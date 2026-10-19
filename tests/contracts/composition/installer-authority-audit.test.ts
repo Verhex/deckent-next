@@ -6,8 +6,13 @@ import { auditEventSchema } from '#domain/index.js';
 import { AuditApplication, verifyAuditRecord } from '#engine/index.js';
 import { openLocalIntegrityAuthority, openSqliteAuditStore } from '#adapters/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { applyPolicyTemplateInstallation, upgradePolicyTemplateInstallation } from '#composition/core/installation/index.js';
+import { applyPolicyTemplateInstallation, upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
 import { productResourcePath } from '#platform/index.js';
+
+/** SEC-1 (I-POL): `init policy --upgrade --apply` is an authority write and vitest has no terminal, so this file attests the witness; the refusal
+ * without one is tests/contracts/composition/policy-upgrade-witness.test.ts. */
+const upgradePolicyTemplateInstallation = (...args: Parameters<typeof upgradeInstallation>) =>
+  upgradeInstallation(args[0], args[1], args[2], args[3], args[4], args[5], args[6], { attest: async () => true });
 
 const roots: string[] = [];
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

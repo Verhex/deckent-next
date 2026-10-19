@@ -3,11 +3,16 @@ import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource } from '#adapters/index.js';
-import { evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
 import { decideAgentToolCall } from '#engine/index.js';
 import { main } from '#surfaces/index.js';
-import { applyPolicyTemplateInstallation, upgradePolicyTemplateInstallation } from '#composition/core/installation/index.js';
+import { applyPolicyTemplateInstallation, upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
 import { clearConfigCache } from '#platform/index.js';
+
+/** SEC-1 (I-POL): `init policy --upgrade --apply` is an authority write and vitest has no terminal, so this file attests the witness; the refusal
+ * without one is tests/contracts/composition/policy-upgrade-witness.test.ts. */
+const upgradePolicyTemplateInstallation = (...args: Parameters<typeof upgradeInstallation>) =>
+  upgradeInstallation(args[0], args[1], args[2], args[3], args[4], args[5], args[6], { attest: async () => true });
 
 // POLICY-UPGRADE-HANDBUILT (lead 2026-10-08, Jev b6dba079): the live and N1 installations run a hand-built policy (`live-read-tools`, no
 // first-run read rule), so both upgrade commands refused them and MCP calls (decided on `mcp-server` since alpha.11) were denied. The installer
@@ -110,6 +115,14 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       // v12 (option A): the hand-built `live-scope` already covers scope inspection; its `local` stop rule names another service than the one
       // configured here (the fresh install's `live-runtime`), so only the service stop is added.
       grant('first-run-service-shutdown', 'service', ['shutdown'], [`${SCOPE}-runtime`]),
+      // v13 (I-POL, owner A48-D3 + MON-NAMES + CA-1 + C3): `model-activation deactivate` is covered (owner-model-catalog); the other six are added,
+      // the installation-wide ones over every scope, and the MCP actor gets only the pool read.
+      grant('first-run-execution-environment-install', 'execution-environment', ['install'], ['docker'], { scopes: 'all' }),
+      grant('first-run-installation-repair', 'installation', ['repair'], 'all', { scopes: 'all' }),
+      grant('first-run-decision-inspect', 'decision', ['inspect'], 'all'),
+      grant('first-run-monitor-scope-diagnostics', 'monitor', ['inspect-scope-diagnostics'], 'all', { scopes: 'all' }),
+      grant('first-run-standing-grants-all', 'policy', ['inspect-standing-grants'], 'all'),
+      { id: 'first-run-mcp-observe-pool', effect: 'allow', actions: ['inspect'], scopes: [SCOPE], principals: [MCP_PERSON], resource: { kind: 'pool', ids: 'all' } },
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
@@ -126,7 +139,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(entries).toHaveLength(1);
     const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
       before: { policy: unknown }; after: { policy: unknown } };
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v12-/) });
+    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v13-/) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
 
@@ -160,7 +173,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const argv = ['init', 'policy', '--scope', SCOPE, '--upgrade', '--person', `${PERSON.issuer}/${PERSON.subject}`, '--json'];
     expect(await main([...argv, '--preview'], context)).toBe(0); expect(errors).toEqual([]);
     const preview = JSON.parse(output.join('')) as { revision: string; expect: string; rules: { id: string }[] };
-    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 12 } });
+    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 13 } });
     expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-service-shutdown']);
     expect(await f.bytes()).toBe(before);
     output.length = 0;
@@ -218,7 +231,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const owner = v5.grants[0]!.principals[0]!;
     const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(rule => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
       'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown'].includes(rule.id)
-      && !rule.id.startsWith('first-run-mcp-observe-')).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
+      && !rule.id.startsWith('first-run-mcp-observe-') && !(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as readonly string[]).includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
       ids: (rule.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : rule) };
     await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });
     const v4Bytes = await readFile(policyPath, 'utf8');

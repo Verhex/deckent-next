@@ -206,7 +206,7 @@ replay and the prefix cache): the workline appends a bounded active-work note (�
 `--- deckent session note: active work`) from the active work strip's records to the person's latest message only; resume and fresh-context
 displays strip it like attachments. A new read tool **`session_state`** returns the same snapshot as JSON, recomputed at call time; it is
 decided like every tool (`agent-tool`/`invoke`) and offered only when that decision is `allow` at turn start — the first-run template does
-**not** grant it (a default grant would be a template v12 and change the v11 rollback delta: owner decision). Working style adds "keep your
+**not** grant it (a default grant would need a template bump and change the rollback delta: owner decision). Working style adds "keep your
 reasoning out of the answer". **Inline reasoning:** the loop routes a LEADING `<think>…</think>` block of the answer text (a model served
 without a reasoning parser) to `reasoning` events (the thought line) and keeps it out of the answer and history; the streamed and settled
 splits agree (`createInlineReasoningRouter` / `splitInlineReasoning`); provider reasoning fields stay the adapters' (OpenAI chat

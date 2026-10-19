@@ -1,9 +1,9 @@
 import { firstSessionTargets, firstSessionPublication } from '#adapters/index.js';
 import { lstat, readFile, stat } from 'node:fs/promises';
-import { FileInstallationIdentityStore, FileProjectIdentityStore, inspectInstallationFile, openLocalIntegrityAuthority, openSqliteAuditStore, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
+import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInteractiveTerminal, inspectInstallationFile, localPrincipalChannel, openLocalIntegrityAuthority, openSqliteAuditStore, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
 import { userInfo } from 'node:os'; import { randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
 import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
-  upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
+  upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, assertAuthorityWitness, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
 import { getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
@@ -59,9 +59,13 @@ export async function applyPolicyTemplateInstallation(projectRoot: string, scope
 }
 /** `deckent init policy --upgrade [--apply] [--person <issuer>/<subject>]` (owner 2026-10-07): the first-run v4 → v5 migration of this installation's
  * policy, as the local person the template names (or, for a hand-built policy, the person its file owner names: lead 2026-10-08), through the
- * authority documents' one conditional writer. Without `--apply` it only reads (what would change, or why not). */
+ * authority documents' one conditional writer. Without `--apply` it only reads (what would change, or why not). `--apply` is an authority write
+ * (SEC-1, owner A48-D5): it needs the witness (Core: this process's controlling terminal; an Enterprise composition may pass a stronger one) and is
+ * refused for the MCP actor, with `AUTHORITY_WITNESS_REQUIRED` before any configuration, policy, identity or audit is read or written. */
 export async function upgradePolicyTemplateInstallation(projectRoot: string, scopeId: string, apply: boolean, expect?: string, options: ConfigLoadOptions = {},
-  callerUid: number | undefined = process.getuid?.(), person?: { readonly issuer: string; readonly subject: string }) {
+  callerUid: number | undefined = process.getuid?.(), person?: { readonly issuer: string; readonly subject: string },
+  witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }) {
+  if (apply) await assertAuthorityWitness('policyTemplateUpgrade', localPrincipalChannel(), witness);
   // An existing installation: its configured layout (a custom data root, as a live installation has), not only the default `.deckent`.
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), layout = config.productLayout, identity = readLocalOsIdentity();
   if (apply) await assertConfiguredInstallationIdentity(projectRoot);

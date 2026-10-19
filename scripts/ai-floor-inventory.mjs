@@ -12,6 +12,10 @@ export const floorFamilies = [
       ['write', 'register', 'activate', 'remove', 'future-mutation'].map(action => [kind, 'fixture-record', action])) },
   { id: 'backup', en: 'Backup restore', tr: 'Yedeği geri yükleme', whyEn: 'A restore can replace authority data.', whyTr: 'Geri yükleme yetki verisini değiştirebilir.',
     routes: [['backup', 'fixture-backup', 'restore']] },
+  { id: 'host', en: 'Execution environment install and installation repair', tr: 'Yürütme ortamı kurma ve kurulum onarımı',
+    whyEn: 'Both change the host outside the sandbox (Docker group membership is root-equivalent); only a person at a terminal runs them (owner 2026-10-19).',
+    whyTr: 'İkisi de sandbox dışında host’u değiştirir (Docker grubu root eşdeğeridir); yalnız terminaldeki kişi çalıştırır (owner 2026-10-19).',
+    routes: [['execution-environment', 'fixture-target', 'install'], ['installation', 'fixture-target', 'repair']] },
   { id: 'mode', en: 'Permission mode set, including full access', tr: 'Full access dahil izin kipi değiştirme',
     whyEn: 'An AI must not choose a weaker permission mode for itself.', whyTr: 'AI kendi izin kipini gevşetemez.',
     routes: ['standart', 'full-auto', 'full-access'].map(id => ['permission-mode', id, 'set']) },
@@ -52,7 +56,7 @@ export function inventory(vocabulary) {
   const add = (route, floor, family) => { const [kind, id, action] = route; routes.set(JSON.stringify(route), { kind, id, action, floor, family }); };
   for (const { kind, actions } of vocabulary.resources) for (const action of actions)
     add([kind, kind === 'config' ? 'project:language' : 'fixture-target', action], kind === 'secret' || kind === 'backup' && action === 'restore'
-      || kind === 'permission-mode' && action === 'set', 'vocabulary');
+      || kind === 'permission-mode' && action === 'set' || kind === 'execution-environment' && action === 'install' || kind === 'installation' && action === 'repair', 'vocabulary');
   nonFloorRoutes.forEach(route => add(route, false, 'boundary-control'));
   floorFamilies.forEach(family => family.routes.forEach(route => add(route, true, family.id)));
   return [...routes.values()].sort((a, b) => { const x = JSON.stringify(a), y = JSON.stringify(b); return x < y ? -1 : x > y ? 1 : 0; });

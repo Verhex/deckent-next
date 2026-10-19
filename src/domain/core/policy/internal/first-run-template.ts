@@ -1,6 +1,7 @@
 import { isMcpPrincipal, mcpPrincipalRef } from '#domain/core/principal/index.js';
 import { IDENTITY_MAX_LENGTH, identitySchema } from '#domain/core/primitives/index.js';
 import { bindingsFileSchema, policyFileSchema, policyGrantSchema, type PolicyFile, type PolicyGrant } from './schema.js';
+import { policyResources } from './vocabulary.js';
 import { policyChangeSchema, type PolicyChange } from './administer.js';
 
 /**
@@ -49,7 +50,14 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
 /** v12 (POLICY-V12, owner 2026-10-16): the named person may inspect the installed scope (inventory, worker observation and the service's own
  * recovery passes run as this person) and shut down exactly their installation's runtime service (`service.identity`, written at install).
  * Owner 2026-10-16 option A: edited first-run and named hand-built policies get the same two rules through the add-only plan (named person only). */
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 12;
+/** v13 (alpha.48, owner A48-D3 + MON-NAMES + CA-1 + C3, 2026-10-19): seven add-only rules, each its own id (`FIRST_RUN_V13_RULE_IDS`). The named
+ * person may install the registered execution environments (`execution-environment`/`install`), repair the installation (`installation`/`repair`),
+ * deactivate models (`model-activation`/`deactivate`, a separate rule beside the v7 activation rule so the add-only plan and the rollback can carry it),
+ * read decisions in the installed scope (`decision`/`inspect`), see refused and failed scopes by name in the monitor (`monitor`/
+ * `inspect-scope-diagnostics`) and read everyone's standing approvals (`policy`/`inspect-standing-grants`); the MCP actor gets one more observation
+ * rule, `pool`/`inspect` in the installed scope. No authority action for the MCP actor; a terminal-only action (install, repair) is enforced by its
+ * consumer, never by grant data. Every rule is revocable like any other; `policy upgrade --template current --rollback` removes exactly these. */
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 13;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
 export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
@@ -72,6 +80,8 @@ export interface FirstRunPolicyTemplateInput {
   /** v12: the runtime service id the person may shut down (the installation's configured `service.identity` of this scope); absent, the
    * deterministic default `firstRunServiceId(scopeId)`. Unused by v4–v11. */
   readonly serviceId?: string;
+  /** v13: the execution-environment registry ids the person may install (product data the engine pins, e.g. `docker`). Unused by v4–v12. */
+  readonly executionEnvironmentIds: readonly string[];
 }
 export interface FirstRunPolicyTemplate {
   readonly id: typeof FIRST_RUN_POLICY_TEMPLATE_ID;
@@ -92,7 +102,7 @@ export function firstRunServiceId(scopeId: string): string {
   const scope = identitySchema.parse(scopeId), suffix = '-runtime';
   return identitySchema.parse(`${scope.slice(0, IDENTITY_MAX_LENGTH - suffix.length)}${suffix}`);
 }
-function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12) {
+function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13) {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
@@ -131,6 +141,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
       ...(version >= 10 ? executionRules(principal, [scopeId]) : []),
       ...(version >= 11 ? deliveryRules(principal, [scopeId]) : []),
       ...(version >= 12 ? ownerServiceRules(principal, [scopeId], input.serviceId) : []),
+      ...(version >= 13 ? v13Rules(principal, [scopeId], input.executionEnvironmentIds) : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
@@ -139,7 +150,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
 
 /** Why an installation's policy cannot take the current template upgrade in place: it already is current, it is not exactly the v4 template this
  * installation's (scope, person) would get (hand-edited, administered since, another person's, or another version), or it is unreadable. */
-export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11; readonly policy: PolicyFile }
+export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12; readonly policy: PolicyFile }
   | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-v4-template' | 'invalid' };
 /**
  * The first-run exact-template migration (v5 owner decision 2026-10-07): only a policy document that is exactly an older template of this (scope, person) — the
@@ -152,7 +163,7 @@ export function upgradeFirstRunPolicy(current: unknown, input: FirstRunPolicyTem
   const target = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION).policy;
   if (canonicalJson(parsed.data) === canonicalJson(target)) return Object.freeze({ status: 'current' });
   // Exact older templates become the current one; edited policies take the explicit add-only plan.
-  for (const from of [11, 10, 9, 8, 7, 6, 5, 4] as const) {
+  for (const from of [12, 11, 10, 9, 8, 7, 6, 5, 4] as const) {
     if (canonicalJson(parsed.data) === canonicalJson(buildTemplate(input, from).policy)) return Object.freeze({ status: 'upgrade', from, policy: target });
   }
   return Object.freeze({ status: 'unavailable', reason: 'not-v4-template' });
@@ -184,11 +195,15 @@ export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mc
   observeActivation: 'first-run-mcp-observe-model-activation', observeInvocation: 'first-run-mcp-observe-model-invocation', observeSpending: 'first-run-mcp-observe-provider-spend-account',
   runs: 'first-run-runs', pools: 'first-run-pools', attempts: 'first-run-attempts', workTargets: 'first-run-work-targets',
   quotaRelease: 'first-run-quota-release', integration: 'first-run-integration', workTargetAdopt: 'first-run-work-target-adopt',
-  scopeInspect: 'first-run-scope-inspect', serviceShutdown: 'first-run-service-shutdown' });
-/** The v11 delta: what `policy upgrade --template current --rollback` removes. It never removes earlier versions' administration or observation
- * authority, nor the v12 owner rules (scope inspection and the service stop stay once added; owner 2026-10-16). */
+  scopeInspect: 'first-run-scope-inspect', serviceShutdown: 'first-run-service-shutdown',
+  environmentInstall: 'first-run-execution-environment-install', installationRepair: 'first-run-installation-repair', modelDeactivation: 'first-run-model-deactivation',
+  decisionInspect: 'first-run-decision-inspect', scopeDiagnostics: 'first-run-monitor-scope-diagnostics', standingGrantsAll: 'first-run-standing-grants-all',
+  observePool: 'first-run-mcp-observe-pool' });
+/** The v13 delta (owner A48-D3, rollback option D3c): what `policy upgrade --template current --rollback` removes. It never removes earlier versions'
+ * rules: the v11 delivery and the v12 owner rules stay once added, like every older version's administration or observation authority. */
 export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze([
-  FIRST_RUN_UPGRADE_RULE_IDS.quotaRelease, FIRST_RUN_UPGRADE_RULE_IDS.integration, FIRST_RUN_UPGRADE_RULE_IDS.workTargetAdopt,
+  FIRST_RUN_UPGRADE_RULE_IDS.environmentInstall, FIRST_RUN_UPGRADE_RULE_IDS.installationRepair, FIRST_RUN_UPGRADE_RULE_IDS.modelDeactivation,
+  FIRST_RUN_UPGRADE_RULE_IDS.decisionInspect, FIRST_RUN_UPGRADE_RULE_IDS.scopeDiagnostics, FIRST_RUN_UPGRADE_RULE_IDS.standingGrantsAll, FIRST_RUN_UPGRADE_RULE_IDS.observePool,
 ]);
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
@@ -202,7 +217,9 @@ const coversAll = (held: Selection, wanted: Selection) => held === 'all' || (wan
 const sameRule = (a: unknown, b: unknown) => JSON.stringify(policyGrantSchema.parse(a)) === JSON.stringify(policyGrantSchema.parse(b));
 type Person = { readonly issuer: string; readonly subject: string };
 /** `serviceId` (v12): the installation's configured runtime service id of this scope; absent, the deterministic default of the plan's first scope. */
-type AdditionNames = { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string; readonly serviceId?: string };
+type AdditionNames = { readonly proposeMcpToolName: string; readonly mcpCallOperationId: string; readonly policyAdministerOperationId: string; readonly serviceId?: string;
+  /** v13: the execution-environment registry ids the install rule names. */
+  readonly executionEnvironmentIds: readonly string[] };
 /** Whether a rule NAMES this person: a rule for `all` principals names nobody (security, lead 2026-10-07: never proof of an owner). */
 const namesPerson = (grant: PolicyGrant, person: Person) => grant.principals !== 'all' && grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
 /**
@@ -242,7 +259,9 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     // v8 (BACKUP-COMMAND): installation-wide backup authority, added the same add-only way.
     rule(ids.backup, 'backup', ['create', 'verify', 'restore'], 'all', 'all'), ...mcpObservationRules(person, scopes), ...executionRules(person, scopes), ...deliveryRules(person, scopes),
     // v12 (owner 2026-10-16 option A): scope inspection and this installation's service stop, for the named person only, added the same add-only way.
-    ...ownerServiceRules(person, scopes, input.serviceId)];
+    ...ownerServiceRules(person, scopes, input.serviceId),
+    // v13 (owner A48-D3, MON-NAMES, CA-1, C3): the seven v13 rules, each its own id, added the same add-only way (named person; MCP pool observation).
+    ...v13Rules(person, scopes, input.executionEnvironmentIds)];
   const conflicts: string[] = [], rules: PolicyGrant[] = [];
   for (const want of wanted) {
     const same = grants.find(grant => grant.id === want.id);
@@ -341,15 +360,38 @@ function ownerServiceRules(person: Person, scopes: readonly string[], serviceId:
   ].map(({ id, kind, actions, resource }) => policyGrantSchema.parse({ id, effect: 'allow', actions, scopes: [...scopes], principals: [person], resource: { kind, ids: resource } }));
 }
 
-/** Latest add-only delta (v11) by content: a same-id customization is preserved and reported, never deleted as a template rule. */
-export function firstRunTemplateRollback(current: unknown, person: Person, scopeId?: string): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[] } {
+/** v13 (owner A48-D3, MON-NAMES, CA-1, C3): the named person's six rules and the MCP actor's pool observation, shared by the fresh template, both add-only
+ * plans and the rollback. A person rule never names the MCP actor (AI and MCP get no authority action); the MCP rule only reads. */
+function v13Rules(person: Person, scopes: readonly string[], executionEnvironmentIds: readonly string[] | undefined): readonly PolicyGrant[] {
+  const ids = FIRST_RUN_UPGRADE_RULE_IDS, vocabulary = policyResources;
+  const observePool = policyGrantSchema.parse({ id: ids.observePool, effect: 'allow', actions: ['inspect'], scopes: [...scopes], principals: [mcpPrincipalRef(person)],
+    resource: { kind: vocabulary.pool.kind, ids: 'all' } });
+  if (isMcpPrincipal(person)) return [observePool];
+  // Fail closed: a caller that names no environment (or an untyped one passing nothing) gets no install rule, never a wider one.
+  const environments = (executionEnvironmentIds ?? []).map(id => identitySchema.parse(id));
+  return [
+    // Installation-wide (like backup): an execution environment and the installation folder are the host's, not one scope's.
+    ...(environments.length ? [{ id: ids.environmentInstall, kind: vocabulary.executionEnvironment.kind, actions: ['install'], ids: environments, scopes: 'all' as const }] : []),
+    { id: ids.installationRepair, kind: vocabulary.installation.kind, actions: ['repair'], ids: 'all' as const, scopes: 'all' as const },
+    // The same reach as the v7 activation rule (the ledger catalog register is installation-wide).
+    { id: ids.modelDeactivation, kind: vocabulary.modelActivation.kind, actions: ['deactivate'], ids: 'all' as const, scopes: 'all' as const },
+    { id: ids.decisionInspect, kind: vocabulary.decision.kind, actions: ['inspect'], ids: 'all' as const, scopes: [...scopes] },
+    // An installation-level view (owner 2026-10-19, PLAN §16): every scope's refused or failed check, named.
+    { id: ids.scopeDiagnostics, kind: vocabulary.monitor.kind, actions: ['inspect-scope-diagnostics'], ids: 'all' as const, scopes: 'all' as const },
+    { id: ids.standingGrantsAll, kind: vocabulary.policy.kind, actions: ['inspect-standing-grants'], ids: 'all' as const, scopes: [...scopes] },
+  ].map(({ id, kind, actions, ids: resource, scopes: ruleScopes }) => policyGrantSchema.parse({ id, effect: 'allow', actions, scopes: ruleScopes === 'all' ? 'all' : ruleScopes,
+    principals: [person], resource: { kind, ids: resource } })).concat(observePool);
+}
+
+/** Latest add-only delta (v13) by content: a same-id customization is preserved and reported, never deleted as a template rule. */
+export function firstRunTemplateRollback(current: unknown, person: Person, scopeId: string | undefined, names: Pick<AdditionNames, 'executionEnvironmentIds'>): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[] } {
   const policy = policyFileSchema.parse(current);
   if (policy.schemaVersion !== 2) return { rules: [], conflicts: [] };
   const read = policy.grants.find(rule => rule.id === 'first-run-read-tools');
   if (isMcpPrincipal(person)) return { rules: [], conflicts: [] };
   const scopes = read && read.scopes !== 'all' && namesPerson(read, person) ? read.scopes : scopeId ? [identitySchema.parse(scopeId)] : null;
   if (!scopes) return { rules: [], conflicts: [] };
-  const expected = deliveryRules({ issuer: person.issuer, subject: person.subject }, scopes), rules: PolicyGrant[] = [], conflicts: string[] = [];
+  const expected = v13Rules({ issuer: person.issuer, subject: person.subject }, scopes, names.executionEnvironmentIds), rules: PolicyGrant[] = [], conflicts: string[] = [];
   for (const want of expected) {
     const held = policy.grants.find(rule => rule.id === want.id);
     if (held && canonicalJson(held) === canonicalJson(want)) rules.push(held);

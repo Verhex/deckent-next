@@ -9,17 +9,19 @@ const person = { issuer: 'host', subject: 'owner' };
 const owner = { id: 'owner', ...person, assurance: 'os-user' as const, scopeIds: ['installation', 'other'] };
 const mcp = { ...owner, ...mcpPrincipalRef(person), assurance: 'workload-verified' as const };
 const colleague = { ...owner, id: 'colleague', subject: 'colleague' };
-const names = { proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer' };
+const names = { proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer', executionEnvironmentIds: ['docker'] };
 const input = { scopeId: 'installation', principal: person, ...names, readToolNames: ['read_file'], scratchToolNames: ['scratch_write'],
   scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['run_shell'], writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run' };
 const v12ids = ['first-run-scope-inspect', 'first-run-service-shutdown'];
-const built = firstRunPolicyTemplate(input);
+// I-POL (alpha.48): the current template is v13, an add-only delta over v12 (FIRST_RUN_CURRENT_UPGRADE_RULE_IDS); v12 is the current one without it.
+const current = firstRunPolicyTemplate(input), v13ids: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+const built = { version: 12, bindings: current.bindings, policy: { ...current.policy, revision: 'first-run-template-v12', grants: current.policy.grants.filter(rule => !v13ids.includes(rule.id)) } };
 const v11 = { ...built.policy, revision: 'first-run-template-v11', grants: built.policy.grants.filter(rule => !v12ids.includes(rule.id)) };
 const source = (policy: unknown) => ({ async load() { return resolvePolicyBindings(policy, built.bindings); } });
 const SERVICE = 'installation-runtime';
 
 it('v12 adds exactly two rules naming the person alone, in the installed scope only, on the installed scope and this installation\'s service id', () => {
-  expect(built.version).toBe(12);
+  expect(current.version).toBe(13); // the v12 rules below are unchanged inside v13
   expect(built.policy.grants.filter(rule => v12ids.includes(rule.id))).toEqual([
     { id: 'first-run-scope-inspect', effect: 'allow', actions: ['inspect'], scopes: ['installation'], principals: [person], resource: { kind: 'scope', ids: ['installation'] } },
     { id: 'first-run-service-shutdown', effect: 'allow', actions: ['shutdown'], scopes: ['installation'], principals: [person], resource: { kind: 'service', ids: [SERVICE] } },
@@ -57,10 +59,11 @@ it('F1: only the named owner may shut down exactly this service in this scope; t
 });
 
 it('exact v11 upgrades to v12 (also naming a configured service id); edited and hand-built v11 policies get exactly the two rules add-only (option A)', () => {
-  expect(upgradeFirstRunPolicy(v11, input)).toEqual({ status: 'upgrade', from: 11, policy: built.policy });
+  expect(upgradeFirstRunPolicy(v11, input)).toEqual({ status: 'upgrade', from: 11, policy: current.policy });
   const configured = firstRunPolicyTemplate({ ...input, serviceId: 'configured' }).policy;
   expect(upgradeFirstRunPolicy(v11, { ...input, serviceId: 'configured' })).toEqual({ status: 'upgrade', from: 11, policy: configured });
-  expect(upgradeFirstRunPolicy(built.policy, input)).toEqual({ status: 'current' });
+  expect(upgradeFirstRunPolicy(built.policy, input)).toEqual({ status: 'upgrade', from: 12, policy: current.policy });
+  expect(upgradeFirstRunPolicy(current.policy, input)).toEqual({ status: 'current' });
   // Another person's or another scope's exact v11 is not this installation's template.
   expect(upgradeFirstRunPolicy(v11, { ...input, principal: { issuer: 'host', subject: 'colleague' } })).toEqual({ status: 'unavailable', reason: 'not-v4-template' });
   // A hand-edited v11 (one extra rule) is refused by the exact path; the add-only plans (owner 2026-10-16 option A) add exactly the two rules.
@@ -71,7 +74,7 @@ it('exact v11 upgrades to v12 (also naming a configured service id); edited and 
   const v12rules = built.policy.grants.filter(rule => v12ids.includes(rule.id));
   for (const [plan, current] of [[firstRunTemplateAdditions(edited, { ...names, person }), edited], [namedPersonPolicyAdditions(handBuilt, { ...names, person, scopeId: 'installation' }), handBuilt]] as const) {
     expect(plan.status).toBe('plan'); if (plan.status !== 'plan') throw new Error('missing v12 plan');
-    expect(plan.rules).toEqual(v12rules); expect(plan.conflicts).toEqual([]);
+    expect(plan.rules.filter(rule => !v13ids.includes(rule.id))).toEqual(v12rules); expect(plan.conflicts).toEqual([]);
     expect(plan.change.changes.every(change => change.kind === 'grant.add')).toBe(true);
     // Applied, a second plan is current; a configured service id is the one named.
     const applied = { ...current, grants: [...current.grants, ...plan.rules] };
@@ -85,8 +88,8 @@ it('exact v11 upgrades to v12 (also naming a configured service id); edited and 
   expect(namedPersonPolicyAdditions(handBuilt, { ...names, person: { issuer: 'host', subject: 'colleague' }, scopeId: 'installation' })).toEqual({ status: 'unavailable', reason: 'person-not-named' });
   const covered = { ...edited, grants: [...edited.grants, { id: 'own-stop', effect: 'allow', actions: ['shutdown'], scopes: ['installation'], principals: [person], resource: { kind: 'service', ids: 'all' } }] };
   const partial = firstRunTemplateAdditions(covered, { ...names, person });
-  expect(partial.status === 'plan' ? partial.rules.map(rule => rule.id) : []).toEqual([v12ids[0]]);
-  // The rollback delta stays v11's: the v12 owner rules are never removed by `policy upgrade --template current --rollback`.
+  expect(partial.status === 'plan' ? partial.rules.map(rule => rule.id).filter(id => !v13ids.includes(id)) : []).toEqual([v12ids[0]]);
+  // The rollback delta (v13's since I-POL) never holds the v12 owner rules: `policy upgrade --template current --rollback` never removes them.
   expect(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.some(id => v12ids.includes(id))).toBe(false);
-  expect(firstRunTemplateRollback(built.policy, person).rules.map(rule => rule.id).some(id => v12ids.includes(id))).toBe(false);
+  expect(firstRunTemplateRollback(current.policy, person, undefined, names).rules.map(rule => rule.id).some(id => v12ids.includes(id))).toBe(false);
 });

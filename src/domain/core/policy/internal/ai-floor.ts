@@ -8,13 +8,16 @@ const AUTHORITY_APPROVAL_IDS = Object.freeze(['identity-profile', 'policy-mcp-ca
  * Y4 v1: security invariants, never policy-grant data. Read-only metadata stays available. Every route that can widen an AI actor's own
  * (or a controlled principal's) authority is here: policy administration (grants, role bindings, delegation cells, restrictions, SoD,
  * standing grants), authority/authenticator/assurance records, permission modes incl. full access, backup restore, every secret action,
- * authority approval cards, audit baselines and security configuration (incl. `execution.secretGate` exclusions).
+ * authority approval cards, audit baselines and security configuration (incl. `execution.secretGate` exclusions). Owner 2026-10-19 (I-POL v13):
+ * host changes outside the sandbox — installing an execution environment (Docker group membership is root-equivalent) and repairing the
+ * installation itself — are never an AI's, whatever a policy grants; the person runs them at a terminal.
  */
 export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assurance?: string }, resource: { readonly kind: string; readonly id: string }, action: string): boolean {
   if (!isAiPrincipal(actor)) return false;
   if (resource.kind === 'operation' && resource.id === 'policy.administer' && ['execute', 'compensate'].includes(action)) return true;
   if (['authority-document', 'authenticator', 'approval-assurance'].includes(resource.kind) && !['inspect', 'list'].includes(action)) return true;
   if (resource.kind === 'backup' && action === 'restore') return true;
+  if (resource.kind === 'execution-environment' && action === 'install' || resource.kind === 'installation' && action === 'repair') return true;
   if (resource.kind === 'permission-mode' && action === 'set') return true;
   if (resource.kind === 'secret') return true;
   if (resource.kind === 'approval' && action === 'decide' && AUTHORITY_APPROVAL_IDS.includes(resource.id)) return true;

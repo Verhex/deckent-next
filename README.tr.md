@@ -225,7 +225,7 @@ bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
    `deckent config explain admission` gösterir.
 4. **Servisi yeniden başlatın**, yeni yapılandırmayı okusun: `deckent runtime restart` (terminalde `/service-restart`).
    Şunu söyler: `Runtime servisi yeniden başlatıldı (pid 494385, örnek 8b1e2392-…).` Yeni bir `init policy --apply`
-   (ilk kurulum politikası v12) servisi zaten adlandırır (`service.identity`) ve onu yalnız sizin durdurmanıza izin verir.
+   (ilk kurulum politikası v12 ve sonrası) servisi zaten adlandırır (`service.identity`) ve onu yalnız sizin durdurmanıza izin verir.
    Daha eski bir ilk kurulumda önce yukarıdaki yükseltmeyi çalıştırın; servis kimliğini ayarladığını söylerse çalışan
    servisi bir kez elle durdurun ([Runtime servisi](#runtime-servisi)), sonra `runtime restart` çalışır.
    **5. adımdan önce, bir kez: model ve işçi girişi.** `/do` bütçeli, bağlı bir model ister; işçi CLI'ın da bu makinede
