@@ -278,9 +278,13 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   *Yol:* reddedilenler için gerekmez; başarısız kontrol için `deckent doctor` ve gösterilen kod.
 - **Monitor bir servisin derleme zamanını ve sürüm numarasını göstermez.** Servis yalnız commit'ini ve kaynak ağacını bildirir;
   Kurulumlar `build <commit> · kaynak ağacı <özet>` gösterir. *Yol:* servisi çalıştıran makinede `deckent --version`.
-- **Boşta duran etkileşimli `deckent monitor` CPU kullanmaya devam eder,** çünkü her yenilemede her şeyi yeniden okur
-  (`inspection.workers.heartbeatMs`, varsayılan 2 sn). Run ve kapsam sayısıyla artar. *Yol:* `p` ile duraklatın,
-  `inspection.workers.heartbeatMs` değerini büyütün ya da `deckent monitor --once` kullanın.
+- **Etkileşimli `deckent monitor` boştayken de biraz CPU kullanır; iş defteri değiştirdiği sürece eskisi kadar kullanır.** Run'ları,
+  işçileri ve izin kararlarını yalnız defter, politika, bağlamalar ya da yapılandırma değiştikten sonra (ve değişiklikten sonraki
+  yenilemede bir kez daha) yeniden okur. İşçi dosyaları, süreç durumu ve model kullanılabilirliği her yenilemede okunur
+  (`inspection.workers.heartbeatMs`, varsayılan 2 sn); Ayarlar sekmesi yalnız açıkken okunur. 2.000 Run'lık bir test kurulumunda
+  ölçüldü: hiçbir şey değişmezken bir çekirdeğin yaklaşık %9–10'u (önce %31–34); canlı bir kurulum ölçülmedi. Terminalin
+  `/monitor` penceresi, `--once`, `--json` ve MCP her çağrıda her şeyi okur. *Yol:* `p` ile duraklatın, `r` ile tam yeniden
+  okuyun ya da `deckent monitor --once` kullanın.
 - **SDK hâlâ ham yazıcıları da dışa aktarır,** yönetilenlerin yanında; sonraki sürümlü bir SDK sözleşmesinin yalnız
   yönetilenleri bırakması hedeflenir.
 
