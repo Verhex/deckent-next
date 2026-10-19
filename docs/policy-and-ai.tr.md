@@ -234,12 +234,12 @@ Uygulama kartı güvenliği ayrıca sınanır. Dogfood'da Git testleri bir adapt
 müşteri ERP/CRM sonucunu aynı kimlik/kapsam/operasyon/onay sözleşmeleriyle iş kriteri ve kalıcı
 makbuz üzerinden kabul eder.
 
-Komut kaynakları: [policy grants/status/upgrade](../src/surfaces/core/cli/internal/policy-grants.ts),
-[MCP politikası](../src/surfaces/core/cli/internal/policy-mcp.ts), [Run](../src/surfaces/core/cli/internal/run.ts),
-[Task](../src/surfaces/core/cli/internal/task.ts), [onay](../src/surfaces/core/cli/internal/approvals.ts),
-[audit](../src/surfaces/core/cli/internal/audit.ts). Karar kuralları:
+Komut kaynakları: [policy grants/status/upgrade](../src/surfaces/core/cli-approval/internal/policy-grants.ts),
+[MCP politikası](../src/surfaces/core/cli-approval/internal/policy-mcp.ts), [Run](../src/surfaces/core/cli-run/internal/run.ts),
+[Task](../src/surfaces/core/cli-task/internal/task.ts), [onay](../src/surfaces/core/cli-approval/internal/approvals.ts),
+[audit](../src/surfaces/core/cli-admin/internal/audit.ts). Karar kuralları:
 [adım grant'i](../src/domain/core/policy/internal/decision-step.ts),
 [yaşam döngüsü broker'ı](../src/engine/core/runs/internal/decision-approval.ts),
 [kart yetkisi](../src/engine/core/approval/internal/application.ts).
 
-Devir kaynakları: [CLI](../src/surfaces/core/cli/internal/policy-delegations.ts), [application](../src/engine/core/approval/internal/delegations.ts), [inventory](../src/domain/core/policy/internal/delegations.ts).
+Devir kaynakları: [CLI](../src/surfaces/core/cli-approval/internal/policy-delegations.ts), [application](../src/engine/core/approval/internal/delegations.ts), [inventory](../src/domain/core/policy/internal/delegations.ts).

@@ -1,7 +1,7 @@
 import type { Locale } from '#platform/index.js';
 import { createWorklineLedgerPorts as createLedgerPorts, launchTerminal } from '#surfaces/core/cli-terminal/index.js';
 import { mcpSlash } from './mcp.js';
-import { renderRunCancellation } from './run.js';
+import { renderRunCancellation } from '#surfaces/core/cli-run/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 
 /**

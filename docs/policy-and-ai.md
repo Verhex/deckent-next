@@ -234,12 +234,12 @@ acceptance evidence. Application-card security is checked separately. For dogfoo
 are one adapter's evidence; customers accept ERP/CRM outcomes against business criteria and
 durable receipts using the same principal/scope/operation/approval contracts.
 
-Command sources: [policy grants/status/upgrade](../src/surfaces/core/cli/internal/policy-grants.ts),
-[MCP policy](../src/surfaces/core/cli/internal/policy-mcp.ts), [Run](../src/surfaces/core/cli/internal/run.ts),
-[Task](../src/surfaces/core/cli/internal/task.ts), [approvals](../src/surfaces/core/cli/internal/approvals.ts),
-[audit](../src/surfaces/core/cli/internal/audit.ts). Decision rules:
+Command sources: [policy grants/status/upgrade](../src/surfaces/core/cli-approval/internal/policy-grants.ts),
+[MCP policy](../src/surfaces/core/cli-approval/internal/policy-mcp.ts), [Run](../src/surfaces/core/cli-run/internal/run.ts),
+[Task](../src/surfaces/core/cli-task/internal/task.ts), [approvals](../src/surfaces/core/cli-approval/internal/approvals.ts),
+[audit](../src/surfaces/core/cli-admin/internal/audit.ts). Decision rules:
 [step grant](../src/domain/core/policy/internal/decision-step.ts),
 [lifecycle broker](../src/engine/core/runs/internal/decision-approval.ts),
 [card authority](../src/engine/core/approval/internal/application.ts).
 
-Delegation sources: [CLI](../src/surfaces/core/cli/internal/policy-delegations.ts), [application](../src/engine/core/approval/internal/delegations.ts), [inventory](../src/domain/core/policy/internal/delegations.ts).
+Delegation sources: [CLI](../src/surfaces/core/cli-approval/internal/policy-delegations.ts), [application](../src/engine/core/approval/internal/delegations.ts), [inventory](../src/domain/core/policy/internal/delegations.ts).

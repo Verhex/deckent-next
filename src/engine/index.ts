@@ -22,6 +22,7 @@ export type { DispatchInventoryQuery, DispatchInventoryInput, DispatchInventoryE
 export { diagnoseReservationWave, reservationDiagnosticParams, planSchedulingWave, measureTaskOccupancy, SchedulingError } from '#engine/core/scheduling/index.js';
 export type { ReservationDiagnostic, ReservationDiagnosticReason, ReservationDiagnosticSite } from '#engine/core/scheduling/index.js';
 export * from '#engine/core/runs/index.js';
+export * from '#engine/core/run-proposal/index.js';
 export * from '#engine/core/runtime/index.js';
 export { getPolicyVocabulary } from '#engine/core/policy/index.js';
 export { verifyDispatchEvaluationEvidence, TaskEvidenceError } from '#engine/core/task-evaluation/index.js';
