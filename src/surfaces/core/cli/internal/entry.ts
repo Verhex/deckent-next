@@ -1,9 +1,9 @@
 import { identityCommand } from '#surfaces/core/cli-identity/index.js';
 import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract } from '#surfaces/core/cli-kit/index.js';
 import { approvalsCommand, policyGrantsCommand } from '#surfaces/core/cli-approval/index.js';
-import { runInventoryCommand, monitorCommand } from '#surfaces/core/monitor/index.js';
+import { monitorCommand } from '#surfaces/core/monitor/index.js';
 import { workersCommand } from '#surfaces/core/cli-observe/index.js';
-import { runCommand, doCommand, reportCommand } from '#surfaces/core/cli-run/index.js';
+import { runCommand, doCommand, reportCommand, inventoryCommand } from '#surfaces/core/cli-run/index.js';
 import { taskCommand } from '#surfaces/core/cli-task/index.js';
 import { initCommand } from '#surfaces/core/cli-installation/index.js';
 import { mcpCommand } from './mcp.js';
@@ -25,7 +25,7 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   // The config surface renders through terminal-render (whose barrel carries Ink): a lazy edge keeps it off every other command's start.
   config: async (argv, context) => (await import('#surfaces/core/config/index.js')).configCommand(argv, context),
   mcp: mcpCommand, secret: secretCommand, toolchains: toolchainsCommand, doctor: runKernelCommand,
-  inventory: runInventoryCommand, paths: runKernelCommand, runtime: runtimeCommand, coding: codingCommand,
+  inventory: inventoryCommand, paths: runKernelCommand, runtime: runtimeCommand, coding: codingCommand,
   inference: inferenceCommand, operation: operationCommand, decide: decisionCommand,
   policy: (argv, context) => (argv[1] === 'status' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? policyGrantsCommand : runKernelCommand)(argv, context),
 });

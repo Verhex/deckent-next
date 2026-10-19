@@ -152,11 +152,29 @@ it('TTY hold: the revision is read just before the card, the card names scope an
   expect(cards.asked[0]!.title).toContain('Month-end close');
   expect(cards.asked[0]!.body!.join('\n')).toContain('Kapsam: s'); expect(cards.asked[0]!.body!.join('\n')).toContain('revizyon 7');
   expect(cards.asked[1]!.body!.join('\n')).toContain('revizyon 9');
-  expect(cards.asked[0]!.body!.join('\n')).toContain('Bekletmeyi deckent run resume kaldırır'); // no window key on a CLI card expect(cards.asked[1]!.body!.join('\n')).toContain('Run bu arada değişti');
+  expect(cards.asked[0]!.body!.join('\n')).toContain('Bekletmeyi deckent run resume kaldırır'); // no window key on a CLI card
+  expect(cards.asked[1]!.body!.join('\n')).toContain('Run bu arada değişti');
   const write = s.calls.find(call => call.startsWith('apply:'))!;
   expect(JSON.parse(write.slice(6))).toMatchObject({ action: 'hold', runId: LONG, scopeId: 's', expectedRevision: 9, holdReason: 'Kişi Deckent terminalinde bekletti.' });
   expect(JSON.parse(write.slice(6)).commandId).toMatch(/^cli-run-hold-/u);
   expect(printed.join('\n')).toContain('bekletme kaydedildi');
+});
+
+// J2e join (lead note on the C-RUN review flag "test-coverage"): the accepted card path of cancel and close, not only declines.
+it('TTY cancel and close: a yes sends one command with a system command id at the revision read before the card; close advances the revision', async () => {
+  const root = await project();
+  for (const action of ['cancel', 'close'] as const) {
+    const s = store([view()]), printed: string[] = [], cards = scripted(['yes']);
+    await runControlFlow(action, s.context as never, { locale: 'en', root, options: { env: {} }, ask: cards.ask as never, print: text => printed.push(text) }, { scopeId: 's', runId: 'a1b2c3' });
+    expect(cards.asked).toHaveLength(1);
+    const writes = s.calls.filter(call => call.startsWith('apply:') || call.startsWith('cancel:'));
+    expect(writes).toHaveLength(1);
+    const sent = JSON.parse(writes[0]!.slice(writes[0]!.indexOf(':') + 1)) as Record<string, unknown>;
+    expect(writes[0]!.startsWith(action === 'cancel' ? 'cancel:' : 'apply:')).toBe(true);
+    expect(sent).toMatchObject({ runId: LONG, scopeId: 's', expectedRevision: 7, ...(action === 'close' ? { action: 'close' } : { action: 'cancel' }) });
+    expect(sent['commandId']).toMatch(new RegExp(`^cli-run-${action}-[0-9a-f-]{36}$`, 'u'));
+    if (action === 'close') expect(printed.join('\n')).toContain('(revision 8)');
+  }
 });
 
 it('the TTY control offer equals the terminal /runs keys for hold, resume and close in every Run state', () => {

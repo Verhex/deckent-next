@@ -672,7 +672,7 @@
   "resource.cost.partial": "Cost is partial. API money, subscription usage, machine resources and human effort are separate axes. No subscription limit or future quality guarantee is inferred.",
   "resource.cost.attempt": "Task {task} / Attempt {attempt} · work class {workClass} · profile {profile} · requested model {model} / effort {effort} · acceptance {outcome}\n  sampled CPU {cpu} s · peak {peak} bytes · wall {wall} ms · measured API {api} USD\n  observed subscription calls {subscription} / {subscriptionMs} ms · local model calls {local} · human interventions {human} · rework {rework} · rollback {rollback}",
   "resource.cost.help.summary": "Inspect cost and acceptance evidence for a Run",
-  "resource.cost.help": "deckent report --scope <scope> --run <run> [--json] [--lang en|tr]\nRead-only, partial cost/quality report under the existing inspect authority.",
+  "resource.cost.help": "deckent report [--scope <id>] [--run <id>] [--verbose] [--json] [--lang en|tr]\nRead-only cost and quality report under the existing inspect authority. Known: result, what acceptance rests on, duration, CPU, memory, model. Not measurable: each field with its reason. Raw values and full ids: --verbose.\nWithout --run: the scope's recent Runs (on a terminal: pick one). --run takes a short id.",
   "resource.cost.outcome.accepted": "accepted",
   "resource.cost.outcome.failed": "failed",
   "resource.cost.outcome.awaiting": "awaiting decision",

@@ -20,7 +20,7 @@ Başlarken:
 
 İzleme:
   report      Run maliyet ve kabul kanıtını incele
-      --scope <id> --run <id>
+      [--scope <id>] [--run <id>] [--verbose]
   monitor     Kurulumları ve işleri izle
       [--once|--json] [--scope <id>]
   workers     İşçileri listele veya izle (eylemsiz: list)
@@ -31,9 +31,9 @@ Başlarken:
   do          Brain ve mevcut onay kapılarıyla bir isteği planla
       --request <metin> [--scope <id>]
   run         Run oluştur ve yönet
-      create | propose | inspect-proposal | reserve | inspect | cancel | close |
-      hold | resume
-      --scope <id> --id <id> [--command-id <id>]
+      list | create | propose | inspect-proposal | reserve | inspect | cancel |
+      close | hold | resume
+      [--scope <id>] [--id <id>]
   task        Görevleri yürüt, değerlendir ve teslim et
       inspect | execute | evaluate | accept | reject | patch-prepare |
       patch-preview | integration-check | integration-prepare |
@@ -93,7 +93,7 @@ Kurulum/Bakım:
 
 Geliştirici:
   inventory   Kayıtlı denemeleri incele
-      --scope <id> [--after <id>] [--limit <n>]
+      [--scope <id>] [--after <id>] [--limit <n>]
   paths       Kurulum yollarını incele
       [--global]
   runtime     Yerel çalışma servisini yönet (eylemsiz: describe)

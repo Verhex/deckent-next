@@ -222,8 +222,9 @@ it('passes an action word to its handler unchanged and refuses a bare family by 
 
 it('keeps exactly the reviewed planned names out of dispatch and help until their slice implements them', async () => {
   const planned = (CLI_CATALOG as readonly CliCommandSpec[]).flatMap(spec => (spec.children ?? []).filter(child => child.planned).map(child => `${spec.name} ${child.name}`));
-  expect(planned).toEqual(['run list', 'policy scopes']);
-  expect(hasCliAction('run', 'list')).toBe(false);
+  expect(planned).toEqual(['policy scopes']);
+  // C-RUN (alpha.48): `run list` is implemented (the CLI counterpart of `/runs`) and dispatches.
+  expect(hasCliAction('run', 'list')).toBe(true); expect(CLI_COMMANDS.map(command => command.path.join(' '))).toContain('run list');
   for (const name of planned) {
     const [family, child] = name.split(' ') as [string, string];
     const spec = CLI_CATALOG.find(command => command.name === family)! as CliCommandSpec;
@@ -232,9 +233,9 @@ it('keeps exactly the reviewed planned names out of dispatch and help until thei
     expect(renderCommandHelp(CLI_COMMANDS.find(command => command.path.join(' ') === family)!, 'en')).not.toMatch(new RegExp(`^  ${child} `, 'm'));
   }
   let errors = '';
-  expect(await main(['run', 'list'], { root: mkdtempSync(join(tmpdir(), 'deckent-cli-planned-')), env: { NO_COLOR: '1' }, stdout: { write: () => undefined },
+  expect(await main(['policy', 'scopes'], { root: mkdtempSync(join(tmpdir(), 'deckent-cli-planned-')), env: { NO_COLOR: '1' }, stdout: { write: () => undefined },
     stderr: { write: (text: string) => { errors += text; } } })).toBe(2);
-  expect(errors).toContain('[CLI_USAGE]');
+  expect(errors).toContain('CLI_USAGE');
 });
 
 /** The reviewed read-only defaults (owner 2026-10-19 CLI review): a new default needs the same review (stop: a default would mutate). */
@@ -260,7 +261,9 @@ it('runs only the reviewed read action when a family is called without one', asy
 });
 
 it.each(['en', 'tr'] as const)('names the missing argument for every family without a runnable default (%s, exit 2, never the bare usage)', async language => {
-  const runnable = new Set([...Object.keys(READ_DEFAULTS).filter(name => name !== 'workers'), 'terminal', 'init', 'models', 'identity', 'mcp', 'config', 'monitor', 'doctor', 'paths', 'coding', 'inference', 'operation']);
+  // C-RUN: bare `report` and `inventory` are handler-owned reads (default scope; off a terminal without one: CLI_SCOPE_REQUIRED, below).
+  const runnable = new Set([...Object.keys(READ_DEFAULTS).filter(name => name !== 'workers'), 'terminal', 'init', 'models', 'identity', 'mcp', 'config', 'monitor', 'doctor', 'paths',
+    'coding', 'inference', 'operation', 'report', 'inventory']);
   const catalog = MESSAGE_REGISTRY.catalogs[language];
   for (const spec of (CLI_CATALOG as readonly CliCommandSpec[]).filter(item => !runnable.has(item.name))) {
     let errors = '';
@@ -285,5 +288,13 @@ it('J1b: the composition signal list and the usage echo read the one catalog (no
   expect(cliUsage('task', 'integration-adopt', 'en').params).toMatchObject({ command: 'deckent task integration-adopt' });
   expect(cliUsage('run', 'cancel', 'en').params).toMatchObject({ command: 'deckent run cancel' });
   expect(cliUsage('run', 'secret-value', 'en').params).toMatchObject({ command: 'deckent run' });
-  expect(cliUsage('run', 'list', 'en').params).toMatchObject({ command: 'deckent run' }); // planned, not yet an action
+  expect(cliUsage('run', 'list', 'en').params).toMatchObject({ command: 'deckent run list' }); // C-RUN: an action now
+});
+
+it.each(['report', 'inventory'])('C-RUN: bare %s off a terminal with no scope and no configured default names the valid scopes (CLI_SCOPE_REQUIRED, exit 2)', async family => {
+  let errors = '';
+  const root = mkdtempSync(join(tmpdir(), 'deckent-cli-bare-read-'));
+  const code = await main([family, '--json'], { root, env: { NO_COLOR: '1', DECKENT_LANG: 'en', HOME: root, USERPROFILE: root }, initialize: () => undefined,
+    stdout: { write: () => undefined }, stderr: { write: (text: string) => { errors += text; } } });
+  expect(code).toBe(2); expect(JSON.parse(errors)).toMatchObject({ code: 'CLI_SCOPE_REQUIRED' });
 });

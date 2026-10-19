@@ -20,7 +20,7 @@ Getting started:
 
 Observe:
   report      Inspect cost and acceptance evidence for a Run
-      --scope <id> --run <id>
+      [--scope <id>] [--run <id>] [--verbose]
   monitor     Watch installations and work
       [--once|--json] [--scope <id>]
   workers     List or watch workers (without an action: list)
@@ -31,9 +31,9 @@ Execute work:
   do          Plan an intent through Brain and existing approval gates
       --request <text> [--scope <id>]
   run         Create and manage Runs
-      create | propose | inspect-proposal | reserve | inspect | cancel | close |
-      hold | resume
-      --scope <id> --id <id> [--command-id <id>]
+      list | create | propose | inspect-proposal | reserve | inspect | cancel |
+      close | hold | resume
+      [--scope <id>] [--id <id>]
   task        Execute, evaluate and deliver Tasks
       inspect | execute | evaluate | accept | reject | patch-prepare |
       patch-preview | integration-check | integration-prepare |
@@ -94,7 +94,7 @@ Setup / Maintenance:
 
 Developer:
   inventory   Inspect recorded attempts
-      --scope <id> [--after <id>] [--limit <n>]
+      [--scope <id>] [--after <id>] [--limit <n>]
   paths       Inspect installation paths
       [--global]
   runtime     Manage the local runtime service (without an action: describe)

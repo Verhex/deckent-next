@@ -35,8 +35,8 @@ function planned(name: string, group: HelpGroup, summary: MessageKey, detail: Me
  * Children inherit the family handler; existing handlers retain argument validation and execution. Handler actions and catalog
  * actions are kept equal by `cli-grouped-help.test.ts` (both directions). */
 export const CLI_CATALOG = [
-  { name: 'report' , group: 'observe', summary: 'resource.cost.help.summary', detail: 'resource.cost.help', args: '--scope <id> --run <id>',
-    bare: { requires: ['--scope <id>', '--run <id>'] } },
+  { name: 'report' , group: 'observe', summary: 'resource.cost.help.summary', detail: 'resource.cost.help', args: '[--scope <id>] [--run <id>] [--verbose]',
+    bare: 'handler' },
   { name: 'do', group: 'work', summary: 'cli.help.summary.do', detail: 'cli.help.do', args: '--request <text> [--scope <id>]', bare: { requires: ['--request <text>'] } },
   { name: 'audit', group: 'setup', summary: 'cli.audit.summary', detail: 'cli.audit.help', args: '[--scope <id>]', bare: { read: 'verify' }, children: [
     action('verify', 'setup', 'cli.audit.summary', 'cli.audit.help'),
@@ -70,8 +70,8 @@ export const CLI_CATALOG = [
     action('list', 'observe', 'cli.help.action.workers.list', 'cli.workers.help'),
     action('watch', 'observe', 'cli.help.action.watch', 'cli.workers.help'),
   ] },
-  { name: 'run', group: 'work', summary: 'cli.help.summary.run', detail: 'cli.help.run', args: '--scope <id> --id <id> [--command-id <id>]', children: [
-    planned('list', 'observe', 'cli.help.action.run.list', 'cli.help.run'),
+  { name: 'run', group: 'work', summary: 'cli.help.summary.run', detail: 'cli.help.run', args: '[--scope <id>] [--id <id>]', children: [
+    action('list', 'observe', 'cli.help.action.run.list', 'cli.help.run'),
     action('create', 'work', 'cli.help.action.create', 'cli.help.run'),
     action('propose', 'work', 'cli.help.action.propose', 'cli.help.run'),
     action('inspect-proposal', 'observe', 'cli.help.action.inspectProposal', 'cli.help.run'),
@@ -195,8 +195,8 @@ export const CLI_CATALOG = [
     action('update', 'setup', 'cli.help.action.update', 'cli.help.toolchains'),
   ] },
   { name: 'doctor', group: 'setup', summary: 'cli.help.summary.doctor', detail: 'cli.help.doctor', args: '[--toolchains] [--json]' },
-  { name: 'inventory', group: 'developer', summary: 'cli.help.summary.inventory', detail: 'cli.help.inventory', args: '--scope <id> [--after <id>] [--limit <n>]',
-    bare: { requires: ['--scope <id>'] } },
+  { name: 'inventory', group: 'developer', summary: 'cli.help.summary.inventory', detail: 'cli.help.inventory', args: '[--scope <id>] [--after <id>] [--limit <n>]',
+    bare: 'handler' },
   { name: 'paths', group: 'developer', summary: 'cli.help.summary.paths', detail: 'cli.help.paths', args: '[--global]' },
   { name: 'runtime', group: 'developer', summary: 'cli.help.summary.runtime', detail: 'cli.help.runtime', bare: { read: 'describe' }, children: [
     action('serve', 'developer', 'cli.help.action.serve', 'cli.help.runtime'),

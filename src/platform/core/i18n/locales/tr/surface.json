@@ -672,7 +672,7 @@
   "resource.cost.partial": "Maliyet kısmi. API parası, abonelik kullanımı, makine kaynakları ve insan emeği ayrı eksenlerdir. Abonelik limiti veya gelecek kalite garantisi çıkarılmaz.",
   "resource.cost.attempt": "Task {task} / Attempt {attempt} · iş sınıfı {workClass} · profil {profile} · istenen model {model} / effort {effort} · kabul {outcome}\n  örneklenen CPU {cpu} s · tepe {peak} bayt · duvar {wall} ms · ölçülen API {api} USD\n  gözlenen abonelik çağrısı {subscription} / {subscriptionMs} ms · yerel model çağrısı {local} · insan müdahalesi {human} · yeniden iş {rework} · geri alma {rollback}",
   "resource.cost.help.summary": "Run maliyet ve kabul kanıtını incele",
-  "resource.cost.help": "deckent report --scope <scope> --run <run> [--json] [--lang en|tr]\nMevcut inspect yetkisiyle salt okunur, kısmi maliyet/kalite raporu.",
+  "resource.cost.help": "deckent report [--scope <id>] [--run <id>] [--verbose] [--json] [--lang en|tr]\nMevcut inspect yetkisiyle salt okunur maliyet ve kalite raporu. Bilinen: sonuç, kabulün dayandığı kanıt, süre, CPU, bellek, model. Ölçülemeyen: her alan nedeniyle. Ham değerler ve tam kimlikler: --verbose.\n--run yoksa kapsamın son Run'ları (terminalde birini seçin). --run kısa kimlik alır.",
   "resource.cost.outcome.accepted": "kabul edildi",
   "resource.cost.outcome.failed": "başarısız",
   "resource.cost.outcome.awaiting": "karar bekliyor",
