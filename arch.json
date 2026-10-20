@@ -2549,6 +2549,7 @@
     },
     "src/surfaces/core/monitor": {
       "dependencies": [
+        "src/surfaces/core/cli-human",
         "src/engine/core/monitor",
         "src/surfaces/core/monitor-view",
         "src/surfaces/core/cli-kit",

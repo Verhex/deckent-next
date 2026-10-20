@@ -2,7 +2,7 @@ import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { acceptanceEvidenceText } from '#surfaces/core/cli-human/index.js';
 import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
 import type { RunView } from '#engine/index.js';
-import { notAcceptedLabel, quotaWaitText, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
+import { briefQualifiesAcceptance, notAcceptedLabel, quotaWaitText, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 import { runTitle, shownId } from './run-human.js';
 import type { RunCommandContext } from './context.js';
 import REGISTRY from './run.json' with { type: 'json' };
@@ -50,7 +50,8 @@ function taskLines(run: RunView, task: TaskView, models: InspectData['models'], 
     ...(task.skippedReason ? [t('cli.run.lifecycle.reason', { reason: task.skippedReason }, locale)] : []),
     ...(task.decision ? [t('cli.run.lifecycle.deadline', { since: task.decision.since, deadline: task.decision.deadline }, locale), t('cli.run.lifecycle.reason', { reason: task.decision.reason }, locale)] : []),
     ...(task.decision?.question ? [t('cli.run.lifecycle.question', { question: task.decision.question }, locale)] : []),
-    ...(task.acceptedEvidence === 'model-unverified' ? [] : acceptanceEvidenceLines(run, task, locale)),
+    // PRE-1 B3: the brief's evaluation line already names it; printed once.
+    ...(task.acceptedEvidence === 'model-unverified' || (task.resultBrief && briefQualifiesAcceptance(task.taskBrief, task.resultBrief.evaluation.verdict)) ? [] : acceptanceEvidenceLines(run, task, locale)),
     ...delivery,
     ...(models ?? []).filter(model => model.taskId === task.id).map(model => t('cli.run.inspect.model', {
       attempt: model.attemptId ? (verbose ? model.attemptId : shownId(model.attemptId)) : '—', line: renderWorkerModelLine(model, locale) }, locale)),

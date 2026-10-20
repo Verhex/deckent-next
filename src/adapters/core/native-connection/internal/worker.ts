@@ -154,14 +154,16 @@ export function secretValues(value: unknown, into: string[] = []): string[] {
 }
 /** B09-2: bounded claims, never acceptance. Mirrored by the pure domain report schema; no host imports in this mounted file. */
 interface ReportLimits { reportBytes: number; summaryChars: number; changedFiles: number; changedFileChars: number; checks: number;
-  checkCommandChars: number; openIssues: number; openIssueChars: number; handoffTaskIdChars: number; handoffSummaryChars: number;
+  checkCommandChars: number; checkIdChars: number; openIssues: number; openIssueChars: number; handoffTaskIdChars: number; handoffSummaryChars: number;
   handoffArtifacts: number; handoffArtifactNameChars: number; handoffOpenQuestions: number; handoffOpenQuestionChars: number; sharedNotes: number; sharedNoteChars: number; promptBytes: number }
 const reportText = (maxLength: number) => ({ type: 'string', maxLength });
 const reportObject = (properties: Record<string, unknown>, required = Object.keys(properties)) => ({ type: 'object', additionalProperties: false, required, properties });
 export function createFinalReportJsonSchema(l: ReportLimits, strictSchema: boolean) {
   const texts = (maxItems: number, chars: number) => ({ type: 'array', maxItems, items: reportText(chars) });
   const schema = reportObject({ schemaVersion: { type: 'integer', const: 1 }, summary: reportText(l.summaryChars), changedFiles: texts(l.changedFiles, l.changedFileChars),
-    checks: { type: 'array', maxItems: l.checks, items: reportObject({ command: reportText(l.checkCommandChars), outcome: { type: 'string', enum: ['passed', 'failed', 'not-run', 'unknown'] } }) },
+    // Owner D5a typed check: an `acceptance` check whose last outcome is not `passed` refuses the task; untyped/exploratory checks stay claims.
+    checks: { type: 'array', maxItems: l.checks, items: reportObject({ command: reportText(l.checkCommandChars), outcome: { type: 'string', enum: ['passed', 'failed', 'not-run', 'unknown'] },
+      checkId: { ...reportText(l.checkIdChars), minLength: 1 }, role: { type: 'string', enum: CHECK_ROLES } }, ['command', 'outcome']) },
     openIssues: texts(l.openIssues, l.openIssueChars), handoff: reportObject({ toTask: reportText(l.handoffTaskIdChars), summary: reportText(l.handoffSummaryChars),
       artifacts: { type: 'array', maxItems: l.handoffArtifacts, items: reportObject({ name: reportText(l.handoffArtifactNameChars), digest: { type: 'string', pattern: '^[a-f0-9]{64}$' } }) },
       openQuestions: texts(l.handoffOpenQuestions, l.handoffOpenQuestionChars) }, ['summary', 'artifacts', 'openQuestions']), sharedNotes: texts(l.sharedNotes, l.sharedNoteChars),
@@ -174,11 +176,16 @@ export function createFinalReportJsonSchema(l: ReportLimits, strictSchema: boole
     handoff.required = Object.keys(handoff.properties); handoff.properties.toTask = { type: ['string', 'null'], maxLength: l.handoffTaskIdChars };
     schema.properties.handoff = { anyOf: [handoff, { type: 'null' }] }; schema.required = Object.keys(schema.properties);
     schema.properties.exit = { anyOf: [schema.properties.exit, { type: 'null' }] };
+    const check = (schema.properties.checks as { items: ReturnType<typeof reportObject> }).items;
+    check.required = Object.keys(check.properties); check.properties.checkId = { type: ['string', 'null'], minLength: 1, maxLength: l.checkIdChars };
+    check.properties.role = { type: ['string', 'null'], enum: [...CHECK_ROLES, null] };
   }
   return schema;
 }
 interface HandoffNote { toTask?: string; summary: string; artifacts: { name: string; digest: string }[]; openQuestions: string[] }
-interface FinalReport { schemaVersion: 1; summary: string; changedFiles: string[]; checks: { command: string; outcome: 'passed' | 'failed' | 'not-run' | 'unknown' }[]; openIssues: string[];
+const CHECK_ROLES = ['acceptance', 'exploratory'];
+interface FinalReport { schemaVersion: 1; summary: string; changedFiles: string[]; openIssues: string[];
+  checks: { command: string; outcome: 'passed' | 'failed' | 'not-run' | 'unknown'; checkId?: string; role?: 'acceptance' | 'exploratory' }[];
   handoff?: HandoffNote; sharedNotes?: string[]; exit?: { schemaVersion: 1; kind: 'needs-input'; question: string } }
 type FinalReportResult = { status: 'reported'; report: FinalReport } | { status: 'unavailable'; reason: 'invalid' | 'oversized' | 'missing' | 'unsupported' };
 export function validateFinalReport(value: unknown, secrets: readonly string[], l: ReportLimits): FinalReportResult {
@@ -197,11 +204,13 @@ export function validateFinalReport(value: unknown, secrets: readonly string[], 
     || !text(value.summary, l.summaryChars) || !texts(value.changedFiles, l.changedFiles, l.changedFileChars) || !texts(value.openIssues, l.openIssues, l.openIssueChars)
     || (Object.hasOwn(value, 'handoff') && !handoff(value.handoff)) || (Object.hasOwn(value, 'sharedNotes') && !texts(value.sharedNotes, l.sharedNotes, l.sharedNoteChars))
     || (Object.hasOwn(value, 'exit') && !needsInput(value.exit))
-    || !Array.isArray(value.checks) || value.checks.length > l.checks || !value.checks.every(c => object(c, ['command', 'outcome'])
+    || !Array.isArray(value.checks) || value.checks.length > l.checks || !value.checks.every(c => object(c, ['command', 'outcome'], ['checkId', 'role'])
+      && (!Object.hasOwn(c, 'checkId') || (text(c.checkId, l.checkIdChars) && c.checkId.length > 0)) && (!Object.hasOwn(c, 'role') || CHECK_ROLES.includes(c.role as string))
       && text(c.command, l.checkCommandChars) && typeof c.outcome === 'string' && ['passed', 'failed', 'not-run', 'unknown'].includes(c.outcome))) return { status: 'unavailable', reason: 'invalid' };
   const input = value as unknown as FinalReport, red = (text: string, max: number) => redactText(text, secrets, max);
   const report: FinalReport = { schemaVersion: 1, summary: red(input.summary, l.summaryChars), changedFiles: input.changedFiles.map(x => red(x, l.changedFileChars)),
-    checks: input.checks.map(x => ({ command: red(x.command, l.checkCommandChars), outcome: x.outcome })), openIssues: input.openIssues.map(x => red(x, l.openIssueChars)),
+    checks: input.checks.map(x => ({ command: red(x.command, l.checkCommandChars), outcome: x.outcome,
+      ...(x.checkId === undefined ? {} : { checkId: red(x.checkId, l.checkIdChars) }), ...(x.role === undefined ? {} : { role: x.role }) })), openIssues: input.openIssues.map(x => red(x, l.openIssueChars)),
     ...(input.handoff ? { handoff: { ...(input.handoff.toTask === undefined ? {} : { toTask: red(input.handoff.toTask, l.handoffTaskIdChars) }),
       summary: red(input.handoff.summary, l.handoffSummaryChars), artifacts: input.handoff.artifacts.map(a => ({ name: red(a.name, l.handoffArtifactNameChars), digest: red(a.digest, a.digest.length) })),
       openQuestions: input.handoff.openQuestions.map(x => red(x, l.handoffOpenQuestionChars)) } } : {}),
@@ -210,7 +219,7 @@ export function validateFinalReport(value: unknown, secrets: readonly string[], 
   if (report.handoff && !handoff(report.handoff)) return { status: 'unavailable', reason: 'invalid' };
   return Buffer.byteLength(JSON.stringify(report)) > l.reportBytes ? { status: 'unavailable', reason: 'oversized' } : { status: 'reported', report };
 }
-function finalReportCollector(provider: string, secrets: readonly string[], limits: ReportLimits) {
+export function finalReportCollector(provider: string, secrets: readonly string[], limits: ReportLimits) {
   let result: FinalReportResult = { status: 'unavailable', reason: 'missing' };
   return {
     observe(line: string) {
@@ -225,6 +234,7 @@ function finalReportCollector(provider: string, secrets: readonly string[], limi
           const value = JSON.parse(String(item.text)) as Record<string, unknown>;
           if (value && typeof value === 'object' && !Array.isArray(value)) {
             if (value.exit === null) delete value.exit;
+            if (Array.isArray(value.checks)) for (const check of value.checks as Record<string, unknown>[]) if (check && typeof check === 'object') for (const key of ['checkId', 'role']) if (check[key] === null) delete check[key];
             if (value.handoff === null) delete value.handoff;
             else if (value.handoff && typeof value.handoff === 'object' && !Array.isArray(value.handoff) && (value.handoff as Record<string, unknown>).toTask === null) delete (value.handoff as Record<string, unknown>).toTask;
           }

@@ -71,7 +71,7 @@ export async function readMonitorWorkerContent(artifacts: ReturnType<typeof File
         const output = parseRetainedOutputEnvelope(await artifacts.read(files.identity.scopeId, outputReceipt), files.identity);
         const report = readWorkerFinalReport(output.stdout);
         return { finalReport: report.status === 'reported' ? { ...report, report: { ...report.report, summary: scrub(report.report.summary),
-          changedFiles: report.report.changedFiles.map(scrub), checks: report.report.checks.map(check => ({ ...check, command: scrub(check.command) })), openIssues: report.report.openIssues.map(scrub) } } : report };
+          changedFiles: report.report.changedFiles.map(scrub), checks: report.report.checks.map(check => ({ ...check, command: scrub(check.command), ...(check.checkId === undefined ? {} : { checkId: scrub(check.checkId) }) })), openIssues: report.report.openIssues.map(scrub) } } : report };
       }));
     } catch { result.finalReport = { schemaVersion: 1, kind: 'native-worker-report', status: 'unavailable', reason: 'invalid' }; }
   }

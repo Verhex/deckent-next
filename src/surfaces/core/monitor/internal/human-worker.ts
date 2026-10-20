@@ -1,10 +1,9 @@
-import { renderBriefLines } from './brief.js';
+import { evaluationText, renderBriefLines } from './brief.js';
 import { renderWorkerModelLine } from './worker-model.js';
-import { notAcceptedLabel } from './labels.js';
 import { redactSensitive, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { resolveWorkerUsage, type MonitorWorker } from '#engine/index.js';
 import { span, type MonitorLine } from '#surfaces/core/monitor-view/index.js';
-import { clockText, verdictLabel } from './labels.js';
+import { clockText } from './labels.js';
 const safe = (text: string) => redactSensitive(terminalSafeText(text));
 /** Human hierarchy from the shared snapshot. Reports are claims; only the engine's evaluation line states acceptance. */
 export function humanWorkerLines(worker: MonitorWorker, locale: Locale): MonitorLine[] {
@@ -24,8 +23,8 @@ export function humanWorkerLines(worker: MonitorWorker, locale: Locale): Monitor
     line(t('monitor.human.title', { title: h.title ? safe(h.title) : t('monitor.human.noTitle', {}, locale), source: sources[h.titleEvidence] }, locale), 'strong'),
     ...renderBriefLines(h.taskBrief, h.resultBrief, locale).map(text => line(text)),
     ...(worker.model?.reasoningEffort ? [line(renderWorkerModelLine(worker.model, locale))] : []),
-    ...(h.resultBrief ? [] : [line(t('monitor.human.evaluation', { verdict: verdictLabel(h.evaluation, locale) }, locale)
-      + (h.evaluationReason ? ` · ${notAcceptedLabel(h.evaluationReason, locale)}` : ''), h.evaluation === 'rejected' ? 'warning' : undefined)]),
+    ...(h.resultBrief ? [] : [line(evaluationText(h.taskBrief, { verdict: h.evaluation, ...(h.evaluationReason ? { reason: h.evaluationReason } : {}) }, locale),
+      h.evaluation === 'rejected' ? 'warning' : undefined)]),
     ...(h.evaluationReason === 'no-change-produced' && h.patch.state === 'recorded' && h.patch.fileCount === 0 ? [] : [h.patch.state === 'recorded' ? h.patch.fileCount === 0 ? line(t('monitor.human.emptyPatch', {}, locale), h.evaluation === 'rejected' ? 'warning' : undefined)
       : line(t('monitor.human.patch', { count: h.patch.fileCount ?? '—', files: h.patch.files.map(safe).join(', ') }, locale)) : line(patchMissing, 'muted')]),
     ...(h.patch.truncated ? [line(t('monitor.human.bounded', {}, locale), 'muted')] : []),

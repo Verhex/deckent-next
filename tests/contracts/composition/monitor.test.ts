@@ -302,7 +302,7 @@ describe('monitor human worker evidence', () => {
       await store.reserveRunTasks({ commandId: 'reserve-human', actor, scopeId: 's', runId: 'r-human', expectedRevision: 0, now: 20_000, identities: [identity] });
       const claim = { owner: 'worker', request: { protocolVersion: 1 as const, identity, workspace: join(root, 'gone', 'workspace'), argv: ['x'] } };
       await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim, 30_000);
-      const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: { schemaVersion: 1, summary: 'tests passed secret=private-value', changedFiles: [], checks: [{ command: 'test', outcome: 'passed' }], openIssues: [] } };
+      const report = { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: { schemaVersion: 1, summary: 'tests passed secret=private-value', changedFiles: [], checks: [{ command: 'test', outcome: 'passed', checkId: 'unit secret=private-value', role: 'acceptance' }], openIssues: [] } };
       await store.retainDispatchOutput(claim, await artifacts.put('s', Buffer.from(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout: JSON.stringify(report), stderr: '' }))));
       const events = [{ schemaVersion: 1, sequence: 1, atMs: 5, kind: 'message', role: 'assistant', excerpt: 'checked secret=private-value', textBytes: 34, thinking: false },
         { schemaVersion: 1, sequence: 2, atMs: 7, kind: 'session.ended', outcome: 'success', turns: 3, durationMs: 2000, apiDurationMs: null, costUsd: null, costBasis: null, tokens: null, permissionDenials: 0 }];
