@@ -67,7 +67,8 @@ function profile(input: CoreStageInput): CoreStageResult {
   if (!input.scopeId || !installed(input.facts)) return result({ ...waits(input.scopeId ? 'core:policy' : 'core:folder').decision, default: chosen });
   return result({ state: 'ready', reason: reason('setup.reason.profileChosen', { profile: chosen.id }), default: chosen,
     operation: { id: 'identity-profile.preview', version: 1, input: { scopeId: input.scopeId, profile: chosen } },
-    cli: ['deckent', 'identity', 'preview', '--profile', chosen.id, '--profile-version', String(chosen.version), '--scope', input.scopeId] });
+    // The command that does what the stage applies (saves the selection; review of SOLO-PROFILE): `identity preview` only shows it.
+    cli: ['deckent', 'config', 'set', 'identity.profile', JSON.stringify({ id: chosen.id, version: chosen.version }), '--global'] });
 }
 function policy(input: CoreStageInput): CoreStageResult {
   const state = input.facts.policy.state, scopeId = input.scopeId;
