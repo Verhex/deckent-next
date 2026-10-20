@@ -59,6 +59,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 ## Yalıtım
 
+- **Docker görevleri, bellek sınırlarının %75'i kadar Node heap tavanı alır.** Deckent `NODE_OPTIONS=--max-old-space-size` ayarlar;
+  böylece Node tabanlı kontroller (ör. `tsc`) konteynerin belleğini kullanır. Görev komutu `NODE_OPTIONS`'ı kendisi ayarlarsa o geçerlidir;
+  imajın kendi ortamında ayarlanan `NODE_OPTIONS` ise ezilir. Aynı konteynerdeki birden çok Node süreci sınırı paylaşır ve yine de
+  sınırda durdurulabilir (çıkış 137).
 - **Docker işçisi sanal makine değildir.** Host çekirdeğini paylaşır. *Etki:* çekirdek düzeyinde bir kaçışı Deckent
   sınırlamaz. microVM sandbox'ı planlıdır, yapılmadı.
 - **Kodlama işçisinin kendi araçları Deckent'in model giriş yolunun dışındadır.** Claude Code, Codex ve Cursor konteyner

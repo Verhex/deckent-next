@@ -60,6 +60,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 ## Isolation
 
+- **Docker tasks get a Node heap ceiling of 75 % of their memory limit.** Deckent sets `NODE_OPTIONS=--max-old-space-size` so Node-based
+  checks (for example `tsc`) use the memory the container has. A task command that sets `NODE_OPTIONS` itself wins; an image that sets
+  `NODE_OPTIONS` in its own environment is overridden. Several Node processes in one container share the limit and can still be stopped
+  by it (exit 137).
 - **A Docker worker is not a virtual machine.** It shares the host kernel. *Impact:* a kernel-level escape is not
   contained by Deckent. A microVM sandbox is planned, not built.
 - **A coding worker's own tools sit outside Deckent's model ingress.** Claude Code, Codex and Cursor use their own tools
