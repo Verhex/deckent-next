@@ -10,6 +10,7 @@ import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 // fake `docker` first on PATH. It lists twelve local images and answers `context inspect`/`info` at once; `image inspect` answers at once
 // for the chunk holding the first image and never for the others, so the discovery deadline cuts the list short. The key's focus lines say
 // so once ("Showing the N found before the time limit"), on the key and on its values; with every chunk answering, nothing is said.
+// The fixture sets the discovery limit (`toolchains.currency.timeoutMs`) to 2 s so the slow case waits 2 s, not the 5 s default.
 const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const roots: string[] = [];
@@ -74,7 +75,7 @@ async function run(slow: boolean, rows: number, columns: number) {
   const project = join(root, 'project'), home = join(root, 'home'), bin = join(root, 'bin');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }); await mkdir(home, { mode: 0o700 }); await mkdir(bin, { mode: 0o700 });
   await writeFile(join(bin, 'docker'), fakeDocker(slow), { mode: 0o700 }); await chmod(join(bin, 'docker'), 0o700);
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, inspection: { workers: { sources: [] } } }), { mode: 0o600 });
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, inspection: { workers: { sources: [] } }, toolchains: { currency: { timeoutMs: 2000 } } }), { mode: 0o600 });
   const env = { PATH: dirname(process.execPath), HOME: home, LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' };
   await execute(process.execPath, [cli, 'init', 'policy', '--scope', 'pty', '--apply'], { cwd: project, env, timeout: 60_000 });
   // The window narrowed to the key: its section · Enter (the key, with its focus lines) · Enter (the key's values) · Esc · Esc · Esc (close).
@@ -92,18 +93,21 @@ async function run(slow: boolean, rows: number, columns: number) {
 }
 const count = (text: string, part: string) => text.split(part).length - 1;
 
-// 30×160 shows the whole notice on one row; on 24×80 it wraps and still shows first in the key's focus area (which does not scroll).
-it.each([[30, 160], [24, 80]])('%i×%i: a deadline-cut image list says it is partial once, on the key and on its values, and still offers the images found (PTY, built binary)', async (rows, columns) => {
+// 24×80: the notice wraps to two rows and still shows, first, in the key's focus area (which does not scroll while the list has the keys).
+it('a deadline-cut image list says it is partial once, on the key and on its values, and still offers the images found (PTY 24×80, built binary)', async () => {
   await access(cli).catch(() => { throw new Error(`BUILD_REQUIRED: ${cli}`); });
-  const [, key, values, back] = await run(true, rows, columns);
-  const notice = columns >= 120 ? 'Showing the 3 found before the time limit; set another with config set execution.docker.imageId <json>.' : 'Showing the 3 found before the time limit';
-  for (const screen of [key!, values!, back!]) expect(count(screen.text, notice), `${screen.label}\n${screen.text}`).toBe(1);
+  const [, key, values, back] = await run(true, 24, 80);
+  for (const screen of [key!, values!, back!]) {
+    const where = `${screen.label}\n${screen.text}`, joined = screen.text.split('\n').map(line => line.replace(/^│ ?| *│$/gu, '').trimEnd()).join(' ');
+    expect(count(joined, 'Showing the 3 found before the time limit; set another with config set execution.docker.imageId <json>.'), where).toBe(1);
+    expect(joined.indexOf('Showing the 3'), where).toBeLessThan(joined.indexOf('Pinned Docker'));
+  }
   expect(count(values!.text, 'Docker · '), values!.text).toBe(3); expect(values!.text).toContain(`Docker · ${ids[0]!.slice(7, 19)}`);
 }, 150_000);
 
 it('a complete image list says nothing about a time limit (PTY, built binary)', async () => {
   await access(cli).catch(() => { throw new Error(`BUILD_REQUIRED: ${cli}`); });
-  const [, key, values] = await run(false, 30, 160);
+  const [, key, values] = await run(false, 24, 80);
   for (const screen of [key!, values!]) expect(screen.text, screen.text).not.toContain('time limit');
   expect(values!.text).toContain('of 12'); // all twelve offered (the body pages them)
 }, 150_000);
