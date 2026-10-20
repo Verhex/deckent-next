@@ -70,10 +70,20 @@ it('keeps the images proven before the deadline and still runs the daemon id che
   const docker = fakeDocker(twelve, { hang: id(12) });
   const size = Math.min(CONFIG_DISCOVERY_BOUNDS.imageChunk, Math.ceil(twelve.length / CONFIG_DISCOVERY_BOUNDS.imageProcesses));
   const hung = twelve.slice(Math.floor(11 / size) * size, Math.floor(11 / size) * size + size), proven = twelve.filter(value => !hung.includes(value));
-  expect(await discover(docker, limits)).toEqual({ value: { values: proven, partial: true } }); // CONFIG-PARTIAL-NOTICE: cut short, said so
+  expect(await discover(docker, limits)).toEqual({ value: { values: proven, partial: 'time' } }); // CONFIG-PARTIAL-NOTICE: cut short, said so
   expect(proven.length).toBeGreaterThan(0);
   expect(proven).not.toContain(id(12));
   expect(docker.infos().map(call => call.at)).toEqual([20, 380]);
   // A daemon swap is still refused when the list is partial.
   expect(await discover(fakeDocker(twelve, { hang: id(12), daemons: ['daemon-a', 'daemon-b'] }), limits)).toEqual({ value: { values: [], partial: false } });
+});
+
+// CONFIG-PARTIAL-CLI: more local images than the list holds (`maxEntries`) is a size cut, said as such; exactly `maxEntries` is complete.
+it('says a list cut by its size bound is partial (size), keeps the images it holds, and calls a list that fits complete', async () => {
+  const many = Array.from({ length: 9 }, (_, n) => id(n + 1)), bounded = { ...limits, maxEntries: 8 };
+  expect(await discover(fakeDocker(many), bounded)).toEqual({ value: { values: many.slice(0, 8), partial: 'size' } });
+  expect(await discover(fakeDocker(many.slice(0, 8)), bounded)).toEqual({ value: { values: many.slice(0, 8), partial: false } });
+  // Both cuts at once: the time limit is named (fewer than the size bound were proven).
+  const cut = await discover(fakeDocker(many, { hang: id(8) }), bounded) as { value: { values: string[]; partial: unknown } };
+  expect(cut.value.partial).toBe('time'); expect(cut.value.values).not.toContain(id(8));
 });
