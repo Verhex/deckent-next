@@ -349,7 +349,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   `deckent pool status` aynı kararı kullanır.
 - **Config penceresi seçenekleri ilk kareden önce yükler.** PATH'te Docker varsa yerel imaj listesini bekler (burada 43 imaj için
   yaklaşık 0,7 sn, ilk kare toplam 2,2 sn); seçenekler henüz anahtar açılınca yüklenmiyor. Liste süre sınırına takılırsa o ana kadar
-  doğrulanan imajlar önerilir ve anahtar listenin eksik olduğunu söyler ("Süre sınırından önce bulunan N seçenek gösteriliyor"); ikinci
+  doğrulanan imajlar önerilir ve anahtar listenin eksik olduğunu söyler ("Süre sınırından önce bulunan N seçenek gösteriliyor"); boyut sınırına takılan liste
+  (`inspection.maxPageSize` imaj ya da dizin girdisi, 256 PATH dizini) "Boyut sınırından önce bulunan N seçenek gösteriliyor" der; terminal
+  dışında değersiz `deckent config set <anahtar>` reddinde aynısını söyler ve `--json` bunu `params.partial` (`time` | `size`) ve
+  `params.found` olarak taşır; dal ve havuz listeleri `inspection.maxPageSize`'da hâlâ sessizce kesilir; ikinci
   kimlik okumasında yoğun bir daemon hiç imaj önermez. *Yol:* listenin ulaşmadığı imaj için
   `deckent config set execution.docker.imageId '"sha256:…"'`; `deckent config explain execution` şemayı gösterir.
 - **Kurulum teklifi yalnız çıplak `deckent` içindir.** Kurulumsuz bir klasörde `deckent --full-access` ve `deckent terminal`

@@ -346,7 +346,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   MCP shows only that count; v13 (fresh, or after `deckent init policy --upgrade`) gives it `pool inspect` in the installed scope. *Workaround:* ask an administrator for `pool inspect` on that pool; `deckent pool status` uses the same decision.
 - **The config window loads choices before its first frame.** With Docker on the path it waits for the local image list (about 0.7 s for
   43 images here, 2.2 s first frame in total); choices are not loaded when a key is opened yet. When the list runs out of time the
-  images proven so far are offered and the key says the list is partial ("Showing the N found before the time limit"); a busy
+  images proven so far are offered and the key says the list is partial ("Showing the N found before the time limit"); a list cut by a size bound
+  (`inspection.maxPageSize` images or directory entries, 256 PATH directories) says "Showing the N found before the size limit"; off a
+  terminal, `deckent config set <key>` without a value says the same in its refusal and `--json` carries `params.partial` (`time` | `size`)
+  and `params.found`; branch and pool lists are still cut at `inspection.maxPageSize` without saying so; a busy
   daemon at the second identity read offers none. *Workaround:* `deckent config set execution.docker.imageId '"sha256:…"'` sets an
   image the list did not reach; `deckent config explain execution` shows the schema.
 - **The setup offer is made only for bare `deckent`.** In a folder with no installation, `deckent --full-access` and `deckent terminal`
