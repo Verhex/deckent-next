@@ -6,7 +6,7 @@ import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArti
   validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
   gitQueueCandidateSource, applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, type WorkerEventSealing } from '#adapters/index.js';
 import { authenticate, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
-  RunStoreError, DispatchError, DispatchPreparationGuard, inactivityWatch, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment } from '#engine/index.js';
+  RunStoreError, DispatchError, DispatchPreparationGuard, inactivityWatch, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { parkConfiguredRunProgression } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -57,7 +57,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       // requirement refuses the launch typed below (the Run parks naming it) and releases the checkout, as the secret gate does.
       const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv };
       const probe = new DockerSupervisor({ ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid, ...(readOnlyMounts ? { readOnlyMounts } : {}) });
-      await assertTaskEnvironment(profile.environment, nativeCodingEnvironmentProbes((argv, timeoutMs) => probe.probe(request, argv, timeoutMs)))
+      await assertTaskEnvironment(profile.environment, environmentProbeRegistry.with(nativeCodingEnvironmentProbes((argv, timeoutMs) => probe.probe(request, argv, timeoutMs))))
         .catch(async (error: unknown) => { if (classifyLaunchRefusal(error).disposition === 'permanent') await broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit }); throw error; });
       await preparation.enter('handoff'); await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
       // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.

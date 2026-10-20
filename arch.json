@@ -459,6 +459,7 @@
     },
     "src/composition/core/root": {
       "dependencies": [
+        "src/engine/core/dispatch",
         "src/engine/core/provider-spend",
         "src/adapters/core/contract",
         "src/platform/core/config",
@@ -718,6 +719,7 @@
     },
     "src/engine/core/dispatch": {
       "dependencies": [
+        "src/domain/core/adapter-registry",
         "src/capabilities/core/artifacts",
         "src/domain/core/attempt",
         "src/domain/core/audit",

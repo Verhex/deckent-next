@@ -224,21 +224,21 @@ export class DockerSupervisor implements ExecutionSupervisor {
   }
   /** PRE-7: one environment probe on the worker's floor (same image, user, `--network none`, sandbox flags, tmpfs, Node heap environment and
    * re-checked read-only dependency binds), without the workspace and never the connection: no credential, no model. `argv` comes only from
-   * an adapter's probe-kind registry. Exit 0 = met, any other exit of the probe = unmet; past `timeoutMs` the container is killed (unmet);
-   * `--rm` removes it. A daemon refusal (exit 125) or an unclassified failure stays a control failure (transient). */
+   * an adapter's probe-kind registry. Exit 0 = met, any other exit of the probe = unmet, past `timeoutMs` unmet. The labelled probe container
+   * holds no evidence, so it is force-removed before the answer returns (no leftover, also after the bound). A daemon refusal (exit 125)
+   * or an unclassified failure stays a control failure (transient). */
   async probe(input: SandboxRequest, argv: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<'met' | 'unmet'> {
     const { digest, handle } = this.identity(input), o = this.options, name = `${handle}-env-${randomUUID()}`, mounts: string[] = [];
     for (const mount of o.readOnlyMounts ?? []) { await assertReadOnlyMountSource(mount.source, [resolve(o.workspaceRoot)]); mounts.push('--mount', `type=bind,src=${mount.source},dst=${mount.target},readonly`); }
     try {
-      await this.command(['run', '--rm', '--name', name, '--label', 'deckent.preflight=' + digest, '--network', 'none', ...this.floor(), '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
+      await this.command(['run', '--name', name, '--label', 'deckent.preflight=' + digest, '--network', 'none', ...this.floor(), '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
         ...mounts, ...dockerNodeHeapEnvironment(o.memoryBytes), '--workdir', '/tmp', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], timeoutMs, signal);
       return 'met';
     } catch (error) {
       if (!(error instanceof DockerCommandFailure)) throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
-      if (error.stop === 'deadline') { await this.command(['kill', name], o.controlTimeoutMs).catch(() => undefined); return 'unmet'; }
-      if (typeof error.code === 'number' && error.code !== DOCKER_RUN_DAEMON_FAILURE) return 'unmet';
+      if (error.stop === 'deadline' || (typeof error.code === 'number' && error.code !== DOCKER_RUN_DAEMON_FAILURE)) return 'unmet';
       throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
-    }
+    } finally { await this.command(['rm', '--force', name], o.controlTimeoutMs).catch(() => undefined); }
   }
   /** EXEC-RELEASE: only the labelled, exited container of this exact request, removed by its immutable id (no name reuse between
    * inspect and rm), never forced; success requires Docker to echo that id and a later inspect to report it absent. */

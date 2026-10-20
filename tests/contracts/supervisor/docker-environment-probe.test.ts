@@ -35,9 +35,11 @@ it('runs a registry probe with the worker floor and without the workspace or the
     readOnlyMounts: [{ source: r.deps, target: '/deps' }] }, runner);
   expect(await supervisor.probe(request(r.workspace), ['node', '--version'], 5000)).toBe('met');
   const run = calls[0]!;
-  for (const flag of ['--rm', '--network', 'none', '--read-only', '--cap-drop', 'ALL', 'no-new-privileges', '--user', '1000:1000', `type=bind,src=${r.deps},dst=/deps,readonly`, 'NODE_OPTIONS=--max-old-space-size=1536']) expect(run).toContain(flag);
+  for (const flag of ['--network', 'none', '--read-only', '--cap-drop', 'ALL', 'no-new-privileges', '--user', '1000:1000', `type=bind,src=${r.deps},dst=/deps,readonly`, 'NODE_OPTIONS=--max-old-space-size=1536']) expect(run).toContain(flag);
   expect(run.join(' ')).not.toContain('/workspace'); expect(run.join(' ')).not.toContain('deckent-connection'); expect(run.join(' ')).not.toContain('deckent.request=');
   expect(run.slice(-2)).toEqual(['sha256:' + 'b'.repeat(64), '--version']); expect(run[run.indexOf('--entrypoint') + 1]).toBe('node');
+  // The probe container is removed before the answer returns (it holds no evidence).
+  expect(calls[1]).toEqual(['rm', '--force', run[run.indexOf('--name') + 1]]);
   exit = 127; expect(await supervisor.probe(request(r.workspace), ['missing-tool', '--version'], 5000)).toBe('unmet');
   exit = 1; expect(await supervisor.probe(request(r.workspace), ['node', '-e', 'process.exit(1)'], 5000)).toBe('unmet');
   exit = 125; await expect(supervisor.probe(request(r.workspace), ['node', '--version'], 5000)).rejects.toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED' });
@@ -65,5 +67,6 @@ it.skipIf(process.platform !== 'linux' || !dockerImage)('real Docker on the pinn
   expect(await check('node-heap', 'node', String(1536 * MiB))).toBe('met'); expect(await check('node-heap', 'node', String(2048 * MiB))).toBe('unmet');
   // A probe that outlives its bound is killed and counts as unmet.
   expect(await supervisor.probe(req, ['node', '-e', 'setTimeout(() => {}, 60000)'], 1500)).toBe('unmet');
-  expect((await exec('/usr/bin/docker', ['ps', '-aq', '--filter', 'label=deckent.preflight'])).stdout.trim()).toBe('');
+  const { handle } = await supervisor.inspectActivity(req);
+  expect((await exec('/usr/bin/docker', ['ps', '-aq', '--filter', `name=${handle}-env-`])).stdout.trim()).toBe('');
 }, 120_000);

@@ -25,7 +25,7 @@ const STATE: Readonly<Record<MonitorBlockerCode, MonitorRunState>> = Object.free
   'waiting-dependency': 'waiting', 'waiting-scope-conflict': 'waiting', 'worker-stale-heartbeat': 'blocked', 'evaluation-not-ready': 'blocked', 'evaluation-unknown': 'blocked',
   'unresolved-effect': 'blocked', 'not-admitted': 'blocked', 'unknown': 'blocked' });
 /** PRE-7: the parked blocker's detail for an environment park: this prefix + the unmet requirement id (the view names it in words). */
-export const MONITOR_ENVIRONMENT_DETAIL = 'environment-not-ready:';
+export const MONITOR_ENVIRONMENT_DETAIL = 'environment-not-ready:' as const;
 const OPEN = new Set(['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision']);
 const blocker = (code: MonitorBlockerCode, taskId: string | null, sinceMs: number | null = null, detail: string | null = null): MonitorBlocker =>
   Object.freeze({ code, taskId, sinceMs, detail });

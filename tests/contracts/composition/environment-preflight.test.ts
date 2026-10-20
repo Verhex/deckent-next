@@ -21,7 +21,11 @@ const exec = promisify(execFile), roots: string[] = [];
 const dockerImage = process.env.DECKENT_TEST_DOCKER_IMAGE;
 afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const REQUIREMENTS = { schemaVersion: 1, requirements: [{ id: 'node', kind: 'executable', target: 'node' }, { id: 'marker', kind: 'path-readable', target: '/deps/marker.txt' }] };
-const preflightContainers = async () => (await exec('/usr/bin/docker', ['ps', '-aq', '--filter', 'label=deckent.preflight'])).stdout.trim();
+/** This test's probe containers (by the worker handle they derive from); other files' probes may run in parallel. */
+const preflightContainers = async (probe: { mock: { contexts: unknown[]; calls: unknown[][] } }) => {
+  const handles = await Promise.all(probe.mock.calls.map((call, index) => (probe.mock.contexts[index] as DockerSupervisor).inspectActivity(call[0] as never).then(value => value.handle)));
+  return (await Promise.all(handles.map(async handle => (await exec('/usr/bin/docker', ['ps', '-aq', '--filter', `name=${handle}-env-`])).stdout.trim()))).join('');
+};
 
 async function fixture(context: TestContext, environment: object) {
   if (process.platform !== 'linux' || !dockerImage) context.skip('Docker execution and the private ledger are Linux-only here; needs DECKENT_TEST_DOCKER_IMAGE');
@@ -67,7 +71,7 @@ it('an unmet declared requirement parks the Run naming it before any worker: no 
     // Both probes ran in declaration order on the worker's floor; neither the worker nor its connection started.
     expect(probe.mock.calls.map(call => call[1])).toEqual([['node', '--version'], ['node', '-e', expect.stringContaining('accessSync'), '/deps/marker.txt']]);
     expect(execute).not.toHaveBeenCalled(); expect(await f.store.loadBoundDispatch(identity)).toBeNull();
-    expect(await readdir(f.workspaces)).toEqual([]); expect(await preflightContainers()).toBe('');
+    expect(await readdir(f.workspaces)).toEqual([]); expect(await preflightContainers(probe)).toBe('');
     expect((await f.store.load('s', identity.attemptId))!.lastObservation?.result).toEqual({ kind: 'launch-refused', code: 'EXECUTION_ENVIRONMENT_NOT_READY', requirement: 'marker' });
     const run = (await f.store.loadRun('s', 'r'))!;
     expect(run.state).toMatchObject({ kind: 'parked', reason: 'environment-not-ready', failureCode: 'marker' });
@@ -108,7 +112,7 @@ it('after the operator fixes the environment and resumes, a new attempt is check
     const run = (await f.store.loadRun('s', 'r'))!;
     expect(run.previousBindings).toEqual([expect.objectContaining({ identity: first, observedKind: 'launch-refused' })]);
     expect(run.bindings).toEqual([expect.objectContaining({ identity: second, observedKind: 'exited' })]);
-    expect(await preflightContainers()).toBe('');
+    expect(await preflightContainers(probe)).toBe('');
   } finally { f.store.close(); }
 }, 120_000);
 
