@@ -87,8 +87,13 @@ export function installStatusLabel(status: MonitorInstallStatus, locale: Locale)
 export function notAcceptedLabel(reason: NonNullable<MonitorTask['evaluation']['reason']>, locale: Locale): string {
   const labels = { 'no-change-produced': t('task.acceptance.noChangeProduced', {}, locale), 'report-missing': t('task.acceptance.reportMissing', {}, locale),
     'report-invalid': t('task.acceptance.reportInvalid', {}, locale), 'declared-check-not-passed': t('task.acceptance.declaredCheckNotPassed', {}, locale),
-    'worker-stalled': t('task.acceptance.workerStalled', {}, locale) };
+    'worker-stalled': t('task.acceptance.workerStalled', {}, locale), 'acceptance-check-not-run': t('task.acceptance.checkNotRun', {}, locale) };
   return labels[reason];
+}
+/** PRE-7: the next step after an acceptance check the worker could not run. Deckent's preflight checks only declared requirements, so an
+ * undeclared missing tool reaches the worker; the operator may declare it on the task's template (never added automatically). */
+export function notAcceptedNextStep(reason: NonNullable<MonitorTask['evaluation']['reason']>, profile: Readonly<{ id: string; version: number }> | null, locale: Locale): string[] {
+  return reason === 'acceptance-check-not-run' ? [t('task.acceptance.checkNotRunNext', { template: profile?.id ?? '—', version: profile?.version ?? '—' }, locale)] : [];
 }
 /** PRE-34: the shared stop cause in words (one map, every monitor surface); `unrecorded` keeps the honest "not recorded". */
 export function stopCauseText(cause: StopCause, locale: Locale): string {

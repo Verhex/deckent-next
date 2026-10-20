@@ -19,7 +19,7 @@ export function runControls(run: RunView): readonly RunControl[] {
   if (run.cancellationRequested) return ['cancel'];
   if (run.state.kind !== 'parked') return ['cancel', 'hold'];
   const held = run.state.reason === 'operator-hold' || run.state.operatorHold !== undefined;
-  return ['cancel', ...(held ? [] : ['hold' as const]), ...(held || run.state.reason === 'progression-failed' ? ['resume' as const] : []), 'close'];
+  return ['cancel', ...(held ? [] : ['hold' as const]), ...(held || run.state.reason === 'progression-failed' || run.state.reason === 'environment-not-ready' ? ['resume' as const] : []), 'close'];
 }
 
 /** The card of one control in the terminal's own words (`terminal.runControl.*`, `terminal.cancel.*`; the hold consequence names the CLI resume, not the window's `r` key): what it does, the scope, the Run's state at its revision, its identity. */

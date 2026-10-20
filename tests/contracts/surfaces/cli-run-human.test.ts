@@ -179,7 +179,7 @@ it('TTY cancel and close: a yes sends one command with a system command id at th
 
 it('the TTY control offer equals the terminal /runs keys for hold, resume and close in every Run state', () => {
   const states = [{ kind: 'running' }, { kind: 'terminal', outcome: 'failed', reason: 'completed' },
-    ...['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted']
+    ...['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready']
       .map(reason => ({ kind: 'parked', reason, since: 1, deadline: 2 })), { kind: 'parked', reason: 'needs-input', since: 1, deadline: 2, operatorHold: { schemaVersion: 1, note: 'n' } }];
   for (const state of states) for (const cancellationRequested of [false, true]) {
     const runView = { ...view(), state, cancellationRequested } as never;

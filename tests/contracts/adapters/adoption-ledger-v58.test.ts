@@ -44,14 +44,14 @@ async function v57Ledger() {
 }
 
 it('upgrades a populated v57 journal to v58: every row kept byte for byte, stamped pre-v58, and the old uniqueness still holds', async () => {
-  expect(CURRENT_LEDGER_VERSION).toBe(58); expect(ADOPTION_REPOSITORY_LEDGER_VERSION).toBe(58);
+  expect(CURRENT_LEDGER_VERSION).toBe(59); expect(ADOPTION_REPOSITORY_LEDGER_VERSION).toBe(58);
   const { path, backups } = await v57Ledger();
   const before = rows(path, 'SELECT scope_id,command_id,target_ref,sequence,kind,intent,settled FROM workspace_adoptions ORDER BY target_ref,sequence');
   expect(before).toHaveLength(22);
   // The v58 build refuses the older ledger for normal writers until the service-start upgrade runs.
   expect(() => openSqliteLedger(path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgrade = await upgradeExistingProductLedger(path, options, backups, new Date('2026-10-17T12:00:00.000Z'));
-  expect(upgrade).toEqual({ from: 57, to: 58, backupPath: join(backups, 'ledger-v57-2026-10-17T12-00-00-000Z.db') });
+  expect(upgrade).toEqual({ from: 57, to: CURRENT_LEDGER_VERSION, backupPath: join(backups, 'ledger-v57-2026-10-17T12-00-00-000Z.db') });
   expect(rows(upgrade!.backupPath, 'SELECT scope_id,command_id,target_ref,sequence,kind,intent,settled FROM workspace_adoptions ORDER BY target_ref,sequence')).toEqual(before);
   expect(rows(path, 'SELECT scope_id,command_id,target_ref,sequence,kind,intent,settled FROM workspace_adoptions ORDER BY target_ref,sequence')).toEqual(before);
   expect(rows(path, 'SELECT DISTINCT repository FROM workspace_adoptions')).toEqual([{ repository: 'pre-v58' }]);
@@ -62,7 +62,7 @@ it('upgrades a populated v57 journal to v58: every row kept byte for byte, stamp
     expect(() => db.prepare("INSERT INTO workspace_adoptions VALUES('s','bad','pre-v58',?,21,'adopt','{}',3)").run(TARGET)).toThrow(/CHECK/u);
   } finally { db.close(); }
   // A newer ledger is never reopened by this build (downgrade = restore the pre-switch backup).
-  const newer = new DatabaseSync(path); newer.exec('PRAGMA user_version=59'); newer.close();
+  const newer = new DatabaseSync(path); newer.exec(`PRAGMA user_version=${CURRENT_LEDGER_VERSION + 1}`); newer.close();
   expect(() => openSqliteLedger(path, options, 'allow')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
 });
 

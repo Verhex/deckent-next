@@ -24,6 +24,8 @@ const STATE: Readonly<Record<MonitorBlockerCode, MonitorRunState>> = Object.free
   'waiting-pool-slot': 'waiting', 'waiting-execution-slot': 'waiting', 'pool-held': 'waiting', 'awaiting-approval': 'waiting', 'cancellation-pending': 'waiting', 'worker-exited-unevaluated': 'waiting',
   'waiting-dependency': 'waiting', 'waiting-scope-conflict': 'waiting', 'worker-stale-heartbeat': 'blocked', 'evaluation-not-ready': 'blocked', 'evaluation-unknown': 'blocked',
   'unresolved-effect': 'blocked', 'not-admitted': 'blocked', 'unknown': 'blocked' });
+/** PRE-7: the parked blocker's detail for an environment park: this prefix + the unmet requirement id (the view names it in words). */
+export const MONITOR_ENVIRONMENT_DETAIL = 'environment-not-ready:';
 const OPEN = new Set(['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision']);
 const blocker = (code: MonitorBlockerCode, taskId: string | null, sinceMs: number | null = null, detail: string | null = null): MonitorBlocker =>
   Object.freeze({ code, taskId, sinceMs, detail });
@@ -100,7 +102,7 @@ function pendingBlocker(task: TaskReadiness, e: MonitorRunEvidence, conflicting:
 export function deriveRunBlocker(e: MonitorRunEvidence): MonitorBlocker | null {
   const snapshot = e.run.snapshot;
   if (snapshot.state.kind === 'terminal') return null;
-  if (snapshot.state.kind === 'parked') return { ...blocker('parked', null, snapshot.state.since, snapshot.state.reason === 'quota-exhausted' ? (snapshot.quotaWaits ?? []).some(wait => (snapshot.quotaWaits ?? []).filter(row => row.identity.taskId === wait.identity.taskId).length > wait.maxResumes) ? 'quota-retry-limit' : (snapshot.quotaWaits ?? []).some(wait => wait.resetBoundExceeded || wait.quota.resetsAtMs === null || wait.quota.resetsAtMs <= wait.since) ? 'quota-reset-unknown' : 'quota-exhausted' : snapshot.state.failureCode ?? (snapshot.state.reason === 'dependency-failed' && snapshot.progress.some(task => task.notAcceptedReason === 'worker-stalled') ? 'TASK_STALL_RETRY_EXHAUSTED' : snapshot.state.reason)), deadlineMs: snapshot.state.deadline };
+  if (snapshot.state.kind === 'parked') return { ...blocker('parked', null, snapshot.state.since, snapshot.state.reason === 'quota-exhausted' ? (snapshot.quotaWaits ?? []).some(wait => (snapshot.quotaWaits ?? []).filter(row => row.identity.taskId === wait.identity.taskId).length > wait.maxResumes) ? 'quota-retry-limit' : (snapshot.quotaWaits ?? []).some(wait => wait.resetBoundExceeded || wait.quota.resetsAtMs === null || wait.quota.resetsAtMs <= wait.since) ? 'quota-reset-unknown' : 'quota-exhausted' : snapshot.state.reason === 'environment-not-ready' ? MONITOR_ENVIRONMENT_DETAIL + snapshot.state.failureCode : snapshot.state.failureCode ?? (snapshot.state.reason === 'dependency-failed' && snapshot.progress.some(task => task.notAcceptedReason === 'worker-stalled') ? 'TASK_STALL_RETRY_EXHAUSTED' : snapshot.state.reason)), deadlineMs: snapshot.state.deadline };
   if (!snapshot.progress.some(task => OPEN.has(task.phase))) return null;
   if (snapshot.cancelRequested) return blocker('cancellation-pending', null);
   const ready = readiness(e.run, e.observedAt); const candidates: MonitorBlocker[] = [];

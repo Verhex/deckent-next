@@ -1138,5 +1138,6 @@
   "terminal.delivery.nextDefault": "Başka bir şey yazılmadı. /deliver yeniden açar; /run işi gösterir.",
   "terminal.delivery.pickerTitle": "/deliver · teslim bekleyen görevler",
   "terminal.delivery.none": "Teslim bekleyen görev yok.",
-  "terminal.delivery.fallbackTitle": "Kabul edilen görev"
+  "terminal.delivery.fallbackTitle": "Kabul edilen görev",
+  "terminal.jobs.parked.environment-not-ready": "ortam hazır değil"
 }

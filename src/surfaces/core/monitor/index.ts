@@ -8,7 +8,7 @@ export { renderResourceDetail } from './internal/resources.js';
 
 export { briefQualifiesAcceptance, renderBriefLines } from './internal/brief.js';
 export { renderGraphSummaryLines } from './internal/graph-summary.js';
-export { quotaWaitText, clockText, processExitText, processLabel, notAcceptedLabel } from './internal/labels.js';
+export { quotaWaitText, clockText, processExitText, processLabel, notAcceptedLabel, notAcceptedNextStep } from './internal/labels.js';
 
 export { renderAcceptanceLine } from './internal/acceptance.js';
 export { renderCostReport, renderCostSummary } from './internal/costs.js';
