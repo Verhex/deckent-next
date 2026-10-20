@@ -88,9 +88,10 @@ it('an unmet declared requirement parks the Run naming it before any worker: no 
       .flatMap(block => block.kind === 'table' ? block.rows : []).flatMap(row => [row.cells.map(cell => cell.text).join(' '), ...row.detail().map(line => line.map(item => item.text).join(''))]).join('\n');
     expect(monitor).toContain('environment not ready: marker');
     // The --once summary renders the same words (one detail renderer), never the raw machine detail.
-    for (const [locale, words] of [['en', 'environment not ready: marker'], ['tr', 'ortam hazır değil: marker']] as const) {
-      const once = (await loadMonitorSurface()).renderMonitorText(await inspectMonitor(f.project, f.options), { locale, width: 200, ascii: true });
-      expect(once).toContain(words); expect(once).not.toContain('environment-not-ready:marker');
+    // Phase 2 (lead, brief §1): the park line says in words it is an installation problem, not a worker or task failure.
+    for (const [locale, words, kind] of [['en', 'environment not ready: marker', 'an installation problem, not a task failure'], ['tr', 'ortam hazır değil: marker', 'kurulum sorunu, görev hatası değil']] as const) {
+      const once = (await loadMonitorSurface()).renderMonitorText(await inspectMonitor(f.project, f.options), { locale, width: 240, ascii: true });
+      expect(once).toContain(words); expect(once).toContain(kind); expect(once).not.toContain('environment-not-ready:marker');
     }
   } finally { f.store.close(); }
 }, 120_000);

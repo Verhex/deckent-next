@@ -18,9 +18,20 @@ it('a coding template carries its declared requirements into the compiled task p
   const hand = compileNativeCodingDockerProfile({ id: template.id, version: template.version, adapter: { id: 'docker', version: 2 }, parameters: { argv: ['unused'], ...docker } },
     { schemaVersion: 4, ...invocation, model, composition: { schemaVersion: 1, task: workInput.task, scope: 'note.txt', acceptance: workInput.acceptance } });
   expect(encodeExecutionProfileDefinition(compiled)).toBe(encodeExecutionProfileDefinition(hand));
-  // Without a declaration nothing changes (existing templates and their ids stay as they are).
+});
+
+// PRE-7 phase 2 (lead Q3): `coding template` / `init registry` declare the coding defaults from the adapter registry when the operator
+// declared none: node; the typescript path only with a dependency mount at /node_modules; the heap ceiling node-heap.json sets.
+it('a template created without a declaration gets the registry defaults; a dependency mount adds typescript; an explicit declaration wins', () => {
   const { environment: _none, ...plain } = docker; void _none;
-  expect(resolveDockerTaskProfile(compileNativeCodingWorkInput(createNativeCodingTemplate(plain, invocation), workInput)).environment).toBeUndefined();
+  const defaults = createNativeCodingTemplate(plain, invocation).parameters['docker'] as { environment?: unknown };
+  expect(defaults.environment).toEqual({ schemaVersion: 1, requirements: [{ id: 'node', kind: 'executable', target: 'node' },
+    { id: 'node-heap', kind: 'node-heap', target: 'node', expect: String(1536 * 1024 * 1024) }] });
+  const mounted = createNativeCodingTemplate({ ...plain, readOnlyMounts: [{ source: 'deps/node_modules', target: '/node_modules' }] }, invocation).parameters['docker'] as { environment?: { requirements: { id: string }[] } };
+  expect(mounted.environment!.requirements.map(row => row.id)).toEqual(['node', 'typescript', 'node-heap']);
+  expect((createNativeCodingTemplate(docker, invocation).parameters['docker'] as { environment?: unknown }).environment).toEqual(environment);
+  // The defaults reach the frozen task profile like any declaration.
+  expect(resolveDockerTaskProfile(compileNativeCodingWorkInput(createNativeCodingTemplate(plain, invocation), workInput)).environment).toEqual(defaults.environment);
 });
 
 it('negative: a template whose requirement carries a command or an invalid shape is refused at creation', () => {

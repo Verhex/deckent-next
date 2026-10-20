@@ -6,3 +6,8 @@ export function dockerNodeHeapEnvironment(memoryBytes: number): readonly string[
   const units = Math.floor(memoryBytes * policy.memoryFraction / policy.bytesPerUnit);
   return units > 0 ? ['--env', `${policy.environment}=${policy.flag}${units}`] : [];
 }
+/** PRE-7: the heap ceiling (bytes) that environment sets for this memory limit; null when none is set. */
+export function dockerNodeHeapCeilingBytes(memoryBytes: number): number | null {
+  const units = Math.floor(memoryBytes * policy.memoryFraction / policy.bytesPerUnit);
+  return units > 0 ? units * policy.bytesPerUnit : null;
+}

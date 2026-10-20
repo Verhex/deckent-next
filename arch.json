@@ -3206,6 +3206,7 @@
     },
     "src/surfaces/core/cli-admin": {
       "dependencies": [
+        "src/domain/core/attempt",
         "src/domain/core/audit",
         "src/surfaces/core/doctor",
         "src/platform/core/output",
