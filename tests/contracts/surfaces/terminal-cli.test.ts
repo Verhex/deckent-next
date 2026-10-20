@@ -1,13 +1,13 @@
 import { ensureConfiguredTerminalIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RUNTIME_SERVICE_HEARTBEAT_MS } from '#engine/index.js';
 import { main } from '../../../src/surfaces/index.js';
 import { runtimeBuildSkew } from '#surfaces/core/cli/index.js';
-import { clearConfigCache, t } from '#platform/index.js';
+import { clearConfigCache, resolveGlobalConfigPaths, t } from '#platform/index.js';
 import { readLocalOsIdentity, registerProviderConfig } from '#adapters/index.js';
 
 /** A minimal in-memory TTY screen: the composer's real render lands here through `runTerminalWorkline`. */
@@ -41,6 +41,10 @@ async function fixture() {
   }
   return { project, env: { HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: join(home, '.config'), DECKENT_GLOBAL_HOME: join(home, 'global') } };
 }
+/** SEC-3: only the installation (global) layer may hold a $DECK reference; fixtures put their references there. */
+async function writeInstallationConfig(env: Readonly<Record<string, string>>, config: object): Promise<void> {
+  const path = resolveGlobalConfigPaths(env).platformPath; await mkdir(dirname(path), { recursive: true }); await writeFile(path, JSON.stringify(config));
+}
 function sink() { const values: string[] = []; return { values, text: () => values.join(''), output: { write(value: string) { values.push(value); } } }; }
 const plan = { schemaVersion: 1 as const, status: 'ready' as const, reference: { providerId: 'local', providerVersion: 1, modelId: 'chat', modelVersion: 1 },
   catalogRevision: 'r1', maxCompletionTokens: 64, historyMessages: 3 };
@@ -62,7 +66,8 @@ describe('deckent terminal CLI', () => {
     const piped = sink();
     expect(await main([], { root: f.project, env: { ...f.env, DECKENT_LANGUAGE: 'en' }, stdout: piped.output, stderr: piped.output, initialize() {},
       stdin: Object.assign(Readable.from([]), { isTTY: false }) })).toBe(0);
-    expect(piped.text()).toContain('opens the interactive session');
+    // L-HELP (J1b): the main help's Surfaces section states the same rule (the retired cli.help.default line said it before).
+    expect(piped.text()).toContain('the interactive terminal on a real terminal; this help');
     const dumb = sink();
     expect(await main([], { ...tty('dumb'), stdout: Object.assign(dumb.output, { isTTY: true }), stderr: dumb.output })).toBe(0);
     expect(dumb.text()).toContain('Usage:');
@@ -253,7 +258,8 @@ it.skipIf(process.platform === 'win32')('S06 CLI config snapshot protects actual
   for (const locale of ['en', 'tr'] as const) for (const streamed of [false, true]) {
     const f = await fixture(); const stdout = new Screen(); const stdin = keyboard();
     const canary = `fictitious-**s06**${streamed ? '-' : '\n'}known-0123456789`;
-    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:S06_TEST', terminal: { autostartService: false } }));
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ terminal: { autostartService: false } }));
+    await writeInstallationConfig(f.env, { projectName: '$DECK:S06_TEST' });
     const reply = `Prose می\u200cروم 👩\u200d💻 ❤️ literal <U+202E>\n\`path\u200bfile\` ${canary} ${canary.slice(0, 14)}\u001b[31m${canary.slice(14)} ${canary.slice(0, 14)}\u0002${canary.slice(14)} override \u202eEND`;
     const stream = async function* () { yield { kind: 'text' as const, text: reply }; yield { kind: 'done' as const, finish: 'stop' as const, note: null }; };
     const run = main(['terminal', 'workline', '--scope', 's', '--lang', locale], {
@@ -280,7 +286,7 @@ it.skipIf(process.platform === 'win32')('S06 CLI config snapshot protects actual
 it('S05 line mode redacts a known value and a provider token split across deltas, marks bidi/tag characters and writes no escape', async () => {
   registerProviderConfig();
   const f = await fixture(), out = sink(), err = sink(), canary = 'fictitious-line-known-0123456789';
-  await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:LINE_TEST' }));
+  await writeInstallationConfig(f.env, { projectName: '$DECK:LINE_TEST' });
   const code = await main(['terminal', 'session', '--scope', 's', '--lang', 'en'], { root: f.project, env: { ...f.env, LINE_TEST: canary }, stdout: out.output, stderr: err.output,
     stdin: Object.assign(Readable.from(['go\n', 'osc\n', 'ask\n', '/exit\n']), { isTTY: false }), initialize() {},
     async describeTerminalChatPlan() { return plan; }, async completeTerminalChat() { throw new Error('line mode must stream'); },
@@ -320,7 +326,7 @@ it('dispatches deckent --scope to the same terminal command, including typed TTY
 it('W12 line mode masks a multiline known value across complete-line and delta boundaries, preserving raw history', async () => {
   registerProviderConfig();
   const f = await fixture(), out = sink(), err = sink(), canary = 'W12-first-part\nsecond-part-012345';
-  await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:LINE_TEST' }));
+  await writeInstallationConfig(f.env, { projectName: '$DECK:LINE_TEST' });
   const histories: string[] = [];
   const code = await main(['terminal', 'session', '--scope', 's', '--lang', 'en'], { root: f.project, env: { ...f.env, LINE_TEST: canary }, stdout: out.output, stderr: err.output,
     stdin: Object.assign(Readable.from(['go\n', 'again\n', '/exit\n']), { isTTY: false }), initialize() {}, async describeTerminalChatPlan() { return { ...plan, historyMessages: 40 }; },

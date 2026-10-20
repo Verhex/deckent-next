@@ -1,9 +1,9 @@
 import { realpath } from 'node:fs/promises';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { EffectError, type AgentToolOutcome } from '#domain/index.js';
-import { EffectApplication, OperationPolicyAuthorization, agentToolApprovalFacts, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
+import { EffectApplication, OperationPolicyAuthorization, agentToolApprovalFacts, assertAuthorityWitness, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
 import { configuredSecretResolver, ManagedFileError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { agentWorkspaceDeny, createLocalPeerSession, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes,
+import { agentWorkspaceDeny, attestLocalInteractiveTerminal, createLocalPeerSession, localPrincipalChannel, localPrincipalPeer, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes,
   McpToolTarget, mcpImportEntry, MCP_SERVER_NAME, mcpSendAuthority, mcpTrustAuditWriter, mcpTurnTools, openSqliteAttemptStore, openTurnMcp, readLocalOsIdentity, readMcpImportSources, runMcpCommand,
   type LocalPeerIdentity, type McpImportFrom,
   type McpCallOutcome, type McpClientPool, type McpCommandContext, type McpCommandRequest, type McpLaunchContext, type McpStartNotice } from '#adapters/index.js';
@@ -104,7 +104,11 @@ export async function runConfiguredMcpCommand(projectRoot: string, request: McpC
   const workspace = await createWorkspaceReadTools(projectRoot, { deny: agentWorkspaceDeny(projectRoot, config.productLayout) }),
     scopeId = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? 'installation';
   const shown = locale ?? resolveLocale(undefined, environment, config.language);
-  const context: McpCommandContext = { projectRoot, scopeId, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask,
+  // SEC-1 (owner A48-D5): a trust decision is an authority write. The witness (this process, or the service peer that asked) comes before any card,
+  // `--yes` included, and before any start, audit or write; the MCP actor never decides. In-turn cards are already witnessed by `decideApproval`.
+  const peer = localPrincipalPeer(), channel = localPrincipalChannel(), witnessed: McpCommandContext['ask'] = async card => {
+    await assertAuthorityWitness('mcpTrust', channel, { attest: () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid) }); return ask(card); };
+  const context: McpCommandContext = { projectRoot, scopeId, layout: config.productLayout, environment, sandboxes: mcpInspectSandboxes(workspace.scope, isWriteApprovalFloored), principal, ask: witnessed,
     grants: configuredMcpToolGrants(projectRoot, scopeId, options, principal),
     describeNotice: notice => renderMcpStartNotice(notice, shown),
     secret: configuredSecretResolver(config, options), limits: { inputMaxBytes: config.mcp.inputMaxBytes },

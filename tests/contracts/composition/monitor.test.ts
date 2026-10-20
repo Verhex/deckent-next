@@ -47,6 +47,8 @@ async function project(root: string, name: string, scopes: readonly string[], gr
     ...(extra.includes('runs') ? [{ id: 'runs', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'run', ids: 'all' } }] : []),
     ...(extra.includes('output') ? [{ id: 'output', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['read-output'], resource: { kind: 'attempt', ids: 'all' } }] : []),
     ...(extra.includes('approvals') ? [{ id: 'approvals', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'approval', ids: [...granted] } }] : []),
+    // M-VIS: the monitor shows a pool only on the viewer's `pool inspect` allow (the first-run owner holds it); negatives in monitor-pool-visibility.test.ts.
+    { id: 'pools', effect: 'allow', scopes: [...granted], principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], actions: ['inspect'], resource: { kind: 'pool', ids: 'all' } },
   ] }), { mode: 0o600 });
   const store = await openSqliteAttemptStore(opened.path, { busyTimeoutMs: 100, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles);
   try {
@@ -99,7 +101,7 @@ describe('inspectMonitor composition', () => {
     expect(snapshot).toMatchObject({ schemaVersion: 1, control: 'observe-only' }); expect(snapshot.installs.map(install => install.id)).toEqual(['current', 'dogfood', 'gone']);
     const [mine, dogfood, missing] = snapshot.installs;
     expect(mine).toMatchObject({ path: current.dir, status: 'available', scopeIds: ['s', 's2'], ledgerVersion: CURRENT_LEDGER_VERSION, service: { state: process.platform === 'linux' ? 'stopped' : 'unknown', build: null } });
-    expect(mine!.diagnostics).toContain('scope-denied:hidden');
+    expect(mine!.diagnostics).toContain('scopes-denied:1'); expect(JSON.stringify(mine)).not.toMatch(/hidden(?!Pools)/);
     if (process.platform !== 'linux') expect(mine!.diagnostics).toContain('service-unavailable:LOCAL_RUNTIME_UNSUPPORTED');
     const runs = Object.fromEntries(mine!.runs.map(run => [run.runId, run]));
     expect(Object.keys(runs).sort()).toEqual(['current-s', 'current-s2']);
@@ -120,7 +122,7 @@ describe('inspectMonitor composition', () => {
     const snapshot = await inspectMonitor(current.dir, current.options, { schemaVersion: 1, install: 'current' });
     expect(snapshot.sourcesRead).toEqual(['current']);
     expect(snapshot.installs[0]).toMatchObject({ status: 'denied', runs: [], approvals: [], pools: [], scopeIds: [] });
-    expect(snapshot.installs[0]!.diagnostics).toContain('scope-denied:s');
+    expect(snapshot.installs[0]!.diagnostics).toContain('scopes-denied:1');
   });
   it('selected MCP monitor keeps its distinct actor and cannot use a terminal-owner scope grant', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-mcp-')); roots.push(root);
@@ -129,7 +131,7 @@ describe('inspectMonitor composition', () => {
     const snapshot = await applications.inspectMonitor();
     expect(snapshot.sourcesRead).toEqual(['current']);
     expect(snapshot.installs[0]).toMatchObject({ status: 'denied', runs: [], workers: [], approvals: [], pools: [], scopeIds: [] });
-    expect(snapshot.installs[0]!.diagnostics).toContain('scope-denied:s');
+    expect(snapshot.installs[0]!.diagnostics).toContain('scopes-denied:1');
   });
   it('opt-in open filter keeps terminal process facts in the ledger and withholds private resources under the same read-output gate', async () => {
     const root = await mkdtemp(join(tmpdir(), 'deckent-monitor-')); roots.push(root);
@@ -200,7 +202,7 @@ describe('inspectMonitor composition', () => {
     expect(failed.tasks[0]!.lastAttempt).toMatchObject({ endedAtMs: 40_000, recentEvents: [{ atMs: 5, kind: 'tool.call', summary: 'shell Bash npm test' }] });
     expect(install.runs[0]!.runId).toBe('r-fail');
     expect(install.map).toMatchObject({ memory: { available: false }, models: [], registry: { profiles: [], kinds: [] },
-      policy: { grants: 2, byResourceKind: { scope: 1, attempt: 1 }, separationOfDuties: 0, permissionModes: [] } });
+      policy: { grants: 3, byResourceKind: { scope: 1, attempt: 1, pool: 1 }, separationOfDuties: 0, permissionModes: [] } });
     expect(install.map!.config.map(layer => layer.layer)).toEqual(['default', 'global', 'project', 'environment']);
     expect(install.map!.config[2]).toMatchObject({ path: current.configPath, sections: ['inspection', 'layout'] });
     expect(JSON.stringify(install.map)).not.toContain(join(root, 'current-data'));
@@ -399,7 +401,7 @@ describe('MONITOR-H1-R usage evidence', () => {
   }
   async function workers(current: Awaited<ReturnType<typeof project>>, command: 'list' | 'watch', locale: 'en' | 'tr') {
     const out: string[] = [];
-    const code = await main(['workers', command, '--scope', 's', '--lang', locale, ...(command === 'watch' ? ['--samples', '1'] : [])], {
+    const code = await main(['workers', command, '--scope', 's', '--verbose', '--lang', locale, ...(command === 'watch' ? ['--samples', '1'] : [])], {
       root: current.dir, env: current.options.env, initialize() {}, stdout: { write(value: string) { out.push(value); } }, stderr: { write() {} },
       inspectWorkers: inspectConfiguredWorkers,
     });

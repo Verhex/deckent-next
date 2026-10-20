@@ -2,4 +2,4 @@ export { configuredApproval } from './internal/application.js';
 export { withPolicyAdministration } from './internal/standing.js';
 export { listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from './internal/mcp-capabilities.js';
 export { inspectConfiguredDecisionDelegations, changeConfiguredDecisionDelegation } from './internal/delegations.js';
-export { configuredMcpToolGrants, configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredStandingGrants, revokeConfiguredStandingGrant } from './internal/standing.js';
+export { configuredMcpToolGrants, configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredAllStandingGrants, listConfiguredStandingGrants, revokeConfiguredStandingGrant } from './internal/standing.js';

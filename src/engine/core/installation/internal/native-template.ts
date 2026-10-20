@@ -19,7 +19,8 @@ export interface NativeTemplatePorts {
 const requestSchema = z.object({ provider: nativeCliIdSchema, kind: identitySchema,
   image: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(), apply: z.boolean() }).strict();
 export type CodingTemplateRequest = z.infer<typeof requestSchema>;
-export type CodingTemplateResult = Readonly<{ schemaVersion: 1; status: 'preview' | 'applied' | 'unchanged';
+/** `current` is returned by the first-registry bootstrap only (an equal registry already exists); the template returns the other three. */
+export type CodingTemplateResult = Readonly<{ schemaVersion: 1; status: 'preview' | 'applied' | 'unchanged' | 'current';
   profile: ExecutionRegistry['profiles'][number]; kind: ExecutionRegistry['kinds'][number]; registry: ExecutionRegistry;
   expect: string | null; write: ConfigWriteResult | null }>;
 function refuse(code: string): never { throw ErrorRegistry.createError(code); }
@@ -60,7 +61,7 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
 }
 
 /** No launch/build/network. Apply is one allow-only ConfigApplication CAS write; no retry or policy bypass. */
-export async function configureNativeTemplate(input: unknown, ports: NativeTemplatePorts): Promise<CodingTemplateResult> {
+export async function configureNativeTemplate(input: unknown, ports: NativeTemplatePorts): Promise<CodingTemplateResult & Readonly<{ status: 'preview' | 'applied' | 'unchanged' }>> {
   const parsed = requestSchema.safeParse(input);
   if (!parsed.success) refuse('CODING_TEMPLATE_INPUT_INVALID');
   const request = parsed.data;
@@ -93,34 +94,60 @@ const initializeSchema = requestSchema.omit({ image: true }).extend({ schemaVers
   poolId: identitySchema, executionSlots: z.number().int().positive().safe(), inFlightSlots: z.number().int().positive().safe(),
   discovery: z.enum(['disabled', 'repository']) }).strict();
 export type InitialRegistryRequest = z.infer<typeof initializeSchema>;
-function initialSource(snapshot: ConfigSnapshot, request: InitialRegistryRequest) {
+const authoredRegistry = (document: Record<string, unknown>) => {
   // Authored presence, including malformed/empty/null values, must never be mistaken for an absent registry.
-  for (const document of [snapshot.global, snapshot.project]) {
-    const admission = document['admission'];
-    if (admission && typeof admission === 'object' && Object.hasOwn(admission, 'registry')) refuse('INITIAL_REGISTRY_EXISTS');
-  }
+  const admission = document['admission'];
+  return !!admission && typeof admission === 'object' && Object.hasOwn(admission, 'registry');
+};
+function initialSource(snapshot: ConfigSnapshot, request: InitialRegistryRequest, existing = false) {
+  if (!existing && [snapshot.global, snapshot.project].some(authoredRegistry)) refuse('INITIAL_REGISTRY_EXISTS');
   const admission = snapshot.effective.admission;
-  if (admission && (admission.poolId !== request.poolId || admission.executionSlots !== request.executionSlots || admission.inFlightSlots !== request.inFlightSlots)) refuse('INITIAL_REGISTRY_CONFIG_CONFLICT');
+  if (!existing && admission && (admission.poolId !== request.poolId || admission.executionSlots !== request.executionSlots || admission.inFlightSlots !== request.inFlightSlots)) refuse('INITIAL_REGISTRY_CONFIG_CONFLICT');
   const scope = snapshot.effective.service.identity?.scopeId ?? (snapshot.effective['terminal'] as { scopeId?: string } | undefined)?.scopeId;
   if (scope !== request.scopeId) refuse('INITIAL_REGISTRY_CONFIG_CONFLICT');
   const settings = snapshot.effective.execution?.docker;
-  if (!settings) refuse('CODING_TEMPLATE_IMAGE_REQUIRED');
+  if (!settings) refuse(existing ? 'INITIAL_REGISTRY_EXISTS' : 'CODING_TEMPLATE_IMAGE_REQUIRED');
   return settings;
+}
+type DockerSettings = NonNullable<DeckentConfig['execution']>['docker'];
+/** The first registry for one detected CLI version: one profile, one kind, the default evaluators; deterministic revision. */
+function initialRegistry(request: InitialRegistryRequest, settings: DockerSettings, cliVersion: string, template: NativeTemplatePorts['template']) {
+  const { executable, ...resources } = settings; void executable;
+  let profile: ExecutionProfileDefinition;
+  try { profile = template(resources, { provider: request.provider, cliVersion,
+    discovery: { schemaVersion: 1, mode: request.discovery }, permissionMode: 'unattended' }); }
+  catch { refuse('INITIAL_REGISTRY_CLI_UNAVAILABLE'); }
+  const kind = { kind: request.kind, profile: { id: profile.id, version: profile.version } };
+  const content = { schemaVersion: 1, profiles: [profile], kinds: [kind], evaluators: initialRegistryDefaults.evaluators };
+  return { profile, kind, registry: executionRegistrySchema.parse({ ...content, revision: `initial-registry-${sha256(JSON.stringify(content))}` }) };
+}
+/** I-S6: a project registry equal to what this request would write (rebuilt from its own recorded CLI version, so no new probe) is
+ * `current`; any other authored registry, or one in the global layer, keeps the `INITIAL_REGISTRY_EXISTS` refusal before any write. */
+function currentRegistry(snapshot: ConfigSnapshot, request: InitialRegistryRequest, template: NativeTemplatePorts['template']) {
+  if (authoredRegistry(snapshot.global)) refuse('INITIAL_REGISTRY_EXISTS');
+  if (!authoredRegistry(snapshot.project)) return null;
+  const settings = initialSource(snapshot, request, true);
+  const existing = executionRegistrySchema.safeParse((snapshot.project['admission'] as { registry?: unknown }).registry);
+  const invocation = existing.success && existing.data.profiles.length === 1 ? existing.data.profiles[0]!.parameters['invocation'] as { cliVersion?: unknown } | undefined : undefined;
+  if (typeof invocation?.cliVersion !== 'string') refuse('INITIAL_REGISTRY_EXISTS');
+  let candidate: ReturnType<typeof initialRegistry>;
+  try { candidate = initialRegistry(request, settings, invocation.cliVersion, template); } catch { refuse('INITIAL_REGISTRY_EXISTS'); }
+  const admission = snapshot.effective.admission;
+  const equal = JSON.stringify(existing.data) === JSON.stringify(candidate.registry) && admission?.poolId === request.poolId
+    && admission.executionSlots === request.executionSlots && admission.inFlightSlots === request.inFlightSlots && admission.ordering === initialRegistryDefaults.ordering;
+  if (!equal) refuse('INITIAL_REGISTRY_EXISTS');
+  return candidate;
 }
 /** Bootstrap only: discovery is a port observation, and the existing config application remains the sole durable writer. */
 export async function initializeNativeRegistry(input: unknown, ports: NativeTemplatePorts) {
   const parsed = initializeSchema.safeParse(input);
   if (!parsed.success) refuse('CODING_TEMPLATE_INPUT_INVALID');
-  const request = parsed.data, read = await ports.snapshot(), settings = initialSource(read, request);
+  const request = parsed.data, read = await ports.snapshot();
+  const current = currentRegistry(read, request, ports.template);
+  if (current) return { schemaVersion: 1 as const, ...current, expect: read.digest, status: 'current' as const, write: null };
+  const settings = initialSource(read, request);
   const cliVersion = await ports.detect(request.provider, settings);
-  const { executable, ...resources } = settings; void executable;
-  let profile: ExecutionProfileDefinition;
-  try { profile = ports.template(resources, { provider: request.provider, cliVersion,
-    discovery: { schemaVersion: 1, mode: request.discovery }, permissionMode: 'unattended' }); }
-  catch { refuse('INITIAL_REGISTRY_CLI_UNAVAILABLE'); }
-  const kind = { kind: request.kind, profile: { id: profile.id, version: profile.version } };
-  const content = { schemaVersion: 1, profiles: [profile], kinds: [kind], evaluators: initialRegistryDefaults.evaluators };
-  const registry = executionRegistrySchema.parse({ ...content, revision: `initial-registry-${sha256(JSON.stringify(content))}` });
+  const { profile, kind, registry } = initialRegistry(request, settings, cliVersion, ports.template);
   const admission = { ...read.effective.admission, registry, poolId: request.poolId, executionSlots: request.executionSlots,
     inFlightSlots: request.inFlightSlots, ordering: initialRegistryDefaults.ordering };
   const result = { schemaVersion: 1 as const, profile, kind, registry, expect: read.digest };

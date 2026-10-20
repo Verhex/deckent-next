@@ -7,19 +7,19 @@
     "src/domain/core/policy/index.ts": "b33acc0768c61d72f4c359cb2913f50a23ebbba2ec5be7886c51afae33f73372",
     "src/domain/core/policy/internal/administer.ts": "7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004",
     "src/domain/core/policy/internal/administration.ts": "85ea655acb0a388542fae3740c47c81f6cfe7763434117e8d5aef10bc40c93b0",
-    "src/domain/core/policy/internal/ai-floor.ts": "d7f7c65905a2c67a85e791f12cb99b6b186c3d8adeba557414d9fc89dc80eeb7",
+    "src/domain/core/policy/internal/ai-floor.ts": "0634a53500e224bada3d582879e6fb5a1703efbd16783cfb802a772f9db4b106",
     "src/domain/core/policy/internal/decision-step.ts": "70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe",
     "src/domain/core/policy/internal/delegations.ts": "c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320",
     "src/domain/core/policy/internal/describe.ts": "0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df",
     "src/domain/core/policy/internal/evaluate.ts": "75be554942eb2071ad95900a4a828418c5cc04e681be4aa7c40fc3fc820a8d7d",
-    "src/domain/core/policy/internal/first-run-template.ts": "60d7ea9b997092e4acc7bfaee8365844502e9be6e88ac6dd68bebebebf868051",
+    "src/domain/core/policy/internal/first-run-template.ts": "5d4327ac29077e7295c242f83b2b21605b482d255ebdfaccda4cae146cd6948e",
     "src/domain/core/policy/internal/mcp-capabilities.ts": "c864257ab5ce5852f0799805d358f7b8790ec54fe8656157a1e4addd8cdeafb4",
     "src/domain/core/policy/internal/mcp-grant.ts": "8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a",
     "src/domain/core/policy/internal/mode.ts": "ea7d39a53c386e5d8a16c64f52cfad9466355450d63786b7412d08954f498827",
     "src/domain/core/policy/internal/schema.ts": "7ee507ceee1166b0f2fada5ad67e334ab5c883b47ad7a16f4ec3f0665220df9c",
     "src/domain/core/policy/internal/scope.ts": "7515bab07e7ee92d03be12c0a8710f72d6973419ca53a79fdeff61a84a496da4",
     "src/domain/core/policy/internal/standing.ts": "bb3b4f7c301474d2df1f690d85f3b1ea7219fbfe6f90af8b8d680017bb50d5db",
-    "src/domain/core/policy/internal/vocabulary.ts": "4e4624e0cbf60a0373b4d7a3f63d70cd296f61db68cf932de95913bb37d477d8",
+    "src/domain/core/policy/internal/vocabulary.ts": "188637ad5d40fcbcc7eccbc4b13bb7e31a08355751b1c563cea0258b5bff61b2",
     "src/domain/core/primitives/index.ts": "6563d5ec8a552726681800698c8ac01024eebfafa4a6212ccc6d7cf638e30ce3",
     "src/domain/core/primitives/internal/command-id.ts": "69a16b34a9225fe7c8bb1047e9b9e99d03fd71573baf2281bfa8e870e1a219c9",
     "src/domain/core/primitives/internal/installation-identity.ts": "28612d8f2f00382172bb96cdfa8e5d35d4d2175620ab49dd702c3e4184db8ab7",
@@ -30,10 +30,10 @@
     "src/domain/core/principal/internal/principal.ts": "31cb346e4b73a5ce7b4c7eb299829eba78583eedb8d1313157b3035579676fcf"
   },
   "summary": {
-    "routes": 258,
-    "floorRoutes": 184,
+    "routes": 262,
+    "floorRoutes": 186,
     "contexts": 6,
-    "policyChecks": 1548,
+    "policyChecks": 1572,
     "stepChecks": 48,
     "violations": 0
   },
@@ -22179,6 +22179,222 @@
       "reason": "GRANTED"
     },
     {
+      "kind": "execution-environment",
+      "id": "fixture-target",
+      "action": "install",
+      "floor": true,
+      "family": "host",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "execution-environment",
+      "id": "fixture-target",
+      "action": "install",
+      "floor": true,
+      "family": "host",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "execution-environment",
+      "id": "fixture-target",
+      "action": "install",
+      "floor": true,
+      "family": "host",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "execution-environment",
+      "id": "fixture-target",
+      "action": "install",
+      "floor": true,
+      "family": "host",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "execution-environment",
+      "id": "fixture-target",
+      "action": "install",
+      "floor": true,
+      "family": "host",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "execution-environment",
+      "id": "fixture-target",
+      "action": "install",
+      "floor": true,
+      "family": "host",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "installation",
+      "id": "fixture-target",
+      "action": "repair",
+      "floor": true,
+      "family": "host",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "installation",
+      "id": "fixture-target",
+      "action": "repair",
+      "floor": true,
+      "family": "host",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "installation",
+      "id": "fixture-target",
+      "action": "repair",
+      "floor": true,
+      "family": "host",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "installation",
+      "id": "fixture-target",
+      "action": "repair",
+      "floor": true,
+      "family": "host",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "installation",
+      "id": "fixture-target",
+      "action": "repair",
+      "floor": true,
+      "family": "host",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "installation",
+      "id": "fixture-target",
+      "action": "repair",
+      "floor": true,
+      "family": "host",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
       "kind": "mcp-server",
       "id": "fixture-target",
       "action": "invoke",
@@ -23136,6 +23352,114 @@
       "kind": "model-invocation",
       "id": "fixture-target",
       "action": "purge-content",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "token-granted",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "monitor",
+      "id": "fixture-target",
+      "action": "inspect-scope-diagnostics",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "NO_GRANT"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "NO_GRANT"
+      },
+      "verdict": "uyumlu",
+      "reason": "NO_GRANT"
+    },
+    {
+      "kind": "monitor",
+      "id": "fixture-target",
+      "action": "inspect-scope-diagnostics",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "monitor",
+      "id": "fixture-target",
+      "action": "inspect-scope-diagnostics",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "monitor",
+      "id": "fixture-target",
+      "action": "inspect-scope-diagnostics",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "monitor",
+      "id": "fixture-target",
+      "action": "inspect-scope-diagnostics",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "monitor",
+      "id": "fixture-target",
+      "action": "inspect-scope-diagnostics",
       "floor": false,
       "family": "vocabulary",
       "context": "token-granted",
@@ -24121,6 +24445,114 @@
       },
       "verdict": "uyumlu",
       "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "policy",
+      "id": "fixture-target",
+      "action": "inspect-standing-grants",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "NO_GRANT"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "NO_GRANT"
+      },
+      "verdict": "uyumlu",
+      "reason": "NO_GRANT"
+    },
+    {
+      "kind": "policy",
+      "id": "fixture-target",
+      "action": "inspect-standing-grants",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "policy",
+      "id": "fixture-target",
+      "action": "inspect-standing-grants",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "policy",
+      "id": "fixture-target",
+      "action": "inspect-standing-grants",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "policy",
+      "id": "fixture-target",
+      "action": "inspect-standing-grants",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "policy",
+      "id": "fixture-target",
+      "action": "inspect-standing-grants",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "token-granted",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
     },
     {
       "kind": "pool",

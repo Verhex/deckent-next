@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { endpointMayCarryKey } from '#domain/index.js';
 import { createServer, type Server } from 'node:http';
 import { PROVIDER_CONNECT_KINDS, ProviderProbeError, probeProviderConnection, providerConnectKind, providerConnectSecretName, providerEndpoint, providerProbeRejection,
   connectionAdapter, providerConnectModelPriced, readProviderConnectSeed, type ProviderProbeFetch } from '#adapters/core/provider-connect/index.js';
@@ -139,9 +140,14 @@ describe('provider connection check', () => {
     expect(providerEndpoint('http://127.0.0.1:8000/v1/')).toEqual({ ok: true, base: 'http://127.0.0.1:8000' });
     expect(providerEndpoint('https://gw.example/openai/v1')).toEqual({ ok: true, base: 'https://gw.example/openai' });
     expect(providerEndpoint('https://gw.example/v1?key=x')).toEqual({ ok: false, reason: 'url-query' });
+    // G2-7: the one rule every key path asks — https only; plain http (literal loopback included) and an unparsable address never carry a key.
+    expect(['https://api.example', 'https://127.0.0.1:8443/v1'].map(url => endpointMayCarryKey(url))).toEqual([true, true]);
+    expect(['http://127.0.0.1:8000', 'http://[::1]:8000/v1', 'http://api.example', 'not a url', 'ftp://x'].map(url => endpointMayCarryKey(url))).toEqual([false, false, false, false, false]);
   });
 
-  it('checks a real local server over loopback: a key it rejects, the key it accepts, no key when it needs none', async () => {
+  // G2-7 (owner 2026-10-18, "no key over plain http"): the one key rule (`endpointMayCarryKey`) — the check sends no key to a plain-http server,
+  // loopback included, like discovery, the invocation profile and the call; a key given for one is refused before any request.
+  it('checks a real local server over loopback without a key; a key for it is refused before any request reaches the server', async () => {
     const server = createServer((req, res) => {
       const auth = req.headers['authorization'];
       if (req.url !== '/v1/models') { res.writeHead(404).end(); return; }
@@ -151,9 +157,14 @@ describe('provider connection check', () => {
     servers.push(server); await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
     const endpoint = `http://127.0.0.1:${address.port}/v1`;
-    expect(await probeProviderConnection({ kind: 'local-openai', endpoint, key: CANARY })).toEqual({ outcome: 'ok', httpStatus: 200, key: 'unverified' });
-    expect(await probeProviderConnection({ kind: 'local-openai', endpoint, key: 'wrong' })).toEqual({ outcome: 'credential-rejected', httpStatus: 401, key: 'unverified' });
+    let requests = 0; server.on('request', () => { requests++; });
+    for (const key of [CANARY, 'wrong']) {
+      await expect(probeProviderConnection({ kind: 'local-openai', endpoint, key })).rejects.toMatchObject({ code: 'PROVIDER_KEY_INSECURE' });
+    }
+    expect(requests).toBe(0);
     expect(await probeProviderConnection({ kind: 'local-openai', endpoint, key: null })).toEqual({ outcome: 'ok', httpStatus: 200, key: 'none' });
+    expect(await probeProviderConnection({ kind: 'local-openai', endpoint, key: '' })).toEqual({ outcome: 'ok', httpStatus: 200, key: 'none' }); // an empty field is no key
+    expect(requests).toBe(2);
     server.closeAllConnections();
     await new Promise<void>(resolve => server.close(() => resolve())); servers.splice(0);
     expect(await probeProviderConnection({ kind: 'local-openai', endpoint, key: null }, { timeoutMs: 2000 })).toMatchObject({ outcome: 'unreachable', httpStatus: null });

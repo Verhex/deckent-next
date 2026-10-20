@@ -3,7 +3,8 @@ import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { redactForRecord, redactForDecision, snapshotKnownSecrets, hasSecret } from '#platform/index.js';
+import { backtrackingSteps, calibratedBudgetMs, modelMatches } from '../../fixtures/regex-cost.js';
+import { redactForRecord, redactForDecision, snapshotKnownSecrets, hasSecret, REDACTION_PATTERNS } from '#platform/index.js';
 import { workerRedactForRecord as workerRecord, workerRedactForDecision as workerDecision, workerSnapshotKnownSecrets as workerSnapshot, redactText } from '#adapters/core/native-connection/index.js';
 // @ts-expect-error Host generation tooling has no declaration file.
 import { syncWorkerRedactor, workerRedactorBlock } from '../../../scripts/sync-worker-redactor.mjs';
@@ -224,4 +225,112 @@ describe('B7 legacy bearer record compatibility', () => {
     expect(redactForDecision(text, collisionKnown)).toEqual({ text: 'Bearer ‹secret:B›', knownMatches: 1, patternMatches: [] });
     expect(hasSecret(text, collisionKnown)).toBe(true);
   });
+});
+
+// SEC-6 F39: the legacy canonical jwt pattern backtracks over the rest of a `[\w-]` run from every `eyJ` start in it, so a dot-free `eyJ-` line
+// is O(N²) (4 MiB ≈ 10^12 steps) in record redaction of untrusted worker output. The record form only starts at the first `eyJ` of a run:
+// every later start in the same run succeeds or fails with it (same run end, same suffix), so the masked spans are identical.
+// SEC-6b: the canonical `source` is now that linear form too; the quadratic expression stays here, verbatim, only as the equivalence oracle.
+const LEGACY_JWT = String.raw`\beyJ[\w-]+\.[\w-]+\.[\w-]+\b`;
+describe('SEC-6 jwt record redaction is linear and masks exactly the canonical spans', () => {
+  const jwt = { source: LEGACY_JWT, flags: 'g' };
+  it('agrees with the legacy jwt expression on 20 000 random runs of jwt-shaped fragments', () => {
+    let seed = 0x5ec6;
+    const random = (n: number) => { seed = (seed * 1_103_515_245 + 12_345) & 0x7fffffff; return seed % n; };
+    const parts = ['eyJ', 'eyJ', '-', '.', 'a', 'Z', '_', '9', ' ', 'x-', 'é', '\n', 'eyJa.b.c', '--'], disagreements: string[] = [];
+    for (let n = 0; n < 20_000; n++) {
+      let text = '';
+      for (let k = random(16); k > 0; k--) text += parts[random(parts.length)];
+      const expected = text.replace(new RegExp(jwt.source, jwt.flags), '[REDACTED]');
+      if (redactForRecord(text) !== expected || workerRecord(text) !== expected) disagreements.push(JSON.stringify(text));
+    }
+    expect(disagreements).toEqual([]);
+    expect(redactForRecord('x-eyJhbGc.eyJzdWI.c2ln-- eyJ-eyJa.b.c- eyJno.dots')).toBe('x-[REDACTED]-- [REDACTED]- eyJno.dots');
+  });
+  // Primary bound: the record pattern starts once per run, so a hostile line costs a constant number of scans per character. The time
+  // below is only a coarse helper: before the fix 128 KiB took ≈ 2 s and 4 MiB was out of reach; after it both take a few milliseconds
+  // (guards 500 ms / 1 s, so a loaded suite cannot turn them red).
+  it.each([['eyJ-', 1 << 17], ['eyJ-', 1 << 22], ['eyJa.eyJ-', 1 << 20], ['eyJa.b.-', 1 << 20], ['x-eyJ.', 1 << 20]] as const)(
+    'redacts a hostile %s line of %i characters without quadratic backtracking', (unit, length) => {
+      const line = unit.repeat(Math.ceil(length / unit.length)), started = performance.now();
+      const record = redactForRecord(line), ms = performance.now() - started;
+      console.info('SEC6_F39_JWT_GUARD', JSON.stringify({ unit, length, ms }));
+      expect(ms).toBeLessThan(length > 1 << 17 ? 1_000 : 500);
+      // The dot-free line holds no jwt (the legacy expression would itself be quadratic on it); the other shapes it answers linearly.
+      expect(record).toBe(unit === 'eyJ-' ? line : line.replace(new RegExp(jwt.source, jwt.flags), '[REDACTED]'));
+    });
+});
+
+// SEC-6b F39 remainder: `hasSecret` (standing approvals on model command text), the DECISION counters (`redactForDecision`) and the worker
+// tree gate ran the canonical jwt `source`, which was the quadratic expression above. They run on the service thread (the gate in its
+// terminable worker), so a dot-free `eyJ-` command or file cost O(N²). `source` is now the linear form; these tests reproduce the defect.
+describe('SEC-6b the canonical jwt source is linear for hasSecret, the DECISION counters and the gate', () => {
+  const jwt = REDACTION_PATTERNS.find(row => row.id === 'jwt')!;
+  const others = REDACTION_PATTERNS.filter(row => row.id !== 'jwt');
+  const legacyCount = (text: string) => [...text.matchAll(new RegExp(LEGACY_JWT, 'g'))].length;
+  it('answers exactly like the legacy expression on 20 000 random inputs: spans, counts, hasSecret, the gate flavour and the record text', () => {
+    let seed = 0x5ec6b;
+    const random = (n: number) => { seed = (seed * 1_103_515_245 + 12_345) & 0x7fffffff; return seed % n; };
+    const parts = ['eyJ', 'eyJ', '-', '.', 'a', 'Z', '_', '9', ' ', 'x-', 'é', '\n', 'eyJa.b.c', '--', 'J', 'ey', '.-', 'eyJ.'], disagreements: string[] = [];
+    let hits = 0;
+    for (let n = 0; n < 20_000; n++) {
+      let text = '';
+      for (let k = random(24); k > 0; k--) text += parts[random(parts.length)];
+      const legacy = [...text.matchAll(new RegExp(LEGACY_JWT, 'g'))].map(match => [match.index, match.index + match[0].length]);
+      const current = [...text.matchAll(new RegExp(jwt.source, jwt.flags))].map(match => [match.index + match[1]!.length, match.index + match[0].length]);
+      const decision = redactForDecision(text).patternMatches.find(row => row.kind === 'jwt')?.count ?? 0;
+      const expectedSecret = legacy.length > 0 || others.some(row => new RegExp(row.source, row.flags).test(text));
+      if (legacy.length) hits++;
+      if (JSON.stringify(current) !== JSON.stringify(legacy) || decision !== legacy.length || workerDecision(text).patternMatches.find(row => row.kind === 'jwt')?.count !== (legacy.length || undefined)
+        || hasSecret(text) !== expectedSecret || new RegExp(jwt.source, jwt.flags.replace('g', '')).test(text) !== legacy.length > 0
+        || redactForRecord(text) !== text.replace(new RegExp(LEGACY_JWT, 'g'), '[REDACTED]')) disagreements.push(JSON.stringify(text));
+    }
+    console.info('SEC6B_JWT_EQUIVALENCE', JSON.stringify({ inputs: 20_000, legacyHits: hits, disagreements: disagreements.length }));
+    expect(hits).toBeGreaterThan(5_000);
+    expect(disagreements).toEqual([]);
+  });
+  it('the step model is faithful: it reports the same matches as V8 for both expressions', () => {
+    let seed = 0xf39;
+    const random = (n: number) => { seed = (seed * 1_103_515_245 + 12_345) & 0x7fffffff; return seed % n; };
+    const parts = ['eyJ', '-', '.', 'a', ' ', 'x-', 'eyJa.b.c', 'é', '.-'];
+    for (let n = 0; n < 2_000; n++) {
+      let text = '';
+      for (let k = random(20); k > 0; k--) text += parts[random(parts.length)];
+      for (const source of [LEGACY_JWT, jwt.source]) {
+        expect(modelMatches(source, text), `${source} on ${JSON.stringify(text)}`).toEqual([...text.matchAll(new RegExp(source, 'g'))].map(match => [match.index, match.index + match[0].length]));
+      }
+    }
+  });
+  // Primary bound: ECMA-262 backtracking steps per input character stay constant (≤ 16) as the line grows four times, for every hostile
+  // shape, in both the `test` form (hasSecret, the gate) and the `matchAll` form (DECISION counters). The legacy expression is the reproduction:
+  // its steps grow sixteenfold on the dot-free line (quadratic), ≈ 1 500 per character at 4 096 characters.
+  it.each(['eyJ-', 'eyJa.eyJ-', 'eyJa.b.-', 'x-eyJ.', 'eyJa.b.c-'])('scans a hostile %s line in linear backtracking steps', unit => {
+    for (const length of [1_024, 4_096]) {
+      const line = unit.repeat(Math.ceil(length / unit.length));
+      for (const mode of ['test', 'all'] as const) {
+        const { steps } = backtrackingSteps(jwt.source, line, mode);
+        console.info('SEC6B_JWT_STEPS', JSON.stringify({ unit, length: line.length, mode, steps, perChar: steps / line.length }));
+        expect(steps).toBeLessThanOrEqual(16 * line.length + 64);
+      }
+    }
+    if (unit === 'eyJ-') {
+      const small = backtrackingSteps(LEGACY_JWT, unit.repeat(256), 'all').steps, large = backtrackingSteps(LEGACY_JWT, unit.repeat(1_024), 'all').steps;
+      console.info('SEC6B_LEGACY_STEPS', JSON.stringify({ small, large, ratio: large / small }));
+      expect(large / small).toBeGreaterThan(12);
+    }
+  });
+  // Calibrated helper only: before the fix 256 KiB took 12.8 s (quadratic); after it ≈ 14 ms, and 4 MiB ≈ 220 ms (bases 100/500/1 000 ms).
+  it.each([['eyJ-', 1 << 18], ['eyJ-', 1 << 22], ['eyJa.b.-', 1 << 20], ['x-eyJ.', 1 << 20]] as const)(
+    'hasSecret and the DECISION counters answer a hostile %s line of %i characters within a calibrated bound', (unit, length) => {
+      const budgetMs = calibratedBudgetMs(length > 1 << 20 ? 1_000 : length > 1 << 18 ? 500 : 100, `sec6b-${unit}-${length}`);
+      const line = unit.repeat(Math.ceil(length / unit.length)), started = performance.now();
+      const secret = hasSecret(line), decision = redactForDecision(line), ms = performance.now() - started;
+      console.info('SEC6B_JWT_GUARD', JSON.stringify({ unit, length, ms, budgetMs }));
+      expect(ms).toBeLessThan(budgetMs);
+      // The legacy expression is linear on the shapes with dots, so it is the oracle there; the dot-free line holds no jwt at all.
+      const expected = unit === 'eyJ-' ? 0 : legacyCount(line);
+      expect(secret).toBe(expected > 0);
+      expect(decision.text).toBe(line);
+      expect(decision.patternMatches.find(row => row.kind === 'jwt')?.count ?? 0).toBe(expected);
+    });
 });

@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { DockerImageProbeError, probeDockerImageAvailability, runNodeDockerCommand, type DockerCommand } from '#adapters/core/docker-supervisor/index.js';
+import { DockerCommandFailure, DockerImageProbeError, probeDockerImageAvailability, probeDockerImageSetAvailability, runNodeDockerCommand, type DockerCommand } from '#adapters/core/docker-supervisor/index.js';
 
 const imageId = `sha256:${'a'.repeat(64)}`;
 const control = { executable: '/usr/bin/docker', timeoutMs: 1_000, outputBytes: 8_192, imageId };
@@ -46,8 +46,39 @@ it('returns typed errors for invalid controls and unavailable or nonexact image 
   })).rejects.toMatchObject({ code: 'DOCKER_IMAGE_PROBE_UNAVAILABLE' });
 });
 
+it('J3-IMAGES: proves a list with one endpoint pin, one daemon id read before and after and chunked exact-id inspects; typed refusals', async () => {
+  const other = `sha256:${'b'.repeat(64)}`, missing = `sha256:${'c'.repeat(64)}`, list = { ...control, imageIds: [imageId, missing, other], chunkSize: 2, processes: 1 };
+  const calls: DockerCommand[] = [];
+  let infos = 0;
+  const runner = (daemons: readonly string[]) => async (command: DockerCommand) => {
+    calls.push(command);
+    if (command.args[0] === 'context') return { stdout: JSON.stringify({ Host: endpoint }), stderr: '' };
+    if (command.args[2] === 'info') return { stdout: daemons[Math.min(infos++, daemons.length - 1)]!, stderr: '' };
+    const found = command.args.slice(4, -2).filter(id => id !== missing).map(id => `${id}\n`).join('');
+    if (command.args.includes(missing)) throw new DockerCommandFailure(`${found}sha256:${'d'.repeat(64)}\n`, 'No such image', 1, false);
+    return { stdout: found, stderr: '' };
+  };
+  await expect(probeDockerImageSetAvailability(list, runner(['daemon-a']))).resolves.toEqual([imageId, other]);
+  expect(calls.map(command => command.args)).toEqual([
+    ['context', 'inspect', '--format', '{{json .Endpoints.docker}}'],
+    ['--host', endpoint, 'info', '--format', '{{.ID}}'],
+    ['--host', endpoint, 'image', 'inspect', imageId, missing, '--format', '{{.Id}}'],
+    ['--host', endpoint, 'image', 'inspect', other, '--format', '{{.Id}}'],
+    ['--host', endpoint, 'info', '--format', '{{.ID}}'],
+  ]);
+  infos = 0;
+  await expect(probeDockerImageSetAvailability(list, runner(['daemon-a', 'daemon-b']))).rejects.toMatchObject({ code: 'DOCKER_IMAGE_PROBE_CHANGED' });
+  for (const invalid of [{ ...list, imageIds: ['latest'] }, { ...list, chunkSize: 0 }, { ...list, processes: undefined }, { ...list, executable: 'docker' }, [list]]) {
+    await expect(probeDockerImageSetAvailability(invalid, runner(['daemon-a']))).rejects.toMatchObject({ code: 'DOCKER_IMAGE_PROBE_INVALID' });
+  }
+  await expect(probeDockerImageSetAvailability(list, async () => { throw new Error('credential=not-exposed'); })).rejects.toEqual(new DockerImageProbeError('DOCKER_IMAGE_PROBE_UNAVAILABLE'));
+});
+
 const configuredImage = process.env.DECKENT_TEST_DOCKER_IMAGE;
 it.skipIf(process.platform !== 'linux' || !existsSync('/usr/bin/docker') || !configuredImage)('proves the explicitly configured local image is available read-only', async () => {
   const result = await probeDockerImageAvailability({ ...control, imageId: configuredImage! }, runNodeDockerCommand);
   expect(result).toMatchObject({ status: 'locally-available', imageId: configuredImage });
+  // The real CLI prints the found id and exits 1 for the absent one; the list probe keeps only the proven id.
+  const absent = `sha256:${'f'.repeat(64)}`;
+  await expect(probeDockerImageSetAvailability({ ...control, timeoutMs: 5_000, imageIds: [absent, configuredImage!], chunkSize: 16, processes: 4 }, runNodeDockerCommand)).resolves.toEqual([configuredImage]);
 });

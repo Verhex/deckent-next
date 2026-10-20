@@ -35,7 +35,7 @@ describe('runtime control surfaces', () => {
     const base = { env: { HOME: '/tmp/deckent-runtime-control' }, stdout: output.output, stderr: output.output, initialize() {} };
     const readiness = { mode: 'started' as const, instanceId: 'instance-b', pid: 4242, logPath: null, shutdownAvailable: true, build: null };
     expect(await main(['runtime', 'restart'], { ...base, async restartRuntimeService() { restarts++; return readiness; } })).toBe(0);
-    expect(restarts).toBe(1); expect(output.values.join('')).toContain('restarted'); expect(output.values.join('')).toContain('instance-b');
+    expect(restarts).toBe(1); expect(output.values.join('')).toContain('restarted'); expect(output.values.join('')).toContain('pid 4242'); // C-ADMIN: short instance id
     // Negative: no handler wired, or hand-written shutdown fields: nothing is restarted and the command fails typed.
     expect(await main(['runtime', 'restart'], base)).not.toBe(0);
     expect(await main(['runtime', 'restart', '--service', 'runtime'], { ...base, async restartRuntimeService() { restarts++; return readiness; } })).not.toBe(0);

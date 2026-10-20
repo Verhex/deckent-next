@@ -2,7 +2,8 @@
 import { planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { inspectInstallationStartability, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
 import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
-import { executeConfiguredBackup, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
+import { executeConfiguredBackup, inspectConfiguredBackupSets, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
+import { inspectConfiguredAdminPaths } from './admin-paths.js';
 import { previewConfiguredIdentityProfile, listIdentityProfiles, listConfiguredIdentityDistributionChoices, previewConfiguredIdentityDistribution, applyConfiguredIdentityDistribution } from '#composition/core/identity-profile/index.js';
 import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LEGACY_KEYS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind, providerConnectModelPriced, providerConnectSecretName, readProviderConnectSeed } from '#adapters/index.js';
@@ -10,11 +11,11 @@ import { settledProviderCacheUsage } from '#engine/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, configuredConfigChoiceSources } from '#composition/core/config/index.js';
 import { inspectConfiguredWorkerTranscript, inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
-import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision } from '#composition/core/decision/index.js';
+import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision, listConfiguredDecisions } from '#composition/core/decision/index.js';
 import { inspectMonitor, inspectSurfaceAccess, inspectSurfaceRunIds, followLedgerSurface } from '#composition/core/monitor/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains, inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
-import { changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
+import { changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredAllStandingGrants, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
 import { interactiveDeliveryHandlers, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
@@ -22,32 +23,50 @@ import { connectConfiguredModel, listConfiguredConnectionModels, planConfiguredP
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
-import { main as runCli, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn } from '#surfaces/index.js';
+import { main as runCli, openConfigWindow, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, resolveCliLocale } from '#surfaces/index.js';
 import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { inspectConfiguredShellRealm, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
-import { getConfigFieldDefault, isMainModule, resolveLocale, loadConfigLanguage, loadConfig } from '#platform/index.js';
+import { getConfigFieldDefault, isMainModule, envValue, loadConfigLanguage, loadConfigAgentEnvironment, loadConfig, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile, configureNativeCodingTemplate, initializeNativeCodingRegistry } from '#composition/core/native-coding/index.js';
 import { assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat } from '#composition/core/terminal-chat/index.js';
 import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand, inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { verifyConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
+import { configuredSetup } from '#composition/core/setup/index.js';
 import { inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores } from '#composition/core/secrets/index.js';
+/**
+ * L-KIT: the call's locale, resolved once here and handed to every command (`context.locale`): `--lang`, DECKENT_LANGUAGE/DECKENT_LANG,
+ * config `language`, LC_ALL, LC_MESSAGES, LANG. Presentation only: a config that cannot be read falls back to the environment, never blocks.
+ */
+export async function hostLocale(argv: readonly string[], root: string, env: NodeJS.ProcessEnv = process.env): Promise<Locale> {
+  const at = argv.indexOf('--lang'), flag = at >= 0 && !argv[at + 1]?.startsWith('-') ? argv[at + 1] : undefined;
+  // A supported flag or DECKENT_LANGUAGE/DECKENT_LANG outranks config: no config read is needed then (an unsupported value is passed over).
+  const decisive = [flag, envValue(env, 'DECKENT_LANGUAGE'), envValue(env, 'DECKENT_LANG')]
+    .some(value => !!value && resolveCliLocale({ flag: value, env: {} }) === value.slice(0, 2).toLowerCase());
+  if (decisive) return resolveCliLocale({ flag, env });
+  let configLanguage: string | undefined;
+  try { configLanguage = await loadConfigLanguage(root, { env }); } catch { /* unreadable or invalid config: the environment chain decides */ }
+  return resolveCliLocale({ flag, env, configLanguage });
+}
+/** The long-running commands whose SIGINT/SIGTERM cancel the call (besides `runtime serve`); a cli-grouped-help test pins each name to the catalog. */
+export const SIGNAL_COMMANDS: readonly (readonly [string, string?])[] = Object.freeze([['do'], ['workers', 'watch'], ['decide', 'ask'],
+  ['task', 'integration-deliver'], ['task', 'integration-adopt'], ['task', 'integration-rollback']]);
+/** INIT-D7: the installation's `cli.agentEnvironment`, read like the language (presentation only); unreadable or invalid → the kit default. */
+export const hostAgentEnvironment = (root: string, env: NodeJS.ProcessEnv = process.env) => loadConfigAgentEnvironment(root, { env }).catch(() => undefined);
 export async function main(argv: readonly string[] = process.argv.slice(2), serviceEntry?: string) {
   const root = process.cwd(), runtime = createConfiguredRuntimeClient(root);
-  const languageAt = argv.indexOf('--lang');
-  const isRuntimeServe = argv[0] === 'runtime' && argv[1] === 'serve';
-  const handlesSignals = isRuntimeServe || argv[0] === 'do' || (argv[0] === 'workers' && argv[1] === 'watch') || (argv[0] === 'decide' && argv[1] === 'ask') || (argv[0] === 'task' && ['integration-deliver', 'integration-adopt', 'integration-rollback'].includes(argv[1] ?? ''));
+  const [locale, agentEnvironment] = await Promise.all([hostLocale(argv, root), hostAgentEnvironment(root)]);
+  const isRuntimeServe = argv[0] === 'runtime' && argv[1] === 'serve', handlesSignals = isRuntimeServe || SIGNAL_COMMANDS.some(([family, action]) => argv[0] === family && (action === undefined || argv[1] === action));
   const controller = new AbortController();
-  const delivery = interactiveDeliveryHandlers(async view => askDeliveryConfirmation(view,
-    resolveLocale(languageAt >= 0 ? argv[languageAt + 1] : await loadConfigLanguage(root)), process.stdin, process.stderr,
+  const delivery = interactiveDeliveryHandlers(async view => askDeliveryConfirmation(view, locale, process.stdin, process.stderr,
     { timeoutMs: (await loadConfig(root)).approvals.sessionTtlMs, signal: controller.signal }));
   const stop = () => controller.abort();
   if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
-  try { return await runCli(argv, { initialize: composeCore, root, signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
+  const host: Parameters<typeof runCli>[1] & object = { initialize: composeCore, root, locale, ...(agentEnvironment ? { agentEnvironment } : {}), signal: controller.signal, startRuntimeService: startConfiguredCliRuntimeService,
     verifyAudit: verifyConfiguredAudit, rebaselineAudit: rebaselineConfiguredAudit, executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
     listIdentityDistributionChoices: listConfiguredIdentityDistributionChoices, previewIdentityDistribution: previewConfiguredIdentityDistribution, applyIdentityDistribution: applyConfiguredIdentityDistribution,
-    prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision,
+    prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision, listDecisions: listConfiguredDecisions,
     ...configuredTargetQueueTerminal(root),
     deliverWorkspaceIntegration: delivery.deliver,
     adoptWorkspaceIntegration: delivery.adopt, rollbackWorkspaceIntegration: delivery.rollback, interactiveDelivery: interactiveDeliveryHandlers, // TESLIM-PENCERESI window answer
@@ -56,6 +75,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     checkWorkspaceIntegration: checkConfiguredWorkspaceIntegration, prepareWorkspaceIntegration: prepareConfiguredWorkspaceIntegration,
     prepareWorkspacePatch: prepareConfiguredWorkspacePatch, previewWorkspacePatch: previewConfiguredWorkspacePatch, renderUnifiedDiff: unifiedDiff,
     configChoiceSources: configuredConfigChoiceSources, configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal,
+    openConfigPanel: openConfigWindow, // C-SETUP: `deckent config` on a terminal = the `/config` window (lazy view)
     inspectToolchainRefresh,
     inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options), inspectSurfaceAccess, inspectSurfaceRunIds, followSurfaceEvents: followLedgerSurface,
     ensureRuntimeService: (projectRoot, options) => ensureConfiguredRuntimeService(projectRoot, options, undefined, serviceEntry),
@@ -66,7 +86,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     selfSourceProject: isSelfSourceProject,
     ensureTerminalIdentity: (projectRoot, scopeId, options) => ensureConfiguredTerminalIdentity(projectRoot, scopeId, options).catch(error => { throw queryFailure(error); }),
     resolveInstallationIdentity: resolveConfiguredInstallationIdentity, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity,
-    stopRuntimeService: (projectRoot, options) => stopConfiguredRuntimeService(projectRoot, options),
+    stopRuntimeService: (projectRoot, options, reason) => stopConfiguredRuntimeService(projectRoot, options, reason), inspectBackupSets: inspectConfiguredBackupSets, inspectAdminPaths: inspectConfiguredAdminPaths,
     readInferenceMetrics: (projectRoot, input, options) => readConfiguredInferenceMetrics(projectRoot, input, options),
     updateToolchains: (projectRoot, input, options) => updateConfiguredToolchains(projectRoot, input, options),
     runMcpCommand: runConfiguredMcpCommand,
@@ -148,9 +168,9 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     upgradePolicyTemplateInstallation: (projectRoot, scopeId, apply, expect, person) => upgradePolicyTemplateInstallation(projectRoot, scopeId, apply, expect, {}, process.getuid?.(), person)
       .catch(error => { throw queryFailure(error); }),
     installConfiguredExecutionPool: (projectRoot, scopeId, apply) => installConfiguredExecutionPool(projectRoot, scopeId, apply).catch(error => { throw queryFailure(error); }),
-    inspectPolicyTemplate: projectRoot => inspectPolicyTemplate(projectRoot),
+    inspectPolicyTemplate: (projectRoot, options) => inspectPolicyTemplate(projectRoot, options),
     assessModelInvocationDelivery: (projectRoot, options) => assessConfiguredModelInvocationDelivery(projectRoot, options),
-    listStandingGrants: listConfiguredStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,
+    listStandingGrants: listConfiguredStandingGrants, listAllStandingGrants: listConfiguredAllStandingGrants, revokeStandingGrant: revokeConfiguredStandingGrant,
     inspectPolicyAdministration: inspectConfiguredPolicyAdministration,
     upgradePolicyTemplate: (root, scopeId, input, options) => configuredPolicyTemplateUpgrade(root, scopeId, options, input).catch(error => { throw queryFailure(error); }),
     delegations: { inspect: inspectConfiguredDecisionDelegations, change: changeConfiguredDecisionDelegation },
@@ -163,7 +183,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
     proposeRun: (_root, input) => runtime.proposeRun(input), inspectRunProposal: (_root, input) => runtime.inspectRunProposal(input),
     createRun: (_root, input) => runtime.createRun(input), createDeliveryRun: createConfiguredDeliveryRun,
     executeTask: (_root, input) => runtime.executeTask(input), evaluateTask: (_root, input) => runtime.evaluateTask(input),
-  }); } finally { if (handlesSignals) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } }
+  };
+  try { return await runCli(argv, { ...host, ...configuredSetup(host) }); } finally { if (handlesSignals) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } } // I-S3: bare `deckent init`
 }
 if (isMainModule(import.meta)) {
   void main().then(code => { if (process.argv[2] === 'runtime' && process.argv[3] === 'serve' && code !== 0) process.exit(code); else process.exitCode = code; });

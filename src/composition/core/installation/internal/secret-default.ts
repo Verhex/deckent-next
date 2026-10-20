@@ -6,6 +6,7 @@ import { normalizeGlobalScopePlatform, productResourcePath, resolveProductLayout
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { missingEnvironmentReferenceNames } from '#composition/core/secrets/index.js';
 import { applyPolicyTemplateInstallation } from './policy-template.js';
+import { loadComposedConfig } from '#composition/core/root/index.js';
 
 /** What the first-run secret store default did: switched (with the switch's own record), kept (the installation config already selects a store),
  * not offered on this platform (native Windows until the OS keyring backend), or not done (a typed refusal; the installation itself stands). */
@@ -15,7 +16,9 @@ export type InstallationSecretStoreDefault = Readonly<{ status: 'set' | 'kept' |
 /** Fresh installer default via the governed store switch (owner 2026-10-08): the command result carries the switch record while no ledger exists.
  * Existing selections/installations and native Windows are kept; a refusal is visible without undoing the installation. */
 export async function applyPolicyTemplateInstallationWithSecretDefault(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}) {
-  const policy = productResourcePath(resolveProductLayout({ projectRoot }), 'policy');
+  // The layout the installation writes (this process's config and environment; `options` only selects the store default below):
+  // the configured data root, the default only when the config is unreadable.
+  const policy = productResourcePath(await loadComposedConfig(projectRoot, { heal: false, force: true }).then(config => config.productLayout, () => resolveProductLayout({ projectRoot })), 'policy');
   const fresh = await lstat(policy).then(() => false, (error: NodeJS.ErrnoException) => error.code === 'ENOENT');
   const result = await applyPolicyTemplateInstallation(projectRoot, scopeId);
   if (!fresh || result.status !== 'installed') return result;

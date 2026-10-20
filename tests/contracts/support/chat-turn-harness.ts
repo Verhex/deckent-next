@@ -59,7 +59,8 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   await Promise.all([mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }), mkdir(join(project, 'src'), { recursive: true }), mkdir(home, { mode: 0o700 })]);
   await mkdir(data, { recursive: true, mode: 0o700 });
   await writeFile(join(project, 'src', 'a.ts'), 'export const a = 1;\n');
-  const state = { requests: [] as Record<string, unknown>[], raw: [] as string[], tokenize: [] as Record<string, unknown>[], script: [] as Script[], closed: 0 };
+  /** `authorization`: the header each request arrived with (G2-7: a plain-http server never receives a key), in arrival order. */
+  const state = { requests: [] as Record<string, unknown>[], raw: [] as string[], tokenize: [] as Record<string, unknown>[], script: [] as Script[], closed: 0, authorization: [] as Array<string | null> };
   // The answering model echoes the requested one (T4-B: a connected seed model is served by the same scripted server).
   let served = 'native-chat';
   const chunk = (delta: Record<string, unknown>, finish: string | null = null) => `data: ${JSON.stringify({ id: 'chatcmpl-turn',
@@ -67,7 +68,7 @@ export async function runtime(options: { toolGrant?: boolean | 'approval'; token
   const usageOf = (completion = 8) => `data: ${JSON.stringify({ id: 'chatcmpl-turn', object: 'chat.completion.chunk', created: 1, model: served, choices: [],
     usage: { prompt_tokens: 20, completion_tokens: completion, total_tokens: 20 + completion } })}\n\n`;
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-    const body: Buffer[] = []; req.on('data', part => body.push(part));
+    const body: Buffer[] = []; req.on('data', part => body.push(part)); state.authorization.push(req.headers.authorization ?? null);
     req.on('end', () => {
       if (options.modelList && req.method === 'GET' && req.url === '/v1/models') {
         res.writeHead(200, { 'content-type': 'application/json' });

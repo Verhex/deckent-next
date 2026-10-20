@@ -84,7 +84,8 @@ export async function doctorView(locale: Locale, report: ((sink: OutputSink) => 
     if (data.poolReadiness) {
       const status = data.poolReadiness.status;
       const words = status === 'ready' ? t('doctor.poolReadiness.status.ready', {}, locale) : status === 'drift' ? t('doctor.poolReadiness.status.drift', {}, locale)
-        : status === 'unavailable' ? t('doctor.poolReadiness.status.unavailable', {}, locale) : status === 'unconfigured' ? t('doctor.poolReadiness.status.unconfigured', {}, locale) : status;
+        : status === 'unavailable' ? t('doctor.poolReadiness.status.unavailable', {}, locale) : status === 'unconfigured' ? t('doctor.poolReadiness.status.unconfigured', {}, locale)
+          : status === 'missing' ? t('doctor.poolReadiness.status.missing', {}, locale) : status; // I-S7: registry present, pool not set up yet
       // Not configured is not a failure and not unknown: the chip says so in the readiness word itself.
       sections.push({ title: t('terminal.info.doctor.section.pools', {}, locale), chip: status === 'ready' ? chip('ok') : status === 'drift' ? chip('warn') : status === 'unavailable' ? chip('fail')
         : { state: 'neutral', text: words },

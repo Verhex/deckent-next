@@ -7,3 +7,4 @@ export type { ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler }
 export type { ModelCatalogApplyHandler, ModelCatalogInspectionHandler } from './internal/model-catalog.js';
 export { renderModelConnect, type ModelConnectHandler } from './internal/model-connect.js';
 export { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetLine, scopeBudgetRevisionCommand } from './internal/budget.js';
+export { modelRetirementWarnings, renderRetirementWarning, type ModelRetirementWarning } from './internal/models-table.js';

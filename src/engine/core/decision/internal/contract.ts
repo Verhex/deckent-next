@@ -5,6 +5,7 @@ import { createImmutableJsonObjectSchema, identitySchema, decisionCaseSchema, de
   type DecisionCase, type DecisionAdvice, type DecisionPolicy, type DecisionRecord, type AuditEvent, type ModelInvocationCommand, type VerifiedPrincipal } from '#domain/index.js';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ModelInvocationResult } from '#engine/core/model-invocation/index.js';
+import listBounds from './decision-list.json' with { type: 'json' };
 const ingress = createImmutableJsonObjectSchema(MODEL_INVOCATION_NATIVE_JSON_LIMITS);
 const target = {schemaVersion:z.literal(1),scopeId:identitySchema,decisionId:identitySchema};
 const digest=z.string().regex(/^[a-f0-9]{64}$/);
@@ -12,12 +13,15 @@ export const decisionPrepareInputSchema=ingress.pipe(z.object({schemaVersion:z.l
 export const decisionAskCommandSchema=ingress.pipe(z.object({schemaVersion:z.literal(1),commandId: clientCommandIdSchema,scopeId:identitySchema,case:decisionCaseSchema,
   invocation:z.object({reference:modelReferenceSchema,catalogRevision:identitySchema,expectedBinding:modelActivationBindingSchema}).strict()}).strict());
 export const decisionQuerySchema=ingress.pipe(z.object(target).strict());
+/** Recent decisions of one scope (C-APPROVE `deckent decide`): the page bound is protocol data (`decision-list.json`), not configurable policy. */
+export const decisionListQuerySchema=z.object({schemaVersion:z.literal(1),scopeId:identitySchema,limit:z.number().int().min(1).max(listBounds.pageMax)}).strict();
 export const decisionRecordCommandSchema=ingress.pipe(z.object({...target,commandId: clientCommandIdSchema,selectedOption:identitySchema,rationale:z.string().min(1)}).strict());
 export const decisionOutcomeCommandSchema=ingress.pipe(z.object({...target,commandId: clientCommandIdSchema,
   outcome:z.object({observedAt:z.string().datetime({offset:true}),observation:z.string().min(1)}).strict()}).strict());
 export type DecisionPrepareInput=z.infer<typeof decisionPrepareInputSchema>;
 export type DecisionAskCommand=z.infer<typeof decisionAskCommandSchema>;
 export type DecisionQuery=z.infer<typeof decisionQuerySchema>;
+export type DecisionListQuery=z.infer<typeof decisionListQuerySchema>;
 export type DecisionRecordCommand=z.infer<typeof decisionRecordCommandSchema>;
 export type DecisionOutcomeCommand=z.infer<typeof decisionOutcomeCommandSchema>;
 export type DecisionStatus='advised'|'below-threshold'|'unknown'|'cancelled'|'unavailable';
@@ -30,11 +34,15 @@ export interface DecisionPrepareResult {readonly schemaVersion:1;readonly case:D
 export interface DecisionAskResult {readonly schemaVersion:1;readonly status:DecisionStatus;readonly decisionId:string;readonly caseDigest:string;
  readonly adviceDigest:string|null;readonly advice:DecisionAdvice|null;readonly thresholds:DecisionPolicy['thresholds'];readonly invocationId:string|null;readonly record:DecisionRecord|null;readonly replayed:boolean}
 export type DecisionInspection=(DecisionAskResult & {readonly case:DecisionCase})|{readonly schemaVersion:1;readonly status:'not-found';readonly decisionId:string};
+/** Newest first (claim time); each item is the `inspect` view of one decision plus when it was asked. */
+export interface DecisionList {readonly schemaVersion:1;readonly scopeId:string;readonly items:readonly (DecisionAskResult & {readonly case:DecisionCase;readonly claimedAtMs:number})[]}
 export interface DecisionRecordResult {readonly schemaVersion:1;readonly replayed:boolean;readonly record:DecisionRecord}
 export type DecisionOutcomeResult=DecisionRecordResult;
 export interface DecisionMutationReceipt {readonly scopeId:string;readonly commandId:string;readonly decisionId:string;readonly digest:string;readonly result:DecisionRecordResult}
 export interface DecisionStore {
  load(scopeId:string,decisionId:string):Promise<DecisionSnapshot|null>;
+ /** The scope's most recently stored decisions, at most `limit` (optional: a store without it lists nothing). */
+ list?(scopeId:string,limit:number):Promise<readonly DecisionSnapshot[]>;
  claim(snapshot:DecisionSnapshot,event:AuditEvent):Promise<{replayed:boolean;snapshot:DecisionSnapshot}>;
  settle(previous:DecisionSnapshot,next:DecisionSnapshot,event:AuditEvent):Promise<DecisionSnapshot>;
  receipt(scopeId:string,commandId:string):Promise<DecisionMutationReceipt|null>;

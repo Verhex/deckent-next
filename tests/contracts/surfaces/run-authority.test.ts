@@ -20,7 +20,10 @@ it.each(['en', 'tr'] as const)('inspect JSON, text and monitor detail expose the
   const command = ['run', 'inspect', '--scope', 's', '--id', 'r', '--lang', locale];
   expect(await main([...command, '--json'], context as never)).toBe(0);
   expect(JSON.parse(output.pop()!).run.authority).toEqual(authority);
+  // C-RUN (CLI review §run): the authority record is an internal record, shown with --verbose; the default view does not carry it.
   expect(await main(command, context as never)).toBe(0);
+  expect(output.join('')).not.toContain(authority.decision.eventId);
+  expect(await main([...command, '--verbose'], context as never)).toBe(0);
   const line = t('cli.run.inspect.authority', { record: authority.decision.eventId, sequence: 17, approval: 'approval-17' }, locale);
   expect(output.join('')).toContain(line);
   const monitor = projectMonitorRun({ run: { snapshot: run, poolId: null, admitted: true, createdAtMs: 0, attempts: [] }, approvals: [], pool: null, workers: new Map(), observedAt: 10 });

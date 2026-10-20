@@ -7,4 +7,8 @@ export interface CliBaseContext {
   stdin?: Readable & { isTTY?: boolean };
   signal?: AbortSignal;
   onLocale?: (locale: Locale) => void;
+  /** L-KIT: the locale the host resolved once for this call (`resolveCliLocale`, config `language` included); read it through `commandLocale`. */
+  locale?: Locale;
+  /** L-KIT: exact environment variable names that mark an AI agent caller (config registry once INIT-D7 lands); absent: the kit's registry list. */
+  agentEnvironment?: readonly string[];
 }

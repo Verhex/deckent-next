@@ -8,7 +8,7 @@ import { modelInvocabilityText, IdentityProfileRegistry, installationOwnScopes, 
 import { executionRegistrySchema, policySchema } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/index.js';
 import { discoverConfigRecordFiles, readConfigRecordFile, discoverConfigExecutables, discoverConfigBranches, discoverConfigImages, discoverConfigFiles, discoverConfigPools } from '#adapters/index.js';
-import { ErrorRegistry, inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, inspectProductDirectory, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import type { ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/index.js';
 /** Each inspection gets a fresh snapshot. No source grants write authority; ConfigApplication still admits the chosen value. */
 export function configuredConfigChoiceSources(root: string, options: ConfigLoadOptions): ConfigChoiceSourcePort {
@@ -45,11 +45,17 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
     if (source === 'task-kinds') { const registry = executionRegistrySchema.safeParse(config.admission?.registry); return registry.success ? values(registry.data.kinds.map(kind => kind.kind)) : []; }
     if (source === 'identity-profiles') {
       const selection = config['identity'] as { packages?: readonly unknown[] } | undefined;
-      return new IdentityProfileRegistry(selection?.packages).list().map((entry, i) => ({ id: `r${i}`, label: entry.labels?.[config.language] ?? entry.definition.id, value: { id: entry.definition.id, version: entry.definition.version }, detail: `${entry.definition.id} · v${entry.definition.version}` }));
+      return new IdentityProfileRegistry(selection?.packages).list().map((entry, i) => ({ id: `r${i}`, label: entry.labels?.[resolveLocale(undefined, env, config.language)] ?? entry.definition.id, value: { id: entry.definition.id, version: entry.definition.version }, detail: `${entry.definition.id} · v${entry.definition.version}` }));
     }
     if (source === 'serving-profiles') { const serving = config['inference_serving'] as { profiles?: readonly { id: string }[] } | undefined; return values(serving?.profiles?.map(profile => profile.id) ?? []); }
     if (source === 'scopes') {
-      const document = policySchema.parse(await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load());
+      // J2c/J2d: a folder with no installation (no product directory or no policy file) refuses with the typed setup answer
+      // (`CLI_INSTALLATION_MISSING`: run `deckent init`). Only a missing file means "no installation": an unsafe, changed or invalid
+      // authority file still refuses with its own error. An installation with no scope this person may read stays an empty list.
+      const loaded = await createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes).load()
+        .catch((error: unknown) => { if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return null; throw error; });
+      if (loaded === null) throw ErrorRegistry.createError('CLI_INSTALLATION_MISSING');
+      const document = policySchema.parse(loaded);
       const candidates = installationOwnScopes(document, [scopeId, config.service.identity?.scopeId, ...(config.cancellationRuntime?.scopeIds ?? []), ...(config.reconciliationRuntime?.scopeIds ?? [])].filter((value): value is string => !!value));
       const identity = readLocalOsIdentity(), admitted: string[] = [];
       for (const scope of candidates) { try { admitted.push(...await resolveConfiguredScopeMembership(config, document, identity, [scope], 'read')); } catch { /* Foreign/unregistered scopes are not displayed. */ } }
@@ -59,8 +65,8 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
     if (source === 'models') {
       const reading = await inspectConfiguredInvocableModels(root, scopeId, options);
       return reading.models.map(model => ({ id: JSON.stringify(model.reference), label: model.label, value: model.reference,
-        detail: `${model.reference.providerId} · ${modelInvocabilityText(model.availability, config.language)}`,
-        ...(!model.availability.invocable ? { blocked: modelInvocabilityText(model.availability, config.language) } : {}) }));
+        detail: `${model.reference.providerId} · ${modelInvocabilityText(model.availability, resolveLocale(undefined, env, config.language))}`,
+        ...(!model.availability.invocable ? { blocked: modelInvocabilityText(model.availability, resolveLocale(undefined, env, config.language)) } : {}) }));
     }
     const context = await loadConfiguredScopeContext(root, scopeId, options, 'read');
     if (source === 'companies') return values([context.config.company.id]); // Policy/membership pins this installation to one company; no foreign enumeration.

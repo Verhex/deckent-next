@@ -38,12 +38,12 @@ it('doctor --json carries the composed shell realm report from the service state
 it('doctor shows the realm in its human lines in the product\'s own sandbox words; null when unwired', async () => {
   const f = await fixture(), out = capture();
   const notice = '[deckent] sandbox: landlock instead of bubblewrap (bubblewrap: bwrap at /p/.deckent/host/global/bin/bwrap-917f is inside the project or scratch area, where a sandboxed command could replace it).';
-  await runKernelCommand(['doctor'], { root: f.project, env: f.env, stdout: out.sink, inspectShellRealm: async () => ({ mode: 'prefer-sandbox', selected: 'landlock',
+  await runKernelCommand(['doctor', '--verbose'], { root: f.project, env: f.env, stdout: out.sink, inspectShellRealm: async () => ({ mode: 'prefer-sandbox', selected: 'landlock',
     marker: 'sandbox: landlock', notice, code: null, rejected: [{ kind: 'bubblewrap', reason: 'x' }], preferSandbox: null }) });
   const text = out.lines.join('');
   expect(text).toContain(`sandbox: landlock [terminal.shell.realm prefer-sandbox]\n${notice}`);
   const refused = capture();
-  await runKernelCommand(['doctor'], { root: f.project, env: f.env, stdout: refused.sink, inspectShellRealm: async () => ({ mode: 'require-sandbox', selected: null, marker: null,
+  await runKernelCommand(['doctor', '--verbose'], { root: f.project, env: f.env, stdout: refused.sink, inspectShellRealm: async () => ({ mode: 'require-sandbox', selected: null, marker: null,
     notice: null, code: 'SHELL_SANDBOX_UNAVAILABLE', rejected: [{ kind: 'bubblewrap', reason: 'a' }, { kind: 'landlock', reason: 'landlock unavailable' }], preferSandbox: null }) });
   expect(refused.lines.join('')).toContain('sandbox: refused (SHELL_SANDBOX_UNAVAILABLE) [terminal.shell.realm require-sandbox]\nbubblewrap: a; landlock: landlock unavailable');
   const unwired = capture();
@@ -71,12 +71,13 @@ it('doctor runs one command through the selected sandbox with the turn\'s own la
   expect(existsSync(f.stateDir)).toBe(false);
   const view = { mode: 'prefer-sandbox', selected: 'bubblewrap', marker: 'sandbox: bubblewrap', notice: null, code: null, rejected: [], preferSandbox: null };
   const failed = capture();
-  await runKernelCommand(['doctor'], { root: f.project, env: f.env, stdout: failed.sink, inspectShellRealm: async () => ({ ...view,
+  await runKernelCommand(['doctor', '--verbose'], { root: f.project, env: f.env, stdout: failed.sink, inspectShellRealm: async () => ({ ...view,
     selfTest: { status: 'failed' as const, detail: 'spawn-failed: [deckent] the command could not be started: E2BIG (argument list too long); nothing was run.', durationMs: 3 } }) });
   const text = failed.lines.join('');
   expect(text).toContain('sandbox: bubblewrap [terminal.shell.realm prefer-sandbox]\nsandbox self-test FAILED: spawn-failed: [deckent] the command could not be started: E2BIG');
-  expect(text).toContain('Status: degraded');
+  // J3 (C-DOCTOR follow-up d082a9a7): --verbose states the status once, in the grouped summary's words; a failed self-test needs attention.
+  expect(text).toMatch(/^Status: needs attention · 1 error\(s\)/u);
   const passed = capture();
-  await runKernelCommand(['doctor'], { root: f.project, env: f.env, stdout: passed.sink, inspectShellRealm: async () => ({ ...view, selfTest: { status: 'ok' as const, detail: null, durationMs: 1200 } }) });
+  await runKernelCommand(['doctor', '--verbose'], { root: f.project, env: f.env, stdout: passed.sink, inspectShellRealm: async () => ({ ...view, selfTest: { status: 'ok' as const, detail: null, durationMs: 1200 } }) });
   expect(passed.lines.join('')).toContain('sandbox self-test: ok (a command ran in this project\'s real sandbox view; 1200 ms from start to exit, view preparation not counted)');
 });

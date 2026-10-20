@@ -79,6 +79,8 @@ export type EffectApprovalPending = Readonly<{ schemaVersion: 2; status: 'approv
   target: EffectTargetRef; approval: EffectApprovalPendingRequest }>;
 export type EffectOutcome = EffectResult | EffectApprovalPending;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+/** The digest an effect intent pins for its canonical input (`submit` below): a reader can match an audited change to the input that made it. */
+export const effectInputDigest = (input: unknown) => digest(encodeCommandProjection('effect-input', input ?? null));
 export const effectWireKey = (command: EffectCommand) => digest(['effect-key:1', command.scopeId, command.target.kind, command.target.id,
   `${command.operation.id}@${command.operation.version}`, command.idempotencyKey].join('\0'));
 const binding = (descriptor: OperationDescriptor, target: EffectTarget) =>
@@ -142,7 +144,7 @@ export class EffectApplication {
       let encoded: string;
       try { encoded = encodeCommandProjection('effect-input', command.input ?? null); } catch { throw new EffectError('EFFECT_INVALID'); }
       if (Buffer.byteLength(encoded) > descriptor.inputMaxBytes) throw new EffectError('EFFECT_INVALID');
-      inputDigest = digest(encoded);
+      inputDigest = digest(encoded); // = effectInputDigest(command.input)
     }
     // The approval gate: a pending approval ends the submission here (or before the effect, see `settle`); nothing is sent.
     const gate = async (decided: Decision, record: EffectRecord | null) => {

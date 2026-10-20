@@ -74,6 +74,11 @@ export function parseConfigInput(keyPath: string, text: string): { readonly ok: 
   try { parsed = JSON.parse(text); } catch { return { ok: false }; }
   return schema.safeParse(parsed).success ? { ok: true, value: parsed } : { ok: false };
 }
+/** L-KIT `--schema` (option B, no new dependency owner): a command's zod input contract as JSON Schema with the MCP tool list's projection,
+ * so CLI, MCP and SDK describe one contract; the CLI prints it with `renderInputSchema`. */
+export function projectInputSchema(schema: z.ZodTypeAny): unknown {
+  return zodToJsonSchema(schema, { $refStrategy: 'none' });
+}
 function jsonSchemaView(schema: z.ZodTypeAny, schemaKey: string): unknown {
   const generation = configRegistryGeneration();
   if (schemaGeneration !== generation) { schemaViews.clear(); schemaGeneration = generation; }

@@ -257,6 +257,7 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/surfaces/core/cli-kit",
         "src/adapters/core/provider-connect",
         "src/adapters/core/agent-workspace-floor",
         "src/adapters/core/terminal-history",
@@ -302,7 +303,12 @@
         "src/composition/core/run-planner",
         "src/platform/core/i18n",
         "src/surfaces/core/effect-confirmation",
-        "src/composition/core/audit"
+        "src/composition/core/audit",
+        "src/surfaces/core/config-window",
+        "src/adapters/core/secret-store",
+        "src/adapters/core/mcp-client",
+        "src/adapters/core/local-runtime-socket",
+        "src/composition/core/setup"
       ],
       "plan": "SURFACES"
     },
@@ -385,7 +391,8 @@
         "src/domain/core/audit",
         "src/platform/core/clock",
         "src/composition/core/run-planner",
-        "src/composition/core/audit"
+        "src/composition/core/audit",
+        "src/platform/core/crash-reporting"
       ],
       "plan": "SURFACES"
     },
@@ -460,7 +467,6 @@
     },
     "src/composition/core/terminal-chat": {
       "dependencies": [
-        "src/surfaces/core/terminal-kit",
         "src/adapters/core/contract",
         "src/composition/core/provider-catalog",
         "src/domain/core/model-invocation",
@@ -530,7 +536,8 @@
         "src/adapters/core/local-principal",
         "src/adapters/core/target-queue-store",
         "src/adapters/core/sqlite-ledger",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/engine/core/run-proposal"
       ],
       "plan": "EXECUTION"
     },
@@ -770,9 +777,6 @@
         "src/engine/core/approval",
         "src/domain/core/command",
         "src/platform/core/integrity",
-        "src/engine/core/provider-spend",
-        "src/domain/core/model-invocation",
-        "src/capabilities/core/run-planner",
         "src/platform/core/redaction",
         "src/platform/core/i18n",
         "src/domain/core/work-cost",
@@ -808,7 +812,8 @@
         "src/engine/core/task-evaluation",
         "src/platform/core/config",
         "src/domain/core/run",
-        "src/domain/core/command"
+        "src/domain/core/command",
+        "src/engine/core/run-proposal"
       ],
       "plan": "EXECUTION"
     },
@@ -1141,14 +1146,15 @@
         "src/surfaces/core/terminal-panels",
         "src/surfaces/core/project-instructions",
         "src/engine/core/project-instructions",
-        "src/engine/core/runs",
         "src/surfaces/core/terminal-delivery",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/engine/core/run-proposal"
       ],
       "plan": "SURFACES"
     },
     "src/surfaces/core/cli-kit": {
       "dependencies": [
+        "src/platform/core/host",
         "src/platform/core/i18n",
         "src/platform/core/output",
         "src/platform/core/errors"
@@ -1170,7 +1176,9 @@
         "src/domain/core/model-invocation",
         "src/engine/core/model-invocation",
         "src/engine/core/provider-spend",
-        "src/domain/core/provider-spend"
+        "src/domain/core/provider-spend",
+        "src/surfaces/core/cli-human",
+        "src/platform/core/config-fields"
       ],
       "plan": "SURFACES"
     },
@@ -1178,7 +1186,9 @@
       "dependencies": [
         "src/engine/core/toolchain-currency",
         "src/platform/core/i18n",
-        "src/domain/core/audit"
+        "src/domain/core/audit",
+        "src/domain/core/provider-catalog",
+        "src/platform/core/output"
       ],
       "plan": "SURFACES"
     },
@@ -1198,45 +1208,27 @@
       "dependencies": [
         "src/surfaces/core/cli-installation",
         "src/surfaces/core/doctor",
-        "src/engine/core/secret-store",
-        "src/domain/core/attempt",
-        "src/domain/core/policy",
-        "src/domain/core/primitives",
-        "src/domain/core/task-graph",
-        "src/engine/core/dispatch",
-        "src/engine/core/runs",
-        "src/engine/core/runtime",
-        "src/engine/core/task-evaluation",
         "src/platform/core/common",
         "src/platform/core/config",
-        "src/platform/core/config-fields",
         "src/platform/core/crash-reporting",
         "src/platform/core/errors",
         "src/platform/core/host",
         "src/platform/core/i18n",
-        "src/platform/core/identity",
         "src/platform/core/output",
-        "src/engine/core/run-progression",
-        "src/domain/core/run",
-        "src/engine/core/workspace-patch",
-        "src/capabilities/core/artifacts",
-        "src/engine/core/toolchain-currency",
-        "src/domain/core/effect",
-        "src/engine/core/effect",
         "src/surfaces/core/cli-models",
         "src/surfaces/core/cli-kit",
-        "src/engine/core/model-invocation",
         "src/surfaces/core/monitor",
         "src/surfaces/core/cli-decision",
-        "src/engine/core/config",
-        "src/platform/core/utils",
         "src/surfaces/core/cli-identity",
         "src/surfaces/core/work-labels",
         "src/surfaces/core/cli-terminal",
-        "src/engine/core/backup",
-        "src/surfaces/core/run-planning",
-        "src/domain/core/audit",
-        "src/surfaces/core/delivery-queue"
+        "src/surfaces/core/cli-observe",
+        "src/surfaces/core/cli-run",
+        "src/surfaces/core/cli-admin",
+        "src/surfaces/core/cli-approval",
+        "src/surfaces/core/cli-task",
+        "src/surfaces/core/cli-human",
+        "src/platform/core/config-fields"
       ],
       "plan": "SURFACES"
     },
@@ -1285,7 +1277,8 @@
         "src/domain/core/attempt",
         "src/engine/core/effect",
         "src/engine/core/workspace-patch",
-        "src/surfaces/core/terminal-delivery"
+        "src/surfaces/core/terminal-delivery",
+        "src/engine/core/run-proposal"
       ],
       "plan": "SURFACES"
     },
@@ -1318,7 +1311,8 @@
         "src/engine/core/agent-turn",
         "src/domain/core/audit",
         "src/domain/core/run",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/engine/core/run-proposal"
       ],
       "plan": "SURFACES"
     },
@@ -1359,6 +1353,7 @@
     "src/composition/core/installation": {
       "dependencies": [
         "src/adapters/core/contract",
+        "src/engine/core/runtime",
         "src/adapters/core/secret-store",
         "src/engine/core/secret-store",
         "src/domain/core/audit",
@@ -1685,7 +1680,8 @@
         "src/composition/core/config",
         "src/adapters/core/provider-connect",
         "src/engine/core/workspaces",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/engine/core/runtime"
       ],
       "plan": "SURFACES"
     },
@@ -1979,6 +1975,7 @@
     "src/adapters/core/host-shell": {
       "dependencies": [
         "src/platform/core/common",
+        "src/adapters/core/workspace-read",
         "src/domain/core/agent-tool",
         "src/engine/core/effect",
         "src/engine/core/shell-classification",
@@ -1994,7 +1991,8 @@
       "dependencies": [
         "src/adapters/core/workspace-read",
         "src/engine/core/shell-classification",
-        "src/adapters/core/workspace-write"
+        "src/adapters/core/workspace-write",
+        "src/platform/core/validate"
       ],
       "plan": "SURFACES"
     },
@@ -2056,7 +2054,6 @@
         "src/adapters/core/docker-supervisor",
         "src/adapters/core/file-artifacts",
         "src/adapters/core/worker-observation",
-        "src/composition/core/inventory",
         "src/composition/core/policy",
         "src/composition/core/query-errors",
         "src/composition/core/scoped-request",
@@ -2067,7 +2064,9 @@
         "src/platform/core/config",
         "src/platform/core/managed-files",
         "src/platform/core/common",
-        "src/composition/core/resource-observation"
+        "src/composition/core/resource-observation",
+        "src/engine/core/dispatch",
+        "src/engine/core/monitor"
       ],
       "plan": "EXECUTION"
     },
@@ -2423,7 +2422,9 @@
         "src/platform/core/config",
         "src/domain/core/agent-turn",
         "src/platform/core/config-fields",
-        "src/platform/core/i18n"
+        "src/platform/core/i18n",
+        "src/adapters/core/mcp-trust",
+        "src/platform/core/redaction"
       ],
       "plan": "SURFACES"
     },
@@ -2488,7 +2489,9 @@
         "src/engine/core/supervisor",
         "src/domain/core/attempt",
         "src/domain/core/work-cost",
-        "src/engine/core/resource-observation"
+        "src/engine/core/resource-observation",
+        "src/domain/core/policy",
+        "src/domain/core/principal"
       ],
       "plan": "MONITOR"
     },
@@ -2532,7 +2535,6 @@
         "src/composition/core/runtime-service",
         "src/composition/core/worker-observation",
         "src/engine/core/monitor",
-        "src/engine/core/worker-observation",
         "src/platform/core/clock",
         "src/platform/core/config",
         "src/composition/core/scoped-request",
@@ -2541,13 +2543,15 @@
         "src/composition/core/toolchains",
         "src/engine/core/config",
         "src/composition/core/root",
-        "src/composition/core/model-invocation"
+        "src/composition/core/model-invocation",
+        "src/engine/core/policy"
       ],
       "plan": "MONITOR"
     },
     "src/surfaces/core/monitor": {
       "dependencies": [
         "src/engine/core/monitor",
+        "src/surfaces/core/monitor-view",
         "src/surfaces/core/cli-kit",
         "src/platform/core/errors",
         "src/platform/core/output",
@@ -2560,10 +2564,8 @@
         "src/engine/core/worker-observation",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/config",
-        "src/engine/core/config",
         "src/engine/core/runs",
         "src/surfaces/core/terminal-theme",
-        "src/engine/core/model-invocation",
         "src/engine/core/resource-observation",
         "src/domain/core/work-cost"
       ],
@@ -2583,7 +2585,21 @@
         "src/surfaces/core/cli-models",
         "src/platform/core/host",
         "src/platform/core/common",
-        "src/domain/core/provider-spend"
+        "src/domain/core/provider-spend",
+        "src/surfaces/core/cli-human"
+      ],
+      "plan": "CONFIG-SURFACE"
+    },
+    "src/surfaces/core/config-window": {
+      "dependencies": [
+        "src/platform/core/output",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-window",
+        "src/surfaces/core/terminal-panels",
+        "src/surfaces/core/work-labels",
+        "src/surfaces/core/config"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -2722,7 +2738,10 @@
         "src/platform/core/errors",
         "src/platform/core/i18n",
         "src/platform/core/output",
-        "src/surfaces/core/cli-kit"
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/cli-approval",
+        "src/surfaces/core/cli-terminal"
       ],
       "plan": "AOF-DECISION-PORT"
     },
@@ -2813,7 +2832,9 @@
         "src/platform/core/i18n",
         "src/platform/core/config",
         "src/platform/core/output",
-        "src/surfaces/core/cli-kit"
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-human",
+        "src/platform/core/config-fields"
       ],
       "plan": "INSTALLATION"
     },
@@ -2869,7 +2890,8 @@
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/terminal-kit",
-        "src/surfaces/core/terminal-theme"
+        "src/surfaces/core/terminal-theme",
+        "src/engine/core/setup"
       ],
       "plan": "SURFACES"
     },
@@ -2916,7 +2938,8 @@
         "src/composition/core/policy",
         "src/adapters/core/sqlite-ledger",
         "src/adapters/core/contract",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/composition/core/secrets"
       ],
       "plan": "INSTALLATION"
     },
@@ -2933,7 +2956,8 @@
         "src/engine/core/runs",
         "src/engine/core/provider-spend",
         "src/platform/core/errors",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/engine/core/run-proposal"
       ],
       "plan": "STORE"
     },
@@ -2964,7 +2988,7 @@
         "src/capabilities/core/run-planner",
         "src/engine/core/authentication",
         "src/engine/core/model-invocation",
-        "src/engine/core/runs"
+        "src/engine/core/run-proposal"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -2995,11 +3019,11 @@
     "src/surfaces/core/run-planning": {
       "dependencies": [
         "src/domain/core/run",
-        "src/engine/core/runs",
         "src/platform/core/i18n",
         "src/platform/core/errors",
         "src/platform/core/output",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/engine/core/run-proposal"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -3102,11 +3126,283 @@
         "src/platform/core/output",
         "src/platform/core/config",
         "src/platform/core/i18n",
+        "src/platform/core/redaction",
+        "src/domain/core/effect",
         "src/engine/core/effect",
         "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-human",
         "src/surfaces/core/effect-confirmation"
       ],
       "plan": "SURFACES"
+    },
+    "src/surfaces/core/cli-run": {
+      "dependencies": [
+        "src/surfaces/core/cli-terminal",
+        "src/surfaces/core/cli-kit",
+        "src/domain/core/run",
+        "src/surfaces/core/run-planning",
+        "src/platform/core/output",
+        "src/platform/core/config",
+        "src/platform/core/i18n",
+        "src/platform/core/errors",
+        "src/surfaces/core/monitor",
+        "src/engine/core/run-proposal",
+        "src/surfaces/core/cli-admin",
+        "src/platform/core/host",
+        "src/engine/core/runs",
+        "src/domain/core/task-graph",
+        "src/domain/core/primitives",
+        "src/domain/core/attempt",
+        "src/surfaces/core/cli-human",
+        "src/domain/core/work-cost",
+        "src/platform/core/common"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/cli-task": {
+      "dependencies": [
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-terminal",
+        "src/surfaces/core/monitor",
+        "src/platform/core/output",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/engine/core/runs",
+        "src/surfaces/core/delivery-queue",
+        "src/platform/core/config",
+        "src/platform/core/host",
+        "src/domain/core/attempt",
+        "src/engine/core/task-evaluation",
+        "src/engine/core/dispatch",
+        "src/engine/core/workspace-patch",
+        "src/capabilities/core/artifacts",
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/effect-confirmation",
+        "src/surfaces/core/terminal-delivery",
+        "src/engine/core/effect"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/cli-approval": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/config",
+        "src/platform/core/i18n",
+        "src/surfaces/core/cli-kit",
+        "src/engine/core/policy",
+        "src/surfaces/core/cli-terminal",
+        "src/surfaces/core/work-labels",
+        "src/surfaces/core/cli-human",
+        "src/engine/core/approval",
+        "src/engine/core/config",
+        "src/domain/core/approval",
+        "src/domain/core/policy"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/cli-admin": {
+      "dependencies": [
+        "src/domain/core/audit",
+        "src/surfaces/core/doctor",
+        "src/platform/core/output",
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/platform/core/i18n",
+        "src/surfaces/core/cli-kit",
+        "src/engine/core/backup",
+        "src/domain/core/run",
+        "src/engine/core/runtime",
+        "src/engine/core/toolchain-currency",
+        "src/surfaces/core/cli-terminal",
+        "src/domain/core/effect",
+        "src/engine/core/effect",
+        "src/engine/core/runs",
+        "src/platform/core/utils",
+        "src/platform/core/host",
+        "src/engine/core/run-progression",
+        "src/engine/core/secret-store",
+        "src/surfaces/core/cli-human",
+        "src/platform/core/config-fields",
+        "src/engine/core/config"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/cli-observe": {
+      "dependencies": [
+        "src/platform/core/config",
+        "src/engine/core/model-invocation",
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/doctor",
+        "src/surfaces/core/cli-admin",
+        "src/surfaces/core/cli-approval",
+        "src/platform/core/errors",
+        "src/platform/core/host",
+        "src/platform/core/identity",
+        "src/platform/core/i18n",
+        "src/platform/core/common",
+        "src/engine/core/config",
+        "src/platform/core/output",
+        "src/platform/core/config-fields",
+        "src/domain/core/policy",
+        "src/engine/core/worker-observation",
+        "src/surfaces/core/monitor",
+        "src/engine/core/model-activation",
+        "src/domain/core/model-activation",
+        "src/surfaces/core/cli-human",
+        "src/engine/core/inference-serving",
+        "src/surfaces/core/cli-models"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/engine/core/run-proposal": {
+      "dependencies": [
+        "src/domain/core/command",
+        "src/domain/core/principal",
+        "src/domain/core/model-invocation",
+        "src/domain/core/run",
+        "src/platform/core/errors",
+        "src/platform/core/clock",
+        "src/engine/core/authentication",
+        "src/engine/core/provider-spend",
+        "src/engine/core/runs",
+        "src/domain/core/audit",
+        "src/domain/core/primitives",
+        "src/platform/core/integrity",
+        "src/domain/core/task-graph",
+        "src/platform/core/redaction",
+        "src/capabilities/core/run-planner"
+      ],
+      "plan": "CONTRACT"
+    },
+    "src/engine/core/run-query": {
+      "dependencies": [],
+      "plan": "CONTRACT"
+    },
+    "src/surfaces/core/cli-human": {
+      "dependencies": [
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
+        "src/platform/core/host",
+        "src/platform/core/config",
+        "src/platform/core/config-fields",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-window"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/engine/core/setup": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/platform/core/i18n",
+        "src/platform/core/errors",
+        "src/platform/core/integrity",
+        "src/domain/core/audit",
+        "src/domain/core/policy"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/adapters/core/setup-detect-execution": {
+      "dependencies": [
+        "src/engine/core/setup"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/adapters/core/setup-detect-coding": {
+      "dependencies": [
+        "src/engine/core/setup",
+        "src/domain/core/provider-catalog",
+        "src/adapters/core/native-cli-registry",
+        "src/adapters/core/agent-workspace-floor",
+        "src/adapters/core/setup-detect-execution"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/adapters/core/execution-env-docker": {
+      "dependencies": [
+        "src/platform/core/i18n",
+        "src/platform/core/output",
+        "src/platform/core/host",
+        "src/adapters/core/setup-detect-execution"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/composition/core/setup": {
+      "dependencies": [
+        "src/engine/core/audit",
+        "src/engine/core/setup",
+        "src/engine/core/runtime",
+        "src/adapters/core/execution-env-docker",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/setup-detect-execution",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/audit-store",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/managed-files",
+        "src/platform/core/i18n",
+        "src/surfaces/core/cli-human",
+        "src/composition/core/policy",
+        "src/composition/core/root",
+        "src/adapters/core/setup-detect-coding",
+        "src/adapters/core/native-connection",
+        "src/platform/core/config",
+        "src/surfaces",
+        "src/surfaces/core/cli-observe",
+        "src/composition/core/installation",
+        "src/composition/core/config",
+        "src/composition/core/agent-turn"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/surfaces/core/setup": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/i18n",
+        "src/platform/core/config",
+        "src/platform/core/common",
+        "src/platform/core/host",
+        "src/domain/core/policy",
+        "src/engine/core/setup",
+        "src/engine/core/identity-profile",
+        "src/engine/core/project-instructions",
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/project-instructions",
+        "src/domain/core/model-activation",
+        "src/engine/core/model-activation",
+        "src/surfaces/core/cli-models",
+        "src/surfaces/core/cli-observe",
+        "src/surfaces/core/doctor",
+        "src/surfaces/core/cli-admin"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/surfaces/core/monitor-view": {
+      "dependencies": [
+        "src/engine/core/monitor",
+        "src/engine/core/config",
+        "src/engine/core/model-invocation",
+        "src/surfaces/core/config",
+        "src/surfaces/core/terminal-render",
+        "src/platform/core/i18n",
+        "src/platform/core/output"
+      ],
+      "plan": "MONITOR"
+    },
+    "src/adapters/core/mcp-trust": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/config",
+        "src/platform/core/redaction",
+        "src/platform/core/output"
+      ],
+      "plan": "SECURITY"
     }
   },
   "composition": {
@@ -3141,9 +3437,9 @@
       "domain": 10000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 28300,
+      "adapters": 29250,
       "surfaces": 45000,
-      "composition": 7350
+      "composition": 7650
     },
     "totalSrcLines": 200000,
     "testCases": 8000,
@@ -3201,7 +3497,19 @@
       "native",
       "desktop",
       "misc",
-      "config"
+      "config",
+      "help",
+      "clirun",
+      "clitask",
+      "cliapproval",
+      "clisetup",
+      "cliadmin",
+      "climodels",
+      "clidoctor",
+      "monitor",
+      "setup",
+      "security",
+      "terminal"
     ]
   },
   "literals": {
@@ -4086,61 +4394,6 @@
           "file": "tests/fixtures/agent-turn/compaction-response-975da614.json",
           "count": 1,
           "reason": "Captured model response quotes the developer checkout path; redact the fixture to a neutral root and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/frame-full-tr-120.txt",
-          "count": 1,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/snapshots.ts",
-          "count": 6,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-empty-en.txt",
-          "count": 3,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-empty-tr.txt",
-          "count": 3,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-full-en-120.txt",
-          "count": 6,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-full-en-60.txt",
-          "count": 6,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-full-en-80.txt",
-          "count": 6,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-full-tr-120.txt",
-          "count": 7,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-full-tr-60.txt",
-          "count": 6,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-full-tr-80.txt",
-          "count": 6,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
-        },
-        {
-          "file": "tests/fixtures/monitor/text-long-en-60.txt",
-          "count": 2,
-          "reason": "Monitor snapshot renders a synthetic operator cwd (/home/owner); switch the fixture to a neutral example path and remove."
         }
       ]
     },

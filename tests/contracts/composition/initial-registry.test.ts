@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { initializeNativeCodingRegistry, configureNativeCodingTemplate } from '#composition/core/native-coding/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
+import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
 import { executionRegistrySchema } from '#domain/index.js';
 import { main } from '#surfaces/core/cli/index.js';
@@ -45,12 +46,50 @@ it('fresh policy → preview is read-only → apply writes a versioned registry 
   const stored = await loadConfig(f.root, f.options);
   expect(stored.admission).toMatchObject({ registry: preview.registry, poolId: 'customer', executionSlots: 3, inFlightSlots: 5 });
   const bytes = await readFile(f.path, 'utf8'), afterFiles = await f.files();
-  await expect(initializeNativeCodingRegistry(f.root, { ...request, apply: true }, f.options, { detect: async () => { throw new Error('must not probe existing registry'); } }))
+  // I-S6: an equal existing registry is `current` (preview and apply), without a new probe or any write.
+  const noProbe = { detect: async () => { throw new Error('must not probe existing registry'); } };
+  for (const apply of [true, false]) expect(await initializeNativeCodingRegistry(f.root, { ...request, apply }, f.options, noProbe))
+    .toMatchObject({ status: 'current', write: null, registry: preview.registry, profile: preview.profile, kind: preview.kind });
+  expect(await readFile(f.path, 'utf8')).toBe(bytes); expect(await f.files()).toEqual(afterFiles); expect(f.auditCount()).toBe(audits + 1);
+  // A different request against the existing registry is still refused before any write.
+  for (const change of [{ executionSlots: 4 }, { kind: 'review' }, { discovery: 'disabled' }]) await expect(initializeNativeCodingRegistry(f.root, { ...request, ...change, apply: true }, f.options, noProbe))
     .rejects.toMatchObject({ code: 'INITIAL_REGISTRY_EXISTS' });
   expect(await readFile(f.path, 'utf8')).toBe(bytes); expect(await f.files()).toEqual(afterFiles); expect(f.auditCount()).toBe(audits + 1);
   expect((await configureNativeCodingTemplate(f.root, { provider: 'claude', kind: 'feature', apply: true }, f.options)).status).toBe('unchanged');
   const next = await configureNativeCodingTemplate(f.root, { provider: 'claude', kind: 'review', apply: true }, f.options);
   expect(next.registry.kinds.map(entry => entry.kind)).toEqual(['feature', 'review']); expect(next.registry.profiles).toHaveLength(1);
+  // The registry has grown beyond the first one: no longer `current`, refused before any write.
+  const grown = await readFile(f.path, 'utf8');
+  await expect(initializeNativeCodingRegistry(f.root, { ...request, apply: true }, f.options, noProbe)).rejects.toMatchObject({ code: 'INITIAL_REGISTRY_EXISTS' });
+  expect(await readFile(f.path, 'utf8')).toBe(grown);
+});
+
+it('execution defaults: only the machine-specific values are authored (no limits JSON) and the first registry uses the registry defaults', async () => {
+  const f = await setup();
+  await f.mutate(config => { config.execution = { docker: { executable: docker.executable, imageId: docker.imageId }, git: { gitExecutable: 'git' } } as TestConfig['execution']; });
+  const effective = (await loadConfig(f.root, f.options)).execution!;
+  expect(effective.docker).toEqual({ executable: docker.executable, imageId: docker.imageId, memoryBytes: 2147483648, pids: 512, cpus: 1, logMaxSizeKiB: 2048,
+    logMaxFiles: 2, tmpBytes: 1073741824, deadlineMs: 1200000, controlTimeoutMs: 15000, outputBytes: 1048576 });
+  expect(effective.git).toMatchObject({ gitExecutable: 'git', timeoutMs: 180000, outputBytes: 4194304 });
+  const applied = await initializeNativeCodingRegistry(f.root, { ...request, apply: true }, f.options, detected);
+  expect(applied.status).toBe('applied'); expect(JSON.stringify(applied.profile)).toContain('"memoryBytes":2147483648');
+  expect((await initializeNativeCodingRegistry(f.root, { ...request, apply: true }, f.options, detected)).status).toBe('current');
+  // An operator override still wins, and an invalid override is refused by the schema.
+  await f.mutate(config => { config.execution!.docker = { ...config.execution!.docker!, pids: 64 }; });
+  expect((await loadConfig(f.root, f.options)).execution!.docker.pids).toBe(64);
+  await f.mutate(config => { config.execution!.docker = { ...config.execution!.docker!, pids: 0 }; });
+  await expect(loadConfig(f.root, f.options)).rejects.toMatchObject({ issues: expect.arrayContaining([expect.objectContaining({ path: 'execution.docker.pids' })]) });
+});
+
+it('named limit: one leaf on an absent execution is refused before any write; the three machine values go in one write', async () => {
+  const f = await setup();
+  await f.mutate(config => { delete config.execution; });
+  const before = await readFile(f.path, 'utf8'), audits = f.auditCount(), principal = await resolveConfiguredConfigPrincipal(f.root, 's', f.options);
+  const set = (keyPath: string, value: unknown) => createConfiguredConfigApplication(f.root, f.options).set({ keyPath, value, layer: 'project', principal, scopeId: 's', commandId: `c-${keyPath}` });
+  await expect(set('execution.docker.executable', '/usr/bin/docker')).rejects.toMatchObject({ code: 'CONFIG_VALIDATION' });
+  expect(await readFile(f.path, 'utf8')).toBe(before); expect(f.auditCount()).toBe(audits);
+  await set('execution', { docker: { executable: '/usr/bin/docker', imageId: docker.imageId }, git: { gitExecutable: '/usr/bin/git' } });
+  expect((await loadConfig(f.root, f.options)).execution!.docker).toMatchObject({ executable: '/usr/bin/docker', memoryBytes: 2147483648, deadlineMs: 1200000 });
 });
 
 it.each(['project', 'global'] as const)('preserves an existing %s registry, including an empty but authored document', async layer => {
@@ -135,7 +174,13 @@ it('renders EN/TR through init registry and emits the real preview/apply contrac
     output = ''; expect(await main([...args, ...flags], context)).toBe(2); expect(output).toBe('');
   }
   output = ''; expect(await main([...args, '--apply', '--json'], context), error).toBe(0); expect(JSON.parse(output).status).toBe('applied');
-  output = ''; error = ''; expect(await main([...args, '--apply', '--lang', 'tr'], context)).toBe(78); expect(error).toContain('deckent coding template');
+  output = ''; expect(await main([...args, '--apply', '--json'], context), error).toBe(0); expect(JSON.parse(output)).toMatchObject({ status: 'current', write: null });
+  // I-S6 J1 delta: a person sees "already exists, nothing written" for `current`, never "created".
+  for (const [locale, said, never] of [['en', 'already exists and matches this request', 'registry created'], ['tr', 'zaten var ve bu istekle aynı', 'registry oluşturuldu']] as const) {
+    output = ''; expect(await main([...args, '--apply', '--lang', locale], context), error).toBe(0); expect(output).toContain(said); expect(output).not.toContain(never);
+  }
+  const different = args.map(value => value === '3' ? '4' : value);
+  output = ''; error = ''; expect(await main([...different, '--apply', '--lang', 'tr'], context)).toBe(78); expect(error).toContain('deckent coding template');
 });
 
 });

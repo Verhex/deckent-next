@@ -60,7 +60,7 @@ describe.skipIf(process.platform === 'win32')('K5 typed pool hold operator surfa
     const held = await f.cli('hold', '--command-id', 'cli-hold', '--reason', 'dev-release switch', '--json');
     expect(held.code).toBe(0);
     expect(JSON.parse(held.stdout)).toMatchObject({ changed: true, state: 'held', poolId: 'p', scopeId: 's', hold: { reason: 'dev-release switch', revision: 1 } });
-    expect((await f.cli('hold', '--lang', 'en')).stdout).toContain('already held');
+    expect((await f.cli('hold', '--lang', 'en')).stdout).toContain('was already on hold'); // C-ADMIN human words
     // The composition reservation path (CLI `run reserve`, MCP `reserve_run_tasks`, runtime service) refuses with the typed code, writing nothing.
     await expect(reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'reserve-1', expectedRevision: 0 }, f.options))
       .rejects.toMatchObject({ code: 'RUN_POOL_HELD' });
@@ -71,7 +71,7 @@ describe.skipIf(process.platform === 'win32')('K5 typed pool hold operator surfa
     const status = JSON.parse((await f.cli('status', '--json')).stdout);
     expect(status).toMatchObject({ poolId: 'p', state: 'held', occupancy: { execution: 0, inFlight: 0 }, drained: true });
     expect(status).toEqual(await inspectPoolHold(f.project, { schemaVersion: 1, scopeId: 's' }, f.options));
-    expect((await f.cli('status', '--lang', 'tr')).stdout).toContain('boşaldı: true');
+    expect((await f.cli('status', '--lang', 'tr')).stdout).toContain('Boşaldı: bu havuzda çalışan iş kalmadı.');
     expect(f.rows("SELECT kind,scope_id FROM audit_events ORDER BY sequence")).toEqual([{ kind: 'authority-decision', scope_id: 's' }, { kind: 'pool-hold', scope_id: 's' }, { kind: 'pool-hold', scope_id: 's' }]);
     expect(JSON.parse((await f.cli('resume', '--command-id', 'cli-resume', '--json')).stdout)).toMatchObject({ changed: true, state: 'open' });
     const reserved = await reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'reserve-2', expectedRevision: 0 }, f.options);
@@ -79,7 +79,8 @@ describe.skipIf(process.platform === 'win32')('K5 typed pool hold operator surfa
     // Usage errors never reach the application.
     for (const argv of [['pause'], ['status', '--reason', 'x'], ['hold', '--bogus', 'x'], ['hold', '--reason']]) expect((await f.cli(...argv)).code).toBe(2);
     // Without --scope the configured terminal scope is required (none here): a typed usage refusal, nothing applied.
-    expect(await f.cli('hold', '--no-scope')).toMatchObject({ code: 2, stderr: expect.stringContaining('TERMINAL_SCOPE_REQUIRED') });
+    // C-ADMIN (owner CLI review 2026-10-19): a change off a terminal never takes a silent scope, configured or not.
+  expect(await f.cli('hold', '--no-scope')).toMatchObject({ code: 2, stderr: expect.stringContaining('CLI_SCOPE_REQUIRED') });
   });
 
   it('refuses a hold held only in the caller scope (installation-level authority) with no hold state, over SDK, CLI and MCP alike', async () => {
@@ -116,7 +117,7 @@ describe.skipIf(process.platform === 'win32')('K5 typed pool hold operator surfa
   });
 });
 
-it.skipIf(process.platform === 'win32')('quota-release CLI and SDK share audited receipts; production MCP principal is denied even with owner pool grants', async () => {
+it.skipIf(process.platform === 'win32')('quota-release CLI and SDK share audited receipts; MCP does not offer quota release until the delegation slice', async () => {
   const f = await fixture(), command = { schemaVersion: 1, scopeId: 's', commandId: 'cli-release', channelId: 'subscription-channel' };
   const result = await f.cli('quota-release', '--channel', command.channelId, '--command-id', command.commandId, '--json');
   expect(result.code).toBe(0); expect(JSON.parse(result.stdout)).toEqual(await releaseQuota(f.project, command, f.options));
@@ -124,7 +125,9 @@ it.skipIf(process.platform === 'win32')('quota-release CLI and SDK share audited
   expect((await f.cli('quota-release', '--channel', command.channelId, '--lang', 'tr')).stdout).toContain('serbest bırakıldı');
   expect((await f.cli('quota-release')).code).toBe(2);
   const session = await mcp({ releaseQuota: input => withMcpPrincipal(() => releaseQuota(f.project, input, f.options)) });
-  try { expect(JSON.stringify(await session.client.callTool({ name: 'release_quota', arguments: { ...command, commandId: 'mcp-release' } }))).toContain('POLICY_DENIED'); }
+  // hide_until_slice (owner 2026-10-18): the MCP actor is not offered quota release before the delegation slice; CLI/SDK keep it.
+  try { expect((await session.client.listTools()).tools.map(tool => tool.name)).not.toContain('release_quota');
+    expect(JSON.stringify(await session.client.callTool({ name: 'release_quota', arguments: { ...command, commandId: 'mcp-release' } }))).toContain('MCP_TOOL_UNKNOWN'); }
   finally { await session.close(); }
   expect(f.rows("SELECT count(*) n FROM quota_release_receipts")[0]!.n).toBe(2);
 });

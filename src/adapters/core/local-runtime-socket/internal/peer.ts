@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { closeSync } from 'node:fs';
+import { closeSync, readlinkSync } from 'node:fs';
 import { Socket } from 'node:net';
 import { LocalRuntimeSocketError } from './endpoint.js';
 
@@ -9,13 +9,20 @@ export type PeerClosure = Readonly<{ state: 'closed'; reason: 'requested' | 'pol
 interface PeerAcceptor { close(): void; removeEndpoint(): void }
 interface PeerModule { isConnectionActive(fd: number, pid: number, uid: number, gid: number): boolean; createListener(endpoint: string, backlog: number, onConnection: (handoff: PeerHandoff) => void, onLifecycle: (event: PeerClosure) => void, retryDelayMs: number, retryLimit: number): PeerAcceptor }
 
+/** SEC-1 (F27): the namespaces a peer must share with the service. A sandbox (bubblewrap unshares all of them) is another principal
+ * context even with the owner's uid; an unreadable namespace refuses the peer (fail closed). */
+const PEER_NAMESPACES = ['pid', 'mnt', 'user'] as const;
+function namespaces(pid: number | 'self'): string | null {
+  try { return PEER_NAMESPACES.map(kind => readlinkSync(`/proc/${pid}/ns/${kind}`)).join('\0'); } catch { return null; }
+}
+
 /** The native adapter owns accept and SO_PEERCRED; no private Node Socket fields are accessed. */
 export function listenWithPeerIdentity(endpoint: string, maxConnections: number,
   onConnection: (socket: Socket, peer: LocalPeerIdentity) => void, retryDelayMs: number, retryLimit: number) {
   let native: PeerModule;
   try { native = createRequire(import.meta.url)('../native/build/Release/peer_credentials.node') as PeerModule; }
   catch (error) { throw new LocalRuntimeSocketError('LOCAL_RUNTIME_NATIVE_UNAVAILABLE', { cause: error }); }
-  const clients = new Set<Socket>();
+  const clients = new Set<Socket>(), service = namespaces('self');
   let stopped = false; let finish: (() => void) | undefined;
   const drained = new Promise<void>(resolve => { finish = resolve; });
   let settle!: (event: PeerClosure) => void;
@@ -26,6 +33,10 @@ export function listenWithPeerIdentity(endpoint: string, maxConnections: number,
     if (stopped || clients.size >= maxConnections || uid !== process.getuid?.()
       || ![pid, uid, gid].every(value => Number.isSafeInteger(value) && value >= 0) || pid === 0) return;
     const fd = handoff.takeFd();
+    // Same namespaces as the service, read after accept and confirmed against the still-connected peer (a reused pid fails the witness).
+    let admitted = false;
+    try { admitted = service !== null && namespaces(pid) === service && native.isConnectionActive(fd, pid, uid, gid); } catch { /* refused below */ }
+    if (!admitted) { closeSync(fd); return; }
     let socket: Socket;
     try { socket = new Socket({ fd, readable: true, writable: true, allowHalfOpen: true }); }
     catch { closeSync(fd); return; }

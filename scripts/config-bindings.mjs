@@ -4,6 +4,10 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 export const DECLARED_ONLY_ALLOWLIST = Object.freeze([]);
 const fieldRegistry = 'src/platform/core/config-fields/internal/fields.ts';
+/** alpha.48 A2: per-writer field fragments merged into CONFIG_FIELDS. Only these files and the registry may declare `name: field(...)`. */
+export const FIELD_FRAGMENTS = Object.freeze(['src/platform/core/config-fields/internal/fields-setup.ts', 'src/platform/core/config-fields/internal/fields-models.ts']);
+export const FIELD_SOURCES = Object.freeze([fieldRegistry, ...FIELD_FRAGMENTS]);
+const fieldUnit = 'src/platform/core/config-fields/';
 const nameOf = node => ts.isIdentifier(node) || ts.isStringLiteralLike(node) ? node.text : undefined;
 const property = (object, key) => ts.isObjectLiteralExpression(object) ? object.properties.find(node => ts.isPropertyAssignment(node) && nameOf(node.name) === key)?.initializer : undefined;
 const literal = node => node && ts.isStringLiteralLike(node) ? node.text : undefined;
@@ -31,8 +35,8 @@ export function collectConfigBindings(sources) {
   const declarations = [];
   for (const { source, path } of sources) {
     function visit(node) {
-      if (path === fieldRegistry && ts.isPropertyAssignment(node) && ts.isCallExpression(node.initializer) && node.initializer.expression.getText(source) === 'field') {
-        declarations.push({ key: nameOf(node.name), path, binding: node.initializer.arguments[1], apply: node.initializer.arguments[2], schema: node.initializer.arguments[3] });
+      if (path.startsWith(fieldUnit) && ts.isPropertyAssignment(node) && ts.isCallExpression(node.initializer) && node.initializer.expression.getText(source) === 'field') {
+        declarations.push({ key: nameOf(node.name), path, binding: node.initializer.arguments[1], apply: node.initializer.arguments[2], schema: node.initializer.arguments[3], field: true });
       }
       if (ts.isCallExpression(node) && node.expression.getText(source) === 'registerConfigSection') {
         const key = literal(node.arguments[0]), metadata = node.arguments[2] && property(node.arguments[2], 'metadata');
@@ -50,7 +54,13 @@ export function lintConfigBindings(root, fail) {
   const references = new Map();
   const parse = file => ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
   const declarations = collectConfigBindings(sourceFiles(join(root, 'src')).map(file => ({ source: parse(file), path: relative(root, file).replaceAll('\\', '/') })));
+  const declared = new Map();
   for (const row of declarations) {
+    if (row.field && !FIELD_SOURCES.includes(row.path)) { fail('config-binding-fragment', row.path, `${row.key ?? '<dynamic>'}: declare config fields in the registry or a registered fragment`); continue; }
+    if (row.field && row.key) {
+      if (declared.has(row.key)) fail('config-binding-duplicate', row.path, `${row.key}: already declared in ${declared.get(row.key)}`);
+      else declared.set(row.key, row.path);
+    }
     if (!row.key || !row.binding || !['live', 'restart'].includes(literal(row.apply))) { fail('config-binding-metadata', row.path, `${row.key ?? '<dynamic>'}: explicit binding and apply metadata required`); continue; }
     const state = literal(property(row.binding, 'state'));
     if (state === 'declared-only') {

@@ -6,7 +6,7 @@ import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPromp
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { modelInvocationRequestDigest, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
-import type { RunProposalQuery, RunProposalResult } from '#engine/core/runs/index.js';
+import type { RunProposalQuery, RunProposalResult } from '#engine/core/run-proposal/index.js';
 export const brainRunId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-run:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export const brainInvocationCommandId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-invocation:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: ExecutionRegistry,

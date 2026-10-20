@@ -1,30 +1,124 @@
 Kullanım: deckent <komut> [seçenekler]
+
+Yüzeyler (tek kurulum, aynı tipli işlemler):
+  deckent             gerçek terminalde etkileşimli terminal; pipe’ta bu
+                      yardım
+  deckent <komut>     bu CLI: bir çağrı, bir sonuç; insan için metin, betik ve
+                      AI ajanları için --json
+  deckent-mcp         MCP sunucusu: Deckent işlemleri AI istemcilerine araç
+                      olarak; hangilerini kullanacaklarını policy izni belirler
+
+Komutlar (deckent <komut> --help her eylemi ve seçeneklerini gösterir):
+
 Başlarken:
   terminal    Etkileşimli terminali aç
+      workline | session | status | chat-plan | snapshot
+      [--scope <id>] [--full-access]
   init        Kurulumu hazırla
+      preview | inspect | apply | resume | identity | policy | pool | registry
+      [--json] [--yes --scope <id>] [--preview] [--profile <dosya>]
+
 İzleme:
   report      Run maliyet ve kabul kanıtını incele
+      [--scope <id>] [--run <id>] [--verbose]
   monitor     Kurulumları ve işleri izle
-  workers     İşçileri listele veya izle
+      [--once|--json] [--scope <id>]
+  workers     İşçileri listele veya izle (eylemsiz: list)
+      list | watch
+      [--scope <id>] [--all | --since <12h>] [--verbose] [--limit <n>]
+
 İş yürütme:
   do          Brain ve mevcut onay kapılarıyla bir isteği planla
+      --request <metin> [--scope <id>]
   run         Run oluştur ve yönet
+      list | create | propose | inspect-proposal | reserve | inspect | cancel |
+      close | hold | resume
+      [--scope <id>] [--id <id>]
   task        Görevleri yürüt, değerlendir ve teslim et
-  pool        Havuzu incele, beklet veya sürdür
+      inspect | execute | evaluate | accept | reject | patch-prepare |
+      patch-preview | integration-check | integration-prepare |
+      integration-inspect | integration-queue-enqueue | integration-queue-list |
+      integration-queue-inspect | integration-queue-confirm |
+      integration-queue-rollback | integration-deliver | integration-adopt |
+      integration-rollback | transcript
+      --scope <id> --run <id> --task <id>
+  pool        Havuzu incele, beklet veya sürdür (eylemsiz: status)
+      status | set-capacity | hold | resume | quota-release
+      [--scope <id>] [--pool <id>]
   decide      Danışman kararlarını hazırla, sor ve kaydet
+      prepare | ask | record | outcome | inspect
+      [--scope <id>] [--input <dosya|->]
+
 Modeller:
   models      Modelleri incele ve yönet
+      binding | activation | activate | deactivate | invoke | invocation |
+      purge-content | cancel | spending | reconcile-spending | create-budget |
+      revise-budget | audit-spending | connect |
+      catalog list|register|activate|deactivate
+      [--scope <id>] [--declared] [--catalog] [--verbose]
+
 Onaylar:
-  approval    Onay isteklerini incele ve karara bağla
-  policy      Politikayı ve kalıcı izinleri incele
+  approval    Onay isteklerini incele ve karara bağla (eylemsiz: list)
+      list | inspect | decide | renew
+      [--scope <id>] [--input <dosya|->]
+  policy      Politikayı ve kalıcı izinleri incele (eylemsiz: status)
+      vocabulary | status | delegations | delegate | undelegate | grants |
+      revoke | upgrade | mcp list|grant|revoke | scopes
+      [--scope <id>]
+
 Kurulum/Bakım:
+  audit       Audit geçmişini ve checkpoint kanıtını doğrula (eylemsiz: verify)
+      verify | rebaseline
+      [--scope <id>]
   backup      Kurtarma seti oluştur, doğrula ve geri yükle
+      create | verify | restore
+      [<eylem> --scope <id> --set <yol>]
   identity    Kimlik profilleri, taslak önizleme ve yönetilen dağıtım
+      profiles | preview | choices | distribute
+      [--scope <id>] [--verbose]
   config      Yapılandırmayı incele ve değiştir
+      get | explain | validate | set | unset
+      [<anahtar> [<değer>]] [--global]
   mcp         MCP sunucularını yönet
-  secret      Saklanan gizli değerleri yönet
+      add | add-json | import | list | get | remove | approve | revoke
+      [<ad>] [--check] [--scope local|project|user]
+  secret      Saklanan gizli değerleri yönet (eylemsiz: list)
+      list | set | delete | store
+      [<ad>] [--scope <id>]
   toolchains  İşçi araçlarını kontrol et veya güncelle
+      update
+      [update [--apply]]
   doctor      Kurulum sağlığını kontrol et
-Genel: --json --lang en|tr --no-color. Örnek: deckent doctor; deckent config get
-Ayrıntı: deckent <komut> --help; geliştirici: deckent --help --all
-Terminalde argümansız çağrı etkileşimli oturumu açar. --version: sürüm.
+      [--verbose] [--toolchains] [--json]
+
+Geliştirici:
+  inventory   Kayıtlı denemeleri incele
+      [--scope <id>] [--after <id>] [--limit <n>]
+  paths       Kurulum yollarını incele
+      [--global]
+  runtime     Yerel çalışma servisini yönet (eylemsiz: describe)
+      serve | describe | shutdown | restart
+  coding      Yerel kodlama profillerini hazırla
+      prepare | template
+      --input <dosya|-> | --provider <id> --kind <id>
+  inference   Yerel çıkarım kapasitesini incele
+      plan | budget | metrics
+      [--profile <id>]
+  operation   Tipli işlemleri yürüt veya incele
+      execute | compensate | inspect
+      --input <dosya|-> [--wait <ms>]
+
+Seçenekler:
+  -h, --help          yardım; tek komut için deckent <komut> [<eylem>] --help
+  -v, --version       sürüm ve derleme
+  --json              stdout’ta makinece okunur tek sonuç; hatalar stderr’de
+  --lang en|tr        çıktı dili
+  --no-color          renksiz düz metin
+  --scope <id>        komutun çalıştığı scope (her komutun yardımına bakın)
+  --full-access       terminali tam erişim kipinde aç
+
+Eylem verilmezse komut yukarıda adı geçen okumayı yapar, kendi işini yapar
+(terminal, init, monitor, models, config, doctor, paths) ya da eylemlerini
+listeler ve eksik argümanı adıyla söyler (çıkış 2).
+Çıkış kodları: 0 başarı, 1 hata, 2 kullanım, 78 yapılandırma.
+Örnekler: deckent doctor --json · deckent pool · deckent run --help

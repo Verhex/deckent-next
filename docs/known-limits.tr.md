@@ -3,7 +3,7 @@
 [English](known-limits.md) · [README](../README.tr.md) · [Mimariye genel bakış](architecture-overview.tr.md)
 
 Bu sayfa Deckent'in henüz neyi yapmadığını, neyin denenmediğini ve onun yerine ne yapmanız gerektiğini açıkça söyler.
-güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde ve [CHANGELOG](../CHANGELOG.md) dosyasının ilk satırındadır). Bir sınır bu sayfadan ancak onu kapatan değişiklik indiğinde ve
+Sayfa güncel ön sürümü anlatır (sürüm [README](../README.tr.md) içinde ve [CHANGELOG](../CHANGELOG.md) dosyasının ilk satırındadır). Bir sınır bu sayfadan ancak onu kapatan değişiklik indiğinde ve
 çalıştığı görüldüğünde çıkar, daha önce değil. Her madde sınırın **ne** olduğunu, size **etkisini** ve varsa bir
 **yolunu** verir. [CHANGELOG.md](../CHANGELOG.md) her sürümün o günkü sınırlarını listeler.
 
@@ -27,6 +27,30 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   *Yol:* x86_64 kullanın.
 - **Henüz npm paketi yok.** Kaynaktan kurarsınız ([Başlarken](../README.tr.md#başlarken)).
 - **Bazı kurulum mesajları yalnız İngilizce** (derleme ve sandbox hazırlığı mesajları çeviri var olmadan önce çıkar).
+- **`deckent init` kurulumu yapar, henüz ilk kodlama Run'ını değil** (alpha.48 I-S3). İlk kurulum izinlerini, dili,
+  sandbox kontrolünü, Docker kurulumunu (yalnız kişi), model bağlantısını (`models connect`), proje yönergelerini ve son
+  kontrolü, her birini kendi mevcut komutuyla uygular. *Etki:* kurulum worker imajını oluşturmaz, kaydı ve havuzu yazmaz:
+  özeti (ve `deckent init --json`, `firstJob`) ilk iş için eksik adımları sırayla ve tam komutlarıyla listeler (kaynak kodda
+  `npm run worker:image` ile worker imajı, `deckent config set execution`, `deckent init registry`, `deckent init pool`), doctor'un
+  havuz satırı ilkini gösterir; liste yalnız yapılandırmayı ve havuz defterini okur, ayarlı imajın makinede olup olmadığını
+  denetlemez; teslim klonu da kurulum aşaması değildir.
+  Kurulum kaydedilmiş profili geri okumaz: tek kullanıcı hiçbir şey yazmaz (doctor yine kimlik profili ister), ekip ya da
+  kurum seçimi kullanıcınızın genel yapılandırmasına kaydeder (dağıtım `deckent identity distribute` olarak kalır) ve
+  sonraki `deckent init` yeniden sorar. Son kontrol
+  doctor'ın kendi satırlarıdır: yalnız hiç uyarı yokken ve diğer her aşama tamam ya da atlanmışken "tamam" olur; bu yüzden
+  yeni kurulumda "uygulanmaya hazır" kalır (doctor kimlik profili ve worker havuzu için uyarır ve ikisi için de `deckent init`
+  der). Gözetimsiz `deckent init --yes --scope <kimlik>` yalnız yeni izinleri, dili ve son kontrolü uygular.
+- **Kurulumdan Docker Engine kurmak yeni** (alpha.48 I-D2; I-S3'ten beri `deckent init` penceresinde, yalnız gerçek bir
+  terminaldeki kişiye önerilir). Yalnız Docker'ın resmi apt deposundan, Docker'ın listelediği Ubuntu ve Debian sürümlerinde
+  (2026-10-19'da kontrol edildi), Deckent ile gelen Docker imza anahtarıyla kurar; geri kalan her durumda (yerel
+  Windows/macOS, WSL'de Docker Desktop, Linux Mint gibi türevler, çakışan `docker.io`/`containerd`/`runc` paketleri, eski bir
+  `docker.list`, ağ yok) yalnız sonraki adımı yazar. *Etki:* gerçek kurulum yalnız kayıt tutan sahte bir `sudo` ile
+  prova edildi; Deckent testleri onu hiç çalıştırmaz. Docker anahtarını değiştirirse apt depoyu yeni anahtar bir Deckent
+  güncellemesiyle gelene kadar reddeder (güvenli tarafta kapanır). Anahtar ve kaynak dosyaları `$TMPDIR` altında özel bir
+  klasörde hazırlanır; reddedilen ya da yalnız yazdırılan bir çalıştırmadan sonra orada kalır. systemd'siz WSL'de motor
+  kurulumdan sonra başlamayabilir; sonraki kontrol hizmetin durduğunu söyler. WSL'deki Docker Desktop denetimi Windows
+  tarafındaki programa bakar (gözlenen bir düzen, belgelenmiş bir sözleşme değil). Terminal tanığı ret metni bu kurulumu
+  henüz adıyla anmıyor. Kurulum sürerken pencere kapanır (sudo düz terminalde sorar) ve sonra yeniden açılır. *Yol:* yazılan komutları izleyin, hizmeti başlatın, `docker` grubu için oturumu kapatıp açın.
 
 ## Yalıtım
 
@@ -39,11 +63,19 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   başlayamaz; Deckent görünür biçimde Landlock'a düşer ve tam erişimli kabuk çağrılarını reddeder. *Yol:* bir yönetici
   bubblewrap'ı root sahipli `/usr/local/bin/bwrap` olarak, ona `userns` izni veren bir AppArmor profiliyle kurar
   ([Başlarken](../README.tr.md#başlarken)).
+- **Yalnız Landlock olan bir host'ta büyük bir `.gitignore` klasörü kabuğu durdurabilir.** Landlock artık `.gitignore`'da adı
+  geçen klasörlerde de bubblewrap gibi kimlik bilgisi dosyası arar; bu yüzden bu klasörler 20.000 girdilik sınırına sayılır
+  (bubblewrap: 50.000). *Etki:* sınırı aşan bir projede kabuk çalışmaz, görünür bir nedenle reddedilir. *Yol:* bubblewrap'ı
+  kullanılabilir yapın ya da büyük üretilmiş klasörleri proje klasörünün dışında tutun.
 - **`prefer-sandbox` host yedeğinin zorlanan bir dosya sistemi sınırı yoktur.** Kapalı modlarda kullanılabilir sandbox
   yoksa çağrı host'ta çalışabilir. *Yol:* sınırlama gerekiyorsa `require-sandbox` seçin.
 - **Kimlik bilgisi ve ev dizini gizleme sınırlıdır.** Ortak kayıt gh, Docker, kube, Codex, Git kimlik bilgileri ve yaygın
   bulut CLI'larını kapsar; gizleme 3 derinlikte ve 20.000 girdide durur. *Etki:* özel konumlar ve olağandışı dosya adları
   maskelenmez. *Yol:* böyle dosyaları sandbox'ın gördüğü ev dizininin dışında tutun ya da ayrıca yalıtın.
+- **Sırrı yalnız kurulum ayarı adlandırabilir.** Proje ayarındaki (`.deckent/config.json`) bir `$DECK:NAME` referansı ayarın
+  yüklenmesini `SECRET_REFERENCE_PROJECT_LAYER` ile durdurur; teslim commit'inin yazarı hiçbir ayarda referans olamaz
+  (`SECRET_REFERENCE_LEAVES_HOST`). *Etki:* alpha.48'den önce `$DECK:` kullanan bir proje dosyası değiştirilene kadar yüklenmez.
+  *Yol:* referansı kurulum ayarına taşıyın ya da düz değeri yazın.
 - **Sır kapısı Git geçmişini taramaz.** İş gönderilmeden önce işçinin aldığı her şeyi (çalışma kopyası, `.git` üst verisi,
   bağlamalar, görev girdileri, istem bağlamı) tarar ve bulursa reddeder; nesne deposundaki eski commit'ler taranmaz. Hariç
   tutmalar yalnız ayarda yazılı yollar ya da bildirilmiş bir bağımlılık ağacıdır, denetime yazılır ve Run kartında görünür.
@@ -79,6 +111,18 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Sır kapısının ayar kuralı yalnız ayar türü dosyalara bakar.** Sıradan kaynak koduna yazılmış bir parola yakalanmaz.
   *Yol:* sırları bir sır deposunda tutun, kaynak kodda değil.
 
+- **Yetki değişikliği terminaldeki bir kişiyi gerektirir.** İzin modunu değiştirmek, bir secret'ı yazmak ya da silmek veya
+  secret deposunu değiştirmek, isteği yapan sürecin girişi ve çıkışı etkileşimli bir terminalde değilse
+  `AUTHORITY_WITNESS_REQUIRED` ile reddedilir; MCP aktörü her zaman reddedilir ve hiçbir şey karara bağlanmaz, denetime
+  yazılmaz ya da değişmez. *Etki:* `echo ANAHTAR | deckent secret set AD`, betikler, bir betikten çağrılan SDK ve yapay zekâ
+  araçları bu değişiklikleri artık yapamaz; bunlar için henüz bir onay isteği yolu yok. *Geçici çözüm:* `deckent secret set AD`
+  (gizli istem), `deckent secret store` ya da terminalin `/provider` ve mod değiştirmesini etkileşimli bir terminalde kullanın.
+- **Runtime soketi sandbox'taki süreçleri reddeder, hesabınızın diğer süreçlerini değil.** Runtime servisi kendi PID, mount ve
+  user namespace'i dışındaki bir eşi reddeder, tam erişimli bubblewrap görünümü runtime soket dizinlerini gizler ve Landlock
+  realm'i hiç unix soketi açamaz. Hesabınızın sandbox dışında çalıştırdığı bir süreç (tam erişimli bir turda onaylanan host
+  realm çağrısı, host'ta çalışan bir MCP sunucusu, başka bir ajan) sokete yine ulaşır ve yukarıdaki yetki değişiklikleri
+  dışında her şeyi sizin adınıza yapar. *Geçici çözüm:* güvenilmeyen sunucuları ve ajanları bir sandbox'ta ya da ayrı bir
+  hesapta çalıştırın.
 - **Kendi işletim sistemi hesabınızla çalışan bir yapay zekâ ajanı Deckent onaylarıyla sınırlanmaz.** Onay ve denetim
   kayıtları hesabınızda duran bir anahtarla mühürlenir, etkileşimli terminal denetimi bir insanı değil bir terminali
   kanıtlar ve policy dosyasını hesabınız yazabilir. Hesabınız Docker ya da sudo kullanabiliyorsa böyle bir ajan pratikte
@@ -107,8 +151,35 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   bir API'ye geçmez; bildirilen aday listesi üzerinden yönlendirme planlı. *Yol:* bir API modelini kendiniz bağlayın ve seçin.
 - **Doğrulanmış yayımlanmış fiyatı olmayan uzak model kilitlidir.** Zhipu GLM Çin, fiyatları CNY olduğu için kilitli kalır.
   DeepSeek yayımlanmış tepe fiyattan kesinleşir ve üst sınır olarak etiketlenir. *Yol:* fiyatı olan ya da yerel bir model kullanın.
+- **Başka bir makinedeki model sunucusu henüz bağlanamaz.** Düz `http` yalnız bu makinede (`127.0.0.1` ya da `[::1]`) kabul
+  edilir; uzak bir OpenAI uyumlu sunucu yayımlanmış bir fiyat satırı ister. Bugün bu satırlar yalnız OpenAI, DeepSeek ve Z.ai
+  API'leri için var ve kendi fiyatınızı bildirmenin yolu yok. *Etki:* ağınızdaki bir şirket model sunucusu kullanılamaz.
+  *Yol:* model sunucusunu bu makinede çalıştırın.
+- **Codex ya da Cursor işçisinin kullandığı model doğrulanamaz.** Model başına kullanımı yalnız Claude Code bildirir; Codex ve
+  Cursor sonuçları doğrulanmamış olarak kaydedilir ve ölçütlerine göre kabul edilir. *Etki:* böyle bir işçi başka bir modelle
+  çalıştıysa iş yine kabul edilir.
+- **Cursor için paketli işçi model kataloğu yok.** İşçi yalnız etkin bir `native-cli` katalog kanalıyla kabul edilir; Claude Code
+  ve Codex'in paketli katalogları var, Cursor'ın yok. *Yol:* bir katalog yazıp `deckent models catalog register --file` ile
+  kaydedin.
 - **Deckent sağlayıcı tarafındaki ayarları göremez.** OpenRouter için "Prevent overrides" eklenti ayarını ya da OpenRouter kredi
   sınırınızı göremez. *Yol:* ilk ücretli çağrıdan önce ikisine de kendiniz bakın.
+- **alpha.48'den önceki MCP güveni bir kez yeniden sorulur.** Proje ve yerel MCP sunucularının güveni proje klasöründen
+  Deckent genel köküne taşındı; bir depo artık güveni kendisiyle getiremez. alpha.48'den önce güvenilen bir sunucu kartını
+  bekler (`mcp list` nedeni `trust-moved`); `deckent mcp approve <ad> --yes` onu `MCP_TRUST_NEEDS_CARD` ile reddeder. Veri
+  klasöründeki eski `integrations/mcp-trust.json` yerinde kalır ve güven olarak hiç okunmaz. *Yol:* terminalde ilk kullanımda
+  kartı yanıtlayın ya da bir terminalde `deckent mcp approve <ad>` çalıştırın; sonra isterseniz eski dosyayı silin.
+- **Proje MCP dosyası yalnız birkaç ortam değişkeni okur.** Proje `.deckent/mcp.json` içindeki `${VAR}` yalnız `HOME`, `USER`,
+  `LOGNAME`, `LANG`, `LC_ALL`, `TZ` ve `TMPDIR` okur; başka bir ad yazılı varsayılanını ya da boş okur, kimlik bilgisi taşıyan
+  bir değer sunucuyu reddettirir. Bilinen kurulum sırlarıyla karşılaştırma henüz yok (yalnız kimlik bilgisi kalıpları).
+  *Yol:* başka değişken isteyen bir sunucuyu yerel ya da kullanıcı kapsamına koyun (`deckent mcp add`).
+- **Proje MCP güveni proje dışında bir genel kök ister.** `DECKENT_GLOBAL_HOME` (yoksa `DECKENT_HOME`) projenin içini
+  gösterirse proje ve yerel sunucular `trust-store-unavailable` gösterir ve hiç başlamaz. *Yol:* `DECKENT_GLOBAL_HOME`'u
+  projenin dışına yöneltin.
+- **Bir MCP sunucusuna güvenmek terminaldeki bir kişiyi ister.** `deckent mcp approve` ve yerel ya da kullanıcı kapsamına
+  `deckent mcp add` kartını yalnız gerçek bir terminalde gösterir; pipe, CI ya da bir yapay zekâ aracından reddedilir
+  (`MCP_APPROVAL_NEEDS_TERMINAL`) ve `--yes` artık kartı atlamaz. *Yol:* betikten sunucuyu `--no-approve` ile ekleyin; ilk kullanımda sorar.
+- **`deckent mcp import` seçilen istemcinin bütün sunucularını alır.** Terminalde istemciyi seçersiniz; tek tek sunucu seçimi
+  henüz yok. İçe aktarılanlar güvenilmeden kalır. *Yol:* içe aktarmadan sonra `deckent mcp remove <ad>`.
 - **OAuth ile MCP sunucuları desteklenmiyor.** Streamable HTTP sunucuları OAuth olmadan çalışır. *Yol:* yerel bir stdio sunucusu ya da
   OAuth gerektirmeyen bir HTTP sunucusu kullanın.
 
@@ -121,8 +192,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   *Etki:* sınırları Deckent'in değil, sağlayıcı planınızın sınırlarıdır.
 - **Sağlayıcı başına harcama sınırı yapılmadı.** Kapsam başına tek ortak USD bütçesi var. *Yol:* sınırları her sağlayıcı
   hesabında belirleyin.
-- **Kesinleşen harcama Deckent'in kendi hesabıdır:** sağlayıcının bildirdiği kullanım çarpı doğrulanmış fiyat. Sağlayıcının
-  faturası değildir.
+- **Kesinleşen harcama Deckent'in kendi hesabıdır:** sağlayıcının bildirdiği kullanım çarpı doğrulanmış fiyat (OpenRouter
+  çağrıları OpenRouter'ın bildirdiği ücretten kesinleşir). Sağlayıcının faturası değildir.
 - **Son kullanımı hiç bildirilmeyen çağrı tutulu kalır;** `deckent models reconcile-spending` ile çözene kadar.
 
 ## Teslim ve dala alma
@@ -188,16 +259,23 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Komut satırındaki `deckent do` siz onaylayınca devam etmez.** Öneriyi planlar ve kaydeder; karardan sonra aynı komutu aynı
   `--command-id` ile yinelersiniz; kimlik basılmaz, bu yüzden `--command-id` ile kendinizinkini verin. Terminalde `/do` kendiliğinden
   devam eder.
-- **Soru soran bir işçiye terminalden cevap verme henüz yapılmadı.**
+- **Soru soran bir işçiye terminalden cevap verme henüz yapılmadı.** *Yol:* `deckent run resume --scope <id> --id <run>
+  --command-id <id> --expected-revision <n> --task <id> --answer <metin>`.
 - **Otonom teslim tasarlandı ama kapalı.** Her teslim ve dala alma, doğrulanmış bir terminalde sizin `y`'nizi ister.
 
 ## ERP ve operasyonlar
 
 - **ERP bağlayıcısı yok.** Operasyon sözleşmesi (niyet, koşullu yazım, tekrarsız yeniden gönderim, kanıtla kabul, telafi) ve
   uzantı girişi var; IFS, SAP, Oracle, Microsoft, Uyumsoft ya da Logo adaptörleri yok. Çalışan tek örnek hedef bir test
-  fixture'ıdır. *Etki:* ERP etkilerini çalıştırmak için kendi adaptörünüzü yazmalısınız.
+  fixture'ıdır. Core ayrıca genel bir `http-conditional` REST hedefi sunar (ETag, `If-Match`, `Idempotency-Key`; operasyonları
+  ayarda tanımlanır); kimlik bilgisi göndermez. *Etki:* kimlik doğrulama isteyen ERP'ler dahil, ERP etkilerini çalıştırmak
+  için kendi adaptörünüzü yazmalısınız.
 - **`deckent operation list` yok.** Tek bir operasyona `deckent operation inspect --scope <id> --command-id <id>` ile
   bakabilirsiniz, yani kullandığınız komut kimliklerini saklamalısınız. *Etki:* bekleyen ve belirsiz etkiler listelenemez.
+  (Tek başına `deckent operation` yapılandırılmış işlem kataloğunu listeler, çalışmış komutları değil.)
+- **`deckent operation execute` terminalde de komutu JSON olarak alır.** Adım adım akış henüz yok (katalogdan işlem → hedef →
+  şemadan parametreler → önizleme → onay → aynı ekranda bekleme); `--schema` sözleşmeyi basar ve hatalı belge alanını adıyla
+  söyler. *Etki:* kişi komut belgesini elle ya da bir betikle yazar.
 - **Belirsiz bir ERP yazımından yeniden göndermeden başka çıkış yok.** Hedef yazımın olup olmadığını söyleyemiyorsa Deckent onu
   kendiliğinden yeniden denemez ve kayıt hedefi meşgul tutar. Hedef sonradan doğrulayabiliyorsa aynı komut kimliğini yeniden
   gönderin, kanıtı kaydı kesinleştirir; doğrulayamıyorsa kayıt çözümsüz kalır. *Etki:* bir kişi onu henüz kapatamaz.
@@ -213,6 +291,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   genel etki yolu sonucunu ledger'a yazar.
 - **Enterprise SSO, filo yönetimi ve merkezi policy hizmeti yok.** Policy modülünün kalan parçaları (kartlı kurucu admin
   kurtarma, iki kişiyle devir, rol düzenleme, imzalı paketler) yapılmadı.
+- **`deckent policy grants --all` başlangıç zamanını yalnız yönetilen kalıcı onaylar için gösterir.** "Başlangıç" sütunu kuralı
+  oluşturan mühürlü denetim değişikliğinden gelir; elle yazılmış ya da denetimden eski bir kural "—" gösterir ve bir kapsamın
+  yalnız ilk 10 000 politika değişikliği aranır (sayfa o zaman zamanların eksik olduğunu söyler). Kişiler issuer/subject olarak
+  görünür: Core görünen ad tutmaz.
 
 ## Kurtarma ve yükseltme
 
@@ -220,11 +302,20 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   arşivi düz dosyadır. *Yol:* kümeleri şifreli depolamada saklayın, parolayı ayrı tutun.
 - **Geri yükleme yedek zamanlamasını kapatır** ve sağlayıcı anahtarları ile yedek parolası kümede değildir. *Yol:* geri
   yüklemeden sonra `backup.schedule`'ı yeniden seçin ve her anahtar için `deckent secret set` çalıştırın.
-- **Geri yükleme servisin durmuş olmasını ister** ve mesaj komutu söylemez. *Yol:* `deckent runtime shutdown --service <id>
-  --instance <id> --command-id <id> --reason <metin>`, açık terminalleri kapatın, sonra geri yüklemeyi yeniden çalıştırın.
+- **Geri yükleme servisin durmuş olmasını ister** ve mesaj komutu söylemez. *Yol:* `deckent runtime shutdown` (terminalde kartla
+  sorar; başka yerde `--reason <metin>` ekleyin; `--service`, `--instance`, `--command-id` ve `--reason` içeren uzun biçim de
+  çalışır), açık terminalleri kapatın, sonra geri yüklemeyi yeniden çalıştırın. Terminalde `deckent backup restore` bunu parolayı
+  sormadan önce denetler.
+- **`deckent backup` yalnız varsayılan kurtarma klasörünü listeler** (`state/backups/recovery`); `--set` ile başka yerde oluşturulan
+  setler görünmez. "Son doğrulama" yalnız bu kurulumun mühürlü yedek audit kayıtlarından, aynı mutlak set yolu için gelir; yolu başka
+  yazımla doğrulanan bir set "kayıt yok" görünür. *Yol:* böyle bir seti `--set` ile verin.
 - **Yedek kümesinin göreli yolu yanıltıcı bir mesajla reddedilir.** Mutlak yol kullanın.
 - **Ledger yükseltmesinden sonra eski bir Deckent'e dönemezsiniz;** yükseltmeden önce alınan yedeği geri yüklemeden olmaz
   (yeni ledger sürümlerini eski derlemeler açamaz).
+- **Günlük yedek ayarı ledger yükseltmesinden hemen önce yedek almaz.** `backup.schedule` tek değer alır (kapalı, günlük ya da
+  yükseltme öncesi); günlük seçiliyse yükseltme yeni set almadan başlar ve dönüş yolu en yeni günlük settir, en fazla yaklaşık bir
+  gün eskidir. *Yol:* yükseltmeden önce `deckent backup create --scope <id> --set <mutlak yol>` komutunu kendiniz çalıştırın ya
+  da günlük yerine yükseltme öncesini seçin.
 - **Kaybolan bir işçi slotunu tutabilir.** Verilmiş bir deneme, saklama çözülene kadar etkin kalıp bir yürütme slotunu tutabilir.
   *Yol:* `deckent monitor` ile izleyin; slot yalnız tipli manuel kararla ya da işçinin bittiğine dair kanıtla bırakılır.
 - **Temiz makine provası model adımında durdu.** 2026-10-15/16'da taze bir klon kurulum, `doctor`, politika, kayıt defteri ve
@@ -235,11 +326,56 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   üzerinde Ctrl+C ya da boşta durma); ancak ondan sonra `runtime restart` çalışır: servis kimliğini yalnız başlarken okur.
 - **Servis kimliği ve saat.** Kurulum kimliğinin ilk yayımında nadir bir pencere kalıyor; tolerans içindeki yavaş bir saat
   kayması algılanmaz; durdurulan bir çalıştırmanın `cancelled` bildirdiği tek bir overlay durumu yeniden üretilemedi.
+- **Bu sürümden önce onay bekleyen ve yalnız görev düzeyindeki bir onay kuralı yüzünden bekleyen bir /do planı yükseltmeden sonra
+  devam etmez:** yeniden gönderilince park edilir (`APPROVAL_CONFLICT`). *Yol:* yeni bir /do başlatın; görev onayı bu kez görev
+  çalışmadan hemen önce bir kez sorulur. Politikasında `task` kuralı olmayan kurulumlar etkilenmez.
 
 ## Masaüstü ve diğer yüzeyler
 
 - **Masaüstü uygulaması, web paneli ve uzak HTTP API yok.** Terminali, `deckent` komutunu, MCP'yi ya da SDK'yı kullanın.
   `deckent monitor` salt okunur canlı bir görünümdür. Masaüstü beta sonrası için planlı.
+- **`deckent runtime` servisin ne zamandan beri çalıştığını göstermez.** Çalışma protokolü (v29) başlangıç zamanı taşımaz; bir
+  sonraki protokol sürümünü bekler. Durum yalnız derleme, yapılandırma, çalışan işler ve soketi gösterir.
+- **Monitor yalnız inceleme izniniz olan havuzları gösterir** (`pool inspect`); diğer havuzlar tek bir sayı olarak görünür
+  ("Diğer işler: N havuz size gösterilmiyor"), adı, kapasitesi ve tutanı gösterilmez. *Etki:* görebildiğiniz bir Run, inceleyemediğiniz
+  bir havuzda bekliyorsa havuz bekleme nedeni görünmez. İlk kurulum şablonu v13'ten önce MCP aktörünün kurallarında `pool inspect`
+  yoktur, MCP üzerinden `inspect_monitor` yalnız bu sayıyı gösterir; v13 (yeni kurulumda ya da `deckent init policy --upgrade`
+  sonrası) ona kurulu kapsamda `pool inspect` verir. *Yol:* bir yöneticiden o havuz için `pool inspect` isteyin;
+  `deckent pool status` aynı kararı kullanır.
+- **Config penceresi seçenekleri ilk kareden önce yükler.** PATH'te Docker varsa yerel imaj listesini bekler (burada 43 imaj için
+  yaklaşık 0,7 sn, ilk kare toplam 2,2 sn); seçenekler henüz anahtar açılınca yüklenmiyor. Liste süre sınırına takılırsa o ana kadar
+  doğrulanan imajlar "kısmi" uyarısı olmadan önerilir; ikinci kimlik okumasında yoğun bir daemon hiç imaj önermez. *Yol:* imaj
+  kimliğini yazın; `deckent config explain execution` şemayı gösterir.
+- **Kurulum teklifi yalnız çıplak `deckent` içindir.** Kurulumsuz bir klasörde `deckent --full-access` ve `deckent terminal`
+  `TERMINAL_SCOPE_REQUIRED` vermeye devam eder. *Yol:* çıplak `deckent` ya da `deckent init` çalıştırın.
+- **Monitor okuyamadığı kapsamın adını yalnız `monitor inspect-scope-diagnostics` iznine sahip izleyiciye gösterir.** Bu izleyici
+  (v13: kurucu yönetici; yeni kurulumda ya da `deckent init policy --upgrade` sonrası) reddedilen ya da okunamayan her kapsamı adı ve
+  nedeniyle görür (metinde ve pencerede ilk beşi, sonra `deckent monitor --verbose` komutunu gösteren tek bir "…ve K kapsam daha"
+  satırı; `--verbose` ve `--json` hepsini listeler); MCP aktörü dahil diğer herkes yalnız sayı görür ("N kapsama erişim reddedildi", "N kapsam okunamadı (<kod>)"). İzin
+  denetiminin kendisi başarısız olursa herkes sayıları ve tek bir "kapsam adlarını görme izni denetlenemedi" satırını görür. *Yol:*
+  kural (`first-run-monitor-scope-diagnostics`) sıradan politika verisidir; yönetici onu yönetilen bir politika değişikliğiyle verir
+  ya da geri alır. Başarısız kontrol için `deckent doctor` ve kod.
+- **Monitor bir servisin derleme zamanını ve sürüm numarasını göstermez.** Servis yalnız commit'ini ve kaynak ağacını bildirir;
+  Kurulumlar `build <commit> · kaynak ağacı <özet>` gösterir. *Yol:* servisi çalıştıran makinede `deckent --version`.
+- **Etkileşimli `deckent monitor` boştayken de biraz CPU kullanır; iş defteri değiştirdiği sürece eskisi kadar kullanır.** Run'ları,
+  işçileri ve izin kararlarını yalnız defter, politika, bağlamalar ya da yapılandırma değiştikten sonra (ve değişiklikten sonraki
+  yenilemede bir kez daha) yeniden okur. İşçi dosyaları, süreç durumu ve model kullanılabilirliği her yenilemede okunur
+  (`inspection.workers.heartbeatMs`, varsayılan 2 sn); Ayarlar sekmesi yalnız açıkken okunur. 2.000 Run'lık bir test kurulumunda
+  ölçüldü: hiçbir şey değişmezken bir çekirdeğin yaklaşık %9–10'u (önce %31–34); canlı bir kurulum ölçülmedi. Terminalin
+  `/monitor` penceresi, `--once`, `--json` ve MCP her çağrıda her şeyi okur. *Yol:* `p` ile duraklatın, `r` ile tam yeniden
+  okuyun ya da `deckent monitor --once` kullanın.
+- **`deckent run list`, `report` ve Run seçicileri yalnız `/runs` sorgusunun döndürdüğü Run'ları gösterir** (en yeni önce, en çok
+  `inspection.workers.maxEntries`) ve her birini `/runs` gibi bir kez okur; kısa kimlik yalnız bu Run'lar arasında çözülür, daha eski
+  bir Run tam kimliğini ister. Büyük bir kapsamda ölçülmedi. *Geçici çözüm:* `deckent run inspect --id <tam kimlik>`; `deckent
+  inventory` saklanan tüm kayıtları sayfalar.
+- **`deckent doctor` henüz Docker'ı sınamaz** ve o satırda "sınanmadı" der; worker imajı yenileme ve havuz satırları son yenilemenin
+  ve havuz okumasının bulduğunu göstermeye devam eder. *Yol:* makinede `docker info`. Etkileşimli doctor yalnız mevcut bir ürün
+  komutunun uyguladığı düzeltmeleri önerir (bugün: worker araç güncellemesi); kurulum klasörünü özel yapmak kendi politika eylemini
+  bekler, bu yüzden o satır sizin çalıştıracağınız `chmod 700 <klasör>` adımını gösterir.
+- **`deckent terminal status` sohbet modeline bağlanmaz,** bu yüzden erişim "sınanmadı" görünür; `deckent` içindeki ilk yanıt ya da
+  `/provider` kontrolü gösterir. Bağlam penceresi ilk yanıt ölçülene kadar "?" görünür.
+- **`deckent workers watch` satır seçmeye izin vermez.** Terminalde tek pencereyi yeniden çizer (Esc ya da q kapatır); ayrıntı
+  `deckent workers --verbose` ile gelir. `--json`, `--all` ne derse desin geçmiş dahil tüm gözlem raporunu döndürür.
 - **SDK hâlâ ham yazıcıları da dışa aktarır,** yönetilenlerin yanında; sonraki sürümlü bir SDK sözleşmesinin yalnız
   yönetilenleri bırakması hedeflenir.
 

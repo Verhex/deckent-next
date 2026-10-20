@@ -53,7 +53,9 @@ it.each(['en', 'tr'] as const)('run and task inspection render acceptance from t
   const f = fixture(), out: string[] = [];
   const context = { env: { NO_COLOR: '1' }, stdout: { write(text: string) { out.push(text); } }, stderr: { write() {} },
     async inspectRun() { return { schemaVersion: 1, layout: resolveProductPaths('/fixture/project', { env: { HOME: '/fixture/home' } }), run: f.view }; } };
-  for (const argv of [['run', 'inspect', '--scope', identity.scopeId, '--id', identity.runId], ['task', 'inspect', '--scope', identity.scopeId, '--run', identity.runId, '--task', identity.taskId]]) {
+  // C-TASK/C-RUN (CLI review §task/§run, internal records under --verbose): run and task inspect show the acceptance metadata line with --verbose.
+  for (const argv of [['run', 'inspect', '--scope', identity.scopeId, '--id', identity.runId, '--verbose'],
+    ['task', 'inspect', '--scope', identity.scopeId, '--run', identity.runId, '--task', identity.taskId, '--verbose']]) {
     out.length = 0; expect(await main([...argv, '--lang', locale], context as never)).toBe(0);
     expect(out.join('')).toContain(renderAcceptanceLine(f.view.tasks[0]!.acceptance!, locale));
     expect(out.join('')).toContain(locale === 'en' ? 'accepted' : 'kabul edildi');

@@ -13,6 +13,7 @@ it('reopens the installed runtime and preserves exact settlement, approval and r
     if (!(error instanceof FixtureUnavailableError)) throw error;
     await recordFixtureAvailability('runtime', error.availability); return context.skip(JSON.stringify(error.availability));
   });
+  let failure: unknown;
   try {
     const command = f.command('restart'); const { pending } = await f.approve(command);
     const first = await f.execute(command);
@@ -24,5 +25,7 @@ it('reopens the installed runtime and preserves exact settlement, approval and r
     expect(JSON.stringify(await f.inspectApproval(pending.approval.approvalId))).toBe(approval);
     expect(JSON.stringify(await f.execute(command))).toBe(JSON.stringify(first));
     expect(f.server.writes).toHaveLength(1);
-  } finally { await f.close('runtime-restart'); }
+  } catch (error) { failure = error; throw error; }
+  // A close failure fails the test on its own, but never hides the body's own failure (J3: full suite 1d30f87a showed only the close error).
+  finally { await f.close('runtime-restart').catch((error: unknown) => { if (failure === undefined) throw error; }); }
 });

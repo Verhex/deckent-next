@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { chmod, lstat, mkdir, rename, rm } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readdir, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createHmacIntegrity, resolveProductLayout, productResourcePath, sha256, type ProductLayout } from '#platform/index.js';
@@ -21,26 +21,23 @@ export class VerifiedBackup {
   result(action: BackupResult['action']): BackupResult { return { schemaVersion: 1, action, set: this.set, ledgerDigest: this.ledgerDigest,
     files: this.state.entries.length, createdAt: this.state.createdAt, relocation: null, globalConfig: null, preserved: [] }; }
 }
+const fsCode = (error: unknown) => error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+const unreadable = (path: string) => (error: unknown): never => { if (['EACCES', 'EPERM'].includes(fsCode(error))) refuse('BACKUP_SET_UNREADABLE', { path }); throw error; };
+/** Owner CLI review 2026-10-19: before any decryption a missing or unreadable set is its own typed cause, never a passphrase failure. */
+export async function locateBackupSet(set: string): Promise<void> {
+  const info = await safePath(set).then(path => lstat(path)).catch(error => ['ENOENT', 'ENOTDIR'].includes(fsCode(error)) ? refuse('BACKUP_SET_NOT_FOUND', { path: set }) : unreadable(set)(error));
+  if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
+  const names = await readdir(set).catch(unreadable(set));
+  // A folder of sets (or anything else) is no set; a set that lost only its manifest was modified.
+  if (!names.includes('MANIFEST.sha256')) return refuse(names.some(name => (FILES as readonly string[]).includes(name)) ? 'BACKUP_MANIFEST_INVALID' : 'BACKUP_SET_NOT_FOUND', { path: set });
+}
 export async function verifyBackupSet(set: string, passphrase: string, limits: BackupLimits): Promise<VerifiedBackup> {
-  await safePath(set); await privateDirectoryExisting(set);
-  const text = (await readPrivate(join(set, 'MANIFEST.sha256'), 4096)).toString('utf8');
-  const expected = new Map<string, string>();
-  for (const line of text.trimEnd().split('\n')) {
-    const match = /^([a-f0-9]{64}) {2}([a-zA-Z0-9.-]+)$/.exec(line);
-    if (!match || expected.has(match[2]!) || !(FILES as readonly string[]).includes(match[2]!)) return refuse('BACKUP_MANIFEST_INVALID');
-    expected.set(match[2]!, match[1]!);
-  }
-  if (expected.size !== FILES.length) return refuse('BACKUP_MANIFEST_INVALID');
-  const payload: string[] = [];
-  for (const name of FILES) {
-    const file = join(set, name), info = await lstat(file);
-    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
-    if (info.size > limits.maxTotalBytes * 2) return refuse('BACKUP_LIMIT');
-    const digest = await digestFile(file);
-    if (digest !== expected.get(name)) return refuse('BACKUP_MANIFEST_INVALID');
-    if ((PAYLOAD as readonly string[]).includes(name)) payload.push(manifestLine(digest, name));
-  }
-  const envelope = await readPrivate(join(set, 'authority.key.enc'), 4096);
+  await locateBackupSet(set);
+  if (!passphrase) return refuse('BACKUP_PASSPHRASE_REQUIRED');
+  // A member that vanished after the listing changed the set; one this user cannot open is unreadable. Typed refusals pass unchanged.
+  const member = (error: unknown): never => fsCode(error) === 'ENOENT' ? refuse('BACKUP_MANIFEST_INVALID') : unreadable(set)(error);
+  const { expected, payload } = await readManifest(set, limits).catch(member);
+  const envelope = await readPrivate(join(set, 'authority.key.enc'), 4096).catch(member);
   const { createHash } = await import('node:crypto');
   if (createHash('sha256').update(envelope).digest('hex') !== expected.get('authority.key.enc')) return refuse('BACKUP_MANIFEST_INVALID');
   const key = await decryptKey(envelope.toString('utf8'), passphrase, payload.join(''));
@@ -59,9 +56,25 @@ export async function verifyBackupSet(set: string, passphrase: string, limits: B
     return new VerifiedBackup(resolve(set), state, expected.get('ledger.db')!, key);
   } catch (error) { key.fill(0); throw error; }
 }
-async function privateDirectoryExisting(path: string) {
-  const info = await lstat(path);
-  if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
+async function readManifest(set: string, limits: BackupLimits) {
+  const text = (await readPrivate(join(set, 'MANIFEST.sha256'), 4096)).toString('utf8');
+  const expected = new Map<string, string>();
+  for (const line of text.trimEnd().split('\n')) {
+    const match = /^([a-f0-9]{64}) {2}([a-zA-Z0-9.-]+)$/.exec(line);
+    if (!match || expected.has(match[2]!) || !(FILES as readonly string[]).includes(match[2]!)) return refuse('BACKUP_MANIFEST_INVALID');
+    expected.set(match[2]!, match[1]!);
+  }
+  if (expected.size !== FILES.length) return refuse('BACKUP_MANIFEST_INVALID');
+  const payload: string[] = [];
+  for (const name of FILES) {
+    const file = join(set, name), info = await lstat(file);
+    if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.uid !== process.getuid?.() || (info.mode & 0o077)) return refuse('BACKUP_PATH_UNSAFE');
+    if (info.size > limits.maxTotalBytes * 2) return refuse('BACKUP_LIMIT');
+    const digest = await digestFile(file);
+    if (digest !== expected.get(name)) return refuse('BACKUP_MANIFEST_INVALID');
+    if ((PAYLOAD as readonly string[]).includes(name)) payload.push(manifestLine(digest, name));
+  }
+  return { expected, payload };
 }
 export async function createBackupSet(layout: ProductLayout, projectRoot: string, installationId: string, keyFile: string,
   destination: string, passphrase: string, limits: BackupLimits, config?: BackupConfigLayers): Promise<BackupResult> {

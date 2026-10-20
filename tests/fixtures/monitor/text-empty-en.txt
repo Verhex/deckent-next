@@ -1,5 +1,5 @@
 Deckent monitor · observed 2026-10-02 09:30:00Z · observe only
-● current · no service record · build unknown · ledger v44 · /home/owner/projects/fresh
+● fresh (current) · NO SERVICE RECORD · ✓ no problems · /srv/owner/projects/fresh
 
 ── Summary ─────────────────────────────────────────────────────────────────────────────────────────
 Runs: 0 queued · 0 running · 0 checking · 0 on hold · 0 done · 0 stopped
@@ -26,18 +26,21 @@ Workers running now (0)
   No pool configured.
 
 ── Installs ────────────────────────────────────────────────────────────────────────────────────────
-Install current · available
-Path /home/owner/projects/fresh
-Scopes: —
-no service record · instance —
-build unknown · source tree —
-ledger v44
-0 Runs · 0 workers · 0 approvals · 0 pools
+  ● fresh (current)   NO SERVICE RECORD   ✓ no problems
+  ┌──────────┬────────────────────────────────────────────────────────────┐
+  │ Status   │ ○ No service record · ✓ Ledger v44                         │
+  ├──────────┼────────────────────────────────────────────────────────────┤
+  │ Workload │ 0 run(s) · 0 worker(s) · 0 approval(s) waiting · 0 pool(s) │
+  │ Scope    │ —                                                          │
+  │ Folder   │ /srv/owner/projects/fresh                                  │
+  ├──────────┼────────────────────────────────────────────────────────────┤
+  │ Build    │ build unknown                                              │
+  └──────────┴────────────────────────────────────────────────────────────┘
 
 No other install observed. Add one under config `inspection.workers.sources`.
 
 ── Map ─────────────────────────────────────────────────────────────────────────────────────────────
-current · /home/owner/projects/fresh
+current · /srv/owner/projects/fresh
   No map was read for this install.
 
 Observe only: this view never claims, reserves, cancels or decides anything. A blocker is the

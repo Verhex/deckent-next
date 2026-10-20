@@ -40,6 +40,9 @@ describe.skipIf(process.platform !== 'linux')('shell path check over the workspa
     ['stat .brain/memory.db', 'PATH_PROTECTED'], ['cat .brain/*', 'PATH_PROTECTED'], ['cat .git/config', 'PATH_PROTECTED'], ['ls .git', 'PATH_PROTECTED'],
     ['cat file.pem', 'PATH_PROTECTED'], ['cat keys/prod.key', 'PATH_PROTECTED'], ['cat id_rsa', 'PATH_PROTECTED'], ['cat notes/credentials', 'PATH_PROTECTED'],
     ['head -1 .*', 'PATH_PROTECTED'], ['cat *', 'PATH_PROTECTED'], ['cat store.jks', 'PATH_PROTECTED'], ['cat secrets.json', 'PATH_PROTECTED'],
+    // G2-2: the file jq reads through --rawfile/--slurpfile is checked like any other read (it once shifted into the script slot and was skipped).
+    ['jq --rawfile raw /etc/passwd . f.json', 'PATH_OUTSIDE_ROOT'], ['jq --slurpfile all .env . f.json', 'PATH_PROTECTED'],
+    ['jq --rawfile raw ../outside/secret . f.json', 'PATH_OUTSIDE_ROOT'], ["jq -n --rawfile k keys/prod.key '$k'", 'PATH_PROTECTED'],
     // Real-filesystem cases the lexical legacy matrix could not show.
     ['cat notes.txt', 'PATH_PROTECTED'], ['cat linked/secret', 'PATH_OUTSIDE_ROOT'], ['cat missing.txt', 'PATH_UNRESOLVED'], ['cat *.nomatch', 'GLOB_EXPANSION'],
     ['wc -l < .env', 'PATH_PROTECTED'], ['grep -f .env src/a.ts', 'PATH_PROTECTED'],
@@ -85,5 +88,48 @@ describe.skipIf(process.platform !== 'linux')('shell path check over the workspa
     const context = createShellPathContext(scope);
     expect(await classifyReadOnlyShellCommand(`cat ${root}/src/a.ts docs/MASTER-PLAN.md`, context)).toMatchObject({ readOnly: true, programs: ['cat'] });
     expect(context.examined).toEqual(['src/a.ts', 'docs/MASTER-PLAN.md']);
+  });
+
+  // SEC-6 F31: a model-chosen glob was compiled to a backtracking RegExp and tested synchronously before any approval; `*?` × 20 then
+  // `!` against a 40-character name is ≈ 1.4e11 backtracking steps. Steps are the primary assertion: the whole expansion runs under an
+  // explicit step budget (the hostile glob has ≈ 85 states, so 41 code points cost a few thousand steps) and fails closed when exhausted.
+  it('matches a hostile glob in linear steps and fails closed with GLOB_UNSUPPORTED when the step budget is exhausted (F31)', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'dn-shell-glob-')); roots.push(base);
+    await writeFile(join(base, 'a'.repeat(40)), 'x\n');
+    await writeFile(join(base, '.hidden-' + 'a'.repeat(32)), 'x\n');
+    const scope = await createWorkspaceScope(base), hostile = `cat ${'*?'.repeat(20)}!`;
+    expect(await classifyReadOnlyShellCommand(hostile, createShellPathContext(scope, undefined, [], 20_000))).toMatchObject({ readOnly: false, reasonCode: 'GLOB_EXPANSION' });
+    expect(await classifyReadOnlyShellCommand(hostile, createShellPathContext(scope, undefined, [], 500))).toMatchObject({ readOnly: false, reasonCode: 'GLOB_UNSUPPORTED' });
+    expect(await classifyReadOnlyShellCommand(`cat ${'*?'.repeat(20)}`, createShellPathContext(scope, undefined, [], 20_000))).toMatchObject({ readOnly: true });
+  });
+
+  // Coarse helper only (the steps above are the assertion): before the fix `*?` × 9 took ≈ 2 s and × 10 ≈ 9 s on one 40-character name
+  // (each pair ≈ ×4); after it the whole check takes a few milliseconds, so a loaded suite cannot turn this guard red.
+  it('answers a hostile glob within the 1s guard under the default budget (F31)', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'dn-shell-glob-')); roots.push(base);
+    await writeFile(join(base, 'a'.repeat(40)), 'x\n');
+    const scope = await createWorkspaceScope(base), started = performance.now();
+    expect(await classifyReadOnlyShellCommand(`cat ${'*?'.repeat(10)}!`, createShellPathContext(scope))).toMatchObject({ readOnly: false, reasonCode: 'GLOB_EXPANSION' });
+    const ms = performance.now() - started;
+    console.info('SEC6_F31_GLOB_GUARD', JSON.stringify({ pairs: 10, ms }));
+    expect(ms).toBeLessThan(1_000);
+  });
+
+  // The linear matcher keeps sh semantics: `*`/`?` never match a leading dot unless the segment starts with one, brackets (ranges,
+  // negation, POSIX classes) match one character, an unterminated `[` is literal, and collating/equivalence forms stay unsupported.
+  it('keeps sh glob semantics for dotfiles and bracket expressions (F31)', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'dn-shell-glob-')); roots.push(base);
+    for (const file of ['a1.txt', 'b2.txt', 'c3.txt', '.dot.txt', '[x.txt', 'd-4.txt']) await writeFile(join(base, file), 'x\n');
+    const scope = await createWorkspaceScope(base), context = createShellPathContext(scope);
+    const expand = async (glob: string) => {
+      const verdict = await classifyReadOnlyShellCommand(`cat ${glob}`, context);
+      return verdict.readOnly ? 'ok' : verdict.reasonCode;
+    };
+    const cases: [string, string][] = [['*.txt', 'ok'], ['?.txt', 'GLOB_EXPANSION'], ['.*.txt', 'ok'], ['[ab]1.txt', 'ok'], ['[!a]1.txt', 'GLOB_EXPANSION'],
+      ['[^b]1.txt', 'ok'], ['[a-c][[:digit:]].txt', 'ok'], ['[[:alpha:]]-[0-9].txt', 'ok'], ['[x.txt', 'ok'], ['[.]dot.txt', 'GLOB_EXPANSION'],
+      ['[[.a.]]1.txt', 'GLOB_UNSUPPORTED'], ['[[=a=]]1.txt', 'GLOB_UNSUPPORTED'], ['[[:nope:]]1.txt', 'GLOB_UNSUPPORTED'], ['*.TXT', 'GLOB_EXPANSION']];
+    const seen: [string, string][] = [];
+    for (const [glob] of cases) seen.push([glob, await expand(glob)]);
+    expect(seen).toEqual(cases);
   });
 });

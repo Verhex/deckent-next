@@ -1,0 +1,5 @@
+{
+  "formats": { "json": "json", "agent": "json", "ci": "json", "dumb": "plain", "pipe": "plain", "tty": "interactive" },
+  "windowOptionRows": 5,
+  "foreground": ["execution-environment.install", "project-instructions.initialize", "model.connect", "installation.policy-upgrade", "doctor.inspect"]
+}

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { approvalRecordSchema, approvalSubject, sameAttemptIdentity, parseModelCatalogModelRecord, parseModelCatalogChannelRecord, readWorkerModelPin, runSnapshotSchema, taskEvaluationModelSchema, type AttemptIdentity, type WorkerModelView, type RunSnapshot } from '#domain/index.js';
 import type { ArtifactReceipt } from '#capabilities/index.js';
 import { poolCapacityReceiptSchema, runExecutionPolicySchema, AttemptStoreError, handoffEventCommandId, handoffStartRecordSchema, workerTreeExclusionCommandId, workerTreeExclusionRecordSchema, dispatchRecordSchema, executionPoolSchema, measureTaskOccupancy, poolHoldRecordSchema, workerEventLogSchema,
-  type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
+  type MonitorLedgerApproval, type MonitorLedgerAttempt, type MonitorLedgerIndex, type MonitorLedgerPool, type MonitorLedgerReading, type MonitorLedgerRun, type MonitorMap } from '#engine/index.js';
 import { readRunAcceptanceMetrics, readRunAcceptanceEvaluations, readAcceptanceEvaluationRows, assertSqliteEngineSupported, CURRENT_LEDGER_VERSION, POOL_CAPACITY_LEDGER_VERSION, POOL_HOLD_LEDGER_VERSION, RUN_LEDGER_VERSION, sqliteFailure, WORKER_EVENT_LOG_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 import { aggregateDelivery, readDeliveryReceipts } from './receipt-observation.js';
 
@@ -18,8 +18,15 @@ export interface MonitorAttemptFiles {
 }
 
 const OPEN_PHASES = "('pending','active','evaluating','reconciling','awaiting-decision')";
-const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647), maxRuns: z.number().int().positive().max(100_000), run: z.object({ scopeId: z.string(), runId: z.string() }).strict().optional() }).strict();
+const idsSchema = z.array(z.string()).max(100_000).readonly();
+/** M-VIS (PB-POOL-VIS): `scope` limits what is read. Runs, their receipts and approvals only of `scopeIds`; pool rows and pool occupancy only of
+ * `poolIds` (occupancy still counts every Run in an admitted pool, since a pool is installation-wide). Absent: the whole ledger (single-Run reads). */
+const optionsSchema = z.object({ busyTimeoutMs: z.number().int().nonnegative().max(2_147_483_647), maxRuns: z.number().int().positive().max(100_000), run: z.object({ scopeId: z.string(), runId: z.string() }).strict().optional(),
+  scope: z.object({ scopeIds: idsSchema, poolIds: idsSchema }).strict().optional() }).strict();
 export type MonitorLedgerOptions = z.infer<typeof optionsSchema>;
+type Scope = MonitorLedgerOptions['scope'];
+/** SQL fragment + bound JSON array: `column IN (ids)` without building placeholders from data; '' when the read is not scoped. */
+const scopedTo = (column: string, ids: readonly string[] | undefined, glue = 'AND') => ids ? { sql: ` ${glue} ${column} IN (SELECT value FROM json_each(?))`, args: [JSON.stringify(ids)] } : { sql: '', args: [] };
 const num = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 const json = (value: unknown) => { try { return JSON.parse(String(value)) as unknown; } catch { return undefined; } };
 /** A record that fails its schema is reported; an SQLite failure (busy, I/O, corruption) is never relabelled as one bad row. */
@@ -49,18 +56,19 @@ export function scanMonitorLedger(path: string, input: MonitorLedgerOptions, ret
       return { reading: Object.freeze({ ledgerVersion: version, scopeIds: [], runs: [], approvals: [], pools: [], diagnostics: ['ledger-version-unsupported:' + version] }), files: [] };
     }
     const files: MonitorAttemptFiles[] = [];
-    return { reading: read(db, version, options.data.maxRuns, files, options.data.run, pinned), files };
+    return { reading: read(db, version, options.data.maxRuns, files, options.data.run, pinned, options.data.scope), files };
   } catch (error) { throw sqliteFailure(error); }
   finally { try { if (db.isTransaction) db.exec('ROLLBACK'); } finally { db.close(); } }
 }
 
-function read(db: DatabaseSync, version: number, maxRuns: number, files: MonitorAttemptFiles[], selected?: { scopeId: string; runId: string }, pinned?: RunSnapshot): MonitorLedgerReading {
+function read(db: DatabaseSync, version: number, maxRuns: number, files: MonitorAttemptFiles[], selected?: { scopeId: string; runId: string }, pinned?: RunSnapshot, scope?: Scope): MonitorLedgerReading {
+  const inScope = (glue = 'AND') => scopedTo('scope_id', scope?.scopeIds, glue);
   const diagnostics: string[] = version < CURRENT_LEDGER_VERSION ? ['info:ledger-version-older:' + version] : [];
   // One pass over run receipts (command text only; snapshots are not loaded): creation time per Run and reservation time per attempt.
   // MONITOR v1.1: the evaluation receipt also carries the worker model record (requested → init → usage → verdict) of pinned tasks.
   const created = new Map<string, number>(), reserved = new Map<string, number>(), models = new Map<string, WorkerModelView>();
   for (const row of db.prepare(`SELECT scope_id,command FROM run_receipts WHERE (CASE WHEN json_valid(command) THEN json_extract(command,'$.action') END)
-    IN ('create-run','reserve-run-tasks','apply-task-evaluation')`).all()) {
+    IN ('create-run','reserve-run-tasks','apply-task-evaluation')${inScope().sql}`).all(...inScope().args)) {
     const command = json(row.command) as { action?: string; now?: unknown; identity?: { runId?: string }; identities?: { attemptId?: string }[];
       evaluation?: { identity?: { attemptId?: string }; model?: unknown } };
     if (command?.action === 'apply-task-evaluation') {
@@ -72,12 +80,12 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
     if (command.action === 'create-run') created.set(`${row.scope_id}/${command.identity?.runId}`, now);
     else for (const identity of command.identities ?? []) reserved.set(`${row.scope_id}/${identity?.attemptId}`, now);
   }
-  const total = Number(db.prepare('SELECT count(*) AS n FROM runs').get()?.n);
+  const total = Number(db.prepare(`SELECT count(*) AS n FROM runs${inScope('WHERE').sql}`).get(...inScope().args)?.n);
   if (total > maxRuns) diagnostics.push('info:runs-truncated:' + total);
   const rows = db.prepare(`SELECT scope_id,run_id,revision,snapshot,policy,CASE WHEN json_valid(policy) THEN json_extract(policy,'$.poolId') END AS pool_id,
     CASE WHEN json_valid(snapshot) THEN EXISTS(SELECT 1 FROM json_each(snapshot,'$.progress') p WHERE json_extract(p.value,'$.phase') IN ${OPEN_PHASES}) ELSE 1 END AS open
-    FROM runs ${selected ? 'WHERE scope_id=? AND run_id=?' : ''} ORDER BY open DESC,rowid DESC LIMIT ?`).all(...(selected ? [selected.scopeId, selected.runId, maxRuns] : [maxRuns]));
-  const runs: MonitorLedgerRun[] = []; const deliveries = readDeliveryReceipts(db, version), evaluationRows = readAcceptanceEvaluationRows(db);
+    FROM runs ${selected ? 'WHERE scope_id=? AND run_id=?' : ''}${selected ? inScope().sql : inScope('WHERE').sql} ORDER BY open DESC,rowid DESC LIMIT ?`).all(...(selected ? [selected.scopeId, selected.runId] : []), ...inScope().args, maxRuns);
+  const runs: MonitorLedgerRun[] = []; const deliveries = readDeliveryReceipts(db, version, scope?.scopeIds), evaluationRows = scope ? scopedEvaluationRows(db, scope.scopeIds) : readAcceptanceEvaluationRows(db);
   for (const row of rows) {
     const key = `${row.scope_id}/${row.run_id}`;
     try {
@@ -105,11 +113,11 @@ function read(db: DatabaseSync, version: number, maxRuns: number, files: Monitor
       files.push(...found);
     } catch (error) { recordOnly(error); diagnostics.push('run-corrupt:' + key); }
   }
-  const approvals = version >= APPROVAL_LEDGER_VERSION ? currentApprovals(db, maxRuns, diagnostics) : [];
-  const scopes = new Set(db.prepare('SELECT DISTINCT scope_id FROM runs ORDER BY scope_id').all().map(row => String(row.scope_id)));
+  const approvals = version >= APPROVAL_LEDGER_VERSION ? currentApprovals(db, maxRuns, diagnostics, scope?.scopeIds) : [];
+  const scopes = new Set(db.prepare(`SELECT DISTINCT scope_id FROM runs${inScope('WHERE').sql} ORDER BY scope_id`).all(...inScope().args).map(row => String(row.scope_id)));
   for (const approval of approvals) scopes.add(approval.scopeId);
   return Object.freeze({ ledgerVersion: version, scopeIds: Object.freeze([...scopes].sort()), runs: Object.freeze(runs), approvals: Object.freeze(approvals),
-    pools: Object.freeze(pools(db, version, diagnostics)), diagnostics: Object.freeze(diagnostics), map: catalog(db, version) });
+    pools: Object.freeze(pools(db, version, diagnostics, scope?.poolIds)), diagnostics: Object.freeze(diagnostics), map: catalog(db, version) });
 }
 
 /** Catalog metadata only. Composition supplies scoped invocation readiness; this adapter never guesses it from activation tables. */
@@ -159,10 +167,11 @@ function attempt(db: DatabaseSync, version: number, binding: MonitorLedgerRun['s
 
 /** Current approvals retain decided/expired history. Pending requests and newest expiry lead the bounded page;
  * status is inside the sealed snapshot (the MAC is not verified here, so summary is display data only). */
-function currentApprovals(db: DatabaseSync, limit: number, diagnostics: string[]): MonitorLedgerApproval[] {
-  const rows = db.prepare(`SELECT scope_id,approval_id,snapshot FROM approvals WHERE current=1
+function currentApprovals(db: DatabaseSync, limit: number, diagnostics: string[], scopeIds?: readonly string[]): MonitorLedgerApproval[] {
+  const within = scopedTo('scope_id', scopeIds);
+  const rows = db.prepare(`SELECT scope_id,approval_id,snapshot FROM approvals WHERE current=1${within.sql}
     ORDER BY (CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.status')='pending' ELSE 1 END) DESC,
-    (CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.request.expiresAt') END) DESC,scope_id,approval_id LIMIT ?`).all(limit + 1);
+    (CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.request.expiresAt') END) DESC,scope_id,approval_id LIMIT ?`).all(...within.args, limit + 1);
   if (rows.length > limit) diagnostics.push('info:approvals-truncated');
   return rows.slice(0, limit).flatMap(row => {
     try {
@@ -174,18 +183,20 @@ function currentApprovals(db: DatabaseSync, limit: number, diagnostics: string[]
   });
 }
 
-/** Installation-wide pools: capacity from `execution_pools`, occupancy recomputed from every Run's progress (the reservation rule), hold (v44). */
-function pools(db: DatabaseSync, version: number, diagnostics: string[]): MonitorLedgerPool[] {
-  const occupancy = new Map<string, { execution: number; inFlight: number }>();
+/** Installation-wide pools: capacity from `execution_pools`, occupancy recomputed from every Run's progress (the reservation rule), hold (v44).
+ * M-VIS: with `poolIds` only those pools and only the Runs bound to them are read (the progress of other pools' Runs is never loaded). */
+function pools(db: DatabaseSync, version: number, diagnostics: string[], poolIds?: readonly string[]): MonitorLedgerPool[] {
+  const occupancy = new Map<string, { execution: number; inFlight: number }>(), bound = scopedTo("(CASE WHEN json_valid(policy) THEN json_extract(policy,'$.poolId') END)", poolIds, 'WHERE');
   for (const row of db.prepare(`SELECT CASE WHEN json_valid(policy) THEN json_extract(policy,'$.poolId') END AS pool_id,
-    CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.progress') END AS progress FROM runs`).all()) {
+    CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.progress') END AS progress FROM runs${bound.sql}`).all(...bound.args)) {
     if (typeof row.pool_id !== 'string') continue;
     try {
       const measured = measureTaskOccupancy(json(row.progress)), sum = occupancy.get(row.pool_id) ?? { execution: 0, inFlight: 0 };
       occupancy.set(row.pool_id, { execution: sum.execution + measured.execution, inFlight: sum.inFlight + measured.inFlight });
     } catch { diagnostics.push('pool-occupancy-corrupt:' + row.pool_id); }
   }
-  return db.prepare('SELECT pool_id,policy FROM execution_pools ORDER BY pool_id').all().flatMap(row => {
+  const within = scopedTo('pool_id', poolIds, 'WHERE');
+  return db.prepare(`SELECT pool_id,policy FROM execution_pools${within.sql} ORDER BY pool_id`).all(...within.args).flatMap(row => {
     try {
       const pool = executionPoolSchema.parse(json(row.policy)); if (pool.poolId !== row.pool_id) throw new Error();
       const changed = version >= POOL_CAPACITY_LEDGER_VERSION ? db.prepare('SELECT record FROM execution_pool_capacities WHERE pool_id=?').get(pool.poolId) : null;
@@ -200,4 +211,34 @@ function pools(db: DatabaseSync, version: number, diagnostics: string[]): Monito
         hold: hold ? Object.freeze({ state: hold.state, changedAtMs: hold.changedAtMs, changedBy: hold.changedBy.subject }) : null })];
     } catch (error) { recordOnly(error); diagnostics.push('pool-corrupt:' + row.pool_id); return []; }
   });
+}
+
+/** `readAcceptanceEvaluationRows` limited to the admitted scopes (same row shape, keyed `scope/run`). */
+function scopedEvaluationRows(db: DatabaseSync, scopeIds: readonly string[]): ReadonlyMap<string, readonly { commandId: string; command: string }[]> {
+  const rows = new Map<string, { commandId: string; command: string }[]>(), within = scopedTo('scope_id', scopeIds);
+  for (const row of db.prepare(`SELECT scope_id,command_id,command,json_extract(command,'$.evaluation.identity.runId') AS run_id FROM run_receipts WHERE CASE WHEN json_valid(command)
+    THEN json_extract(command,'$.action')='apply-task-evaluation' ELSE 0 END${within.sql}`).all(...within.args)) if (typeof row.run_id === 'string') {
+    const key = `${row.scope_id}/${row.run_id}`, list = rows.get(key) ?? []; list.push({ commandId: String(row.command_id), command: String(row.command) }); rows.set(key, list); }
+  return rows;
+}
+
+/** M-VIS index: which scopes (Runs and current approvals) and pools exist — ids only, from one read-only transaction. No Run snapshot,
+ * receipt, occupancy or holder is read, so the caller can decide admission before {@link scanMonitorLedger} reads anything scoped. */
+export function indexMonitorLedger(path: string, input: { busyTimeoutMs: number }): MonitorLedgerIndex {
+  const options = optionsSchema.pick({ busyTimeoutMs: true }).safeParse(input);
+  if (typeof path !== 'string' || !path || !options.success) throw new AttemptStoreError('ATTEMPT_STORE_OPTIONS');
+  assertSqliteEngineSupported(process.versions.sqlite);
+  const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+  let db: DatabaseSync;
+  try { db = new NativeDatabase(path, { readOnly: true, timeout: options.data.busyTimeoutMs }); } catch (error) { throw sqliteFailure(error); }
+  try {
+    db.exec('BEGIN');
+    const version = Number(db.prepare('PRAGMA user_version').get()?.user_version);
+    if (!Number.isSafeInteger(version) || version < RUN_LEDGER_VERSION || version > CURRENT_LEDGER_VERSION) return Object.freeze({ ledgerVersion: version, scopeIds: [], poolIds: [] });
+    const ids = (sql: string, column: string) => db.prepare(sql).all().map(row => String(row[column]));
+    const scopes = new Set(ids('SELECT DISTINCT scope_id FROM runs', 'scope_id'));
+    if (version >= APPROVAL_LEDGER_VERSION) for (const id of ids('SELECT DISTINCT scope_id FROM approvals WHERE current=1', 'scope_id')) scopes.add(id);
+    return Object.freeze({ ledgerVersion: version, scopeIds: Object.freeze([...scopes].sort()), poolIds: Object.freeze(ids('SELECT pool_id FROM execution_pools ORDER BY pool_id', 'pool_id')) });
+  } catch (error) { throw sqliteFailure(error); }
+  finally { try { if (db.isTransaction) db.exec('ROLLBACK'); } finally { db.close(); } }
 }

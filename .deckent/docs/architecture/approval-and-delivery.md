@@ -104,7 +104,7 @@ issuer + subject); a role is never a call parameter; a binding grants membership
 v1 parsing is unchanged (bindings are not read); an older reader refuses v2. Four-eyes is enforced in `ApprovalApplication.decide`
 on `allow` only (the requester's own allow → `APPROVAL_DENIED`). Roles may target `task` rules (2026-09-27): Run reservation wires
 the task-admission filter whenever any explicit or role-derived task rule exists in the effective document (`policyGatesTaskAdmission`);
-the per-principal decision stays exact, the wiring check is document-wide (unrelated principals may see the approval journal opened). Adding the `bindings` resource changes every installation's layout revision:
+the per-principal decision stays exact, the wiring check is document-wide (unrelated principals may see the approval journal opened). A Run proposal no longer asks a task-level require-approval at plan time (g4-cift-onay, owner-approved 2026-10-18): the plan card names the task, and this reservation filter is the single place that asks it, once, on the then-current policy. An MCP/AI principal still cannot decide it (MCP-NO-DECIDE unchanged). Adding the `bindings` resource changes every installation's layout revision:
 admitted but unexecuted Runs from before the update get `RUN_STORE_CONFLICT` at execution (same as earlier resource additions).
 Scope access mode is stated at every call (Astra 2126 R1): queries pass `read` and never pin a scope; only write admissions pin.
 The sealed adapter registry holds immutable snapshots of factories and manifests (Astra 2126 R2).
@@ -267,9 +267,13 @@ managed on top, `mcp add|add-json|list|get|remove`), never in configuration: pro
 Claude-compatible `mcpServers`, plus Deckent `realm`/`timeoutMs`), personal `<Deckent global root>/mcp.json` (0600; top-level
 `mcpServers` = user, `projects.<real project path>.mcpServers` = local). The same name connects once from its highest scope, whole entry:
 managed > local > project > user; an invalid override blocks the name. The company policy is a read interface (`ManagedMcpPolicy`:
-servers, allowed, denied; no Core source yet). `${VAR}`/`${VAR:-default}` expand in command, args and env; a project file reads
-credential-shaped names as empty and may not use `$DECK:NAME` (personal files may). Trust and tool pins are product state
-(`<data root>/integrations/mcp-trust.json`, 0600, atomic; no layout or ledger schema change), bound to the entry's definition digest (stricter
+servers, allowed, denied; no Core source yet). `${VAR}`/`${VAR:-default}` expand in command, args and env; a project file reads only the
+allowlisted non-secret variables of `adapters/core/mcp-trust/internal/registry.json` (SEC-2 F30: any other name reads as its default or empty;
+an allowlisted value with URL user info or a credential pattern refuses the entry; the project digest also binds those values) and may not
+use `$DECK:NAME` (personal files may). Command, args and url refuse control characters and bidi overrides at load (F28). Trust and tool pins
+are product state in unit `adapters/core/mcp-trust` (SEC-2 F29: project/local trust in `<global root>/mcp-project-trust/<sha256(real project
+path, dev, ino)>/mcp-trust.json`, never inside the project tree — an in-project or non-private directory is `trust-store-unavailable`; the
+file is 0600, owner, one link, ≤ `trustMaxBytes`, atomic), bound to the entry's definition digest (stricter
 than Claude Code, which binds approval to the name and asks only for project servers): an unapproved or changed server is never started nor
 offered; `deckent mcp approve` starts it in its realm, shows the card (the registry template, never an expanded `${VAR}`) and pins its
 tools; every scope needs approval (no silent trust on first use). The agent's read floor protects `.deckent/mcp.json` (read tools, shell
@@ -318,10 +322,13 @@ requests from servers (no elicitation/sampling/roots handler; an `input_required
 (the list is re-read each turn),
 signed server bundles. The tool list is read with all its pages (SDK 2.2.0 follows `nextCursor`; at most 16 pages and 512 tools, more is
 `too-many-tools`; pins apply over every page). Trust decisions (owner 2026-09-28, `db5121d`): adding a local/user server is its trust
-decision (cards, or `--yes`; `--no-approve` skips); a project entry is decided on its first use. Cards come in two phases — `launch`
+decision (its card on a real terminal, where `--yes` no longer skips the card; off a terminal the CLI refuses with `MCP_APPROVAL_NEEDS_TERMINAL`, owner A48-D5/D6; `--no-approve` skips and the server asks on first use); a project entry is decided on its first use. Cards come in two phases — `launch`
 (definition as written, variables set/unset, env names, realm; nothing runs before yes) and `tools` (started in its realm; live tools with
 digests; yes pins them); no records `declined` for that definition; an unanswered card records nothing. User trust lives beside the
-personal registry (`<global root>/mcp-trust.json`) and holds in every project; project/local trust in the data root. Trust and registry
+personal registry (`<global root>/mcp-trust.json`) and holds in every project; project/local trust in the global root's project directory.
+A record left in the alpha.47 place (`<data root>/integrations/mcp-trust.json`) is never trust: its server is `pending-approval` with reason
+`trust-moved`, re-approved once on its card (owner A48-D6; `deckent mcp approve` shows the card on a terminal even with `--yes`, and off a terminal the CLI refuses with `MCP_APPROVAL_NEEDS_TERMINAL`; `MCP_TRUST_NEEDS_CARD` is the adapter's guard that refuses an unattended migration approval, nothing written). The
+card is one field per line (each argument its own line; escapes removed, line breaks shown), a tool description one bounded line. Trust and registry
 writes run in the config write lock (`withConfigWriteLock`). Every change (trust, decline, reset, revoke, reconnect) is a sealed `mcp-trust`
 audit event written first. The turn asks first-use cards on the C12 approval path as an `agent-tool-call` subject with the reserved tool
 `mcp_trust` (no approval schema change). `/mcp` lists servers and trust state and does approve (reset), reconnect (record counter; the
@@ -340,7 +347,9 @@ remote or relative `$ref`, unknown and cross-dialect keywords, 2019-09 and other
 patterns, size limits) — the pool then refuses the call before sending (`invalid-output-schema`; Astra 2180 R2: a `$dynamicRef` schema that
 cf-worker ignored and answered fail-open is now refused, `astra-2180-dynamic-ref.test.ts`; recursion through a plain `$ref` validates).
 `pattern`/`patternProperties` run on a linear-time Thompson-NFA engine (single-code-point atoms keep V8's u-mode meaning), so a server
-controlling both pattern and instance cannot block the service (27-char `^(a+)+$`: 0.4 ms vs 1.46 s on cf-worker). Validation is bounded by
+controlling both pattern and instance cannot block the service (27-char `^(a+)+$`: 0.4 ms vs 1.46 s on cf-worker). Compilation is bounded
+too (SEC-6 F2): a body that emits no state (`(?:)`, `a{0}`) folds to nothing before generation, and every generator visit is charged against a
+fixed multiple of the states limit, so a nested empty-body repetition cannot hang the service. Validation is bounded by
 a weighted step budget (5 000 000; historical ≈ 50 ms on the calibration machine, not a portable wall-time guarantee) and instance/evaluation depth; an exhausted bound is `valid: false`
 (fail closed; CI-FIX-R3 tests retain the 50/500ms timing floors, scale only the test guards using
 an independent 5-million-iteration CPU control against its measured 6ms lane reference, log calibration and
@@ -372,7 +381,7 @@ Deckent publishes compiles with it (contract test).
 **Send authority (MCP-REVOKE, Astra 2174–2176, 2026-09-29).** A one-shot approval of a tool call never stands in for the server's trust.
 `McpToolTarget` (the one dispatch owner) requires an `admit` authority that `pool.call` asks last — after the approval wait and every local
 pre-send check, right before the request is handed to the SDK. `mcpSendAuthority` re-reads both registry files and the scope's trust record
-(user trust in the global root, project/local in the data root) under that record's config write lock (the lock `reset`/`remove`/`approve`
+(user trust in the global root, project/local in its project directory there) under that record's config write lock (the lock `reset`/`remove`/`approve`
 take) and admits only while the server is still `trusted` as exactly the scope and definition digest the turn offered it under (`binding`,
 carried by the registry view's launch settings, not part of the launch key) and the tool's pin is that digest. Otherwise nothing is sent:
 `trust-revoked` | `definition-changed` | `pin-revoked` | `trust-unavailable` (fail closed), ledger `refused` (`EFFECT_REJECTED`). The lock is
@@ -536,7 +545,7 @@ profile revision, in-flight Runs keep their imageId) and API capability snapshot
 `toolchains update [--apply]` (CLI), `update_toolchains` (MCP) and `updateToolchains` (SDK) run the currency report and, when an
 npm provider is stale, plan exactly one next image version (`r<N+1>-<day>`, newest-first history line, recipe delta) as a typed plan
 under `<workspaces>/toolchains/plans/`. WORKER-IMAGE-R5 (owner 2026-10-03; landed, `97590485`): the packaged lineage is reconciled
-to r4-20260930 using the retained recipe/Dockerfile hashes in its build receipt. In `auto` mode or with explicit apply,
+to r4-20260930 using the retained recipe/Dockerfile hashes in its build receipt. With explicit apply (a manual update in every mode; the service's own refresh under `auto`),
 before writing a plan artifact or creating a build context, the installed builder runs its read-only `--held-version` mode
 against the exact repository on the selected daemon and reports the highest held r<N> tag. ISCI-IMAJ-SAYAC (2026-10-17):
 installations sharing one daemon share its `deckent/worker:r<N>-<day>` tag namespace, so the planned counter is
@@ -561,7 +570,7 @@ candidates under the workspaces resource. `atStartup` emits the read-only curren
 builds. Codex workers now run with `-c check_for_update_on_startup=false`; Claude workers keep `DISABLE_AUTOUPDATER=1`; Cursor stays an
 explicit unsupported exception.
 
-**Otonom worker imajı yenilemesi (WORKER-AUTO-REFRESH, owner 2026-10-06 K2; kod wave/1'de).** Varsayılanlar `toolchains.update.mode` `propose` → `auto`, `atStartup` `false` → `true` oldu (açık yazılmış değerler korunur); `intervalMs` (varsayılan 86 400 000 = 24 sa, `0` = periyodik kapalı) ve `failedContextsKept` (varsayılan 3, en az 1) eklendi. `engine/core/toolchain-currency` saf yenileme politikasını taşır (`refreshTriggerAllowed`, `refreshInProgress`, `refreshStatus`, `unverifiedReason`, `reviseRegistryForProposal`); kabul edilmiş toolchain yalnız bir task kind'ın işaret ettiği profil sürümüdür, eski sürümler rollback için kayıtlı kalır. `composition/core/toolchains` `refreshConfiguredToolchains` (tek uçuşta, proje başına) ve `startToolchainRefresh` (servis zamanlayıcısı, AbortSignal ile iptal) sağlar; durable işaret `workspaces/toolchains/refresh-state.json` (`updating` yalnız build kesinleşince; `expiresAt` = `buildTimeoutMs` + 60 sn), her deneme `refreshes/<ts>-<trigger>.json` audit'i bırakır; profil revizyonu yönetilen `ConfigApplication.set(admission.registry)` ile (principal + policy + ledger audit) yazılır, kind'lar yeni sürüme taşınır, eski sürüm ve kabul edilmiş Run'lar dokunulmaz. Yenileme sürerken `WORKER_MODEL_CLI_TOO_OLD` yerine tipli `WORKER_IMAGE_REFRESHING` uyarısı `createRun` sonucunun `warnings[]` alanında gelir; build yokken ret aynen kalır. Başarısız build eski imajı korur, sonraki periyotta yeniden denenir; bağlam `<sürüm>.failed-<ms>` adıyla kanıt olarak kalır (en son `failedContextsKept` tane). Görünürlük: monitor install diagnostics (`info:image-updating`, `info:image-current:<v>`, `image-refresh-failed:<kod>`), `doctor` `imageRefresh` (JSON + satır), runtime serve olayı `onToolchainRefresh`. Elle `toolchains update` (CLI/MCP/SDK) her modda yalnız `--apply` ile build eder; `mode=auto` yalnız servisin otonom yenilemesini açar. Servis durunca süren builder süreci worker-image adapter'ına geçirilen AbortSignal ile sonlandırılır; bağlam `failed-` kalır, registry yazılmaz. Açık sınırlar: yalnız Docker execution'lı kurulumlarda çalışır; Windows'ta config yazımı için `LOCAL_OS_PRINCIPAL` yok (tipli failed); registry yazımı yalnız proje katmanına yapılır, global katmanda tanımlı registry'yi proje kopyası gölgeler (K6 izleme maddesi; global katman ayrı kart).
+**Otonom worker imajı yenilemesi (WORKER-AUTO-REFRESH, owner 2026-10-06 K2; kod wave/1'de).** Varsayılanlar `toolchains.update.mode` `propose` → `auto`, `atStartup` `false` → `true` oldu (açık yazılmış değerler korunur); `intervalMs` (varsayılan 86 400 000 = 24 sa, `0` = periyodik kapalı) ve `failedContextsKept` (varsayılan 3, en az 1) eklendi. `engine/core/toolchain-currency` saf yenileme politikasını taşır (`refreshTriggerAllowed`, `refreshInProgress`, `refreshStatus`, `unverifiedReason`, `reviseRegistryForProposal`); kabul edilmiş toolchain yalnız bir task kind'ın işaret ettiği profil sürümüdür, eski sürümler rollback için kayıtlı kalır. `composition/core/toolchains` `refreshConfiguredToolchains` (tek uçuşta, proje başına) ve `startToolchainRefresh` (servis zamanlayıcısı, AbortSignal ile iptal) sağlar; durable işaret `workspaces/toolchains/refresh-state.json` (`updating` yalnız build kesinleşince; `expiresAt` = `buildTimeoutMs` + 60 sn), her deneme `refreshes/<ts>-<trigger>.json` audit'i bırakır; profil revizyonu yönetilen `ConfigApplication.set(admission.registry)` ile (principal + policy + ledger audit) yazılır, kind'lar yeni sürüme taşınır, eski sürüm ve kabul edilmiş Run'lar dokunulmaz. Yenileme sürerken `WORKER_MODEL_CLI_TOO_OLD` yerine tipli `WORKER_IMAGE_REFRESHING` uyarısı `createRun` sonucunun `warnings[]` alanında gelir; build yokken ret aynen kalır. Başarısız build eski imajı korur, sonraki periyotta yeniden denenir; bağlam `<sürüm>.failed-<ms>` adıyla kanıt olarak kalır (en son `failedContextsKept` tane). Görünürlük: monitor install diagnostics (`info:image-updating`, `info:image-current[:<v>]` — sürüm kaydı yoksa yalnız kod, `image-refresh-failed:<kod>`), `doctor` `imageRefresh` (JSON + satır), runtime serve olayı `onToolchainRefresh`. Elle `toolchains update` (CLI/MCP/SDK) her modda yalnız `--apply` ile build eder; `mode=auto` yalnız servisin otonom yenilemesini açar. Servis durunca süren builder süreci worker-image adapter'ına geçirilen AbortSignal ile sonlandırılır; bağlam `failed-` kalır, registry yazılmaz. Açık sınırlar: yalnız Docker execution'lı kurulumlarda çalışır; Windows'ta config yazımı için `LOCAL_OS_PRINCIPAL` yok (tipli failed); registry yazımı yalnız proje katmanına yapılır, global katmanda tanımlı registry'yi proje kopyası gölgeler (K6 izleme maddesi; global katman ayrı kart).
 
 **WORKER-AUTO-REFRESH düzeltmeleri (Astra 2371/2375/2388, wave/1).** Sürüm soyu kurulumun en yeni doğrulanmış build'inden sürer (`selectWorkerLineage`); sayaç/tag koruması değişmez. Registry revizyonu yalnız proje katmanı belgesinden, aynı okumanın digest'iyle `expect` (CAS) ile yazılır; global katman `admission.registry`'ye katkı veriyorsa veya proje registry tanımlamıyorsa otomatik yazma yapılmaz (tipli `TOOLCHAIN_REGISTRY_LAYER_HOLD` / `TOOLCHAIN_REGISTRY_NOT_IN_PROJECT`, doctor/monitor'da görünür) — önceki paragraftaki 'proje kopyası gölgeler' sınırı bu hold ile kapanmıştır. Tetik/Docker/iptal kapısı `workspaces` altında herhangi bir dizin yazımından önce gelir; servis durdurma, custody bırakılmadan önce başlattığı yenilemenin bitmesini (`refresh.done`) bekler ve durdurma sinyali Docker daemon ön kontrolü dahil her adıma geçer.
 
@@ -1034,7 +1043,11 @@ criteria/profile and receipt are checked again before effects. Legacy delivery-p
 
 `deckent task integration-queue-enqueue --input FILE` accepts `{schemaVersion:1,commandId,identity,target:{kind:"git-ref",id:"refs/heads/..."}}`
 and an optional `deliveryIntent:"service-reattempt"` (below).
-Use `integration-queue-list --scope ID` or `integration-queue-inspect --scope ID --command-id TICKET` to read. The verified terminal's
+Use `integration-queue-list --scope ID` or `integration-queue-inspect --scope ID --command-id TICKET` to read. The human list is a
+table (task, target, state or outcome, next step, ticket; tickets in flight first, then the rest, each group in the service's page order:
+the protocol v29 view carries no submission time, so newest-first waits for a protocol bump (Astra 2661 R2); the ticket is the shortest
+prefix unique on the page, `--verbose` prints full ids; a typed reason such as
+a parked ticket's on its own line); `--json` prints the unchanged page. The verified terminal's
 `integration-queue-confirm` obtains separate publish and adoption cards (the adoption card asks "Move <branch> to the verified commit?";
 each action refuses flags it does not take; output follows `--lang`, then config `language`, then LANG); the second card is derived from the first frozen prefix,
 so a later arrival never enters its consent. Capability values are service-issued and never printed as product output. MCP exposes

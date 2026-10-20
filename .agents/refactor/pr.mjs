@@ -10,10 +10,14 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE = path.resolve(here, '../../.github/PULL_REQUEST_TEMPLATE.md');
-const USAGE = 'Usage: prepare <patch-dir> --card <ID> [--scope <glob>]... [--repo <path>] [--json] | open <patch-dir> --card <ID> --push [--remote origin] [--repo <path>] [--scope <glob>]... [--timeout-ms N] [--json] | status <card>-<runId> [--repo <path>] [--json]';
+const USAGE = 'Usage: prepare <patch-dir> --card <ID> --scope <glob>... [--allow-protected-paths] [--repo <path>] [--json] | open <patch-dir> --card <ID> --push --scope <glob>... [--allow-protected-paths] [--remote origin] [--repo <path>] [--timeout-ms N] [--json] | status <card>-<runId> [--repo <path>] [--json]';
 const CARD_RE = /^[A-Z0-9][A-Z0-9-]{1,63}$/;
 const RUN_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-const FLAGS = new Set(['json', 'push']);
+const FLAGS = new Set(['json', 'push', 'allow-protected-paths']);
+/** CI/automation, review-ownership and agent-instruction paths (SEC F40): a pushed lane branch runs its own workflows with a write token,
+ * and agent instructions steer every later session, so a worker patch touching them is refused unless the lead passes
+ * --allow-protected-paths; the scope must still name them. Host tooling under `.agents/refactor/` stays an ordinary lane path. */
+const PROTECTED = Object.freeze(['.github/**', 'CODEOWNERS', 'docs/CODEOWNERS', '.claude/**', '.cursor/**', '.codex/**', '.agents/skills/**']);
 const OPTIONS = new Set(['card', 'scope', 'repo', 'remote', 'timeout-ms']);
 const fail = (code, detail, extra = {}) => Object.assign(new Error(`${code}${detail ? `: ${detail}` : ''}`), { code, detail: detail ?? null, ...extra });
 const asString = value => (value == null ? '' : Buffer.isBuffer(value) ? value.toString('utf8') : String(value));
@@ -130,11 +134,10 @@ function existingCommit(repo, branch) {
   try { return git(repo, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], { raw: true }).trim(); }
   catch (error) { if (typeof error.status === 'number') return null; throw fail('PR_GIT', detailOf(error)); }
 }
-function outsideScope(files, globs) {
-  return globs.length ? files.filter(file => !globs.some(pattern => matchesGlob(file, pattern))) : [];
-}
-function requireScope(files, globs) {
-  const paths = outsideScope(files, globs);
+function requireScope(files, opts) {
+  const guarded = opts['allow-protected-paths'] ? [] : files.filter(file => PROTECTED.some(pattern => matchesGlob(file, pattern)));
+  if (guarded.length) throw fail('PR_PROTECTED_PATH', guarded.join(', '), { paths: guarded });
+  const paths = files.filter(file => !opts.scope.some(pattern => matchesGlob(file, pattern)));
   if (paths.length) throw fail('PR_SCOPE_VIOLATION', paths.join(', '), { paths });
 }
 function readReceipt(file) {
@@ -156,6 +159,11 @@ function writeReceipt(file, receipt) {
 }
 function names(cwd, args, repo) {
   return git(repo, args, { cwd, raw: true }).split('\0').filter(Boolean);
+}
+/** Every path a change touches (Astra 2661 R1). Rename detection is off, never left to the host's `diff.renames`: a rename lists its
+ * removed source and its added destination, so a protected or out-of-scope file moved into the scope still meets both guards. */
+function changedPaths(cwd, range, repo) {
+  return names(cwd, ['diff', '--no-renames', '--name-only', '-z', ...range], repo);
 }
 function mapApply(error) {
   const blob = `${error.stderr || ''}\n${error.message || ''}`;
@@ -199,6 +207,8 @@ function prepare(opts) {
   if (!CARD_RE.test(card)) throw fail('PR_INVALID_ID', 'card id');
   const loaded = loadPatch(path.resolve(dir));
   if (!validRun(loaded.runId)) throw fail('PR_INVALID_ID', 'run id');
+  // Fail closed (SEC F40): without an owned scope every worker path would be committed and pushed.
+  if (!opts.scope.length) throw fail('PR_SCOPE_REQUIRED', 'pass --scope <glob> for the card\'s owned paths');
   const repo = bindRepo(opts);
   if (!isAncestor(repo, loaded.base)) throw fail('PR_STALE_BASE', `${loaded.base} is not an ancestor of origin/main`);
   const branch = `lane/${card}-${loaded.runId}`;
@@ -206,14 +216,14 @@ function prepare(opts) {
   const previous = readReceipt(file);
   const current = existingCommit(repo, branch);
   if (previous && current === previous.commit && previous.patchSha256 === loaded.patchSha256 && previous.diffSha256 === loaded.diffSha256 && (previous.reportSha256 ?? null) === loaded.reportSha256) {
-    requireScope(names(repo, ['diff', '--name-only', '-z', previous.base, previous.commit], repo), opts.scope);
+    requireScope(changedPaths(repo, [previous.base, previous.commit], repo), opts);
     return previous;
   }
   return withWorktree(repo, loaded.base, tmp => {
     applyDiff(tmp, loaded.diffFile);
-    const files = names(tmp, ['diff', '--cached', '--name-only', '-z'], repo);
+    const files = changedPaths(tmp, ['--cached'], repo);
     if (!files.length) throw fail('PR_EMPTY_PATCH', 'diff produced no changes');
-    requireScope(files, opts.scope);
+    requireScope(files, opts);
     const tree = git(tmp, ['write-tree']).trim();
     const existing = existingCommit(repo, branch);
     if (existing) {
@@ -275,7 +285,7 @@ function publish(repo, receipt, loaded, opts) {
   if (!Array.isArray(prs)) throw fail('PR_GH_FAILED', 'pr list was not a JSON array');
   const found = prs.find(item => asString(item.headRefOid).toLowerCase() === receipt.commit && Number.isSafeInteger(item.number) && typeof item.url === 'string');
   if (found) return writeReceipt(file, { ...receipt, phase: 'opened', at: new Date().toISOString(), pr: { number: found.number, url: found.url } });
-  const files = names(repo, ['diff', '--name-only', '-z', receipt.base, receipt.commit], repo);
+  const files = changedPaths(repo, [receipt.base, receipt.commit], repo);
   const body = renderBody({ ...receipt, files, checks: loaded.report?.checks ?? [], risks: loaded.report?.risks ?? [], summary: loaded.report?.summary ?? null, report: Boolean(loaded.reportFile) });
   const bodyFile = path.join(os.tmpdir(), `deckent-pr-body-${crypto.randomUUID()}.md`);
   fs.writeFileSync(bodyFile, body);

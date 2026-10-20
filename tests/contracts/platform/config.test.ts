@@ -8,7 +8,7 @@ import {
   createDefaultConfig, deepMerge, loadConfig, clearConfigCache, validateConfig, ConfigValidationError,
   registerConfigSection, saveGlobalConfig, writeConfig,
   withConfigWriteLock, readJsonFile, healCorruptProjectConfig, resolveConfigSecrets, getConfigMetadata,
-  getConfigValue, resolveGlobalConfigPaths, productResourcePath, t, ENVIRONMENT_KEYS,
+  getConfigValue, resolveGlobalConfigPaths, productResourcePath, t, ENVIRONMENT_KEYS, resolveLocale,
 } from '../../../src/platform/index.js';
 
 import { registerProviderConfig } from '../../../src/adapters/index.js';
@@ -50,16 +50,23 @@ describe('config public contract', () => {
     await mkdir(join(f.home, '.config', 'deckent'), { recursive: true });
     const legacy = join(f.home, '.config', 'deckent', 'config.json');
     await writeFile(legacy, '{"language":"tr"}');
-    expect((await loadConfig(f.project, { env: f.env })).language).toBe('en');
+    expect((await loadConfig(f.project, { env: f.env })).language).toBeUndefined(); // INIT-D6: no authored language stays absent so LC_*/LANG decide
     await saveGlobalConfig({ language: 'en' }, { env: f.env });
     expect((await loadConfig(f.project, { env: f.env })).language).toBe('en');
     expect(JSON.parse(await readFile(legacy, 'utf8'))).toEqual({ language: 'tr' });
     expect(JSON.parse(await readFile(f.globalPath, 'utf8'))).toEqual({ schema_version: 4, language: 'en' });
   });
+  it('INIT-D6: an absent config language never shadows LANG; resolveLocale reaches the system locale through a full loadConfig', async () => {
+    const f = await fixture(), env = { ...f.env, LANG: 'tr_TR.UTF-8', LC_ALL: '' };
+    const config = await loadConfig(f.project, { env });
+    expect(config.language).toBeUndefined();
+    expect(resolveLocale(undefined, env, config.language)).toBe('tr');
+    expect(resolveLocale(undefined, { ...env, DECKENT_LANGUAGE: 'en' }, (await loadConfig(f.project, { env: { ...env, DECKENT_LANGUAGE: 'en' } })).language)).toBe('en');
+  });
   it('resolves cache against call-time env and file revisions and never returns a shared mutable object', async () => {
     const f = await fixture();
     const one = await loadConfig(f.project, { env: f.env }); expect(() => { one.language = 'tr'; }).toThrow(TypeError);
-    expect((await loadConfig(f.project, { env: f.env })).language).toBe('en');
+    expect((await loadConfig(f.project, { env: f.env })).language).toBeUndefined(); // INIT-D6: no authored language stays absent so LC_*/LANG decide
     await writeFile(f.projectPath, '{"language":"tr"}');
     expect((await loadConfig(f.project, { env: f.env })).language).toBe('tr');
     expect((await loadConfig(f.project, { env: { ...f.env, DECKENT_LANGUAGE: '', DECKENT_LANG: 'en', DECKENT_CONFIG_RELOAD: '1' } })).language).toBe('en');
@@ -103,7 +110,8 @@ describe('config public contract', () => {
   it('interpolates only exact $DECK references after layering and leaves missing references visible', async () => {
     const f = await fixture();
     registerConfigSection('custom_secrets', z.object({ token: z.string(), other: z.string() }).strict(), { metadata: { descriptionKey: 'config.section', tier: 'core', since: '1.0.0-alpha.1', binding: { state: 'bound', consumers: ['src/platform/core/config'] }, apply: 'live' }, optional: true });
-    await writeFile(f.projectPath, '{"custom_secrets":{"token":"$DECK:TOKEN","other":"prefix $DECK:TOKEN"}}');
+    // SEC-3: only the installation (global) layer may hold a $DECK reference.
+    await writeFile(f.globalPath, '{"custom_secrets":{"token":"$DECK:TOKEN","other":"prefix $DECK:TOKEN"}}');
     f.env = { ...f.env, TOKEN: 'private-value' } as typeof f.env;
     const config = await loadConfig(f.project, { env: f.env });
     expect(config['custom_secrets']).toEqual({ token: 'private-value', other: 'prefix $DECK:TOKEN' });
@@ -218,7 +226,7 @@ describe('new config contract and write authority', () => {
   });
   it('does not resolve secrets from the old sibling file and resolves fresh values from the injected backend', async () => {
     const f = await fixture();
-    await writeFile(f.projectPath, JSON.stringify({ schema_version: 3, projectName: '$DECK:TOKEN' }));
+    await writeFile(f.globalPath, JSON.stringify({ schema_version: 3, projectName: '$DECK:TOKEN' }));
     await writeFile(join(f.project, '.deck'), 'TOKEN="outside-value"\n');
     const first = await loadConfig(f.project, { env: f.env });
     expect(first.projectName).toBe('$DECK:TOKEN');
@@ -228,7 +236,7 @@ describe('new config contract and write authority', () => {
 
   it('observes secret rotation and revocation without caching resolved values', async () => {
     const f = await fixture();
-    await writeFile(f.projectPath, JSON.stringify({ projectName: '$DECK:TOKEN' }));
+    await writeFile(f.globalPath, JSON.stringify({ projectName: '$DECK:TOKEN' })); await writeFile(f.projectPath, '{}');
     let secret: string | undefined = 'first';
     const options = { env: f.env, secretResolver: async () => secret };
     expect((await loadConfig(f.project, options)).projectName).toBe('first');

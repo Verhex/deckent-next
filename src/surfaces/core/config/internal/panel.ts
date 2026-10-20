@@ -29,14 +29,15 @@ function layerLock(permission: ConfigWritePermission | undefined, readOnly: bool
  * principal's policy decision per layer as a lock (read only: `ConfigApplication.permissions` writes nothing). Writes go through the L2 port
  * (`terminalConfigWrite`: principal'd, policy-checked, approval-aware), the same as `/config set|unset`; nothing else writes config here.
  */
-export function configPanelPort(root: string, context: ConfigCommandContext, options: ConfigLoadOptions, locale: Locale, sources?: ConfigChoiceSourcePort) {
+export function configPanelPort(root: string, context: ConfigCommandContext, options: ConfigLoadOptions, locale: Locale, sources?: ConfigChoiceSourcePort,
+  surface: 'terminal' | 'cli' = 'terminal') {
   if (!context.configApplication) throw ErrorRegistry.createError('CLI_USAGE');
   const application = () => context.configApplication!(root, options);
   // The words of what each key takes, from the last inspection (the entry's reason when a value does not fit).
   const expected = new Map<string, string>(), current = new Map<string, unknown>(), sensitive = new Set<string>();
   const described = (field: ConfigFieldView) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[field.descriptionKey] ?? field.description;
   return {
-    records: configRecordPort(root, context, options, locale, sources),
+    records: configRecordPort(root, context, options, locale, sources, surface),
     async inspect() {
       const view = await application().inspect({}), readOnly = !context.resolveConfigPrincipal, notes: string[] = [];
       const config = await loadConfig(root, options), scopeId = (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
@@ -89,7 +90,7 @@ export function configPanelPort(root: string, context: ConfigCommandContext, opt
     },
     write(request: { readonly action: 'set' | 'unset'; readonly keyPath: string; readonly value?: unknown; readonly layer: Layer }) {
       return terminalConfigWrite(root, { action: request.action, keyPath: request.keyPath, ...(request.action === 'set' ? { value: request.value } : {}), layer: request.layer },
-        context, options, locale);
+        context, options, locale, surface);
     },
   };
 }

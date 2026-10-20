@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -7,6 +7,7 @@ import type { AgentTurnStreamEvent } from '#domain/index.js';
 import { runMcpCommand, type McpLiveTool } from '#adapters/index.js';
 import { ErrorRegistry, resolveProductLayout, t, type Locale } from '#platform/index.js';
 import { renderMcpStartNotice, runConfiguredMcpCommand, withMcpNotices } from '#composition/core/agent-turn/index.js';
+import { witnessedMcpCommand } from '../support/mcp-terminal-decide.js';
 import { mcpSlash, type CommandContext } from '#surfaces/core/cli/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { closeModeRuntimes, modeRuntime, rule } from '../support/agent-turn-modes.js';
@@ -33,12 +34,13 @@ function mcpFixture(mode: 'legacy' | 'dual' = 'dual', tools: unknown[] = [echo, 
     realm: 'host', ...extraEntry });
   return { calls, starts, entry, setTools: (next: unknown[]) => writeFileSync(toolsFile, JSON.stringify(next)) };
 }
-/** The project registry file and the owner's approval (the real composition command; the card is answered yes). */
+/** The project registry file and the owner's approval (the real composition command; the card is answered yes; SEC-1: refused without a terminal,
+ * then decided with a real PTY peer). */
 function registry(project: string, servers: Record<string, unknown>) {
   mkdirSync(join(project, '.deckent'), { recursive: true }); writeFileSync(join(project, '.deckent', 'mcp.json'), JSON.stringify({ mcpServers: servers }));
 }
 const approve = (project: string, env: Record<string, string>, name = 'fx', alwaysAsk: string[] = []) =>
-  runConfiguredMcpCommand(project, { verb: 'approve', name, alwaysAsk }, { env }, async () => true);
+  witnessedMcpCommand(project, { verb: 'approve', name, alwaysAsk }, { env }, async () => true);
 /** Approval through the adapter with the harness's sandbox list (the composition command always uses the shipped providers). */
 const approveWithout = (f: { project: string; data: string; env: Record<string, string> }) => runMcpCommand({ verb: 'approve', name: 'fx', alwaysAsk: [] },
   { projectRoot: f.project, layout: resolveProductLayout({ projectRoot: f.project, root: f.data }), environment: f.env, secret: async () => undefined, sandboxes: [],
@@ -362,10 +364,10 @@ describe.skipIf(process.platform !== 'linux')('MCP tools under the permission mo
   const drop = { name: 'drop', description: 'Drop things', inputSchema: { type: 'object', properties: {} } };
 
   it('full-auto lowers a company-eligible MCP call after a sealed audit event; the floor (alwaysAsk) and the ask mode still ask', async () => {
-    const m = mcpFixture('dual', [echo, drop]), env = { HOME: mkdtempSync(join(tmpdir(), 'deckent-mcp-home-')), PATH: process.env['PATH'] ?? '/usr/bin:/bin' };
-    roots.push(env.HOME);
+    // SEC-2 (F29): project trust lives in the service environment's global root, so each approval uses that runtime's own environment.
+    const m = mcpFixture('dual', [echo, drop]);
     const auto = await modeRuntime({ grants: both('require-approval', true), mode: 'full-auto' });
-    registry(auto.project, { fx: m.entry() }); await approve(auto.project, env, 'fx', ['drop']);
+    registry(auto.project, { fx: m.entry() }); await approve(auto.project, auto.env, 'fx', ['drop']);
     const lowered = await auto.call('mcp__fx__echo', { text: 'auto' });
     expect(lowered).toMatchObject({ card: false, status: 'ok' });
     const [record] = auto.audit().filter(entry => entry.event.subject['kind'] === 'permission-mode');
@@ -375,11 +377,11 @@ describe.skipIf(process.platform !== 'linux')('MCP tools under the permission mo
     expect(floored).toMatchObject({ card: true, status: 'denied' });
     expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
     // G3: a re-approval that gives no alwaysAsk list (the terminal's) keeps the owner's lock: the floor cell still asks.
-    await runConfiguredMcpCommand(auto.project, { verb: 'approve', name: 'fx' }, { env }, async () => true);
+    await witnessedMcpCommand(auto.project, { verb: 'approve', name: 'fx' }, { env: auto.env }, async () => true);
     expect(await auto.call('mcp__fx__drop', {})).toMatchObject({ card: true, status: 'denied' });
     expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
     const ask = await modeRuntime({ grants: both('require-approval', true), mode: 'ask' });
-    registry(ask.project, { fx: m.entry() }); await approve(ask.project, env);
+    registry(ask.project, { fx: m.entry() }); await approve(ask.project, ask.env);
     expect(await ask.call('mcp__fx__echo', { text: 'ask' })).toMatchObject({ card: true, status: 'denied' });
     expect(m.calls().map(entry => entry.name)).toEqual(['echo']);
   }, 90_000);
@@ -433,7 +435,11 @@ describe.skipIf(!sandboxReady)('a server the sandbox cannot start is never silen
     mkdirSync(join(f.project, 'tools')); writeFileSync(join(f.project, 'tools', 'inside.mjs'), RAW_SERVER);
     symlinkSync(join(f.project, 'tools', 'inside.mjs'), join(f.project, 'tools', 'server.mjs'));
     await f.start();
-    registry(f.project, { fx: { command: process.execPath, args: ['${MCP_TOOLS_DIR}/server.mjs'] } }); await approve(f.project, f.env);
+    // SEC-2 (F30): a project file reads only allowlisted variables, so this `${VAR}` entry is a local (personal) one, where it still expands.
+    mkdirSync(join(f.env.HOME, '.deckent'), { recursive: true, mode: 0o700 });
+    writeFileSync(join(f.env.HOME, '.deckent', 'mcp.json'), JSON.stringify({ projects: { [realpathSync(f.project)]: { mcpServers: {
+      fx: { command: process.execPath, args: ['${MCP_TOOLS_DIR}/server.mjs'] } } } } }), { mode: 0o600 });
+    await approve(f.project, f.env);
     rmSync(join(f.project, 'tools', 'server.mjs')); symlinkSync(join(dir, 'server.mjs'), join(f.project, 'tools', 'server.mjs'));
     for (const turnId of ['turn-trusted-1', 'turn-trusted-2']) {
       f.state.script = [{ content: 'No tools.' }];

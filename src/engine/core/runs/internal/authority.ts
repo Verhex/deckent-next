@@ -1,5 +1,5 @@
 import { commandEnvelopeSchema, deriveProposalPermissions, encodeCommandProjection, evaluatePolicy, policySchema, AuditError,
-  type AuthorityAdmission, type AuditRecord, type Policy, type PolicyDecision, type VerifiedPrincipal } from '#domain/index.js';
+  type AuthorityAdmission, type AuditRecord, type Policy, type PolicyDecision, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
 import { ErrorRegistry, sha256, type TrustedClock, type Locale, type KnownSecretSnapshot } from '#platform/index.js';
 import { AuditApplication, AuthorityDecisionRecords } from '#engine/core/audit/index.js';
 import { RunCreateApprovalBroker, type RunCreateApprovalInput } from '#engine/core/approval/index.js';
@@ -8,13 +8,14 @@ import { runCreateSchema, RunStoreError, type RunCreate } from './store.js';
 import type { RunWorkspaceCustody } from '#engine/core/workspaces/index.js';
 import type { BoundRunAdmission } from './admission.js';
 import { renderRunCreateApprovalSummary } from './approval-summary.js';
-export type RunAdmissionEvaluation = { readonly policy: Policy; readonly verdict: PolicyDecision };
+/** `askedAtExecution`: tasks whose task restriction requires approval; TaskApprovalAdmission asks for each once, when it runs. Never sealed. */
+export type RunAdmissionEvaluation = { readonly policy: Policy; readonly verdict: PolicyDecision; readonly askedAtExecution?: readonly string[] };
 const hash = (tag: string, input: unknown) => sha256(encodeCommandProjection(tag, input));
 /** Run's first consumer of general sealed authority decisions; only evaluatePolicy owns policy semantics. */
 export class RunCreationAuthority {
   constructor(private readonly source: PolicySource, private readonly records: AuthorityDecisionRecords,
     private readonly approvals: RunCreateApprovalBroker, private readonly clock: TrustedClock,
-    private readonly presentation: { readonly locale?: Locale; readonly known?: KnownSecretSnapshot } = {}) {}
+    private readonly presentation: { readonly locale?: Locale; readonly known?: KnownSecretSnapshot; readonly registry?: WorkClassRegistry | undefined } = {}) {}
   async evaluate(command: BoundRunAdmission, principal: VerifiedPrincipal): Promise<RunAdmissionEvaluation> {
     let policy: Policy, verdict: PolicyDecision;
     try { policy = policySchema.parse(await this.source.load()); verdict = evaluatePolicy(policy, { principal, action: 'create',
@@ -28,17 +29,20 @@ export class RunCreationAuthority {
   }
   /** A proposal's requirements come from the system, never from the proposer's list (live 2026-10-18: a model's invented entries refused
    * its plan): the graph-derived task restriction only, read as TaskApprovalAdmission reads it at execution, where NO_GRANT means the
-   * optional task restriction is absent. An explicit deny refuses and require-approval asks. The proposer's list stays stored as advisory.
-   * A plain Run create (no proposal) keeps its single create decision. */
+   * optional task restriction is absent. An explicit deny refuses the plan early. A require-approval is not a plan decision (g4-cift-onay,
+   * owner-approved 2026-10-18; approval-and-delivery.md: TaskApprovalAdmission owns it when the task runs, on the then-current policy): it never
+   * raises the Run-create verdict and is only named on the plan card. The proposer's list stays stored as advisory. A plain Run create keeps
+   * its single create decision. */
   evaluatePermissions(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation): RunAdmissionEvaluation {
-    let verdict = evaluation.verdict;
+    let verdict = evaluation.verdict; const askedAtExecution: string[] = [];
     for (const permission of command.proposal ? deriveProposalPermissions(command.graph) : []) {
       const checked = evaluatePolicy(evaluation.policy, { principal, scopeId: command.scopeId, action: permission.action, resource: { kind: permission.kind, id: permission.resourceId } });
       if (checked.reason === 'NO_GRANT') continue;
-      if (verdict.decision !== 'deny' && (checked.decision === 'deny' || (checked.decision === 'require-approval' && verdict.decision === 'allow'))) verdict = checked;
+      if (checked.decision === 'require-approval') askedAtExecution.push(permission.resourceId);
+      else if (checked.decision === 'deny' && verdict.decision !== 'deny') verdict = checked;
     }
     if (verdict.decision === 'deny') { this.seal(command, principal, { ...evaluation, verdict }, null); throw new PolicyAuthorizationError('POLICY_DENIED'); }
-    return { ...evaluation, verdict };
+    return { ...evaluation, verdict, askedAtExecution };
   }
   async prepare(command: BoundRunAdmission, principal: VerifiedPrincipal, evaluation: RunAdmissionEvaluation, create: RunCreate, workspace?: RunWorkspaceCustody) {
     // Resolution may have awaited catalogs or workspace custody; never apply a stale sampled policy.
@@ -57,7 +61,7 @@ export class RunCreationAuthority {
     const record = this.seal(command, principal, evaluation, this.basis(create, workspace));
     const reference = { eventId: record.event.eventId, sequence: record.sequence };
     const approvalInput = { ...this.approvalInput(record, evaluation.policy), summary: renderRunCreateApprovalSummary(command, create,
-      evaluation.verdict, this.presentation.locale, this.presentation.known) };
+      evaluation.verdict, this.presentation.locale, this.presentation.known, this.presentation.registry, evaluation.askedAtExecution) };
     if (evaluation.verdict.decision === 'allow') this.approvals.assertUnrequested(command.scopeId, command.commandId);
     const authority: AuthorityAdmission = evaluation.verdict.decision === 'allow' ? { decision: reference }
       : { decision: reference, approval: this.approve(approvalInput) };
@@ -108,7 +112,7 @@ export class RunCreationAuthority {
 }
 
 export function createRunCreationAuthority(source: PolicySource, audit: ConstructorParameters<typeof AuditApplication>[0], approvals: ConstructorParameters<typeof RunCreateApprovalBroker>[0],
-  integrity: ConstructorParameters<typeof AuditApplication>[1], clock: TrustedClock, requestTtlMs: number, presentation: { locale?: Locale; known?: KnownSecretSnapshot }) {
+  integrity: ConstructorParameters<typeof AuditApplication>[1], clock: TrustedClock, requestTtlMs: number, presentation: { locale?: Locale; known?: KnownSecretSnapshot; registry?: WorkClassRegistry | undefined }) {
   return new RunCreationAuthority(source, new AuthorityDecisionRecords(new AuditApplication(audit, integrity)),
     new RunCreateApprovalBroker(approvals, integrity, clock, { requestTtlMs, admitWithinMs: requestTtlMs }), clock, presentation);
 }

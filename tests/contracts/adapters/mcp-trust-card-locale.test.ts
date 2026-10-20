@@ -29,7 +29,8 @@ const tools: McpTrustCard = { ...launch, phase: 'tools', era: 'modern', protocol
   tools: [{ name: 'lookup', digest: 'b'.repeat(64), description: null, annotations: {}, alwaysAsk: true }] };
 const english = (phase: McpTrustCard['phase']) => [
   `MCP server catalog (project scope, /project/mcp.json) — ${phase === 'launch' ? 'start it?' : 'trust it and pin these tools?'}`,
-  'command: node catalog.mjs',
+  'command: node',
+  '  argument 1: catalog.mjs',
   'variables: TOKEN (unset)',
   'env: none',
   'realm: sandbox-net',

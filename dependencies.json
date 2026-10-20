@@ -205,7 +205,9 @@
         "src/surfaces/core/terminal-window",
         "src/surfaces/core/monitor",
         "src/surfaces/core/approval-presentation",
-        "src/surfaces/core/project-instructions"
+        "src/surfaces/core/project-instructions",
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/config-window"
       ],
       "purpose": "Interactive terminal (TUI) renderer: layout, input and paste handling for the Deckent terminal.",
       "features": [
@@ -255,7 +257,8 @@
         "src/surfaces/core/monitor",
         "src/surfaces/core/approval-presentation",
         "src/surfaces/core/project-instructions",
-        "src/surfaces/core/terminal-delivery"
+        "src/surfaces/core/terminal-delivery",
+        "src/surfaces/core/cli-human"
       ],
       "purpose": "Component model for the ink TUI.",
       "features": [

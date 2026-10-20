@@ -1,0 +1,907 @@
+{
+ "source": "live policy shape 2026-10-19 (host and model ids replaced)",
+ "policy": {
+  "schemaVersion": 2,
+  "revision": "a-f109790f00866eaec11a57058c31d30d1542c524",
+  "roles": [],
+  "grants": [
+   {
+    "id": "local-monitor",
+    "actions": [
+     "inspect"
+    ],
+    "scopes": [
+     "pilot"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "scope",
+     "ids": [
+      "pilot"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "live-activate",
+    "actions": [
+     "activate",
+     "deactivate",
+     "inspect"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "model-activation",
+     "ids": [
+      "model-1",
+      "model-2",
+      "model-3",
+      "model-4",
+      "model-5"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "live-invoke",
+    "actions": [
+     "invoke",
+     "inspect",
+     "cancel-invocation"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "model-invocation",
+     "ids": [
+      "model-6",
+      "model-7",
+      "model-8",
+      "model-9",
+      "model-10"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "live-scope",
+    "actions": [
+     "inspect"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "scope",
+     "ids": [
+      "live"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "live-service-shutdown",
+    "actions": [
+     "shutdown"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "service",
+     "ids": [
+      "local"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "live-read-tools",
+    "actions": [
+     "invoke"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "agent-tool",
+     "ids": [
+      "read_file",
+      "list_dir",
+      "grep",
+      "glob"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "live-approval-inspect",
+    "actions": [
+     "inspect",
+     "decide"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "approval",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-scratch-tools",
+    "actions": [
+     "invoke"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "agent-tool",
+     "ids": [
+      "scratch_write",
+      "scratch_read",
+      "scratch_list"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-edit-shell-tools",
+    "actions": [
+     "invoke"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "agent-tool",
+     "ids": [
+      "edit_file",
+      "write_file",
+      "run_shell"
+     ]
+    },
+    "effect": "require-approval",
+    "modeEligible": true
+   },
+   {
+    "id": "first-run-write-operation",
+    "actions": [
+     "execute"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "operation",
+     "ids": [
+      "workspace.file.write"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-shell-operation",
+    "actions": [
+     "execute"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "operation",
+     "ids": [
+      "host.shell.run"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-scratch-write-operation",
+    "actions": [
+     "execute"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "operation",
+     "ids": [
+      "workspace.scratch.write"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "live-permission-modes",
+    "actions": [
+     "set"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "permission-mode",
+     "ids": [
+      "full-auto",
+      "full-access"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "owner-secret-store",
+    "actions": [
+     "set",
+     "delete"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "secret",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "owner-mcp-tools",
+    "actions": [
+     "invoke"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "agent-tool",
+     "ids": [
+      "mcp__context7__resolve_library_id",
+      "mcp__context7__query_docs"
+     ]
+    },
+    "effect": "require-approval",
+    "modeEligible": true
+   },
+   {
+    "id": "owner-mcp-operation",
+    "actions": [
+     "execute"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "operation",
+     "ids": [
+      "mcp.tool.call"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "live-attempt-release",
+    "actions": [
+     "release"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "attempt",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "owner-config-write",
+    "actions": [
+     "write"
+    ],
+    "scopes": "all",
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "config",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "owner-model-catalog",
+    "actions": [
+     "activate",
+     "deactivate",
+     "inspect"
+    ],
+    "scopes": "all",
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "model-activation",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "owner-invoke-local-vllm",
+    "actions": [
+     "invoke",
+     "inspect",
+     "cancel-invocation"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "model-invocation",
+     "ids": [
+      "model-11"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-mcp-servers",
+    "actions": [
+     "invoke"
+    ],
+    "scopes": "all",
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "mcp-server",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-mcp-propose-tool",
+    "actions": [
+     "invoke"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "agent-tool",
+     "ids": [
+      "propose_mcp_server"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-policy-administer",
+    "actions": [
+     "execute"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "operation",
+     "ids": [
+      "policy.administer"
+     ]
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-secret-switch",
+    "actions": [
+     "switch"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "secret",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-model-invocation",
+    "actions": [
+     "invoke",
+     "inspect",
+     "inspect-content",
+     "cancel-invocation"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "model-invocation",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-provider-spending",
+    "actions": [
+     "inspect",
+     "audit",
+     "reconcile",
+     "budget-revision"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "provider-spend-account",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-backup",
+    "actions": [
+     "create",
+     "verify",
+     "restore"
+    ],
+    "scopes": "all",
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "backup",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-mcp-observe-run",
+    "actions": [
+     "inspect"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host/mcp",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "run",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-mcp-observe-scope",
+    "actions": [
+     "inspect"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host/mcp",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "scope",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-mcp-observe-approval",
+    "actions": [
+     "inspect"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host/mcp",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "approval",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-mcp-observe-model-activation",
+    "actions": [
+     "inspect"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host/mcp",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "model-activation",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-mcp-observe-model-invocation",
+    "actions": [
+     "inspect"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host/mcp",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "model-invocation",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-mcp-observe-provider-spend-account",
+    "actions": [
+     "inspect"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host/mcp",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "provider-spend-account",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-runs",
+    "actions": [
+     "create",
+     "reserve",
+     "inspect",
+     "cancel"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "run",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-pools",
+    "actions": [
+     "use",
+     "inspect"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "pool",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-attempts",
+    "actions": [
+     "execute",
+     "evaluate",
+     "read-output",
+     "recover-output",
+     "cancel",
+     "reconcile",
+     "release"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "attempt",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-work-targets",
+    "actions": [
+     "use"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "work-target",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-quota-release",
+    "actions": [
+     "release-quota"
+    ],
+    "scopes": "all",
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "pool",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-integration",
+    "actions": [
+     "prepare-integration",
+     "deliver-integration",
+     "adopt-integration",
+     "rollback-integration"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "attempt",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "first-run-work-target-adopt",
+    "actions": [
+     "adopt"
+    ],
+    "scopes": [
+     "live"
+    ],
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "work-target",
+     "ids": "all"
+    },
+    "effect": "allow"
+   },
+   {
+    "id": "mcp-dfee92899a57680383fcacdf-server",
+    "actions": [
+     "invoke"
+    ],
+    "scopes": "all",
+    "principals": [
+     {
+      "issuer": "host",
+      "subject": "1000"
+     }
+    ],
+    "resource": {
+     "kind": "mcp-server",
+     "ids": [
+      "context7"
+     ]
+    },
+    "effect": "require-approval",
+    "modeEligible": true
+   }
+  ],
+  "restrictions": [],
+  "separationOfDuties": []
+ }
+}

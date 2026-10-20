@@ -10,7 +10,7 @@ export type { McpStartNotice, McpStartNoticeRenderer } from './internal/failures
 export { expandMcpEntry, isMcpHttpEntry, mcpEndpointRefusal, mcpEntryDisplay, MCP_PROJECT_REGISTRY_PATH, MCP_REGISTRY_MAX_BYTES, MCP_SERVER_NAME, MCP_REGISTRY_FILE, MCP_SCOPE_PRECEDENCE, mcpDefinitionDigest, mcpRegistryPaths, mcpServerEntrySchema,
   readMcpRegistryFile, resolveMcpRegistry, type ManagedMcpPolicy, type McpRegistry, type McpRegistryEntry, type McpRegistryProblem, type McpScope,
   type McpServerEntry } from './internal/registry.js';
-export { findMcpTrust, MCP_TRUST_FILE, readMcpTrust, updateMcpTrust, type McpTrustRecord, type McpTrustState } from './internal/trust.js';
+export { findMcpTrust, MCP_PROJECT_TRUST_DIR, MCP_TRUST_FILE, mcpProjectTrustDirectory, readMcpTrust, updateMcpTrust, type McpTrustRecord, type McpTrustState } from '#adapters/core/mcp-trust/index.js';
 export { loadMcpRegistry, mcpClientSettings, mcpGlobalRoot, mcpSendAuthority, mcpTrustContext, mcpTrustDirectory, openTurnMcp, runMcpCommand, type McpCommandContext, type McpCommandRequest,
   type McpRegistryContext, type McpRegistryView, type McpServerStatus, type McpServerView } from './internal/manage.js';
 export { MCP_PROPOSAL_SECRETS_REFUSED, planMcpProposal, PROPOSE_MCP_SERVER_TOOL, PROPOSE_MCP_SERVER_TOOL_SPEC, type McpProposal, type McpProposalPlan } from './internal/propose.js';

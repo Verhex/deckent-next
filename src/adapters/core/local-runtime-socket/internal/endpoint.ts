@@ -1,14 +1,11 @@
 import { createHash } from 'node:crypto';
-import { lstat, realpath, rm } from 'node:fs/promises';
+import { lstat, realpath, rm, rmdir } from 'node:fs/promises';
 import { dirname, isAbsolute, normalize, resolve } from 'node:path';
 
 export type LocalRuntimeSocketErrorCode = 'LOCAL_RUNTIME_UNSUPPORTED' | 'LOCAL_RUNTIME_NATIVE_UNAVAILABLE' | 'LOCAL_RUNTIME_OPTIONS'
   | 'LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG' | 'LOCAL_RUNTIME_ENDPOINT_UNSAFE' | 'LOCAL_RUNTIME_ALREADY_RUNNING' | 'LOCAL_RUNTIME_TRANSPORT' | 'LOCAL_RUNTIME_UNAVAILABLE';
 export class LocalRuntimeSocketError extends Error {
-  constructor(readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions, readonly path?: string) {
-    super(code, options);
-    this.name = 'LocalRuntimeSocketError';
-  }
+  constructor(readonly code: LocalRuntimeSocketErrorCode, options?: ErrorOptions, readonly path?: string) { super(code, options); this.name = 'LocalRuntimeSocketError'; }
 }
 
 export type LocalRuntimeSocketOptions = Readonly<{ endpoint: string; maxConnections: number; inputMaxBytes: number;
@@ -40,7 +37,11 @@ export async function resolveSocketOptions(options: LocalRuntimeSocketOptions): 
   const parent = dirname(options.endpoint);
   let stat;
   try { stat = await lstat(parent); }
-  catch (error) { throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause: error }); }
+  catch (error) {
+    // A clean stop removes its own empty directory: a missing parent is a stopped service (as in assertOwnedSocket); any other failure stays a custody refusal.
+    const missing = (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
+    throw new LocalRuntimeSocketError(missing ? 'LOCAL_RUNTIME_UNAVAILABLE' : 'LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause: error });
+  }
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid() || (stat.mode & 0o777) !== 0o700
     || await realpath(parent) !== resolve(parent)) throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE');
   const digest = createHash('sha256').update(`${options.endpoint}\0${process.getuid()}`).digest('hex');
@@ -60,8 +61,7 @@ export async function assertOwnedSocket(endpoint: string): Promise<void> {
 }
 
 export async function removeOwnedSocket(endpoint: string, missingIsSafe: boolean): Promise<void> {
-  let stat;
-  try { stat = await lstat(endpoint); }
+  let stat; try { stat = await lstat(endpoint); }
   catch (error) {
     if (missingIsSafe && (error as NodeJS.ErrnoException).code === 'ENOENT') return;
     throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE', { cause: error });
@@ -70,4 +70,8 @@ export async function removeOwnedSocket(endpoint: string, missingIsSafe: boolean
     throw new LocalRuntimeSocketError('LOCAL_RUNTIME_ENDPOINT_UNSAFE');
   }
   await rm(endpoint);
+}
+/** Clean stop or release, under custody and after the socket file is gone: only this uid's own empty `/tmp/dk-<uid>-<sha256>` directory (runtimeSocketLocation) goes too; rmdir never removes content, other parents stay and the stop never fails here. */
+export async function releaseRuntimeSocketDirectory(endpoint: string): Promise<void> {
+  if (process.getuid && new RegExp(`^/tmp/dk-${process.getuid()}-[0-9a-f]{64}$`, 'u').test(dirname(endpoint))) await rmdir(dirname(endpoint)).catch(() => undefined);
 }

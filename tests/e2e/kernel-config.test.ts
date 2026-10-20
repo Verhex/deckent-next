@@ -92,11 +92,12 @@ describe('K1 real binary journeys', () => {
     expect(result.company).toEqual({ companyId: 'default' });
     expect(result.host.cpuCores).toBeGreaterThan(0); expect(result.host.recommendedMaxWorkers).toBeGreaterThan(0);
     // F12: the human text carries the same overall verdict as the JSON (here degraded: startability is blocked).
-    expect((await f.run(['doctor']).catch(error => error)).stdout).toContain('Status: degraded');
+    // (J3 d082a9a7: --verbose states the status once, in the grouped summary's words; degraded JSON = "needs attention" with its errors.)
+    expect((await f.run(['doctor', '--verbose']).catch(error => error)).stdout).toMatch(/^Status: needs attention · \d+ error\(s\)/u);
     expect(result.host.workerBasis).toMatchObject({ cpuBased: expect.any(Number), memoryBased: expect.any(Number), workerMemoryEstimateMB: expect.any(Number), recommended: result.host.recommendedMaxWorkers });
-    expect((await f.run(['doctor'], { DECKENT_LANG: 'tr' }).catch(error => error)).stdout).toContain('Önerilen worker');
-    expect((await f.run(['doctor', '--lang', 'tr']).catch(error => error)).stdout).toContain('Bellek:');
-    expect((await f.run(['doctor', '--lang', 'tr']).catch(error => error)).stdout).toContain('Secret deposu: core.secret-store.env@1 (ready)');
+    expect((await f.run(['doctor', '--verbose'], { DECKENT_LANG: 'tr' }).catch(error => error)).stdout).toContain('Önerilen worker');
+    expect((await f.run(['doctor', '--verbose', '--lang', 'tr']).catch(error => error)).stdout).toContain('Bellek:');
+    expect((await f.run(['doctor', '--verbose', '--lang', 'tr']).catch(error => error)).stdout).toContain('Secret deposu: core.secret-store.env@1 (ready)');
   });
   it('shows the configured company in doctor JSON and rejects an invalid company id as a typed config error without changing bytes', async () => {
     const f = await fixture('project-override'), path = join(f.project, '.deckent/config.json');
@@ -162,8 +163,10 @@ describe('K1 blocking review reproductions', () => {
     const f = await fixture('project-override'), secret = 'supersecret-value-42';
     Object.assign(f.env, { API_TOKEN: secret });
     // Config schema 4 retired `providers` (CONFIG-SURFACE); a kernel leaf and the free-form `admission.registry` subtree carry the references now.
-    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:API_TOKEN', admission: { registry: { brain: '$DECK:API_TOKEN',
+    // SEC-3: only the installation (global) layer may hold a $DECK reference; the project layer keeps a clean override.
+    await writeFile(resolveGlobalConfigPaths(f.env).platformPath, JSON.stringify({ projectName: '$DECK:API_TOKEN', language: 'tr', admission: { registry: { brain: '$DECK:API_TOKEN',
       overrides: { sample: '$DECK:API_TOKEN' } }, poolId: 'pool', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order' } }));
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ language: 'en' }));
     const results = await settledReads([[], ['--json']].map(format => f.run(['config', 'get', ...(key ? [key] : []), ...format])));
     for (const [index, result] of results.entries()) {
         expect(result.stdout + result.stderr).not.toContain(secret);

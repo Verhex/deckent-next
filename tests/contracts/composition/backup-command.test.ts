@@ -19,6 +19,8 @@ import { DOWNGRADE_TO_PREVIOUS_LEDGER_SQL } from '../../fixtures/ledger-previous
 import { composeCore } from '#composition/core/root/index.js';
 import { openConfiguredArtifactStore } from '#composition/core/artifacts/index.js';
 import { restoreHoldPath } from '#platform/index.js';
+import { startBackupSchedule } from '#composition/core/backup/index.js';
+import type { BackupScheduleEvent } from '#engine/index.js';
 const roots: string[] = [], workers: Worker[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
 const phrase = 'CANARY-backup-operator-secret-🐦';
 afterEach(async () => {
@@ -156,6 +158,12 @@ it.skipIf(process.platform !== 'linux')('before-upgrade creates a complete set b
   const service=await startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:{...f.env,BACKUP_PASSPHRASE:phrase}});services.push(service);
   const directory=join(f.layout.root,'state/backups/recovery'),sets=await readdir(directory);expect(sets).toHaveLength(1);
   const snapshot=new DatabaseSync(join(directory,sets[0]!,'ledger.db'),{readOnly:true});expect(snapshot.prepare('PRAGMA user_version').get()?.user_version).toBe(PREVIOUS_LEDGER_VERSION);snapshot.close();
+  // Owner 2026-10-18: unlike the daily schedule, an older set that no longer verifies (a changed passphrase) still stops the migration.
+  await service.stop();await service.done;services.splice(services.indexOf(service),1);
+  const again=new DatabaseSync(f.ledger);again.exec(DOWNGRADE_TO_PREVIOUS_LEDGER_SQL);again.close();
+  await expect(startConfiguredRuntimeService(f.root,{async onPage(){},async onError(){}},{env:{...f.env,BACKUP_PASSPHRASE:'CANARY-changed-passphrase'}})).rejects.toMatchObject({code:'BACKUP_PASSPHRASE_INVALID'});
+  const kept=new DatabaseSync(f.ledger,{readOnly:true});expect(kept.prepare('PRAGMA user_version').get()?.user_version).toBe(PREVIOUS_LEDGER_VERSION);kept.close();
+  expect(await readdir(directory)).toEqual(sets);
 });
 it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] a rewritten payload plus a recomputed manifest still cannot bypass AEAD, and link targets are refused',async()=>{
   const f=await fixture();await call(f,'create');const {createHash}=await import('node:crypto');
@@ -264,6 +272,26 @@ it.skipIf(process.platform !== 'linux')('scheduled retention keeps the three new
   expect(await readFile(join(directory,'operator-note'),'utf8')).toBe('keep');
 });
 
+// g2-yedek-dakika (analysis 2026-10-18): with the daily schedule on, every minute fully re-verified every set (scrypt + ledger scan) before the
+// one-day check, and one set that no longer verified (a changed passphrase) failed every minute and blocked every new backup.
+it.skipIf(process.platform !== 'linux')('daily schedule: the minute check reads set names only; an old set that no longer verifies is reported and kept, and the new set is made',async()=>{
+  const f=await fixture(),path=join(f.root,'.deckent/config.json'),config=JSON.parse(await readFile(path,'utf8'));
+  config.backup={schedule:'daily',retention:3};await writeFile(path,JSON.stringify(config));clearConfigCache();
+  const directory=join(f.layout.root,'state/backups/recovery'),changed='CANARY-changed-passphrase';
+  const run=async(passphrase:string)=>{const events:BackupScheduleEvent[]=[],controller=new AbortController();
+    const done=startBackupSchedule(f.root,{env:{...f.env,BACKUP_PASSPHRASE:passphrase}},controller.signal,{onBackup(event){events.push(event);if(event.status!=='skipped')controller.abort();}});
+    const timer=setTimeout(()=>controller.abort(),3000);try{await done;}finally{clearTimeout(timer);}return events;};
+  expect(await run(phrase)).toEqual([{trigger:'daily',status:'created',code:null}]);
+  const [first]=await readdir(directory);
+  // Within the day the minute check decides from the name: a changed passphrase is not even tried (before: BACKUP_PASSPHRASE_INVALID every minute).
+  expect(await run(changed)).toEqual([]);
+  // A day later the full check runs: the old set does not verify with the new passphrase, is reported and kept, and the new set is still made.
+  const old=`recovery-${new Date(Date.now()-2*86400000).toISOString().replaceAll(':','-').replace(/\.\d{3}/,'')}-${first!.slice(-36)}`;
+  await rename(join(directory,first!),join(directory,old));
+  const events=await run(changed);
+  expect(events).toEqual([{trigger:'daily',status:'skipped',code:expect.stringMatching(/^BACKUP_/),set:old},{trigger:'daily',status:'created',code:null}]);
+  const sets=(await readdir(directory)).filter(name=>name.startsWith('recovery-'));expect(sets).toHaveLength(2);expect(sets).toContain(old);
+});
 it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] exact target confirmation does not grant authority to overwrite another installation',async()=>{
   const f=await fixture();await call(f,'create');const directory=join(f.target,'.deckent/installation-identity');
   await mkdir(directory,{recursive:true,mode:0o700});const path=join(directory,'identity.json');
@@ -364,4 +392,51 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket: b
   await expect(call(f,'restore',phrase,{target:f.root,confirmTarget:f.root})).rejects.toMatchObject({code:'BACKUP_TARGET_CONFIG_CONFLICT',params:{path:globalPath,section:'decision'}});
   expect(await snapshot()).toEqual(before);expect((await readdir(join(f.root,'.deckent'))).sort()).toEqual(entries);expect((await readdir(f.layout.root)).sort()).toEqual(data);
   await expect(stat(restoreHoldPath(f.root))).rejects.toMatchObject({code:'ENOENT'});
+});
+/** Owner CLI review 2026-10-19 (C-PRIO): `backup verify` names why a set cannot be used; only the AEAD failure says "wrong passphrase". */
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] a missing set is BACKUP_SET_NOT_FOUND, never a passphrase failure, with or without a passphrase and through the CLI',async()=>{
+  const f=await fixture(),missing=join(f.base,'no-such-set');
+  for(const passphrase of [phrase,''])await expect(call(f,'verify',passphrase,{set:missing})).rejects.toMatchObject({code:'BACKUP_SET_NOT_FOUND',params:{path:missing}});
+  await expect(call(f,'restore','',{set:missing})).rejects.toMatchObject({code:'BACKUP_SET_NOT_FOUND'});
+  // The owner's measurement: a pipe with no passphrase and a path that does not exist.
+  let output='',errors='';
+  expect(await main(['backup','verify','--scope','scope','--set',missing,'--json'],{root:f.root,env:f.env,initialize:composeCore,executeBackup,
+    stdin:Readable.from([]),stdout:{write:text=>{output+=text;}},stderr:{write:text=>{errors+=text;}}})).toBe(78);
+  expect(output).toBe('');expect(JSON.parse(errors)).toMatchObject({code:'BACKUP_SET_NOT_FOUND'});expect(errors).not.toContain('BACKUP_PASSPHRASE_INVALID');
+  // A folder that holds sets (or anything else) but no manifest is not a set either; a set that lost its manifest was modified.
+  const folder=join(f.base,'recovery');await mkdir(folder,{mode:0o700});await mkdir(join(folder,'set-a'),{mode:0o700});
+  await expect(call(f,'verify',phrase,{set:folder})).rejects.toMatchObject({code:'BACKUP_SET_NOT_FOUND'});
+  await call(f,'create');await rm(join(f.set,'MANIFEST.sha256'));
+  await expect(call(f,'verify',phrase)).rejects.toMatchObject({code:'BACKUP_MANIFEST_INVALID'});
+  const records=await audit(f);expect(records.filter(record=>record.event.subject.kind==='backup-operation'&&record.event.subject.code==='BACKUP_SET_NOT_FOUND').length).toBeGreaterThanOrEqual(3);
+  expect(JSON.stringify(records)).not.toContain(phrase);
+});
+/** C-PRIO J1 (lead): the recovery audit lives next to the set, so a set that does not exist is refused before that audit is written. */
+it.skipIf(process.platform === 'win32'||process.getuid?.()===0)('[unsupported on Windows: backup needs the OS-user identity; root writes any mode] a restore of a missing set is BACKUP_SET_NOT_FOUND even under a read-only folder, and leaves no audit folder',async()=>{
+  const f=await fixture(),locked=join(f.base,'locked');await mkdir(locked,{mode:0o500});
+  // Before J1 this answered BACKUP_AUDIT_UNAVAILABLE: the intent record was written next to the set before the set was located.
+  try{await expect(call(f,'restore',phrase,{set:join(locked,'no-such-set')})).rejects.toMatchObject({code:'BACKUP_SET_NOT_FOUND'});}finally{await chmod(locked,0o700);}
+  expect(await readdir(locked)).toEqual([]);
+  await expect(call(f,'restore','',{set:join(f.base,'typo-set')})).rejects.toMatchObject({code:'BACKUP_SET_NOT_FOUND'});
+  expect(await readdir(f.base)).not.toContain('.deckent-backup-audit');
+});
+it.skipIf(process.platform === 'win32'||process.getuid?.()===0)('[unsupported on Windows: backup needs the OS-user identity; root reads any mode] an unreadable set or member is BACKUP_SET_UNREADABLE; a removed member is a modified set',async()=>{
+  const f=await fixture();await call(f,'create');
+  await chmod(f.set,0o000);
+  try{await expect(call(f,'verify',phrase)).rejects.toMatchObject({code:'BACKUP_SET_UNREADABLE',params:{path:f.set}});}finally{await chmod(f.set,0o700);}
+  const member=join(f.set,'authority.key.enc');await chmod(member,0o000);
+  try{await expect(call(f,'verify',phrase)).rejects.toMatchObject({code:'BACKUP_SET_UNREADABLE'});}finally{await chmod(member,0o600);}
+  await call(f,'verify');
+  await rm(join(f.set,'ledger.db'));
+  await expect(call(f,'verify',phrase)).rejects.toMatchObject({code:'BACKUP_MANIFEST_INVALID'});
+});
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: backup needs the OS-user identity] an empty passphrase is BACKUP_PASSPHRASE_REQUIRED; a wrong one on a real set stays BACKUP_PASSPHRASE_INVALID',async()=>{
+  const f=await fixture();await call(f,'create');
+  await expect(call(f,'verify','')).rejects.toMatchObject({code:'BACKUP_PASSPHRASE_REQUIRED'});
+  const wrong=await call(f,'verify','CANARY-wrong-passphrase').then(()=>null,(error:{code?:string;message?:string})=>error);
+  expect(wrong?.code).toBe('BACKUP_PASSPHRASE_INVALID');expect(wrong?.message).not.toContain('CANARY-wrong-passphrase');
+  let errors='';
+  expect(await main(['backup','verify','--scope','scope','--set',f.set,'--json'],{root:f.root,env:f.env,initialize:composeCore,executeBackup,
+    stdin:Readable.from(['CANARY-wrong-passphrase\n']),stdout:{write:()=>{}},stderr:{write:text=>{errors+=text;}}})).toBe(78);
+  expect(JSON.parse(errors)).toMatchObject({code:'BACKUP_PASSPHRASE_INVALID'});expect(errors).not.toContain('CANARY-wrong-passphrase');
 });

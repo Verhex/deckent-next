@@ -4,14 +4,16 @@ import { delimiter, join, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
-import { probeDockerImageAvailability, runNodeDockerCommand, type DockerCommandRunner } from '#adapters/core/docker-supervisor/index.js';
+import { probeDockerImageSetAvailability, runNodeDockerCommand, type DockerCommandRunner } from '#adapters/core/docker-supervisor/index.js';
 const exec = promisify(execFile);
 export interface ConfigDiscoveryLimits { readonly timeoutMs: number; readonly outputBytes: number; readonly maxEntries: number }
 /**
  * Scan bounds beside the caller's limits (Astra 2456): at most this many PATH directories are probed, and a directory listing reads at most
  * `maxEntries × CONFIG_DISCOVERY_SCAN_FACTOR` entries (every entry seen counts, not only matches); both stop at the limits' `timeoutMs`.
+ * Local images are inspected in at most `imageProcesses` concurrent `docker image inspect` calls of at most `imageChunk` ids (J3-IMAGES,
+ * measured on 43 images: one call 1.5 s, four 0.55 s; the CLI inspects the ids of one call one after another).
  */
-export const CONFIG_DISCOVERY_BOUNDS = Object.freeze({ pathDirectories: 256, scanFactor: 16 });
+export const CONFIG_DISCOVERY_BOUNDS = Object.freeze({ pathDirectories: 256, scanFactor: 16, imageProcesses: 4, imageChunk: 16 });
 /** Discovery never starts a shell, mutates Git, pulls an image or opens a ledger writer. */
 export async function discoverConfigExecutables(name: 'docker' | 'git', env: NodeJS.ProcessEnv, limits: Pick<ConfigDiscoveryLimits, 'timeoutMs'>): Promise<readonly string[]> {
   const deadline = AbortSignal.timeout(limits.timeoutMs);
@@ -28,17 +30,14 @@ export async function discoverConfigBranches(executable: string, root: string, e
   return result.stdout.trim().split('\n').filter(value => /^refs\/heads\/[A-Za-z0-9._/-]{1,200}$/u.test(value)).slice(0, limits.maxEntries);
 }
 export async function discoverConfigImages(executable: string, limits: ConfigDiscoveryLimits, runner: DockerCommandRunner = runNodeDockerCommand): Promise<readonly string[]> {
-  const deadline = AbortSignal.timeout(limits.timeoutMs);
-  const bounded: DockerCommandRunner = command => runner(command, deadline);
-  const output = await bounded({ executable, args: ['image', 'ls', '--no-trunc', '--quiet'], ...limits });
-  const ids = [...new Set(output.stdout.trim().split('\n'))].filter(id => /^sha256:[a-f0-9]{64}$/u.test(id)).slice(0, limits.maxEntries);
-  const images: string[] = [];
-  for (const imageId of ids) {
-    deadline.throwIfAborted();
-    try { await probeDockerImageAvailability({ executable, imageId, ...limits }, bounded); images.push(imageId); } catch { /* Changed/unavailable images are never proposed. */ }
-    deadline.throwIfAborted();
-  }
-  return images;
+  const started = performance.now(), deadline = AbortSignal.timeout(limits.timeoutMs);
+  const output = await runner({ executable, args: ['image', 'ls', '--no-trunc', '--quiet'], ...limits }, deadline);
+  const imageIds = [...new Set(output.stdout.trim().split('\n'))].filter(id => /^sha256:[a-f0-9]{64}$/u.test(id)).slice(0, limits.maxEntries);
+  if (!imageIds.length) return [];
+  // One endpoint pin and daemon id check around all inspects; images not proven by the deadline are left out, the proven ones kept.
+  const probe = { executable, imageIds, outputBytes: limits.outputBytes, timeoutMs: Math.max(1, Math.floor(limits.timeoutMs - (performance.now() - started))),
+    chunkSize: CONFIG_DISCOVERY_BOUNDS.imageChunk, processes: CONFIG_DISCOVERY_BOUNDS.imageProcesses };
+  return probeDockerImageSetAvailability(probe, runner, deadline).catch(() => []); // Changed daemon or unreachable endpoint: nothing is proposed.
 }
 export async function discoverConfigFiles(directory: string, limits: ConfigDiscoveryLimits): Promise<readonly string[]> {
   const paths: string[] = [], deadline = Date.now() + limits.timeoutMs, scanLimit = limits.maxEntries * CONFIG_DISCOVERY_BOUNDS.scanFactor;

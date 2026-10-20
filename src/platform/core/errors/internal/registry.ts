@@ -1,7 +1,10 @@
 import { t, resolveLocale, currencyAmountText, type Locale, type Params } from '#platform/core/i18n/index.js';
 import { NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
-import { DeckentError, type ErrorCategory } from './error.js';
-export interface ErrorEntry { readonly message: string; readonly suggestion?: string; readonly whatHappened?: string; readonly why?: string; readonly howToFix?: readonly string[] }
+import { DeckentError } from './error.js';
+import type { ErrorDefinitions, ErrorEntry } from './definition.js';
+import { mergeErrorDefinitions } from './merge.js';
+import { ERROR_DEFINITION_FRAGMENTS } from './defs/index.js';
+export type { ErrorEntry } from './definition.js';
 /** MCP_SANDBOX_COMMAND_UNREACHABLE (MCP-SANDBOX-PATHS): one catalog sentence per diagnosis kind (params name, kind, role, path, target
  * ('' = none), runner); `{targetSuffix}` is ' -> <target>' when the link target differs, the role is its own localized label. */
 /** PATCH_LIMIT names the exceeded bound (params detail, observed, limit, field); an unknown or absent detail keeps the generic sentence. */
@@ -43,8 +46,7 @@ function mcpSandboxUnreachable(p: Params, l: Locale): string {
   if (p['kind'] === 'package-runner') return t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.packageRunner', { name, runner: String(p['runner'] ?? '') }, l);
   return t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.containerDaemon', { name, runner: String(p['runner'] ?? '') }, l);
 }
-interface Definition { readonly category: ErrorCategory; readonly render: (params: Params, locale: Locale) => ErrorEntry }
-const definitions: Readonly<Record<string, Definition>> = Object.freeze({
+const coreDefinitions: ErrorDefinitions = Object.freeze({
   SECRET_STORE_PROTECTION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_PROTECTION_REQUIRED', p, l) }) },
   OAUTH_CONNECTION_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED', p, l) }) },
   OAUTH_CONNECTION_PLATFORM_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_PLATFORM_UNSUPPORTED', p, l) }) },
@@ -162,9 +164,6 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   TERMINAL_CHAT_TRUNCATED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_TRUNCATED', p, l) }) },
   TERMINAL_CHAT_EMPTY: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_EMPTY', p, l) }) },
   TERMINAL_CHAT_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_CANCELLED', p, l) }) },
-  TERMINAL_CHAT_INVOCATION_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_INVOCATION_FAILED', p, l) }) },
-  TERMINAL_CHAT_INVOCATION_PENDING: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_INVOCATION_PENDING', p, l) }) },
-  TERMINAL_CHAT_STREAM_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_STREAM_MISMATCH', p, l) }) },
   TERMINAL_CHAT_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_UNAVAILABLE', p, l) }) },
   AGENT_TURN_IN_PROGRESS: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_TURN_IN_PROGRESS', p, l) }) },
   AGENT_TURN_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_TURN_CONFLICT', p, l) }) },
@@ -437,7 +436,6 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   // or runner); the sentence is chosen by the diagnosis kind.
   MCP_SANDBOX_COMMAND_UNREACHABLE: { category: 'error', render: (p, l) => ({ message: mcpSandboxUnreachable(p, l) }) },
   MCP_TOOL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_TOOL_UNKNOWN', p, l) }) },
-  MCP_APPROVAL_NEEDS_TERMINAL: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_APPROVAL_NEEDS_TERMINAL', p, l) }) },
   MCP_REGISTRY_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.MCP_REGISTRY_FILE_INVALID', p, l) }) },
   MCP_SERVER_NOT_TRUSTED: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_NOT_TRUSTED', p, l) }) },
   MCP_TRUST_STORE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MCP_TRUST_STORE_UNAVAILABLE', p, l) }) },
@@ -776,6 +774,8 @@ const definitions: Readonly<Record<string, Definition>> = Object.freeze({
   TOOLCHAIN_UPDATE_TERMINAL_ONLY: { category: 'error', render: (p, l) => ({ message: t('error.TOOLCHAIN_UPDATE_TERMINAL_ONLY', p, l) }) },
   CLI_USAGE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_USAGE', { ...p, command: p.command ?? 'deckent', usage: p.usage ?? t('cli.usage.help', {}, l), flag: p.flag ?? t('cli.usage.arguments', {}, l) }, l) }) },
 });
+// Duplicate codes across the core table and the family fragments fail at load (ERROR_REGISTRY_DUPLICATE), never last-wins.
+const definitions = mergeErrorDefinitions([['core', coreDefinitions], ...ERROR_DEFINITION_FRAGMENTS]);
 for (const definition of Object.values(definitions)) Object.freeze(definition);
 export const ERROR_CODES: readonly string[] = Object.freeze(Object.keys(definitions));
 export const ErrorRegistry = Object.freeze({

@@ -3,6 +3,7 @@ import { lstat, readFile, realpath, stat } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
+import { BASELINE_IGNORED_DIRS } from '#adapters/core/workspace-read/index.js';
 import type { ShellCapabilities } from './probe.js';
 import type { ShellSandbox, ShellSandboxLayout, ShellSandboxWriteView } from './realm.js';
 import { describeShellWritePosture, sandboxHardFloored, sandboxWriteView } from './realm.js';
@@ -44,12 +45,14 @@ export async function gitWorktreeRepository(root: string): Promise<string | null
  * directory reaches everything beneath it, so a directory with a protected path or a `.git` below it cannot take a read-write rule:
  * it is carved — listing only — and its entries take rules one by one: clean files and clean trees read-write, `.git` read-only,
  * protected paths (the scope's deny list), multiply linked files, special files and unreadable directories no rule at all.
- * Symbolic links take no rule (access through one resolves to its target's own rule). Ignored directories (node_modules, dist, …)
- * are not scanned and are read-write as a whole. Past a bound the set is refused, never cut.
+ * Symbolic links take no rule (access through one resolves to its target's own rule). Only the generated/vendored baseline
+ * (`BASELINE_IGNORED_DIRS`: node_modules, dist, …) is not scanned and is read-write as a whole; a directory named only by the project's
+ * `.gitignore` is scanned and deny-matched like any other, as the bubblewrap realm does (SEC-4, F34). Past a bound the set is refused,
+ * never cut.
  */
 export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Partial<typeof LANDLOCK_RULE_BOUNDS> = {},
   fsOps: (path: string) => FsOps = fsOpsFor, write: { readonly floorReadOnly?: boolean; readonly projectReadOnly?: boolean } = {}): Promise<LandlockRuleSet> {
-  const limit = { ...LANDLOCK_RULE_BOUNDS, ...bounds }, { root, denied, ignoredDirs } = input.project;
+  const limit = { ...LANDLOCK_RULE_BOUNDS, ...bounds }, { root, denied } = input.project;
   // SHELL-AUTONOMY: for a call the owner did not approve, the write floor's existing files and trees take read-only rules (their
   // directory is carved, so the entry cannot be replaced or removed either). A floor path that does not exist yet is not covered here.
   // Fail closed (Astra 2170 R2): a read-only floor asked of a layout that does not know the floor is refused, never run with it writable.
@@ -130,7 +133,9 @@ export async function buildLandlockRules(input: ShellSandboxLayout, bounds: Part
       if (denied(child)) return { carve: true };
       if (entry.isDirectory()) {
         const floor = cls === 'w' && floored(`${child}/-`);
-        if (ignoredDirs.has(entry.name)) {
+        // SEC-4 (F34): only the baseline is left unscanned. A `.gitignore`-derived name (`secrets/`, `certs/`) is a project choice, not a
+        // sign the tree holds no credentials, so it is walked below and its denied entries take no rule — the bubblewrap realm's floor.
+        if (BASELINE_IGNORED_DIRS.has(entry.name)) {
           if (hasProtectedBeneath(child)) return { rules: await carveProtected(child, depth + 1, floor ? 'r' : cls), carve: true };
           return floor ? { rules: [['r', child]], carve: true } : { clean: child, carve: false };
         }

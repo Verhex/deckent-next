@@ -20,6 +20,30 @@ import remotetr from '../locales/tr/remote.json' with { type: 'json' };
 import nativetr from '../locales/tr/native.json' with { type: 'json' };
 import desktoptr from '../locales/tr/desktop.json' with { type: 'json' };
 import misctr from '../locales/tr/misc.json' with { type: 'json' };
+import helpen from '../locales/en/help.json' with { type: 'json' };
+import clirunen from '../locales/en/clirun.json' with { type: 'json' };
+import clitasken from '../locales/en/clitask.json' with { type: 'json' };
+import cliapprovalen from '../locales/en/cliapproval.json' with { type: 'json' };
+import clisetupen from '../locales/en/clisetup.json' with { type: 'json' };
+import cliadminen from '../locales/en/cliadmin.json' with { type: 'json' };
+import climodelsen from '../locales/en/climodels.json' with { type: 'json' };
+import clidoctoren from '../locales/en/clidoctor.json' with { type: 'json' };
+import monitoren from '../locales/en/monitor.json' with { type: 'json' };
+import setupen from '../locales/en/setup.json' with { type: 'json' };
+import securityen from '../locales/en/security.json' with { type: 'json' };
+import terminalen from '../locales/en/terminal.json' with { type: 'json' };
+import helptr from '../locales/tr/help.json' with { type: 'json' };
+import cliruntr from '../locales/tr/clirun.json' with { type: 'json' };
+import clitasktr from '../locales/tr/clitask.json' with { type: 'json' };
+import cliapprovaltr from '../locales/tr/cliapproval.json' with { type: 'json' };
+import clisetuptr from '../locales/tr/clisetup.json' with { type: 'json' };
+import cliadmintr from '../locales/tr/cliadmin.json' with { type: 'json' };
+import climodelstr from '../locales/tr/climodels.json' with { type: 'json' };
+import clidoctortr from '../locales/tr/clidoctor.json' with { type: 'json' };
+import monitortr from '../locales/tr/monitor.json' with { type: 'json' };
+import setuptr from '../locales/tr/setup.json' with { type: 'json' };
+import securitytr from '../locales/tr/security.json' with { type: 'json' };
+import terminaltr from '../locales/tr/terminal.json' with { type: 'json' };
 
 export const families = [
   { en: configen, tr: configtr },
@@ -33,6 +57,18 @@ export const families = [
   { en: nativeen, tr: nativetr },
   { en: desktopen, tr: desktoptr },
   { en: miscen, tr: misctr },
+  { en: helpen, tr: helptr },
+  { en: clirunen, tr: cliruntr },
+  { en: clitasken, tr: clitasktr },
+  { en: cliapprovalen, tr: cliapprovaltr },
+  { en: clisetupen, tr: clisetuptr },
+  { en: cliadminen, tr: cliadmintr },
+  { en: climodelsen, tr: climodelstr },
+  { en: clidoctoren, tr: clidoctortr },
+  { en: monitoren, tr: monitortr },
+  { en: setupen, tr: setuptr },
+  { en: securityen, tr: securitytr },
+  { en: terminalen, tr: terminaltr },
 ] as const;
 
 // Derived from `families` (distributive over the tuple), not from the JSON imports: the emitted declaration then names no JSON module, which a

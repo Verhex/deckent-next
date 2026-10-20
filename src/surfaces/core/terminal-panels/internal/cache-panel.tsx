@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { span } from '#surfaces/core/terminal-render/index.js';
-import { ListPicker, type PickerResult, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { Window } from '#surfaces/core/terminal-window/index.js';
-import { panelWindowLines, usePickerRoom } from './lines.js';
+import type { PickerResult, PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import { panelWindowLines } from './lines.js';
+import { PickerWindow } from './picker-window.js';
 import type { CachePanelLabels, CachePanelPort, CachePanelView, PanelLabels, PanelNotice } from './contract.js';
 
 const CONFIRM = 'confirm';
@@ -22,10 +22,10 @@ export function cacheConfirmTree(words: CachePanelLabels): PickerTree {
 export function CacheWindow({ port, view, labels, words = labels.cache, push, openApproval, onError, onDone }: { readonly port: CachePanelPort; readonly view: CachePanelView; readonly labels: PanelLabels;
   readonly words?: CachePanelLabels;
   readonly push: (notices: readonly PanelNotice[]) => void; readonly openApproval?: (approvalId: string) => void; readonly onError: (error: unknown) => void; readonly onDone: () => void }) {
-  const room = usePickerRoom(view.lines.length);
   const [busy, setBusy] = useState(false);
   const title = [span(words.title, { bold: true })];
-  if (busy) return <Window title={title} body={[{ spans: [span(labels.loading)] }]} hints={words.hints} position={labels.position} />;
+  if (busy) return <PickerWindow title={title} body={[{ spans: [span(labels.loading)] }]} bodyRows={view.lines.length} tree={null} labels={labels.picker} listHints={words.hints}
+    position={labels.position} onResult={() => undefined} />;
   const answer = (result: PickerResult) => {
     if (result.kind !== 'selected' || result.id !== CONFIRM) { onDone(); return; }
     setBusy(true);
@@ -35,6 +35,6 @@ export function CacheWindow({ port, view, labels, words = labels.cache, push, op
       if (outcome.status === 'approval-pending' && outcome.approvalId && openApproval) openApproval(outcome.approvalId);
     }, error => { onError(error); onDone(); });
   };
-  return <Window title={title} body={panelWindowLines(view.lines)} hints={words.hints} position={labels.position} footerRows={room.footerRows} onInput={() => true}
-    footer={focused => <ListPicker tree={cacheConfirmTree(words)} labels={labels.picker} active={focused} maxRows={room.rows} onResult={answer} />} />;
+  return <PickerWindow title={title} body={panelWindowLines(view.lines)} bodyRows={view.lines.length} tree={cacheConfirmTree(words)} labels={labels.picker} listHints={words.hints}
+    position={labels.position} onResult={answer} />;
 }

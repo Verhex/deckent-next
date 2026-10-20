@@ -10,3 +10,9 @@ export { attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn }
 export type { ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/core/config/index.js';
 export { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 export { askDeliveryConfirmation, askQueueConfirmation } from '#surfaces/core/effect-confirmation/index.js';
+export { resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
+export { openConfigWindow } from '#surfaces/core/config-window/index.js';
+export { askCliCard, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
+// I-S3: `deckent init`'s setup reader (loads the setup surface lazily, as `init` does) and doctor's own measurement for the final check.
+export function loadSetupSurface(): Promise<typeof import('#surfaces/core/setup/index.js')> { return import('#surfaces/core/setup/index.js'); }
+export { doctorVerdict, type KernelCommandContext } from '#surfaces/core/cli-observe/index.js';

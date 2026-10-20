@@ -17,7 +17,9 @@ export interface OptionGrammar {
   /** Single-char options that consume a value (attached or next token). */
   readonly shortValues?: Readonly<Record<string, ValueKind>>;
   readonly longSwitches?: readonly string[];
-  readonly longValues?: Readonly<Record<string, ValueKind>>;
+  /** Long options that consume values: one kind per value word. A multi-word option (jq's `--arg name value`, `--rawfile name file`) takes the
+   * next words in order, never an attached `=` form; a missing word refuses the command. */
+  readonly longValues?: Readonly<Record<string, ValueKind | readonly ValueKind[]>>;
   /** Rejected with MUTATING_FLAG. */
   readonly deniedShort?: string;
   readonly deniedLong?: readonly string[];
@@ -147,7 +149,9 @@ export const PROGRAMS: Readonly<Record<string, ProgramSpec>> = {
   },
   jq: {
     id: 'jq', risk: 'none', readsContent: true, positional: 'first-script-then-paths', scriptOptions: ['-f', '--from-file'],
-    grammar: { shortSwitches: 'rjaSCMcsenR', shortValues: { f: 'path', L: 'path' }, longSwitches: ['--raw-output', '--join-output', '--ascii-output', '--sort-keys', '--color-output', '--monochrome-output', '--compact-output', '--slurp', '--exit-status', '--null-input', '--raw-input', '--tab', '--stream', '--stream-errors', '--seq', '--args', '--jsonargs', '--raw-output0', '--unbuffered', ...COMMON_LONG_HELP], longValues: { '--indent': 'number', '--from-file': 'path', '--arg': 'any', '--argjson': 'any', '--slurpfile': 'any', '--rawfile': 'any' } },
+    grammar: { shortSwitches: 'rjaSCMcsenR', shortValues: { f: 'path', L: 'path' }, longSwitches: ['--raw-output', '--join-output', '--ascii-output', '--sort-keys', '--color-output', '--monochrome-output', '--compact-output', '--slurp', '--exit-status', '--null-input', '--raw-input', '--tab', '--stream', '--stream-errors', '--seq', '--args', '--jsonargs', '--raw-output0', '--unbuffered', ...COMMON_LONG_HELP], longValues: { '--indent': 'number', '--from-file': 'path', '--arg': ['any', 'any'], '--argjson': ['any', 'any'],
+      // G2-2 (analysis 2026-10-18): jq reads the second word of `--slurpfile`/`--rawfile` as a file, so it is a path the workspace check sees.
+      '--slurpfile': ['any', 'path'], '--rawfile': ['any', 'path'] } },
   },
   git: { id: 'git', risk: 'low', readsContent: true, positional: 'any', grammar: {} },
   pwd: { id: 'pwd', risk: 'none', readsContent: false, positional: 'none', grammar: { shortSwitches: 'LP', longSwitches: ['--logical', '--physical', ...COMMON_LONG_HELP] } },

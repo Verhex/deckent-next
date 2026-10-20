@@ -41,6 +41,7 @@ değiştiren üst yolları da kapsar; yalnız benzer başlayan adlar eşleşmez.
 | Politika yönetimi execute/compensate | `operation/policy.administer/execute`, `operation/policy.administer/compensate` | Grant, rol bağı, devir, kısıtlama, görev ayrılığı ve kalıcı izin AI tarafından yetki genişletmeye dönüşmemeli. |
 | Yetki belgeleri, authenticator ve onay güvencesi: tüm değişimler | `authority-document/fixture-record/write`, `authority-document/fixture-record/register`, `authority-document/fixture-record/activate`, `authority-document/fixture-record/remove`, `authority-document/fixture-record/future-mutation`, `authenticator/fixture-record/write`, `authenticator/fixture-record/register`, `authenticator/fixture-record/activate`, `authenticator/fixture-record/remove`, `authenticator/fixture-record/future-mutation`, `approval-assurance/fixture-record/write`, `approval-assurance/fixture-record/register`, `approval-assurance/fixture-record/activate`, `approval-assurance/fixture-record/remove`, `approval-assurance/fixture-record/future-mutation` | Aktör kendisini sınırlayan kimliği veya onay doğrulayıcısını değiştiremez; inspect/list politika kapsamındadır. |
 | Yedeği geri yükleme | `backup/fixture-backup/restore` | Geri yükleme yetki verisini değiştirebilir. |
+| Yürütme ortamı kurma ve kurulum onarımı | `execution-environment/fixture-target/install`, `installation/fixture-target/repair` | İkisi de sandbox dışında host’u değiştirir (Docker grubu root eşdeğeridir); yalnız terminaldeki kişi çalıştırır (owner 2026-10-19). |
 | Full access dahil izin kipi değiştirme | `permission-mode/standart/set`, `permission-mode/full-auto/set`, `permission-mode/full-access/set` | AI kendi izin kipini gevşetemez. |
 | Read/resolve dahil bütün sır işlemleri | `secret/FIXTURE_SECRET/set`, `secret/FIXTURE_SECRET/delete`, `secret/FIXTURE_SECRET/switch`, `secret/FIXTURE_SECRET/read`, `secret/FIXTURE_SECRET/resolve`, `secret/FIXTURE_SECRET/inspect`, `secret/FIXTURE_SECRET/list`, `secret/FIXTURE_SECRET/future-action` | Kimlik bilgisini okumak, değiştirmek veya taşımak sır sınırını aşar; read/resolve savunma hücreleridir, açık sır-okuma API’leri değildir. |
 | Yetki onay kartları | `approval/identity-profile/decide`, `approval/policy-mcp-capability/decide`, `approval/policy-template-upgrade/decide`, `approval/audit-rebaseline/decide` | Yetki kartını karara bağlamak da yetki değiştiren bir yoldur. |
@@ -113,7 +114,15 @@ deckent policy revoke STANDING_GRANT_ID --scope SCOPE_ID --json
 deckent policy upgrade --template current --scope SCOPE_ID --preview --json
 ```
 
-`grants --mine` bütün devir hücrelerini değil, kendi kalıcı araç onaylarınızı listeler.
+`grants` (`--mine` ile ya da onsuz) bütün devir hücrelerini değil, kendi kalıcı araç onaylarınızı listeler; herkesin
+onayları (`deckent policy grants --all [--after PAGE_MARK]`) verilebilir okuma eylemi `policy`/`inspect-standing-grants` ister
+(ilk kurulum şablonu v13 bunu kuran kişiye verir; bir politika kuralı adlandırmadıkça hiçbir AI aktörü almaz). Önce politika karar
+verir; eylem yoksa komut `CLI_POLICY_GRANTS_ALL_UNAVAILABLE` ile reddeder ve başka hiçbir şey okumaz. İzin varsa sınırlı bir sayfa
+gösterir (kişi, kural, araç, maskelenmiş desen, kapsam, başlangıç: kuralı oluşturan mühürlü denetim değişikliği, elle yazılmış
+kural için "—") ve sonraki sayfanın komutunu verir.
+Kendi terminalinizde `deckent policy` scope özetini (yöneticiler, kalıcı onaylarınız, AI adımları ve MCP grupları açık/kapalı)
+gösterir; `deckent policy mcp` / `deckent policy delegations` ile grup ya da adım seçer, değişikliğin önizlemesini kartta
+okur ve yukarıdaki komutlarla aynı yönetilen değişiklikle uygularsınız.
 `policy revoke` rastgele politika grant'ini değil, bu kayıtlardan birini kaldırır.
 TTY dışındaki kalıcı izin geri alımında `--yes` teyit bayrağı vardır; yetki, politika veya AI
 tabanını aşmaz.
@@ -122,7 +131,8 @@ tabanını aşmaz.
 
 CLI ve terminal `/policy` → **Yapay zekâya devir** bölümü tek sürümlü komutu kullanır.
 Önce listeleyin; aynı envanterden adımı seçin ve y/N kartındaki aktör, kapsam, kaynak sınıfı/kimliği
-ve politika revizyonunu inceleyin. CLI yalnız `y`/`yes`, terminal kartı yalnız `y` ile onaylar.
+ve politika revizyonunu inceleyin. CLI kartı ok tuşlarıyla ya da `y`/`n` ile yanıtlanır (değişiklik görünümü yeniden okur,
+kart tam onu gösterir); terminal kartı yalnız `y` ile onaylar.
 Terminal kartında Enter, N ve Escape vazgeçer. Yazım doğrulanmış etkileşimli girdi/çıktı ister;
 `--yes` geçişi yoktur. SDK `inspectConfiguredDecisionDelegations(root, query, options)` yalnız
 okur. MCP yazma veya yeni karar aracı sunulmaz.
@@ -234,12 +244,12 @@ Uygulama kartı güvenliği ayrıca sınanır. Dogfood'da Git testleri bir adapt
 müşteri ERP/CRM sonucunu aynı kimlik/kapsam/operasyon/onay sözleşmeleriyle iş kriteri ve kalıcı
 makbuz üzerinden kabul eder.
 
-Komut kaynakları: [policy grants/status/upgrade](../src/surfaces/core/cli/internal/policy-grants.ts),
-[MCP politikası](../src/surfaces/core/cli/internal/policy-mcp.ts), [Run](../src/surfaces/core/cli/internal/run.ts),
-[Task](../src/surfaces/core/cli/internal/task.ts), [onay](../src/surfaces/core/cli/internal/approvals.ts),
-[audit](../src/surfaces/core/cli/internal/audit.ts). Karar kuralları:
+Komut kaynakları: [policy grants/status/upgrade](../src/surfaces/core/cli-approval/internal/policy-grants.ts),
+[MCP politikası](../src/surfaces/core/cli-approval/internal/policy-mcp.ts), [Run](../src/surfaces/core/cli-run/internal/run.ts),
+[Task](../src/surfaces/core/cli-task/internal/task.ts), [onay](../src/surfaces/core/cli-approval/internal/approvals.ts),
+[audit](../src/surfaces/core/cli-admin/internal/audit.ts). Karar kuralları:
 [adım grant'i](../src/domain/core/policy/internal/decision-step.ts),
 [yaşam döngüsü broker'ı](../src/engine/core/runs/internal/decision-approval.ts),
 [kart yetkisi](../src/engine/core/approval/internal/application.ts).
 
-Devir kaynakları: [CLI](../src/surfaces/core/cli/internal/policy-delegations.ts), [application](../src/engine/core/approval/internal/delegations.ts), [inventory](../src/domain/core/policy/internal/delegations.ts).
+Devir kaynakları: [CLI](../src/surfaces/core/cli-approval/internal/policy-delegations.ts), [application](../src/engine/core/approval/internal/delegations.ts), [inventory](../src/domain/core/policy/internal/delegations.ts).

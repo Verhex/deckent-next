@@ -4,24 +4,18 @@ import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIM
 import { SQLITE_STORAGE_OPTIONS } from './storage.js';
 import { RESOURCE_OBSERVATION_SETTINGS } from './resource-observation.js';
 import { z } from 'zod';
-import { PRODUCT_LAYOUT_REGISTRY, LAYOUT_CONTRACT_SINCE, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
+import { field, mergeConfigFields } from './field.js';
+import { SETUP_FIELDS } from './fields-setup.js';
+import { MODEL_FIELDS } from './fields-models.js';
+import { PRODUCT_LAYOUT_REGISTRY, LAYOUT_CONTRACT_SINCE, CONFIG_SCHEMA_VERSION, OUTPUT_MODES } from '#platform/core/common/index.js';
 import { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';
 
-export type ConfigBinding = { readonly state: 'bound'; readonly consumers: readonly string[] } | { readonly state: 'declared-only'; readonly reason: string };
-export type ConfigApplyMode = 'live' | 'restart';
-export interface ConfigFieldMetadata {
-  readonly descriptionKey: string; readonly tier: string; readonly since: string;
-  readonly binding: ConfigBinding; readonly apply: ConfigApplyMode;
-}
-type EnvironmentBinding = { readonly names: readonly string[]; readonly path?: readonly string[]; readonly encoding?: 'boolean' };
+export type { ConfigBinding, ConfigApplyMode, ConfigFieldMetadata } from './field.js';
 const SERVICE_EXECUTION_CAPACITY_DEFAULT = 8;
-function field<T extends z.ZodTypeAny>(descriptionKey: string, binding: ConfigBinding, apply: ConfigApplyMode, schema: T, environment: readonly EnvironmentBinding[] = [], since = CONFIG_CONTRACT_SINCE) {
-  return Object.freeze({ schema, environment, metadata: Object.freeze({ descriptionKey, tier: 'core' as const, since, binding: binding.state === 'bound' ? Object.freeze({ ...binding, consumers: Object.freeze([...binding.consumers]) }) : Object.freeze({ ...binding }), apply }) });
-}
 /** Single declaration of mutable config policy. Consumers derive, never duplicate, these values. */
-export const CONFIG_FIELDS = Object.freeze({
+export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
   schema_version: field('config.field.schema_version', { state: 'bound', consumers: ['src/platform/core/config'] }, 'live', z.literal(CONFIG_SCHEMA_VERSION).default(CONFIG_SCHEMA_VERSION)),
-  language: field('config.field.language', { state: 'bound', consumers: ['src/surfaces/core/cli'] }, 'live', z.enum(SUPPORTED_LANGUAGES as ['en', 'tr']).default('en'), [{ names: ['DECKENT_LANGUAGE', 'DECKENT_LANG'] }]),
+  language: field('config.field.language', { state: 'bound', consumers: ['src/surfaces/core/cli-observe'] }, 'live', z.enum(SUPPORTED_LANGUAGES as ['en', 'tr']).optional(), [{ names: ['DECKENT_LANGUAGE', 'DECKENT_LANG'] }]),
   output_mode: field('config.field.output_mode', { state: 'bound', consumers: ['src/platform/core/output'] }, 'live', z.enum(OUTPUT_MODES).default('standard')),
   layout: field('config.field.layout', { state: 'bound', consumers: ['src/platform/core/config'] }, 'restart', z.object({ root: z.string().min(1).nullable().default(null), resources: z.record(z.string().min(1)).default({}) }).strict().default({}),
     [{ names: [PRODUCT_LAYOUT_REGISTRY.rootEnvironmentKey], path: ['root'] }], LAYOUT_CONTRACT_SINCE),
@@ -73,7 +67,10 @@ export const CONFIG_FIELDS = Object.freeze({
     /** APPROVER-NOTE: the most characters (code points) of an approver's own note a tool-call turn gives the model; the record keeps it whole. */
     approverNoteMaxChars: z.number().int().positive().max(2048).safe().default(500),
   }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
-  cli: field('config.field.cli', { state: 'bound', consumers: ['src/surfaces/core/cli'] }, 'live', z.object({ graphInputMaxBytes: z.number().int().positive().safe().default(1048576), invocationInputMaxBytes: z.number().int().positive().safe().default(1048576) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
+  cli: field('config.field.cli', { state: 'bound', consumers: ['src/surfaces/core/cli-run', 'src/surfaces/core/cli-human'] }, 'live', z.object({ graphInputMaxBytes: z.number().int().positive().safe().default(1048576), invocationInputMaxBytes: z.number().int().positive().safe().default(1048576),
+    /** INIT-D7 (UX only, never a security boundary): exact environment variable names that mark an AI agent caller (no prefix match); any
+     * non-empty value other than 0/false makes the CLI plain and never asks a question. Evidence of each default: L-KIT HANDOFF (2026-10-19). */
+    agentEnvironment: z.array(z.string().regex(/^[A-Z_][A-Z0-9_]{0,63}$/)).max(64).default(['CLAUDECODE', 'AI_AGENT', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'CURSOR_AGENT', 'GEMINI_CLI']) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
   mcp: field('config.field.mcp', { state: 'bound', consumers: ['src/composition/core/agent-turn'] }, 'restart', z.object({
     inputMaxBytes: z.number().int().positive().safe().default(1048576),
     responseMaxBytes: z.number().int().positive().safe().default(1048576),
@@ -163,8 +160,9 @@ export const CONFIG_FIELDS = Object.freeze({
   projectName: field('config.field.projectName', { state: 'bound', consumers: ['src/surfaces/core/config'] }, 'live', z.string().min(1).default('deckent-project')),
   max_workers: field('config.field.max_workers', { state: 'bound', consumers: ['src/composition/core/runs', 'src/composition/core/monitor'] }, 'restart', z.union([z.number().int().positive().safe(), z.literal('auto')]).default('auto')),
   company: field('config.field.company', { state: 'bound', consumers: ['src/composition/core/scoped-request'] }, 'restart', z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/).default('default') }).strict().default({})),
-  enforce_principal_assurance: field('config.field.enforce_principal_assurance', { state: 'bound', consumers: ['src/surfaces/core/cli'] }, 'live', z.boolean().default(false)),
-});
+  enforce_principal_assurance: field('config.field.enforce_principal_assurance', { state: 'bound', consumers: ['src/surfaces/core/cli-observe'] }, 'live', z.boolean().default(false)),
+// The per-writer fragments (alpha.48 A2) join after the core fields; a duplicate name fails at load.
+}, SETUP_FIELDS, MODEL_FIELDS));
 type FieldShape = { [K in keyof typeof CONFIG_FIELDS]: typeof CONFIG_FIELDS[K]['schema'] };
 export const CORE_SCHEMA = z.object(Object.fromEntries(
   Object.entries(CONFIG_FIELDS).map(([name, definition]) => [name, definition.schema]),

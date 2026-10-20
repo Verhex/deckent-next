@@ -1,5 +1,6 @@
 /** Built-in protocol vocabulary, not grants or configurable business policy.
- * Extensions may use other identifiers in generic policy documents; this catalog advertises only implemented core operations.
+ * Extensions may use other identifiers in generic policy documents; this catalog advertises only core operations (the v13 template's new actions
+ * land with their alpha.48 consumers: until a consumer decides one, its grant allows nothing).
  */
 export const policyResources = Object.freeze({
   backup: Object.freeze({ kind: 'backup' as const, actions: Object.freeze(['create', 'verify', 'restore'] as const) }),
@@ -39,6 +40,15 @@ export const policyResources = Object.freeze({
   // A configured work target (WORK-TARGETS, owner 2026-09-30 K2 = A): the resource id is the target id of `execution.workTargets`.
   // `use` is checked at Run admission and reservation (like pool use), `adopt` when an adoption or rollback moves the target's branch.
   workTarget: Object.freeze({ kind: 'work-target' as const, actions: Object.freeze(['use', 'adopt'] as const) }),
+  // v13 (owner A48-D3a, INIT D2): installing one host execution environment (the resource id is its execution-environment registry id, e.g.
+  // `docker`). Installation-wide; the consumer offers it only to a person at a real terminal, never to the MCP actor or an agent.
+  executionEnvironment: Object.freeze({ kind: 'execution-environment' as const, actions: Object.freeze(['install'] as const) }),
+  // v13 (owner A48-D3b, C-DOCTOR C2): a doctor repair of the installation itself (e.g. making its folder private); the resource id is the repair id.
+  installation: Object.freeze({ kind: 'installation' as const, actions: Object.freeze(['repair'] as const) }),
+  // v13 (owner 2026-10-19, MON-NAMES): the monitor names refused and failed scopes (id and reason) to a viewer holding this; others see counts.
+  monitor: Object.freeze({ kind: 'monitor' as const, actions: Object.freeze(['inspect-scope-diagnostics'] as const) }),
+  // v13 (owner 2026-10-19, CA-1): reading every principal's standing approvals (`deckent policy grants --all`); a person's own need no action.
+  policy: Object.freeze({ kind: 'policy' as const, actions: Object.freeze(['inspect-standing-grants'] as const) }),
 });
 export type CorePolicyResource = keyof typeof policyResources;
 export type CorePolicyAction<R extends CorePolicyResource> = typeof policyResources[R]['actions'][number];

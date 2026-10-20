@@ -1,22 +1,13 @@
-import { auditCommand } from './audit.js';
 import { identityCommand } from '#surfaces/core/cli-identity/index.js';
 import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract } from '#surfaces/core/cli-kit/index.js';
-import { approvalsCommand } from './approvals.js';
-import { workersCommand, runInventoryCommand, monitorCommand } from '#surfaces/core/monitor/index.js';
-import { runCommand } from './run.js';
-import { doCommand } from './do.js';
-import { reportCommand } from './report.js';
-import { codingCommand } from './coding.js';
-import { taskCommand } from './task.js';
-import { runtimeCommand } from './runtime.js';
+import { approvalsCommand, policyGrantsCommand, policyScopesCommand } from '#surfaces/core/cli-approval/index.js';
+import { monitorCommand } from '#surfaces/core/monitor/index.js';
+import { terminalInfoCommand, workersCommand } from '#surfaces/core/cli-observe/index.js';
+import { runCommand, doCommand, reportCommand, inventoryCommand } from '#surfaces/core/cli-run/index.js';
+import { taskCommand } from '#surfaces/core/cli-task/index.js';
 import { initCommand } from '#surfaces/core/cli-installation/index.js';
-import { toolchainsCommand } from './toolchains.js';
 import { mcpCommand } from './mcp.js';
-import { operationCommand } from './operation.js';
-import { policyGrantsCommand } from './policy-grants.js';
-import { backupCommand } from './backup.js';
-import { secretCommand } from './secret.js';
-import { poolCommand } from './pool.js';
+import { auditCommand, backupCommand, codingCommand, operationCommand, poolCommand, runtimeCommand, secretCommand, toolchainsCommand } from '#surfaces/core/cli-admin/index.js';
 import { inferenceCommand, modelsCommand } from '#surfaces/core/cli-models/index.js';
 import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
 import { PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, type ExitCode } from '#platform/index.js';
@@ -26,7 +17,8 @@ export type { ExitCode } from '#platform/index.js';
 /** Catalog registration binds every family and leaf to its existing argument parser. */
 export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   audit: auditCommand, backup: backupCommand, identity: identityCommand,
-  terminal: async (argv, context) => (await import('./terminal.js')).terminalCommand(argv, context),
+  // C-DOCTOR: `terminal status|chat-plan|snapshot` get their human text and single errors first; the terminal itself is unchanged (K1–K8).
+  terminal: (argv, context) => terminalInfoCommand(argv, context, async () => (await import('./terminal.js')).terminalCommand(argv, context)),
   init: initCommand, monitor: monitorCommand, workers: workersCommand, run: runCommand, task: taskCommand,
   do: doCommand,
   report: reportCommand,
@@ -34,16 +26,16 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   // The config surface renders through terminal-render (whose barrel carries Ink): a lazy edge keeps it off every other command's start.
   config: async (argv, context) => (await import('#surfaces/core/config/index.js')).configCommand(argv, context),
   mcp: mcpCommand, secret: secretCommand, toolchains: toolchainsCommand, doctor: runKernelCommand,
-  inventory: runInventoryCommand, paths: runKernelCommand, runtime: runtimeCommand, coding: codingCommand,
+  inventory: inventoryCommand, paths: runKernelCommand, runtime: runtimeCommand, coding: codingCommand,
   inference: inferenceCommand, operation: operationCommand, decide: decisionCommand,
-  policy: (argv, context) => (argv[1] === 'status' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? policyGrantsCommand : runKernelCommand)(argv, context),
+  policy: (argv, context) => (argv[1] === 'scopes' ? policyScopesCommand : argv[1] === 'status' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? policyGrantsCommand : runKernelCommand)(argv, context),
 });
 
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */
 export function dispatch(argv: readonly string[]): { readonly output: string; readonly code: ExitCode } {
   const [command] = argv;
   const common = { name: PACKAGE_NAME, version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}` };
-  if (command === undefined || command === '--help' || command === '-h') return { output: renderTopHelp(resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined), argv.includes('--all')), code: 0 };
+  if (command === undefined || command === '--help' || command === '-h') return { output: renderTopHelp(resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined)), code: 0 };
   if (command === '--version' || command === '-v') {
     const build = readBuildIdentity();
     const line = build ? '\n' + t('cli.version.build', { tree: build.sourceTreeSha256.slice(0, 12), commit: build.sourceCommit?.slice(0, 12) ?? '-',
@@ -61,7 +53,9 @@ function interactiveTerminal(context: CommandContext): boolean {
 }
 
 export async function main(argv: readonly string[] = process.argv.slice(2), context: CommandContext = {}): Promise<ExitCode> {
-  let locale = resolveLocale(undefined, context.env);
+  // L-KIT: the host resolved the call's locale once (config language included), so an error before a command reports its own locale
+  // renders in the same language as its heading.
+  let locale = context.locale ?? resolveLocale(undefined, context.env);
   try {
     assertErrorRegistry();
     const help = await cliHelpRequest(argv, CLI_COMMANDS, context.env, () => loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }));
@@ -84,7 +78,12 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     // `deckent` alone opens the interactive terminal on a real terminal; piped or dumb terminals get help (owner 2026-09-23).
     // `deckent --full-access` (MODES-3) opens it in full access; without a terminal it is refused by the terminal itself (never silent).
     if (interactive) {
-      await (await import('./terminal.js')).terminalCommand(['terminal', ...argv], { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
+      const launch = async () => (await import('./terminal.js')).terminalCommand(['terminal', ...argv], { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } });
+      // I-S5 (owner D8): bare `deckent` with no scope in a folder with no installation offers the guided setup to a person on a terminal.
+      await launch().catch(async (error: unknown) => {
+        if (argv.length !== 0 || (error as { code?: unknown } | null)?.code !== 'TERMINAL_SCOPE_REQUIRED') throw error;
+        await (await import('./setup-offer.js')).offerSetup(error, context, locale, launch);
+      });
       return 0;
     }
     // Installation on a Node.js below the supported floor is allowed to proceed, but never silently (a known heap overrun in older 24.x).

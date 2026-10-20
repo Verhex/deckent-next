@@ -1,0 +1,8 @@
+{
+  "$comment": "Detection bounds (I-S2): one shared deadline for the whole probe, one per command, output bytes per command, PATH directories scanned, registry entries.",
+  "totalTimeoutMs": 10000,
+  "commandTimeoutMs": 5000,
+  "outputBytes": 1048576,
+  "pathDirectories": 256,
+  "runtimes": 16
+}

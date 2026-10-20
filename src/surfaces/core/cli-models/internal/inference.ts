@@ -1,9 +1,11 @@
 import { ErrorRegistry, emit, loadConfig, resolveLocale, t, formatValue, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { buildInferenceServingPlan, estimateReplicaCapacity, InferenceServingError, roleContextCeiling, InferenceTokenBudget, selectInferenceProfile } from '#engine/index.js';
+import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import type { ModelCommandContext } from './context.js';
 
 interface Parsed {
-  action: 'plan' | 'budget' | 'metrics';
+  /** null: the bare call (status read). */
+  action: 'plan' | 'budget' | 'metrics' | null;
   json: boolean;
   help: boolean;
   language?: string;
@@ -15,11 +17,13 @@ interface Parsed {
 
 function parse(argv: readonly string[]): Parsed {
   if (argv[0] !== 'inference') throw ErrorRegistry.createError('CLI_USAGE');
-  const action = argv[1];
-  if (action !== 'plan' && action !== 'budget' && action !== 'metrics') throw ErrorRegistry.createError('CLI_USAGE');
+  // C-SETUP (review §inference): bare `deckent inference` (flags only) is the status read, never a usage error.
+  const bare = argv[1] === undefined || argv[1].startsWith('-');
+  const action = bare ? null : argv[1];
+  if (action !== null && action !== 'plan' && action !== 'budget' && action !== 'metrics') throw ErrorRegistry.createError('CLI_USAGE');
   const parsed: Parsed = { action, json: false, help: false };
   const seen = new Set<string>();
-  for (let index = 2; index < argv.length; index++) {
+  for (let index = bare ? 1 : 2; index < argv.length; index++) {
     const key = argv[index] === '-h' ? '--help' : argv[index]!;
     if (key === '--help') { parsed.help = true; continue; }
     if (key === '--json') { parsed.json = true; continue; }
@@ -78,12 +82,32 @@ function renderPlan(plan: ReturnType<typeof buildInferenceServingPlan>, locale: 
   ].join('\n');
 }
 
+/** Models this installation calls on this machine: invocation profiles whose endpoint is a loopback address (no provider id is assumed). */
+function localModels(config: Record<string, unknown>): { readonly model: string; readonly provider: string }[] {
+  const profiles = (config['provider_invocation_profiles'] as { profiles?: readonly unknown[] } | undefined)?.profiles ?? [];
+  const local = profiles.flatMap(entry => {
+    const profile = entry as { reference?: { providerId?: unknown; modelId?: unknown }; adapter?: { definition?: { endpoint?: unknown } } };
+    const endpoint = profile.adapter?.definition?.endpoint;
+    let host: string;
+    try { host = typeof endpoint === 'string' ? new URL(endpoint).hostname : ''; } catch { host = ''; }
+    const loopback = host === 'localhost' || host === '[::1]' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/u.test(host);
+    return loopback && typeof profile.reference?.modelId === 'string' && typeof profile.reference.providerId === 'string'
+      ? [{ model: profile.reference.modelId, provider: profile.reference.providerId }] : [];
+  });
+  return [...new Map(local.map(item => [`${item.provider}/${item.model}`, item])).values()];
+}
+/** No serving profile: what it is for, the local model already connected (a different thing), and where to define one. */
+function renderAbsent(local: readonly { readonly model: string; readonly provider: string }[], locale: Locale): string {
+  return [t('clisetup.inference.absent', {}, locale),
+    ...local.map(item => t('clisetup.inference.localModel', { model: item.model, provider: item.provider }, locale)),
+    t('clisetup.inference.why', {}, locale), t('clisetup.inference.define', {}, locale)].join('\n');
+}
+
 export async function inferenceCommand(argv: readonly string[], context: ModelCommandContext = {}): Promise<void> {
   const parsed = parse(argv);
   const root = context.root ?? process.cwd();
   const env = context.env ?? process.env;
-  let locale = resolveLocale(parsed.language, env);
-  context.onLocale?.(locale);
+  let locale = commandLocale(context, parsed.language);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (parsed.help) {
     emit(t('cli.help.inference', {}, locale), sinks);
@@ -91,9 +115,14 @@ export async function inferenceCommand(argv: readonly string[], context: ModelCo
   }
   const options: ConfigLoadOptions = { env };
   const config = await loadConfig(root, { ...options, heal: false });
-  locale = resolveLocale(parsed.language, env, config.language);
-  context.onLocale?.(locale);
+  if (!parsed.language && !context.locale) { locale = resolveLocale(undefined, env, config.language); context.onLocale?.(locale); }
   const profile = selectProfile(config as Record<string, unknown>, parsed.profileId, locale);
+  if (parsed.action === null) {
+    const local = localModels(config as Record<string, unknown>), plan = profile ? buildInferenceServingPlan(profile) : null;
+    emit({ schemaVersion: 1 as const, profileId: plan?.profileId ?? null, plan, localModels: local }, { ...sinks, json: parsed.json,
+      render: value => value.plan ? [renderPlan(value.plan, locale), t('clisetup.inference.next', {}, locale)].join('\n') : renderAbsent(value.localModels, locale) });
+    return;
+  }
   if (!profile) {
     emit(t('inference.notConfigured', {}, locale), { ...sinks, level: 'warning' });
     return;

@@ -118,7 +118,10 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
 it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] an explicitly selected same-path alias keeps its id and collects once', async () => {
   const f = await fixture(), snapshot = await inspectMonitor(f.current.dir, f.options, { schemaVersion: 1, install: 'alias' });
   expect(snapshot.sourcesRead).toEqual(['alias']); expect(snapshot.installs.map(install => install.id)).toEqual(['alias']);
-  expect(trace.databases.filter(path => path === f.current.ledger)).toHaveLength(1); untouched(f.other);
+  // M-VIS: one collection opens the ledger twice (id index, then the scoped read); the alias collects exactly as often as one plain target.
+  const aliasOpens = trace.databases.filter(path => path === f.current.ledger).length; trace.databases.length = 0; clearConfigCache();
+  await inspectMonitor(f.current.dir, f.options, { schemaVersion: 1, install: 'current' });
+  expect(aliasOpens).toBe(trace.databases.filter(path => path === f.current.ledger).length); expect(aliasOpens).toBe(2); untouched(f.other);
 });
 it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] MCP validates the same query, advertises read-only hints and returns the selected source evidence', async () => {
   const f = await fixture(); let calls = 0;

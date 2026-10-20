@@ -2,7 +2,7 @@ import { configCommand } from '#surfaces/core/config/index.js';
 import { createElement } from 'react';
 import { render } from 'ink';
 import { ErrorRegistry, colorTier, emit, loadConfig, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import type { MonitorQuery, MonitorSnapshot } from '#engine/index.js';
+import type { MonitorQuery, MonitorSnapshot, MonitorSourceMemo } from '#engine/index.js';
 import { resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { prefersAsciiGlyphs } from '#surfaces/core/terminal-render/index.js';
 import type { MonitorCommandContext } from './context.js';
@@ -10,15 +10,15 @@ import { MonitorApp } from './app.js';
 import { renderMonitorText } from './text.js';
 import { filterSnapshot, type MonitorFilters } from './view.js';
 
-/** The data lane's read (composition): every observed install as one observe-only MonitorSnapshot. */
-export type MonitorHandler = (root: string, options: ConfigLoadOptions, query?: MonitorQuery) => Promise<MonitorSnapshot>;
-interface Parsed { once: boolean; json: boolean; help: boolean; noColor: boolean; install?: string; scope?: string; language?: string }
+/** The data lane's read (composition): every observed install as one observe-only MonitorSnapshot; the live view passes its memo (MON-CPU-FIX). */
+export type MonitorHandler = (root: string, options: ConfigLoadOptions, query?: MonitorQuery, memo?: MonitorSourceMemo) => Promise<MonitorSnapshot>;
+interface Parsed { once: boolean; json: boolean; help: boolean; noColor: boolean; verbose: boolean; install?: string; scope?: string; language?: string }
 const DEFAULT_TEXT_WIDTH = 120;
-const FLAGS = { '--help': 'help', '--once': 'once', '--json': 'json', '--no-color': 'noColor' } as const;
+const FLAGS = { '--help': 'help', '--once': 'once', '--json': 'json', '--no-color': 'noColor', '--verbose': 'verbose' } as const;
 const VALUES = { '--install': 'install', '--scope': 'scope', '--lang': 'language' } as const;
 
 function parse(argv: readonly string[], start: number): Parsed {
-  const parsed: Parsed = { once: false, json: false, help: false, noColor: false };
+  const parsed: Parsed = { once: false, json: false, help: false, noColor: false, verbose: false };
   for (let index = start; index < argv.length; index++) {
     const arg = argv[index] === '-h' ? '--help' : argv[index]!;
     // Own keys only: `toString` and friends are not flags.
@@ -64,7 +64,8 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
   if (argv.includes('--config')) {
     const flags = argv.filter((arg, i) => i > 0 && arg !== '--config' && arg !== '--once');
     if (flags.some(flag => !['--json', '--lang', 'en', 'tr', '--no-color', '--help', '-h'].includes(flag))) throw ErrorRegistry.createError('CLI_USAGE');
-    await configCommand(['config', ...flags], context); return;
+    // C-SETUP §4 (lead, J2e): the monitor stays observe-only; on a person's terminal `--config` prints, it never opens the writable /config window.
+    const observeOnly = { ...context }; delete observeOnly.openConfigPanel; await configCommand(['config', ...flags], observeOnly); return;
   }
   const parsed = parse(argv, 1), env = context.env ?? process.env;
   let locale = resolveLocale(parsed.language, env); context.onLocale?.(locale);
@@ -75,16 +76,16 @@ export async function runMonitorCommand(argv: readonly string[], context: Monito
   const config = await loadConfig(root, { ...options, heal: false });
   locale = resolveLocale(parsed.language, env, config.language); context.onLocale?.(locale);
   const read = context.inspectMonitor, query: MonitorQuery = { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) };
-  const inspect = (at: string, configOptions: ConfigLoadOptions) => read(at, configOptions, query);
+  const inspect = (at: string, configOptions: ConfigLoadOptions, memo?: MonitorSourceMemo) => read(at, configOptions, query, memo);
   const filters = filtersOf(parsed), ascii = prefersAsciiGlyphs(env);
   if (parsed.json) { emit(filterSnapshot(await inspect(root, options), filters), { ...sinks, json: true }); return; }
   if (parsed.once || !interactive(context)) {
-    emit(await inspect(root, options), { ...sinks, render: snapshot => renderMonitorText(snapshot, { locale, width: textWidth(context), ascii, filters }) });
+    emit(await inspect(root, options), { ...sinks, render: snapshot => renderMonitorText(snapshot, { locale, width: textWidth(context), ascii, filters, verbose: parsed.verbose }) });
     return;
   }
   // The command already selected the interactive TTY lane; do not let Ink infer a different lane from ambient CI.
   const palette = resolveWorklinePalette(colorTier({ env, isTTY: true, noColor: parsed.noColor }));
-  const instance = render(createElement(MonitorApp, { load: () => inspect(root, options), intervalMs: config.inspection.workers.heartbeatMs, locale, ascii, palette, filters,
+  const instance = render(createElement(MonitorApp, { load: memo => inspect(root, options, memo), intervalMs: config.inspection.workers.heartbeatMs, locale, ascii, palette, filters, verbose: parsed.verbose,
     ...(context.configApplication ? { loadConfigView: () => context.configApplication!(root, options).inspect() } : {}),
     errorText: (error: unknown) => monitorFailureText(error, locale) }), { interactive: true, alternateScreen: true, patchConsole: false,
     ...(context.stdout ? { stdout: context.stdout as unknown as NodeJS.WriteStream } : {}), ...(context.stdin ? { stdin: context.stdin as unknown as NodeJS.ReadStream } : {}) });
@@ -100,5 +101,5 @@ export async function runMonitorSlash(root: string, args: string, context: Monit
   if (parsed.once || parsed.json || parsed.help || parsed.language || parsed.noColor) return [t('monitor.slash.usage', {}, locale)];
   if (!context.inspectMonitor) throw ErrorRegistry.createError('MONITOR_UNAVAILABLE');
   const snapshot = await context.inspectMonitor(root, options, { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) });
-  return renderMonitorText(snapshot, { locale, width, ascii: prefersAsciiGlyphs(context.env ?? process.env), filters: filtersOf(parsed) }).split('\n');
+  return renderMonitorText(snapshot, { locale, width, ascii: prefersAsciiGlyphs(context.env ?? process.env), filters: filtersOf(parsed), verbose: parsed.verbose }).split('\n');
 }

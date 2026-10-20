@@ -1,10 +1,9 @@
-import { configMonitorBlocks, type ConfigMonitorInspection } from './config-view.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput, useWindowSize, type Key } from 'ink';
 import { t, type Locale } from '#platform/index.js';
 import type { WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
-import type { MonitorSnapshot } from '#engine/index.js';
-import { clipLine, flattenBlocks, lineText, span, type MonitorFlatLine, type MonitorLine, type MonitorRow } from './layout.js';
+import { MonitorSourceMemo, type MonitorSnapshot } from '#engine/index.js';
+import { clipLine, configMonitorBlocks, flattenBlocks, lineText, span, type ConfigMonitorInspection, type MonitorFlatLine, type MonitorLine, type MonitorRow } from '#surfaces/core/monitor-view/index.js';
 import { clockText, durationText, MONITOR_TABS, tabLabel } from './labels.js';
 import { wrapDetail } from './text.js';
 import { buildMonitorView, filterSnapshot, type MonitorFilters } from './view.js';
@@ -12,13 +11,17 @@ import { applyControls, changeMarks, GROUP_CYCLE, NO_CONTROLS, signatures, SORT_
 import { CHANGE_GLYPHS, legendLines } from './legend.js';
 
 export interface MonitorAppProps {
-  /** One observe-only read of the whole snapshot (the CLI's `inspectMonitor`); never called while a previous call is still running. */
-  readonly load: () => Promise<MonitorSnapshot>;
+  /** One observe-only read of the whole snapshot (the CLI's `inspectMonitor`); never called while a previous call is still running. The memo is
+   * this view's (MON-CPU-FIX): unchanged ledger/policy/config sources are not re-collected; `r` starts a fresh one (a full re-read). */
+  readonly load: (memo: MonitorSourceMemo) => Promise<MonitorSnapshot>;
+  /** Read only while the Config tab is shown: on entering it and with every heartbeat there (never for a hidden tab). */
   readonly loadConfigView?: () => Promise<ConfigMonitorInspection>;
   /** `inspection.workers.heartbeatMs`: the next read starts this long after the previous one settled. */
   readonly intervalMs: number;
   readonly locale: Locale; readonly ascii: boolean; readonly palette: WorklineInkPalette;
   readonly filters?: MonitorFilters;
+  /** `--verbose`: every named scope line on the Installs card (J3); otherwise the display registry's bound. */
+  readonly verbose?: boolean;
   /** Typed failure → catalog sentence; an unknown failure never echoes transport text. */
   readonly errorText: (error: unknown) => string;
   /** A snapshot to show at once (frame dumps and tests); without it the view opens on a loading line and reads immediately. */
@@ -54,6 +57,18 @@ function detailBody(row: MonitorRow | null, width: number, requestedOffset: numb
   return body;
 }
 interface Failure { readonly text: string; readonly at: number }
+/** MON-CPU-FIX: the Config tab's read, one at a time; the view calls it only while that tab is shown (on entering it and with each heartbeat there). */
+function useConfigRead(load: MonitorAppProps['loadConfigView'], errorText: (error: unknown) => string, alive: { readonly current: boolean }) {
+  const [view, setView] = useState<ConfigMonitorInspection | null>(null), [failure, setFailure] = useState<string | null>(null), inFlight = useRef(false);
+  const read = useCallback(async () => {
+    if (!load || inFlight.current) return;
+    inFlight.current = true;
+    try { const value = await load(); if (alive.current) { setView(value); setFailure(null); } }
+    catch (error) { if (alive.current) { setView(null); setFailure(errorText(error)); } }
+    finally { inFlight.current = false; }
+  }, [alive, errorText, load]);
+  return { view, failure, read };
+}
 /** The snapshot with the local time it arrived and its change marks against the previous one (shown until the next snapshot). */
 interface Received { readonly snapshot: MonitorSnapshot; readonly at: number; readonly marks: ReadonlyMap<string, string>; readonly signatures: ReadonlyMap<string, string> }
 
@@ -63,17 +78,15 @@ interface Received { readonly snapshot: MonitorSnapshot; readonly at: number; re
  * Keys: Tab/←→ or tab numbers, ↑↓/PgUp/PgDn select, Enter details, Esc back, / filter, s/S sort, g group, r refresh, p pause, ? help, q quit.
  */
 export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProps, 'active' | 'onClose' | 'escapeCloses' | 'minRows'>>) {
-  const { load, intervalMs, locale, ascii, palette, filters, errorText } = props;
+  const { load, intervalMs, locale, ascii, palette, filters, errorText } = props, verbose = props.verbose ?? false;
   // Fullscreen: `q` leaves the program. A host window passes its own `onClose` (see MonitorBody).
   const { exit } = useApp(), onClose = props.onClose ?? exit;
   const now = props.now ?? Date.now;
   const tabs = props.loadConfigView ? [...MONITOR_TABS, 'config' as const] : MONITOR_TABS;
-  const [configView, setConfigView] = useState<ConfigMonitorInspection | null>(null);
-  const [configFailure, setConfigFailure] = useState<string | null>(null);
   const window = useWindowSize(), { columns, rows } = props.size ?? window;
   const width = Math.max(20, columns || 80), height = Math.max(props.minRows ?? 10, rows || 24), ellipsis = ascii ? '...' : '…';
   const [received, setReceived] = useState<Received | null>(() => props.initial
-    ? { snapshot: props.initial, at: now(), marks: new Map(), signatures: signatures(buildMonitorView(filterSnapshot(props.initial, filters ?? {}), locale, ascii).tabs) } : null);
+    ? { snapshot: props.initial, at: now(), marks: new Map(), signatures: signatures(buildMonitorView(filterSnapshot(props.initial, filters ?? {}), locale, ascii, verbose).tabs) } : null);
   const snapshot = received?.snapshot ?? null;
   const [failure, setFailure] = useState<Failure | null>(null);
   const [generation, setGeneration] = useState(0);
@@ -84,27 +97,26 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const [detailOffset, setDetailOffset] = useState(0);
   const [help, setHelp] = useState(false);
   const [controls, setControls] = useState<MonitorControls>(NO_CONTROLS);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(false), [configAll, setConfigAll] = useState(false); // `a` on Config: view state only, the read never changes
   const [clock, setClock] = useState(() => now());
-  const alive = useRef(true), inFlight = useRef(false);
+  const alive = useRef(true), inFlight = useRef(false), memo = useRef<MonitorSourceMemo | null>(null), configShown = useRef(false);
+  const { view: configView, failure: configFailure, read: readConfig } = useConfigRead(props.loadConfigView, errorText, alive);
 
   const refresh = useCallback(async () => {
     if (inFlight.current) return;
     inFlight.current = true;
     try {
-      const [observed, inspectedConfig] = await Promise.allSettled([Promise.resolve().then(load), Promise.resolve().then(() => props.loadConfigView?.())]);
+      const [observed] = await Promise.allSettled([Promise.resolve().then(() => load(memo.current ??= new MonitorSourceMemo())), configShown.current ? readConfig() : undefined]);
       if (alive.current) {
-        if (inspectedConfig.status === 'fulfilled') { setConfigView(inspectedConfig.value ?? null); setConfigFailure(null); }
-        else { setConfigView(null); setConfigFailure(errorText(inspectedConfig.reason)); }
         if (observed.status === 'fulfilled') {
-          const next = observed.value, current = signatures(buildMonitorView(filterSnapshot(next, filters ?? {}), locale, ascii).tabs);
+          const next = observed.value, current = signatures(buildMonitorView(filterSnapshot(next, filters ?? {}), locale, ascii, verbose).tabs);
           setReceived(previous => ({ snapshot: next, at: now(), signatures: current, marks: changeMarks(previous?.signatures ?? null, current, CHANGE_GLYPHS) }));
           setFailure(null);
         } else setFailure({ text: errorText(observed.reason), at: now() });
       }
     } catch (error) { if (alive.current) setFailure({ text: errorText(error), at: now() }); }
     finally { inFlight.current = false; if (alive.current) { setGeneration(value => value + 1); setClock(now()); } }
-  }, [ascii, errorText, filters, load, locale, now, props.loadConfigView]);
+  }, [ascii, errorText, filters, load, locale, now, readConfig]);
   useEffect(() => { alive.current = true; if (!props.initial) void refresh(); return () => { alive.current = false; }; }, []);
   // One read timer at a time: re-armed only after a read settled (generation) and never while paused.
   useEffect(() => {
@@ -115,21 +127,22 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   // The age indicator ticks once per interval even when reads hang or are paused (no per-second churn).
   useEffect(() => { const handle = setInterval(() => setClock(now()), intervalMs); return () => clearInterval(handle); }, [intervalMs, now]);
 
-  const view = useMemo(() => snapshot ? buildMonitorView(filterSnapshot(snapshot, filters ?? {}), locale, ascii) : null, [ascii, filters, locale, snapshot]);
+  const view = useMemo(() => snapshot ? buildMonitorView(filterSnapshot(snapshot, filters ?? {}), locale, ascii, verbose) : null, [ascii, filters, locale, snapshot, verbose]);
   const current = tabs[tab]!;
-  const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale) : configFailure
+  useEffect(() => { configShown.current = current === 'config'; if (configShown.current) void readConfig(); }, [current, readConfig]);
+  const blocks = useMemo(() => view ? applyControls(current === 'config' ? configView ? configMonitorBlocks(configView, locale, { all: configAll, warn: '!' }) : configFailure
     ? [{ kind: 'line' as const, line: [span(t('config.surface.unavailable', {}, locale), 'warning')] }, { kind: 'line' as const, line: [span(configFailure, 'error')] }]
     : [{ kind: 'line' as const, line: [span(t('monitor.live.loading', {}, locale))] }] : view.tabs[current], controls, current === 'runs' || current === 'workers', received?.marks ?? new Map(),
-    { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configFailure, configView, controls, current, locale, received, view]);
-  const flat: MonitorFlatLine[] = useMemo(() => flattenBlocks(blocks, width, ellipsis), [blocks, ellipsis, width]);
+    { noMatch: t('monitor.filter.noMatch', {}, locale), arrows: { down: ascii ? 'v' : '▼', up: ascii ? '^' : '▲' } }) : [], [ascii, configAll, configFailure, configView, controls, current, locale, received, view]);
+  const flat: MonitorFlatLine[] = useMemo(() => flattenBlocks(blocks, width, ellipsis, ascii), [ascii, blocks, ellipsis, width]);
   const items = flat.filter(line => line.item !== undefined);
   const selected = Math.min(selection[tab] ?? 0, Math.max(0, items.length - 1));
   const detailRow = detail === null ? null : flat.find(line => line.row?.key === detail)?.row ?? null;
 
-  // Header: title + snapshot age (neutral when fresh, ⚠ after 2 intervals, ✗ after 5) + the active filter; then one line per install.
+  // Header: title + snapshot age (neutral when fresh, ! after 2 intervals, ✗ after 5) + the active filter; then one line per install.
   const age = received ? Math.max(0, clock - received.at) : 0, sep = ` ${ascii ? '|' : '·'} `;
   const ageSpans = !received || age <= 2 * intervalMs ? [] : [span(sep),
-    span(`${age > 5 * intervalMs ? (ascii ? 'x' : '✗') : (ascii ? '!' : '⚠')} ${t('monitor.live.stale', { age: durationText(age, locale) }, locale)}`, age > 5 * intervalMs ? 'error' : 'warning')];
+    span(`${age > 5 * intervalMs ? (ascii ? 'x' : '✗') : '!'} ${t('monitor.live.stale', { age: durationText(age, locale) }, locale)}`, age > 5 * intervalMs ? 'error' : 'warning')];
   const filterSpans = controls.filter ? [span(sep), span(t('monitor.filter.active', { filter: controls.filter }, locale), 'accent')] : [];
   const header: MonitorLine[] = view ? view.header.map((line, index) => clipLine(index ? line : [...line, ...ageSpans, ...filterSpans], width, ellipsis))
     : [[span(t('monitor.title', {}, locale), 'strong')]];
@@ -137,7 +150,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
   const lastRead = received ? clockText(received.at).slice(11) : '—';
   const sortWord = (key: 'age' | 'state' | 'name') => key === 'age' ? t('monitor.sort.age', {}, locale) : key === 'state' ? t('monitor.sort.state', {}, locale) : t('monitor.sort.name', {}, locale);
   const status: MonitorLine = editing ? [span(`/${controls.filter}${ascii ? '_' : '▏'}`, 'accent'), span(`  ${t('monitor.filter.hint', {}, locale)}`, 'muted')]
-    : failure ? [span(`${ascii ? '!' : '⚠'} ${t('monitor.live.refreshFailed', { time: lastRead }, locale)}`, 'error')]
+    : failure ? [span(`! ${t('monitor.live.refreshFailed', { time: lastRead }, locale)}`, 'error')]
       : paused ? [span(t('monitor.live.paused', {}, locale), 'warning')]
         : [span(t('monitor.live.every', { every: durationText(intervalMs, locale), time: snapshot ? clockText(snapshot.observedAt) : '—' }, locale), 'muted'),
           ...(controls.sort ? [span(`  ${t('monitor.sort.active', { key: sortWord(controls.sort.key) }, locale)}`, 'muted')] : []),
@@ -163,8 +176,8 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     if (key.escape) { if (help) setHelp(false); else if (detail !== null) setDetail(null); else if (controls.filter) setControls(value => ({ ...value, filter: '' })); else if (props.escapeCloses) onClose(); return; }
     if (help) return;
     if (input === '/') { setEditing(true); setDetail(null); return; }
-    if (input === 'r') { void refresh(); return; }
-    if (input === 'p') { setPaused(value => !value); return; }
+    if (input === 'r') { memo.current = null; void refresh(); return; }
+    if (input === 'p' || (input === 'a' && current === 'config')) { if (input === 'p') setPaused(value => !value); else { setConfigAll(value => !value); move(-items.length); } return; }
     if (input === 's') { setControls(value => { const next = cycle(SORT_CYCLE, value.sort?.key ?? null); return { ...value, sort: next ? { key: next, reverse: false } : null }; }); return; }
     if (input === 'S') { setControls(value => ({ ...value, sort: { key: value.sort?.key ?? 'age', reverse: !(value.sort?.reverse ?? false) } })); return; }
     if (input === 'g') { setControls(value => ({ ...value, group: cycle(GROUP_CYCLE, value.group) })); return; }
@@ -215,7 +228,7 @@ export function MonitorApp(props: MonitorAppProps & Partial<Pick<MonitorBodyProp
     ...shown.map(line => ({ line, selected: colored && detail === null && !help && (line[0]?.text.startsWith(pointer) ?? false) })),
     { line: clipLine(status, width, ellipsis) },
     // While reads fail the key hint gives way to the typed reason (one line, the layout height never changes).
-    { line: clipLine(failure && !editing ? [span(failure.text, 'error')] : [span(t('monitor.live.hint', {}, locale), 'muted')], width, ellipsis) }];
+    { line: clipLine(failure && !editing ? [span(failure.text, 'error')] : [span(current === 'config' ? t('monitor.config.hint', {}, locale) : t('monitor.live.hint', {}, locale), 'muted')], width, ellipsis) }];
   return (
     <Box flexDirection="column" width={width}>
       {lines.map((entry, index) => (

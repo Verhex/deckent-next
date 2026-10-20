@@ -80,8 +80,8 @@ const currentRuns: MonitorRun[] = [
     delivery: { state: 'rolled-back', commit: null } }),
 ];
 const MAP: MonitorMap = {
-  config: [{ layer: 'default', path: null, sections: ['layout', 'inspection', 'approvals'] }, { layer: 'global', path: '/home/owner/.deckent/config.json', sections: ['language'] },
-    { layer: 'project', path: '/home/owner/projects/deckent-next/.deckent/config.json', sections: ['layout', 'terminal', 'inspection'] },
+  config: [{ layer: 'default', path: null, sections: ['layout', 'inspection', 'approvals'] }, { layer: 'global', path: '/srv/owner/.deckent/config.json', sections: ['language'] },
+    { layer: 'project', path: '/srv/owner/projects/deckent-next/.deckent/config.json', sections: ['layout', 'terminal', 'inspection'] },
     { layer: 'environment', path: null, sections: [] }],
   registry: { profiles: [{ id: 'coding-default', version: 3, adapter: 'docker' }, { id: 'review', version: 1, adapter: 'docker' }, { id: 'legacy-shell', version: 1, adapter: 'host' }],
     kinds: [{ kind: 'coding', profile: 'coding-default@3' }, { kind: 'review', profile: 'review' }] },
@@ -93,7 +93,7 @@ const MAP: MonitorMap = {
 };
 
 export const fullSnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBSERVED_AT, control: 'observe-only', sourcesRead: ['current', 'dogfood', 'remote-lab'], installs: [
-  { id: 'current', path: '/home/owner/projects/deckent-next', status: 'available', scopeIds: ['scope-a'], service: SERVICE, ledgerVersion: 44,
+  { id: 'current', path: '/srv/owner/projects/deckent-next', status: 'available', scopeIds: ['scope-a'], service: SERVICE, ledgerVersion: 44,
     runs: currentRuns,
     workers: [worker('build'), worker('lint', {}, { ageMs: 95_000, freshness: 'stale' }, 'running'),
       // A finished, ledger-only worker: no sidecar files; model and first failure come from its Run attempt.
@@ -101,8 +101,8 @@ export const fullSnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBS
         identity: { scopeId: 'scope-a', runId: 'run-broken', taskId: 'build', attemptId: attemptIdFor('run-broken', 'build'), layoutRevision: 'layout-1', generation: 1 } }),
       worker('pack', { custody: 'released', process: 'missing' }, { ageMs: null, freshness: 'unknown' }, null)],
     approvals: [approval('appr-0001', 3 * HOUR + 12 * MIN, 45 * MIN), approval('appr-0002', 4 * MIN, -2 * MIN, { subjectKind: 'effect', summary: 'Delete stale preview environment', requiredAssurance: null })],
-    pools: [pool('default', 4, 4), pool('gpu', 1, 0, 'owner@local'), pool('ci', null, 2)], diagnostics: ['scope-unavailable:scope-x:LEDGER_LOCKED'], map: MAP },
-  { id: 'dogfood', path: '/home/owner/deckent-dogfood', status: 'available', scopeIds: ['scope-dog'], service: { ...SERVICE, instanceId: 'svc-02', processId: 2001,
+    pools: [pool('default', 4, 4), pool('gpu', 1, 0, 'owner@local'), pool('ci', null, 2)], diagnostics: ['scopes-unavailable:1:LEDGER_LOCKED'], map: MAP },
+  { id: 'dogfood', path: '/srv/owner/deckent-dogfood', status: 'available', scopeIds: ['scope-dog'], service: { ...SERVICE, instanceId: 'svc-02', processId: 2001,
     build: { ...SERVICE.build, sourceCommit: '76582f9f00000000000000000000000000000000', builtAt: '2026-10-01T22:15:00.000Z' } }, ledgerVersion: 43,
     runs: [run('run-dog-1', 'progressing', 'worker-running', ago(90_000), { scopeId: 'scope-dog' })], workers: [],
     // The principal may list this approval but not read its summary: the data lane sends '' plus an install diagnostic.
@@ -113,12 +113,12 @@ export const fullSnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBS
 ] };
 
 export const emptySnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBSERVED_AT, control: 'observe-only', sourcesRead: ['current'], installs: [
-  { id: 'current', path: '/home/owner/projects/fresh', status: 'available', scopeIds: [], service: null, ledgerVersion: 44, runs: [], workers: [], approvals: [], pools: [],
+  { id: 'current', path: '/srv/owner/projects/fresh', status: 'available', scopeIds: [], service: null, ledgerVersion: 44, runs: [], workers: [], approvals: [], pools: [],
     diagnostics: [] }] };
 
 const LONG = 'run-2026-10-02-extremely-long-identifier-for-a-delivery-run-0123456789abcdef';
 export const longIdSnapshot: MonitorSnapshot = { schemaVersion: 1, observedAt: OBSERVED_AT, control: 'observe-only', sourcesRead: ['current'], installs: [
-  { id: 'current', path: '/home/owner/a/very/deep/directory/structure/that/never/ends/projects/deckent-next-with-a-long-name', status: 'available',
+  { id: 'current', path: '/srv/owner/a/very/deep/directory/structure/that/never/ends/projects/deckent-next-with-a-long-name', status: 'available',
     scopeIds: ['scope-with-a-really-long-name-for-enterprise-unit-alpha'], service: SERVICE, ledgerVersion: 44,
     runs: [run(LONG, 'blocked', 'worker-stale-heartbeat', ago(2 * 86_400_000 + 3 * HOUR), { scopeId: 'scope-with-a-really-long-name-for-enterprise-unit-alpha',
       blocker: { code: 'worker-stale-heartbeat', taskId: 'task-with-a-long-name-0123456789', sinceMs: ago(2 * 86_400_000 + 3 * HOUR), detail: 'HEARTBEAT_STALE_FOR_LONGER_THAN_ALLOWED' } })],

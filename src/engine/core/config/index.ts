@@ -3,7 +3,7 @@ export { ConfigApplicationError } from './internal/contract.js';
 export type { ConfigFieldView, ConfigSnapshot, ConfigLayer, ConfigSource, ConfigWriteInput, ConfigWriteResult, ConfigDocumentPort, ConfigAuthorityPort, ConfigPlan,
   ConfigApprovalPort, ConfigApprovalAdmission, ConfigAuthorization, ConfigChangeOutcome, ConfigChangeSubject, ConfigPermissionDecision, ConfigWritePermission } from './internal/contract.js';
 export { planConfigChange, validateConfigLayers } from './internal/planner.js';
-export { configDefinitions, configPath, atConfigPath, definitionFor, configFieldView, allConfigKeys, parseConfigInput } from './internal/registry.js';
+export { configDefinitions, configPath, atConfigPath, definitionFor, configFieldView, allConfigKeys, parseConfigInput, projectInputSchema } from './internal/registry.js';
 export { authorizeConfigWrite, evaluateConfigWrite } from './internal/policy.js';
 export { configServiceState } from './internal/service-state.js';
 export type { ConfigServiceState, DescribeService } from './internal/service-state.js';

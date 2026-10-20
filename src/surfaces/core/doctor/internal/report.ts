@@ -77,9 +77,10 @@ function secretStoreCustodyLine(backend: string, locale: Locale): readonly strin
   return [];
 }
 
-/** The human `doctor` text; `poolLines` are the pool readiness lines the caller (which owns the pool port) already rendered. */
-export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonly string[], locale: Locale): string {
-  return [...(result.status ? [(result.status === 'degraded' ? t('doctor.status.degraded', {}, locale) : t('doctor.status.ready', {}, locale))] : []),
+/** The human `doctor` text; `poolLines` are the pool readiness lines the caller (which owns the pool port) already rendered.
+ * `status: false` leaves out the old ready/degraded line where the grouped summary already states the status (`--verbose`). */
+export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonly string[], locale: Locale, options: { readonly status?: boolean } = {}): string {
+  return [...(result.status && options.status !== false ? [(result.status === 'degraded' ? t('doctor.status.degraded', {}, locale) : t('doctor.status.ready', {}, locale))] : []),
     t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers + (result.host.workerBasis ? t('doctor.workerBasis', { cpu: result.host.workerBasis.cpuBased, memory: result.host.workerBasis.memoryBased,
       estimate: result.host.workerBasis.workerMemoryEstimateMB }, locale) : ''), company: result.company.companyId, principal: result.principal.id }, locale),

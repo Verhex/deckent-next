@@ -28,6 +28,30 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   *Workaround:* use x86_64.
 - **No npm package yet.** You install from source (see [Get started](../README.md#get-started)).
 - **Some install-time messages are English only** (build and sandbox preparation messages appear before translation exists).
+- **`deckent init` sets up the installation, not yet a first coding Run** (alpha.48 I-S3). It applies the first-run
+  permissions, the language, the sandbox check, the Docker install (person only), the model connection (`models connect`),
+  the project instructions and the final check, each through its existing command. *Impact:* setup does not build the worker image or write the registry and pool:
+  its summary (and `deckent init --json`, `firstJob`) lists the missing first-job steps in order with their exact commands (worker image
+  with `npm run worker:image` in the source checkout, `deckent config set execution`, `deckent init registry`, `deckent init pool`) and
+  doctor's pool row names the first one; the list reads configuration and the pool ledger only and does not check that the configured
+  image exists; a delivery clone is not a setup stage either. Setup does not read a saved profile back: solo writes nothing (doctor then
+  still asks for an identity profile), team or enterprise saves the selection in your user's global configuration
+  (distribution stays `deckent identity distribute`), and the next `deckent init` asks again. The final check is doctor's own rows: it reads done only with no
+  warning and every other stage done or skipped, so on a fresh install it stays "ready to apply" (doctor still warns about
+  the identity profile and the worker pool, and names `deckent init` for both). Unattended
+  `deckent init --yes --scope <id>` applies only the fresh permissions, the language and the final check.
+- **Docker Engine install from setup is new** (alpha.48 I-D2; offered in the `deckent init` window since I-S3, only to a
+  person at a real terminal). It installs only from Docker's official apt repository on the Ubuntu and Debian releases Docker
+  lists (checked 2026-10-19), with Docker's signing key shipped in Deckent; everything else (native Windows/macOS, Docker
+  Desktop on WSL, derivatives such as Linux Mint, conflicting `docker.io`/`containerd`/`runc` packages, an older
+  `docker.list`, no network) only prints the next step. *Impact:* a real install has only been rehearsed with a recording
+  fake `sudo`, never run by Deckent's tests. If Docker changes its key, apt refuses the repository until a Deckent update
+  ships the new key (fail closed). The key and source files are staged in a private folder under `$TMPDIR` that stays
+  after a declined or print-only run. On WSL without systemd the engine may not start after the install; the next check
+  then says the service is stopped. The Docker Desktop check on WSL looks for the Windows-side program (an observed
+  convention, not a documented contract). The terminal-witness refusal text does not name this install yet. The window
+  closes while the install runs (sudo asks on the plain terminal) and reopens afterwards.
+  *Workaround:* follow the printed commands, start the service, log out and in again for the `docker` group.
 
 ## Isolation
 
@@ -41,11 +65,19 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   start; Deckent falls back to Landlock visibly and refuses full-access shell calls. *Workaround:* an administrator installs
   bubblewrap root-owned as `/usr/local/bin/bwrap` with an AppArmor profile that allows `userns` for it (see
   [Get started](../README.md#get-started)).
+- **On a Landlock-only host a large `.gitignore`d folder can refuse the shell.** Landlock now checks folders named in
+  `.gitignore` for credential files like bubblewrap does, so they count toward its 20,000-entry limit (bubblewrap: 50,000).
+  *Impact:* a project over the limit gets the shell refused with a visible reason instead of running. *Workaround:* make
+  bubblewrap usable, or keep large generated folders out of the project folder.
 - **The `prefer-sandbox` host fallback has no enforced filesystem boundary.** In the closed modes, when no sandbox is
   usable the call may run on the host. *Workaround:* set `require-sandbox` when confinement is required.
 - **Credential and home-folder hiding is bounded.** The shared registry covers gh, Docker, kube, Codex, Git credentials and
   common cloud CLIs; hiding stops at depth 3 and 20,000 entries. *Impact:* custom locations and unusual file names are not
   masked. *Workaround:* keep such files out of the home folder the sandbox sees, or isolate separately.
+- **Only the installation config may name a secret.** A `$DECK:NAME` reference in the project config (`.deckent/config.json`)
+  refuses the whole config load with `SECRET_REFERENCE_PROJECT_LAYER`, and the delivery commit author may not be a reference
+  in any config (`SECRET_REFERENCE_LEAVES_HOST`). *Impact:* a project file written before alpha.48 that used `$DECK:` stops
+  loading until it is changed. *Workaround:* move the reference into the installation config, or write the plain value.
 - **The secret gate does not scan Git history.** Before dispatch it scans everything the worker receives (checkout, `.git`
   metadata, binds, task inputs, prompt context) and refuses on a hit; past commits in the object store are not scanned.
   Exclusions are configured paths or a declared dependency tree only, audited and shown on the Run card. *Workaround:*
@@ -79,6 +111,18 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **The secret gate's config rule covers config-like files only.** A password written into ordinary source code is not
   detected. *Workaround:* keep secrets in a secret store, never in source.
 
+- **Authority changes need a person at a terminal.** Changing the permission mode, setting or deleting a secret, or switching
+  the secret store is refused with `AUTHORITY_WITNESS_REQUIRED` unless the requesting process has its input and output on an
+  interactive terminal; the MCP actor is always refused, and nothing is decided, audited or written. *Impact:*
+  `echo KEY | deckent secret set NAME`, scripts, the SDK called from a script and AI tools can no longer make these changes,
+  and there is no approval-request path for them yet. *Workaround:* run `deckent secret set NAME` (hidden prompt),
+  `deckent secret store` or the terminal's `/provider` and mode switch in an interactive terminal.
+- **The runtime socket refuses sandboxed processes, not other processes of your account.** The runtime service refuses a
+  peer outside its own PID, mount and user namespaces, the full-access bubblewrap view hides the runtime socket directories,
+  and the Landlock realm cannot open a unix socket at all. A process your account runs outside a sandbox (a host-realm call
+  approved in a full-access turn, an MCP server run on the host, another agent) still reaches the socket and acts as you for
+  everything except the authority changes above. *Workaround:* run untrusted servers and agents in a sandbox or under a
+  separate account.
 - **An AI agent running on your own operating-system account is not contained by Deckent's approvals.** Approval and
   audit records are sealed with a key stored in your account, the interactive-terminal check proves a terminal rather than
   a person, and your account can write the policy file. Where your account can use Docker or sudo, such an agent can in
@@ -107,8 +151,35 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **A remote model without a verified published price is locked.** Zhipu GLM China stays locked because its prices are in
   CNY. DeepSeek settles at the published peak price, labelled an upper bound. *Workaround:* use a priced model or a local
   one.
+- **A model server on another machine cannot be connected yet.** Plain `http` is accepted only on this machine
+  (`127.0.0.1` or `[::1]`), and a remote OpenAI-compatible server needs a published price row; today those exist only for
+  the OpenAI, DeepSeek and Z.ai APIs, and there is no way to declare your own price. *Impact:* a company model server on
+  your network cannot be used. *Workaround:* run the model server on this machine.
+- **The model a Codex or Cursor worker used cannot be verified.** Only Claude Code reports per-model usage; Codex and Cursor
+  results are recorded as unverified and accepted by their criteria. *Impact:* if such a worker ran another model, the work
+  is still accepted.
+- **Cursor has no packaged worker model catalog.** A worker is admitted only on an active `native-cli` catalog channel;
+  Claude Code and Codex have packaged catalogs, Cursor does not. *Workaround:* write a catalog and register it with
+  `deckent models catalog register --file`.
 - **Deckent cannot see provider-side settings.** For OpenRouter it cannot see the "Prevent overrides" plugin setting or your
   OpenRouter credit limit. *Workaround:* check both yourself before the first paid call.
+- **MCP trust from before alpha.48 is asked again once.** Trust for project and local MCP servers moved out of the project
+  folder into the Deckent global root, so a repository can no longer ship it. A server trusted before alpha.48 waits for its
+  card (`mcp list` reason `trust-moved`); `deckent mcp approve <name> --yes` refuses it with `MCP_TRUST_NEEDS_CARD`. The old
+  `integrations/mcp-trust.json` in the data folder is left in place and never read as trust. *Workaround:* answer the card on
+  first use in the terminal, or run `deckent mcp approve <name>` in a terminal; then delete the old file if you like.
+- **A project MCP file reads only a few environment variables.** `${VAR}` in a project `.deckent/mcp.json` reads only `HOME`,
+  `USER`, `LOGNAME`, `LANG`, `LC_ALL`, `TZ` and `TMPDIR`; any other name reads as its written default or empty, and a value
+  that carries a credential refuses the server. Known installation secrets are not yet compared (credential patterns only).
+  *Workaround:* put a server that needs other variables in your local or user scope (`deckent mcp add`).
+- **Project MCP trust needs a global root outside the project.** When `DECKENT_GLOBAL_HOME` (or, without it, `DECKENT_HOME`)
+  points inside the project, project and local servers show `trust-store-unavailable` and never start. *Workaround:* point
+  `DECKENT_GLOBAL_HOME` outside the project.
+- **Trusting an MCP server needs a person at a terminal.** `deckent mcp approve` and `deckent mcp add` to a local or user scope
+  show their card only on a real terminal; from a pipe, CI or an AI tool they are refused (`MCP_APPROVAL_NEEDS_TERMINAL`), and
+  `--yes` no longer skips the card. *Workaround:* add the server with `--no-approve` from a script; it asks on first use.
+- **`deckent mcp import` takes every server of the chosen client.** On a terminal you pick the client; picking single servers is
+  not offered yet. Imported servers stay untrusted. *Workaround:* `deckent mcp remove <name>` after the import.
 - **MCP servers over OAuth are not supported.** Streamable HTTP servers work without OAuth. *Workaround:* use a local stdio server or an
   HTTP server that does not need OAuth.
 
@@ -121,8 +192,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   budget. *Impact:* their limits are your provider plan's limits, not Deckent's.
 - **Per-provider spend limits are not built.** There is one shared USD budget per scope. *Workaround:* set limits in each
   provider account.
-- **Settled spend is Deckent's own calculation,** from the usage the provider reports times a verified price. It is not the
-  provider's invoice.
+- **Settled spend is Deckent's own calculation,** from the usage the provider reports times a verified price (OpenRouter
+  calls settle from the cost OpenRouter reports). It is not the provider's invoice.
 - **A call that never reported final usage stays held** until you resolve it with `deckent models reconcile-spending`.
 
 ## Delivery and adoption
@@ -186,16 +257,23 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **`deckent do` on the command line does not continue after you approve.** It plans and records the proposal, then you
   repeat the same command with the same `--command-id` after the decision; the id is not printed, so pass your own with
   `--command-id`. In the terminal `/do` continues by itself.
-- **A worker that asks you a question cannot be answered from the terminal yet.**
+- **A worker that asks you a question cannot be answered from the terminal yet.** *Workaround:* `deckent run resume --scope <id>
+  --id <run> --command-id <id> --expected-revision <n> --task <id> --answer <text>`.
 - **Autonomous delivery is designed but off.** Every delivery and adoption needs your `y` in a verified terminal.
 
 ## ERP and operations
 
 - **There are no ERP connectors.** The operation contract (intent, conditional write, idempotent resend, evidence-based
   acceptance, compensation) and the extension entry exist; IFS, SAP, Oracle, Microsoft, Uyumsoft or Logo adapters do not.
-  The only worked target is a test fixture. *Impact:* you must write your own adapter to run ERP effects.
+  The only worked target is a test fixture. Core also ships a generic `http-conditional` REST target (ETag, `If-Match`,
+  `Idempotency-Key`; its operations are declared in config); it sends no credentials. *Impact:* you must write your own
+  adapter to run ERP effects, including any ERP that requires authentication.
 - **There is no `deckent operation list`.** You can look up one operation with `deckent operation inspect --scope <id>
   --command-id <id>`, so you must keep the command ids you used. *Impact:* pending and uncertain effects cannot be listed.
+  (`deckent operation` alone lists the configured operation catalog, not the commands that ran.)
+- **`deckent operation execute` takes the command as JSON on a terminal too.** There is no guided flow yet (catalog operation →
+  target → parameters from a schema → preview → approval → wait on one screen); `--schema` prints the contract and a bad document
+  names its field. *Impact:* a person writes the command document by hand or uses a script.
 - **An uncertain ERP write has no exit except a resend.** If the target cannot say whether the write happened, Deckent does not
   retry it by itself and the record keeps the target busy. When the target can confirm afterwards, resend the same command id and
   its evidence settles the record; if it cannot, the record stays unresolved. *Impact:* a person cannot close it yet. Closing
@@ -211,6 +289,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   the generic effect path records its result in the ledger.
 - **Enterprise SSO, fleet management and the central policy service are not available.** The policy module's remaining
   parts (founder-admin recovery with a card, two-person handover, role editing, signed packages) are not built.
+- **`deckent policy grants --all` shows a start time only for governed standing approvals.** The "since" column comes from the
+  sealed audit change that created the rule; a rule written by hand or before the audit existed shows "—", and only the
+  first 10 000 policy changes of a scope are searched (the page then says the times are partial). People are shown as
+  issuer/subject: Core keeps no display names.
 
 ## Recovery and upgrades
 
@@ -218,11 +300,20 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   the state archive are plain files. *Workaround:* store sets on encrypted storage and keep the passphrase apart.
 - **A restore turns the backup schedule off,** and provider keys and the backup passphrase are not in the set. *Workaround:*
   after a restore, choose `backup.schedule` again and run `deckent secret set` for each key.
-- **A restore needs the service stopped,** and the message does not name the command. *Workaround:* `deckent runtime shutdown
-  --service <id> --instance <id> --command-id <id> --reason <text>`, close open terminals, then run the restore again.
+- **A restore needs the service stopped,** and the message does not name the command. *Workaround:* `deckent runtime shutdown`
+  (on a terminal it asks on a card; elsewhere add `--reason <text>`; the long form with `--service`, `--instance`, `--command-id`
+  and `--reason` also works), close open terminals, then run the restore again. On a terminal `deckent backup restore` checks this
+  before asking for the passphrase.
+- **`deckent backup` lists only the default recovery folder** (`state/backups/recovery`); sets made elsewhere with `--set` are not
+  listed. "Last verified" comes only from this installation's sealed backup audit records for the same absolute set path, so a set
+  verified under another spelling of its path shows "not on record". *Workaround:* name such a set with `--set`.
 - **The relative path of a backup set is refused with a misleading message.** Use an absolute path.
 - **You cannot go back to an older Deckent after a ledger upgrade** without restoring the backup taken before the upgrade
   (newer ledger versions cannot be opened by older builds).
+- **The daily backup schedule takes no backup right before a ledger upgrade.** `backup.schedule` holds one value (off, daily or
+  before-upgrade), so with daily the upgrade starts without a fresh set and the way back is the newest daily set, up to about a
+  day old. *Workaround:* before an upgrade run `deckent backup create --scope <id> --set <absolute path>` yourself, or choose
+  before-upgrade instead of daily.
 - **A lost worker can keep its slot.** A granted attempt can stay active and hold an execution slot until custody is resolved.
   *Workaround:* watch it with `deckent monitor`; the slot is freed only by a typed manual decision or by evidence that the worker ended.
 - **The clean-machine rehearsal stopped at the model step.** A fresh clone on 2026-10-15/16 reached install, `doctor`, policy,
@@ -233,11 +324,54 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   or its idle stop) before `runtime restart` works: a service reads its identity only when it starts.
 - **The service identity and the clock.** A rare window remains at first publication of the installation identity; a slow
   clock drift inside the tolerance is not detected; one overlay case where a stopped run reports `cancelled` is not reproduced.
+- **A /do plan that is still waiting for approval from before this release, and that was waiting only because of a task-level
+  approval rule, does not continue after the upgrade:** resubmitting it parks it (`APPROVAL_CONFLICT`). *Workaround:* start a new
+  /do; the task approval is then asked once, just before the task runs. Installations without a `task` rule in their policy are not
+  affected.
 
 ## Desktop and other surfaces
 
 - **There is no Desktop app, no Dashboard and no remote HTTP API.** Use the terminal, the `deckent` command, MCP or the SDK.
   `deckent monitor` is a read-only live view. The Desktop is planned after the beta.
+- **`deckent runtime` does not show since when the service runs.** The runtime protocol (v29) carries no start time; it waits for
+  the next protocol version. The status shows build, configuration, running work and socket only.
+- **The monitor shows only the pools you may inspect** (`pool inspect`); other pools appear as one count ("Other work: N
+  pool(s) not shown to you"), with no name, capacity or holder. *Impact:* a Run you can see that waits in a pool you cannot inspect
+  shows no pool-wait reason. Before first-run template v13 the MCP actor's rules include no `pool inspect`, so `inspect_monitor` over
+  MCP shows only that count; v13 (fresh, or after `deckent init policy --upgrade`) gives it `pool inspect` in the installed scope. *Workaround:* ask an administrator for `pool inspect` on that pool; `deckent pool status` uses the same decision.
+- **The config window loads choices before its first frame.** With Docker on the path it waits for the local image list (about 0.7 s for
+  43 images here, 2.2 s first frame in total); choices are not loaded when a key is opened yet. When the list runs out of time the
+  images proven so far are offered without a "partial" notice, and a busy daemon at the second identity read offers none.
+  *Workaround:* type the image id; `deckent config explain execution` shows the schema.
+- **The setup offer is made only for bare `deckent`.** In a folder with no installation, `deckent --full-access` and `deckent terminal`
+  keep `TERMINAL_SCOPE_REQUIRED`. *Workaround:* run bare `deckent` or `deckent init`.
+- **The monitor names a scope it could not read only to a viewer holding `monitor inspect-scope-diagnostics`.** That viewer (v13:
+  the founding administrator, fresh or after `deckent init policy --upgrade`) sees each refused or failed scope by id and reason (in the text and the window the first five, then one "…and K more" line
+  pointing to `deckent monitor --verbose`; `--verbose` and `--json` list every one); everyone else, the MCP actor included, sees counts ("access to N scope(s) was refused", "N scope(s) could not be read (<code>)").
+  If the permission check itself fails, everyone sees counts and one "scope names could not be checked" line. *Workaround:* the rule
+  (`first-run-monitor-scope-diagnostics`) is ordinary policy data; an administrator grants or revokes it through a governed policy
+  change. For a failed check, `deckent doctor` and the code.
+- **The monitor shows no build time and no release number for a service.** The service reports only its commit and source tree, so
+  Installs shows `build <commit> · source tree <hash>`. *Workaround:* `deckent --version` on the machine that runs the service.
+- **The interactive `deckent monitor` still uses some CPU while idle, and as much as before while work changes the ledger.** It
+  re-reads Runs, workers and permission decisions only after the ledger, policy, bindings or configuration changed (and once
+  more in the refresh after a change). Worker files, process state and model availability are still read on every refresh
+  (`inspection.workers.heartbeatMs`, default 2 s), and the Config tab only while it is shown. Measured on a test installation
+  with 2,000 Runs: about 9–10 % of one core while nothing changes (it was 31–34 %); a live installation was not measured. The
+  terminal's `/monitor` window, `--once`, `--json` and MCP read everything on each call. *Workaround:* press `p` to pause it,
+  `r` for a full re-read, or use `deckent monitor --once`.
+- **`deckent run list`, `report` and the Run pickers show only the Runs the `/runs` query returns** (newest first, at most
+  `inspection.workers.maxEntries`) and read each of them once, as `/runs` does; a short id resolves only among those Runs, so an
+  older Run needs its full id. Not measured on a large scope. *Workaround:* `deckent run inspect --id <full id>`; `deckent
+  inventory` pages every stored record.
+- **`deckent doctor` does not test Docker yet** and says "not tested" on that row; worker image refresh and pool rows still show
+  what the last refresh and pool read found. *Workaround:* `docker info` on the machine. The interactive doctor offers only fixes that
+  an existing product command applies (today: the worker tool update); making the installation folder private waits for its policy
+  action, so that row shows the `chmod 700 <folder>` step to run yourself.
+- **`deckent terminal status` does not contact the chat model**, so its reachability reads "not tested"; the first answer in
+  `deckent` or the `/provider` check shows it. The context window reads "?" until the first answer is measured.
+- **`deckent workers watch` has no row selection.** It redraws one window on a terminal (Esc or q closes); details come from
+  `deckent workers --verbose`. `--json` returns the whole observation report, history included, whatever `--all` says.
 - **The SDK still exports raw writers** next to the managed ones; a later versioned SDK contract is meant to keep only the
   managed ones.
 

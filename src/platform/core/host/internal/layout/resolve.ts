@@ -68,6 +68,13 @@ export function resolveProductLayout(input: ProductLayoutInput): ProductLayout {
   const revision = createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
   return Object.freeze({ ...snapshot, revision });
 }
+/**
+ * G2-1 (analysis 2026-10-18, owner-approved): the data root's own ignore rule, so `git add -A` in a project never commits the approval integrity
+ * key, the ledger, the policy or the sessions. Every top-level entry is product state except `docs` — the project's tracked documents (owner
+ * decision Y 2026-09-30, the write floor's same exception); anchored patterns leave what lies under `docs` to the project's own rules.
+ */
+export const PRODUCT_DATA_ROOT_IGNORE = '/*\n!/docs/\n';
+export function productDataRootIgnorePath(layout: ProductLayout): string { return (layout.platform === 'win32' ? win32 : posix).join(layout.root, '.gitignore'); }
 /** Callers retain this snapshot throughout one operation; config reload produces a new snapshot. */
 export function productResourcePath(layout: ProductLayout, resource: ProductResource): string {
   if (layout.schemaVersion !== registry.schemaVersion) throw new LayoutError('LAYOUT_VERSION_UNSUPPORTED');

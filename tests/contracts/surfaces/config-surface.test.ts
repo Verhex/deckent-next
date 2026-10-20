@@ -39,7 +39,8 @@ describe('registry-driven config surface', () => {
   });
   it('refuses invalid JSON before calling write and rejects unsupported arguments', async () => {
     const f = fixture(); await expect(configCommand(['config', 'set', 'max_workers', '{', '--scope', 's'], f.ctx)).rejects.toBeDefined(); expect(f.set).not.toHaveBeenCalled();
-    await expect(configCommand(['config', 'explain'], f.ctx)).rejects.toBeDefined();
+    // C-SETUP (owner 2026-10-19): bare `explain` lists the keys instead of a usage error; it reads, never writes.
+    f.output.length = 0; await configCommand(['config', 'explain'], f.ctx); expect(f.output.join('')).toContain('max_workers'); expect(f.set).not.toHaveBeenCalled();
     await expect(configCommand(['config', '--expect', 'd'], f.ctx)).rejects.toBeDefined();
   });
   it('terminal reads the same inspect and refuses malformed or unrouted write syntax (T3 L2: the write route needs the principal port)', async () => {

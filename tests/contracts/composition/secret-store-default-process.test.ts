@@ -42,7 +42,7 @@ it.skipIf(process.platform !== 'linux')('a fresh `init policy --apply` selects t
   expect(applied.code, applied.stderr).toBe(0);
   // The switch's own record is the command result (no ledger yet at this point): decided by the policy this run installed, nothing moved.
   expect(JSON.parse(applied.stdout)).toMatchObject({ status: 'installed', secretStore: { status: 'set', backend: SEALED, record: {
-    policyRevision: expect.stringContaining('first-run-template-v12'), subject: { kind: 'secret-store-switch', from: 'core.secret-store.env@1', to: SEALED,
+    policyRevision: expect.stringContaining('first-run-template-v13'), subject: { kind: 'secret-store-switch', from: 'core.secret-store.env@1', to: SEALED,
       entries: 0, downgrade: false, decision: { effect: 'allow', ruleId: 'first-run-secret-switch' } } } } });
   expect((await f.globalConfig()).secrets).toEqual({ store: SEALED });
   const before = await readFile(f.globalPath, 'utf8');
@@ -51,7 +51,7 @@ it.skipIf(process.platform !== 'linux')('a fresh `init policy --apply` selects t
   expect(again.code, again.stderr).toBe(0);
   expect(JSON.parse(again.stdout)).not.toHaveProperty('secretStore');
   expect(await readFile(f.globalPath, 'utf8')).toBe(before);
-  const doctor = await f.run(['doctor']);
+  const doctor = await f.run(['doctor', '--verbose']);
   // The installation directory the switch created is owner-only, so the selected store is usable right away (not refused as not private).
   expect(doctor.stdout).toContain(`Secret store: ${SEALED} (ready)`);
   expect(doctor.stdout).toContain('other programs running as your user can');

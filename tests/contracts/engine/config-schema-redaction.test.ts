@@ -56,14 +56,23 @@ it('masks token content and URL passwords through the real application in all co
   }
   for (const locale of ['en', 'tr'] as const) {
     const output: string[] = [], ctx = { root: '/tmp/config-content', env: {}, configApplication: () => app, stdout: { write: (s: string) => { output.push(s); } } };
-    for (const args of [['config'], ['config', '--json'], ['config', 'explain', 'argv_view_fixture.argv.0'], ['config', 'explain', 'argv_view_fixture.argv', '--json'], ['config', 'explain', 'toolchains.currency.registryEndpoint'], ['config', 'explain', 'toolchains.currency.registryEndpoint', '--json']]) {
+    // C-SETUP (owner CLI review §config): bare `config` and the human `monitor --config` print only the values set in a layer (none here, so
+    // nothing to leak: no canary may appear); every value is still checked masked below through --json, explain, the /config window and the
+    // monitor's full Config tab.
+    for (const args of [['config'], ['monitor']] as const) {
+      output.length = 0;
+      if (args[0] === 'config') await configCommand(['config', '--lang', locale], ctx); else await monitorCommand(['monitor', '--config', '--once', '--lang', locale], ctx);
+      for (const canary of passwords) expect(output.join('')).not.toContain(canary);
+    }
+    for (const args of [['config', '--json'], ['config', 'explain', 'argv_view_fixture.argv.0'], ['config', 'explain', 'argv_view_fixture.argv', '--json'], ['config', 'explain', 'toolchains.currency.registryEndpoint'], ['config', 'explain', 'toolchains.currency.registryEndpoint', '--json']]) {
       output.length = 0; await configCommand([...args, '--lang', locale], ctx); assertMasked(output.join(''));
     }
     assertMasked((await configSlash(ctx.root, '', ctx, {}, locale, 80)).join('\n'));
-    for (const json of [false, true]) {
-      output.length = 0; await monitorCommand(['monitor', '--config', '--once', '--lang', locale, ...(json ? ['--json'] : [])], ctx); assertMasked(output.join(''));
-    }
-    const blocks = configMonitorBlocks(await app.inspect(), locale);
+    output.length = 0; await monitorCommand(['monitor', '--config', '--once', '--lang', locale, '--json'], ctx); assertMasked(output.join(''));
+    // PB-MON-UX: the tab opens on changed settings only (none here, so nothing to leak); `a` shows every field, masked.
+    const changedOnly = JSON.stringify(configMonitorBlocks(await app.inspect(), locale));
+    for (const canary of passwords) expect(changedOnly).not.toContain(canary);
+    const blocks = configMonitorBlocks(await app.inspect(), locale, { all: true, warn: '!' });
     assertMasked(JSON.stringify(blocks));
     for (const block of blocks) if (block.kind === 'table') for (const row of block.rows) for (const canary of passwords) expect(JSON.stringify(row.detail())).not.toContain(canary);
   }

@@ -67,6 +67,14 @@
   "cancellation": null,
   "cancellationRuntime": null,
   "cli": {
+    "agentEnvironment": [
+      "CLAUDECODE",
+      "AI_AGENT",
+      "CODEX_SANDBOX",
+      "CODEX_THREAD_ID",
+      "CURSOR_AGENT",
+      "GEMINI_CLI"
+    ],
     "graphInputMaxBytes": 1048576,
     "invocationInputMaxBytes": 1048576
   },
@@ -112,7 +120,6 @@
     "requireMachineBinding": false,
     "writeLockTimeoutMs": 2000
   },
-  "language": "en",
   "layout": {
     "resources": {},
     "root": null
@@ -123,6 +130,9 @@
     "maxConcurrentCalls": 8,
     "maxServers": 20,
     "responseMaxBytes": 1048576
+  },
+  "models": {
+    "retirementWarningDays": 15
   },
   "operations": {
     "catalog": [],

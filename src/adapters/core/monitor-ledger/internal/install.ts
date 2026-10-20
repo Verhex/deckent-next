@@ -1,15 +1,16 @@
 import { userInfo } from 'node:os';
+import { lstat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { CONFIG_FIELDS, createDefaultConfig, envValue, inspectProductDirectory, inspectProductFile, loadGlobalConfig, productResourcePath, readJsonFile, resolveGlobalConfigReadPath,
   resolveProductLayout, type Environment, type ResolvedConfig } from '#platform/index.js';
 import { sameAttemptIdentity, executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent, type RunSnapshot } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
-import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests } from '#engine/index.js';
+import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerIndex, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests, type MonitorReadScope } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 import { readWorkerEventTail, readWorkerSidecars } from '#adapters/core/worker-observation/index.js';
 import { emptyWorkerContent, readMonitorWorkerContent } from './worker-content.js';
-import { scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
+import { indexMonitorLedger, scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
 import { authorizeMonitorDelivery } from './receipt-observation.js';
 import limits from './display-limits.json' with { type: 'json' };
 
@@ -25,10 +26,10 @@ const recent = (events: readonly { readonly atMs: number | null; readonly event:
  * only exact selected identities pass through read-output, then artifact/sidecar reads outside the transaction.
  * No product files, state or policy are created or healed. */
 export async function prepareMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>, run?: { scopeId: string; runId: string }, retained?: RunSnapshot,
-  expected?: { revision: number; layoutRevision: string }) {
+  expected?: { revision: number; layoutRevision: string }, scope?: MonitorReadScope) {
   const layout = config.productLayout;
   const scan = scanMonitorLedger(await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']),
-    { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize, ...(run ? { run } : {}) }, retained);
+    { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, maxRuns: config.inspection.maxPageSize, ...(run ? { run } : {}), ...(scope ? { scope } : {}) }, retained);
   // Reject stale/future result views before any output decision or read, including receipt observations.
   const scoped = expected ? { ...scan.reading, runs: scan.reading.runs.filter(value => value.snapshot.revision === expected.revision
     && value.snapshot.identity.layoutRevision === expected.layoutRevision) } : scan.reading;
@@ -62,6 +63,19 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
     })) }));
     return authorizeMonitorDelivery(Object.freeze({ ...reading, runs: Object.freeze(runs), map: reading.map, diagnostics: Object.freeze(diagnostics) }), readOutput);
   } };
+}
+/** M-VIS: the ledger's scope and pool ids (no Run, occupancy or holder), read before the monitor decides admission. */
+export async function indexMonitorInstall(config: ResolvedConfig): Promise<MonitorLedgerIndex> {
+  return indexMonitorLedger(await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
+}
+/** MON-CPU-FIX: the viewer and the stat identity of the install's ledger (database and WAL), policy and bindings — nothing is opened or read.
+ * `changedAtMs` is the newest change; a caller trusts the stamp only once that change is older than the file timestamp granularity. */
+export async function stampMonitorInstall(config: ResolvedConfig) {
+  const layout = config.productLayout, ledger = await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']);
+  const stats = await Promise.all([ledger, `${ledger}-wal`, productResourcePath(layout, 'policy'), productResourcePath(layout, 'bindings')]
+    .map(path => lstat(path, { bigint: true }).catch((error: { code?: unknown }) => { if (error?.code === 'ENOENT') return null; throw error; })));
+  return Object.freeze({ stamp: JSON.stringify([readLocalOsIdentity(), ...stats.map(stat => stat && `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`)]),
+    changedAtMs: Math.max(...stats.map(stat => stat ? Number(stat.ctimeNs / 1_000_000n) : 0)) });
 }
 /** Metadata only. Artifact reads are explicitly deferred until the application selects its visible worker set. */
 export async function readMonitorInstall(config: ResolvedConfig, env: Environment | undefined, readOutput: (identity: AttemptIdentity) => Promise<boolean>) {

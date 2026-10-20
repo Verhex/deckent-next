@@ -75,12 +75,16 @@ export async function executeConfiguredBackup(projectRoot: string, input: Backup
       authority = { principal: verifiedPrincipalSchema.parse({ ...identity, scopeIds: [command.scopeId] }),
         installationId: recovered.state.installationId, integrity: recovered.integrity() };
     }
-    const auditDirectory = command.action === 'restore' || !existingPolicy ? join(dirname(resolve(command.set)), '.deckent-backup-audit')
-      : join(productResourcePath(layout, 'audit'), 'backup-operations');
+    const auditNextToSet = command.action === 'restore' || !existingPolicy;
+    const auditDirectory = auditNextToSet ? join(dirname(resolve(command.set)), '.deckent-backup-audit') : join(productResourcePath(layout, 'audit'), 'backup-operations');
     const globalConfigPath = await resolveGlobalConfigReadPath(options.env, options.platform);
     const configDocument = command.action === 'create' ? async () => readBackupConfig(layout.bootstrapConfigPath, globalConfigPath, limits) : undefined;
     const source = { layout, projectRoot: resolve(projectRoot), installationId: authority.installationId, keyFile: config.approvals.keyFile, globalConfigPath, ...(configDocument ? { configDocument } : {}) };
-    const app = new BackupApplication(new FileBackupStorage(source, limits), policyBackupAuthorization(document), (event, integrity) => recordBackupAudit(auditDirectory, event, integrity), authority);
+    const storage = new FileBackupStorage(source, limits);
+    // C-PRIO J1: a recovery audit lives next to the set, so a set that does not exist is refused before that audit is written (no stray
+    // audit folder, never AUDIT_UNAVAILABLE for a mistyped path). Any other refusal of an existing set (unsafe, modified) is audited as before.
+    if (auditNextToSet) await storage.locate(command.set).catch((error: unknown) => { if ((error as { code?: unknown } | null)?.code === 'BACKUP_SET_NOT_FOUND') throw error; });
+    const app = new BackupApplication(storage, policyBackupAuthorization(document), (event, integrity) => recordBackupAudit(auditDirectory, event, integrity), authority);
     return await app.execute(command, passphrase);
   } finally { recovered?.close(); }
 }

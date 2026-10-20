@@ -128,6 +128,12 @@ describe.skipIf(process.platform !== 'linux')('full-auto shell autonomy inside a
     const literal = await f.call('run_shell', { command: 'ls && cat .cache/deckent/state/ledger.db' });
     expect(literal.card).toBe(false);
     expect(literal.text).toMatch(/^\[deckent\] run_shell: error=PRODUCT_STATE_PROTECTED \(\.cache\/deckent\/state\/ledger\.db\)/u);
+    // G2-2 (analysis 2026-10-18): the file jq reads through --rawfile/--slurpfile meets the same floor (it was taken for the script and skipped).
+    for (const command of ['jq --rawfile k .cache/deckent/state/ledger.db . package.json', 'jq -n --slurpfile k .cache/deckent/state/ledger.db \'$k\'']) {
+      const named = await f.call('run_shell', { command });
+      expect({ command, card: named.card }).toEqual({ command, card: false });
+      expect(named.text).toMatch(/^\[deckent\] run_shell: error=PRODUCT_STATE_PROTECTED \(\.cache\/deckent\/state\/ledger\.db\)/u);
+    }
     expect(await f.call('run_shell', { command: 'echo "$(cat .cache/deckent/state/ledger.db)"' })).toMatchObject({ card: true, status: 'denied' });
     // Program floor: an interpreter, a package manager and a network tool still ask inside the sandbox (checkpoint C1).
     for (const command of ['echo "$(python3 -c 1)"', 'npm test && echo ok', 'curl -s http://127.0.0.1:9/ || true']) {

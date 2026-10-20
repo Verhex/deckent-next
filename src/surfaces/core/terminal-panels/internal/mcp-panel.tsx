@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fillTemplate, span, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
-import { ListPicker, PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
+import type { WindowLine } from '#surfaces/core/terminal-window/index.js';
 import { EntryWindow } from './entry.js';
-import { LinesWindow, QuestionWindow, usePickerRoom } from './lines.js';
+import { LinesWindow, QuestionWindow } from './lines.js';
+import { PickerWindow } from './picker-window.js';
 import type { McpChoice, McpPanelLabels, McpPanelList, McpPanelPort, McpServerDraft, McpTrustQuestion, PanelLabels, PanelLine, PanelNotice } from './contract.js';
 
 const ADD = ':add';
+/** The body rows the list window keeps (no server yet, or the inventory's problems: a longer body scrolls its position row in). */
+const BODY_ROWS = 1;
 type Action = keyof McpPanelLabels['actions'];
 const ACTIONS: readonly Action[] = ['detail', 'approve', 'revoke', 'reconnect', 'remove'];
 
@@ -59,7 +62,6 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
   const [generation, setGeneration] = useState(0);
   const draft = useRef<Draft>(emptyDraft());
   const answer = useRef<((value: boolean | null) => void) | null>(null);
-  const room = usePickerRoom(1);
   const reload = useCallback(async () => { setList(await port.list()); }, [port]);
   const exits = useRef({ onError, onClose });
   exits.current = { onError, onClose };
@@ -72,7 +74,8 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
     try { await reload(); } catch (error) { onError(error); }
     back();
   };
-  if (!list || view.kind === 'busy') return <Window title={[span(words.title)]} body={[{ spans: [span(labels.loading)] }]} hints={words.hints} position={labels.position} />;
+  if (!list || view.kind === 'busy') return <PickerWindow title={[span(words.title)]} body={[{ spans: [span(labels.loading)] }]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker}
+    listHints={words.hints} position={labels.position} onResult={() => undefined} />;
   if (view.kind === 'question') return <QuestionWindow title={view.question.title} lines={view.question.lines} hints={view.question.prompt || words.trustKeys} position={labels.position}
     onAnswer={value => { const resolve = answer.current; answer.current = null; setView({ kind: 'busy' }); resolve?.(value); }} />;
   if (view.kind === 'detail') return <LinesWindow title={view.name} lines={view.lines} hints={words.hints} position={labels.position} onClose={() => back(state)} />;
@@ -98,10 +101,9 @@ export function McpPanel({ port, labels, push, onError, errorText, onClose }: { 
     void run(() => action === 'approve' ? port.approve(name, ask) : action === 'revoke' ? port.revoke(name) : port.reconnect(name));
   };
   const body: WindowLine[] = list.servers.length ? [] : [{ spans: [span(words.none, { role: 'muted' })] }];
-  return <Window title={[span(words.title)]} body={[...body, ...list.problems.map(problem => ({ spans: [span(problem, { role: 'warning' })] }))]} hints={words.hints}
-    position={labels.position} footerRows={room.footerRows} onInput={() => true}
-    footer={focused => <ListPicker key={generation} tree={mcpPanelTree(list, words)} labels={labels.picker} active={focused} initial={state} onState={setState} maxRows={room.rows}
-      onResult={result => chosen(result, state)} />} />;
+  return <PickerWindow title={[span(words.title)]} body={[...body, ...list.problems.map(problem => ({ spans: [span(problem, { role: 'warning' })] }))]} bodyRows={BODY_ROWS}
+    tree={mcpPanelTree(list, words)} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
+    onResult={result => chosen(result, state)} />;
 }
 
 function choiceTree(title: string, choices: readonly McpChoice[]): PickerTree {
@@ -128,14 +130,14 @@ function McpWizard({ step, problem, port, labels, draft, onStep, onCancel, onDon
     ...Object.keys(draft.headers).map(name => ({ label: [span(words.steps.headers, { bold: true })], spans: [span(`${name}: ${hidden}`)] }))];
   if (step === 'transport' || step === 'realm' || step === 'scope') {
     const choices = step === 'transport' ? port.transports : step === 'realm' ? port.realms : port.scopes;
-    return <Window title={[span(title)]} body={summary} hints={words.hints} position={labels.position} footerRows={choices.length + 6} onInput={() => true}
-      footer={focused => <ListPicker key={step} tree={choiceTree(words.steps[step], choices)} labels={labels.picker} active={focused} onResult={result => {
+    return <PickerWindow title={[span(title)]} body={summary} bodyRows={Math.max(BODY_ROWS, summary.length)} tree={choiceTree(words.steps[step], choices)} labels={labels.picker}
+      position={labels.position} pickerKey={step} onResult={result => {
         if (result.kind !== 'selected') { onCancel(); return; }
         if (step === 'transport') draft.transport = result.id === 'http' ? 'http' : 'stdio';
         else if (step === 'realm') draft.realm = result.id;
         else draft.scope = result.id === 'project' || result.id === 'user' ? result.id : 'local';
         next();
-      }} />} />;
+      }} />;
   }
   const pair = step === 'env' ? '=' : step === 'headers' ? ':' : null;
   return <EntryWindow key={`${step}:${Object.keys(draft.env).length}:${Object.keys(draft.headers).length}`} title={title} body={summary}

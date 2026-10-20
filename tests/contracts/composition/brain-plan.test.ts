@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { planRun, inspectRun, inspectRunProposal, configuredApproval } from '../../../src/index.js';
+import { planRun, inspectRun, inspectRunProposal, configuredApproval, reserveRunTasks } from '../../../src/index.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
 import { completeTerminalChatTurn } from '#composition/core/terminal-chat/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
@@ -206,7 +206,9 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
 // POLICY_DENIED. The system derives what admission evaluates from the validated graph; the model's list is advisory and never a requirement.
 const invented = (resourceId: string) => [{ kind: 'task', action: 'execute', resourceId: 'task' }, { kind: 'attempt', action: 'execute', resourceId: 'task' },
   { kind: 'run', action: 'create', resourceId: 'docs-version-label-update' }, { kind: 'run', action: 'reserve', resourceId: 'docs-version-label-update' },
-  { kind: 'scope', action: 'inspect', resourceId: 'live' }, { kind: 'model-invocation', action: 'invoke', resourceId }];
+  { kind: 'scope', action: 'inspect', resourceId: 'live' }, { kind: 'model-invocation', action: 'invoke', resourceId },
+  // accept_mark (owner 2026-10-18): an unregistered kind and a repeated entry are marked on the card, never a refusal.
+  { kind: 'erp-ledger', action: 'post', resourceId: 'invoice' }, { kind: 'scope', action: 'inspect', resourceId: 'live' }];
 it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] invented model permissions are advisory: a policy that grants only the real needs admits the plan and the card names them', async () => {
   const { graph, budgetCeiling } = proposalFixture('business');
   const f = await fixture({ standing: true, response: JSON.stringify({ graph, budgetCeiling, requiredPermissions: invented('gpt-6.1-sol') }) });
@@ -219,8 +221,30 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
     expect(lines).toContain(locale === 'tr' ? 'Kabulde politikayla denetlenen izinler: task/execute/task' : 'Permissions checked by policy at admission: task/execute/task');
     expect(lines).toContain(locale === 'tr' ? 'Modelin ayrıca andığı izinler (yalnız bilgi, değerlendirilmedi, yetki vermez)' : 'The model also mentioned (advisory, not evaluated, grants nothing)');
     expect(lines).toContain('model-invocation/invoke/gpt-6.1-sol'); expect(lines).toContain('scope/inspect/live');
+    expect(lines).toContain(locale === 'tr' ? 'Bu kurulumda tanınmayan izinler (yalnız bilgi, değerlendirilmedi, yetki vermez): erp-ledger/post/invoice'
+      : 'Not recognised by this installation (advisory, not evaluated, grants nothing): erp-ledger/post/invoice');
+    for (const entry of ['scope/inspect/live', 'erp-ledger/post/invoice']) expect(lines.split(entry)).toHaveLength(2);
   }
+  expect(first.unrecognisedPermissions).toEqual([{ kind: 'erp-ledger', action: 'post', resourceId: 'invoice' }]);
   expect(await planRun(f.project, command, f.options)).toEqual(first); expect(f.posts).toBe(1); expect(counts(f.path)).toEqual({ runs: 1, proposals: 1 });
+});
+// g4-cift-onay (owner-approved 2026-10-18): the task approval moves from plan time to execution time. The floor is kept, not dropped: the plan
+// is admitted without a plan card, and the first reservation asks the task approval (TaskApprovalAdmission) and runs nothing until it is decided.
+it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] a task require-approval is asked once, at reservation, not on the plan', async () => {
+  const { graph, budgetCeiling } = proposalFixture('business');
+  const f = await fixture({ standing: true, response: JSON.stringify({ graph, budgetCeiling, requiredPermissions: [] }) });
+  const path = join(f.data, 'policy.json'), policy = JSON.parse(await readFile(path, 'utf8')), owner = policy.grants[0].principals;
+  policy.revision = 'task-asked'; policy.grants[0].actions.push('reserve');
+  policy.grants.push({ id: 'ask-task', effect: 'require-approval', actions: ['execute'], scopes: ['s'], principals: owner, resource: { kind: 'task', ids: ['task'] } });
+  await writeFile(path, JSON.stringify(policy), { mode: 0o600 });
+  const list = () => configuredApproval(f.project, 'list', { schemaVersion: 1, scopeId: 's', afterId: null, limit: 10 }, f.options) as Promise<{ status: string; request: Record<string, unknown> }[]>;
+  const planned = await planRun(f.project, command, f.options);
+  expect(planned.proposal).toMatchObject({ status: 'accepted', reason: null }); expect(planned.run).not.toBeNull(); expect(await list()).toEqual([]);
+  const run = planned.run!;
+  await expect(reserveRunTasks(f.project, { schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: run.runId, expectedRevision: run.revision }, f.options))
+    .rejects.toMatchObject({ code: 'RUN_CAPACITY_OR_ORDER' });
+  expect(await list()).toEqual([expect.objectContaining({ status: 'pending', request: expect.objectContaining({ runId: run.runId, taskId: 'task' }) })]);
+  expect((await inspectRun(f.project, { schemaVersion: 1, scopeId: 's', runId: run.runId }, f.options)).run!.tasks.map(task => task.phase)).toEqual(['pending']);
 });
 it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] a real need the policy denies still refuses the plan, even when the model lists nothing', async () => {
   const { graph, budgetCeiling } = proposalFixture('business');

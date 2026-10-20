@@ -1,0 +1,142 @@
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
+import { resolveProductLayout } from '#platform/index.js';
+import { createGlobMatcher, createWorkspaceScope, DEFAULT_WORKSPACE_READ_DENY, REPOSITORY_INTERNALS_DENY, type ShellSandboxLayout } from '#adapters/index.js';
+import { bubblewrapArguments, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { prepareRuntimeSocket, startLocalRuntimeSocketServer, type LocalRuntimeSocketOptions, type LocalRuntimeSocketServer } from '../../../src/adapters/core/local-runtime-socket/index.js';
+import { landlockShellSandbox, resolveShellRealm } from '#adapters/core/host-shell/index.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
+
+/**
+ * SEC-1 (Claude Security F27 + F32): an agent shell of a full-access turn runs in bubblewrap's open view (host `/` bound, host network, the
+ * owner's uid). Before the fix it could find the runtime socket under `/tmp/dk-<uid>-*`, connect, and send a v29 frame without `channel`;
+ * the adapter admitted it on uid equality alone and the service treated it as the human owner. Two separate layers are proven here, each
+ * with the risky input kept: (a) the real open view the adapter builds hides every runtime socket directory, so the endpoint is not even
+ * reachable; (b) a peer in another PID/mount/user namespace that CAN reach the endpoint (a socket outside the mask) is refused at accept,
+ * before any frame is read or dispatched. The client inside the sandbox is plain `node:net`, the same bytes any shell command could send.
+ */
+const measured = await measureTestShellHost();
+const launcher = measured.bubblewrap.status === 'available' ? measured.bubblewrap.launcher?.path ?? null : null;
+const landlockAbi = (() => {
+  try { return process.platform === 'linux' ? Number(JSON.parse(execFileSync(join(import.meta.dirname, '../../../src/adapters/core/host-shell/native/build/Release/shell-capabilities'),
+    { encoding: 'utf8' })).landlockAbi) : 0; } catch { return 0; }
+})();
+const owned: string[] = [];
+const servers: LocalRuntimeSocketServer[] = [];
+afterEach(async () => {
+  await Promise.all(servers.splice(0).map(server => server.dispose().catch(() => undefined)));
+  await Promise.all(owned.splice(0).map(path => rm(path, { recursive: true, force: true })));
+});
+
+// Writes one v29 frame with no `channel` (the request every CLI sends) and prints what came back: a response, a closed connection, or an error.
+const CLIENT = String.raw`
+const net = require('node:net'); const [endpoint, version] = process.argv.slice(1);
+const body = Buffer.from(JSON.stringify({ schemaVersion: Number(version), requestId: 'sandbox-request', operation: 'describeService', input: {} }));
+const head = Buffer.alloc(4); head.writeUInt32BE(body.length, 0);
+let printed = false; const print = value => { if (!printed) { printed = true; process.stdout.write(JSON.stringify(value) + '\n'); } };
+const socket = net.createConnection(endpoint); const chunks = [];
+socket.on('connect', () => socket.end(Buffer.concat([head, body])));
+socket.on('data', chunk => chunks.push(chunk));
+socket.on('error', error => print({ error: error.code }));
+socket.on('close', () => { const frame = Buffer.concat(chunks); print(frame.length > 4 ? { response: JSON.parse(frame.subarray(4).toString('utf8')) } : { closed: true }); });
+setTimeout(() => { print({ timeout: true }); process.exit(0); }, 5000).unref();
+`;
+
+function options(endpoint: string): LocalRuntimeSocketOptions {
+  return { endpoint, maxConnections: 4, inputMaxBytes: 4096, responseMaxBytes: 4096, acceptRetryDelayMs: 25, acceptRetryLimit: 3, headerTimeoutMs: 2_000, responseTimeoutMs: 2_000 };
+}
+async function serve(endpoint: string) {
+  const seen: string[] = [];
+  const server = await startLocalRuntimeSocketServer(options(endpoint), request => {
+    seen.push(request.operation);
+    return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result: { admitted: true } };
+  });
+  servers.push(server);
+  return { server, seen };
+}
+// Asynchronous on purpose: the server under test runs in this process, so a synchronous child would block its accept loop.
+function run(command: string, args: readonly string[], env?: NodeJS.ProcessEnv): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { env: env ?? process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', chunk => { stdout += String(chunk); }); child.stderr.on('data', chunk => { stderr += String(chunk); });
+    const timer = setTimeout(() => child.kill('SIGKILL'), 20_000);
+    child.once('error', reject);
+    child.once('close', status => { clearTimeout(timer); resolve({ status, stdout, stderr }); });
+  });
+}
+function outcome(stdout: string): Record<string, unknown> {
+  const line = stdout.trim().split('\n').filter(Boolean).at(-1);
+  return line ? JSON.parse(line) as Record<string, unknown> : { noOutput: true };
+}
+
+describe.skipIf(process.platform !== 'linux')('SEC-1: an agent shell cannot reach or use the runtime socket', () => {
+  it.skipIf(!launcher)('(a) the full-access open view hides the runtime socket directory: the endpoint cannot be reached, nothing is dispatched', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-sec1-open-')); owned.push(root);
+    const project = join(root, 'project'), home = join(root, 'home'), global = join(root, 'global');
+    await Promise.all([mkdir(join(project, '.deckent'), { recursive: true }), mkdir(home, { recursive: true }), mkdir(global, { recursive: true })]);
+    const endpoint = await prepareRuntimeSocket(resolveProductLayout({ projectRoot: project }));
+    owned.push(dirname(endpoint));
+    expect(endpoint).toMatch(new RegExp(`^/tmp/dk-${process.getuid!()}-[0-9a-f]{64}/s$`));
+    const { seen } = await serve(endpoint);
+    const credentials = DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern)).map(createGlobMatcher);
+    const layout: ShellSandboxLayout = { project: await createWorkspaceScope(project, DEFAULT_WORKSPACE_READ_DENY.filter(pattern => !REPOSITORY_INTERNALS_DENY.includes(pattern))),
+      scratchDir: null, writeFloor: () => false, repositoryWritable: true,
+      hardFloor: { roots: [join(project, '.deckent'), global], homeDenied: path => credentials.some(match => match(path)) } };
+    const env = { HOME: home, PATH: `${dirname(process.execPath)}:/usr/bin:/bin` };
+    const view = await resolveBubblewrapView(layout, env, {}, { floorReadOnly: true, open: true });
+    if (!view.ok) throw new Error(view.reason);
+    const sandboxed = await run(launcher!, [...bubblewrapArguments(view.view), '--', process.execPath, '-e', CLIENT, endpoint, String(RUNTIME_SERVICE_SCHEMA_VERSION)], env);
+    expect(sandboxed.status, sandboxed.stderr).toBe(0);
+    // The directory is an empty tmpfs inside the view: the name does not resolve (ENOENT), so no connection and no request.
+    expect(outcome(sandboxed.stdout)).toEqual({ error: 'ENOENT' });
+    expect(seen).toEqual([]);
+  });
+
+  it.skipIf(!launcher)('(b) a peer in another PID/mount/user namespace that can reach the endpoint is refused at accept, before any frame is dispatched', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-sec1-ns-')); owned.push(root);
+    const parent = join(root, 'private'); await mkdir(parent, { mode: 0o700 });
+    const endpoint = join(parent, 'runtime.sock');
+    const { seen } = await serve(endpoint);
+    // The host bound read-write at `/` (as the open view does) with every namespace but the network unshared, and no socket mask: the
+    // endpoint is reachable, so only the adapter's peer check can stop the frame.
+    const sandboxed = await run(launcher!, ['--unshare-all', '--share-net', '--die-with-parent', '--new-session', '--bind', '/', '/', '--proc', '/proc', '--dev', '/dev',
+      '--', process.execPath, '-e', CLIENT, endpoint, String(RUNTIME_SERVICE_SCHEMA_VERSION)]);
+    expect(sandboxed.status, sandboxed.stderr).toBe(0);
+    const result = outcome(sandboxed.stdout);
+    expect(result).not.toHaveProperty('response');
+    expect(seen).toEqual([]);
+  });
+
+  it('(c) a peer in the service\'s own namespaces is still admitted (the CLI and terminal path is unchanged)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-sec1-same-')); owned.push(root);
+    const parent = join(root, 'private'); await mkdir(parent, { mode: 0o700 });
+    const endpoint = join(parent, 'runtime.sock');
+    const { seen } = await serve(endpoint);
+    const plain = await run(process.execPath, ['-e', CLIENT, endpoint, String(RUNTIME_SERVICE_SCHEMA_VERSION)]);
+    expect(plain.status, plain.stderr).toBe(0);
+    expect(outcome(plain.stdout)).toEqual({ response: { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'sandbox-request', ok: true, result: { admitted: true } } });
+    expect(seen).toEqual(['describeService']);
+  });
+
+  it.skipIf(landlockAbi < 1)('(d) the Landlock realm cannot open a unix socket at all: a reachable endpoint receives nothing', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'deckent-sec1-landlock-')); owned.push(root);
+    const parent = join(root, 'private'), project = join(root, 'project'), scratch = join(root, 'scratch');
+    await Promise.all([mkdir(parent, { mode: 0o700 }), mkdir(project), mkdir(scratch)]);
+    const endpoint = join(parent, 'runtime.sock');
+    const { seen } = await serve(endpoint);
+    const resolution = resolveShellRealm('prefer-sandbox', { platform: 'linux', bubblewrap: 'unavailable', userNamespace: 'available', landlock: { status: 'available', abi: landlockAbi } },
+      [landlockShellSandbox({ project: await createWorkspaceScope(project), scratchDir: scratch })]);
+    if (!resolution.ok || resolution.realm.kind !== 'landlock') throw new Error('landlock realm expected');
+    const ran = await resolution.realm.run({ command: `python3 -c "import socket; s = socket.socket(socket.AF_UNIX); s.connect('${endpoint}'); print('connected')"`,
+      cwd: project, environment: { PATH: '/usr/bin:/bin' } });
+    // The refusal is the kernel's (seccomp refuses AF_UNIX in this realm), not a missing interpreter.
+    expect(ran.output).toMatch(/PermissionError|Operation not permitted|Permission denied/u);
+    expect(ran.output).not.toContain('connected');
+    expect(seen).toEqual([]);
+  });
+});

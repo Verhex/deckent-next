@@ -82,3 +82,13 @@ it('keeps environment locale available with invalid config', async () => {
   await writeFile(join(root, '.deckent', 'config.json'), '{broken');
   env['DECKENT_LANG'] = 'tr'; await help(['run', '--help'], 'tr');
 });
+it('L-KIT: an error before a command reports its locale renders in the host-resolved locale, heading and body alike', async () => {
+  const { ErrorRegistry } = await import('#platform/index.js');
+  for (const [locale, said, never] of [['tr', 'Envanter güvenle okunamıyor', 'Inventory cannot be read'], ['en', 'Inventory cannot be read', 'Envanter güvenle okunamıyor']] as const) {
+    let errors = '';
+    // LANG says English; the host already resolved `locale` (flag, DECKENT_*, config language, LC_*); a failure before the command runs keeps it.
+    expect(await main(['run', 'inspect', '--scope', 's'], { root, env, locale, initialize: () => { throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE'); },
+      stdout: { write: () => {} }, stderr: { write: text => { errors += text; } } })).not.toBe(0);
+    expect(errors).toContain(said); expect(errors).not.toContain(never);
+  }
+});

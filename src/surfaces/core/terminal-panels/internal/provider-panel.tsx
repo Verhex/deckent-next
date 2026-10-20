@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
-import { ListPicker, PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { Window } from '#surfaces/core/terminal-window/index.js';
+import { PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { EntryWindow } from './entry.js';
-import { LinesWindow, QuestionWindow, panelWindowLines, usePickerRoom } from './lines.js';
+import { LinesWindow, QuestionWindow, panelWindowLines } from './lines.js';
+import { PickerWindow } from './picker-window.js';
 import { BudgetWindow, budgetEntry } from './budget-panel.js';
 import { CacheWindow, cacheEntry } from './cache-panel.js';
 import type { BudgetPanelView, CachePanelView, PanelLabels, PanelNotice, ProviderConnectOutcome, ProviderModelOutcome, ProviderPanelKind, ProviderPanelLabels, ProviderPanelPort, ProviderPanelView } from './contract.js';
@@ -51,7 +51,6 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   const [step, setStep] = useState<Step>({ kind: 'list' });
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [generation, setGeneration] = useState(0);
-  const room = usePickerRoom(1);
   // Stage 1: the scope budget row (create / change) above the kinds; a budget read failure only hides the row.
   const [budget, setBudget] = useState<BudgetPanelView | null>(null);
   // CACHE-SLICE1: the cache migration row (existing profiles without a cache choice); a read failure only hides the row.
@@ -69,7 +68,8 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
       error => { onError(error); back(); });
   };
   const title = (text: string) => [span(text, { bold: true })];
-  if (!view || step.kind === 'busy') return <Window title={title(words.title)} body={[{ spans: [span(view ? words.checking : labels.loading)] }]} hints={words.hints} position={labels.position} />;
+  if (!view || step.kind === 'busy') return <PickerWindow title={title(words.title)} body={[{ spans: [span(view ? words.checking : labels.loading)] }]} bodyRows={BODY_ROWS} tree={null}
+    labels={labels.picker} listHints={words.hints} position={labels.position} onResult={() => undefined} />;
   if (step.kind === 'budget' && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={back} />;
   if (step.kind === 'cache' && cache && port.cache) return <CacheWindow port={port.cache} view={cache} labels={labels} push={push} onError={onError} onDone={back}
     {...(openApproval ? { openApproval: (approvalId: string) => { openApproval(approvalId); onClose(); } } : {})} />;
@@ -82,13 +82,13 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   }} />;
   if (step.kind === 'model') {
     const { target, endpoint } = step, connectModel = port.connectModel;
-    return <Window title={title(fillTemplate(words.modelTitle, { kind: target.label }))} hints={words.hints} position={labels.position} footerRows={room.footerRows} onInput={() => true}
-      body={target.models.length ? [] : [{ spans: [span(words.modelEmpty, { role: 'muted' })] }]}
-      footer={focused => <ListPicker tree={providerModelTree(target, words)} labels={labels.picker} active={focused} maxRows={room.rows} onResult={result => {
+    return <PickerWindow title={title(fillTemplate(words.modelTitle, { kind: target.label }))} bodyRows={BODY_ROWS} labels={labels.picker} position={labels.position}
+      body={target.models.length ? [] : [{ spans: [span(words.modelEmpty, { role: 'muted' })] }]} pickerKey="model"
+      tree={providerModelTree(target, words)} onResult={result => {
         if (result.kind !== 'selected' || !connectModel) { back(); return; }
         setStep({ kind: 'busy' });
         connectModel({ kind: target.id, endpoint, model: result.id }).then(outcome => setStep({ kind: 'connected', outcome }), error => { onError(error); back(); });
-      }} />} />;
+      }} />;
   }
   if (step.kind === 'confirm') return <QuestionWindow title={fillTemplate(words.disconnectTitle, { kind: step.target.label })} lines={[]} hints={words.disconnectKeys} position={labels.position}
     onAnswer={answer => {
@@ -100,14 +100,14 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     }} />;
   if (step.kind === 'endpoint') {
     const target = step.target;
-    return <Window title={title(`${target.label} · ${words.endpointTitle}`)} hints={words.hints} position={labels.position} footerRows={room.footerRows} onInput={() => true}
-      footer={focused => <ListPicker tree={providerEndpointTree(target, words)} labels={labels.picker} active={focused} maxRows={room.rows} onResult={result => {
+    return <PickerWindow title={title(`${target.label} · ${words.endpointTitle}`)} bodyRows={BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey="endpoint"
+      tree={providerEndpointTree(target, words)} onResult={result => {
         if (result.kind !== 'selected') { back(); return; }
         const choice = target.endpointChoices.find(item => item.id === result.id);
         if (choice && step.forModel) { chooseModels(target, choice.url); return; }
         setStep(choice ? { kind: 'key', target, endpoint: choice.url }
           : { kind: 'address', target, text: '', problem: null, ...(step.forModel ? { forModel: true } : {}) });
-      }} />} />;
+      }} />;
   }
   // Each entry step is its own window instance (key): an accepted entry stays deaf, and the key step never inherits the address's text.
   if (step.kind === 'address') return <EntryWindow key="address" title={`${step.target.label} · ${words.endpointOther}`} hints={words.endpointHint} position={labels.position}
@@ -158,10 +158,12 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     ...view.notes.map(note => ({ spans: [span(note, { role: 'warning' as const })] })),
     // K6: a key-only kind says so in the window body too (a narrow terminal may cut the row's detail).
     ...view.kinds.filter(kind => kind.pendingNote).map(kind => ({ spans: [span(`${kind.label}: `, { bold: true }), span(kind.pendingNote!, { role: 'muted' as const })] }))];
-  return <Window title={title(view.title)} body={body} hints={words.hints} position={labels.position} footerRows={room.footerRows} onInput={() => true}
-    footer={focused => <ListPicker key={generation} tree={withRows(providerPanelTree(view, words, Boolean(port.connectModel)), budgetEntry(budget, labels.budget), cacheEntry(cache, labels.cache))} labels={labels.picker} active={focused} initial={state} onState={setState}
-      maxRows={room.rows} onResult={result => chosen(result, state)} />} />;
+  return <PickerWindow title={title(view.title)} body={body} bodyRows={BODY_ROWS} labels={labels.picker} position={labels.position} pickerKey={generation} initial={state} onState={setState}
+    tree={withRows(providerPanelTree(view, words, Boolean(port.connectModel)), budgetEntry(budget, labels.budget), cacheEntry(cache, labels.cache))}
+    onResult={result => chosen(result, state)} />;
 }
+/** The body rows every provider window keeps (an empty list's line, the notes and key-only kinds scroll past it). */
+const BODY_ROWS = 1;
 /** Stage 1: the budget row first, when the window offers a budget action; then (CACHE-SLICE1) the cache migration row when one is offered. */
 function withRows(tree: PickerTree, entry: ReturnType<typeof budgetEntry>, cacheRow: ReturnType<typeof cacheEntry>): PickerTree {
   return { ...tree, items: [...(entry ? [{ id: BUDGET, label: entry.label, detail: entry.detail }] : []),

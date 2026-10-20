@@ -42,6 +42,7 @@ entries, descendants and whole-object parents such as `terminal`, `terminal.shel
 | Policy administration execute/compensate | `operation/policy.administer/execute`, `operation/policy.administer/compensate` | Grants, bindings, delegation, restrictions, duties and standing grants must not let an AI enlarge its own authority. |
 | Authority documents, authenticators and approval assurance: all mutations | `authority-document/fixture-record/write`, `authority-document/fixture-record/register`, `authority-document/fixture-record/activate`, `authority-document/fixture-record/remove`, `authority-document/fixture-record/future-mutation`, `authenticator/fixture-record/write`, `authenticator/fixture-record/register`, `authenticator/fixture-record/activate`, `authenticator/fixture-record/remove`, `authenticator/fixture-record/future-mutation`, `approval-assurance/fixture-record/write`, `approval-assurance/fixture-record/register`, `approval-assurance/fixture-record/activate`, `approval-assurance/fixture-record/remove`, `approval-assurance/fixture-record/future-mutation` | An actor cannot replace the identity or approval verifier that constrains it; inspect/list remain policy governed. |
 | Backup restore | `backup/fixture-backup/restore` | A restore can replace authority data. |
+| Execution environment install and installation repair | `execution-environment/fixture-target/install`, `installation/fixture-target/repair` | Both change the host outside the sandbox (Docker group membership is root-equivalent); only a person at a terminal runs them (owner 2026-10-19). |
 | Permission mode set, including full access | `permission-mode/standart/set`, `permission-mode/full-auto/set`, `permission-mode/full-access/set` | An AI must not choose a weaker permission mode for itself. |
 | Every secret action, including read/resolve | `secret/FIXTURE_SECRET/set`, `secret/FIXTURE_SECRET/delete`, `secret/FIXTURE_SECRET/switch`, `secret/FIXTURE_SECRET/read`, `secret/FIXTURE_SECRET/resolve`, `secret/FIXTURE_SECRET/inspect`, `secret/FIXTURE_SECRET/list`, `secret/FIXTURE_SECRET/future-action` | Reading, changing or moving credentials would bypass the secret boundary; read/resolve are defensive cells, not public secret-read APIs. |
 | Authority approval cards | `approval/identity-profile/decide`, `approval/policy-mcp-capability/decide`, `approval/policy-template-upgrade/decide`, `approval/audit-rebaseline/decide` | Deciding an authority card is another authority-changing route. |
@@ -115,7 +116,15 @@ deckent policy revoke STANDING_GRANT_ID --scope SCOPE_ID --json
 deckent policy upgrade --template current --scope SCOPE_ID --preview --json
 ```
 
-`grants --mine` lists your standing tool approvals, not every delegation cell. `policy revoke`
+`grants` (with or without `--mine`) lists your standing tool approvals, not every delegation cell; everyone's
+grants (`deckent policy grants --all [--after PAGE_MARK]`) need the grantable read action `policy`/`inspect-standing-grants`
+(first-run template v13 gives it to the installing person; no AI actor gets it unless a policy rule names it). The policy decides
+first; without the action the command refuses with `CLI_POLICY_GRANTS_ALL_UNAVAILABLE` and reads nothing else. Allowed, it shows
+one bounded page (person, rule, tool, masked pattern, scope, since: the sealed audit change that created the rule, "—" for a
+hand-written one) and the command for the next page.
+On your own terminal `deckent policy` summarises the scope (administrators, your grants, AI steps and MCP groups
+on/off), and `deckent policy mcp` / `deckent policy delegations` let you pick a group or step, read the change's
+preview on a card and apply it through the same governed change as the commands above. `policy revoke`
 revokes one of those entries, not an arbitrary policy grant. Non-TTY standing revocation has
 a `--yes` confirmation flag; it does not bypass authority, policy or the AI floor.
 
@@ -123,7 +132,8 @@ a `--yes` confirmation flag; it does not bypass authority, policy or the AI floo
 
 The CLI and the terminal `/policy` → **AI delegation** section share one versioned command.
 List first; select a step from that inventory, then confirm its actor, scope, resource class/id
-and policy revision on the y/N card. Only `y`/`yes` confirms CLI; the terminal card uses `y`.
+and policy revision on the card. The CLI card is answered with the arrow keys or `y`/`n` (the change re-reads the
+view, and the card shows exactly that); the terminal card uses `y`.
 Enter, N and Escape cancel the terminal card. Writes require verified interactive stdin/output;
 there is no `--yes` bypass. SDK `inspectConfiguredDecisionDelegations(root, query, options)` is
 read-only. No MCP mutation or new decision tool is exposed.
@@ -213,7 +223,7 @@ an attacker with the same account who removes both all markers and checkpoints c
 like a fresh installation locally. Rebaseline is a witnessed human y/N action, on the AI floor,
 after investigating the cause; it establishes a new reference, not proof the past was safe.
 Hardware-backed FIDO2 confirmation and signed policy bundles are post-beta work, not current
-protection. See [audit limits](architecture-overview.md#audit-integrity-and-pull-witness).
+protection. See [audit limits](architecture-overview.md#audit-integrity-and-pull-witnesses).
 
 ## What the compliance report proves
 
@@ -234,12 +244,12 @@ acceptance evidence. Application-card security is checked separately. For dogfoo
 are one adapter's evidence; customers accept ERP/CRM outcomes against business criteria and
 durable receipts using the same principal/scope/operation/approval contracts.
 
-Command sources: [policy grants/status/upgrade](../src/surfaces/core/cli/internal/policy-grants.ts),
-[MCP policy](../src/surfaces/core/cli/internal/policy-mcp.ts), [Run](../src/surfaces/core/cli/internal/run.ts),
-[Task](../src/surfaces/core/cli/internal/task.ts), [approvals](../src/surfaces/core/cli/internal/approvals.ts),
-[audit](../src/surfaces/core/cli/internal/audit.ts). Decision rules:
+Command sources: [policy grants/status/upgrade](../src/surfaces/core/cli-approval/internal/policy-grants.ts),
+[MCP policy](../src/surfaces/core/cli-approval/internal/policy-mcp.ts), [Run](../src/surfaces/core/cli-run/internal/run.ts),
+[Task](../src/surfaces/core/cli-task/internal/task.ts), [approvals](../src/surfaces/core/cli-approval/internal/approvals.ts),
+[audit](../src/surfaces/core/cli-admin/internal/audit.ts). Decision rules:
 [step grant](../src/domain/core/policy/internal/decision-step.ts),
 [lifecycle broker](../src/engine/core/runs/internal/decision-approval.ts),
 [card authority](../src/engine/core/approval/internal/application.ts).
 
-Delegation sources: [CLI](../src/surfaces/core/cli/internal/policy-delegations.ts), [application](../src/engine/core/approval/internal/delegations.ts), [inventory](../src/domain/core/policy/internal/delegations.ts).
+Delegation sources: [CLI](../src/surfaces/core/cli-approval/internal/policy-delegations.ts), [application](../src/engine/core/approval/internal/delegations.ts), [inventory](../src/domain/core/policy/internal/delegations.ts).

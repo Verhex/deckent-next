@@ -29,7 +29,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> **Ön sürüm `1.0.0-alpha.46`** (2026-10-18 yayımlandı). Deckent henüz npm'de yok; [Başlarken](#başlarken)
+> **Ön sürüm `1.0.0-alpha.48`** (2026-10-20 yayımlandı). Deckent henüz npm'de yok; [Başlarken](#başlarken)
 > bölümündeki gibi kaynaktan kurun. Her sürümün içeriği [CHANGELOG.md](CHANGELOG.md) içinde.
 
 ## Deckent nedir
@@ -44,9 +44,10 @@ aktörünü adıyla anan açık bir policy izni ister. İnsan onay kararları et
 
 Açık kaynak Core (Apache-2.0) tek başına çalışır. Ayrı dağıtılacak proprietary Enterprise sürümü, Core'u değiştirmeden
 kayıt defteri (registry) üzerinden üstüne katmanlanacak şekilde tasarlanmıştır. Bugün public uzantı girişi, CLI
-dağıtımının etki adaptörleri ve gizli depo adaptörleri kaydetmesini sağlar. alpha.20’den beri aynı dağıtım,
+dağıtımının etki adaptörleri, gizli depo adaptörleri ve sır yardımcıları, onay güvencesi üreticileri, MCP yetki grupları
+ve sağlayıcı ücretsiz-çağrı sertifikaları kaydetmesini sağlar. alpha.20’den beri aynı dağıtım,
 kayıtlarıyla servis ve MCP girişini de başlatabilir; otomatik servis başlatma ve yeniden başlatma dağıtımın girişini
-yeniden çalıştırır. Core'un yalın çalıştırılabilir dosyaları bu modülleri kendiliğinden keşfetmez. Enterprise SSO, ERP
+yeniden çalıştırır (elle çalıştırılan `npm run smoke:dist` ile sınanır, CI'da yok). Core'un yalın çalıştırılabilir dosyaları bu modülleri kendiliğinden keşfetmez. Enterprise SSO, ERP
 entegrasyonları ve filo yönetimi planlanan yeteneklerdir.
 
 | | |
@@ -128,8 +129,8 @@ deckent init policy --scope my-project --apply
    sunar; ücretli çağrı için fiyat ve yönlendirme yine doğrulanmalıdır. Bugün abonelikler: Claude Code işçisi kendi Claude girişinizle çalışır; abonelikli Brain hazırlanıyor (henüz yok); Claude aboneliğiyle terminal sohbeti şu an desteklenmiyor, sohbet için Anthropic API anahtarı kullanın. ChatGPT ile giriş `/provider`'da henüz kullanılamıyor olarak görünür. Aynısı komut satırından: `deckent secret
    set <AD>` ve `deckent models connect --scope <id> --connection <tür> --command-id <id> --model <birebir
    kimlik>`.
-4. **Bütçe belirleyin.** Her model turu, kapsamın tek ve ortak USD bütçesinden pay ayırır; bütçe yoksa her tur
-   reddedilir ve pencereler bunu söyler. `/provider`'ın ilk satırı **Bütçe oluştur** bütçe penceresini açar: 5, 10, 25,
+4. **Bütçe belirleyin.** Her ücretli API model turu, kapsamın tek ve ortak USD bütçesinden pay ayırır; bütçe yoksa her
+   ücretli tur reddedilir ve pencereler bunu söyler (yerel loopback modeller ve abonelik modelleri bütçesiz çalışır). `/provider`'ın ilk satırı **Bütçe oluştur** bütçe penceresini açar: 5, 10, 25,
    50 ya da 100 USD veya ok tuşlarıyla 1 ile 1000 arasında başka bir tam dolar tutarı, ardından bir onay adımı. Sonra
    aynı satır **Bütçeyi değiştir** olur. Komut satırından: `deckent models create-budget --scope <id> --usd <n>` ve
    `deckent models revise-budget --scope <id> --usd <n>`.
@@ -164,7 +165,7 @@ deckent init policy --scope my-project --apply
 bir kodlama işçisi Docker içinde yapar ve değişiklik Git'e teslim edilir. 1 ile 4 arası adımlar bir kez yapılan operatör
 kurulumudur; yolun temiz bir makinede 2026-10-15/16'da yapılan provası model adımına kadar
 gitti (model adımı ve boş bir Docker daemon'unda işçi imajı derlemesi denenmedi; [bilinen sınırlar](docs/known-limits.tr.md)). Aşağıdaki komutlar ve mesajlar güncel kaynaktan ve mesaj
-kataloglarından gelir; kimlikler, yollar ve saatler örnektir.
+kataloglarından gelir; kimlikler, yollar ve saatler örnektir. `deckent init` ve `deckent doctor` bu adımlardan hangilerinin eksik olduğunu tam komutuyla gösterir.
 
 ```mermaid
 flowchart LR
@@ -224,7 +225,7 @@ bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
    `deckent config explain admission` gösterir.
 4. **Servisi yeniden başlatın**, yeni yapılandırmayı okusun: `deckent runtime restart` (terminalde `/service-restart`).
    Şunu söyler: `Runtime servisi yeniden başlatıldı (pid 494385, örnek 8b1e2392-…).` Yeni bir `init policy --apply`
-   (ilk kurulum politikası v12) servisi zaten adlandırır (`service.identity`) ve onu yalnız sizin durdurmanıza izin verir.
+   (ilk kurulum politikası v12 ve sonrası) servisi zaten adlandırır (`service.identity`) ve onu yalnız sizin durdurmanıza izin verir.
    Daha eski bir ilk kurulumda önce yukarıdaki yükseltmeyi çalıştırın; servis kimliğini ayarladığını söylerse çalışan
    servisi bir kez elle durdurun ([Runtime servisi](#runtime-servisi)), sonra `runtime restart` çalışır.
    **5. adımdan önce, bir kez: model ve işçi girişi.** `/do` bütçeli, bağlı bir model ister; işçi CLI'ın da bu makinede
@@ -238,7 +239,8 @@ bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
 
    `secret set` anahtarı gizli bir istemde sorar. Her bağlantı türünün kendi gizli adı vardır: `DECKENT_ANTHROPIC_KEY`,
    `DECKENT_OPENAI_KEY`, `DECKENT_DEEPSEEK_KEY`, `DECKENT_GLM_KEY`, `DECKENT_GLM_CN_KEY` ya da `DECKENT_OPENROUTER_KEY`
-   (`/provider` aynı adla saklar). `--model` birebir API model kimliğini alır; paketlenmiş katalogların kimlikleri kaynak
+   (`/provider` aynı adla saklar). Yerel sunucu (vLLM, Ollama ya da LM Studio) isteğe bağlı `DECKENT_LOCAL_ENDPOINT_KEY`
+   adını, OpenAI uyumlu bir uç nokta ise host'undan türetilen `DECKENT_OAICOMPAT_<HOST>` adını kullanır. `--model` birebir API model kimliğini alır; paketlenmiş katalogların kimlikleri kaynak
    dizinindeki `assets/model-catalog/<bağlantı>.json` dosyalarında, terminalde ise `/model` ile listelenir. İşçi CLI
    (`codex` ya da `claude`) bu makinede kurulu ve girişli olmalıdır: `codex login` çalıştırın; Claude Code için `claude`
    yazıp `/login` girin. Deckent bu girişi CLI'ın kendi dizininden okur (`~/.codex/auth.json`,
@@ -320,7 +322,8 @@ Model turları, onaylar, `/do` ve kurtarma her proje için tek bir yerel runtime
 - **Yeniden başlatma ve durdurma.** `deckent runtime restart` servisi yönetilen durdurmayla kapatır, güncel derleme ve
   yapılandırmayla yeniden başlatır; `deckent runtime shutdown` yalnız durdurur. `deckent runtime describe` çalışanı
   gösterir. İkisi de servisin kimliğini (`deckent config explain service.identity`) ve sizin o servis üzerindeki
-  `shutdown` kuralınızı ister; ilk kurulum politikası bunu yalnız kuran kişiye verir, yerel MCP aktörü servisi durduramaz.
+  `shutdown` kuralınızı ister; ilk kurulum politikası bunu yalnız kuran kişiye verir, yerel MCP aktörü varsayılan olarak servisi durduramaz
+  (politika ona `service` MCP grubunu verirse durdurabilir).
 - **Eski kurulumlar.** v12'den eski bir ilk kurulum politikasında ne servis kimliği ne de `shutdown` kuralı vardır; bu
   yüzden `runtime restart` ve `runtime shutdown` reddedilir. Şöyle yükseltin:
   `deckent init policy --scope <id> --upgrade --preview`, sonra `--apply --expect <değer>` ([Adım adım ilk işiniz](#adım-adım-ilk-işiniz));
@@ -341,7 +344,7 @@ değişiklik policy'den geçer ve bir onaya dönüşebilir.
 <table>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/tr/02-sohbet.png" alt="Sohbet turu: sizin satırınız Sen, yanıt Deckent başlığı altında"><br><sub><b>Sohbet.</b> Sizin satırlarınız ve Deckent'in yanıtları belirgin biçimde ayrışır; her turda süre ve token.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/tr/05-onay.png" alt="Kabuk komutu için onay penceresi"><br><sub><b>Onay penceresi.</b> Ne, nerede (sandbox), kimin adına, kapsam, neden, risk, geri alınabilirlik ve canlı süre. <code>y</code> bu sefer · <code>n</code> reddet · <kbd>Tab</kbd> not.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/05-onay.png" alt="Kabuk komutu için onay penceresi"><br><sub><b>Onay penceresi.</b> Ne, nerede (sandbox), kimin adına, kapsam, neden, risk, geri alınabilirlik ve canlı süre. <code>y</code> bu sefer · <code>n</code> reddet · <kbd>Tab</kbd> not (alpha.17 ekranı; güncel kartlar izin verdiğinde <code>s</code> bu oturum boyunca ve <code>a</code> bu projede her zaman seçeneklerini, ayrıca <kbd>↑</kbd><kbd>↓</kbd> + <kbd>Enter</kbd> seçimini de sunar).</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/tr/04-durum.png" alt="/status penceresi"><br><sub><b>/status.</b> Önce insan dilinde özet; kimlikler, süreç ve build ayrıntıda.</sub></td>
@@ -408,8 +411,8 @@ Tam otomatik, `find -delete`, dosya kısaltma (`>`, `>|`) ve taşıma (`mv`) iç
 
 ### API anahtarları
 
-Sağlayıcı anahtarını bir kez, `/provider`'ın gizlenen alanına ya da `deckent secret set AD` ile kaydedersiniz (gizli
-istem ya da stdin; asla komut argümanı değil); model profili ona adıyla başvurur. Anahtarı `ANTHROPIC_API_KEY`, shell
+Sağlayıcı anahtarını bir kez, `/provider`'ın gizlenen alanına ya da `deckent secret set AD` ile kaydedersiniz (etkileşimli
+terminalde gizli istem; asla komut argümanı değil, stdin'den verilen anahtar reddedilir); model profili ona adıyla başvurur. Anahtarı `ANTHROPIC_API_KEY`, shell
 profili ya da `.env` dosyasına koymayın: başka araçlar oraları okur.
 
 | Depo (`secrets.store`) | Diskte | Anahtarı kim okuyabilir |
@@ -421,12 +424,14 @@ profili ya da `.env` dosyasına koymayın: başka araçlar oraları okur.
 Ajan ve worker istekleri anahtara adıyla başvurur; çalışma zamanı anahtarı isteme veya shell ortamına koymadan çözer.
 Desteklenen sandbox'lar depoyu gizler; host'a düşen yol dosya sistemi yalıtımı sağlamaz. Anahtarı geri yansıtan sağlayıcı
 yanıtı reddedilir.
-`deckent doctor` hangi deponun etkin olduğunu ve kimin okuyabileceğini gösterir. Sağlayıcı anahtarı reddederse (401/403) ya da
+`deckent doctor` hangi deponun etkin olduğunu gösterir; `deckent doctor --verbose` kimin okuyabileceğini de söyler. Sağlayıcı anahtarı reddederse (401/403) ya da
 bir limit dolarsa terminal bunu açık sözlerle söyler; harcama limitleri sağlayıcı hesabınızda kalır.
 
 **Katı kurulum**, anahtarı makinedeki başka hiçbir programın okumaması gerekiyorsa:
 
-1. Anahtarlarınızı şifreli depoya taşıyın: `deckent secret store` kayıtlı depoları seçmeniz için listeler; her anahtarı kopyalar,
+Yeni Linux/WSL/macOS kurulumları, kurulu politika geçişe izin veriyorsa şifreli depoyu `init policy --apply` ve Docker `init apply` ile seçer; mevcut kurulumlar seçimlerini korur.
+
+1. Anahtarlarınızı şifreli depoya taşıyın: `deckent secret store` kayıtlı depoları seçmeniz için listeler; env deposundan çıkarken hedefte eksik olan yapılandırma başvuru adlarını listeler ve evet/hayır sorar (betikler `--confirm-env-missing` ister); `doctor` aynı adları gösterir; her anahtarı kopyalar,
    doğrular, yeni depoyu seçer ve ardından eski kopyayı siler (daha zayıf bir depoya geçiş önce sorar). Linux, WSL ve macOS'ta
    `deckent init policy` ile kurulanlar zaten şifreli depoyla başlar.
 2. Diğer yapay zekâ araçlarını Deckent'in durum klasöründen uzak tutun; örneğin Claude Code'un `~/.claude/settings.json`
@@ -440,7 +445,8 @@ Dosya depoları native Windows'ta henüz yok.
 Her kapsamın, tüm API sağlayıcıları için ortak tek bir USD bütçesi vardır. Ücretli bir çağrıdan önce Deckent, geçerli
 olabilecek en pahalı fiyat kademesinde çağrının tutabileceği en yüksek tutarı ayırır; sonra çağrıyı sağlayıcının kendi
 son yanıtında bildirdiği kullanım ile doğrulanmış yayımlanmış fiyatın çarpımından kesinleştirir. Kesinleşen tutar
-Deckent'in kendi hesabıdır, sağlayıcının faturası değildir. Fiyatı doğrulanmamış uzak bir model reddedilir ve nedeniyle
+Deckent'in kendi hesabıdır, sağlayıcının faturası değildir. OpenRouter çağrıları istisnadır: OpenRouter'ın yanıtında
+bildirdiği ücretten kesinleşir. Fiyatı doğrulanmamış uzak bir model reddedilir ve nedeniyle
 kilitli görünür. Sağlayıcı hangi fiyat kademesini kullandığını söylemiyorsa (DeepSeek) çağrı yayımlanmış en yüksek
 fiyattan kesinleşir ve üst sınır olarak işaretlenir. Son kullanımını hiç almamış bir çağrı, `deckent models
 reconcile-spending` ile çözene kadar ayrılmış kalır. Kesinleşen bir tutar ayrılandan fazla çıkarsa kapsam yeni
@@ -501,6 +507,11 @@ flowchart LR
   isterseniz zamanlayarak ve saklama süresiyle; geri yükleme yalnızca servis durmuşken çalışır. Kümenin içindeki yalnız
   yetki anahtarı parolanızla şifrelenir; ledger ve durum arşivi düz dosyadır, kümeleri güvendiğiniz bir depoda saklayın
   (kümenin tamamının şifrelenmesi henüz yok).
+- **İnceleyin ve denetleyin**: `deckent audit verify` denetim geçmişini doğrular, `deckent report --scope <id> --run <id>`
+  bir Run'ın maliyet ve kabul kanıtını gösterir, `deckent run hold|resume|close` ve `deckent pool hold|resume` işi durdurur,
+  sürdürür ya da kapatır, `deckent policy grants --mine` ve `deckent policy revoke` kalıcı izinlerinizi listeler ve kaldırır,
+  `deckent identity profiles` kimlik profillerini gösterir. `deckent init` önizlemeden sonra proje talimatlarını
+  (`DECKENT.md`) hazırlar. Terminalde `/help` tüm slash komutlarını listeler.
 - **İşletin**: tüm kurulumlar için salt okunur `deckent monitor`, sağlık için `deckent doctor`, ayarlar için
   `deckent config`, her yerde iki dilli yardım.
 
@@ -513,7 +524,7 @@ sade listesi [Bilinen sınırlar](docs/known-limits.tr.md) sayfasındadır.
 ```mermaid
 flowchart LR
   L["Yayımlandı · alpha.23<br/>terminal pencereleri · onay penceresi · slash komut pencereleri<br/>/config · /mode · /mcp · /provider · /model<br/>kolay MCP (HTTP, içe aktarma, güven) · şifreli anahtar deposu<br/>harcama kesinleştirme ve bütçeler · OpenRouter modelleri · istem önbelleği"] --> P["Sürüyor<br/>maliyet korumaları · sağlayıcı başına harcama sınırı<br/>önbellek kırılma noktaları ve sıkıştırma tetikleyicileri"]
-  P --> N["Sırada<br/>abonelikler · işçi kimlik bilgisi kipleri<br/>sistem istemi ve ayarlar<br/>proje talimat dosyası"]
+  P --> N["Sırada<br/>abonelikler · işçi kimlik bilgisi kipleri<br/>sistem istemi ve ayarlar"]
   N --> F["Planlı<br/>Firecracker mikro VM sandbox'ı<br/>HTTP API · web paneli · masaüstü"]
 ```
 
@@ -541,7 +552,7 @@ Sonraki build için yeni bir `--out` dizini kullanın. Build `bubblewrap=present
 Linux'ta kilitli bubblewrap yerleştirilemezse build bitmez, `BUBBLEWRAP_BUILD_REQUIRED` ile durur; Docker'ı başlatıp
 yeniden çalıştırın. Yalnız Linux dışında `bubblewrap=absent (not Linux)` basar; bu bubblewrap sandbox'ının olmadığı
 demektir; yalıtım durumunu `deckent doctor` ile inceleyin. Hiçbir servis çalışmadan yapılan ilk `doctor` bubblewrap yerine
-Landlock gösterebilir: `doctor` yalnız ölçer, paketlenmiş bubblewrap'ı `.deckent/bin` altına runtime servisi, ana makineyi
+Landlock gösterebilir (`doctor --verbose` nedenini söyler): `doctor` yalnız ölçer, paketlenmiş bubblewrap'ı `.deckent/bin` altına runtime servisi, ana makineyi
 ölçerken yerleştirir. Servisi başlatın (`deckent`) ve `doctor`'ı yeniden çalıştırın. Ön koşullar ve sağlayıcı anahtarı
 gerektirmeyen tek test için [katkıcı hızlı başlangıcına (EN)](CONTRIBUTING.md#a-30-minute-quickstart) bakın.
 
@@ -565,11 +576,17 @@ deckent init policy --scope my-project --apply
 deckent doctor                            # kurulum başlayamazsa sıfır dışı çıkış
 deckent                                   # init ile seçilen kapsamda açılır
 # deckent --scope my-project               # açık kapsam seçimi, aynı terminal
-deckent init preview --profile <dosya>    # bir proje için kurulumu önizle
+deckent init preview --profile <dosya>    # ileri düzey: bir kurulum profili dosyasını önizle
 deckent mcp add context7 -- npx -y @upstash/context7-mcp   # MCP sunucusu ekle
 deckent monitor                           # kurulumları ve işleri izle
 deckent --help                            # tüm komutlar; ayrıntı için deckent <komut> --help
 ```
+
+**Bir yapay zekâ istemcisini MCP ile bağlayın.** `deckent-mcp`, Deckent'in stdio MCP sunucusudur; MCP istemcinize kaydedin,
+örneğin Claude Code'da `claude mcp add deckent -- deckent-mcp --project /proje/yolu`. Runtime servisini kendisi başlatmaz ve
+araçlarının çoğu servise ihtiyaç duyar: `deckent runtime serve` açık kalsın (terminalin başlattığı servis 15 dakika boşta
+kalınca durur). MCP aktörü yalnız gözlem izinleriyle başlar; fazlası onu adıyla anan bir politika izni ister
+(bkz. [Politika ve AI](docs/policy-and-ai.tr.md)).
 
 ## Daha fazlası
 

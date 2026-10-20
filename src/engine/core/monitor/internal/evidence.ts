@@ -80,24 +80,38 @@ export interface MonitorLedgerReading {
   /** MONITOR v1.1 (optional): what feeds what in the install (config layers, registry, model catalog, policy summary, memory). */
   readonly map?: MonitorMap | null;
 }
+/** M-VIS (PB-POOL-VIS): ids only — which scopes (Runs, current approvals) and pools a ledger names. Reading it loads no Run, occupancy or holder. */
+export interface MonitorLedgerIndex { readonly ledgerVersion: number; readonly scopeIds: readonly string[]; readonly poolIds: readonly string[] }
+/** What the scoped ledger read may load: Runs, receipts and approvals of `scopeIds`; pool rows and occupancy of `poolIds`. */
+export interface MonitorReadScope { readonly scopeIds: readonly string[]; readonly poolIds: readonly string[] }
 /** One observed installation: `current` or a configured `next-project` observation source. */
 export interface MonitorTarget { readonly id: string; readonly path: string }
 export interface MonitorScopeObservation {
   /** The scope `inspect` decision of the target's own policy; only admitted scopes contribute Runs, approvals and workers. */
   readonly access: 'admitted' | 'denied' | 'unavailable';
+  /** The refusal's typed code (e.g. `POLICY_DENIED`); shown only to a viewer holding the scope-diagnostics grant (MON-NAMES). */
+  readonly reason?: string;
   readonly workers: readonly WorkerObservation[]; readonly workerStatus: string; readonly truncated: boolean;
   /** The approval list decision (`approval inspect` over the scope); absent or false withholds approval summary text. */
   readonly approvals?: boolean;
 }
 /** Ports the composition binds to adapters. Every method may reject; the application turns rejections into diagnostics. */
 export interface MonitorPorts {
-  /** Recorded output and worker events are read only for attempts the adapter's read-output gate admits. */
-  readLedger(target: MonitorTarget): Promise<MonitorLedgerReading>;
+  /** M-VIS: the ledger's scope and pool ids, read before any admission decision; nothing scoped is loaded here. */
+  indexLedger(target: MonitorTarget): Promise<MonitorLedgerIndex>;
+  /** Recorded output and worker events are read only for attempts the adapter's read-output gate admits. Reads only `scope`
+   * (admitted scopes, visible pools); the application still filters the answer, so a broader adapter answer never widens the view. */
+  readLedger(target: MonitorTarget, scope: MonitorReadScope): Promise<MonitorLedgerReading>;
+  /** M-VIS: the viewer's `pool inspect` decision for one pool over `scopeIds` (admitted scopes); true only on an allow. A rejection hides the pool. */
+  observePool(target: MonitorTarget, poolId: string, scopeIds: readonly string[]): Promise<boolean>;
   /** Hydrate only shown workers, after admitted scopes and the finished-worker limit. Must use the captured ledger snapshot and read-output gate. */
   readShown?(target: MonitorTarget, identities: readonly AttemptIdentity[]): Promise<MonitorLedgerReading>;
   /** Rejects with a coded error; `LOCAL_RUNTIME_UNAVAILABLE` means no service is listening. */
   describeService(target: MonitorTarget): Promise<RuntimeServiceDescriptor>;
   observeScope(target: MonitorTarget, scopeId: string): Promise<MonitorScopeObservation>;
+  /** MON-NAMES: the viewer's installation-wide `monitor inspect-scope-diagnostics` decision (`scopeIds`: the ledger's scopes, admitted first);
+   * true only on an allow. Absent, false or a rejection keep refused and failed scopes as counts. */
+  observeScopeDiagnostics?(target: MonitorTarget, scopeIds: readonly string[]): Promise<boolean>;
   /** WORKER-AUTO-REFRESH: the install's worker image refresh status (updating / current / failed with a typed reason); absent port or `unknown` adds nothing. */
   /** Whether the answering service started with the restart-apply configuration this target has now; absent: not reported. */
   readConfigFreshness?(target: MonitorTarget, descriptor: RuntimeServiceDescriptor): Promise<'current' | 'stale' | 'unknown'>;

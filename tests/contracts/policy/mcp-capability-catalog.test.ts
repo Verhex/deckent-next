@@ -1,4 +1,7 @@
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { describe, expect, it } from 'vitest';
+import { createMcpServer, MCP_UNGROUPED_WRITE_TOOLS, MCP_WITHHELD_TOOLS, type McpApplications } from '#surfaces/core/mcp/index.js';
 import { authorityDocuments, firstRunPolicyTemplate, installationOwnerPermissions, getPolicyVocabulary, resolvePolicyBindings, type VerifiedPrincipal } from '#domain/index.js';
 import { McpCapabilities, McpCapabilityRegistry, mcpCapabilityRegistry } from '#engine/index.js';
 
@@ -14,7 +17,32 @@ const refused = ['inspect_decision', 'renew_approval', 'create_run', 'reserve_ru
   'evaluate_task', 'shutdown_runtime_service', 'admit_model_activation', 'apply_model_catalog', 'connect_model', 'apply_pool_capacity', 'inspect_pool_capacity', 'inspect_pool_hold',
   'apply_pool_hold', 'manage_provider_spending', 'audit_provider_spending', 'invoke_model', 'purge_model_invocation_content', 'cancel_model_invocation', 'execute_operation', 'compensate_operation', 'inspect_operation'];
 
+/** The advertised inventory of the real server with every application handler supplied (a handler for any name, plus one write catalog
+ * operation), so a tool added to the server is covered without editing this test. */
+async function advertisedTools() {
+  const operation = { schemaVersion: 1 as const, operation: { id: 'post-order', version: 1 }, targetKind: 'records', effectClass: 'write' as const,
+    approval: 'policy' as const, precondition: 'none' as const, compensation: null, inputMaxBytes: 4096 };
+  const applications = new Proxy({}, { get: (_target, name) => name === 'operationCatalog' ? [operation] : name === 'then' ? undefined : async () => ({}) }) as McpApplications;
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair(), client = new Client({ name: 'catalog', version: '1' });
+  await createMcpServer(applications, { maxConcurrentCalls: 1, responseMaxBytes: 1_000_000 }, 'en').connect(serverTransport); await client.connect(clientTransport);
+  try { return (await client.listTools()).tools; } finally { await client.close(); }
+}
+
 describe('MCP capability catalog and governed preview contract', () => {
+  // g4-mcp-grup hide_until_slice (owner 2026-10-18): what an AI sees equals what a group can grant or an explicit, reasoned list names.
+  it('every advertised write tool is in a capability group or the explicit ungrouped list; withheld tools are not advertised', async () => {
+    const tools = await advertisedTools(), names = tools.map(tool => tool.name);
+    const grouped = new Set(mcpCapabilityRegistry.list().flatMap(group => group.cells.flatMap(cell => Object.keys(cell.tools))));
+    const writes = tools.filter(tool => tool.annotations?.readOnlyHint !== true).map(tool => tool.name);
+    expect(writes.filter(name => !grouped.has(name) && !Object.hasOwn(MCP_UNGROUPED_WRITE_TOOLS, name))).toEqual([]);
+    // No stale or contradictory row: each listed tool is advertised, written and in no group.
+    for (const name of Object.keys(MCP_UNGROUPED_WRITE_TOOLS)) { expect(writes, name).toContain(name); expect(grouped.has(name), name).toBe(false); }
+    for (const name of Object.keys(MCP_WITHHELD_TOOLS)) { expect(names, name).not.toContain(name); expect(grouped.has(name), name).toBe(false); }
+    expect(Object.keys(MCP_WITHHELD_TOOLS)).toEqual(['release_quota']);
+    // control_run advertises only the ordinary operator control; close (a human step) is not in its schema.
+    const control = tools.find(tool => tool.name === 'control_run')!;
+    expect(JSON.stringify(control.inputSchema)).not.toContain('close'); expect(control.description).toContain('operator-held');
+  });
   it('covers each refused tool with explicit action/resource/scope requirements and has no approval decision cell', () => {
     const cells = mcpCapabilityRegistry.list().flatMap(group => group.cells);
     for (const tool of refused) expect(cells.filter(cell => Object.hasOwn(cell.tools, tool)), tool).not.toHaveLength(0);

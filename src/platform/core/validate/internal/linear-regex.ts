@@ -12,6 +12,10 @@
  * and negations, `\p{…}`, character escapes) keeps V8's exact meaning: its source alone is compiled as `^(?:atom)$` with `u` and tested on one
  * code point, which is constant time (no quantifier, no backtracking). Refused before any matching: backreferences, lookaround, pattern
  * modifiers, and programs above the size limits.
+ *
+ * Compilation is bounded by the same limit (SEC-6 F2): a body that emits no state (`(?:)`, `a{0}`) is folded to nothing before generation,
+ * so its repetition cannot multiply work the states limit never sees, `X{1}` is `X`, and every generator visit is charged against
+ * {@link COMPILE_STEPS_PER_STATE} × `statesMax` (after folding, a program needs at most a few visits per state; the charge is the backstop).
  */
 
 /** Why a pattern cannot be used: invalid ECMA-262 u-mode syntax, a construct this engine does not run in linear time, or a size limit. */
@@ -25,7 +29,8 @@ export class StepBudgetExceeded extends Error {
 }
 export interface StepBudget { remaining: number }
 export interface PatternLimits { readonly sourceMax: number; readonly statesMax: number; readonly repeatMax: number }
-export interface LinearPattern { readonly source: string; readonly states: number; test(input: string, budget: StepBudget): boolean }
+/** `compileSteps`: generator visits spent compiling `source` (each visit charged once, bounded by a fixed multiple of `states`). */
+export interface LinearPattern { readonly source: string; readonly states: number; readonly compileSteps: number; test(input: string, budget: StepBudget): boolean }
 
 type Node =
   | { readonly t: 'atom'; readonly atom: number }
@@ -42,6 +47,11 @@ const NON_ASCII_CACHE_MAX = 1_024;
 const NATIVE_TEST_STEPS = 4;
 /** Parser and generator recurse per group level; bounded far below the call-stack limit. */
 const GROUP_DEPTH_MAX = 64;
+/** Generator visits allowed per program state: a folded tree needs at most ≈ 5 (leaves, their parents and empty alternatives). */
+const COMPILE_STEPS_PER_STATE = 8;
+/** The empty sequence: matches the empty string and emits no state. */
+const EMPTY: Node = { t: 'seq', items: [] };
+const isEmpty = (node: Node) => node.t === 'seq' && node.items.length === 0;
 
 /** One single-code-point matcher: a literal code point, or an atom source whose meaning V8 decides on one code point at a time. */
 class Atom {
@@ -89,8 +99,11 @@ class Parser {
   }
   private sequence(): Node {
     const items: Node[] = [];
-    while (this.i < this.src.length && this.src[this.i] !== '|' && this.src[this.i] !== ')') items.push(this.quantified(this.term()));
-    return items.length === 1 ? items[0]! : { t: 'seq', items };
+    while (this.i < this.src.length && this.src[this.i] !== '|' && this.src[this.i] !== ')') {
+      const item = this.quantified(this.term());
+      if (!isEmpty(item)) items.push(item);
+    }
+    return items.length === 1 ? items[0]! : items.length === 0 ? EMPTY : { t: 'seq', items };
   }
   private term(): Node {
     const c = this.src[this.i]!;
@@ -188,20 +201,25 @@ class Parser {
       this.i += m[0].length;
     } else return node;
     if (this.src[this.i] === '?') this.i++;
-    return { t: 'rep', node, min, max };
+    // Any repetition of the empty body, and zero copies of any body, is the empty sequence; one exact copy is the body itself.
+    if (isEmpty(node) || max === 0) return EMPTY;
+    return min === 1 && max === 1 ? node : { t: 'rep', node, min, max };
   }
 }
 
 /** Instruction arrays of the compiled program (Pike-VM layout: CHAR atom, SPLIT a b, JMP a, ASSERT kind, MATCH). */
 class Program {
   op: number[] = []; a: number[] = []; b: number[] = [];
-  constructor(private readonly statesMax: number) {}
+  steps = 0;
+  private readonly stepsAllowed: number;
+  constructor(private readonly statesMax: number) { this.stepsAllowed = COMPILE_STEPS_PER_STATE * statesMax; }
   emit(op: number, a = 0, b = 0): number {
     if (this.op.length >= this.statesMax) throw new PatternRefusal('limit', `pattern program above ${this.statesMax} states`);
     this.op.push(op); this.a.push(a); this.b.push(b);
     return this.op.length - 1;
   }
   gen(node: Node): void {
+    if (++this.steps > this.stepsAllowed) throw new PatternRefusal('limit', `pattern compilation above ${this.stepsAllowed} steps`);
     switch (node.t) {
       case 'atom': this.emit(CHAR, node.atom); return;
       case 'assert': this.emit(ASSERT, node.kind); return;
@@ -280,7 +298,7 @@ export function compilePattern(source: string, limits: PatternLimits): LinearPat
     return false;
   };
   return {
-    source, states: size,
+    source, states: size, compileSteps: program.steps,
     test(input: string, budget: StepBudget): boolean {
       if (generation > 0x3fffffff) { marks.fill(0); generation = 0; }
       current[size] = 0;

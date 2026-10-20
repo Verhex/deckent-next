@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { encodeCommandProjection, runSnapshotSchema } from '#domain/index.js';
-import { parseRunProposalRecord, parseProviderSpendCheckpoint, classifyWorkSpending, proposalRunGraph, type RunProposalRecord, type RunCreate, type RunReceipt } from '#engine/index.js';
+import { parseRunProposalRecord, recheckRunProposalBudget, classifyWorkSpending, proposalRunGraph, type RunProposalRecord, type RunCreate, type RunReceipt } from '#engine/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { requireLedgerVersion, RUN_PROPOSAL_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
 export function readRunProposal(db: DatabaseSync, scopeId: string, commandId: string): RunProposalRecord | null {
@@ -88,9 +88,9 @@ export class SqliteRunProposals {
     if (!budget) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
     const account = this.db.prepare('SELECT record,revision,reservation_count,digest FROM provider_spend_accounts WHERE scope_id=?').get(create.identity.scopeId);
     if (budget.source === 'configured' && !account) return record;
-    if (budget.source === 'configured' || !account || parseProviderSpendCheckpoint({ schemaVersion: 2, revision: account.revision, reservationCount: account.reservation_count, digest: account.digest, account: JSON.parse(String(account.record)) }).digest !== budget.checkpointDigest) {
-      throw ErrorRegistry.createError('RUN_PROPOSAL_BASIS_STALE');
-    }
+    if (budget.source === 'configured' || !account) throw ErrorRegistry.createError('RUN_PROPOSAL_BASIS_STALE');
+    // recheck_ceiling (owner 2026-10-18): exact budget identity/revision/currency, not frozen, and money left still covers the approved ceiling.
+    recheckRunProposalBudget(budget, record.proposal.budgetCeiling, { schemaVersion: 2, revision: account.revision, reservationCount: account.reservation_count, digest: account.digest, account: JSON.parse(String(account.record)) });
     return record;
   }
   acceptWithin(previous: RunProposalRecord | null, receipt: RunReceipt): void {

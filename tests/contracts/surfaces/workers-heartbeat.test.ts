@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { readWorkerSidecars } from '#adapters/index.js';
 import type { WorkerObservation, WorkerSidecars } from '#engine/index.js';
-import { renderWorkerRow } from '../../../src/surfaces/core/monitor/index.js';
+import { renderWorkerRow } from '../../../src/surfaces/core/cli-observe/index.js';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

@@ -6,6 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { clearConfigCache } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { main } from '#surfaces/core/cli/index.js';
+import { readPiped } from '#surfaces/core/cli-admin/index.js';
 
 registerProviderConfig(); // as the composed entry does: the `terminal` section (terminal.scopeId) is registered there
 
@@ -22,6 +23,8 @@ async function project(scopeId?: string) {
   return { root: dir, env: { HOME: home, USERPROFILE: home, PATH: process.env['PATH'] ?? '/usr/bin:/bin', DECKENT_LANGUAGE: 'en' } };
 }
 const capture = () => { const lines: string[] = []; return { lines, text: () => lines.join(''), sink: { write: (text: string) => { lines.push(String(text)); return true; } } }; };
+/** A person's terminal on stdout too (C-ADMIN/SEC-1: a key is stored only from a terminal; stdin alone being a TTY is not enough). */
+const screen = () => { const out = capture(); return { ...out, sink: Object.assign(out.sink, { isTTY: true }) }; };
 type Call = { readonly scopeId: string; readonly name: string; readonly value?: string };
 function handlers(calls: Call[]) {
   return {
@@ -37,15 +40,26 @@ function handlers(calls: Call[]) {
 }
 const piped = (text: string | Buffer) => Object.assign(Readable.from([Buffer.from(text)]), { isTTY: false });
 
-it('piped stdin: exactly one trailing newline (LF or CRLF) is dropped, everything else is the value; nothing is echoed', async () => {
-  const f = await project('scope');
+it('piped stdin (readPiped, still used by backup): exactly one trailing newline (LF or CRLF) is dropped, everything else is the value', async () => {
   for (const [input, expected] of [[`${CANARY}\n`, CANARY], [`${CANARY}\r\n`, CANARY], [CANARY, CANARY], [`${CANARY}\n\n`, `${CANARY}\n`], [` ${CANARY} `, ` ${CANARY} `]] as const) {
-    const calls: Call[] = [], out = capture(), err = capture();
-    expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--json'], { root: f.root, env: f.env, stdin: piped(input), stdout: out.sink, stderr: err.sink, ...handlers(calls) })).toBe(0);
-    expect(calls).toEqual([{ scopeId: 'scope', name: 'PROVIDER_TOKEN', value: expected }]);
-    expect(JSON.parse(out.text())).toMatchObject({ name: 'PROVIDER_TOKEN', action: 'set', backend: 'core.secret-store.file@1' });
-    expect(out.text() + err.text()).not.toContain(CANARY);
+    expect(await readPiped(piped(input))).toBe(expected);
   }
+  await expect(readPiped(piped(Buffer.alloc(65_539, 0x61).toString()))).rejects.toMatchObject({ code: 'SECRET_VALUE_INVALID' });
+});
+
+it('SEC-1 lead note: a piped secret set is refused before stdin is read (typed, exit 1); nothing is sent, stored or echoed', async () => {
+  const f = await project('scope');
+  for (const argv of [['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'scope', '--json'], ['secret', 'set', 'PROVIDER_TOKEN']]) {
+    let reads = 0; const stdin = Object.assign(new Readable({ read() { reads++; this.push(Buffer.from(`${CANARY}\n`)); this.push(null); } }), { isTTY: false });
+    const calls: Call[] = [], out = capture(), err = capture();
+    expect(await main(argv, { root: f.root, env: f.env, stdin, stdout: out.sink, stderr: err.sink, ...handlers(calls) }), argv.join(' ')).toBe(1);
+    expect(err.text()).toContain('SECRET_SET_TERMINAL_REQUIRED'); expect(reads).toBe(0); expect(stdin.readableEnded).toBe(false);
+    expect(calls).toEqual([]); expect(out.text() + err.text()).not.toContain(CANARY);
+  }
+  // An AI agent at a real terminal is no person: refused the same way.
+  const agent = capture(), tty = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return tty; } });
+  expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'scope'], { root: f.root, env: { ...f.env, CLAUDECODE: '1' }, stdin: tty, stdout: screen().sink, stderr: agent.sink, ...handlers([]) })).toBe(1);
+  expect(agent.text()).toContain('SECRET_SET_TERMINAL_REQUIRED');
 });
 
 it('argv never carries a value: an extra positional or a value flag is a usage refusal, the handler is not called and nothing is echoed', async () => {
@@ -59,17 +73,15 @@ it('argv never carries a value: an extra positional or a value flag is a usage r
   }
 });
 
-it('an empty or oversized piped value is refused before the handler; the scope comes from --scope or terminal.scopeId, else a typed refusal', async () => {
+it('an empty typed value is refused before the handler; the scope comes from --scope, else a typed refusal (C-ADMIN: no silent default)', async () => {
   const f = await project();
+  const tty = (keys: readonly string[]) => { const stream = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stream; } }); setImmediate(() => { for (const key of keys) stream.write(key); }); return stream; };
   const calls: Call[] = [], err = capture();
-  expect(await main(['secret', 'set', 'A', '--scope', 's', '--json'], { root: f.root, env: f.env, stdin: piped(''), stdout: capture().sink, stderr: err.sink, ...handlers(calls) })).toBe(2);
+  expect(await main(['secret', 'set', 'A', '--scope', 's', '--json'], { root: f.root, env: f.env, stdin: tty(['\r']), stdout: screen().sink, stderr: err.sink, ...handlers(calls) })).toBe(2);
   expect(err.text()).toContain('SECRET_VALUE_INVALID');
-  const big = capture();
-  expect(await main(['secret', 'set', 'A', '--scope', 's', '--json'], { root: f.root, env: f.env, stdin: piped(Buffer.alloc(65_538, 0x61)), stdout: capture().sink, stderr: big.sink, ...handlers(calls) })).toBe(2);
-  expect(big.text()).toContain('SECRET_VALUE_INVALID');
   const noScope = capture();
-  expect(await main(['secret', 'set', 'A', '--json'], { root: f.root, env: f.env, stdin: piped(CANARY), stdout: capture().sink, stderr: noScope.sink, ...handlers(calls) })).not.toBe(0);
-  expect(noScope.text()).toContain('TERMINAL_SCOPE_REQUIRED');
+  expect(await main(['secret', 'set', 'A', '--json'], { root: f.root, env: f.env, stdin: tty([`${CANARY}\r`]), stdout: screen().sink, stderr: noScope.sink, ...handlers(calls) })).not.toBe(0);
+  expect(noScope.text()).toMatch(/SCOPE_REQUIRED/u); expect(noScope.text()).not.toContain(CANARY);
   expect(calls).toEqual([]);
   expect(await main(['secret', 'delete', 'A', '--scope', 's', '--json'], { root: f.root, env: f.env, stdout: capture().sink, stderr: capture().sink, ...handlers(calls) })).toBe(0);
   expect(calls).toEqual([{ scopeId: 's', name: 'A' }]);
@@ -83,19 +95,19 @@ it('a terminal gets a no-echo prompt on stderr: raw mode on, backspace edits, En
     setImmediate(() => { for (const key of keys) stream.write(key); });
     return stream;
   };
-  const calls: Call[] = [], out = capture(), err = capture();
+  const calls: Call[] = [], out = screen(), err = capture();
   const typed = tty(['sy', 'nX', '\x7f', 'th', '\r']);
-  expect(await main(['secret', 'set', 'PROVIDER_TOKEN'], { root: f.root, env: f.env, stdin: typed, stdout: out.sink, stderr: err.sink, ...handlers(calls) })).toBe(0);
+  expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'scope'], { root: f.root, env: f.env, stdin: typed, stdout: out.sink, stderr: err.sink, ...handlers(calls) })).toBe(0);
   expect(calls).toEqual([{ scopeId: 'scope', name: 'PROVIDER_TOKEN', value: 'synth' }]);
   expect(typed.modes).toEqual([true, false]);
   expect(err.text()).toContain('PROVIDER_TOKEN'); expect(out.text() + err.text()).not.toMatch(/syn|nX|th/u);
   // A pasted multi-byte character split across two reads is one character, not two replacement characters.
   const bytes = Buffer.from('şé', 'utf8'), split = tty([]);
   setImmediate(() => { split.write(bytes.subarray(0, 1)); split.write(bytes.subarray(1, 3)); split.write(bytes.subarray(3)); split.write('\r'); });
-  expect(await main(['secret', 'set', 'PROVIDER_TOKEN'], { root: f.root, env: f.env, stdin: split, stdout: capture().sink, stderr: capture().sink, ...handlers(calls) })).toBe(0);
+  expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'scope'], { root: f.root, env: f.env, stdin: split, stdout: screen().sink, stderr: capture().sink, ...handlers(calls) })).toBe(0);
   expect(calls.at(-1)).toEqual({ scopeId: 'scope', name: 'PROVIDER_TOKEN', value: 'şé' });
   const cancelled = tty(['abc', '\x03']), cancelErr = capture();
-  expect(await main(['secret', 'set', 'PROVIDER_TOKEN'], { root: f.root, env: f.env, stdin: cancelled, stdout: capture().sink, stderr: cancelErr.sink, ...handlers(calls) })).not.toBe(0);
+  expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'scope'], { root: f.root, env: f.env, stdin: cancelled, stdout: screen().sink, stderr: cancelErr.sink, ...handlers(calls) })).not.toBe(0);
   expect(cancelled.modes).toEqual([true, false]); expect(calls).toHaveLength(2);
   expect(cancelErr.text()).toContain('SECRET_INPUT_CANCELLED'); expect(cancelErr.text()).not.toContain('abc');
 });

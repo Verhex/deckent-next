@@ -41,6 +41,17 @@ export class AuditApplication {
       expected++; return record;
     }));
   }
+  /** Verified page of one subject kind (no continuity check: other kinds sit between): every seal, the scope, the kind and ascending order. */
+  listKind(scopeId: string, kind: AuditEvent['subject']['kind'], afterSequence: number, limit: number): readonly AuditRecord[] {
+    if (!this.store.pageOfKind || !Number.isSafeInteger(afterSequence) || afterSequence < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new AuditError('AUDIT_INVALID');
+    const page = this.guard(() => this.store.pageOfKind!(scopeId, kind, afterSequence, limit));
+    let last = afterSequence;
+    return Object.freeze(page.map(row => {
+      const record = verifyAuditRecord(row, this.integrity);
+      if (record.event.scopeId !== scopeId || record.event.subject.kind !== kind || record.sequence <= last) throw new AuditError('AUDIT_INTEGRITY');
+      last = record.sequence; return record;
+    }));
+  }
   count(scopeId: string, counter: string, by: number, atMs: number): AuditCounter {
     if (!Number.isSafeInteger(by) || by < 1 || !Number.isSafeInteger(atMs) || atMs < 0) throw new AuditError('AUDIT_INVALID');
     return this.guard(() => this.store.increment(scopeId, counter, by, atMs));

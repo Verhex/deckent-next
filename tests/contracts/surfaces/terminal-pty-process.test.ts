@@ -352,7 +352,7 @@ describe.skipIf(process.platform === 'win32')('deckent terminal in a real pseudo
     expect(second.status, second.output).toBe(0);
     expect(second.output).not.toContain('started in the background');
     // Governed stop without hand-written command fields; the endpoint stops answering and the process exits.
-    await execute(process.execPath, [cli, 'runtime', 'shutdown', '--json'], { cwd: f.projectRoot, env: f.env, timeout: 20_000 });
+    await execute(process.execPath, [cli, 'runtime', 'shutdown', '--reason', 'test teardown', '--json'], { cwd: f.projectRoot, env: f.env, timeout: 20_000 });
     const deadline = Date.now() + 20_000;
     while (alive(pid) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100));
     expect(alive(pid)).toBe(false);

@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { expect, it, vi } from 'vitest';
@@ -12,17 +12,23 @@ import * as inventory from '#composition/core/inventory/index.js';
 import { startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { SupervisorError, RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
-import { clearConfigCache, ErrorRegistry, getConfigKnownSecrets, loadConfig, reportQueryError, snapshotKnownSecrets, takeQueryErrorRecord } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, getConfigKnownSecrets, loadConfig, reportQueryError, resolveGlobalConfigPaths, snapshotKnownSecrets, takeQueryErrorRecord } from '#platform/index.js';
 import { homeEnv } from '../support/host-platform.js';
 
 const canary = 'registered-customer-fixture-canary';
 const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
+
+/** SEC-3: only the installation (global) layer may hold a $DECK reference; the fixture writes it there. */
+async function writeInstallationConfig(env: Readonly<Record<string, string>>, config: object): Promise<void> {
+  const path = resolveGlobalConfigPaths(env).platformPath; await mkdir(dirname(path), { recursive: true }); await writeFile(path, JSON.stringify(config));
+}
 it('uses the real fresh config snapshot for the existing service record sink and never sends a registered secret to clients', async () => {
   const root = await mkdtemp(join(tmpdir(), 'dk-query-diagnostic-'));
   try {
     await mkdir(join(root, '.deckent'));
-    await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ service: { identity: { scopeId: 's', serviceId: '$DECK:QUERY_FIXTURE' } } }));
+    await writeFile(join(root, '.deckent/config.json'), JSON.stringify({}));
     const options = { env: homeEnv(join(root, 'home')), secretResolver: async () => canary };
+    await writeInstallationConfig(options.env, { service: { identity: { scopeId: 's', serviceId: '$DECK:QUERY_FIXTURE' } } });
     const failure = queryFailure(new Error(`adapter failed ${canary}`, { cause: new Error(`driver failed ${canary}`) }));
     expect(JSON.stringify(failure)).not.toContain(canary); expect(String(failure)).not.toContain('adapter failed');
     expect(failure.params).toEqual({ errorClass: 'Error', diagnosticId: expect.stringMatching(uuid) });
@@ -93,10 +99,10 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] r
   try {
     await mkdir(join(root, '.deckent'));
     await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') },
-      service: { identity: { scopeId: 's', serviceId: '$DECK:QUERY_FIXTURE' } },
       cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
       cancellationRuntime: { scopeIds: ['s'], pollIntervalMs: 1000, failureBackoffMs: 1000 } }));
     const options = { env: { HOME: join(root, 'home') }, secretResolver: async () => canary };
+    await writeInstallationConfig(options.env, { service: { identity: { scopeId: 's', serviceId: '$DECK:QUERY_FIXTURE' } } });
     (await openConfiguredAttemptStore(root, options)).store.close();
     service = await startConfiguredRuntimeService(root, { onPage() {}, onError() {}, onQueryFailure(event) { events.push(event); } }, options);
     const peer = { pid: process.pid, uid: process.getuid?.() ?? 0, gid: process.getgid?.() ?? 0, assurance: 'linux-so-peercred' as const };

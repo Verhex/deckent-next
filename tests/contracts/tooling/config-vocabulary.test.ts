@@ -84,4 +84,34 @@ describe('config binding ratchet', () => {
     lintConfigBindings(root, (rule: string) => errors.push(rule));
     expect(errors).toContain('config-binding-declared-only');
   });
+  // alpha.48 A2: per-writer field fragments are read like the registry; a field elsewhere in the unit or a second declaration is refused.
+  const fragment = 'src/platform/core/config-fields/internal/fields-setup.ts';
+  const probe = (name: string, consumer: string) => `import { z } from 'zod';\nimport { field } from './field.js';\nexport const SETUP_FIELDS = Object.freeze({\n  ${name}: field('config.field.${name}', { state: 'bound', consumers: ['${consumer}'] }, 'live', z.enum(['probe-alpha', 'probe-beta']).default('probe-alpha')),\n});\n`;
+  it('reads a field declared in a registered fragment into the projection and the binding check', async () => {
+    const root = await fixture();
+    // @ts-expect-error JavaScript tooling contract has no declarations.
+    const { lintConfigBindings } = await import('../../../scripts/config-vocabulary.mjs');
+    await writeFile(join(root, fragment), probe('probe_mode', 'src/surfaces/core/cli-run'));
+    expect(projectVocabulary(root).fields.probe_mode).toEqual(['probe-alpha', 'probe-beta']);
+    const errors: string[] = [];
+    lintConfigBindings(root, (rule: string) => errors.push(rule));
+    expect(errors).toEqual(['config-binding-consumer']);
+  });
+  it('refuses a field declared in an unregistered config-fields file and a field name declared twice', async () => {
+    const root = await fixture();
+    // @ts-expect-error JavaScript tooling contract has no declarations.
+    const { lintConfigBindings } = await import('../../../scripts/config-vocabulary.mjs');
+    await writeFile(join(root, 'src/platform/core/config-fields/internal/fields-extra.ts'), probe('extra_mode', 'src/platform/core/config'));
+    await writeFile(join(root, fragment), probe('language', 'src/surfaces/core/cli-observe'));
+    const errors: string[] = [];
+    lintConfigBindings(root, (rule: string) => errors.push(rule));
+    expect(errors).toContain('config-binding-fragment');
+    expect(errors).toContain('config-binding-duplicate');
+  });
+  it('fails at load when a fragment redeclares a field, never last-wins', async () => {
+    const { mergeConfigFields } = await import('../../../src/platform/index.js');
+    expect(() => mergeConfigFields({ language: 1 }, { language: 2 }, {})).toThrow('CONFIG_FIELD_DUPLICATE:language');
+    expect(() => mergeConfigFields({ a: 1 }, { b: 2 }, { b: 3 })).toThrow('CONFIG_FIELD_DUPLICATE:b');
+    expect(Object.keys(mergeConfigFields({ a: 1 }, { b: 2 }, { c: 3 }))).toEqual(['a', 'b', 'c']);
+  });
 });

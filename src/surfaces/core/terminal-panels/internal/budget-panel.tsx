@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
-import { ListPicker, type PickerResult, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { Window } from '#surfaces/core/terminal-window/index.js';
+import type { PickerResult, PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { ConfigNumberWindow } from './config-stepper.js';
-import { usePickerRoom } from './lines.js';
+import { PickerWindow } from './picker-window.js';
 import type { BudgetPanelLabels, BudgetPanelPort, BudgetPanelView, PanelLabels, PanelNotice } from './contract.js';
 
 const OTHER = ':other', CONFIRM = 'confirm', UNFREEZE = 'unfreeze';
+/** The body rows the window keeps: the current budget and, on the confirm step, the below-settled warning. */
+const BODY_ROWS = 2;
 /** The list row that opens the budget window (stage 1), or null when the window offers no action here. */
 export function budgetEntry(view: BudgetPanelView | null, words: BudgetPanelLabels): Readonly<{ label: string; detail: string }> | null {
   if (!view?.action) return null;
@@ -29,12 +30,13 @@ export function budgetConfirmTree(view: BudgetPanelView, usd: number, words: Bud
  */
 export function BudgetWindow({ port, view, labels, push, onDone }: { readonly port: BudgetPanelPort; readonly view: BudgetPanelView; readonly labels: PanelLabels;
   readonly push: (notices: readonly PanelNotice[]) => void; readonly onDone: () => void }) {
-  const words = labels.budget, room = usePickerRoom(1);
+  const words = labels.budget;
   const [step, setStep] = useState<Readonly<{ kind: 'amount' } | { kind: 'stepper' } | { kind: 'confirm'; usd: number } | { kind: 'busy' }>>({ kind: 'amount' });
   const action = view.action;
   if (!action) return null;
   const title = [span(action === 'create' ? words.create : words.change, { bold: true })];
-  if (step.kind === 'busy') return <Window title={title} body={[{ spans: [span(labels.loading)] }]} hints={words.hints} position={labels.position} />;
+  if (step.kind === 'busy') return <PickerWindow title={title} body={[{ spans: [span(labels.loading)] }]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints}
+    position={labels.position} onResult={() => undefined} />;
   if (step.kind === 'stepper') {
     return <ConfigNumberWindow title={words.stepperTitle} hints={words.hints} position={labels.position} stepper={{ min: view.min, max: view.max, step: view.step, unit: 'count', current: view.start }}
       onCancel={() => setStep({ kind: 'amount' })} onSubmit={usd => setStep({ kind: 'confirm', usd })} />;
@@ -54,7 +56,8 @@ export function BudgetWindow({ port, view, labels, push, onDone }: { readonly po
   const tree = step.kind === 'amount' ? budgetAmountTree(view, words) : budgetConfirmTree(view, step.usd, words);
   const warning = step.kind === 'confirm' && view.settledUsd !== undefined && step.usd <= view.settledUsd && words.belowSettled
     ? [{ spans: [span(`! ${fillTemplate(words.belowSettled, { usd: step.usd, settled: view.settledUsd })}`, { role: 'warning' })] }] : [];
-  return <Window title={title} body={[...(view.current ? [{ spans: [span(fillTemplate(words.changeDetail, { current: view.current }), { role: 'muted' })] }] : []), ...warning]} hints={words.hints}
-    position={labels.position} footerRows={room.footerRows} onInput={() => true}
-    footer={focused => <ListPicker key={step.kind} tree={tree} labels={labels.picker} active={focused} maxRows={room.rows} onResult={answer} />} />;
+  // The confirm step's question is its title (the embedded list draws no title of its own); the body keeps the current budget and the warning.
+  return <PickerWindow title={step.kind === 'confirm' ? [span(tree.title, { bold: true })] : title}
+    body={[...(view.current ? [{ spans: [span(fillTemplate(words.changeDetail, { current: view.current }), { role: 'muted' })] }] : []), ...warning]} bodyRows={BODY_ROWS}
+    tree={tree} labels={labels.picker} position={labels.position} pickerKey={step.kind} onResult={answer} />;
 }

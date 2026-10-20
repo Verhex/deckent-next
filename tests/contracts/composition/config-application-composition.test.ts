@@ -48,6 +48,15 @@ describe('configured config through real policy, ledger audit and atomic writer'
     await expect(f.app.set({ ...f.command, principal: { ...f.principal, subject: 'other' }, keyPath: 'max_workers', value: 4 })).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     expect(await readFile(f.path, 'utf8')).toBe(changed); expect(await backups()).toEqual(before); expect(before).toHaveLength(1);
   });
+  it('SEC-3 (F33): refuses a project-layer $DECK: reference at write time, before the file or its backups change', async () => {
+    const f = await setup(); await f.app.set({ ...f.command, keyPath: 'max_workers', value: 2 });
+    const bytes = await readFile(f.path, 'utf8'), backups = async () => (await readdir(join(f.root, '.deckent'))).filter(name => name.includes('.bak.'));
+    const before = await backups();
+    const refusal = await f.app.set({ ...f.command, commandId: 'sec3', keyPath: 'projectName', value: '$DECK:PROJECT_SECRET' }).then(() => null, (error: unknown) => error);
+    expect(refusal).toMatchObject({ code: 'CONFIG_VALIDATION', issues: [{ path: 'projectName', reason: 'SECRET_REFERENCE_PROJECT_LAYER' }] });
+    expect(JSON.stringify(refusal) + String((refusal as Error).message)).not.toContain('PROJECT_SECRET');
+    expect(await readFile(f.path, 'utf8')).toBe(bytes); expect(await backups()).toEqual(before);
+  });
   it('identifies env overrides and leaves project value explicitly overridden', async () => {
     const f = await setup(); const app = createConfiguredConfigApplication(f.root, { env: { ...f.options.env, DECKENT_LANGUAGE: 'tr' } });
     expect(await app.explain({ keyPath: 'language' })).toMatchObject({ source: 'env', value: 'tr' });

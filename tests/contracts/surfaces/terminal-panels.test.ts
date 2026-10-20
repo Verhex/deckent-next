@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { PermissionModeView } from '#domain/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
-import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
+import { DECISION_ARM_DEFAULT, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { SettingsPanel, configPanelTree, editEntry, maskEntry, mcpArgs, mcpPair, mcpWizardSteps, modePanelTree, type ConfigPanelPort, type ConfigPanelView, type McpPanelPort,
   type McpServerDraft, type McpTrustQuestion, type PanelNotice } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
@@ -18,10 +18,17 @@ class Screen extends Writable {
   frame = '';
   readonly isTTY = true;
   constructor(readonly columns: number, readonly rows: number) { super(); }
-  override _write(chunk: Buffer, _encoding: string, done: () => void) { this.frame = chunk.toString('utf8'); done(); }
+  // G2-3: a decision window turns bracketed paste on and off around its frames; that mode switch is not a frame.
+  override _write(chunk: Buffer, _encoding: string, done: () => void) { const text = chunk.toString('utf8'); if (!/^(?:\u001b\[\?2004[hl])+$/u.test(text)) this.frame = text; done(); } // eslint-disable-line no-control-regex
 }
 const settle = (ms = 40) => new Promise(resolve => setTimeout(resolve, ms));
 const ESC = '\u001B', DOWN = '\u001B[B', ENTER = '\r';
+/** G2-3: a panel question is a decision window — it counts keys once its key hints show after the quiet arming period (arming.ts). */
+async function armed(frame: () => string, hint: string) {
+  await settle(DECISION_ARM_DEFAULT + 80);
+  for (let tries = 0; tries < 50 && !frame().includes(hint); tries++) await settle(20);
+  expect(frame()).toContain(hint);
+}
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => { for (const instance of mounted.splice(0)) instance.unmount(); });
 /** One write per key: an escape sequence (arrows) stays whole, every other character is its own key. */
@@ -187,7 +194,7 @@ describe('/mcp window', () => {
     expect(log).toEqual([['revoke', 'files']]); expect(calls.notices.at(-1)).toEqual({ level: 'info', text: 'revoked files' });
     await view.press(`${DOWN}${ENTER}${DOWN}${DOWN}${DOWN}${DOWN}${ENTER}`, 60); // Remove → asks
     expect(log).toHaveLength(1);
-    await view.press('y', 80);
+    await armed(view.frame, 'y yes'); await view.press('y', 80);
     expect(log.at(-1)).toEqual(['remove', 'files']);
   });
   it('the add wizard: HTTP is locked until its transport lands; env values are masked; a taken name goes back to the name step; the trust window answers', async () => {
@@ -209,7 +216,7 @@ describe('/mcp window', () => {
     await view.press(`\u007f\u007f\u007f\u007f\u007ffiles2${ENTER}`); // name step again; the rest of the draft is kept
     for (let step = 0; step < 4; step++) await view.press(ENTER); await view.press(ENTER, 120); // command, args, env (none more), realm, scope
     expect(view.frame()).toContain('Start files2?');
-    await view.press('y', 80);
+    await armed(view.frame, 'y yes'); await view.press('y', 80);
     expect(answers).toEqual([true]);
     expect((log.at(-1) as [string, McpServerDraft])[1]).toMatchObject({ name: 'files2', target: 'npx', env: { TOKEN: 'hunter2' } });
   });
@@ -268,3 +275,54 @@ describe('CS-1 allowed new value preview', () => {
     expect(calls.notices).toHaveLength(1); expect(calls.errors).toEqual([]);
   });
 });
+
+/** TERM-PANEL (owner 2026-10-19): the window in a frame — its height (border to border), how often a text shows inside it, its key-hint rows. */
+function windowShape(frame: string, title: string) {
+  const lines = frame.split('\n'), top = lines.findIndex(line => line.startsWith('╭')), bottom = lines.findIndex((line, index) => index > top && line.startsWith('╰'));
+  const inside = lines.slice(top + 1, bottom);
+  return { height: bottom - top + 1, titles: inside.filter(line => line.includes(title)).length, hints: inside.filter(line => /Esc /u.test(line)).length };
+}
+const never = <T,>() => new Promise<T>(() => undefined);
+
+describe('TERM-PANEL: a window with a list draws one title and one key-hint row and keeps one height', () => {
+  it('/config: Loading, the sections, a filter, a section\'s keys, a key\'s values and the layer step with a locked layer\'s reason', async () => {
+    const loading = mount(panel('config', { config: { ...configPort([]), inspect: never } }).element);
+    await settle(80);
+    const height = windowShape(loading.frame(), 'Loading').height;
+    expect(windowShape(loading.frame(), 'Loading')).toEqual({ height, titles: 1, hints: 1 });
+    const view = mount(panel('config', { config: configPort([]) }).element);
+    await settle(80);
+    const shapes = [windowShape(view.frame(), 'Configuration · acme')];
+    for (const keys of ['th', '\u007f\u007f', ENTER, ENTER, ENTER, DOWN]) { await view.press(keys); shapes.push(windowShape(view.frame(), 'Configuration · acme')); }
+    expect(view.frame()).toContain('GLOBAL-LOCKED'); expect(view.frame()).toContain('Configuration · acme › terminal › terminal.theme');
+    expect(shapes).toEqual(shapes.map(() => ({ height, titles: 1, hints: 1 })));
+  });
+  it('/mode: Loading, the list and a locked stop with its long reason (Turkish, 40 columns)', async () => {
+    const port = { current: () => 'standart' as const, select: async () => undefined };
+    const loading = mount(panel('mode', { mode: { ...port, inspect: never } }, 'tr').element, 40, 40);
+    await settle(80);
+    const height = windowShape(loading.frame(), 'İzin modu').height;
+    const view = mount(panel('mode', { mode: { ...port, inspect: async () => VIEW } }, 'tr').element, 40, 40);
+    await settle(80);
+    const first = windowShape(view.frame(), 'İzin modu');
+    await view.press(`${DOWN}${DOWN}${DOWN}`);
+    expect(view.frame()).toContain('grant');
+    expect([first, windowShape(view.frame(), 'İzin modu')]).toEqual([{ height, titles: 1, hints: 1 }, { height, titles: 1, hints: 1 }]);
+    for (const line of view.frame().split('\n')) expect(cells(line)).toBeLessThanOrEqual(40);
+  });
+  it('/mcp: Loading, the servers, a server\'s actions and the add wizard\'s transport step with a locked transport', async () => {
+    const loading = mount(panel('mcp', { mcp: { ...mcpPort([], []), list: never } }).element);
+    await settle(80);
+    const height = windowShape(loading.frame(), 'MCP servers').height;
+    const view = mount(panel('mcp', { mcp: mcpPort([], []) }).element);
+    await settle(80);
+    const shapes = [windowShape(view.frame(), 'MCP servers')];
+    await view.press(`${DOWN}${ENTER}`); shapes.push(windowShape(view.frame(), 'MCP servers'));
+    await view.press(ESC); await view.press(`\u001B[A${ENTER}`);
+    const step = windowShape(view.frame(), 'Transport');
+    await view.press(DOWN);
+    expect(view.frame()).toContain('HTTP-NOT-YET');
+    expect([...shapes, step, windowShape(view.frame(), 'Transport')]).toEqual([...shapes, step, step].map(() => ({ height, titles: 1, hints: 1 })));
+  });
+});
+

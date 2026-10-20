@@ -46,7 +46,7 @@ receipt, progression intent or attempt is created on a resource-ceiling rejectio
 CLI config has a dedicated `surfaces/core/config` unit: an 80-column grouped human view, compatible `get [key] --json`,
 explain/validate/set/unset with safe numeric array paths and splice removal. Line-mode `/config [key]` and monitor's
 read-only Config tab/`monitor --config` use the same inspect operation. Monitor config concerns its current project;
-other installation snapshots do not grant config authority. A failing Config read shows a typed unavailable state without discarding successful Run/worker refreshes; recovery replaces it with fresh config. Tab help derives its index from the active tab registry. CLI explain uses the project/effective view and refuses --global with CLI_USAGE. No runtime protocol/ledger version change is required.
+other installation snapshots do not grant config authority. The monitor's Config tab (`surfaces/core/monitor-view`, PB-MON-UX) opens on the settings whose source is not the default, under the human name of their top-level section (sections in a fixed reading order, an unknown one last under its key), each row showing its full key; `a` shows all of them and `/` searches (view state only, the read is unchanged), and a declared-only field is flagged as not read. A failing Config read shows a typed unavailable state without discarding successful Run/worker refreshes; recovery replaces it with fresh config. Tab help derives its index from the active tab registry. CLI explain uses the project/effective view and refuses --global with CLI_USAGE. No runtime protocol/ledger version change is required.
 The owner-only provider cleanup sequence and temp-project command evidence are outside Git in
 `proof/CONFIG-SURFACE-2026-10-02/owner-vllm-steps.md`. Historical invocation inspection keeps its immutable old reference
 and profile after provider removal; the test uses a seeded valid durable claim/unknown settlement, not a model request.
@@ -61,9 +61,21 @@ has a purpose group, an i18n summary key and a detail key; nested registrations 
 existing execution handler. `cli` binds the handlers once, uses the catalog for dispatch, and recognizes
 help before initialization. Run/Task action admission reads this same catalog. Argument parsers, runtime
 operations, authority, JSON envelopes and exit codes remain owned by the existing handlers.
-Top-level help lists command families by purpose; developer families require `--help --all`. Details
-and registered children are exposed by `deckent <command> --help [--lang en|tr]`; common flags appear once. The compact top footer combines common options and both examples
-without raising the 30-line or 80-column bounds.
+Main help (L-HELP, owner 2026-10-19) is 100–150 lines in both locales: the three surfaces (bare `deckent`,
+the CLI, `deckent-mcp`), every family by purpose group with its live actions and an argument synopsis
+(catalog `args`, `<placeholder>` words localized through `cli.help.placeholder.*`), then a separate Options
+section; developer families have their own heading and `--help --all` is retired (still tolerated, same
+output, never initializes). Details and registered children are exposed by `deckent <command> --help [--lang en|tr]`.
+Bare behaviour is catalog metadata (`bare`): a reviewed read action runs once its required flags are present
+(`audit`→`verify`, `pool`/`policy`→`status`, `identity`→`profiles`, `mcp`/`secret`→`list`, `runtime`→`describe`,
+`workers --scope <id>`→`list`); `handler` families act on their own; any other family lists its actions and names
+the missing argument as the typed `CLI_ARGUMENT_MISSING` (exit 2). A default never mutates.
+A scope picker on a terminal in a folder with no installation (no product directory or policy file, detected once by the
+`scopes` choice source) answers the typed `CLI_INSTALLATION_MISSING` (exit 2) naming only `deckent init`; with an installation
+but no scope to pick it stays `TERMINAL_SCOPE_REQUIRED`, and off a terminal `CLI_SCOPE_REQUIRED` is unchanged. Handler action words and catalog
+actions are kept equal by a source test in both directions; the usage echo (`cliUsage`) and the composition signal list
+(`SIGNAL_COMMANDS`) read or are pinned to the same catalog; `planned` entries (`run list`, `policy scopes`) are reserved names,
+neither registered nor shown, until their slice implements them.
 Canonical help outputs have bilingual goldens and an 80-display-column gate, and every registration's
 group, summary and detail must exist in both locales. New actions register metadata and localized details
 in this catalog (A1/A3 `run close|resume` and `task accept|reject` are registered since batch 27);

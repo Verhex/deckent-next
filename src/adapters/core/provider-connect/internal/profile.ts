@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { isLiteralLoopbackHostname } from '#platform/index.js';
-import { parseProviderCatalogDocument, type JsonObject, type ProviderCatalogDocument } from '#domain/index.js';
+import { endpointMayCarryKey, parseProviderCatalogDocument, type JsonObject, type ProviderCatalogDocument } from '#domain/index.js';
 import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION, OPENAI_CHAT_HTTP_ADAPTER_ID, OPENAI_CHAT_HTTP_ADAPTER_VERSION,
   OPENAI_RESPONSES_HTTP_ADAPTER_VERSION,
   lookupOpenAiCompatibleTariff, parseOpenAiChatHttpDefinition } from '#adapters/core/provider-openai-chat/index.js';
@@ -41,7 +41,7 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
   // A reconnect is not the migration selection: existing definitions keep their wire choice.
   const responses = route && (!input.existing || (input.existing['dialect'] as { protocol?: unknown } | undefined)?.protocol === 'responses');
   if (responses) input = { ...input, endpoint: new URL(route.path, input.endpoint).href };
-  const secure = new URL(input.endpoint).protocol === 'https:';
+  const secure = endpointMayCarryKey(input.endpoint); // G2-7: the one key rule; plain http (loopback too) is `authentication: none`
   if (connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID) {
     if (!secure || input.credentialRef === null) throw new ProviderConnectError('MODEL_CONNECT_KEY_INSECURE');
     const tariff = anthropicPublishedTariff(input.nativeId), capability = anthropicModelCapability(input.nativeId);

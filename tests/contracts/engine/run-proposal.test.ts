@@ -25,7 +25,7 @@ async function fixture(standing = true, effect: 'allow' | 'deny' | 'require-appr
   const root = await mkdtemp(join(tmpdir(), 'deckent-proposal-')), path = join(root, 'ledger.db');
   const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: () => 100, timeoutMs: 1000 });
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } });
-  const state = { now: 100, principal, registry: registry(standing), effect, permissionEffect: 'allow' as 'allow' | 'deny' | 'require-approval', inspect: true, samples: 0, spending: undefined as { semantics: 'metered' | 'not-metered'; digest: string } | undefined };
+  const state = { now: 100, principal, registry: registry(standing), effect, permissionEffect: 'allow' as 'allow' | 'deny' | 'require-approval', inspect: true, modelSource: false, samples: 0, spending: undefined as { semantics: 'metered' | 'not-metered'; digest: string } | undefined };
   const source = { async load() { state.samples++; return { schemaVersion: 1, revision: 'p1', restrictions: [], grants: [
     { id: 'run-create', effect: state.effect, actions: ['create'], scopes: ['s'], principals: 'all', resource: { kind: 'run', ids: 'all' } },
     { id: 'permission', effect: state.permissionEffect, actions: ['execute'], scopes: ['s'], principals: 'all', resource: { kind: 'task', ids: 'all' } },
@@ -48,8 +48,8 @@ async function fixture(standing = true, effect: 'allow' | 'deny' | 'require-appr
       policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: command.graph.tasks.map(t => t.id) } }; } });
   const app = (port: RunProposalStore = proposals, runPort?: Pick<SqliteAttemptStore, 'createRun' | 'loadRunReceipt' | 'loadRunWorkspaceCustody'>) => new RunProposalApplication(port,
     { verify: async () => state.principal }, f.authority, runs(runPort), { registry: state.registry, clock: f.clock,
-      loadBudget: async () => checkpoint, ...(state.spending ? { classifySpending: async () => state.spending! } : {}), verifySource: async value => { if (value.source.kind === 'model') throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID'); } });
-  const inspect = () => new RunProposalInspectionApplication(proposals, { verify: async () => state.principal }, { authorize: async () => { if (!state.inspect) throw ErrorRegistry.createError('POLICY_DENIED'); } });
+      loadBudget: async () => checkpoint, ...(state.spending ? { classifySpending: async () => state.spending! } : {}), verifySource: async value => { if (value.source.kind === 'model' && !state.modelSource) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID'); } });
+  const inspect = () => new RunProposalInspectionApplication(proposals, { verify: async () => state.principal }, { authorize: async () => { if (!state.inspect) throw ErrorRegistry.createError('POLICY_DENIED'); } }, state.registry);
   const sessions = { verifySession: async () => ({ principal, session: { schemaVersion: 1, sessionId: 'human', authorityRef: 'verified-test-authority', kind: 'os-user', principalRef: proposal.proposer,
     scopeIds: ['s'], authenticatedAt: 0, expiresAt: 10000 } }), isSessionActive: async () => true, revoke: async () => {} };
   const approval = (actor = principal) => new ApprovalApplication(f.approvals, { verify: async () => actor }, sessions, source, f.integrity, f.clock, 'local-terminal-card', 100, undefined, undefined, { interactive: async () => true });
@@ -150,13 +150,78 @@ it('the proposer list is advisory: invented entries are not evaluated and an ung
   expect(accepted.proposal).toMatchObject({ status: 'accepted', reason: null }); expect(accepted.proposal.binding.requiredPermissions).toEqual(input.requiredPermissions);
   expect(f.audit.list('s', 0, 10)[0]!.event.subject).toMatchObject({ verdict: { decision: 'allow' } });
 });
-it('the system-derived task restriction is evaluated even when the proposer lists nothing; require-approval still asks', async () => {
+it('the system-derived task restriction is evaluated even when the proposer lists nothing; an explicit deny refuses the plan', async () => {
   const f = await fixture(); f.state.permissionEffect = 'deny';
   expect((await f.app().propose(proposal)).proposal).toMatchObject({ status: 'rejected', reason: 'POLICY_DENIED' }); noRun(f);
   expect(f.audit.list('s', 0, 10)[0]!.event.subject).toMatchObject({ verdict: { decision: 'deny', reason: 'DENIED', ruleId: 'permission' }, basisDigest: null });
-  const asks = await fixture(); asks.state.permissionEffect = 'require-approval';
-  expect((await asks.app().propose(proposal)).proposal.status).toBe('pending'); noRun(asks);
 });
+// g4-cift-onay (owner-approved card text 2026-10-18): a task-level require-approval used to raise the plan (Run create) decision as well, so the
+// person was asked twice. It is now asked once, by TaskApprovalAdmission when the task runs; the plan card says so.
+it('a task-level require-approval does not raise the plan decision; the plan card names the task asked before it runs', async () => {
+  const standing = await fixture(); standing.state.permissionEffect = 'require-approval';
+  expect((await standing.app().propose(proposal)).proposal).toMatchObject({ status: 'accepted', reason: null });
+  expect(standing.audit.list('s', 0, 10)[0]!.event.subject).toMatchObject({ verdict: { decision: 'allow' } });
+  const gated = await fixture(false); gated.state.permissionEffect = 'require-approval';
+  const pending = await gated.app().propose(proposal); expect(pending.proposal.status).toBe('pending'); noRun(gated);
+  const approval = await gated.approval().inspect({ schemaVersion: 1, scopeId: 's', approvalId: pending.proposal.approval!.approvalId });
+  expect(approval!.request.summary).toContain('Asked once, just before it runs (task approval on the policy current then): task');
+  // Without a task rule the line is absent.
+  const plain = await fixture(false); const quiet = await plain.app().propose(proposal);
+  expect((await plain.approval().inspect({ schemaVersion: 1, scopeId: 's', approvalId: quiet.proposal.approval!.approvalId }))!.request.summary).not.toContain('Asked once');
+  // An explicit Run-create require-approval still asks at plan time, whatever the task rule says.
+  const create = await fixture(true, 'require-approval'); create.state.permissionEffect = 'require-approval';
+  expect((await create.app().propose(proposal)).proposal.status).toBe('pending'); noRun(create);
+});
+it.each(['en', 'tr'] as const)('the owner-approved card text for the execution-time task approval is verbatim (%s)', async locale => {
+  const { t } = await import('#platform/index.js');
+  expect(t('approval.plan.askedAtExecution', { tasks: '{tasks}' }, locale)).toBe(locale === 'tr'
+    ? 'Çalışmadan hemen önce bir kez sorulacak (o anki politikaya göre görev onayı): {tasks}'
+    : 'Asked once, just before it runs (task approval on the policy current then): {tasks}');
+});
+// accept_mark (owner 2026-10-18, Jev 2f191a60): the list is advisory and evaluates nothing. A model's unregistered or repeated entry is marked
+// (response-only, each once) instead of refusing the plan; a person's own list stays strict. Authority is only the system-derived task set.
+const modelSource = { kind: 'model' as const, receipt: { commandId: 'plan', invocationId: 'inv',
+  reference: { providerId: 'fixture-api', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 }, responseDigest: 'a'.repeat(64) } };
+const registered = { kind: 'scope', action: 'inspect', resourceId: 'live' }, unregistered = { kind: 'erp-ledger', action: 'post', resourceId: 'invoice' };
+const inventedAction = { kind: 'run', action: 'invented', resourceId: 'r' }, noisy = [registered, unregistered, registered, unregistered, inventedAction];
+it('a model proposal keeps unregistered and repeated entries as an unrecognised mark, never a refusal; only the derived task set is evaluated', async () => {
+  // The fixture policy grants no scope, erp-ledger or run/invented permission: evaluating any advisory entry would deny the plan.
+  const f = await fixture(); f.state.modelSource = true; const input = { ...proposal, source: modelSource, requiredPermissions: noisy };
+  const accepted = await f.app().propose(input);
+  expect(accepted.proposal).toMatchObject({ status: 'accepted', reason: null }); expect(accepted.run).toMatchObject({ runId: 'r' });
+  expect(accepted.proposal.binding.requiredPermissions).toEqual(noisy);
+  expect(accepted.unrecognisedPermissions).toEqual([unregistered, inventedAction]);
+  expect(f.audit.list('s', 0, 10)[0]!.event.subject).toMatchObject({ verdict: { decision: 'allow' } });
+  expect(await f.app().propose(input)).toEqual(accepted);
+  expect((await f.inspect().inspect({ schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'propose' }))!.unrecognisedPermissions).toEqual([unregistered, inventedAction]);
+  // The derived task/execute is still decided by policy: a deny on it refuses the same noisy model plan.
+  const denied = await fixture(); denied.state.modelSource = true; denied.state.permissionEffect = 'deny';
+  expect((await denied.app().propose(input)).proposal).toMatchObject({ status: 'rejected', reason: 'POLICY_DENIED' }); noRun(denied);
+  expect(denied.audit.list('s', 0, 10)[0]!.event.subject).toMatchObject({ verdict: { decision: 'deny', ruleId: 'permission' } });
+});
+it.each(['en', 'tr'] as const)('the approval card lists each advisory entry once and marks the unrecognised ones (%s)', async locale => {
+  const f = await fixture(false); f.state.modelSource = true;
+  const pending = await f.app().propose({ ...proposal, source: modelSource, requiredPermissions: noisy });
+  expect(pending.proposal.status).toBe('pending'); noRun(f);
+  const summary = (await f.approval().inspect({ schemaVersion: 1, scopeId: 's', approvalId: pending.proposal.approval!.approvalId }))!.request.summary;
+  const count = (text: string) => summary.split(text).length - 1;
+  // The fixture authority renders English; the TR catalog carries the same marker key.
+  expect(count('• Permission: scope / inspect / live')).toBe(1);
+  expect(count('• Permission (not recognised by this installation): erp-ledger / post / invoice')).toBe(1);
+  expect(count('• Permission (not recognised by this installation): run / invented / r')).toBe(1);
+  expect(summary).toContain('Also mentioned by the proposal (advisory, not evaluated, grants nothing): 3');
+  const { t } = await import('#platform/index.js');
+  expect(t('approval.plan.permission.unrecognised', { kind: 'k', action: 'a', resource: 'r' }, locale)).toBe(locale === 'tr' ? '• İzin (bu kurulumda tanınmayan): k / a / r' : '• Permission (not recognised by this installation): k / a / r');
+});
+it.each([['unregistered', [unregistered], [unregistered]], ['repeated', [registered, registered], undefined]] as const)(
+  "a person's own proposal still refuses an %s entry", async (_case, list, marked) => {
+    const f = await fixture(), refused = await f.app().propose({ ...proposal, requiredPermissions: list });
+    expect(refused.proposal).toMatchObject({ status: 'rejected', reason: 'RUN_PROPOSAL_PERMISSION_UNKNOWN' }); noRun(f);
+    expect(refused.unrecognisedPermissions).toEqual(marked);
+    for (const locale of ['en', 'tr'] as const) expect(ErrorRegistry.createError('RUN_PROPOSAL_PERMISSION_UNKNOWN', { locale }).message)
+      .toBe(locale === 'tr' ? 'Listelediğiniz bir izin bu kurulumda tanınmıyor veya iki kez yazılmış. Yalnız kayıtlı tür/eylem çiftlerini birer kez yazıp yeniden gönderin; hiçbir şey değerlendirilmedi veya kabul edilmedi.'
+        : 'A permission you listed is not recognised by this installation or is listed twice. List only registered kind/action pairs, each once, and submit again; nothing was evaluated or admitted.');
+  });
 it('a plain Run create without a proposal keeps its single create decision (no derived proposal check)', async () => {
   const f = await fixture(); f.state.permissionEffect = 'deny';
   const created = await f.runs().create({ schemaVersion: 1, commandId: 'plain', scopeId: 's', runId: 'plain-run', graph: proposal.graph });
@@ -197,11 +262,29 @@ it('budget gates subtract reserved and settled money, accept equality using exac
   expect(refused.localize('en').message).toContain('$2.00'); expect(refused.localize('en').message).toContain('$2.01');
   expect(refused.localize('tr').message).toContain('2,00'); expect(refused.localize('tr').message).toContain('kalan');
 });
-it.each(['budget', 'registry'] as const)('a pending proposal parks after %s drift rather than consuming its old approval', async changed => {
-  const f = await fixture(false); await f.app().propose(proposal); await f.decide();
-  if (changed === 'budget') f.budget(createProviderSpendCheckpoint({ ...f.checkpoint().account, reservedMinorUnits: 1 }, 2, 0));
-  else f.state.registry = workClassRegistrySchema.parse({ ...f.state.registry, revision: 'business-v2' });
+// recheck_ceiling (owner 2026-10-18, Jev b7d6c0cf): the person approved the declared ceiling, never the moving balance. Registry, budget identity,
+// budget revision and currency stay exact; a parallel charge that still leaves the ceiling covered admits, one that does not is refused.
+it.each(['registry', 'budget-id', 'budget-revision'] as const)('a pending proposal parks after %s drift rather than consuming its old approval', async changed => {
+  const f = await fixture(false); await f.app().propose(proposal); await f.decide(); const account = f.checkpoint().account;
+  if (changed === 'registry') f.state.registry = workClassRegistrySchema.parse({ ...f.state.registry, revision: 'business-v2' });
+  else f.budget(createProviderSpendCheckpoint({ ...account, budget: changed === 'budget-id' ? { ...account.budget, budgetId: 'other-budget' } : { ...account.budget, revision: 2 } }, 2, 0));
   expect((await f.app().propose(proposal)).proposal).toMatchObject({ status: 'parked', reason: 'RUN_PROPOSAL_BASIS_STALE' }); noRun(f);
+});
+it('a pending proposal admits after a parallel charge that still leaves its approved ceiling covered', async () => {
+  const f = await fixture(false), pending = await f.app().propose(proposal); await f.decide();
+  f.budget(createProviderSpendCheckpoint({ ...f.checkpoint().account, reservedMinorUnits: 1 }, 2, 0));
+  const admitted = await f.app().propose(proposal);
+  expect(admitted).toMatchObject({ proposal: { status: 'accepted' }, run: { runId: 'r' } });
+  // The Run keeps the basis the person approved; the moved balance never rewrites the sealed binding.
+  expect(admitted.proposal.binding).toEqual(pending.proposal.binding);
+  expect(admitted.proposal.binding.admission!.budget!.checkpointDigest).not.toBe(f.checkpoint().digest);
+});
+it.each(['below-ceiling', 'frozen'] as const)('a pending proposal is refused with the money left when the balance is %s', async changed => {
+  const f = await fixture(false); await f.app().propose(proposal); await f.decide(); const account = f.checkpoint().account;
+  f.budget(createProviderSpendCheckpoint(changed === 'frozen' ? { ...account, frozen: true } : { ...account, reservedMinorUnits: 801 }, 2, 0));
+  const refused = await f.app().propose(proposal);
+  expect(refused.proposal).toMatchObject({ status: 'rejected', reason: 'RUN_PROPOSAL_BUDGET_EXCEEDED' });
+  expect(refused.reasonParams).toMatchObject({ ceiling: 200, currency: 'USD', remaining: changed === 'frozen' ? 1000 : 199 }); noRun(f);
 });
 it('an expired approval is a durable typed park; repeated submission never creates a new approval', async () => {
   const f = await fixture(false); await f.app().propose(proposal); f.state.now = 1100;
@@ -233,12 +316,19 @@ it.each(['proposal', 'decision', 'acceptance'] as const)('%s write failure leave
   await expect(f.app().propose(proposal)).rejects.toBeDefined(); noRun(f);
   if (failed === 'acceptance') expect((await f.proposals.loadProposal('s', 'propose'))!.status).toBe('recorded');
 });
-it('a budget change during execution-registry resolution is refused inside the same Run transaction', async () => {
-  const f = await fixture(); const original = f.store.createRun.bind(f.store);
-  const port = { loadRunReceipt: f.store.loadRunReceipt.bind(f.store), loadRunWorkspaceCustody: f.store.loadRunWorkspaceCustody.bind(f.store),
-    createRun: async (...args: Parameters<typeof original>) => { f.budget(createProviderSpendCheckpoint({ ...f.checkpoint().account, reservedMinorUnits: 1 }, 2, 0)); return original(...args); } };
-  expect((await f.app(f.proposals, port).propose(proposal)).proposal.status).toBe('parked'); noRun(f);
-});
+// The Run transaction repeats the recheck under the writer lock against the account a parallel charge moved after validation (recheck_ceiling).
+it.each([['covered', 'accepted', null], ['revision', 'parked', 'RUN_PROPOSAL_BASIS_STALE'], ['below-ceiling', 'rejected', 'RUN_PROPOSAL_BUDGET_EXCEEDED']] as const)(
+  'a %s budget change during execution-registry resolution is decided inside the same Run transaction', async (change, status, reason) => {
+    const f = await fixture(); const original = f.store.createRun.bind(f.store), account = f.checkpoint().account;
+    const moved = change === 'revision' ? { ...account, budget: { ...account.budget, revision: 2 } } : { ...account, reservedMinorUnits: change === 'covered' ? 1 : 900 };
+    const port = { loadRunReceipt: f.store.loadRunReceipt.bind(f.store), loadRunWorkspaceCustody: f.store.loadRunWorkspaceCustody.bind(f.store),
+      createRun: async (...args: Parameters<typeof original>) => { f.budget(createProviderSpendCheckpoint(moved, 2, 0)); return original(...args); } };
+    const result = await f.app(f.proposals, port).propose(proposal);
+    expect(result.proposal).toMatchObject({ status, reason });
+    if (status === 'accepted') { expect(result.run).toMatchObject({ runId: 'r' }); return; }
+    if (reason === 'RUN_PROPOSAL_BUDGET_EXCEEDED') expect(result.reasonParams).toMatchObject({ remaining: 100, ceiling: 200, currency: 'USD' });
+    noRun(f);
+  });
 it('inspect authorizes the exact Run before reading proposal content; spoofed attribution and wire authority are refused', async () => {
   const f = await fixture(); await f.app().propose(proposal); f.state.inspect = false;
   await expect(f.inspect().inspect({ schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'propose' })).rejects.toMatchObject({ code: 'POLICY_DENIED' });

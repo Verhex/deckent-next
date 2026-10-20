@@ -17,8 +17,8 @@ seçin — çoğu terminalde Shift, iTerm2'de Option, Terminal.app'te Fn. `termi
 yerel kaydırma geçmişi; ekran okuyucuyla önerilir); `terminal.viewportRows` (varsayılan 2000) görünümün ne kadar geriye
 kaydığını sınırlar. Mod renkleri: standart soluk, tam otomatik kendi rengi, tam erişim uyarı tonunda sakin `⏵⏵⏵` işaretiyle
 (NO_COLOR: modu sözcükler taşır). Komutunuzla veya seçiminizle açılan
-pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama, ilerleme ve onay kartları, model
-turunda gelen onaylar ve Run/worker izlemeleri giriş odağını almaz: taslak yazabilir, Enter ile mevcut işlemin
+pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama ve ilerleme pencereleri ile
+Run/worker izlemeleri giriş odağını almaz: taslak yazabilir, Enter ile mevcut işlemin
 arkasına sıraya alabilirsiniz. Ctrl+O giriş ile üst pencere arasında odağı değiştirir. Onay kartı (ve her soru) klavyeyi
 kendiliğinden alır ve giriş barının yerine geçer; Ctrl+O gerekmez. Cevaplar listedir — "Evet, bu sefer (y)", "Evet, bu
 oturum boyunca (s)" ve "Bu projede hep izin ver (a)" yalnız servis sunduğunda (taban öğelerinde ve her zaman sorulan
@@ -63,8 +63,8 @@ etkinleştirmez. Aynı rapor MCP `inspect_toolchain_currency` aracı ve SDK
 
 `deckent toolchains update [--apply]`, eski sürüm raporundan bir sonraki worker image sürümünü
 hazırlar. `toolchains.update.mode` değerleri `off | propose | auto`, varsayılan `auto`'dur.
-Tipli plan `<data root>/workspaces/toolchains/plans/` altına yazılır. `auto` ya da `--apply` ile paketli
-builder `workspaces/toolchains/builds/<version>/` altına kopyalanır ve sınırlı sürede derlenir;
+Tipli plan `<data root>/workspaces/toolchains/plans/` altına yazılır. `--apply` ile (her modda; `auto` yalnız çalışan servisin kendi yenilemesine
+uygulama yetkisi verir) paketli builder `workspaces/toolchains/builds/<version>/` altına kopyalanır ve sınırlı sürede derlenir;
 makbuzundan uygulanmamış (`not-applied`) profil revizyon önerisi (`proposals/<version>.json`) oluşur.
 Kurulu config yeniden yazılmaz; öneri yeni kurulum profil revizyonu olarak uygulanır. Çalışan iş
 kendi image'ını korur; önceki sürümler geri dönüş için tutulur. `toolchains.update.atStartup`,
@@ -143,6 +143,45 @@ index/worktree dosyalarıyla karşılaştırır. `task patch-preview` ile aynı 
 `prepare-integration` policy izni gerekir. Her iki komut `--json` destekler ve runtime servisi
 olmadan yerel depolama kullanır.
 
+İnsan için `deckent task` (alpha.48 C-TASK). Her `task` görünümü çağrının dilini kullanır (`--lang`, sonra
+`DECKENT_LANGUAGE`, sonra config `language`, sonra sistem dili); `transcript` ve `patch-preview` biçimini korur.
+`--run` kısa kimlik alır: tam kimlik ya da terminaldeki `/runs` listesindeki bir Run'ın tek eşleşen öneki çözülür;
+birden çok aday `CLI_ID_AMBIGUOUS` (çıkış 2) olur; başka her değer olduğu gibi iletilir. `task inspect`, `run inspect`
+sırasıyla okunur (görev ve durum, istek, sonuç, kabul edilmiş sonucun neye dayandığı, teslim); beş yoldan uzun gizli
+bilgi kapısı listesi red listesi istisnalarını adlandıran tek satırdır, `--verbose` her yolu ve kabul üst veri satırını
+ekler. `patch-preview` farkında kontrol karakterleri etkisizleştirilen satırın ardından
+`\ üstteki satırdaki kontrol karakterleri etkisizleştirildi` üst satırı gelir (`--stat` ve `--json` değişmez). Gerçek
+terminalde `--run`/`--task` verilmeyen `task inspect|transcript|patch-preview` kapsam, Run ve görev seçtirir; argümansız
+`deckent task` (katalog aileyi argümansız-işleyici olarak işaretleyince) görevin yalnız geçerli eylemlerinin menüsünü
+açar: deneme varsa inceleme, transkript ve fark; karar açıkken kabul/ret; teslim bekleyen kabul edilmiş yama için teslim.
+Kabul/ret revizyonu kartından hemen önce okur ve komut kimliğini üretir; bu arada değişen Run reddedilir
+(`RUN_STORE_CONFLICT`), yeniden okunur ve yeniden sorulur. Teslim `/deliver` ile aynı portu ve uygulamaları kullanır;
+her yazma (aday + teslim, dala alma, kuyruk partisi) kendi birebir kartını bekler; yalnız Enter, Esc ya da sessizlik
+(oturum onay süresi) hayır demektir. Pipe, AI ajanı, CI ya da `--json` çağıranına soru sorulmaz: argümansız
+`deckent task` eksik argümanı adlandırır ve eylemleri dört grupta listeler (İncele, Yürüt ve değerlendir, Teslim,
+Kuyruk), çıkış 2. AI yolu tüm uzun adları ve bayrakları korur.
+
+İnsan için `deckent run`, `report` ve `inventory` (alpha.48 C-RUN). `deckent run list`, terminalin `/runs` penceresiyle aynı
+Run kimliklerini ve her Run'ı aynı inceleme uygulamasıyla okur: bekleyen (bekletilmiş) Run'lar önce, sonra en yenisi; kısa
+kimlik, `/runs` durum sözcükleri, kabul edilen görevler ve başlık; `--json` Run görünümlerini döndürür. Var olan bir Run'ı
+adlandıran her `run` eylemi kısa kimlik alır (benzersiz önek; birden çok aday `CLI_ID_AMBIGUOUS`, çıkış 2; diğerleri olduğu
+gibi geçer); `create --id` hiç çözülmez, yeni Run'ın adıdır. `--scope` olmayan bir okuma yapılandırılmış `terminal.scopeId`'yi
+kullanır ve ilk satırda söyler; yoksa terminal dışında geçerli kapsamları sayan `CLI_SCOPE_REQUIRED` döner. `run inspect`
+istek, sonuç ve görevleri okur (her görevde kabul edilmiş sonucun neye dayandığı, ör. "kabul: çıkış kodu · içerik bağımsız
+doğrulanmadı", sonra teslim); yetki kaydı, maliyet özeti, kabul meta satırı, profil ve kriter satırları, tam kimlikler ve beş
+yoldan uzun gizli bilgi kapısı listesi `--verbose` ile gelir. Gerçek terminalde kimliksiz `run inspect` ve `report` Run'ı
+seçtirir; `--command-id`/`--expected-revision` olmadan `run cancel|hold|resume|close` kapsamı (değişiklik varsayılanı sessizce
+almaz) ve Run'ı (yalnız durumu o denetimi sunan Run'lar; `/runs` tuşlarıyla aynı kural) seçtirir, revizyonu kartın hemen
+öncesinde okur, kart kapsamı, Run'ı, durumu ve sonucu adıyla gösterir ve sistemin ürettiği komut kimliğiyle gönderir; `n`,
+Esc ya da sessizlik hiçbir şey göndermez, arada değişen Run yeniden okunup yeniden sorulur. AI ve otomasyon yolunda tüm
+yazılı bayraklar zorunlu kalır; ajana ya da boruya hiçbir zaman soru sorulmaz. `deckent report` Bilinen (sonuç, kabulün
+dayandığı kanıt, okunur birimlerle süre, CPU, bellek, model) ve Ölçülemeyen (her alan nedeniyle, ör. abonelik çağrısında
+çağrı başına ücret ölçülemez) bölümlerini gösterir; `--run` yoksa kapsamın son Run'larını listeler. `deckent inventory` bu
+kurulumun dağıtım günlüğünün geliştirici görünümüdür (kısa kimlik, `--verbose` ile tam kimlik); `workers list` yapılandırılmış
+`inspection.workers.sources` kaynaklarını da okuduğu için daha çok kayıt gösterebilir. `inspection.maxPageSize` üstü sayfa en
+çok değeri söyleyen `DISPATCH_INVENTORY_LIMIT` olur. Yalın `report`/`inventory` çağrıları ve `run list` katalog deltası
+uygulanınca erişilir.
+
 Hazırlama, yapılandırılmış workspaces kaynağının `integrations` dizininde ayrı Git adayı oluşturur.
 Aday kayıtlı base ve patch'i içerir; kaynak dosya, HEAD ve index değişmez. Hazırlanmış aday Task kabulü
 veya canlı teslim değildir. Tamamlanmış komut tekrarlandığında aday doğrulanır; kesilmiş komut
@@ -178,6 +217,11 @@ kalır. Set dosyaları 0700 dizinde 0600'dür; sette `ledger.db-wal/-shm` kalmaz
 Değiştirilmiş bir setin SHA değerlerini yeniden yazmak yeterli değildir; verify şifreli
 zarfın doğrulamasını da yapar; bu yüzden `BACKUP_PASSPHRASE_INVALID` yanlış parola ya da
 değiştirilmiş set demektir.
+Şifre çözmeden önce verify ve restore diğer nedenleri kendi kodlarıyla söyler (çıkış 78):
+`BACKUP_SET_NOT_FOUND` (yolda `MANIFEST.sha256` içeren klasör yok), `BACKUP_SET_UNREADABLE`
+(bu kullanıcı seti okuyamıyor), `BACKUP_PASSPHRASE_REQUIRED` (boş parola) ve
+`BACKUP_MANIFEST_INVALID` (bir dosya manifestle eşleşmiyor: set değiştirilmiş). Var olmayan bir setin restore'u, setin yanında
+tutulan kurtarma denetimi yazılmadan reddedilir; yanlış yazılmış bir yolda denetim klasörü oluşmaz.
 
 Önce hedef servisi durdurun. Boş hedef doğrudan kullanılabilir; dolu hedef için
 `--confirm-target /tam/mutlak/hedef` ekleyin. Başka kurulum kimliğine bağlı hedef reddedilir.
@@ -218,7 +262,8 @@ before-upgrade ledger migration öncesinde çalışır. `BACKUP_PASSPHRASE` değ
 secret store'a mevcut `secret set` maskeli/stdin akışıyla sağlayın. Varsayılan environment
 backend için değer servis başlatıcısından sağlanmalıdır. Parola yoksa before-upgrade
 migration engellenir. Yalnız doğrulanmış zamanlanmış setlere saklama sınırı uygulanır;
-başka adlı operatör dosyaları korunur. Servis kapanışı devam eden yedeklemeyi bekler.
+başka adlı operatör dosyaları korunur. Artık doğrulanamayan bir set (ör. parola değişince)
+bildirilir ve korunur; sonraki günlük yedeği engellemez, yükseltme öncesinde ise göçü durdurur. Servis kapanışı devam eden yedeklemeyi bekler.
 
 Audit kayıtları parolasız olarak principal, scope ve policy taşır. Create/verify kayıtları
 `audit/backup-operations`, restore kayıtları setin yanındaki `.deckent-backup-audit`
@@ -226,6 +271,20 @@ altındadır; ledger'ın değiştirilmesi restore niyetini silemez. Güvenilir y
 önceki ret mühürlenemez ve depolama etkisi üretmez. Linux kernel kilidi doğrulanmıştır;
 desteklenmeyen platformda restore reddedilir. KMS, bağımsız inceleme, paket kabulü ve
 owner DOGFOOD kararı ayrı kapılardır.
+
+## Yönetim komutları insan diliyle (alpha.48, owner CLI incelemesi 2026-10-19)
+
+Eylemsiz `deckent pool`, `audit`, `secret`, `runtime`, `backup` ve `toolchains` okur: havuzun durumu ve kapasitesi, son checkpoint ile
+audit sonucu, anahtarlar (ad · kullanan · depo, değer asla), servis durumu (derleme, yapılandırma, çalışan işler, soket; başlangıç
+zamanı bir sonraki protokol sürümüne kadar yok), kurtarma setleri (`state/backups/recovery`: tarih · boyut · tür · son doğrulama ·
+ad) ve araç tablosu (ağ kullanımı önce yazılır). `deckent paths` yerleşimi var/yok bilgisiyle gruplar ve gerçekte kullanılan soketi
+(`/tmp/dk-<uid>-<sha256>/s`) adlandırır. Boru hattında çıktı metindir; JSON yalnız `--json` ile, aynı sözleşmelerle.
+Değişiklik sessiz kapsam almaz: terminal dışında `pool hold|resume|set-capacity|quota-release`, `secret set|delete|store --to` ve
+`backup create|restore` `--scope` ister; kimliksiz `runtime shutdown` `--reason` ister. Kişinin terminalinde kapsam, set, anahtar ya da
+depo seçilir ve değişiklik önce kartta onaylanır (AI, CI ya da boru hattına asla sorulmaz): daha zayıf gizli depo için ikinci bir uyarı
+kartı gerekir, geri yükleme hedefi, servis durumunu ve değiştirilen dosyaların nerede saklandığını gösterir, `toolchains update`
+derlemeden önce planı gösterir, `audit rebaseline` kartla onaylanır. `secret set` anahtarı yalnız kişinin terminalinde (gizli istem)
+alır: boru, script, ajan ya da CI'dan stdin okunmadan reddedilir (`SECRET_SET_TERMINAL_REQUIRED`).
 
 ## Sağlayıcı anahtarları, modeller ve harcama
 
@@ -240,6 +299,22 @@ modeli türün paketli kataloğundan bildirir, kapsamın çağrı profilini anah
 anthropic-api, openai-api, deepseek-api, zai-api, zai-cn-api, openai-compatible, local-openai). Doğrulanmış yayımlanmış
 tarifesi olmayan uzak model reddedilir ve nedeniyle kilitli görünür. `terminal.defaultModel` (kullanıcı katmanı)
 terminalin varsayılanıdır; `/model` oturum sabitlemesi önce gelir, sonra projede yazılmış referans.
+
+Kişi için (C-MODELS, owner CLI incelemesi 2026-10-19): argümansız `deckent models`, scope'un worker kataloğunu tek tabloda gösterir
+(model, kanal, durum, effort; emekli model günüyle; `models.retirementWarningDays` içinde, varsayılan 15, emekli olacak açık model için
+uyarı); `--declared` bağlı sağlayıcıların beyanını (sohbet kataloğu) listeler ve o listenin JSON biçimidir (`models --declared --json`);
+`models --json` katalog incelemesidir. Terminalde uzun bayrakları olmadan `models activate|deactivate`, `models catalog activate|deactivate`
+ve `models connect` scope'u, sağlayıcıyı ya da kanalı ve tam model kimliğini (takma ad asla) sorar, bağ özetini ve revizyonları kendisi
+okur ve scope'lu kartla onaylatır; yapay zekâ araçları için uzun biçimler değişmedi. `--input` olmadan `models spending` scope'un API
+bütçesini (sınır, kullanılan, ayrılan, kalan) gösterir.
+
+MCP ve kimlik: `deckent mcp` / `mcp list` bir tablodur (bekleyenler önce, sonraki adımlarıyla) ve hiçbir şeyi başlatmaz; `--check`
+yalnız güvenilir sunucuları başlatır. Her güven kararı (`mcp approve`, yerel ya da kullanıcı kapsamına `mcp add`) bir kişinin
+terminalindeki karttır; terminal dışında reddedilir (`MCP_APPROVAL_NEEDS_TERMINAL`) ve `--yes` artık kartı atlamaz (owner A48-D5/D6).
+Argümansız `deckent identity` (katalog deltası bekliyor: o zamana dek `identity profiles`) seçili profili — ya da
+`deckent config set identity.profile` ile nasıl seçileceğini —, kişileri ve rol bağlamalarını söyler; profil seçilmemişken
+`identity preview` `IDENTITY_PROFILE_NOT_SELECTED` bildirir; terminalde `identity distribute --scope <id> [--apply]` ok tuşlu kartlarla
+ve önizleme kartıyla seçilir.
 
 Harcama: ücretli çağrılar uygulanabilir en pahalı yayımlanmış kademeyi rezerve eder ve sağlayıcının döndürdüğü kullanım ile
 sabitlenmiş tarifenin çarpımından kesinleşir (`measured-tariff`). Kapsamın ilk bütçesi `deckent models create-budget
@@ -259,3 +334,7 @@ Teslim commit'i kabul edilmiş görev başlığı, kimlikler ve sınırlı kabul
 ### Terminalde teslim penceresi (TESLIM-PENCERESI yazar adayı)
 
 Bu terminalin `/do` ile kabul ettiği bir Run'ın görevi "kabul edildi · yama hazır, teslim bekliyor" durumuna gelince teslim penceresi kendiliğinden, girişin odağını almadan açılır (Ctrl+O ya da Aktif iş şeridindeki "teslim bekliyor" satırı Ctrl+T ve Enter ile odağı ona verir); `/deliver` kapsamdaki bekleyen tüm görevleri listeler ve seçileni odakla açar. Pencere görev başlığını, Run/Görev kimliklerini, güncel kaynağın uyum kontrolünü (etkilenen dosyalar tabanla aynı), değişen dosyaları `patch-preview --stat` sayılarıyla, yalnız ayrı bir `refs/deckent/deliveries/` referansının yazılacağını (dallar, index ve çalışma ağacı değişmez) ve yalnız `execution.adoption.targets` yapılandırılmışsa hedef dalları sonraki ayrı bir seçim olarak gösterir. `y`, `task integration-check|prepare|deliver` ile aynı uygulamalar ve yukarıdaki doğrulanmış terminal onayı üzerinden kontrol, hazırlık ve teslimi tek akışta yapar: pencerenin `y`'si onayı yalnız kart pencerenin gösterdiği işlem, kimlikler, komut, dosya kümesi ve tabanla birebir aynıysa cevaplar; değilse kartın kendisi gösterilir ve yeni bir `y` ister. Teslimden sonra yapılandırılmış dala alma yalnız ikinci bir `y` ile yapılır (↑↓ dalı seçer); `n`/Esc hiçbir şey yapmaz. `execution.adoption.verification` yapılandırılmışsa (Y1) bu `y` önce doğrulama adımını açar: kapsamın yapılandırılmış türde (tek görevli) kabul edilmiş Run'ları, yalnız zorunlu değilse "doğrulamasız dala al" satırı; ↑↓ seçer, tek yazılmış `y` seçimle dala alır (tür o anda yapılandırmadan okunur, `task integration-adopt --verification-run` gibi), `r` listeyi yeniden okur, `n`/Esc geri döner. Hiç yoksa bunu söyler ve `deckent run create … --delivery-command-id <bu teslim>` adımını adlandırır. Dala alma uygulaması Run'ın tam olarak bu commit'i güncel profil ve kurulum ölçütleriyle doğruladığını yine denetler; bir ret, nedeniyle ve yeni bir dala alma komutuyla seçime döner. Teslim ve dala alma satırları ile döküm özeti teslim ve dala alma komut kimliklerini gösterir (`task integration-rollback --adoption-command-id`). Girişe yazılan `y` hiçbir zaman onay değildir. Eskimiş taban, eksik izin (attempt araması için `scope inspect` ve entegrasyon eylemleri) veya doğrulanmamış oturum sade sözlerle ve sonraki adımla reddedilir. Teslim kendiliğinden başlamaz; ileride owner'ın koyacağı "kurala göre otonom" aracı aynı onay portuna bağlanır ve uygulanmadı. Hazır adım ayrıca her değişen dosyanın salt okunur farkını sunar (alpha.46; yeni komut yok): ↑↓/j/k dosya seçer, Enter hunk'ları önizlemenin kurulduğu deneme, taban ve öneri kimliğiyle açar, ↑↓/j/k kaydırır, Esc listeye döndürür. Port, sayıların geldiği aynı yamadan dosya başına fark gövdesi taşır; sınırlar `deliver-port.json` içindedir (`maxDiffFiles`, `maxDiffLinesPerFile`, `maxDiffBytesPerFile`); ikili ya da aşırı büyük dosya gövde yerine "Gösterilemez: ikili veya çok büyük" der, kesilen satırlar sayılır. Her satır pencerenin geri kalanıyla aynı redaksiyon ve terminal metni temizliğinden geçer. Görmek hazırlamaz, teslim etmez, dala almaz: fark içinde `y`, `n` ve Enter bir şey yapmaz; teslim, liste adımındaki ayrı doğrulanmış-terminal `y`'si olarak kalır. Eski taban ya da reddedilen erişim yine tipli ret satırıdır.
+
+### CLI'dan onaylar ve kararlar (C-APPROVE yazar adayı)
+
+`deckent approval list` (katalog `list` okumasını tanıyınca argümansız `deckent approval` da) varsayılan scope'u okur (ilk satırda adı yazar; `--scope` değiştirir): önce kalan süreyle bekleyen onaylar ("8 dk kaldı"), sonra diğerleri yeniden eskiye; en çok `approval.json` sayfa ve satır sınırı kadar, sessiz kesme yerine "daha fazla"/"taranmadı" satırları; `--json` ham sayfadır. Kişinin terminalinde ardından bekleyen bir onay seçilip terminalin kartında yanıtlanır: bir kez / hayır (saklanan bir onayın çalışan turu yoktur, terminal de ona "bu oturum"/"her zaman" sunmaz; sert taban isteği yalnız bir kez izin verilebileceğini söyler). Revizyon ve komut kimliği sistemden gelir, kanal `local-cli`, gerekçe kişinin `--reason` değeri ya da varsayılan "Terminalde onaylandı"dır; iptal edilen ya da sessiz kalan kart karar vermez ve karar önceki gibi aynı runtime `decideApproval` (doğrulanmış terminal, güvence alt sınırı) üzerinden gider. `--input` olmadan `approval decide` terminalde aynı seçimdir, başka her yerde eksik `--input` adını söyler. JSON yolu (`--input`) AI araçları için değişmedi; girdi önce uygulamanın şemasıyla denetlenir, yanlış alan adıyla söylenir (`CLI_INPUT_FIELD_INVALID`, çıkış 2, örnekle) — `INVENTORY_QUERY_INVALID` yerine —, gerekçesiz karar hiçbir şey gönderilmeden reddedilir, sonuçlar okunur metindir, ham JSON yalnız `--json` ile; `--schema` girdi sözleşmesini basar. Eylemsiz `deckent decide` scope'un son kararlarını listeler (karar portunun `inspect` izni; ilk kurulum v12 politikasında yoktur, v13 şablonuna kadar `POLICY_DENIED`); terminalde bir karar seçenekleri, tavsiye, seçim ve sonuçla tek pencerede açılır. `decide <eylem> --schema` ve alan adlı girdi hataları `approval` gibi çalışır. MCP'de hâlâ karar aracı yoktur.

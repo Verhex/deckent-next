@@ -8,12 +8,17 @@ import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
 import { createEncryptedFileSecretStore, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
+import { personEnv } from '../support/person-env.js';
 import { cliChildEnv } from '../support/child-env.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
+import { lastJson, runInTerminal } from '../support/terminal-cli.js';
+import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
 
 // SECRET-STORE-SWITCH on the shipped processes (owner 2026-10-08, option B): compiled `runtime serve` + compiled `deckent secret store`. A key in
 // the plaintext file store is moved into the encrypted store, read back, the selection published and the plaintext copy removed; the switch is
 // decided by the template v6 `first-run-secret-switch` grant and audited as `secret-store-switch`. A synthetic canary is searched afterwards.
+// SEC-1 (owner A48-D5): every secret change and switch needs the service-held terminal witness, so they run on a real PTY (`runInTerminal`);
+// the same commands from a pipe are refused by the service with AUTHORITY_WITNESS_REQUIRED and change nothing.
 type Child = ChildProcess & { stdout: NonNullable<ChildProcess['stdout']>; stderr: NonNullable<ChildProcess['stderr']>; stdin: NonNullable<ChildProcess['stdin']> };
 const CANARY = 'synthetic-canary-7e1a20-not-a-real-key', SEALED = 'core.secret-store.encrypted-file@1', FILE = 'core.secret-store.file@1';
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
@@ -34,6 +39,8 @@ function ready(child: Child): Promise<void> {
     child.once('close', code => reject(new Error(`SERVICE_CLOSED_${code}`)));
   });
 }
+const terminal = (args: readonly string[], cwd: string, env: NodeJS.ProcessEnv, answers: Parameters<typeof runInTerminal>[3] = []) =>
+  runInTerminal([process.execPath, cli, ...args], cwd, personEnv(env), answers); // C-ADMIN: a person's terminal (no agent/CI markers)
 function run(args: readonly string[], cwd: string, env: NodeJS.ProcessEnv, input?: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolveRun, reject) => {
     const child = spawn(process.execPath, [cli, ...args], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] }) as Child;
@@ -65,28 +72,36 @@ it.skipIf(process.platform !== 'linux')('compiled CLI + service: file → encryp
   children.add(service); let serviceOut = ''; service.stdout.on('data', chunk => { serviceOut += String(chunk); }); service.stderr.on('data', chunk => { serviceOut += String(chunk); });
   await ready(service);
   const printed: string[] = [];
-  const set = await run(['secret', 'set', 'PROVIDER_TOKEN', '--json'], project, env, `${CANARY}\n`); printed.push(set.stdout, set.stderr);
-  expect(set.code, set.stderr).toBe(0);
+  // SEC-1 × C-ADMIN layers: from a pipe the CLI refuses `secret set` before reading stdin (SECRET_SET_TERMINAL_REQUIRED); nothing stored.
+  const piped = await run(['secret', 'set', 'PLANTED_TOKEN', '--scope', 'installation', '--json'], project, env, 'synthetic-planted-value\n'); printed.push(piped.stdout, piped.stderr);
+  expect(piped.code).not.toBe(0); expect(piped.stdout + piped.stderr).toContain('SECRET_SET_TERMINAL_REQUIRED');
+  const set = await terminal(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'installation', '--json'], project, env, [{ when: 'PROVIDER_TOKEN: ', send: `${CANARY}\r` }]); printed.push(set.output);
+  expect(set.code, set.output).toBe(0);
+  expect((await readFile(join(globalRoot, 'secrets.json'), 'utf8')).includes('PLANTED_TOKEN')).toBe(false);
   expect((await readFile(join(globalRoot, 'secrets.json'))).includes(Buffer.from(CANARY))).toBe(true);
 
   const listed = await run(['secret', 'store', '--list', '--json'], project, env); printed.push(listed.stdout, listed.stderr);
   expect(JSON.parse(listed.stdout)).toEqual({ schemaVersion: 1, current: FILE, stores: ['core.secret-store.env@1', FILE, SEALED] });
-  const switched = await run(['secret', 'store', '--to', SEALED, '--json'], project, env); printed.push(switched.stdout, switched.stderr);
-  expect(switched.code, switched.stderr).toBe(0);
-  expect(JSON.parse(switched.stdout)).toEqual({ schemaVersion: 1, scopeId: 'installation', status: 'switched', from: FILE, to: SEALED, entries: 1, downgrade: false, cleaned: true });
+  const switched = await terminal(['secret', 'store', '--to', SEALED, '--scope', 'installation', '--json'], project, env); printed.push(switched.output);
+  expect(switched.code, switched.output).toBe(0);
+  expect(lastJson(switched.output)).toEqual({ schemaVersion: 1, scopeId: 'installation', status: 'switched', from: FILE, to: SEALED, entries: 1, downgrade: false, cleaned: true });
   // The plaintext copy is gone; the installation config selects the sealed store (other keys kept); the key opens with the installation key.
   expect(JSON.parse(await readFile(join(globalRoot, 'secrets.json'), 'utf8'))).toEqual({ schemaVersion: 1, secrets: {} });
   expect(JSON.parse(await readFile(globalPath, 'utf8'))).toMatchObject({ secrets: { store: SEALED } });
   expect(await createEncryptedFileSecretStore({ root: globalRoot, platform: 'linux' }).get('PROVIDER_TOKEN')).toBe(CANARY);
   // The running service uses the new selection without a restart: the next change lands in the sealed store.
-  const next = await run(['secret', 'set', 'SECOND_TOKEN', '--json'], project, env, 'synthetic-second-value\n'); printed.push(next.stdout, next.stderr);
-  expect(JSON.parse(next.stdout)).toMatchObject({ action: 'set', backend: SEALED });
+  const next = await terminal(['secret', 'set', 'SECOND_TOKEN', '--scope', 'installation', '--json'], project, env, [{ when: 'SECOND_TOKEN: ', send: 'synthetic-second-value\r' }]); printed.push(next.output);
+  expect(lastJson(next.output)).toMatchObject({ action: 'set', backend: SEALED });
   // The same switch again is current (nothing left to clean); a downgrade without confirmation moves nothing.
-  const again = await run(['secret', 'store', '--to', SEALED, '--json'], project, env); printed.push(again.stdout, again.stderr);
-  expect(JSON.parse(again.stdout)).toMatchObject({ status: 'current', cleaned: true });
-  const downgrade = await run(['secret', 'store', '--to', FILE, '--json'], project, env); printed.push(downgrade.stdout, downgrade.stderr);
+  const again = await terminal(['secret', 'store', '--to', SEALED, '--scope', 'installation', '--json'], project, env); printed.push(again.output);
+  expect(lastJson(again.output)).toMatchObject({ status: 'current', cleaned: true });
+  // A downgrade not confirmed at the terminal moves nothing (with --json no question is asked: the service answers); a confirmed one from a pipe
+  // is refused by the service (the witness layer; the CLI does not refuse a store switch itself).
+  const downgrade = await terminal(['secret', 'store', '--to', FILE, '--scope', 'installation', '--json'], project, env, [{ when: 'Continue?', send: 'n\r' }]); printed.push(downgrade.output);
   expect(downgrade.code).not.toBe(0);
-  expect(downgrade.stdout + downgrade.stderr).toContain('SECRET_STORE_DOWNGRADE_UNCONFIRMED');
+  expect(downgrade.output).toContain('SECRET_STORE_DOWNGRADE_UNCONFIRMED');
+  const pipedDowngrade = await run(['secret', 'store', '--to', FILE, '--confirm-downgrade', '--scope', 'installation', '--json'], project, env); printed.push(pipedDowngrade.stdout, pipedDowngrade.stderr);
+  expect(pipedDowngrade.code).not.toBe(0); expect(pipedDowngrade.stdout + pipedDowngrade.stderr).toContain('AUTHORITY_WITNESS_REQUIRED');
   expect(JSON.parse(await readFile(globalPath, 'utf8'))).toMatchObject({ secrets: { store: SEALED } });
 
   const db = new DatabaseSync(ledger, { readOnly: true });
@@ -110,23 +125,29 @@ it.skipIf(process.platform !== 'linux')('compiled env guard and direct runtime c
   await mkdir(project, { mode: 0o700 }); await mkdir(home, { mode: 0o700 });
   const env = cliChildEnv({ HOME: home, DECKENT_GLOBAL_HOME: join(home, 'global'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1', PROVIDER_TOKEN: CANARY });
   await applyPolicyTemplateInstallation(project, 'installation');
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ projectName: '$DECK:PROVIDER_TOKEN', terminal: { scopeId: 'installation' },
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ terminal: { scopeId: 'installation' },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['installation'], pollIntervalMs: 1000, failureBackoffMs: 1000 } }), { mode: 0o600 });
   await mkdir(env['DECKENT_GLOBAL_HOME']!, { recursive: true, mode: 0o700 });
+  // SEC-3: only the installation (global) layer may hold a $DECK reference.
+  const installationPath = resolveGlobalConfigPaths(env).platformPath; await mkdir(dirname(installationPath), { recursive: true, mode: 0o700 });
+  await writeFile(installationPath, JSON.stringify({ projectName: '$DECK:PROVIDER_TOKEN' }), { mode: 0o600 });
   const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close(); clearConfigCache();
   const service = spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] }) as Child;
   children.add(service); let printed = '';
   service.stdout.on('data', chunk => { printed += String(chunk); }); service.stderr.on('data', chunk => { printed += String(chunk); });
   await ready(service).catch(error => { throw new Error(`${(error as Error).message}: ${printed.split(CANARY).join('[canary]')}`); });
-  const blocked = await run(['secret', 'store', '--to', SEALED, '--json'], project, env);
+  const blocked = await run(['secret', 'store', '--to', SEALED, '--scope', 'installation', '--json'], project, env);
   expect(blocked.code).toBe(1); expect(blocked.stderr).toContain('PROVIDER_TOKEN'); printed += blocked.stdout + blocked.stderr;
-  const client = createConfiguredRuntimeClient(project, { env });
+  // The direct runtime client: without a terminal witness the service refuses before its own env guard; on a real PTY the guard answers.
+  await expect(createConfiguredRuntimeClient(project, { env }).switchSecretStore({ schemaVersion: 1, scopeId: 'installation', to: SEALED, confirmDowngrade: false, confirmEnvMissing: true }))
+    .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  const client = createTerminalRuntimeClient(project, { env });
   await expect(client.switchSecretStore({ schemaVersion: 1, scopeId: 'installation', to: SEALED, confirmDowngrade: false }))
     .rejects.toMatchObject({ code: 'SECRET_STORE_ENV_UNCONFIRMED' });
-  const switched = await run(['secret', 'store', '--to', SEALED, '--confirm-env-missing', '--json'], project, env);
-  expect(switched.code, switched.stderr).toBe(0); expect(JSON.parse(switched.stdout)).toMatchObject({ status: 'switched', entries: 0 });
-  printed += switched.stdout + switched.stderr;
+  const switched = await terminal(['secret', 'store', '--to', SEALED, '--confirm-env-missing', '--scope', 'installation', '--json'], project, env);
+  expect(switched.code, switched.output).toBe(0); expect(lastJson(switched.output)).toMatchObject({ status: 'switched', entries: 0 });
+  printed += switched.output;
   expect(await createEncryptedFileSecretStore({ root: env['DECKENT_GLOBAL_HOME']!, platform: 'linux' }).get('PROVIDER_TOKEN')).toBeUndefined();
   service.kill('SIGTERM'); await new Promise(done => service.once('close', done));
   expect(printed).not.toContain(CANARY);

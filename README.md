@@ -29,7 +29,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> **Pre-release `1.0.0-alpha.46`** (released 2026-10-18). Deckent is not on npm yet; install it from source
+> **Pre-release `1.0.0-alpha.48`** (released 2026-10-20). Deckent is not on npm yet; install it from source
 > as shown in [Get started](#get-started). Every release is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What is Deckent
@@ -45,9 +45,10 @@ and output.
 
 The open-source Core (Apache-2.0) works on its own. The planned proprietary Enterprise edition is designed
 to layer on through the registry without editing Core, as a separate distribution. Today the public extension entry lets a CLI
-distribution register effect adapters and secret-store adapters. Since alpha.20, that distribution can also start
+distribution register effect adapters, secret-store adapters and secret helpers, approval-assurance producers, MCP
+capability groups and provider no-charge certifications. Since alpha.20, that distribution can also start
 the service and MCP entry with its registrations; automatic service start and restart replay the distribution's
-entry. Core's bare executables do not discover those modules. Enterprise SSO, ERP integrations and fleet management
+entry (checked by the manual `npm run smoke:dist`, not in CI). Core's bare executables do not discover those modules. Enterprise SSO, ERP integrations and fleet management
 remain planned capabilities.
 
 | | |
@@ -129,8 +130,8 @@ deckent init policy --scope my-project --apply
    OpenRouter offers model connections; paid calls still require verified pricing and routing. Subscriptions today: a Claude Code worker runs with your own Claude login; a subscription-backed Brain is being prepared (not available yet); terminal chat with a Claude subscription is not supported for now, so use an Anthropic API key for chat. Sign in with ChatGPT is listed in `/provider` as not available yet. The same from the
    command line: `deckent secret set <NAME>` and `deckent models connect --scope <id> --connection <kind>
    --command-id <id> --model <exact id>`.
-4. **Set a budget.** Every model turn reserves against one shared USD budget of the scope; without one, every turn is
-   refused and the windows say so. The first row of `/provider`, **Create budget**, opens the budget window: 5, 10, 25,
+4. **Set a budget.** Every paid API model turn reserves against one shared USD budget of the scope; without one, every
+   paid turn is refused and the windows say so (local loopback models and subscription models run without one). The first row of `/provider`, **Create budget**, opens the budget window: 5, 10, 25,
    50 or 100 USD, or another whole-dollar amount from 1 to 1000 with the arrow keys, then a confirm step. Later the
    same row reads **Change budget**. From the command line: `deckent models create-budget --scope <id> --usd <n>` and
    `deckent models revise-budget --scope <id> --usd <n>`.
@@ -164,7 +165,7 @@ deckent init policy --scope my-project --apply
 "Your first session" ends with a governed chat. This path goes on to a real job: Deckent plans it, you approve the plan,
 a coding worker does it in Docker, and the change is delivered to Git. Steps 1 to 4 are one-time operator setup; a clean-machine rehearsal on 2026-10-15/16 ran the path up to the model step
 (the model step and a worker image build on an empty Docker daemon were not exercised; [known limits](docs/known-limits.md)). Commands and messages below come from the current source and its message
-catalogs; ids, paths and times are examples.
+catalogs; ids, paths and times are examples. `deckent init` and `deckent doctor` show which of these steps are still missing, with the exact command.
 
 ```mermaid
 flowchart LR
@@ -224,7 +225,7 @@ policy revision and the runtime service identity, so a change of either in betwe
    the result.
 4. **Restart the service** so it reads the new configuration: `deckent runtime restart` (or `/service-restart` in the
    terminal). It answers `Runtime service restarted (pid 494385, instance 8b1e2392-…).` A fresh `init policy --apply`
-   (first-run policy v12) already names the service (`service.identity`) and lets you, and only you, stop it. On an older
+   (first-run policy v12 and later) already names the service (`service.identity`) and lets you, and only you, stop it. On an older
    first-run installation run the upgrade above first; if it says it set the service identity, stop the running service
    once by hand (see [The runtime service](#the-runtime-service)) before `runtime restart` works.
    **Before step 5, once: a model and a worker login.** `/do` needs one connected model with a budget, and the worker CLI
@@ -238,7 +239,9 @@ policy revision and the runtime service identity, so a change of either in betwe
 
    `secret set` asks for the key in a hidden prompt. Each connection kind has its own secret name:
    `DECKENT_ANTHROPIC_KEY`, `DECKENT_OPENAI_KEY`, `DECKENT_DEEPSEEK_KEY`, `DECKENT_GLM_KEY`, `DECKENT_GLM_CN_KEY`
-   or `DECKENT_OPENROUTER_KEY` (`/provider` stores under the same name). `--model` takes an exact API model ID;
+   or `DECKENT_OPENROUTER_KEY` (`/provider` stores under the same name). A local server (vLLM, Ollama or LM Studio) uses
+   the optional `DECKENT_LOCAL_ENDPOINT_KEY`; an OpenAI-compatible endpoint uses a name derived from its host,
+   `DECKENT_OAICOMPAT_<HOST>`. `--model` takes an exact API model ID;
    the IDs of the packaged catalogs are listed in `assets/model-catalog/<connection>.json` in the source checkout,
    and `/model` lists them in the terminal. The worker CLI (`codex` or `claude`) must be installed on this
    machine and logged in: run `codex login`; for Claude Code run `claude` and type `/login`. Deckent reads that login
@@ -318,7 +321,8 @@ Model turns, approvals, `/do` and recovery run in one local runtime service per 
 - **Restart and stop.** `deckent runtime restart` stops the service through the governed stop and starts the current
   build and configuration; `deckent runtime shutdown` only stops it. `deckent runtime describe` shows the running one.
   Both need the service's identity (`deckent config explain service.identity`) and your `shutdown` rule on it, which
-  the first-run policy gives the installing person only; the local MCP actor cannot stop the service.
+  the first-run policy gives the installing person only; by default the local MCP actor cannot stop the service (a policy
+  that grants it the `service` MCP group can).
 - **Older installations.** A first-run policy older than v12 has neither the service identity nor the `shutdown` rule, so
   `runtime restart` and `runtime shutdown` are refused. Upgrade it with
   `deckent init policy --scope <id> --upgrade --preview`, then `--apply --expect <value>` (see
@@ -339,7 +343,7 @@ may become an approval.
 <table>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/en/02-chat.png" alt="A chat turn: your line marked You, the answer under Deckent"><br><sub><b>Chat.</b> Your lines and Deckent's answers are visibly distinct, with time and tokens per turn.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/05-approval.png" alt="Approval window for a shell command"><br><sub><b>Approval window.</b> What, where (sandbox), on whose behalf, scope, why, risk, reversibility and a live deadline. <code>y</code> once · <code>n</code> decline · <kbd>Tab</kbd> note.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/05-approval.png" alt="Approval window for a shell command"><br><sub><b>Approval window.</b> What, where (sandbox), on whose behalf, scope, why, risk, reversibility and a live deadline. <code>y</code> once · <code>n</code> decline · <kbd>Tab</kbd> note (alpha.17 screen; current cards also offer <code>s</code> this session and <code>a</code> always in this project when the card allows them, and <kbd>↑</kbd><kbd>↓</kbd> + <kbd>Enter</kbd>).</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/en/04-status.png" alt="/status window"><br><sub><b>/status.</b> A human summary first; identities, process and build under the details.</sub></td>
@@ -404,8 +408,8 @@ Full auto still asks before `find -delete`, file truncation (`>`, `>|`) and move
 
 ### API keys
 
-You store a provider key once, in the masked field of `/provider` or with `deckent secret set NAME` (hidden prompt or
-piped stdin, never an argument); a model profile refers to it by name. Never put it in `ANTHROPIC_API_KEY`, a shell
+You store a provider key once, in the masked field of `/provider` or with `deckent secret set NAME` (a hidden prompt in an
+interactive terminal; never an argument, and a piped key is refused); a model profile refers to it by name. Never put it in `ANTHROPIC_API_KEY`, a shell
 profile or a `.env` file: other tools read those.
 
 | Store (`secrets.store`) | On disk | Who can read the key |
@@ -417,7 +421,7 @@ profile or a `.env` file: other tools read those.
 Provider calls resolve keys inside the runtime; keys are not placed in prompts or the shell environment.
 Supported sandbox views hide the store; a host realm or fallback has no filesystem confinement.
 A provider answer that echoes a stored key is refused.
-`deckent doctor` shows which store is active and who can read it. When a provider refuses a key (401/403) or a limit is
+`deckent doctor` shows which store is active; `deckent doctor --verbose` also says who can read it. When a provider refuses a key (401/403) or a limit is
 reached, the terminal says so in plain words; spend limits stay in your provider account.
 
 **Strict install**, for keys no other program on the machine should read:
@@ -438,7 +442,8 @@ The file stores are not available on native Windows yet.
 Each scope has one shared budget in USD for every API provider. Before a paid call, Deckent reserves the most it could
 cost at the dearest price tier that can apply; afterwards it settles the call from the usage the provider itself
 reported in its final answer, multiplied by the verified published price. That settled amount is Deckent's own
-calculation, not the provider's invoice. A remote model without a verified price is refused and shown locked with
+calculation, not the provider's invoice. OpenRouter calls are the exception: they settle from the cost OpenRouter
+reports in its answer. A remote model without a verified price is refused and shown locked with
 the reason. Where a provider does not say which price tier it used (DeepSeek), the call settles at the published peak
 price and is labelled an upper bound. A call that never received its final usage stays held until you resolve it with
 `deckent models reconcile-spending`. If a settled charge ever exceeds what was reserved, the scope stops admitting new
@@ -497,6 +502,11 @@ flowchart LR
   if you choose, with retention; a restore runs only while the service is stopped. Only the authority key inside a set is
   encrypted with your passphrase; the ledger and the state archive are plain files, so keep sets on storage you trust
   (full-set encryption is not available yet).
+- **Inspect and control**: `deckent audit verify` checks the audit history, `deckent report --scope <id> --run <id>` shows a
+  Run's cost and acceptance evidence, `deckent run hold|resume|close` and `deckent pool hold|resume` pause, resume or close work,
+  `deckent policy grants --mine` and `deckent policy revoke` list and remove your standing grants, and `deckent identity
+  profiles` shows the identity profiles. `deckent init` prepares project instructions (`DECKENT.md`) after a preview.
+  `/help` in the terminal lists every slash command.
 - **Operate**: `deckent monitor` for a read-only view of every installation, `deckent doctor` for health, `deckent
   config` for settings, bilingual help everywhere.
 
@@ -509,7 +519,7 @@ plain list of what is open or untried is in [Known limits](docs/known-limits.md)
 ```mermaid
 flowchart LR
   L["Released · alpha.23<br/>terminal windows · approval window · slash-command windows<br/>/config · /mode · /mcp · /provider · /model<br/>easy MCP (HTTP, import, trust) · encrypted key store<br/>spend settlement and budgets · OpenRouter models · prompt cache"] --> P["In progress<br/>cost guards · per-provider spend limits<br/>cache breakpoints and compaction triggers"]
-  P --> N["Next<br/>subscriptions · worker credential modes<br/>system prompt and settings<br/>project instruction file"]
+  P --> N["Next<br/>subscriptions · worker credential modes<br/>system prompt and settings"]
   N --> F["Planned<br/>Firecracker microVM sandbox<br/>HTTP API · Dashboard · Desktop"]
 ```
 
@@ -536,7 +546,7 @@ Use a fresh `--out` directory for another build. The build ends with `bubblewrap
 On Linux a build that cannot stage the locked bubblewrap stops with `BUBBLEWRAP_BUILD_REQUIRED` instead of finishing;
 start Docker and run it again. Only off Linux does it print `bubblewrap=absent (not Linux)`, which means there is no
 bubblewrap sandbox; inspect the sandbox posture with `deckent doctor`. The very first `doctor`, before any service has
-run, can report Landlock instead of bubblewrap: `doctor` only measures, and the runtime service places the bundled
+run, can report Landlock instead of bubblewrap (`doctor --verbose` names the reason): `doctor` only measures, and the runtime service places the bundled
 bubblewrap under `.deckent/bin` when it measures the host. Start the service (`deckent`) and run `doctor` again. See the
 [contributor quickstart](CONTRIBUTING.md#a-30-minute-quickstart) for prerequisites and one test without a provider key.
 
@@ -559,11 +569,17 @@ deckent init policy --scope my-project --apply
 deckent doctor                            # non-zero if setup cannot start
 deckent                                   # opens in the scope selected by init
 # deckent --scope my-project               # explicit scope, same terminal
-deckent init preview --profile <file>     # preview the installation for a project
+deckent init preview --profile <file>     # advanced: preview an installation profile file
 deckent mcp add context7 -- npx -y @upstash/context7-mcp   # add an MCP server
 deckent monitor                           # watch installations and work
 deckent --help                            # every command; deckent <command> --help for details
 ```
+
+**Connect an AI client over MCP.** `deckent-mcp` is Deckent's stdio MCP server; register it in your MCP client, for
+example in Claude Code with `claude mcp add deckent -- deckent-mcp --project /path/to/project`. It does not start the
+runtime service, and most of its tools need it: keep `deckent runtime serve` running (a service the terminal started stops
+after 15 idle minutes). The MCP actor starts with observation-only grants; anything more needs a policy grant naming it
+(see [Policy and AI](docs/policy-and-ai.md)).
 
 ## Learn more
 

@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "planSchemaVersion": 1,
+  "planDigest": "632807bd741077a6b9fc192d85e7c6d0a3c36de895fefb42bffd866bd3e2c0a1",
+  "registryDigest": "46e34130c9004cd86c881235d7f9a65a9c73b826312fde65e1d57016b494d15e",
+  "stages": [
+    {
+      "id": "core:environment",
+      "namespace": "core",
+      "state": "done",
+      "title": "setup.stage.environment",
+      "reason": {
+        "code": "setup.reason.environmentReady",
+        "params": {
+          "platform": "linux"
+        }
+      },
+      "question": null,
+      "default": null,
+      "cli": null,
+      "operation": null,
+      "autoEligible": false
+    },
+    {
+      "id": "core:language",
+      "namespace": "core",
+      "state": "needs-answer",
+      "title": "setup.stage.language",
+      "reason": {
+        "code": "setup.reason.languageDetected",
+        "params": {
+          "language": "tr"
+        }
+      },
+      "question": {
+        "key": "setup.question.language",
+        "params": {
+          "language": "tr"
+        }
+      },
+      "default": "tr",
+      "cli": null,
+      "operation": null,
+      "autoEligible": true
+    },
+    {
+      "id": "core:folder",
+      "namespace": "core",
+      "state": "needs-answer",
+      "title": "setup.stage.folder",
+      "reason": {
+        "code": "setup.reason.scopeRequired",
+        "params": {}
+      },
+      "question": {
+        "key": "setup.question.folder",
+        "params": {
+          "scope": "my-erp"
+        }
+      },
+      "default": "my-erp",
+      "cli": null,
+      "operation": null,
+      "autoEligible": false
+    },
+    {
+      "id": "core:profile",
+      "namespace": "core",
+      "state": "done",
+      "title": "setup.stage.profile",
+      "reason": {
+        "code": "setup.reason.profileSolo",
+        "params": {}
+      },
+      "question": null,
+      "default": {
+        "id": "core:solo",
+        "version": 1
+      },
+      "cli": null,
+      "operation": null,
+      "autoEligible": false
+    },
+    {
+      "id": "core:policy",
+      "namespace": "core",
+      "state": "blocked",
+      "title": "setup.stage.policy",
+      "reason": {
+        "code": "setup.reason.waitsFor",
+        "params": {
+          "stage": "core:folder"
+        }
+      },
+      "question": null,
+      "default": null,
+      "cli": null,
+      "operation": null,
+      "autoEligible": false
+    },
+    {
+      "id": "core:sandbox",
+      "namespace": "core",
+      "state": "done",
+      "title": "setup.stage.sandbox",
+      "reason": {
+        "code": "setup.reason.sandboxReady",
+        "params": {
+          "realm": "bubblewrap"
+        }
+      },
+      "question": null,
+      "default": null,
+      "cli": null,
+      "operation": null,
+      "autoEligible": false
+    },
+    {
+      "id": "core:model",
+      "namespace": "core",
+      "state": "blocked",
+      "title": "setup.stage.model",
+      "reason": {
+        "code": "setup.reason.waitsFor",
+        "params": {
+          "stage": "core:folder"
+        }
+      },
+      "question": null,
+      "default": null,
+      "cli": null,
+      "operation": null,
+      "autoEligible": false
+    },
+    {
+      "id": "instructions:bridges",
+      "namespace": "instructions",
+      "state": "blocked",
+      "title": "setup.instructions.title",
+      "reason": {
+        "code": "setup.instructions.waits",
+        "params": {}
+      },
+      "question": null,
+      "default": null,
+      "cli": null,
+      "operation": null,
+      "autoEligible": false
+    },
+    {
+      "id": "core:final-check",
+      "namespace": "core",
+      "state": "ready",
+      "title": "setup.stage.finalCheck",
+      "reason": {
+        "code": "setup.reason.checkReady",
+        "params": {}
+      },
+      "question": null,
+      "default": null,
+      "cli": [
+        "deckent",
+        "doctor",
+        "--json"
+      ],
+      "operation": {
+        "id": "doctor.inspect",
+        "version": 1,
+        "input": {
+          "heal": false
+        }
+      },
+      "autoEligible": true
+    }
+  ],
+  "apply": {
+    "requested": false,
+    "results": []
+  }
+}

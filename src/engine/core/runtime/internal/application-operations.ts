@@ -1,7 +1,8 @@
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { attemptIdentitySchema } from '#domain/index.js';
 import { dispatchInventoryInputSchema } from '#engine/core/dispatch/index.js';
-import { cancellationRecoveryCommandSchema, runAdmissionSchema, runCommandSchema, runQuerySchema, parseRunProposal, runProposalQuerySchema, runReservationCommandSchema } from '#engine/core/runs/index.js';
+import { cancellationRecoveryCommandSchema, runAdmissionSchema, runCommandSchema, runQuerySchema, runReservationCommandSchema } from '#engine/core/runs/index.js';
+import { parseRunProposal, runProposalQuerySchema } from '#engine/core/run-proposal/index.js';
 import { taskEvaluationCommandSchema } from '#engine/core/task-evaluation/index.js';
 import type { RuntimeServiceOperation, RuntimeServiceRequest } from './service-protocol.js';
 import type { z } from 'zod';

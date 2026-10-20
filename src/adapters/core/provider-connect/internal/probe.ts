@@ -1,4 +1,4 @@
-import { classifyProviderRejection, type ProviderRejectionKind } from '#engine/index.js';
+import { classifyProviderRejection, type ProviderRejectionKind } from '#engine/index.js'; import { endpointMayCarryKey } from '#domain/index.js';
 import { PROVIDER_CONNECT_LIMITS, providerConnectKind, providerEndpoint, type ProviderConnectKind } from './registry.js';
 import { listKindProviderWorkspaces } from './workspaces.js';
 /**
@@ -17,7 +17,7 @@ export type ProviderProbeInput = Readonly<{ kind: string; endpoint: string | nul
 export type ProviderProbeFetch = (url: string, init: { method: 'GET'; headers: Record<string, string>; redirect: 'manual'; signal: AbortSignal }) => Promise<Response>;
 export type ProviderProbeOptions = Readonly<{ timeoutMs?: number; signal?: AbortSignal; fetch?: ProviderProbeFetch }>;
 export class ProviderProbeError extends Error {
-  constructor(readonly code: 'PROVIDER_KIND_UNAVAILABLE' | 'PROVIDER_ENDPOINT_INVALID' | 'PROVIDER_KEY_REQUIRED', readonly reason?: string) { super(code); this.name = 'ProviderProbeError'; }
+  constructor(readonly code: 'PROVIDER_KIND_UNAVAILABLE' | 'PROVIDER_ENDPOINT_INVALID' | 'PROVIDER_KEY_REQUIRED' | 'PROVIDER_KEY_INSECURE', readonly reason?: string) { super(code); this.name = 'ProviderProbeError'; }
 }
 /** How much of a refusal's body is read to tell a spend limit from a rate limit; the text is matched, never kept or returned. */
 const BODY_PREFIX_BYTES = PROVIDER_CONNECT_LIMITS.bodyPrefixBytes;
@@ -63,7 +63,7 @@ export function providerProbeBase(kind: ProviderConnectKind, endpoint: string | 
 }
 /**
  * One free request that needs the key (GET, bounded time, no redirect), mapped to a typed outcome. The key is sent only in the kind's own header
- * to the kind's endpoint over https (plain http only to this machine); it never appears in the result, an error or a log.
+ * to the kind's endpoint over https; a key given for a plain-http endpoint (loopback too) is refused, nothing sent (G2-7, `endpointMayCarryKey`).
  */
 export async function probeProviderConnection(input: ProviderProbeInput, options: ProviderProbeOptions = {}): Promise<ProviderProbeResult> {
   const kind = providerConnectKind(input.kind);
@@ -71,6 +71,7 @@ export async function probeProviderConnection(input: ProviderProbeInput, options
   const key = input.key === null || input.key === '' ? null : input.key;
   if (kind.key.required && key === null) throw new ProviderProbeError('PROVIDER_KEY_REQUIRED');
   const base = providerProbeBase(kind, input.endpoint);
+  if (key !== null && !endpointMayCarryKey(base)) throw new ProviderProbeError('PROVIDER_KEY_INSECURE');
   // A provider that documents no free read (T4-B: Z.ai GLM has no models list): nothing is sent; the key is kept unverified (`httpStatus` null)
   // and the first turn shows any rejection.
   if (!kind.probe) return { outcome: 'ok', httpStatus: null, key: key === null ? 'none' : 'unverified' };

@@ -3,7 +3,7 @@ import { renderWorkerModelLine } from './worker-model.js';
 import { notAcceptedLabel } from './labels.js';
 import { redactSensitive, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { resolveWorkerUsage, type MonitorWorker } from '#engine/index.js';
-import { span, type MonitorLine } from './layout.js';
+import { span, type MonitorLine } from '#surfaces/core/monitor-view/index.js';
 import { clockText, verdictLabel } from './labels.js';
 const safe = (text: string) => redactSensitive(terminalSafeText(text));
 /** Human hierarchy from the shared snapshot. Reports are claims; only the engine's evaluation line states acceptance. */

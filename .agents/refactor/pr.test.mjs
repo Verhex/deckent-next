@@ -137,7 +137,7 @@ function prepareArgs(fx, patch, extra = []) {
   return ['prepare', patch, '--card', CARD, '--repo', fx.repo, '--scope', 'docs/**', '--scope', 'README.md', '--json', ...extra];
 }
 function openArgs(fx, patch, extra = []) {
-  return ['open', patch, '--card', CARD, '--repo', fx.repo, '--push', '--json', ...extra];
+  return ['open', patch, '--card', CARD, '--repo', fx.repo, '--push', '--scope', 'docs/**', '--scope', 'README.md', '--json', ...extra];
 }
 function lines(file) {
   return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
@@ -242,7 +242,7 @@ execTest('a worker report supplies checks and cannot set independent review to P
   assert.equal(/^- Status: PASS$/m.test(body), false);
   assert.equal(body.includes('unknown — worker report missing'), false);
   const md = writePatch(path.join(fx.dir, 'md'), { base: fx.base, runId: 'md1', report: { name: 'report.md', body: '| Exact command | Result / evidence |\n|---|---|\n| npm test | exit 0 |\n' } });
-  const second = await runPr(['open', md, '--card', CARD, '--repo', fx.repo, '--push', '--json'], fx.env, fx.repo);
+  const second = await runPr(['open', md, '--card', CARD, '--repo', fx.repo, '--push', '--scope', 'README.md', '--json'], fx.env, fx.repo);
   assert.equal(second.code, 0, second.stderr);
   const mdBody = lines(fx.ghLog).filter(entry => entry.args[1] === 'create').at(-1).body;
   assert.match(mdBody, /npm test/);
@@ -280,6 +280,141 @@ execTest('missing patch files, bad JSON, stale base, empty diff, conflict and sc
   assertFrozen(fx.repo, afterSide);
   assert.equal(fs.readFileSync(fx.ghLog, 'utf8'), '');
   assert.equal(lines(fx.gitLog).some(args => args[0] === 'push'), false);
+});
+
+const WORKFLOW = `diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1 @@
++on: push
+`;
+execTest('SEC F40: a patch without --scope is refused, and a .github/** change is refused even inside the scope, before any branch or push', async t => {
+  const fx = fixture(t); const before = capture(fx.repo);
+  const plain = writePatch(path.join(fx.dir, 'plain'), { base: fx.base });
+  for (const command of [['prepare'], ['open', '--push']]) {
+    expectCode(await runPr([command[0], plain, '--card', CARD, '--repo', fx.repo, ...command.slice(1), '--json'], fx.env, fx.repo), 'PR_SCOPE_REQUIRED');
+  }
+  const workflow = writePatch(path.join(fx.dir, 'workflow'), { base: fx.base, runId: 'wf1', diff: WORKFLOW });
+  for (const scope of [['--scope', '**'], ['--scope', '.github/**']]) {
+    for (const command of [['prepare'], ['open', '--push']]) {
+      const refused = expectCode(await runPr([command[0], workflow, '--card', CARD, '--repo', fx.repo, ...command.slice(1), ...scope, '--json'], fx.env, fx.repo), 'PR_PROTECTED_PATH');
+      assert.deepEqual(refused.paths, ['.github/workflows/ci.yml']);
+    }
+  }
+  assertFrozen(fx.repo, before);
+  assert.equal(fs.existsSync(path.join(fx.repo, '.deckent/host/pr-receipts')), false);
+  assert.equal(fs.readFileSync(fx.ghLog, 'utf8'), '');
+  assert.equal(lines(fx.gitLog).some(args => args[0] === 'push'), false);
+});
+
+const added = file => `diff --git a/${file} b/${file}
+new file mode 100644
+--- /dev/null
++++ b/${file}
+@@ -0,0 +1 @@
++worker
+`;
+execTest('SEC F40: agent-instruction paths are protected like .github, while .agents/refactor host tooling stays an ordinary scoped path', async t => {
+  const fx = fixture(t); const before = capture(fx.repo);
+  const protectedFiles = ['.claude/rules/worker.md', '.cursor/rules/worker.mdc', '.codex/config.toml', '.agents/skills/deckent-next-refactor/SKILL.md', 'CODEOWNERS', 'docs/CODEOWNERS'];
+  for (const [index, file] of protectedFiles.entries()) {
+    const patch = writePatch(path.join(fx.dir, `protected-${index}`), { base: fx.base, runId: `p${index}`, diff: added(file) });
+    const refused = expectCode(await runPr(['prepare', patch, '--card', CARD, '--repo', fx.repo, '--scope', file, '--json'], fx.env, fx.repo), 'PR_PROTECTED_PATH');
+    assert.deepEqual(refused.paths, [file]);
+  }
+  assertFrozen(fx.repo, before);
+  assert.equal(lines(fx.gitLog).some(args => args[0] === 'push'), false);
+  const tooling = writePatch(path.join(fx.dir, 'tooling'), { base: fx.base, runId: 'tool1', diff: added('.agents/refactor/x.mjs') });
+  const prepared = await runPr(['prepare', tooling, '--card', CARD, '--repo', fx.repo, '--scope', '.agents/refactor/**', '--json'], fx.env, fx.repo);
+  assert.equal(prepared.code, 0, `${prepared.stderr}\n${prepared.stdout}`);
+  assert.equal(gitSync(['show', `lane/${CARD}-tool1:.agents/refactor/x.mjs`], fx.repo), 'worker\n');
+});
+
+execTest('SEC F40: only the explicit --allow-protected-paths flag admits a scoped .github change, and a later open without it is refused', async t => {
+  const fx = fixture(t);
+  const workflow = writePatch(path.join(fx.dir, 'workflow'), { base: fx.base, runId: 'wf1', diff: WORKFLOW });
+  const admitted = await runPr(['prepare', workflow, '--card', CARD, '--repo', fx.repo, '--scope', '.github/**', '--allow-protected-paths', '--json'], fx.env, fx.repo);
+  assert.equal(admitted.code, 0, `${admitted.stderr}\n${admitted.stdout}`);
+  // The flag never widens the scope: the protected path must still be named by --scope.
+  expectCode(await runPr(['prepare', workflow, '--card', CARD, '--repo', fx.repo, '--scope', 'docs/**', '--allow-protected-paths', '--json'], fx.env, fx.repo), 'PR_SCOPE_VIOLATION');
+  // Reusing the prepared receipt without the flag is refused before ls-remote or push.
+  const reused = expectCode(await runPr(['open', workflow, '--card', CARD, '--repo', fx.repo, '--push', '--scope', '.github/**', '--json'], fx.env, fx.repo), 'PR_PROTECTED_PATH');
+  assert.deepEqual(reused.paths, ['.github/workflows/ci.yml']);
+  assert.equal(lines(fx.gitLog).some(args => args[0] === 'push' || args[0] === 'ls-remote'), false);
+  assert.equal(fs.readFileSync(fx.ghLog, 'utf8'), '');
+});
+
+// Astra 2661 R1: Git rename detection reports only the destination of a rename, so a protected or out-of-scope source moved into an
+// allowed scope disappeared from the guard. Rename detection is forced on (as a host `diff.renames=true` would) so the host setting can
+// never mask the case; both the Git rename-header form and the delete + add form of the same move are checked, fresh and on receipt reuse.
+const RENAMES_ON = { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'diff.renames', GIT_CONFIG_VALUE_0: 'true' };
+const OWNERS = '* @deckent/owners\n';
+function renameBase(fx) {
+  fs.mkdirSync(path.join(fx.repo, '.github'), { recursive: true }); fs.mkdirSync(path.join(fx.repo, 'docs'), { recursive: true });
+  fs.writeFileSync(path.join(fx.repo, '.github/CODEOWNERS'), OWNERS); fs.writeFileSync(path.join(fx.repo, 'docs/a.md'), 'doc a\n');
+  gitSync(['add', '.github/CODEOWNERS', 'docs/a.md'], fx.repo); gitSync(['commit', '-m', 'owners'], fx.repo); gitSync(['push', 'origin', 'main'], fx.repo);
+  return gitSync(['rev-parse', 'HEAD'], fx.repo).trim();
+}
+const renameHeader = (from, to) => `diff --git a/${from} b/${to}
+similarity index 100%
+rename from ${from}
+rename to ${to}
+`;
+/** The same move as a delete hunk plus a new-file hunk; `body` ends with a newline. */
+function deleteAdd(from, to, body) {
+  const rows = body.split('\n').slice(0, -1); const sign = mark => rows.map(row => `${mark}${row}\n`).join('');
+  return `diff --git a/${from} b/${from}\ndeleted file mode 100644\n--- a/${from}\n+++ /dev/null\n@@ -1,${rows.length} +0,0 @@\n${sign('-')}`
+    + `diff --git a/${to} b/${to}\nnew file mode 100644\n--- /dev/null\n+++ b/${to}\n@@ -0,0 +1,${rows.length} @@\n${sign('+')}`;
+}
+execTest('R1: a protected file renamed into an allowed scope is refused on a fresh prepare and on receipt reuse; the override still needs both paths in scope', async t => {
+  const fx = fixture(t); const base = renameBase(fx); const env = { ...fx.env, ...RENAMES_ON };
+  for (const [index, diff] of [renameHeader('.github/CODEOWNERS', 'docs/owners.txt'), deleteAdd('.github/CODEOWNERS', 'docs/owners.txt', OWNERS)].entries()) {
+    const patch = writePatch(path.join(fx.dir, `owners-${index}`), { base, runId: `own${index}`, diff });
+    const before = capture(fx.repo);
+    for (const command of [['prepare'], ['open', '--push']]) {
+      const refused = expectCode(await runPr([command[0], patch, '--card', CARD, '--repo', fx.repo, ...command.slice(1), '--scope', 'docs/**', '--json'], env, fx.repo), 'PR_PROTECTED_PATH');
+      assert.deepEqual(refused.paths, ['.github/CODEOWNERS']);
+    }
+    assertFrozen(fx.repo, before);
+    // The override never widens the scope: the protected source must still be named by --scope.
+    const unscoped = expectCode(await runPr(['prepare', patch, '--card', CARD, '--repo', fx.repo, '--scope', 'docs/**', '--allow-protected-paths', '--json'], env, fx.repo), 'PR_SCOPE_VIOLATION');
+    assert.deepEqual(unscoped.paths, ['.github/CODEOWNERS']);
+    // The lead admits the move explicitly; reusing that receipt without the flag is refused before ls-remote or push.
+    const admitted = await runPr(['prepare', patch, '--card', CARD, '--repo', fx.repo, '--scope', 'docs/**', '--scope', '.github/**', '--allow-protected-paths', '--json'], env, fx.repo);
+    assert.equal(admitted.code, 0, `${admitted.stderr}\n${admitted.stdout}`);
+    assert.throws(() => gitSync(['cat-file', '-e', `lane/${CARD}-own${index}:.github/CODEOWNERS`], fx.repo));
+    for (const command of [['prepare'], ['open', '--push']]) {
+      const reused = expectCode(await runPr([command[0], patch, '--card', CARD, '--repo', fx.repo, ...command.slice(1), '--scope', 'docs/**', '--json'], env, fx.repo), 'PR_PROTECTED_PATH');
+      assert.deepEqual(reused.paths, ['.github/CODEOWNERS']);
+    }
+  }
+  assert.equal(lines(fx.gitLog).some(args => args[0] === 'push' || args[0] === 'ls-remote'), false);
+  assert.equal(fs.readFileSync(fx.ghLog, 'utf8'), '');
+});
+
+execTest('R1: an out-of-scope file renamed into the scope is refused fresh and on receipt reuse; an in-scope rename stays allowed and its PR names both paths', async t => {
+  const fx = fixture(t); const base = renameBase(fx); const env = { ...fx.env, ...RENAMES_ON };
+  for (const [index, diff] of [renameHeader('README.md', 'docs/readme.md'), deleteAdd('README.md', 'docs/readme.md', 'base\nmore\n')].entries()) {
+    const patch = writePatch(path.join(fx.dir, `readme-${index}`), { base, runId: `out${index}`, diff });
+    const refused = expectCode(await runPr(['prepare', patch, '--card', CARD, '--repo', fx.repo, '--scope', 'docs/**', '--json'], env, fx.repo), 'PR_SCOPE_VIOLATION');
+    assert.deepEqual(refused.paths, ['README.md']);
+    const admitted = await runPr(['prepare', patch, '--card', CARD, '--repo', fx.repo, '--scope', 'docs/**', '--scope', 'README.md', '--json'], env, fx.repo);
+    assert.equal(admitted.code, 0, `${admitted.stderr}\n${admitted.stdout}`);
+    const reused = expectCode(await runPr(['prepare', patch, '--card', CARD, '--repo', fx.repo, '--scope', 'docs/**', '--json'], env, fx.repo), 'PR_SCOPE_VIOLATION');
+    assert.deepEqual(reused.paths, ['README.md']);
+  }
+  // Positive control: a rename inside the scope is prepared, reused and opened; the PR body lists the removed and the added path.
+  const inside = writePatch(path.join(fx.dir, 'inside'), { base, runId: 'in1', diff: renameHeader('docs/a.md', 'docs/b.md') });
+  const args = ['--card', CARD, '--repo', fx.repo, '--scope', 'docs/**', '--json'];
+  const prepared = await runPr(['prepare', inside, ...args], env, fx.repo);
+  assert.equal(prepared.code, 0, `${prepared.stderr}\n${prepared.stdout}`);
+  assert.equal(gitSync(['show', `lane/${CARD}-in1:docs/b.md`], fx.repo), 'doc a\n');
+  assert.equal((await runPr(['prepare', inside, ...args], env, fx.repo)).json?.commit, prepared.json.commit);
+  const opened = await runPr(['open', inside, ...args, '--push'], env, fx.repo);
+  assert.equal(opened.code, 0, `${opened.stderr}\n${opened.stdout}`);
+  const body = lines(fx.ghLog).find(entry => entry.args[1] === 'create').body;
+  assert.match(body, /^- docs\/a\.md$/m); assert.match(body, /^- docs\/b\.md$/m);
 });
 
 test('invalid card and run ids, including branch injection, are refused', async t => {

@@ -12,6 +12,8 @@ export { ErrorRegistry, ERROR_CODES } from '#platform/core/errors/index.js';
 export { EXIT_CODES, exitCodeFor } from '#platform/core/errors/index.js';
 export type { ExitCode } from '#platform/core/errors/index.js';
 export { lintErrorRegistry, assertErrorRegistry } from '#platform/core/errors/index.js';
+export { mergeErrorDefinitions, ERROR_DEFINITION_FRAGMENTS } from '#platform/core/errors/index.js';
+export type { ErrorDefinition, ErrorDefinitions } from '#platform/core/errors/index.js';
 export { redactSensitive, unexpectedQueryFailure, takeQueryErrorRecord, reportQueryError, queryErrorClientParams, sanitizeQueryFailure } from '#platform/core/errors/index.js';
 export { EMPTY_KNOWN_SECRETS, REDACTION_CONFIG_SECRET, REDACTION_GATE_PATTERNS, REDACTION_PATTERNS, snapshotKnownSecrets, redactForRecord, redactForDecision, hasSecret } from '#platform/core/redaction/index.js';
 export type { NamedKnownSecret, KnownSecretSnapshot, KnownSecretSpan, RedactionMatch, RedactionResult } from '#platform/core/redaction/index.js';
@@ -35,6 +37,8 @@ export { isStandardSchemaV1, validateStandardSchemaSync } from '#platform/core/v
 // Deckent's own JSON Schema validator (MCP-SCHEMA-VALIDATOR): the MCP SDK's jsonSchemaValidator provider for every SDK Client and Server.
 export { DeckentJsonSchemaValidator, JsonSchemaRefusal, JSON_SCHEMA_LIMITS, JSON_SCHEMA_ANNOTATIONS } from '#platform/core/validate/index.js';
 export type { JsonSchemaCheck, JsonSchemaLimits, JsonSchemaRefusalReason, JsonSchemaResult, JsonSchemaValidatorOptions } from '#platform/core/validate/index.js';
+// SEC-6 F31: the same linear-time engine matches model-chosen shell globs (no backtracking RegExp on the service thread).
+export { compilePattern, PatternRefusal, StepBudgetExceeded, type LinearPattern, type StepBudget } from '#platform/core/validate/index.js';
 export { deepMerge, jsonRecordDirectory, readJsonFile, serializeJsonDocument, writeJsonAtomic, writeTextAtomic, type JsonRead, type JsonRecordFile } from '#platform/core/utils/index.js';
 export { formatDuration, estimateRemaining } from '#platform/core/utils/index.js';
 export { CORE_SCHEMA, registerConfigSection } from '#platform/core/config/index.js';
@@ -47,7 +51,7 @@ export { resolveConfigSecrets } from '#platform/core/config/index.js';
 export { configuredSecretResolver, environmentSecretResolver, installSecretResolverFactory } from '#platform/core/config/index.js';
 export type { SecretResolverContext, SecretResolverFactory } from '#platform/core/config/index.js';
 export { configDisplayView, isSensitiveConfigKey } from '#platform/core/config/index.js';
-export { loadConfig, loadGlobalConfig, loadConfigLanguage, clearConfigCache, restoreHoldPath } from '#platform/core/config/index.js';
+export { loadConfig, loadGlobalConfig, loadConfigLanguage, loadConfigAgentEnvironment, clearConfigCache, restoreHoldPath } from '#platform/core/config/index.js';
 export type { ResolvedConfig, ConfigLoadOptions } from '#platform/core/config/index.js';
 export { saveGlobalConfig, writeConfig, withConfigLayersLocked, withConfigWriteLock, pruneConfigBackups } from '#platform/core/config/index.js';
 export { healCorruptProjectConfig } from '#platform/core/config/index.js';
@@ -62,9 +66,10 @@ export type { OutputSink, EmitOptions } from '#platform/core/output/index.js';
 export { LOCALES, MESSAGE_KEYS, MESSAGE_REGISTRY, createMessageRegistry } from '#platform/core/i18n/index.js';
 export type { MessageFamily, MessageRegistry } from '#platform/core/i18n/index.js';
 export { CORE_TURN_ASSURANCE_REFERENCE, getConfigFieldDefault, CONFIG_FIELDS } from '#platform/core/config-fields/index.js';
+export { mergeConfigFields } from '#platform/core/config-fields/index.js';
 export type { ResourceObservationSettings } from '#platform/core/config-fields/index.js';
 export { RESOURCE_OBSERVATION_SETTINGS } from '#platform/core/config-fields/index.js';
-export { resolveProductLayout, productResourcePath, LayoutError } from '#platform/core/host/index.js';
+export { resolveProductLayout, productResourcePath, productDataRootIgnorePath, PRODUCT_DATA_ROOT_IGNORE, LayoutError } from '#platform/core/host/index.js';
 export type { ProductLayout, ProductLayoutInput, ProductResource } from '#platform/core/host/index.js';
 export type { SecretResolver, SecretResolution } from '#platform/core/config/index.js';
 export { inspectProductLayout, type ProductPathInspection } from '#platform/core/host/index.js';
@@ -83,7 +88,7 @@ export { shortId, mapBounded, HOST_LIMITS_REGISTRY } from '#platform/core/common
 
 export { isRecord, assertSafeKeys, digestText, pathsShareTree } from '#platform/core/utils/index.js';
 export { configSections, configRegistryGeneration, applyConfigEnvironment, assertConfigPreimage, backupConfig } from '#platform/core/config/index.js';
-export { assertConfigSecretPolicies } from '#platform/core/config/index.js';
+export { assertConfigSecretPolicies, assertProjectLayerSecretReferences } from '#platform/core/config/index.js';
 
 export { CONFIG_VALUE_CHOICES, CONFIG_ALLOWED_ENTRY_FIELDS, CONFIG_SECRET_ENTRY_NAMES, configChoiceDeclaration, configEntryAllowed, configStepper, stepConfigNumber, configNumberText } from '#platform/core/config-fields/index.js';
 export type { ConfigChoiceDeclaration, ConfigChoiceSource, ConfigNumberUnit, ConfigStepper } from '#platform/core/config-fields/index.js';

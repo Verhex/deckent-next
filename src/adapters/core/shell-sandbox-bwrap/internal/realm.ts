@@ -1,5 +1,5 @@
 import { realpathSync, statSync } from 'node:fs';
-import { lstat, mkdir, readdir, realpath } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 import type { ShellRealm, ShellRealmRequest, ShellRealmResult } from '#domain/index.js';
 import { BASH_LAUNCH, describeShellWritePosture, fsOpsFor, gitWorktreeRepository, longLivedWritePosture, runShellProcess, sandboxWriteView, sandboxHardFloored, scanGitDirectory, type FsOps,
@@ -139,6 +139,16 @@ async function maskHostSockets(environment: Readonly<Record<string, string | und
     ...(docker?.startsWith('unix://') ? [docker.slice(7)] : [])];
   // Older session buses use /tmp/dbus-* instead of /run/user/<uid>/bus.
   for (const entry of await readdir('/tmp', { withFileTypes: true })) if (entry.isSocket() && entry.name.startsWith('dbus-')) configured.push(join('/tmp', entry.name));
+  // SEC-1 (F27): each Deckent runtime socket directory with a bound socket (`/tmp/dk-<uid>-<sha256>`, the local-runtime-socket location) is
+  // an empty tmpfs, so an agent shell cannot find or reach any installation's runtime service. The kernel's bound-socket table is read, not
+  // a `/tmp` listing (stale directories without a socket are many and harmless). A service started later still refuses the peer itself.
+  const runtimeSocket = new RegExp(`^(/tmp/dk-${process.getuid?.() ?? -1}-[0-9a-f]{64})/`, 'u');
+  const bound = await readFile('/proc/net/unix', 'utf8').catch(() => null);
+  if (bound === null) return 'the bound host sockets cannot be listed; the runtime socket directory cannot be hidden';
+  for (const line of bound.split('\n')) {
+    const at = line.indexOf(' /'), directory = at < 0 ? undefined : runtimeSocket.exec(line.slice(at + 1))?.[1];
+    if (directory && !directories.includes(directory)) directories.push(directory);
+  }
   for (const path of configured) {
     if (!isAbsolute(path)) return 'a configured host socket path is not absolute';
     const real = await realpath(path).catch(() => null);

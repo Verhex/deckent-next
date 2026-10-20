@@ -1,0 +1,9 @@
+{
+  "error.SECRET_REFERENCE_PROJECT_LAYER": "Proje ayarı (.deckent/config.json) secret referansı kullanamaz; kurulum secret'ını yalnız kurulum ayarı adlandırabilir. Referansı kurulum ayarına taşıyın ya da kaldırın.",
+  "error.SECRET_REFERENCE_LEAVES_HOST": "Bu değer makineden dışarı çıkar (örneğin teslim commit'inin yazarı); bu yüzden hiçbir ayarda secret referansından gelemez. Düz değeri yazın.",
+  "error.AUTHORITY_WITNESS_REQUIRED": "Yetki değişikliği (izin modu, bir sır, sır deposu, MCP sunucu güveni, politika şablonu yükseltmesi ya da Docker Engine gibi bir çalıştırma ortamının kurulumu) etkileşimli terminaldeki bir kişi gerektirir: komutu bu makinede, girişi ve çıkışı aynı terminalde olan gerçek bir terminalde çalıştırın. Yapay zekâ araçları, MCP, SDK betikleri ve boru hattına bağlı komutlar bu değişikliği --yes ile bile yapamaz. Hiçbir şey değiştirilmedi.",
+  "error.MCP_TRUST_NEEDS_CARD": "MCP sunucusu {name}, Deckent'in artık güven okumadığı bir yerde (projenin veri klasöründe) güvenilir kaydedilmişti. Kartı üzerinden bir kez onaylayın: bir terminalde --yes olmadan `deckent mcp approve {name}` çalıştırın ya da terminalde kullanıp kartını yanıtlayın. Hiçbir şey değiştirilmedi.",
+  "security.mcp.note.project": "proje dosyası: ortamdan yalnız şu değişkenler okunur: {names}; diğerleri varsayılanı ya da boş okunur, kimlik bilgisi taşıyan bir değer sunucuyu reddettirir; sır referansları reddedilir",
+  "security.mcp.note.moved": "bu sunucunun projenin veri klasöründeki güven kaydı artık kullanılmıyor; bu kartta yeniden karar verin",
+  "security.mcp.trustCard.argument": "argüman {index}: {value}"
+}

@@ -4,6 +4,7 @@ import { firstRunPolicyTemplate, firstRunServiceId, firstRunTemplateAdditions, F
   namedPersonPolicyAdditions, policyFileSchema, policyNamedPeople, upgradeFirstRunPolicy, type FirstRunPolicyTemplateInput } from '#domain/index.js';
 import type { BootstrapJournalPayload, BootstrapObservation } from '#platform/index.js';
 import { InstallationPublicationError } from './publish.js';
+import environmentRegistry from './execution-environments.json' with { type: 'json' };
 import { installerAuthorityChangeEvent } from './authority-audit.js';
 import type { AuditEvent } from '#domain/index.js';
 
@@ -21,11 +22,15 @@ export const FIRST_RUN_EDIT_SHELL_TOOL_NAMES = Object.freeze(['edit_file', 'writ
 export const FIRST_RUN_SCRATCH_WRITE_OPERATION_ID = 'workspace.scratch.write';
 export const FIRST_RUN_WRITE_OPERATION_ID = 'workspace.file.write';
 export const FIRST_RUN_SHELL_OPERATION_ID = 'host.shell.run';
+/** v13 (owner A48-D3a, INIT D2): the execution environments the installing person may install — the execution-environment registry seed
+ * (`execution-environments.json`, one entry today), which I-D2's adapter registry pins by test. A new entry changes the template's install rule,
+ * so it comes with a template bump, never with a wider (`all`) grant. */
+export const FIRST_RUN_EXECUTION_ENVIRONMENT_IDS: readonly string[] = Object.freeze(environmentRegistry.environments.map(entry => identitySchema.parse(entry.id)));
 /** The concrete Core tool/operation template contract, shared by installer composition and external catalog pin tests. */
 export const FIRST_RUN_TOOL_NAMES: FirstRunToolNames = Object.freeze({ readToolNames: FIRST_RUN_READ_TOOL_NAMES, scratchToolNames: FIRST_RUN_SCRATCH_TOOL_NAMES,
   scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
   shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
-  policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID });
+  policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS });
 export interface PolicyTemplateSource { load(): Promise<unknown> }
 /** Doctor's read-soft recognition: the application service the domain decision (`matchFirstRunPolicyTemplate`) is
  * invoked through (composition-purity), never called from composition directly. `source.load()` is the raw
@@ -73,7 +78,8 @@ export async function settleFirstRunServiceIdentity(port: FirstRunServiceIdentit
 }
 export const SKIPPED_SERVICE_IDENTITY: FirstRunServiceIdentityResult = Object.freeze({ status: 'skipped', identity: null });
 
-export type PolicyTemplateResource = 'policy' | 'bindings' | 'config' | 'ledger';
+/** `gitignore` (G2-1, analysis 2026-10-18): the new data root's ignore file, so `git add -A` never commits the product state; first-session material. */
+export type PolicyTemplateResource = 'policy' | 'bindings' | 'config' | 'ledger' | 'gitignore';
 export interface PolicyTemplatePublishTarget { readonly resource: PolicyTemplateResource; readonly path: string; readonly content: string; readonly digest: string }
 export interface PolicyTemplatePreview {
   readonly schemaVersion: 1; readonly status: 'preview';
@@ -109,7 +115,7 @@ export interface PreparePolicyTemplateInput {
   readonly firstSessionTargets?: readonly PolicyTemplatePublishTarget[];
 }
 export type FirstRunToolNames = Pick<FirstRunPolicyTemplateInput, 'readToolNames' | 'scratchToolNames' | 'scratchWriteOperationId' | 'editShellToolNames' | 'writeOperationId'
-  | 'shellOperationId' | 'proposeMcpToolName' | 'mcpCallOperationId' | 'policyAdministerOperationId'>;
+  | 'shellOperationId' | 'proposeMcpToolName' | 'mcpCallOperationId' | 'policyAdministerOperationId' | 'executionEnvironmentIds'>;
 /**
  * Pure preparation (SCR-B, owner 2026-09-28 option B): no I/O, deterministic in `(scopeId, principal)`, so
  * `init policy --preview` and a later `init policy --apply` for the same scope always agree on exactly what
@@ -170,7 +176,7 @@ export class PolicyTemplateInstallationApplication {
         profileDigest: preview.planDigest, phase: 'pending', createdAtMs: now, updatedAtMs: now, blockers: ['POLICY_TEMPLATE_NOT_APPLIED'],
         resources: targets.map(target => ({ resource: target.resource, path: target.path, preimageDigest: preimages.get(target.resource)!,
           targetDigest: target.digest, state: 'pending' as const })),
-        recovery: immutableJsonObjectSchema.parse({ schemaVersion: 1, scopeId: preview.scopeId, principal: preview.principal, template: preview.template, ...(targets.length > 2 ? { firstSessionTargets: targets.filter(target => target.resource === 'config' || target.resource === 'ledger') } : {}) }) };
+        recovery: immutableJsonObjectSchema.parse({ schemaVersion: 1, scopeId: preview.scopeId, principal: preview.principal, template: preview.template, ...(targets.length > 2 ? { firstSessionTargets: targets.filter(target => target.resource !== 'policy' && target.resource !== 'bindings') } : {}) }) };
       observed = await this.ports.journal.write(observed, payload);
     }
     if (!observed.record) throw new InstallationPublicationError('INSTALLATION_PUBLICATION_CHANGED');
@@ -234,8 +240,8 @@ const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } |
 /**
  * The first-run older-template → current migration (owner 2026-10-07; `deckent init policy --scope <id> --upgrade --preview|--apply [--expect <revision>]
  * [--person <issuer>/<subject>]`), under the template installation's authority: the local person the first-run rules name, who could install the
- * current template on a fresh installation today. An untouched v4–v11 template becomes exactly the current one (v12 adds the owner's scope inspect and
- * service shutdown, owner 2026-10-16); edited and hand-built policies take the add-only plan below, which (owner 2026-10-16 option A) includes the two v12 rules for the named person. It adds every current template rule that person does not hold yet (`firstRunTemplateAdditions`: MCP server authority, the MCP
+ * current template on a fresh installation today. An untouched v4–v12 template becomes exactly the current one (v12 adds the owner's scope inspect and
+ * service shutdown, owner 2026-10-16; v13 the seven A48-D3 rules); edited and hand-built policies take the add-only plan below, which (owner 2026-10-16 option A) includes the two v12 rules for the named person. It adds every current template rule that person does not hold yet (`firstRunTemplateAdditions`: MCP server authority, the MCP
  * call operation, the proposal tool, the `policy.administer` operation and approval decisions — K1 option A) and keeps everything else:
  * hand-added rules, edited first-run rules, modes and bindings; a rule id that exists with other content is kept and named as a conflict. An
  * untouched v4–v10 template becomes exactly the v11 template. A hand-built policy (no template read rule; POLICY-UPGRADE-HANDBUILT, lead 2026-10-08)
@@ -261,7 +267,8 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
   const principal = person ?? { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const template = { scopeId, principal, ...input.toolNames, ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
   const names = { person: principal, proposeMcpToolName: input.toolNames.proposeMcpToolName, mcpCallOperationId: input.toolNames.mcpCallOperationId,
-    policyAdministerOperationId: input.toolNames.policyAdministerOperationId, ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
+    policyAdministerOperationId: input.toolNames.policyAdministerOperationId, executionEnvironmentIds: input.toolNames.executionEnvironmentIds,
+    ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
   const result = (status: PolicyTemplateUpgradeResult['status'], extra: Partial<PolicyTemplateUpgradeResult> = {}): PolicyTemplateUpgradeResult => Object.freeze({ schemaVersion: 1,
     status, reason: null, template: Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, to: FIRST_RUN_POLICY_TEMPLATE_VERSION }), scopeId, principal, person: person ?? null, basis: null,
     exact: false, people: [], revision: null, rules: [], conflicts: [], wireRules: [], ...extra });

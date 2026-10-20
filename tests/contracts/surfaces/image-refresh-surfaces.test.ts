@@ -16,6 +16,9 @@ it('WORKER-AUTO-REFRESH monitor: updating and current are notes, a failed refres
   expect(describeDiagnostic('info:image-updating', 'en')).toMatchObject({ note: true, text: expect.stringContaining('updated in the background') });
   expect(describeDiagnostic('info:image-updating', 'tr')).toMatchObject({ note: true, text: expect.stringContaining('arka planda') });
   expect(describeDiagnostic('info:image-current:r5-20261006', 'en')).toMatchObject({ note: true, text: expect.stringContaining('r5-20261006') });
+  // N1 2026-10-19: no recorded version reads as a whole sentence, never with empty parentheses.
+  for (const locale of ['en', 'tr'] as const) expect(describeDiagnostic('info:image-current', locale)).toMatchObject({ note: true, text: expect.not.stringMatching(/\(\s*\)/) });
+  expect(describeDiagnostic('info:image-current', 'tr').text).toBe('İşçi imajı güncel');
   expect(describeDiagnostic('image-refresh-failed:WORKER_IMAGE_BUILD_FAILED', 'en')).toMatchObject({ note: false, text: expect.stringContaining('WORKER_IMAGE_BUILD_FAILED') });
   expect(describeDiagnostic('image-refresh-failed:WORKER_IMAGE_BUILD_FAILED', 'tr')).toMatchObject({ note: false, text: expect.stringContaining('önceki imaj') });
 });
@@ -23,13 +26,14 @@ it('WORKER-AUTO-REFRESH monitor: updating and current are notes, a failed refres
 it('the monitor snapshot carries the refresh as typed diagnostics, nothing for unknown, and a failing reader never fails the snapshot', async () => {
   const target = { id: 'current', path: '/fixture/project' };
   const snapshot = async (readImageRefresh?: () => Promise<{ status: 'updating' | 'current' | 'failed' | 'unknown'; reason: string | null; imageVersion: string | null }>) => {
-    const app = new MonitorApplication({ now: () => 1, readLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); },
+    const app = new MonitorApplication({ now: () => 1, indexLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); }, readLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); },
       describeService: async () => { throw Object.assign(new Error('x'), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); }, observeScope: async () => { throw new Error('unused'); },
       ...(readImageRefresh ? { readImageRefresh } : {}) } as never);
     return (await app.inspect([target])).installs[0]!.diagnostics;
   };
   expect(await snapshot(async () => ({ status: 'updating', reason: null, imageVersion: null }))).toContain('info:image-updating');
   expect(await snapshot(async () => ({ status: 'current', reason: null, imageVersion: 'r5-20261006' }))).toContain('info:image-current:r5-20261006');
+  expect((await snapshot(async () => ({ status: 'current', reason: null, imageVersion: null }))).filter(code => code.includes('image'))).toEqual(['info:image-current']);
   expect(await snapshot(async () => ({ status: 'failed', reason: 'REFRESH_EXPIRED', imageVersion: null }))).toContain('image-refresh-failed:REFRESH_EXPIRED');
   expect((await snapshot(async () => ({ status: 'unknown', reason: null, imageVersion: null }))).filter(code => code.includes('image'))).toEqual([]);
   expect((await snapshot()).filter(code => code.includes('image'))).toEqual([]);
@@ -39,13 +43,13 @@ it('the monitor snapshot carries the refresh as typed diagnostics, nothing for u
 it.each([['updating', 'en', 'being updated in the background'], ['failed', 'tr', 'önceki imaj kullanılıyor'], ['current', 'en', 'current (r5-20261006)']] as const)('doctor shows the image refresh line (%s, %s) and keeps unknown silent', async (status, locale, text) => {
   const root = await mkdtemp(join(tmpdir(), 'deckent-doctor-refresh-')); roots.push(root); const env = { HOME: join(root, '..', 'home'), USERPROFILE: join(root, '..', 'home') };
   const lines: string[] = [];
-  await runKernelCommand(['doctor', '--lang', locale], { root, env, stdout: stdout(lines), inspectToolchainRefresh: async () => ({ status, reason: 'WORKER_IMAGE_BUILD_FAILED', imageVersion: 'r5-20261006' }) });
+  await runKernelCommand(['doctor', '--verbose', '--lang', locale], { root, env, stdout: stdout(lines), inspectToolchainRefresh: async () => ({ status, reason: 'WORKER_IMAGE_BUILD_FAILED', imageVersion: 'r5-20261006' }) });
   expect(lines.join('')).toContain(text);
   lines.length = 0;
   await runKernelCommand(['doctor', '--json'], { root, env, stdout: stdout(lines), inspectToolchainRefresh: async () => ({ status, reason: null, imageVersion: null }) });
   expect(JSON.parse(lines.join(''))).toMatchObject({ imageRefresh: { status } });
   lines.length = 0;
-  await runKernelCommand(['doctor', '--lang', 'en'], { root, env, stdout: stdout(lines), inspectToolchainRefresh: async () => ({ status: 'unknown', reason: null, imageVersion: null }) });
+  await runKernelCommand(['doctor', '--verbose', '--lang', 'en'], { root, env, stdout: stdout(lines), inspectToolchainRefresh: async () => ({ status: 'unknown', reason: null, imageVersion: null }) });
   expect(lines.join('')).not.toContain('Worker image');
   lines.length = 0;
   await runKernelCommand(['doctor', '--json'], { root, env, stdout: stdout(lines), inspectToolchainRefresh: async () => { throw new Error('unreadable'); } });
@@ -71,16 +75,16 @@ it('monitor and doctor say "restart required" only for a measured stale service;
   expect(describeDiagnostic('config-restart-required', 'tr')).toMatchObject({ note: false, text: expect.stringContaining('yeniden başlatın') });
   const running = { schemaVersion: 1 as const, instanceId: 'i', shutdownAvailable: false as const, identity: null, configDigest: '0'.repeat(64) };
   const snapshot = async (readConfigFreshness: () => Promise<'current' | 'stale' | 'unknown'>) => (await new MonitorApplication({ now: () => 1,
-    readLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); }, describeService: async () => running, observeScope: async () => { throw new Error('unused'); },
+    indexLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); }, readLedger: async () => { throw Object.assign(new Error('x'), { code: 'LEDGER_ABSENT' }); }, describeService: async () => running, observeScope: async () => { throw new Error('unused'); },
     readConfigFreshness } as never).inspect([{ id: 'current', path: '/fixture/project' }])).installs[0]!.diagnostics;
   expect(await snapshot(async () => 'stale')).toContain('config-restart-required');
   for (const state of ['current', 'unknown'] as const) expect(await snapshot(async () => state)).not.toContain('config-restart-required');
   expect(await snapshot(async () => { throw new Error('x'); })).not.toContain('config-restart-required');
   const root = await mkdtemp(join(tmpdir(), 'deckent-doctor-config-')); roots.push(root); const env = { HOME: join(root, '..', 'home'), USERPROFILE: join(root, '..', 'home') };
   const lines: string[] = [];
-  await runKernelCommand(['doctor', '--lang', 'en'], { root, env, stdout: stdout(lines), describeRuntimeService: async () => running as never });
+  await runKernelCommand(['doctor', '--verbose', '--lang', 'en'], { root, env, stdout: stdout(lines), describeRuntimeService: async () => running as never });
   expect(lines.join('')).toContain('restart required');
   lines.length = 0;
-  await runKernelCommand(['doctor', '--lang', 'en'], { root, env, stdout: stdout(lines), describeRuntimeService: async () => { throw Object.assign(new Error('x'), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); } });
+  await runKernelCommand(['doctor', '--verbose', '--lang', 'en'], { root, env, stdout: stdout(lines), describeRuntimeService: async () => { throw Object.assign(new Error('x'), { code: 'LOCAL_RUNTIME_UNAVAILABLE' }); } });
   expect(lines.join('')).not.toContain('restart required');
 });

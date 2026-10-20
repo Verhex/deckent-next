@@ -1,5 +1,5 @@
 Deckent izleyici · gözlem 2026-10-02 09:30:00Z · yalnız gözlem
-● current · servis kaydı yok · build bilinmiyor · ledger sürüm 44 · /home/owner/projects/fresh
+● fresh (current) · SERVİS KAYDI YOK · ✓ sorun yok · /srv/owner/projects/fresh
 
 ── Özet ────────────────────────────────────────────────────────────────────────────────────────────
 İş: 0 sırada · 0 çalışıyor · 0 kontrolde · 0 beklemede · 0 tamam · 0 durdu
@@ -26,18 +26,21 @@ Takılı ya da bekleyen, en eskisi önce (0)
   Yapılandırılmış havuz yok.
 
 ── Kurulumlar ──────────────────────────────────────────────────────────────────────────────────────
-Kurulum current · erişilebilir
-Yol /home/owner/projects/fresh
-Kapsamlar: —
-servis kaydı yok · örnek —
-build bilinmiyor · kaynak ağacı —
-ledger sürüm 44
-0 iş · 0 işçi · 0 onay · 0 havuz
+  ● fresh (current)   SERVİS KAYDI YOK   ✓ sorun yok
+  ┌─────────┬───────────────────────────────────────────┐
+  │ Durum   │ ○ Servis kaydı yok · ✓ Defter v44         │
+  ├─────────┼───────────────────────────────────────────┤
+  │ İş yükü │ 0 iş · 0 işçi · 0 onay bekliyor · 0 havuz │
+  │ Kapsam  │ —                                         │
+  │ Klasör  │ /srv/owner/projects/fresh                 │
+  ├─────────┼───────────────────────────────────────────┤
+  │ Sürüm   │ build bilinmiyor                          │
+  └─────────┴───────────────────────────────────────────┘
 
 Gözlenen başka kurulum yok. Eklemek için config `inspection.workers.sources`.
 
 ── Harita ──────────────────────────────────────────────────────────────────────────────────────────
-current · /home/owner/projects/fresh
+current · /srv/owner/projects/fresh
   Bu kurulum için harita okunmadı.
 
 Yalnız gözlem: bu görünüm hiçbir şeyi üstlenmez, ayırmaz, iptal etmez, karar vermez. Engel, motorun

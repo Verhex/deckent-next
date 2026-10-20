@@ -18,8 +18,8 @@ in most terminals, Option in iTerm2, Fn in Terminal.app. `terminal.layout: inlin
 inline layout (native scrollback while running; recommended with screen readers); `terminal.viewportRows` (default 2000)
 bounds how far the view scrolls back. Mode colours: standard muted, full auto its own colour, full access the warning tone
 with a calm `⏵⏵⏵` mark (NO_COLOR: the words carry the mode). A window opened by your command or selection takes
-focus immediately; Escape closes it back to input. Automatic /do planning, progress and approval cards, model-turn
-approvals and run/worker watches leave input focused: type a draft or press Enter to queue it behind the current
+focus immediately; Escape closes it back to input. Automatic /do planning and progress windows and
+run/worker watches leave input focused: type a draft or press Enter to queue it behind the current
 operation. Ctrl+O switches between input and the top window. An approval card (and any question) takes the keyboard by
 itself and replaces the input bar in place, so no Ctrl+O is needed; its answers are a list — "Yes, once (y)", "Yes, for this
 session (s)" and "Always allow in this project (a)" only where the service offers them (never for floor items or always-ask
@@ -61,7 +61,7 @@ the MCP tool `inspect_toolchain_currency` and the SDK function `inspectToolchain
 
 `deckent toolchains update [--apply]` turns a stale report into the next worker image version under
 `toolchains.update.mode` (`off | propose | auto`, default `auto`): a typed plan is written under
-`<data root>/workspaces/toolchains/plans/`; with `auto` or `--apply` the shipped builder is copied into
+`<data root>/workspaces/toolchains/plans/`; with `--apply` (in every mode; under `auto` the running service's own refresh applies by itself) the shipped builder is copied into
 `workspaces/toolchains/builds/<version>/`, built with a bounded timeout, and its receipt produces a
 `not-applied` profile-revision proposal (`proposals/<version>.json`). Installed config is never rewritten;
 apply the proposal as a new installation profile revision. Running work keeps its image; old versions stay for
@@ -136,6 +136,45 @@ against HEAD and the affected index/worktree files. Use the same identity flags 
 and the check's `--proposal <code>`, and requires `prepare-integration` policy permission.
 Both commands support `--json` and use local storage without a runtime service.
 
+`deckent task` for a person (alpha.48 C-TASK). Every `task` view uses the call's language (`--lang`, then
+`DECKENT_LANGUAGE`, then config `language`, then the system locale); `transcript` and `patch-preview` keep their
+format. `--run` takes a short id: an exact id or the unique prefix of a Run the terminal's `/runs` lists resolves;
+several candidates are `CLI_ID_AMBIGUOUS` (exit 2); anything else is passed on unchanged. `task inspect` reads in
+`run inspect` order (task and state, request, result, what an accepted result rests on, delivery); a secret-gate list
+longer than five paths is one line naming the deny-list exceptions, and `--verbose` adds every path and the acceptance
+metadata line. In `patch-preview` a diff line whose control characters were neutralised is followed by a
+`\ control characters in the line above were neutralised` meta line (`--stat` and `--json` unchanged). On a real
+terminal, `task inspect|transcript|patch-preview` without `--run`/`--task` pick scope, Run and task; bare
+`deckent task` (once the catalog marks the family bare-handled) opens a menu of only the task's valid actions:
+inspect, transcript and diff once an attempt exists, accept/reject while a decision is open, delivery for an accepted
+patch awaiting delivery. Accept/reject read the revision just before their card and generate the command id; a Run
+that changed meanwhile is refused (`RUN_STORE_CONFLICT`), read again and asked again. Delivery uses the same port and
+applications as `/deliver`; every write (candidate + delivery, adoption, queue batch) waits for its own exact card,
+and Enter alone, Esc or silence (the session approval time) answer no. A pipe, AI agent, CI or `--json` caller is never
+asked: bare `deckent task` names the missing argument and lists the actions in four groups (Inspect, Execute and
+evaluate, Deliver, Queue), exit 2. The AI path keeps every long name and flag.
+
+`deckent run`, `report` and `inventory` for a person (alpha.48 C-RUN). `deckent run list` reads the same Run ids as the
+terminal's `/runs` and each Run through the same inspect application: waiting (parked) Runs first, then newest, with a
+short id, the `/runs` state words, accepted tasks and the title; `--json` returns the Run views. Every `run` action that
+names an existing Run takes a short id (a unique prefix; several candidates are `CLI_ID_AMBIGUOUS`, exit 2; anything else
+is passed on unchanged); `create --id` never resolves, it names the new Run. A read without `--scope` uses the
+configured `terminal.scopeId` and says so on its first line; without one, off a terminal, it is `CLI_SCOPE_REQUIRED`
+with the valid scopes. `run inspect` reads request, result, tasks (each with what an accepted result rests on, e.g.
+"accepted on: exit code · content not independently verified", then delivery); the authority record, cost summary,
+acceptance metadata, profile and criteria lines, full ids and a secret-gate list longer than five paths are `--verbose`.
+On a real terminal, `run inspect` and `report` without an id pick the Run, and `run cancel|hold|resume|close` without
+`--command-id`/`--expected-revision` pick scope (a change never takes the default silently) and Run (only Runs whose
+state offers the control, the same rule as the `/runs` keys), read the revision just before a card that names scope,
+Run, state and consequence, and send with a system command id; `n`, Esc or silence send nothing, and a Run that changed
+meanwhile is read and asked again. The AI and automation path keeps every typed flag mandatory; an agent or a pipe is
+never asked. `deckent report` shows Known (result, what acceptance rests on, duration, CPU, memory, model in readable
+units) and Not measurable (each axis with its reason, e.g. a subscription call has no per-call charge); without
+`--run` it lists the scope's recent Runs. `deckent inventory` is the developer view of this installation's dispatch
+journal (short ids, `--verbose` full ids); `workers list` also reads the configured `inspection.workers.sources`, so it
+can show more records. A page above `inspection.maxPageSize` is `DISPATCH_INVENTORY_LIMIT` naming the maximum. The
+bare `report`/`inventory` calls and `run list` are reachable once the catalog delta lands.
+
 Preparation creates a separate Git candidate under the configured workspaces resource's
 `integrations` directory. It contains the recorded base plus patch and leaves source files,
 HEAD and index unchanged. A prepared candidate is not Task acceptance or live delivery.
@@ -171,6 +210,11 @@ layers are archived apart. Worker clones, provider logins and secret-store crede
 excluded. Set files are 0600 in a 0700 directory and no `ledger.db-wal/-shm` is left in a set.
 SHA hashes alone do not authenticate a changed set: verification also opens the AEAD envelope, so
 `BACKUP_PASSPHRASE_INVALID` means a wrong passphrase or a modified set.
+Before any decryption, verify and restore name the other causes with their own codes (exit 78):
+`BACKUP_SET_NOT_FOUND` (no folder with `MANIFEST.sha256` at the path), `BACKUP_SET_UNREADABLE`
+(this user cannot read the set), `BACKUP_PASSPHRASE_REQUIRED` (empty passphrase) and
+`BACKUP_MANIFEST_INVALID` (a file no longer matches the manifest: the set was modified). A restore of a set that does not exist is
+refused before its recovery audit (kept next to the set) is written, so no audit folder appears at a mistyped path.
 
 Stop the target service first. An empty target needs no replacement confirmation; for an
 existing target add `--confirm-target /exact/absolute/target`. A target bound to another
@@ -210,7 +254,8 @@ is up; before-upgrade runs before ledger migration. Set `BACKUP_PASSPHRASE` thro
 selected secret store (the existing `secret set` masked/stdin flow). The default environment
 backend must instead be provisioned by the service launcher. Missing credentials block an
 admitted before-upgrade migration. Only authenticated scheduled sets are retained/pruned;
-operator files with other names remain. Shutdown waits for a backup already in progress.
+operator files with other names remain. A set that no longer verifies (for example after a
+passphrase change) is reported and kept, and does not block the next daily backup; before an upgrade it stops the migration. Shutdown waits for a backup already in progress.
 
 Backup audit receipts contain principal, scope and policy, without credentials. Create/verify
 receipts live under `audit/backup-operations`; restore receipts live beside the set under
@@ -218,6 +263,20 @@ receipts live under `audit/backup-operations`; restore receipts live beside the 
 A failure before trusted authority exists cannot be sealed, and performs no storage effect.
 Linux kernel custody is verified here; other hosts refuse unsupported custody. KMS, independent
 review, packaged acceptance and owner DOGFOOD admission remain separate gates.
+
+## Administration commands in human words (alpha.48, owner CLI review 2026-10-19)
+
+Without an action `deckent pool`, `audit`, `secret`, `runtime`, `backup` and `toolchains` read: the pool's state and capacity, the
+audit result with the last checkpoint, the keys (name · used by · store, never a value), the service status (build, configuration,
+running work, socket; no start time until the next protocol version), the recovery sets (`state/backups/recovery`: date · size · kind ·
+last verified · name) and the toolchain table (network use stated first). `deckent paths` groups the layout with exists/missing and
+names the socket really used (`/tmp/dk-<uid>-<sha256>/s`). Output is text in a pipe; JSON only with `--json`, in the same contracts.
+A change never takes a silent scope: off a terminal `pool hold|resume|set-capacity|quota-release`, `secret set|delete|store --to`
+and `backup create|restore` need `--scope`, and `runtime shutdown` without identities needs `--reason`. On a person's terminal the
+scope, the set, the key or the store are picked and the change is confirmed on a card first (an AI, CI or pipe is never asked):
+a weaker secret store needs a second warning card, a restore shows target, service state and where replaced files are kept,
+`toolchains update` shows the plan before it builds, `audit rebaseline` confirms on a card. `secret set` takes the key only at a
+person's terminal (hidden prompt): from a pipe, script, agent or CI it is refused before stdin is read (`SECRET_SET_TERMINAL_REQUIRED`).
 
 ## Provider keys, models and spending
 
@@ -232,6 +291,21 @@ declares a model from the kind's packaged catalog, writes the scope's invocation
 it (kinds: anthropic-api, openai-api, deepseek-api, zai-api, zai-cn-api, openai-compatible, local-openai). A remote model
 without a verified published tariff is refused and shown locked with the reason. `terminal.defaultModel` (user layer) is
 the terminal's default; the session pin from `/model` wins, then a project-authored reference.
+
+For a person (C-MODELS, owner CLI review 2026-10-19): bare `deckent models` is one table of the scope's worker catalog (model,
+channel, state, effort; a retired model with its day; a switched-on model retiring within `models.retirementWarningDays`,
+default 15, is warned about); `--declared` lists what the connected providers declare (the chat catalog) and is also the JSON
+form of that list (`models --declared --json`); `models --json` is the catalog inspection. On a terminal, `models activate|deactivate`,
+`models catalog activate|deactivate` and `models connect` without their long flags ask the scope, provider or channel and the exact
+model id (never an alias), read the binding digest and revisions themselves and confirm on a scoped card; the long flag forms are
+unchanged for AI tools. `models spending` without `--input` shows the scope's API budget (limit, used, held, left).
+
+MCP and identity: `deckent mcp` / `mcp list` is a table (waiting servers first with their next step) and starts nothing; `--check`
+starts trusted servers only. Every trust decision (`mcp approve`, `mcp add` to a local or user scope) is a card on a person's terminal;
+off a terminal it is refused (`MCP_APPROVAL_NEEDS_TERMINAL`) and `--yes` no longer skips the card (owner A48-D5/D6). Bare
+`deckent identity` (catalog delta pending: until then `identity profiles`) states the selected profile — or how to select one with
+`deckent config set identity.profile` —, the people and the role bindings; `identity preview` without a selected profile reports
+`IDENTITY_PROFILE_NOT_SELECTED`; `identity distribute --scope <id> [--apply]` on a terminal is chosen with arrow-key cards and a preview card.
 
 Spending: paid calls reserve the dearest applicable published tier and settle from the provider's returned usage times
 the pinned tariff (`measured-tariff`). The scope's first budget is created with `deckent models create-budget --scope <id>
@@ -251,3 +325,7 @@ Delivery commits carry the admitted task title, ids and bounded acceptance state
 ### Delivery window in the terminal (TESLIM-PENCERESI author candidate)
 
 When a Task of a Run that this terminal's `/do` admitted reaches "accepted · patch ready, awaiting delivery", a delivery window opens by itself without taking input (Ctrl+O, or "awaiting delivery" in the Active work strip with Ctrl+T and Enter, moves input to it); `/deliver` lists every waiting task of the scope and opens the chosen one with focus. The window shows the task title, Run/Task ids, the integration check of the current source (affected files match the base), the changed files with `patch-preview --stat` counts, that only a dedicated `refs/deckent/deliveries/` reference is written (branches, index and working tree stay unchanged) and, only when `execution.adoption.targets` is configured, the target branches as a later, separate choice. `y` checks, prepares and delivers in one flow through the same applications as `task integration-check|prepare|deliver` and the verified-terminal confirmation above: the window's `y` answers the confirmation only when its card shows exactly the operation, ids, command, file set and base the window showed; otherwise the exact card is shown and needs a fresh `y`. After delivery a configured branch is adopted only with a second `y` (↑↓ chooses the branch); `n`/Esc does nothing. With `execution.adoption.verification` configured (Y1), that `y` first opens a verification step: the scope's accepted Runs of the configured kind (one task), plus "adopt without verification" only when it is not required; ↑↓ chooses, a single typed `y` adopts with the choice (the kind is read from configuration at that moment, as `task integration-adopt --verification-run` does), `r` reads the list again, `n`/Esc go back. With none it says so and names `deckent run create … --delivery-command-id <this delivery>`. The adoption application still checks that the Run verified exactly this commit with the current profile and the installation's criteria; a refusal returns to the choice with its reason and a fresh adoption command. The delivered and adopted lines and the transcript summary show the delivery and adoption command ids (`task integration-rollback --adoption-command-id`). A typing `y` in the input never confirms. A stale base, a missing grant (`scope inspect` for the attempt lookup plus the integration actions) or a non-verified session is refused in plain words with the next step. Delivery never starts by itself; a future owner-set "autonomous by rule" broker would plug into the same confirmation port and is not implemented. The ready step also offers a read-only diff of each changed file (alpha.46; no new command): ↑↓/j/k choose a file, Enter opens its hunks with the attempt, base and proposal the preview was built from, ↑↓/j/k scroll, Esc returns to the list. The port carries per-file diff bodies of the same patch the counts come from, bounded by `deliver-port.json` (`maxDiffFiles`, `maxDiffLinesPerFile`, `maxDiffBytesPerFile`); a binary or over-large file shows "Cannot show: binary or too large" instead of a body and cut lines are counted. Every row passes the same redaction and terminal-text cleaning as the rest of the window. Viewing never prepares, delivers or adopts: inside a diff `y`, `n` and Enter do nothing, and delivery stays the list step's separate verified-terminal `y`. A stale base or a denied access is still the typed refusal row.
+
+### Approvals and decisions from the CLI (C-APPROVE author candidate)
+
+`deckent approval list` (and bare `deckent approval` once the catalog reads `list`) reads the default scope (named on the first line; `--scope` overrides): waiting approvals first with the time left ("8 min left"), then the rest newest first, at most `approval.json` pages and rows, with "more"/"not scanned" lines instead of a silent cut; `--json` is the raw page. On a person's terminal a waiting approval can then be picked and answered on the terminal's card: once / no (a stored approval has no running turn, so the terminal offers no "this session"/"always" for it either; a hard-floor request says it can only be allowed once). Revision and command id come from the system, the channel is `local-cli`, the reason is the person's `--reason` or the default "Approved on the terminal"; a cancelled or silent card decides nothing, and the decision goes through the same runtime `decideApproval` (attested terminal, assurance minimum) as before. `approval decide` without `--input` is that same pick on a terminal and names the missing `--input` everywhere else. The JSON path (`--input`) is unchanged for AI tools; its input is checked against the application's schema first, so a wrong field is named (`CLI_INPUT_FIELD_INVALID`, exit 2, with an example) instead of `INVENTORY_QUERY_INVALID`, a decision without a reason is refused before anything is sent, results are readable text with raw JSON only with `--json`, and `--schema` prints the input contract. `deckent decide` without an action lists the scope's recent decisions (the decision port's `inspect` grant; a first-run v12 policy has none, so it is `POLICY_DENIED` until the v13 template); on a terminal one decision opens in a window with its options, advice, choice and outcome. `decide <action> --schema` and field-named input errors work as for `approval`. MCP still has no decide tool.

@@ -14,7 +14,7 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { DockerSupervisor, GitIntegrationAdoption } from '#adapters/index.js';
 import { adoptionFenceRef, adoptionFenceText, queueCommandIds, queueGenerationRef, targetQueueKey, TargetBatchExecutor, WorkspaceAdoptionApplication, type TargetQueueView } from '#engine/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
-import { clearConfigCache, productResourcePath } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 import { DRIVER, type Step } from '../support/pty-steps.js';
 import { DOWNGRADE_TO_V57_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
@@ -302,7 +302,9 @@ async function queueSession(f: Fixture) {
     cliInPty(f.project, f.options.env, ['task', 'integration-queue-confirm', '--scope', SCOPE, '--command-id', ticket], steps);
   const written = async () => ({ refs: await git(f.target, 'for-each-ref', '--format=%(refname) %(objectname)'), objects: await git(f.target, 'count-objects', '-v'),
     head: await git(f.target, 'rev-parse', 'HEAD'), status: await git(f.target, 'status', '--porcelain') });
-  return { stop, view, toConfirmation, confirm, written };
+  /** The human list through the built CLI (owner CLI review 2026-10-19, C-PRIO): a table, not the JSON page. */
+  const list = () => cliInPty(f.project, f.options.env, ['task', 'integration-queue-list', '--scope', SCOPE, '--lang', 'en'], []);
+  return { stop, view, toConfirmation, confirm, written, list };
 }
 
 // BENIMSEME-DEPO-KIMLIGI (ADOPT-UNKNOWN 2026-10-17): the adoption journal numbered sequences per ref name across every repository while
@@ -361,6 +363,12 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
       .toMatchObject({ ticket: 'parked', next: 'new-attempt', row: { sequence: 1, settled: 2 } });
     expect(failed.output).toContain('"state":"refused"');
     expect(parked?.reason).toBe('ADOPTION_NOT_APPLIED');
+    // C-PRIO: the parked delivery is visible in the human list with its typed reason and next step; no raw JSON reaches the human.
+    const listed = await s.list();
+    expect(listed.status).toBe(0);
+    expect(listed.output).toMatch(/refs\/heads\/\S+\s+Parked\s+Create a new attempt\s+q1/u);
+    expect(listed.output).toContain(`Reason: ${ErrorRegistry.createError('ADOPTION_NOT_APPLIED', { locale: 'en' }).message}`);
+    expect(listed.output).not.toContain('schemaVersion');
     expect(await git(f.target, 'rev-parse', TARGET)).toBe(f.base); expect(await fenceOf(f.target)).toBeNull();
     // The released row no longer blocks the target: the next ticket adopts as sequence 1 of this repository.
     await s.toConfirmation('q2', second);
