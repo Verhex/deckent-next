@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { createAttempt, applyAttemptObservation, createRun, reserveRunTasks, observeRunAttempt, observeRunAttemptClosure, resumeParkedRun, advanceRunLifecycle,
-  closeParkedRun, holdRun, requestRunCancellation, runSnapshotSchema, environmentRequirementsSchema, ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE } from '#domain/index.js';
+  closeParkedRun, holdRun, requestRunCancellation, runSnapshotSchema, settleEnvironmentProbe, environmentRequirementsSchema, ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE } from '#domain/index.js';
+import { measureTaskOccupancy } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 // PRE-7 ORTAM-HAZIR: a launch refused by Deckent's own preflight (an unmet declared environment requirement) parks the Run for the operator,
 // keeps the task pending for a NEW attempt after an explicit resume, and never fails the work or offers acceptance.
@@ -66,10 +67,49 @@ it('negative: any other launch refusal still fails its task; a refusal without e
   expect(observeRunAttemptClosure(cancelling, cancelling.revision, refused('typescript'), timing.now, timing.timeoutMs).progress[0]!.phase).toBe('failed');
 });
 
-it('REVISE 2691: an uncertain probe end is a typed launch refusal with its requirement and parks the same way; without a requirement it is invalid', () => {
-  const uncertain = applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'launch-refused', code: ENVIRONMENT_UNCERTAIN_CODE, requirement: 'node' }), 0);
-  expect(observeRunAttemptClosure(reserved(), 1, uncertain, timing.now, timing.timeoutMs).state).toEqual({ kind: 'parked', reason: 'environment-not-ready', failureCode: 'node', since: 10, deadline: 110 });
-  expect(() => applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'launch-refused', code: ENVIRONMENT_UNCERTAIN_CODE }), 0)).toThrow('ATTEMPT_INVALID');
+it('REVISE 2691: an uncertain probe end is a typed launch refusal with its requirement and probe; without them it is invalid', () => {
+  expect(() => applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'launch-refused', code: ENVIRONMENT_UNCERTAIN_CODE, requirement: 'node' }), 0)).toThrow('ATTEMPT_INVALID');
+  expect(() => applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'launch-refused', code: ENVIRONMENT_NOT_READY_CODE, requirement: 'node', probe: 'deckent-env-x' }), 0)).toThrow('ATTEMPT_INVALID');
+});
+
+// REVISE 2693: until the probe's end is proven the task keeps its slot as an unresolved effect; nothing — another Run's reservation,
+// cancel, deadline, close or resume — releases it; only the proven settlement does, exactly once.
+const uncertainAttempt = () => applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'launch-refused', code: ENVIRONMENT_UNCERTAIN_CODE, requirement: 'node', probe: 'deckent-env-x' }), 0);
+const uncertainPark = () => observeRunAttemptClosure(reserved(), 1, uncertainAttempt(), timing.now, timing.timeoutMs);
+it('REVISE 2693: an uncertain probe parks the Run and keeps the slot occupied (unresolved effect)', () => {
+  const parked = uncertainPark();
+  expect(parked.state).toEqual({ kind: 'parked', reason: 'environment-not-ready', failureCode: 'node', since: 10, deadline: 110 });
+  expect(parked.progress[0]).toMatchObject({ phase: 'pending', unresolvedEffects: true });
+  expect(measureTaskOccupancy(parked.progress)).toEqual({ execution: 1, inFlight: 1 });
+});
+it('REVISE 2693: cancel, deadline, close and resume cannot release an uncertain probe', () => {
+  const parked = uncertainPark();
+  const cancelled = requestRunCancellation(parked, parked.revision, { now: 20, timeoutMs: timing.timeoutMs });
+  expect(cancelled.state.kind).not.toBe('terminal'); expect(cancelled.progress[0]).toMatchObject({ phase: 'pending', unresolvedEffects: true });
+  expect(measureTaskOccupancy(cancelled.progress).execution).toBe(1);
+  const expired = advanceRunLifecycle(parked, parked.revision, 500, timing.timeoutMs);
+  expect(expired.state.kind).toBe('parked'); expect(expired.progress[0]).toMatchObject({ phase: 'pending', unresolvedEffects: true });
+  expect(() => closeParkedRun(parked, parked.revision, 20, timing.timeoutMs)).toThrow('RUN_DECISION_NOT_READY');
+  expect(() => resumeParkedRun(parked, parked.revision, 20, timing.timeoutMs)).toThrow('RUN_DECISION_NOT_READY');
+});
+it('REVISE 2693: the proven settlement releases the slot exactly once; then resume or a pending cancel proceeds', () => {
+  const parked = uncertainPark(), settled = settleEnvironmentProbe(parked, parked.revision, identity, 20, timing.timeoutMs);
+  expect(settled.progress[0]).toMatchObject({ phase: 'pending', unresolvedEffects: false }); expect(settled.state).toMatchObject({ kind: 'parked', reason: 'environment-not-ready' });
+  expect(measureTaskOccupancy(settled.progress)).toEqual({ execution: 0, inFlight: 0 });
+  expect(() => settleEnvironmentProbe(settled, settled.revision, identity, 20, timing.timeoutMs)).toThrow('RUN_ATTEMPT_CONFLICT');
+  expect(resumeParkedRun(settled, settled.revision, 30, timing.timeoutMs).state).toEqual({ kind: 'running' });
+  // A non-uncertain environment park has nothing to settle.
+  const plain = observeRunAttemptClosure(reserved(), 1, refused('typescript'), timing.now, timing.timeoutMs);
+  expect(() => settleEnvironmentProbe(plain, plain.revision, identity, 20, timing.timeoutMs)).toThrow('RUN_ATTEMPT_CONFLICT');
+  // Cancel requested while uncertain: the settlement closes the held task, and the Run ends.
+  const cancelling = requestRunCancellation(parked, parked.revision, { now: 20, timeoutMs: timing.timeoutMs });
+  const ended = settleEnvironmentProbe(cancelling, cancelling.revision, identity, 30, timing.timeoutMs);
+  expect(ended.state).toMatchObject({ kind: 'terminal', reason: 'cancelled' }); expect(ended.progress[0]!.phase).toBe('cancelled');
+});
+it('REVISE 2693: an uncertain probe on an already cancelled Run still holds the slot', () => {
+  const cancelling = requestRunCancellation(reserved(), 1, { now: 5, timeoutMs: timing.timeoutMs });
+  const held = observeRunAttemptClosure(cancelling, cancelling.revision, uncertainAttempt(), timing.now, timing.timeoutMs);
+  expect(held.progress[0]).toMatchObject({ phase: 'pending', unresolvedEffects: true }); expect(held.state.kind).not.toBe('terminal');
 });
 
 it('declared requirements are versioned registry data in the generic form kind + target (+ expectation), unique ids, bounded', () => {

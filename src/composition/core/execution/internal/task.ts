@@ -110,7 +110,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       else if (!dispatching) {
         // A permanent refusal before any dispatch claim closes the attempt once (no launch, no effect); transient ones keep the turn's backoff.
         const refusal = classifyLaunchRefusal(error);
-        if (refusal.disposition === 'permanent' && !await store.loadBoundDispatch(identity)) await recordAttemptClosure(store, identity, { kind: 'launch-refused', code: refusal.code, ...(refusal.requirement ? { requirement: refusal.requirement } : {}) }, actor);
+        if (refusal.disposition === 'permanent' && !await store.loadBoundDispatch(identity)) await recordAttemptClosure(store, identity, { kind: 'launch-refused', code: refusal.code, ...(refusal.requirement ? { requirement: refusal.requirement } : {}), ...(refusal.probe ? { probe: refusal.probe } : {}) }, actor);
       }
       throw error;
     } finally { await preparation.settle(); store.close(); }

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
-import { attemptSnapshotSchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
+import { attemptIdentitySchema, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
 import { checkedRun, runSnapshotSchema, RunError, type RunSnapshot } from './contract.js';
 import { reconcileRunLifecycle } from './lifecycle.js';
 import { projectRunAttempt } from './reduce.js';
@@ -20,15 +20,26 @@ export type EnvironmentRequirement = z.infer<typeof environmentRequirementSchema
  * after an explicit resume, nothing fails and no acceptance is offered. Any other refusal, or one on a cancelled Run, fails its task as before. */
 export function observeRunAttemptClosure(input: unknown, expectedRevision: number, attemptInput: unknown, now: number, timeoutMs: number): RunSnapshot {
   const run = checkedRun(input, expectedRevision), attempt = attemptSnapshotSchema.parse(attemptInput), result = attempt.lastObservation?.result;
-  if (result?.kind !== 'launch-refused' || result.requirement === undefined || run.cancelRequested) return reconcileRunLifecycle(projectRunAttempt(run, expectedRevision, attempt, true), now, timeoutMs);
+  // REVISE 2693: an uncertain probe (its container not proven gone) keeps the task's slot as an unresolved effect, also on a cancelled Run.
+  const uncertain = result?.kind === 'launch-refused' && result.probe !== undefined;
+  if (result?.kind !== 'launch-refused' || result.requirement === undefined || (run.cancelRequested && !uncertain)) return reconcileRunLifecycle(projectRunAttempt(run, expectedRevision, attempt, true), now, timeoutMs);
   const task = run.progress.find(row => row.taskId === attempt.identity.taskId), binding = run.bindings.find(row => sameAttemptIdentity(row.identity, attempt.identity));
   if (!task || !binding || binding.observedKind !== null || task.phase !== 'active' || task.unresolvedEffects || run.state.kind === 'terminal') throw new RunError('RUN_ATTEMPT_CONFLICT');
   const prior = run.state.kind === 'parked' ? run.state : null;
   const hold = prior?.reason === 'operator-hold' ? { operatorHold: { schemaVersion: 1 as const, note: prior.note! } } : prior?.operatorHold ? { operatorHold: prior.operatorHold } : {};
   // The first unmet requirement keeps naming the park; a later refusal of another task joins it.
-  const state = prior?.reason === 'environment-not-ready' ? prior : { kind: 'parked' as const, reason: 'environment-not-ready' as const, failureCode: result.requirement,
+  const state = run.cancelRequested ? run.state : prior?.reason === 'environment-not-ready' ? prior : { kind: 'parked' as const, reason: 'environment-not-ready' as const, failureCode: result.requirement,
     since: counterSchema.parse(now), deadline: counterSchema.parse(now + counterSchema.positive().parse(timeoutMs)), ...hold };
   return reconcileRunLifecycle(runSnapshotSchema.parse({ ...run, revision: run.revision + 1, state,
-    progress: run.progress.map(row => row === task ? { ...row, phase: 'pending' } : row),
+    progress: run.progress.map(row => row === task ? { ...row, phase: 'pending', unresolvedEffects: uncertain } : row),
     bindings: run.bindings.map(row => row === binding ? { ...row, observedKind: 'launch-refused', observedRevision: attempt.revision } : row) }), now, timeoutMs);
+}
+/** REVISE 2693: the one release of an uncertain probe's hold, after the adapter proved its container gone (by the recorded probe name). The task
+ * stays pending for an explicit resume (or closes as cancelled when cancellation was requested); a second settlement is a conflict. */
+export function settleEnvironmentProbe(input: unknown, expectedRevision: number, identityInput: unknown, now: number, timeoutMs: number): RunSnapshot {
+  const run = checkedRun(input, expectedRevision), identity = attemptIdentitySchema.parse(identityInput);
+  const binding = run.bindings.find(row => sameAttemptIdentity(row.identity, identity)), task = run.progress.find(row => row.taskId === identity.taskId);
+  if (!binding || binding.observedKind !== 'launch-refused' || task?.phase !== 'pending' || !task.unresolvedEffects) throw new RunError('RUN_ATTEMPT_CONFLICT');
+  return reconcileRunLifecycle({ ...run, revision: run.revision + 1,
+    progress: run.progress.map(row => row === task ? { ...row, unresolvedEffects: false, ...(run.cancelRequested ? { phase: 'cancelled' as const } : {}) } : row) }, now, timeoutMs);
 }

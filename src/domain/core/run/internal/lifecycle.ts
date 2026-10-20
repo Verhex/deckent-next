@@ -62,7 +62,7 @@ export function advanceRunLifecycle(input: unknown, expectedRevision: number, no
   if (reset) return reset;
   const expired = run.progress.some(task => task.decision && task.decision.deadline <= now);
   const progress = run.progress.map(task => {
-    if (run.state.kind === 'parked' && ['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason) && run.state.deadline <= now && task.phase === 'pending') return { ...task, phase: 'cancelled' as const };
+    if (run.state.kind === 'parked' && ['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason) && run.state.deadline <= now && task.phase === 'pending' && !task.unresolvedEffects) return { ...task, phase: 'cancelled' as const };
     if (!task.decision || (task.decision.deadline > now && !(run.state.kind === 'parked' && run.state.deadline <= now))) return task;
     return { ...task, decision: undefined, phase: 'failed' as const };
   });
@@ -100,6 +100,8 @@ export function resumeParkedRun(input: unknown, expectedRevision: number, now: n
   }
   // PRE-7: the operator fixed the environment. The refused attempts move aside, so the next turn reserves a NEW generation whose preflight runs again.
   if (run.state.reason === 'environment-not-ready' && run.state.deadline > now) {
+    // REVISE 2693: a probe not proven gone still holds its slot; resume waits for its settlement.
+    if (run.progress.some(task => task.phase === 'pending' && task.unresolvedEffects)) throw new RunError('RUN_DECISION_NOT_READY');
     const refused = run.bindings.filter(row => row.observedKind === 'launch-refused' && run.progress.some(task => task.taskId === row.identity.taskId && task.phase === 'pending'));
     return reconcileRunLifecycle({ ...run, revision: run.revision + 1, state: { kind: 'running' }, bindings: run.bindings.filter(row => !refused.includes(row)),
       previousBindings: [...run.previousBindings ?? [], ...refused] }, now, timeoutMs);

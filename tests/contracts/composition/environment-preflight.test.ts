@@ -11,7 +11,7 @@ import { applyConfiguredRunLifecycle, createConfiguredRun, deliverConfiguredRunC
 import { inspectMonitor } from '#composition/core/monitor/index.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { runCommand } from '#surfaces/core/cli/index.js';
-import { executeConfiguredTask } from '#composition/core/execution/index.js';
+import { executeConfiguredTask, releaseConfiguredPreflightProbes, settleConfiguredEnvironmentProbes } from '#composition/core/execution/index.js';
 import { advanceConfiguredRun } from '#composition/core/run-progression/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
 
@@ -20,6 +20,7 @@ import { fixtureDockerRegistry } from '../support/execution-registry.js';
 const exec = promisify(execFile), roots: string[] = [];
 const dockerImage = process.env.DECKENT_TEST_DOCKER_IMAGE;
 afterEach(async () => { vi.restoreAllMocks(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+const PROBE = 'deckent-env-' + 'a'.repeat(64);
 const REQUIREMENTS = { schemaVersion: 1, requirements: [{ id: 'node', kind: 'executable', target: 'node' }, { id: 'marker', kind: 'path-readable', target: '/deps/marker.txt' }] };
 /** This test's probe containers (by the worker handle they derive from); other files' probes may run in parallel. */
 const preflightContainers = async (probe: { mock: { contexts: unknown[]; calls: unknown[][] } }) => {
@@ -47,8 +48,8 @@ async function fixture(context: TestContext, environment: object) {
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
   const principal = { ...readLocalOsIdentity(), scopeIds: ['s'] }, principals = [{ issuer: principal.issuer, subject: principal.subject }];
   await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'fixture', restrictions: [], grants: [
-    { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect', 'cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: ['r'] } },
-    { id: 'resume', effect: 'allow', actions: ['resume'], scopes: ['s'], principals, resource: { kind: 'run-decision', ids: ['r'] } },
+    { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect', 'cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: 'all' } },
+    { id: 'resume', effect: 'allow', actions: ['resume'], scopes: ['s'], principals, resource: { kind: 'run-decision', ids: 'all' } },
     { id: 'pool', effect: 'allow', actions: ['use'], scopes: ['s'], principals, resource: { kind: 'pool', ids: ['p'] } },
     { id: 'monitor', effect: 'allow', actions: ['inspect'], scopes: ['s'], principals, resource: { kind: 'scope', ids: ['s'] } },
     { id: 'attempt', effect: 'allow', actions: ['execute', 'evaluate', 'read-output'], scopes: ['s'], principals, resource: { kind: 'attempt', ids: 'all' } },
@@ -131,14 +132,41 @@ it('cancelling an environment-parked Run through the real delivery path ends it 
 it('REVISE 2691: a probe whose end cannot be proven is uncertain: nothing launches, the refusal is typed as uncertain with its requirement, the Run parks for the operator', async context => {
   const f = await fixture(context, REQUIREMENTS);
   try {
-    const execute = vi.spyOn(DockerSupervisor.prototype, 'execute'), probe = vi.spyOn(DockerSupervisor.prototype, 'probe').mockResolvedValueOnce({ uncertain: 'deckent-env-left' });
+    const execute = vi.spyOn(DockerSupervisor.prototype, 'execute'), probe = vi.spyOn(DockerSupervisor.prototype, 'probe').mockResolvedValueOnce({ uncertain: PROBE });
     const identity = await reserve(f, 0);
-    await expect(executeConfiguredTask(f.project, identity, f.options)).rejects.toMatchObject({ code: 'EXECUTION_ENVIRONMENT_UNCERTAIN', params: { requirement: 'node', probe: 'deckent-env-left' } });
+    await expect(executeConfiguredTask(f.project, identity, f.options)).rejects.toMatchObject({ code: 'EXECUTION_ENVIRONMENT_UNCERTAIN', params: { requirement: 'node', probe: PROBE } });
     expect(probe).toHaveBeenCalledTimes(1); expect(execute).not.toHaveBeenCalled(); expect(await readdir(f.workspaces)).toEqual([]);
-    expect((await f.store.load('s', identity.attemptId))!.lastObservation?.result).toEqual({ kind: 'launch-refused', code: 'EXECUTION_ENVIRONMENT_UNCERTAIN', requirement: 'node' });
+    expect((await f.store.load('s', identity.attemptId))!.lastObservation?.result).toEqual({ kind: 'launch-refused', code: 'EXECUTION_ENVIRONMENT_UNCERTAIN', requirement: 'node', probe: PROBE });
     expect((await f.store.loadRun('s', 'r'))!.state).toMatchObject({ kind: 'parked', reason: 'environment-not-ready', failureCode: 'node' });
     // Turns while parked start nothing, so no second probe of that identity is started behind the operator's back.
     expect((await advanceConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, new AbortController().signal, f.options)).attempted).toBe(0); expect(probe).toHaveBeenCalledTimes(1);
+  } finally { f.store.close(); }
+}, 120_000);
+
+it('REVISE 2693: an uncertain probe keeps its pool slot (capacity 1): another Run cannot reserve, cancel and restart-time unproven checks release nothing, the proven removal releases it exactly once', async context => {
+  const f = await fixture(context, REQUIREMENTS);
+  try {
+    const graph = { schemaVersion: 4 as const, revision: 1, tasks: [{ id: 'b', kind: 'fixture', dependencies: [], acceptanceCriteria: ['exit'] }],
+      criterionDefinitions: [{ id: 'exit', version: 1, description: 'zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
+    await createConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r2', commandId: 'create-r2', graph }, f.options);
+    vi.spyOn(DockerSupervisor.prototype, 'probe').mockResolvedValueOnce({ uncertain: PROBE });
+    await expect(executeConfiguredTask(f.project, await reserve(f, 0), f.options)).rejects.toMatchObject({ code: 'EXECUTION_ENVIRONMENT_UNCERTAIN' });
+    const reserveB = () => reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r2', commandId: 'reserve-r2-' + Math.random(), expectedRevision: 0 }, f.options);
+    await expect(reserveB()).rejects.toMatchObject({ code: 'RUN_POOL_FULL' });
+    // Cancel of A while uncertain: no silent release.
+    await deliverConfiguredRunCancellation(f.project, { schemaVersion: 1, action: 'cancel', commandId: 'cancel', scopeId: 's', runId: 'r', expectedRevision: (await f.store.loadRun('s', 'r'))!.revision }, f.options);
+    expect((await f.store.loadRun('s', 'r'))!.progress[0]).toMatchObject({ phase: 'pending', unresolvedEffects: true }); await expect(reserveB()).rejects.toMatchObject({ code: 'RUN_POOL_FULL' });
+    // A start (or a turn) that cannot prove the probe gone releases nothing and reports it as held.
+    const remove = vi.spyOn(DockerSupervisor, 'removePreflightProbe').mockResolvedValue(false);
+    expect(await releaseConfiguredPreflightProbes(f.project, f.options)).toMatchObject({ released: 0, held: [PROBE] });
+    expect(await settleConfiguredEnvironmentProbes(f.project, { scopeId: 's', runId: 'r' }, f.options)).toEqual({ released: 0, held: [PROBE] });
+    await expect(reserveB()).rejects.toMatchObject({ code: 'RUN_POOL_FULL' });
+    // Proven removed (real Docker: that container does not exist): released exactly once; the cancelled Run ends; B reserves.
+    remove.mockRestore();
+    expect(await settleConfiguredEnvironmentProbes(f.project, { scopeId: 's', runId: 'r' }, f.options)).toEqual({ released: 1, held: [] });
+    expect(await settleConfiguredEnvironmentProbes(f.project, { scopeId: 's', runId: 'r' }, f.options)).toEqual({ released: 0, held: [] });
+    expect((await f.store.loadRun('s', 'r'))!.state).toMatchObject({ kind: 'terminal', reason: 'cancelled' });
+    await expect(reserveB()).resolves.toBeTruthy();
   } finally { f.store.close(); }
 }, 120_000);
 

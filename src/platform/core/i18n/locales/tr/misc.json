@@ -629,6 +629,8 @@
   "cli.runtime.preflightSwept": "Önceki servis çalışmasından kalan {removed} ortam denetimi kabı kaldırıldı (yokluğu doğrulandı).",
   "cli.runtime.preflightUnsettled": "Ortam denetimi kaplarının kaldırıldığı doğrulanamadı: {probes} ({removed} kaldırıldı). Bu denetimin Run'ları ortam belirsiz diye park edilmiş kalır; kapları docker rm --force <id> ile kaldırın, sonra Run'ları devam ettirin.",
   "cli.runtime.preflightUnlisted": "Deckent başlangıçta ortam denetimi kaplarını listeleyemedi (Docker yanıt vermedi); önceki bir çalışmadan kalan denetim hâlâ çalışıyor olabilir. O denetim yeniden çalışmadan önce kaldırılır.",
+  "cli.runtime.preflightReleased": "Kanıtlanmamış bir ortam denetiminin tuttuğu {count} görev yeri serbest bırakıldı: denetimin kaldırıldığı doğrulandı.",
+  "cli.runtime.preflightHeld": "Kaldırıldığı hâlâ doğrulanamayan ortam denetimleri: {probes}. Görevleri havuz yerlerini korur (yeni iş onları almaz); Deckent her başlangıçta ve Run'larının her turunda yeniden doğrular.",
   "config.field.approvals": "Onay ve canlı oturum ayarları",
   "mcp.tool.listApprovals": "Kapsamdaki onay isteklerini listele.",
   "mcp.tool.inspectApproval": "Bir onayı ve kanıtını incele.",

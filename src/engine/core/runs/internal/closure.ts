@@ -35,10 +35,12 @@ const PERMANENT_LAUNCH_REFUSALS: ReadonlySet<string> = new Set(['EXECUTION_NOT_C
   'WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE',
   // PRE-7: Deckent's preflight found a declared requirement unmet. It carries the requirement; the Run parks for the operator (no turn retries it).
   ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE]);
-export function classifyLaunchRefusal(error: unknown): Readonly<{ disposition: 'permanent'; code: string; requirement?: string }> | Readonly<{ disposition: 'transient' }> {
+export function classifyLaunchRefusal(error: unknown): Readonly<{ disposition: 'permanent'; code: string; requirement?: string; probe?: string }> | Readonly<{ disposition: 'transient' }> {
   const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : null;
   if (code === null || !PERMANENT_LAUNCH_REFUSALS.has(code)) return Object.freeze({ disposition: 'transient' as const });
   if (code !== ENVIRONMENT_NOT_READY_CODE && code !== ENVIRONMENT_UNCERTAIN_CODE) return Object.freeze({ disposition: 'permanent' as const, code });
-  const requirement = (error as { params?: Record<string, unknown> }).params?.['requirement'];
-  return typeof requirement === 'string' ? Object.freeze({ disposition: 'permanent' as const, code, requirement }) : Object.freeze({ disposition: 'transient' as const });
+  const params = (error as { params?: Record<string, unknown> }).params, requirement = params?.['requirement'], probe = params?.['probe'];
+  // REVISE 2693: an uncertain refusal must carry its probe (the hold's identity), else it is not recordable as one.
+  if (typeof requirement !== 'string' || (code === ENVIRONMENT_UNCERTAIN_CODE) !== (typeof probe === 'string')) return Object.freeze({ disposition: 'transient' as const });
+  return Object.freeze({ disposition: 'permanent' as const, code, requirement, ...(typeof probe === 'string' ? { probe } : {}) });
 }

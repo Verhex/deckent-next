@@ -70,11 +70,12 @@ export function requestRunCancellation(input: unknown, expectedRevision: number,
   const run = checkedRun(input, expectedRevision);
   const bound = new Set(run.bindings.map(binding => binding.identity.taskId));
   const pendingCanClose = (taskId: string) => !bound.has(taskId) || run.bindings.some(binding => binding.identity.taskId === taskId && ['quota-exhausted', 'launch-refused'].includes(binding.observedKind ?? ''));
-  const unreserved = run.progress.some(task => (task.phase === 'pending' && pendingCanClose(task.taskId)) || task.phase === 'awaiting-decision');
+  // REVISE 2693: a pending task with an unresolved effect (an uncertain probe) keeps its slot until its settlement closes it.
+  const unreserved = run.progress.some(task => (task.phase === 'pending' && !task.unresolvedEffects && pendingCanClose(task.taskId)) || task.phase === 'awaiting-decision');
   if (run.cancelRequested && !unreserved) return run;
   return reconcileRunLifecycle({ ...run, revision: run.revision + 1, cancelRequested: true,
     progress: run.progress.map(task => {
-      if (task.phase !== 'awaiting-decision' && !(task.phase === 'pending' && pendingCanClose(task.taskId))) return task;
+      if (task.phase !== 'awaiting-decision' && !(task.phase === 'pending' && !task.unresolvedEffects && pendingCanClose(task.taskId))) return task;
       return { ...task, decision: undefined, phase: 'cancelled' };
     }) }, timing.now, timing.timeoutMs);
 }

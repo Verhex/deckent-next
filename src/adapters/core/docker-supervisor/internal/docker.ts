@@ -13,6 +13,8 @@ import { assertDockerMountsMatch, assertReadOnlyMountSource, type DockerExpected
 import { dockerNodeHeapEnvironment } from './node-heap.js';
 /** `docker run`'s own exit status when the daemon could not create or start the container (not the probe's answer). */
 const DOCKER_RUN_DAEMON_FAILURE = 125;
+/** The only container names a probe removal may touch (probeIdentity's form). */
+const PREFLIGHT_PROBE_NAME = /^deckent-env-[a-f0-9]{64}$/;
 type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; Mounts?: unknown; State: { Status: string; ExitCode: number; StartedAt?: unknown; FinishedAt?: unknown } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
  * Only an application with durable dispatch ownership may call execute; this adapter does not grant policy.
@@ -260,6 +262,10 @@ export class DockerSupervisor implements ExecutionSupervisor {
   }
   /** REVISE 2691: the service-start sweep entry. Removal only: its caller never holds a launch-capable supervisor (S6 launch-site test). */
   static sweepPreflightProbes(input: DockerSupervisorOptions, runner?: DockerCommandRunner) { return new DockerSupervisor(input, runner).releasePreflightProbes(); }
+  /** REVISE 2693, removal-only: proves one recorded probe container (by its deterministic `deckent-env-` name) removed; false when not provable. */
+  static removePreflightProbe(input: DockerSupervisorOptions, name: string, runner?: DockerCommandRunner): Promise<boolean> {
+    return PREFLIGHT_PROBE_NAME.test(name) ? new DockerSupervisor(input, runner).gone(name) : Promise.resolve(false);
+  }
   /** REVISE 2691, startup recovery: this installation's labelled probe containers (none is live at service start) are removed and observed
    * absent; another installation's or any unlabelled container is never listed. Unproven removals are reported, never assumed. */
   async releasePreflightProbes(): Promise<Readonly<{ removed: number; unsettled: readonly string[] }>> {

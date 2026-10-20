@@ -28,7 +28,7 @@ export interface RuntimeServiceHost {
 export interface RuntimeServiceObserver extends BackupScheduleObserver {
   onAuditIntegrity?(status: import('#engine/index.js').AuditServiceStatus): void | Promise<void>;
   onQueryFailure?(event: { readonly code: string; readonly diagnosticId: string; readonly detail: string }): void | Promise<void>;
-  onPreflightProbesSwept?(result: Readonly<{ removed: number; unsettled: readonly string[]; unlisted?: true }>): void | Promise<void>;
+  onPreflightProbesSwept?(result: Readonly<{ removed: number; unsettled: readonly string[]; unlisted?: true; released?: number; held?: readonly string[] }>): void | Promise<void>;
   onRunProgression?(query: ProgressionCursor, result: Readonly<{ run: RunView; attempted: number; stopped: boolean; waitedForSlotMs?: number }>): void | Promise<void>;
   onRunProgressionError?(query: ProgressionCursor | null, error: Pick<DeckentError, 'code'> & Partial<Pick<DeckentError, 'params' | 'localize' | 'message'>>): void | Promise<void>;
   onReconciliationPage?(command: ReconciliationRecoveryCommand, result: ReconciliationRecoveryPage): void | Promise<void>;
@@ -167,9 +167,10 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
           () => t('cli.runtime.runProgression', { runId: query.runId, count: result.attempted }, locale));
       }
     },
-    onPreflightProbesSwept: async result => { const failed = result.unlisted || result.unsettled.length > 0;
-      output({ schemaVersion: 1, event: 'preflight-probes-swept', result }, () => result.unlisted ? t('cli.runtime.preflightUnlisted', {}, locale) : failed
-        ? t('cli.runtime.preflightUnsettled', { removed: result.removed, probes: result.unsettled.join(', ') }, locale) : t('cli.runtime.preflightSwept', { removed: result.removed }, locale), failed ? 'error' : 'info'); },
+    onPreflightProbesSwept: async result => { const held = result.held ?? [], failed = result.unlisted || result.unsettled.length > 0 || held.length > 0;
+      output({ schemaVersion: 1, event: 'preflight-probes-swept', result }, () => [result.unlisted ? t('cli.runtime.preflightUnlisted', {}, locale) : result.unsettled.length
+        ? t('cli.runtime.preflightUnsettled', { removed: result.removed, probes: result.unsettled.join(', ') }, locale) : t('cli.runtime.preflightSwept', { removed: result.removed }, locale),
+        ...(result.released ? [t('cli.runtime.preflightReleased', { count: result.released }, locale)] : []), ...(held.length ? [t('cli.runtime.preflightHeld', { probes: held.join(', ') }, locale)] : [])].join('\n'), failed ? 'error' : 'info'); },
     onRunProgressionError: async (query, error) => {
       output({ schemaVersion: 1, event: 'run-progression-failed', query, code: error.code, params: error.params }, () => runProgressionErrorText(query, error, locale), 'error');
     },

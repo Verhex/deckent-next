@@ -33,12 +33,14 @@ export const attemptObservationSchema = z.object({
     z.object({ kind: z.literal('unknown'), reasonCode: identity }).strict(),
     // Typed refusal before any dispatch claim (no launch, no effect); `code` is the refusing error code, open to adapter checks.
     // `requirement` (PRE-7) is the id of the unmet declared environment requirement, present exactly with ENVIRONMENT_NOT_READY_CODE.
-    z.object({ kind: z.literal('launch-refused'), code: identity, requirement: identity.optional() }).strict(),
+    // REVISE 2693: `probe` names the container whose end the preflight could not prove; present exactly with ENVIRONMENT_UNCERTAIN_CODE.
+    z.object({ kind: z.literal('launch-refused'), code: identity, requirement: identity.optional(), probe: identity.optional() }).strict(),
   ]).superRefine((result, context) => {
     if ((result.kind === 'exited' || result.kind === 'quota-exhausted') && !isValidExitCause(result)) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_EXIT_CAUSE_INVALID' });
     }
-    if (result.kind === 'launch-refused' && (result.code === ENVIRONMENT_NOT_READY_CODE || result.code === ENVIRONMENT_UNCERTAIN_CODE) !== (result.requirement !== undefined)) {
+    if (result.kind === 'launch-refused' && ((result.code === ENVIRONMENT_NOT_READY_CODE || result.code === ENVIRONMENT_UNCERTAIN_CODE) !== (result.requirement !== undefined)
+      || (result.code === ENVIRONMENT_UNCERTAIN_CODE) !== (result.probe !== undefined))) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_REFUSAL_INVALID' });
     }
   }).readonly(),
