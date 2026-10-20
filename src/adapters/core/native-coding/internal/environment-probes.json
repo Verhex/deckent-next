@@ -1,0 +1,10 @@
+{
+  "$comment": "PRE-7 ORTAM-HAZIR (2026-10-20): the coding probe kinds of this adapter. A declared requirement {kind, target, expect?} runs the kind's argv in a container on the worker's floor (no network, no connection, no model); a whole-element placeholder {target}/{expect} is replaced by the declared value, never interpolated into a shell. Exit 0 = met. executable: the command answers --version. path-readable: a path (for example the dependency mount /node_modules/typescript) is readable. node-heap: the Node heap ceiling in the container (set by docker-supervisor/internal/node-heap.json from the memory limit, PRE-2) is at least {expect} bytes. timeoutMs bounds one probe container.",
+  "schemaVersion": 1,
+  "timeoutMs": 30000,
+  "kinds": {
+    "executable": { "argv": ["{target}", "--version"] },
+    "path-readable": { "argv": ["node", "-e", "require('node:fs').accessSync(process.argv[1], require('node:fs').constants.R_OK)", "{target}"] },
+    "node-heap": { "argv": ["{target}", "-e", "process.exit(require('node:v8').getHeapStatistics().heap_size_limit >= Number(process.argv[1]) ? 0 : 1)", "{expect}"] }
+  }
+}

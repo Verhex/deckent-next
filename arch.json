@@ -341,7 +341,8 @@
         "src/adapters/core/local-keyring",
         "src/engine/core/audit",
         "src/platform/core/utils",
-        "src/composition/core/runs"
+        "src/composition/core/runs",
+        "src/adapters/core/native-coding"
       ],
       "plan": "EXECUTION"
     },
