@@ -230,8 +230,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   kontrol (`acceptance-check-not-run`) olarak raporlanır; bu işçinin iddiasıdır, ortam kusurunun kanıtı değildir. Gereksinimler Run ile
   dondurulur; kayda eklenen gereksinim `deckent runtime restart` sonrası yeni Run'larda geçerlidir. Core kodlama denetim türlerini
   (executable, path-readable, node-heap) getirir; bağlayıcı ya da kimlik bilgisi türleri Enterprise/ERP paketlerinden
-  `deckent/extensions` ile gelir, kimsenin kaydetmediği tür başlatmayı reddeder. Her denetim kısa bir kap başlatır (referans makinede
-  yaklaşık 0,5 sn). `deckent coding template` varsayılanları bildirir (node, Node heap tavanı; typescript yolu yalnız `/node_modules`
+  `deckent/extensions` ile gelir, kimsenin kaydetmediği tür başlatmayı reddeder. Her denetim kısa bir kap başlatır ve yanıt vermeden önce
+  kabın silindiğini kanıtlar (referans makinede yaklaşık 0,85 sn); silindiği kanıtlanamazsa Run belirsiz olarak park edilir (deneme kodu
+  `EXECUTION_ENVIRONMENT_UNCERTAIN`; monitör ve `run inspect` bunu diğer ortam parkları gibi gösterir) ve sonraki hizmet açılışı bu
+  kurulumun artakalan denetim kaplarını kaldırır. `deckent coding template` varsayılanları bildirir (node, Node heap tavanı; typescript yolu yalnız `/node_modules`
   bağımlılık bağlaması olan şablonda); mevcut görev türü şablonunu korur (komutu o tür için yeniden çalıştırmak
   `CODING_TEMPLATE_KIND_CONFLICT` ile reddedilir), bu yüzden ona bugün gereksinim eklemek `deckent config set` ile `admission.registry`
   düzenlemek demektir. doctor ortam yüzünden park edilen Run'ları henüz listelemez; `monitor` ve `run inspect` gösterir.

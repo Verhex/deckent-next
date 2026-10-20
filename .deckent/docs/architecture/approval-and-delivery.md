@@ -730,7 +730,7 @@ supplies its own core part must carry the same rule. An exit-code acceptance is 
 `environment.requirements` (generic `{id, kind, target, expect?}`, domain `environmentRequirementsSchema`). Engine `assertTaskEnvironment`
 checks them before handoff through the probe-kind registry: Core adapter kinds (native-coding `environment-probes.json`, with
 `templateDefaults` for `coding template`) plus dotted kinds registered via `deckent/extensions` `registerEnvironmentProbeKind`, sealed by
-composeCore. `DockerSupervisor.probe` runs on the worker floor without workspace, connection, credential or model. An unmet requirement
+composeCore. `DockerSupervisor.probe` runs on the worker floor without workspace, connection, credential or model, under a deterministic installation-scoped identity (labels `deckent.preflight`, `deckent.preflight.root`); it answers met/unmet only after the container is proven removed, otherwise `uncertain` (EXECUTION_ENVIRONMENT_UNCERTAIN, no launch, no duplicate probe), and service start sweeps this installation's labelled probes (`releaseConfiguredPreflightProbes`, proven gone or journaled). An unmet requirement
 closes the attempt `launch-refused` (EXECUTION_ENVIRONMENT_NOT_READY + requirement); `observeRunAttemptClosure` parks the Run
 `environment-not-ready` (failure code = requirement, park deadline); resume (run-decision) checks again on a new generation; no automatic
 retry and no manual acceptance from the park. Report evidence `not-run` → task reason `acceptance-check-not-run` (a worker claim;

@@ -230,8 +230,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   could not run (`acceptance-check-not-run`); that is the worker's claim, not proof of an environment defect. Requirements are frozen
   with the Run, so one added to the registry applies to new Runs after `deckent runtime restart`. Core ships coding probe kinds
   (executable, path-readable, node-heap); connector or credential kinds come from Enterprise/ERP packages through
-  `deckent/extensions`, and a kind nobody registered refuses the launch. Each probe starts one short container (about 0.5 s on the
-  reference host). `deckent coding template` declares defaults (node, the Node heap ceiling; the typescript path only for a template
+  `deckent/extensions`, and a kind nobody registered refuses the launch. Each probe starts one short container and proves it removed before
+  answering (about 0.85 s on the reference host); when removal cannot be proven the Run parks as uncertain (the attempt code
+  `EXECUTION_ENVIRONMENT_UNCERTAIN`, shown in monitor and `run inspect` like any environment park), and the next service start removes
+  this installation's leftover probe containers. `deckent coding template` declares defaults (node, the Node heap ceiling; the typescript path only for a template
   with a `/node_modules` dependency mount); an existing task kind keeps its template (re-running the command for it is refused with
   `CODING_TEMPLATE_KIND_CONFLICT`), so adding a requirement to it today means editing `admission.registry` with `deckent config set`.
   doctor does not list Runs parked for the environment yet; `monitor` and `run inspect` do.
