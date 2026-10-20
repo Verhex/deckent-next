@@ -2,7 +2,8 @@
 // --ignore-scripts) and drives the installed package through its real surfaces on one Node binary:
 //   version  `deckent --version` (bin link, shebang, build identity next to the bundle)
 //   mcp      `deckent-mcp` stdio: initialize + tools/list
-//   client   `deckent mcp add --realm host` against the installed `deckent-mcp` (lazy MCP client SDK, cross-spawn, pinning)
+//   client   `deckent mcp add --realm host` against the installed `deckent-mcp`: refused off a terminal (--yes too), trusted and pinned after its
+//            two cards on a terminal (lazy MCP client SDK, cross-spawn, pinning)
 //   runtime  `deckent runtime serve` → ready → `runtime describe` (N-API peer_credentials.node next to the bundle, SO_PEERCRED) → SIGTERM
 //   extensions separate public overlay distribution: service + MCP execute, detached restart, replay, policy deny and unregistered refusal
 //   terminal start contract: TTY `deckent` workline (lazy ink/react/yoga render: banner, Ready, composer placeholder, no line prompt; Ctrl+C
@@ -122,14 +123,6 @@ if (want('mcp') && report.checks.install?.ok !== false) {
     { serverInfo: init?.result?.serverInfo ?? null, tools: toolCount, stderr: result.stderr.trim().slice(-600) });
 }
 
-if (want('client') && report.checks.install?.ok !== false) {
-  const project = fixture('client-project');
-  const result = run([bin('deckent'), 'mcp', 'add', '--yes', '--json', '--realm', 'host', 'self', '--', node, realpathSync(bin('deckent-mcp')), '--project', project],
-    { cwd: project, timeout: 60_000 });
-  let value = null; try { value = JSON.parse(result.stdout); } catch { /* reported below */ }
-  record('client', result.status === 0 && value?.trust === 'trusted' && value.pinnedTools > 0 && (toolCount === null || value.pinnedTools === toolCount),
-    { status: result.status, result: value, stderr: result.stderr.trim().slice(-600) });
-}
 
 async function runtimeCheck() {
   const project = fixture('runtime-project', { layout: { root: join(base, 'runtime-data') },
@@ -210,6 +203,38 @@ async function terminalCheck() {
   record('terminal', Object.values(cases).every(item => item.ok), { cases });
 }
 if (want('terminal') && report.checks.install?.ok !== false) await terminalCheck();
+
+/** MCP client trust (owner A48-D5/D6, alpha.48): a personal `mcp add` is its trust decision, made on a person's terminal. Off a terminal it is
+ * refused, `--yes` included, before anything is written; on a terminal the two trust cards (start it to read its tools, then pin them) answered
+ * yes make the installed `deckent-mcp` a trusted server with every tool pinned (lazy MCP client SDK, cross-spawn, pinning). */
+async function clientCheck() {
+  const project = fixture('client-project'), server = realpathSync(bin('deckent-mcp'));
+  const argv = ['mcp', 'add', '--json', '--realm', 'host', 'self', '--', node, server, '--project', project];
+  const piped = run([bin('deckent'), 'mcp', 'add', '--yes', ...argv.slice(2)], { cwd: project, timeout: 60_000 });
+  const refused = piped.status === 2 && `${piped.stdout}${piped.stderr}`.includes('MCP_APPROVAL_NEEDS_TERMINAL') && !existsSync(join(home, '.deckent', 'mcp.json'));
+  const quote = value => `'${String(value).replaceAll("'", "'\\''")}'`;
+  const cards = ['to read its tools?', 'and pin these tools?'];
+  const answered = await new Promise(done => {
+    const child = spawn('script', ['-qfec', [bin('deckent'), ...argv].map(quote).join(' '), '/dev/null'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] });
+    let raw = '', from = 0, next = 0, timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, 60_000);
+    child.stdout.on('data', chunk => { raw += chunk;
+      // Each card is answered once its own question and its key hints are drawn, searched after the previous card (never one card twice).
+      const text = plain(raw), at = next < cards.length ? text.indexOf(cards[next], from) : -1, hint = at < 0 ? -1 : text.indexOf('Esc cancel', at);
+      if (hint >= 0) { from = hint + 1; next++; setTimeout(() => child.stdin.write('y'), 300); } });
+    child.stdin.on('error', () => undefined);
+    child.once('close', code => { clearTimeout(timer); done({ status: code, text: plain(raw), timedOut, cards: next }); });
+  });
+  let value = null;
+  for (let at = answered.text.lastIndexOf('{'); at >= 0 && value === null; at = answered.text.lastIndexOf('{', at - 1)) {
+    try { value = JSON.parse(answered.text.slice(at).trim()); } catch { /* an inner brace: keep looking back */ }
+  }
+  const trusted = answered.status === 0 && !answered.timedOut && answered.cards === cards.length && value?.trust === 'trusted' && value.pinnedTools > 0
+    && (toolCount === null || value.pinnedTools === toolCount);
+  record('client', refused && trusted, { piped: { status: piped.status, refused, stderr: piped.stderr.trim().slice(-300) },
+    terminal: { status: answered.status, timedOut: answered.timedOut, cards: answered.cards, result: value, tail: answered.text.slice(-400) } });
+}
+if (want('client') && report.checks.install?.ok !== false) await clientCheck();
 
 if (want('native') && report.checks.install?.ok !== false) {
   const addons = [], find = dir => { for (const entry of readdirSync(dir, { withFileTypes: true })) { const path = join(dir, entry.name);
