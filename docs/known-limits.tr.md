@@ -214,9 +214,16 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 - **Bir iş görevi geçerli bir sonuç raporu ister, ama raporu olmayan bir işçi CLI'ı denetlenmez.** 1.0.0-alpha.47'den beri 0 ile
   çıkan ve geçerli rapor bırakmayan bir iş görevi `report-missing` ya da `report-invalid` ile başarısız olur. Yapılandırılmış sonuç
-  kanalı olmayan (bugün Cursor) ya da kurulu sürümü bunu artık sunmayan bir CLI `unsupported` okunur ve bu kapıdan geçmez. Tipli
-  rapor kontrolleri (`checkId`, `role`) tanımlıdır ama konteyner köprüsü onları henüz kabul etmez. *Geçici çözüm:* tamamlanması
-  kanıtlanması gereken işlerde Claude ya da Codex işçilerini tercih edin.
+  kanalı olmayan (bugün Cursor) ya da kurulu sürümü bunu artık sunmayan bir CLI `unsupported` okunur ve bu kapıdan geçmez. 1.0.0-alpha.50'den
+  beri işçi rapor kontrolünü `checkId` ve `role: acceptance` ile işaretleyebilir ve işçi talimatı bunu ister; son sonucu `passed`
+  olmayan kabul kontrolü görevi reddeder (`declared-check-not-passed`). Kontrollerini tiplemeyen işçi yakalanmaz: tipsiz ve keşif
+  amaçlı kontroller iddia olarak kalır ve kabulü engellemez. *Geçici çözüm:* tamamlanması kanıtlanması gereken işlerde Claude ya da
+  Codex işçilerini tercih edin.
+- **Bir kodlama görevi çıkış koduyla kabul edilir.** Ölçütü daha fazlasını isteyebilir (saklanan fark, geri okuma), ama kodlama
+  görevlerinin kullanabildiği tek değerlendirici `process-exit`'tir ve hiçbir Core iş sınıfı kabul profili bağlamaz; bu yüzden ek kanıt
+  denetlenmez. 1.0.0-alpha.50'den beri değerlendirme satırı bunu söyler ("kabul · çıkış kodu · içerik bağımsız doğrulanmadı"):
+  monitör, `workers`, `/runs`, `run inspect`, `task inspect` ve `report`; "1/1 kabul" gibi sayılar nitelenmez. Gerçek doğrulama
+  değerlendiricisi olan kabul profili beta işidir.
 - **Sessiz bir işçi durdurulur ve bir kez yeniden denenir, ama yalnız bazı görevler izlenir.** 1.0.0-alpha.47'den beri sessizlik sınırı
   boyunca (varsayılan 1 saat, `runRuntime.stallRecovery.stopAfterMs`; 3 dakikada uyarı) hiçbir olay ve model trafiği göndermeyen bir
   native abonelik işçisi durdurulur. Etkileri yalnız kendi çalışma alanında kalan bir görev yeni bir Attempt ile bir kez yeniden

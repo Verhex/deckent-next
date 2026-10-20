@@ -722,8 +722,11 @@ exploratory and untyped checks never fail. Reasons have one owner (`inspectTaskE
 `no-change-produced`. `worker-stalled` is reserved for the R3 silence retry. Report reasons are retry-classifiable; the bounded
 retry belongs to the run recovery owner (R3), not to evaluation. `unsupported` (a CLI without a structured result channel, today
 Cursor) is not gated and stays visible on the evaluation. Legacy receipts without `report` replay unchanged. Generic by design:
-for an ERP/CRM operation the report is the worker's structured result, with no Git or test assumption. Not yet wired: the
-container bridge still accepts only `{command, outcome}` checks, so typed checks are reachable only after its schema mirror changes.
+for an ERP/CRM operation the report is the worker's structured result, with no Git or test assumption. Since alpha.50 (PRE-1)
+the container bridge offers `checkId`/`role` in the CLI report schema (strict schemas: required nullable, null becomes absence before
+sealing), and the worker core prompt (`deckent-worker-core@2`) asks workers to type acceptance checks; an installed template that
+supplies its own core part must carry the same rule. An exit-code acceptance is labelled where its evaluation is shown (one owner,
+`cli-human` `acceptanceEvidenceQualifier`); counts are not qualified.
 
 ### SILENT-WORKER WATCHDOG (alpha.47 R3, owner D4a/D5a, 2026-10-18)
 

@@ -214,9 +214,16 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 - **A work task needs a valid result report, but a worker CLI without one is not checked.** Since 1.0.0-alpha.47 a work task that
   exits 0 without a valid report fails as `report-missing` or `report-invalid`. A CLI that has no structured result channel (today
-  Cursor) or whose installed version no longer offers it reads `unsupported` and is not gated. Typed report checks (`checkId`,
-  `role`) are defined but the container bridge does not accept them yet. *Workaround:* prefer Claude or Codex workers for tasks
+  Cursor) or whose installed version no longer offers it reads `unsupported` and is not gated. Since 1.0.0-alpha.50 a worker
+  can mark a report check with `checkId` and `role: acceptance`, and the worker instructions ask it to; an acceptance check whose last
+  result is not `passed` refuses the task (`declared-check-not-passed`). A worker that does not type its checks is not caught:
+  untyped and exploratory checks remain claims and do not block acceptance. *Workaround:* prefer Claude or Codex workers for tasks
   whose completion must be proven.
+- **A coding task is accepted on its exit code.** Its criterion may ask for more (a retained diff, a readback), but the only evaluator
+  available to coding tasks is `process-exit` and no Core work class binds an acceptance profile, so the extra evidence is not
+  checked. Since 1.0.0-alpha.50 the evaluation line says so ("accepted · exit code · content not independently verified") in the
+  monitor, `workers`, `/runs`, `run inspect`, `task inspect` and `report`; counts such as "1/1 accepted" are not qualified. An
+  acceptance profile with a real verification evaluator is beta work.
 - **A silent worker is stopped and retried once, but only some tasks are watched.** Since 1.0.0-alpha.47 a native-subscription worker
   that sends no event and no model traffic for the silence limit (default 1 hour, `runRuntime.stallRecovery.stopAfterMs`; warning
   after 3 minutes) is stopped. A task whose effects stay in its own workspace is retried once on a new Attempt; any other task waits
