@@ -6,9 +6,11 @@ import type { ConfigFieldView } from '#engine/index.js';
 import { configValueWord } from './render.js';
 
 export type ConfigValueChoice = Readonly<{ id: string; label: string; value: unknown; detail?: string; blocked?: string }>;
+/** A source's choices; `partial` when its time limit cut the discovery short (the ones found are still offered). Still an array for list readers. */
+export interface ConfigChoiceList extends ReadonlyArray<ConfigValueChoice> { readonly partial?: boolean }
 /** Read-only, principal-scoped reference discovery. Implementations belong to trusted composition. */
 export interface ConfigChoiceSourcePort {
-  list(source: ConfigChoiceSource, keyPath: string, context?: Readonly<{ path: string }>): Promise<readonly ConfigValueChoice[]>;
+  list(source: ConfigChoiceSource, keyPath: string, context?: Readonly<{ path: string }>): Promise<ConfigChoiceList>;
   browse?(directory: string): Promise<readonly import('./records.js').ConfigFileChoice[]>;
   readDocument?(path: string): Promise<unknown>;
 }
@@ -39,13 +41,15 @@ export async function configValueModel(field: ConfigFieldView, root: string, loc
     values = [...values, ...presets.map((value, index) => ({ id: `n${index}`, value, label: configNumberText(value, stepper.unit) }))];
   }
   if (declaration?.kind === 'reference') {
-    let discovered: readonly ConfigValueChoice[] = [];
+    let discovered: ConfigChoiceList = [];
     try { discovered = declaration.source === 'project-names' ? [...new Set([basename(root), basename(root).replace(/[._-]+/gu, ' ')])].map((value, index) => ({ id: `p${index}`, value, label: value }))
       : await sources?.list(declaration.source, field.key) ?? [];
     } catch (error) {
       // J2d: no installation in this folder is "nothing to offer" (as before J2d), not an unavailable source.
       if ((error as { code?: unknown } | null)?.code !== 'CLI_INSTALLATION_MISSING') sourceState = t('config.select.unavailable', {}, locale);
     }
+    // CONFIG-PARTIAL-NOTICE: a list cut short by its time limit says so, with how to set a value it did not reach.
+    if (discovered.partial) sourceState ??= discovered.length ? t('config.select.partial', { count: discovered.length, key: field.key }, locale) : t('config.select.partialNone', { key: field.key }, locale);
     if (!discovered.length) sourceState ??= t('config.select.empty', {}, locale);
     values = [...values, ...discovered];
     if (declaration.multiple) values = arrayChoices(values, field.value, locale);

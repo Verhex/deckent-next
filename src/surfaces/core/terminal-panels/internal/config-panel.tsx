@@ -39,12 +39,14 @@ export function configPanelTree(view: ConfigPanelView, labels: ConfigPanelLabels
       ...(field?.locks[layer].blocked ? { blocked: { reason: field.locks[layer].blocked } } : {}) })) };
 }
 
-/** The focused key's own words: its description, value/source/apply, what it takes, and each layer's note. */
+/**
+ * The focused key's own words: its description, value/source/apply, what it takes, and each layer's note. The choice notice (unavailable,
+ * empty or partial source) comes first: the focus area is FOCUS_ROWS high and does not scroll, so on an 80-column terminal a last line is cut.
+ */
 function focusLines(field: ConfigPanelField | undefined, labels: ConfigPanelLabels): WindowLine[] {
   if (!field) return [];
-  return [{ spans: [span(field.description)] }, { spans: [span(rowFacts(field), { role: 'muted' })] },
-    { spans: [span(fillTemplate(labels.expected, { expected: field.expected }), { role: 'muted' })] },
-    ...(field.choiceNotice ? [{ spans: [span(field.choiceNotice, { role: 'warning' })] }] : [])];
+  return [...(field.choiceNotice ? [{ spans: [span(field.choiceNotice, { role: 'warning' })] }] : []), { spans: [span(field.description)] },
+    { spans: [span(rowFacts(field), { role: 'muted' })] }, { spans: [span(fillTemplate(labels.expected, { expected: field.expected }), { role: 'muted' })] }];
 }
 
 type Step = Readonly<{ kind: 'pick' } | { kind: 'entry' | 'number' | 'records'; field: ConfigPanelField; layer: ConfigPanelLayer } | { kind: 'preview'; field: ConfigPanelField; layer: ConfigPanelLayer; value: unknown }>;
