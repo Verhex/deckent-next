@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { approvalCommandSchema, approvalListSchema, runCommandSchema } from '#engine/index.js';
-import { createWorklineLedgerPorts } from '#surfaces/core/cli/index.js';
+import { createWorklineLedgerPorts } from '../support/cli-ledger-ports.js';
 
 const hex = (char: string) => char.repeat(64);
 function record(approvalId: string, status: 'pending' | 'decided' = 'pending', decision: 'allow' | 'deny' = 'allow') {

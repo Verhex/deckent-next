@@ -1,34 +1,32 @@
-import { identityCommand } from '#surfaces/core/cli-identity/index.js';
-import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract } from '#surfaces/core/cli-kit/index.js';
-import { approvalsCommand, policyGrantsCommand, policyScopesCommand } from '#surfaces/core/cli-approval/index.js';
-import { monitorCommand } from '#surfaces/core/monitor/index.js';
-import { terminalInfoCommand, workersCommand } from '#surfaces/core/cli-observe/index.js';
-import { runCommand, doCommand, reportCommand, inventoryCommand } from '#surfaces/core/cli-run/index.js';
-import { taskCommand } from '#surfaces/core/cli-task/index.js';
-import { initCommand } from '#surfaces/core/cli-installation/index.js';
-import { mcpCommand } from './mcp.js';
-import { auditCommand, backupCommand, codingCommand, operationCommand, poolCommand, runtimeCommand, secretCommand, toolchainsCommand } from '#surfaces/core/cli-admin/index.js';
-import { inferenceCommand, modelsCommand } from '#surfaces/core/cli-models/index.js';
-import { decisionCommand } from '#surfaces/core/cli-decision/index.js';
-import { PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, type ExitCode } from '#platform/index.js';
+import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract, lazyFunction } from '#surfaces/core/cli-kit/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, type ExitCode, type Locale } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
 
+// COLDSTART: every family loads on its first call (each reaches the engine barrel); help, `--version` and an unknown command load none of them.
+const admin = () => import('#surfaces/core/cli-admin/index.js'), approval = () => import('#surfaces/core/cli-approval/index.js');
+const observe = () => import('#surfaces/core/cli-observe/index.js'), cliRun = () => import('#surfaces/core/cli-run/index.js');
+const models = () => import('#surfaces/core/cli-models/index.js');
+export const runCommand = lazyFunction(cliRun, 'runCommand'), readGraphInput = lazyFunction(cliRun, 'readGraphInput');
+export const toolchainsCommand = lazyFunction(admin, 'toolchainsCommand');
+export const mcpCommand = lazyFunction(() => import('./mcp.js'), 'mcpCommand'), mcpSlash = lazyFunction(() => import('./mcp.js'), 'mcpSlash');
+
 /** Catalog registration binds every family and leaf to its existing argument parser. */
 export const CLI_COMMANDS = registerCliCommands<CommandContext>({
-  audit: auditCommand, backup: backupCommand, identity: identityCommand,
+  audit: lazyFunction(admin, 'auditCommand'), backup: lazyFunction(admin, 'backupCommand'), identity: lazyFunction(() => import('#surfaces/core/cli-identity/index.js'), 'identityCommand'),
   // C-DOCTOR: `terminal status|chat-plan|snapshot` get their human text and single errors first; the terminal itself is unchanged (K1–K8).
-  terminal: (argv, context) => terminalInfoCommand(argv, context, async () => (await import('./terminal.js')).terminalCommand(argv, context)),
-  init: initCommand, monitor: monitorCommand, workers: workersCommand, run: runCommand, task: taskCommand,
-  do: doCommand,
-  report: reportCommand,
-  pool: poolCommand, models: modelsCommand, approval: approvalsCommand,
+  terminal: async (argv, context) => (await observe()).terminalInfoCommand(argv, context, async () => (await import('./terminal.js')).terminalCommand(argv, context)),
+  init: lazyFunction(() => import('#surfaces/core/cli-installation/index.js'), 'initCommand'), monitor: lazyFunction(() => import('#surfaces/core/monitor/index.js'), 'monitorCommand'),
+  workers: lazyFunction(observe, 'workersCommand'), run: runCommand, task: lazyFunction(() => import('#surfaces/core/cli-task/index.js'), 'taskCommand'),
+  do: lazyFunction(cliRun, 'doCommand'),
+  report: lazyFunction(cliRun, 'reportCommand'),
+  pool: lazyFunction(admin, 'poolCommand'), models: lazyFunction(models, 'modelsCommand'), approval: lazyFunction(approval, 'approvalsCommand'),
   // The config surface renders through terminal-render (whose barrel carries Ink): a lazy edge keeps it off every other command's start.
   config: async (argv, context) => (await import('#surfaces/core/config/index.js')).configCommand(argv, context),
-  mcp: mcpCommand, secret: secretCommand, toolchains: toolchainsCommand, doctor: runKernelCommand,
-  inventory: inventoryCommand, paths: runKernelCommand, runtime: runtimeCommand, coding: codingCommand,
-  inference: inferenceCommand, operation: operationCommand, decide: decisionCommand,
-  policy: (argv, context) => (argv[1] === 'scopes' ? policyScopesCommand : argv[1] === 'status' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? policyGrantsCommand : runKernelCommand)(argv, context),
+  mcp: mcpCommand, secret: lazyFunction(admin, 'secretCommand'), toolchains: toolchainsCommand, doctor: runKernelCommand,
+  inventory: lazyFunction(cliRun, 'inventoryCommand'), paths: runKernelCommand, runtime: lazyFunction(admin, 'runtimeCommand'), coding: lazyFunction(admin, 'codingCommand'),
+  inference: lazyFunction(models, 'inferenceCommand'), operation: lazyFunction(admin, 'operationCommand'), decide: lazyFunction(() => import('#surfaces/core/cli-decision/index.js'), 'decisionCommand'),
+  policy: async (argv, context) => (argv[1] === 'scopes' ? (await approval()).policyScopesCommand : argv[1] === 'status' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? (await approval()).policyGrantsCommand : runKernelCommand)(argv, context),
 });
 
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */
@@ -43,6 +41,13 @@ export function dispatch(argv: readonly string[]): { readonly output: string; re
     return { output: t('cli.version', common) + line, code: 0 };
   }
   return { output: t('cli.unknownCommand', { ...common, command }), code: 2 };
+}
+
+/** Bare piped `deckent` prints the top help; anything else that is not a command is `--version` or an unknown command. */
+function emitDispatch(argv: readonly string[], locale: Locale, context: CommandContext): ExitCode {
+  const result = argv.length === 0 ? { output: renderTopHelp(locale), code: 0 as const } : dispatch(argv);
+  emit(result.output, { level: result.code === 0 ? 'info' : 'error', ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
+  return result.code;
 }
 
 function interactiveTerminal(context: CommandContext): boolean {
@@ -64,9 +69,12 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       emit(help.output, { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
       return 0;
     }
-    context.initialize?.();
     const terminalFlags = argv[0] === '--scope';
     const interactive = terminalFlags || (argv.length === 0 && interactiveTerminal(context)) || (argv.length === 1 && argv[0] === '--full-access');
+    // `--version`, an unknown command and piped bare `deckent` need no host (COLDSTART): the host's operations load only for a command or the terminal.
+    if (!interactive && !CLI_COMMANDS.some(item => item.name === argv[0])) return emitDispatch(argv, locale, context);
+    if (context.loadHost) context = { ...context, ...(await context.loadHost()) };
+    context.initialize?.();
     // ID-1C: the relocation stop precedes every installation-bound command. Commands that own their installation load/recovery and
     // identity check (config, init) or need no installation (policy vocabulary) declare it in the catalog and are not gated here.
     if (context.loadInstallationIdentity && (interactive || CLI_COMMANDS.some(item => item.name === argv[0]))
@@ -93,9 +101,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
     }
     const command = CLI_COMMANDS.find(item => item.path.length === 1 && item.name === argv[0]);
     if (command) return (await command.run(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } })) ?? 0;
-    const result = argv.length === 0 ? { output: renderTopHelp(locale), code: 0 as const } : dispatch(argv);
-    emit(result.output, { level: result.code === 0 ? 'info' : 'error', ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
-    return result.code;
+    return emitDispatch(argv, locale, context);
   } catch (error) {
     return reportFatal(error, { ...context, argv, json: argv.includes('--json'), locale });
   }

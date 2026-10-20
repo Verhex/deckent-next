@@ -6,3 +6,4 @@ export { cliUsage, shellIdentity } from './internal/usage.js';
 export { resolveCliLocale, commandLocale } from './internal/locale.js';
 export { catalogDispatch, type CliDispatchContext } from './internal/help.js';
 export type { CliBareBehaviour } from './internal/command-catalog.js';
+export { lazyFunction } from './internal/lazy.js';

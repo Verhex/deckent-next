@@ -13,7 +13,8 @@ import { createConfiguredRuntimeClient } from '#composition/core/runtime-service
 import { executeRuntimeApproval } from '#composition/core/runtime-service/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
-import { createWorklineLedgerPorts, workSurfaceLabels } from '#surfaces/core/cli/index.js';
+import { workSurfaceLabels } from '#surfaces/core/cli/index.js';
+import { createWorklineLedgerPorts } from '../support/cli-ledger-ports.js';
 import { SessionStanding, RUNTIME_SERVICE_SCHEMA_VERSION, runtimeServiceRequestSchema, type RuntimeServiceRequest } from '#engine/index.js';
 import { clearConfigCache, resolveProductLayout, t, type Locale } from '#platform/index.js';
 import type { AgentChatMessage } from '#surfaces/core/terminal-kit/index.js';

@@ -8,7 +8,7 @@ import { createConfiguredRuntimeClient } from '../../../src/index.js';
 import { followLedgerSurface } from '../../../src/composition/core/monitor/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
-import { createWorklineLedgerPorts } from '#surfaces/core/cli/index.js';
+import { createWorklineLedgerPorts } from '../support/cli-ledger-ports.js';
 import { acceptSurfaceEvent, openSurfacePush, releaseSurfacePush, type SurfacePushEvent } from '#surfaces/core/terminal-kit/index.js';
 import { clearConfigCache, productResourcePath, t } from '#platform/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
