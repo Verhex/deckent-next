@@ -104,8 +104,9 @@ export interface MonitorPorts {
   readLedger(target: MonitorTarget, scope: MonitorReadScope): Promise<MonitorLedgerReading>;
   /** M-VIS: the viewer's `pool inspect` decision for one pool over `scopeIds` (admitted scopes); true only on an allow. A rejection hides the pool. */
   observePool(target: MonitorTarget, poolId: string, scopeIds: readonly string[]): Promise<boolean>;
-  /** Hydrate only shown workers, after admitted scopes and the finished-worker limit. Must use the captured ledger snapshot and read-output gate. */
-  readShown?(target: MonitorTarget, identities: readonly AttemptIdentity[]): Promise<MonitorLedgerReading>;
+  /** Hydrate only shown workers, after admitted scopes and the finished-worker limit. Must use the captured ledger snapshot and read-output gate.
+   * `failures` (PRE-34): failed tasks' attempts whose first failing line is read even beyond the shown workers (no other content). */
+  readShown?(target: MonitorTarget, identities: readonly AttemptIdentity[], failures?: readonly AttemptIdentity[]): Promise<MonitorLedgerReading>;
   /** Rejects with a coded error; `LOCAL_RUNTIME_UNAVAILABLE` means no service is listening. */
   describeService(target: MonitorTarget): Promise<RuntimeServiceDescriptor>;
   observeScope(target: MonitorTarget, scopeId: string): Promise<MonitorScopeObservation>;

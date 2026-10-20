@@ -102,7 +102,7 @@
   "doctor.check.image.currentUnnamed": "Worker imajı güncel",
   "doctor.check.image.updating": "Worker imajı arka planda güncelleniyor; Run'lar mevcut imajı kullanır",
   "doctor.check.image.failed": "Son worker imajı yenilemesi başarısız; önceki imaj kullanılıyor",
-  "doctor.check.docker": "Docker bu sürümde doctor tarafından sınanmıyor",
+  "doctor.check.docker.unknown": "Docker durumu okunamadı",
   "doctor.check.delivery": "{profile} profilinin ({model}) model yanıtları yanıt sınırını aşabilir",
   "doctor.check.models.ok": "Emekliye ayrılan etkin model yok",
   "doctor.check.models.unknown": "Model kataloğu okunmadı",

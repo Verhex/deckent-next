@@ -139,4 +139,32 @@ describe.skipIf(process.platform === 'win32')('monitor cached content authorizat
     expect(limited.runs[0]!.attempts[0]!.content!.finalReport).toMatchObject({ status: 'unavailable' });
     expect(decision).toHaveBeenCalledTimes(4);
   });
+  it('PRE-34: a failed attempt beyond the shown workers still gets its first failing line, under the same read-output gate and nothing else', async () => {
+    const f = fixture(), root = await mkdtemp(join(tmpdir(), 'deckent-monitor-failure-')); roots.push(root);
+    await mkdir(join(root, '.deckent'), { recursive: true });
+    const env = { HOME: join(root, 'home'), XDG_CONFIG_HOME: join(root, 'home', '.config') }, config = await loadConfig(root, { env });
+    const artifactStore = new FileArtifactStore({ root: await prepareProductDirectory(config.productLayout, 'artifacts'), maxBytes: config.artifacts.maxBytes });
+    const output = await artifactStore.put('s', bytes({ schemaVersion: 1, identity: f.files.identity, completeness: 'complete', stdout: '', stderr: 'boot\nError [WORKER_IMAGE_MISSING]: no image\n' }));
+    const store = await openSqliteAttemptStore(await prepareProductFile(config.productLayout, 'ledger'), config.storage.sqlite,
+      { now: Date.now, timeoutMs: 86400000 }, 'allow', custodyProfiles); stores.push(store);
+    const actor = { id: 'operator', issuer: 'test', subject: 'operator' }, capacity = { executionSlots: 1, inFlightSlots: 1 };
+    const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 'task', kind: 'fixture', dependencies: [], acceptanceCriteria: ['verified'] }],
+      criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
+    await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity });
+    await store.createRun({ commandId: 'create', actor, identity: { scopeId: 's', runId: f.files.identity.runId, layoutRevision: 'layout' },
+      graph, execution: fixtureExecution(graph), now: 1000, policy: { schemaVersion: 2, poolId: 'p', capacity, ordering: ['task'] } });
+    await store.reserveRunTasks({ commandId: 'reserve', actor, scopeId: 's', runId: f.files.identity.runId, expectedRevision: 0, now: 2000, identities: [f.files.identity] });
+    const claim = { request: { protocolVersion: 1 as const, identity: f.files.identity, workspace: '/w', argv: ['fixture'] }, owner: 'fixture-worker' };
+    await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim, 3000);
+    await store.retainDispatchOutput(claim, output); await store.finishDispatch(claim, { handle: f.files.identity.attemptId, exitCode: 1, interrupted: false });
+    const decision = vi.fn(async () => true);
+    const read = async (failures: readonly (typeof f.files.identity)[]) => (await (await prepareMonitorInstall(config, env, decision, { scopeId: 's', runId: f.files.identity.runId }))
+      .readShown([], failures)).runs[0]!.attempts[0]!;
+    // Not shown and not named as a failure: nothing is read (the finished-worker limit stays a bound).
+    expect((await read([])).firstFailure).toBeUndefined();
+    const failed = await read([f.files.identity]);
+    expect(failed.firstFailure).toBe('Error [WORKER_IMAGE_MISSING]: no image'); expect(failed.content).toBeUndefined();
+    decision.mockResolvedValue(false);
+    expect(await read([f.files.identity])).toMatchObject({ firstFailure: null, diagnostics: ['output-denied'] });
+  });
 });

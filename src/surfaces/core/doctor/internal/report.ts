@@ -47,8 +47,10 @@ export interface DoctorRenderInput {
   readonly serviceConfig?: 'current' | 'stale' | 'unknown' | 'stopped' | null;
 }
 
-function imageRefreshText(view: ImageRefreshDoctorView, locale: Locale): string {
-  const params = { reason: view.reason ?? '-', version: view.imageVersion ?? '-' };
+/** PRE-34: a refresh that built nothing names no image version; the configured worker image is then the evidence (short id), never "(-)". */
+export const shortImageId = (imageId: string | null | undefined) => imageId ? imageId.replace(/^(sha256:)?([0-9a-f]{12})[0-9a-f]+$/u, '$1$2') : null;
+function imageRefreshText(view: ImageRefreshDoctorView, locale: Locale, imageId?: string | null): string {
+  const params = { reason: view.reason ?? '-', version: view.imageVersion ?? shortImageId(imageId) ?? '-' };
   return view.status === 'updating' ? t('doctor.imageRefresh.updating', params, locale) : view.status === 'failed' ? t('doctor.imageRefresh.failed', params, locale) : t('doctor.imageRefresh.current', params, locale);
 }
 const installationBindingLines = (r: InstallationBindingReport, platform: string, locale: Locale): string[] => [r.capability === 'source-invalid' ? t('doctor.installationBinding.sourceInvalid', {}, locale)
@@ -79,7 +81,7 @@ function secretStoreCustodyLine(backend: string, locale: Locale): readonly strin
 
 /** The human `doctor` text; `poolLines` are the pool readiness lines the caller (which owns the pool port) already rendered.
  * `status: false` leaves out the old ready/degraded line where the grouped summary already states the status (`--verbose`). */
-export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonly string[], locale: Locale, options: { readonly status?: boolean } = {}): string {
+export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonly string[], locale: Locale, options: { readonly status?: boolean; readonly imageId?: string | null } = {}): string {
   return [...(result.status && options.status !== false ? [(result.status === 'degraded' ? t('doctor.status.degraded', {}, locale) : t('doctor.status.ready', {}, locale))] : []),
     t('doctor.host', { platform: result.platform, cpu: result.host.cpuCores, memory: result.host.totalMemMB,
     workers: result.host.recommendedMaxWorkers + (result.host.workerBasis ? t('doctor.workerBasis', { cpu: result.host.workerBasis.cpuBased, memory: result.host.workerBasis.memoryBased,
@@ -103,7 +105,7 @@ export function renderDoctorReport(result: DoctorRenderInput, poolLines: readonl
   ...(result.recoveryFiles?.installationDirectory && (parseInt(result.recoveryFiles.installationDirectory.mode, 8) & 0o077)
     ? [t('doctor.installationDirectoryOpen', result.recoveryFiles.installationDirectory, locale)] : []),
   ...(result.recoveryFiles?.leftovers.length ? [t('doctor.recoveryLeftovers', { paths: result.recoveryFiles.leftovers.join(', ') }, locale)] : []),
-  ...(result.imageRefresh && result.imageRefresh.status !== 'unknown' ? [t('doctor.imageRefresh', { status: imageRefreshText(result.imageRefresh, locale) }, locale)] : []),
+  ...(result.imageRefresh && result.imageRefresh.status !== 'unknown' ? [t('doctor.imageRefresh', { status: imageRefreshText(result.imageRefresh, locale, options.imageId) }, locale)] : []),
   ...(result.serviceConfig === 'stale' ? [t('doctor.serviceConfigStale', {}, locale)] : []),
   ...(result.installationBinding ? installationBindingLines(result.installationBinding, result.platform, locale) : []),
   ...(result.policyAdministration ? [t('doctor.policyAdministration', { count: result.policyAdministration.usableAdminCount,

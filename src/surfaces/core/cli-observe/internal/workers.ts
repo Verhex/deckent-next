@@ -4,7 +4,7 @@ import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale } fro
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle, formatClock, resolveCommandScope, scopeLister, scopeNotice, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import { renderWorkersView } from './workers-view.js';
-import { resolveWorkerUsage, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
+import { resolveWorkerUsage, workerFinished, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
 import { renderWorkerModelLine, seconds, renderResourceDetail, type MonitorCommandContext } from '#surfaces/core/monitor/index.js';
 function renderHeartbeat(w: WorkerObservation, locale: Locale): string {
   const h = w.files?.heartbeat;
@@ -28,13 +28,15 @@ function renderHeartbeat(w: WorkerObservation, locale: Locale): string {
   }
 }
 export const renderWorkerRow = (w: WorkerObservation, locale: Locale) => { const x = w.terminal, id = w.identity; return t('cli.workers.row', { ref: `${id?.runId ?? '-'}/${w.taskId}`, attempt: id?.attemptId.slice(0, 8) ?? '-', generation: id?.generation ?? '-', process: x ? `${w.process} ${x.exitCode ?? x.signal ?? '-'}` : w.process, heartbeat: renderHeartbeat(w, locale), provider: w.provider || '-' }, locale); };
-export const renderWorkerUsage = (u: NonNullable<WorkerObservation['usage']>, locale: Locale) => {
-  const outcomes = { success: t('monitor.human.usageOutcomeSuccess', {}, locale), error: t('monitor.human.usageOutcomeError', {}, locale), limit: t('monitor.human.usageOutcomeLimit', {}, locale), running: t('monitor.human.usageOutcomeRunning', {}, locale) };
+// PRE-34: `running` in a usage summary only means no session end was reported; a finished worker says so instead of "still running".
+export const renderWorkerUsage = (u: NonNullable<WorkerObservation['usage']>, locale: Locale, finished = false) => {
+  const outcomes = { success: t('monitor.human.usageOutcomeSuccess', {}, locale), error: t('monitor.human.usageOutcomeError', {}, locale), limit: t('monitor.human.usageOutcomeLimit', {}, locale),
+    running: finished ? t('monitor.human.usageOutcomeUnreported', {}, locale) : t('monitor.human.usageOutcomeRunning', {}, locale) };
   const d = (v: number | null | undefined) => v === null || v === undefined ? '-' : String(v); return t('cli.workers.usage', { turns: d(u.turns), duration: u.durationMs === null || u.durationMs === undefined ? '-' : seconds(u.durationMs), input: u.tokenUsageRecorded === true ? d(u.tokens?.input) : '-', output: u.tokenUsageRecorded === true ? d(u.tokens?.output) : '-', cost: u.costUsd === null || u.costUsd === undefined ? '-' : u.costUsd.toFixed(4), outcome: u.outcome ? outcomes[u.outcome] : '-' }, locale); };
 const renderUsage = (worker: WorkerObservation, locale: Locale): string[] => {
   const usage = resolveWorkerUsage(worker);
   if (worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable') return [t('cli.workers.usageRejected', { reason: worker.usageEvidence === 'invalid' ? t('cli.workers.usageEvidence.invalid', {}, locale) : t('cli.workers.usageEvidence.unavailable', {}, locale) }, locale)];
-  return [...renderResourceDetail(worker.resources, locale), ...(usage ? [renderWorkerUsage(usage, locale)] : [])];
+  return [...renderResourceDetail(worker.resources, locale), ...(usage ? [renderWorkerUsage(usage, locale, workerFinished(worker))] : [])];
 };
 export const renderWorkerSource = (s: WorkerObservationSource, locale: Locale): string[] => [t('cli.workers.source', { source: s.id, path: s.path, status: s.status }, locale) + (s.truncated ? t('cli.workers.sourceMore', { nextAfter: s.nextAfter ?? '-' }, locale) : ''), ...(s.workers.length ? s.workers.flatMap(w => [renderWorkerRow(w, locale), ...(w.model ? [t('cli.workers.model', { task: w.taskId, line: renderWorkerModelLine(w.model, locale) }, locale)] : []), ...renderUsage(w, locale)]) : [t('cli.workers.empty', {}, locale)])];
 /** `12h`, `30m`, `2d`, `45s`: a history window for `--since`. */

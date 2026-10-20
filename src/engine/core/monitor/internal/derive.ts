@@ -132,7 +132,8 @@ function closeReasonOf(attempt: MonitorLedgerAttempt): MonitorCloseReason | null
   const terminal = attempt.dispatch?.terminal ?? null; if (!terminal) return null;
   if (attempt.observedKind === 'cancelled') return 'cancelled';
   if (terminal.interrupted === true) return 'interrupted';
-  if (terminal.signal !== null) return 'signal';
+  // A recorded exit carries no `signal` key (exit code XOR signal, strict schema): only a present signal name closes as a signal.
+  if (terminal.signal !== undefined && terminal.signal !== null) return 'signal';
   return terminal.exitCode === 0 ? 'exit-ok' : 'exit-error';
 }
 /**

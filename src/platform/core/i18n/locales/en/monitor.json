@@ -77,6 +77,7 @@
   "monitor.human.usageOutcomeError": "reported error",
   "monitor.human.usageOutcomeLimit": "limit reached",
   "monitor.human.usageOutcomeRunning": "in progress",
+  "monitor.human.usageOutcomeUnreported": "finished, no outcome reported",
   "cli.worker.effort.line": " · Reasoning effort: {level} ({source}; class {workClass})",
   "cli.worker.effort.policy_revision": " · Work class policy revision: {revision}",
   "cli.worker.effort.source.explicit": "explicit",

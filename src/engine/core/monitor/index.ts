@@ -10,6 +10,6 @@ export { MonitorSourceMemo, readThrough, type MonitorRecall } from './internal/m
 export { monitorScopeDiagnosticsAllowed } from './internal/scope-names.js';
 export { extractFirstFailure, extractFailedTests, summarizeMonitorEvent, MONITOR_FAILURE_MAX_CHARS } from './internal/failure.js';
 export type { MonitorFailedTests } from './internal/failure.js';
-export { projectHumanState } from './internal/human-state.js';
-export type { HumanState, HumanStateCode, HumanStateSubject, HumanNextAction } from './internal/human-state.js';
+export { projectHumanState, projectStopCause, projectRunStop } from './internal/human-state.js';
+export type { HumanState, HumanStateCode, HumanStateSubject, HumanNextAction, StopCause } from './internal/human-state.js';
 export type { SurfacePublicationKind, SurfacePublicationEvent, SurfaceAccessDenied, SurfaceNotInitialized, SurfaceStreamStart, SurfaceSnapshotAccess, SurfaceFollowEvent } from './internal/surface-follow.js';

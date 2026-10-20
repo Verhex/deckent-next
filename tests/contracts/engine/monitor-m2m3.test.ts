@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRun, type RunSnapshot } from '#domain/index.js';
-import { extractFailedTests, projectMonitorRun, resultBriefSchema, projectResultBrief, type MonitorLedgerAttempt, type MonitorRunEvidence } from '#engine/index.js';
+import { dispatchTerminalSchema, extractFailedTests, projectMonitorRun, resultBriefSchema, projectResultBrief, type MonitorLedgerAttempt, type MonitorRunEvidence } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
 /** M2/M3 producer side: the pure failed-test extractor, the close reason / turns / delivery outlook derivation. */
@@ -77,6 +77,10 @@ describe('worker close narrative (M2)', () => {
     expect(reason(done('w', {}, { terminal: { exitCode: null, signal: 'SIGKILL', interrupted: false } })).closeReason).toBe('signal');
     expect(reason(done('w', {}, { terminal: { exitCode: 0, signal: null, interrupted: true } })).closeReason).toBe('interrupted');
     expect(reason(done('w', { observedKind: 'cancelled' })).closeReason).toBe('cancelled');
+    // PRE-34: a recorded exit has no `signal` key at all (strict schema: exit code XOR signal); it closes as an exit, never as a signal.
+    const exit = (exitCode: number) => dispatchTerminalSchema.parse({ handle: 'h', exitCode, interrupted: false }) as never;
+    expect(reason(done('w', {}, { terminal: exit(0) })).closeReason).toBe('exit-ok');
+    expect(reason(done('w', {}, { terminal: exit(3) })).closeReason).toBe('exit-error');
     const events = { provider: 'p', model: 'm', outcome: 'success', turns: 8, durationMs: 1, apiDurationMs: null, tokenUsageRecorded: false } as never;
     expect(reason(done('w', { content: { usage: events, transcript: { state: 'sealed', excerpt: [], truncated: false }, patch: { state: 'missing', files: [], fileCount: null, truncated: false, baseCommit: null }, finalReport: null } }))).toMatchObject({ turns: 8, sessionOutcome: 'success' });
   });

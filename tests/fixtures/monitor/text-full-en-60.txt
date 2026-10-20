@@ -44,12 +44,13 @@ Stuck or waiting, oldest first (12)
   │ run-unknown                   │ ! reason unknown       │
   └───────────────────────────────┴────────────────────────┘
 
-Failed Runs and where they first failed (2)
+Stopped Runs and why (3)
   ┌──────────────────┬─────────────────────────────────────┐
-  │ Run              │ First failure                       │
+  │ Run              │ Cause                               │
   ├──────────────────┼─────────────────────────────────────┤
   │ run-broken       │ ✗ build: ✗ [unit-budget] src/surfa… │
-  │ run-broken-quiet │ ✗ build: first failing line not re… │
+  │ run-broken-quiet │ ✗ build: no permission to read the… │
+  │ run-stopped      │ ■ cancelled                         │
   └──────────────────┴─────────────────────────────────────┘
 
 Workers running now (2)

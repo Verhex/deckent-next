@@ -1,4 +1,4 @@
-export { workerObservationQuerySchema, WorkerObservationError, workerEventLogSchema, resolveWorkerUsage } from './internal/contract.js';
+export { workerObservationQuerySchema, WorkerObservationError, workerEventLogSchema, resolveWorkerUsage, workerFinished } from './internal/contract.js';
 export type { WorkerEventLog, WorkerEventLogStore } from './internal/contract.js';
 export type { WorkerUsageEvidence, WorkerObservationQuery, WorkerObservationReport, WorkerObservationSource, WorkerObservation, WorkerActivity, WorkerProcessState, WorkerSidecars, ObservationLimits } from './internal/contract.js';
 export { WorkerTranscriptApplication } from './internal/transcript.js';

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createRun, parkTaskAwaitingDecision } from '#domain/index.js';
-import { projectHumanState, projectMonitorRun, type MonitorBlockerCode, type MonitorRunEvidence, type MonitorTask, type MonitorWorker } from '#engine/index.js';
+import { projectHumanState, projectMonitorRun, projectRunStop, projectStopCause, type MonitorBlockerCode, type MonitorRunEvidence, type MonitorTask, type MonitorWorker } from '#engine/index.js';
 import { fullSnapshot } from '../../fixtures/monitor/snapshots.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 
@@ -77,6 +77,45 @@ describe('global human status preserves evidence and authority', () => {
     expect(projectHumanState({ kind: 'attempt', value })).toEqual({ state: 'queued' });
     expect(projectHumanState({ kind: 'attempt', value: { ...value, launch: 'granted' } })).toMatchObject({ state: 'held', waitingOn: 'system' });
     expect(projectHumanState({ kind: 'attempt', value: { ...value, endedAtMs: 0 } })).toEqual({ state: 'checking' });
+  });
+  it('PRE-34: an attempt the task has since replaced is over, never "checking" forever; a replacement that still runs stays running', () => {
+    const accepted = { ...task('accepted'), lastAttempt: { ...task('accepted').lastAttempt!, attemptId: 'gen-2', generation: 2 } };
+    const old = { ...freshWorker(), process: 'exited' as const, terminal: { exitCode: 0, interrupted: false } } as MonitorWorker;
+    expect(projectHumanState({ kind: 'worker', value: old })).toEqual({ state: 'checking' });
+    expect(projectHumanState({ kind: 'worker', value: old, task: accepted })).toEqual({ state: 'stopped' });
+    expect(projectHumanState({ kind: 'worker', value: freshWorker(), task: accepted })).toEqual({ state: 'running' });
+    // Negative: the task's own (current) attempt keeps the task's state; an older binding never supersedes a newer worker.
+    const own = { ...accepted, lastAttempt: { ...accepted.lastAttempt!, attemptId: 'a', generation: 1 } };
+    expect(projectHumanState({ kind: 'worker', value: old, task: own })).toEqual({ state: 'done' });
+    const newer = { ...old, identity: { ...old.identity!, attemptId: 'gen-3', generation: 3 } };
+    expect(projectHumanState({ kind: 'worker', value: newer, task: accepted })).toEqual({ state: 'done' });
+  });
+  it('PRE-34: a stopped task always states a cause from recorded evidence, most specific first', () => {
+    const failed: MonitorTask = { ...task('failed'), evaluation: { verdict: 'rejected', observedAtMs: null } }, attempt = failed.lastAttempt!;
+    const cause = (over: Partial<MonitorTask>, at: Partial<typeof attempt> | null = {}) => projectStopCause({ ...failed, ...over, lastAttempt: at === null ? null : { ...attempt, ...at } });
+    expect(cause({}, { firstFailure: 'error TS2322: x', failedTests: { count: 2, names: ['a > b'], truncated: false } })).toEqual({ kind: 'tests', count: 2, name: 'a > b' });
+    expect(cause({}, { firstFailure: 'error TS2322: x' })).toEqual({ kind: 'line', line: 'error TS2322: x' });
+    expect(cause({ evaluation: { verdict: 'rejected', observedAtMs: null, reason: 'worker-stalled' } })).toEqual({ kind: 'not-accepted', reason: 'worker-stalled' });
+    expect(cause({ phase: 'skipped' }, null)).toEqual({ kind: 'skipped' });
+    expect(cause({ phase: 'cancelled' }, null)).toEqual({ kind: 'cancelled' });
+    expect(cause({}, null)).toEqual({ kind: 'no-attempt' });
+    expect(cause({}, { closeReason: 'signal', exitCode: null })).toEqual({ kind: 'signal' });
+    expect(cause({}, { launch: 'prevented-before-launch', exitCode: null })).toEqual({ kind: 'not-launched' });
+    expect(cause({}, { exitCode: 134, diagnostics: ['output-denied'] })).toEqual({ kind: 'exit', code: 134 });
+    expect(cause({}, { diagnostics: ['output-denied'] })).toEqual({ kind: 'output-denied' });
+    expect(cause({})).toEqual({ kind: 'rejected' });
+    expect(cause({ evaluation: { verdict: null, observedAtMs: null } })).toEqual({ kind: 'unrecorded' });
+  });
+  it('PRE-34: every Run the counters call stopped has a stop row (failed, cancelled, rolled back); open and accepted Runs have none', () => {
+    const failedRun = { ...base, state: 'failed' as const, blocker: null, tasks: [task('accepted'), task('failed')] };
+    expect(projectRunStop(failedRun)).toMatchObject({ taskId: 'build', cause: { kind: 'unrecorded' } });
+    expect(projectRunStop({ ...base, state: 'cancelled' as const, blocker: null, tasks: [task('accepted'), { ...task('cancelled'), lastAttempt: null }] }))
+      .toEqual({ taskId: 'build', cause: { kind: 'cancelled' } });
+    expect(projectRunStop({ ...base, state: 'cancelled' as const, blocker: null, tasks: [task('accepted')] })).toEqual({ taskId: null, cause: { kind: 'cancelled' } });
+    expect(projectRunStop({ ...base, state: 'accepted' as const, blocker: null, tasks: [task('accepted')], delivery: { state: 'rolled-back', commit: null } }))
+      .toEqual({ taskId: null, cause: { kind: 'rolled-back' } });
+    expect(projectRunStop({ ...base, state: 'accepted' as const, blocker: null, tasks: [task('accepted')] })).toBeNull();
+    expect(projectRunStop(run('worker-running'))).toBeNull();
   });
   it.each([['integrating', 'checking'], ['delivering', 'checking'], ['adopting', 'checking'], ['rolling-back', 'checking'],
     ['integrated', 'done'], ['delivered', 'done'], ['adopted', 'done'], ['rolled-back', 'stopped']] as const)('delivery %s is %s', (value, state) => {

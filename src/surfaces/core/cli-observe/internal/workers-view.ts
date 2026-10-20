@@ -1,5 +1,5 @@
 import { t, type Locale } from '#platform/index.js';
-import { resolveWorkerUsage, type WorkerObservation, type WorkerObservationReport, type WorkerProcessState } from '#engine/index.js';
+import { resolveWorkerUsage, workerFinished, type WorkerObservation, type WorkerObservationReport, type WorkerProcessState } from '#engine/index.js';
 import { displayId, formatAgo, formatBytes, formatDecimal, formatDuration, orderPendingFirst, renderCliTable, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
 
 /** What a person needs to know about one worker: running now, finished (history), lost (no process and no result) or unknown (not verifiable). */
@@ -10,7 +10,7 @@ const PROCESS_KIND: Readonly<Record<WorkerProcessState, WorkerKind>> = { running
 
 /** A worker with a recorded end (terminal result) or released custody is history; otherwise its observed process decides. */
 export function workerKind(worker: WorkerObservation): WorkerKind {
-  return worker.terminal || worker.custody === 'released' ? 'finished' : PROCESS_KIND[worker.process];
+  return workerFinished(worker) ? 'finished' : PROCESS_KIND[worker.process];
 }
 
 /** The newest instant this worker was heard from: its heartbeat, else its last resource sample, else its last reported event. */

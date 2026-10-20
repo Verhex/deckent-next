@@ -102,7 +102,7 @@
   "doctor.check.image.currentUnnamed": "Worker image is current",
   "doctor.check.image.updating": "Worker image is updating in the background; Runs use the current image",
   "doctor.check.image.failed": "The last worker image refresh failed; the previous image is in use",
-  "doctor.check.docker": "Docker was not checked by doctor in this release",
+  "doctor.check.docker.unknown": "Docker's state could not be read",
   "doctor.check.delivery": "Model answers of profile {profile} ({model}) can exceed the response limit",
   "doctor.check.models.ok": "No active model is being retired",
   "doctor.check.models.unknown": "Model catalog was not read",

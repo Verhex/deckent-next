@@ -38,12 +38,13 @@ Stuck or waiting, oldest first (12)
   │ run-unknown                   │ build │ ! reason unknown                  │ unknown    │ scope-a │ current │
   └───────────────────────────────┴───────┴───────────────────────────────────┴────────────┴─────────┴─────────┘
 
-Failed Runs and where they first failed (2)
+Stopped Runs and why (3)
   ┌──────────────────┬─────────────────────────────────────────────────────────────┬───────────────┬─────────┬─────────┐
-  │ Run              │ First failure                                               │ Last activity │ Scope   │ Install │
+  │ Run              │ Cause                                                       │ Last activity │ Scope   │ Install │
   ├──────────────────┼─────────────────────────────────────────────────────────────┼───────────────┼─────────┼─────────┤
   │ run-broken       │ ✗ build: ✗ [unit-budget] src/surfaces/core/cli — 2001 line… │ 25 min ago    │ scope-a │ current │
-  │ run-broken-quiet │ ✗ build: first failing line not recorded                    │ 35 min ago    │ scope-a │ current │
+  │ run-broken-quiet │ ✗ build: no permission to read the output; the cause canno… │ 35 min ago    │ scope-a │ current │
+  │ run-stopped      │ ■ cancelled                                                 │ 1 d 2 h ago   │ scope-a │ current │
   └──────────────────┴─────────────────────────────────────────────────────────────┴───────────────┴─────────┴─────────┘
 
 Workers running now (2)
