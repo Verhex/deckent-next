@@ -25,7 +25,7 @@ export const mountConfigPanel: ConfigPanelOpener = async (port, io) => {
         onError={error => { failure ??= error; close(); }} errorText={error => String((error as { message?: unknown } | null)?.message ?? error)}
         openApproval={() => { /* The write's own lines name the approval and the command that applies it (printed after close). */ }} onClose={() => close()} />
     </WindowStackProvider>
-  </RenderGlyphsContext.Provider></WorklinePaletteProvider>, { stdout: io.stdout, stdin: io.stdin, exitOnCtrlC: false, patchConsole: false });
+  </RenderGlyphsContext.Provider></WorklinePaletteProvider>, { stdout: io.stdout, stdin: io.stdin, exitOnCtrlC: false, patchConsole: false, interactive: true });
   close = () => view.unmount();
   const abort = () => view.unmount();
   io.signal?.addEventListener('abort', abort, { once: true });

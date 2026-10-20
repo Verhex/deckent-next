@@ -37,10 +37,12 @@ export async function mountCliCard(request: CliCardRequest, io: Readonly<{ stdin
   const palette = resolveWorklinePalette(colorCapability({ env: io.env, isTTY: true, argv: [] }));
   const view = render(<WorklinePaletteProvider palette={palette}><RenderGlyphsContext.Provider value={resolveRenderGlyphs(prefersAsciiGlyphs(io.env))}>
     <WindowStackProvider><CliCard request={request} hints={io.hints} known={io.known} finish={id => { chosen = id; }} /></WindowStackProvider>
-  </RenderGlyphsContext.Provider></WorklinePaletteProvider>, { stdout: io.stdout, stdin: io.stdin, exitOnCtrlC: false, patchConsole: false });
+  </RenderGlyphsContext.Provider></WorklinePaletteProvider>, { stdout: io.stdout, stdin: io.stdin, exitOnCtrlC: false, patchConsole: false, interactive: true });
   // Cancellation of the command closes the card with no answer.
   const abort = () => { chosen = null; view.unmount(); };
   io.signal?.addEventListener('abort', abort, { once: true });
+  // `interactive: true` (as monitor and workline): the caller already admitted a person on a real terminal from its own environment; Ink's
+  // default reads `process.env.CI` instead and would hold every frame until exit, so an embedding host with CI set saw no card (CI-104).
   // Ink draws the first frame inside render(); a cancellation during that draw preceded the listener above.
   if (io.signal?.aborted) abort();
   try { await view.waitUntilExit(); } finally { io.signal?.removeEventListener('abort', abort); view.unmount(); }

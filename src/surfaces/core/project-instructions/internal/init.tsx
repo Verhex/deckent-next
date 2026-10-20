@@ -52,7 +52,7 @@ export async function instructionInitCommand(argv: readonly string[], context: {
   let result: unknown = null, failure: unknown;
   const palette = resolveWorklinePalette(colorCapability({ env: context.env ?? process.env, isTTY: true, argv }));
   const view = render(<WorklinePaletteProvider palette={palette}><InstructionInitWindow port={port} initial={preview} labels={labels} skeleton={skeleton} finish={(value, error) => { result = value; failure = error; }} /></WorklinePaletteProvider>,
-    { stdout, stdin: process.stdin, exitOnCtrlC: false, patchConsole: false });
+    { stdout, stdin: process.stdin, exitOnCtrlC: false, patchConsole: false, interactive: true });
   try { await view.waitUntilExit(); } finally { view.unmount(); }
   if (failure) throw failure;
   if (result) emit(result, { stdout, render: () => labels.done });

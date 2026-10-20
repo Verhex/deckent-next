@@ -4,6 +4,6 @@ export { DOCKER_APT, dockerAptSchema, type DockerAptData } from './internal/regi
 export { dockerCommandLines, dockerSource, dockerSourcesFile, dockerSteps, planDockerInstall, type DockerHostFacts, type DockerInstallPlan, type DockerInstallStep,
   type DockerPrintReason, type DockerSource } from './internal/plan.js';
 export { HOST_DOCKER_PORTS, observeDockerHost, stageDockerFiles, type DockerHostPorts } from './internal/host.js';
-export { installedDockerVersion, resolveSudo, runDockerInstall, spawnForeground, sudoEnvironment, verifyInstalledSource, type DockerInstallPorts, type DockerInstallResult,
+export { installedDockerVersion, resolveSudo, runDockerInstall, spawnForeground, sudoEnvironment, verifyInstalledSource, type DockerInstallPorts, type DockerInstallResult, type DockerTerminalInput,
   type DockerStepRun } from './internal/install.js';
 export { EXECUTION_ENVIRONMENT_INSTALL, dockerCardBody, dockerInstallOffer, dockerPrintLines, dockerResultLines } from './internal/card.js';

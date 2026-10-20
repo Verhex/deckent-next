@@ -44,6 +44,11 @@ for wait, send in steps:
             os.kill(pid, 9); sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
     read_for(0.4)
     since = len(out)
+    # Keys go to a window only once the child reads raw keys (ICANON off on the terminal): typed earlier, the line discipline turns
+    # Enter into a newline that no window reads as Enter (CI-104). A sudo password prompt is a line prompt and is typed as soon as it shows.
+    while 'password for' not in wait and termios.tcgetattr(fd)[3] & termios.ICANON:
+        if time.time() > deadline or not read_for(0.05):
+            os.kill(pid, 9); sys.stdout.write(json.dumps({'timeout': 'raw keys: ' + wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
     for char in send:
         os.write(fd, char.encode()); time.sleep(0.1)
 deadline = time.time() + 40

@@ -5,9 +5,12 @@ import { DOCKER_APT, type DockerAptData } from './registry.js';
 import { dockerSourcesFile, type DockerInstallPlan } from './plan.js';
 
 export type DockerStepRun = Readonly<{ code: number | null; signal: string | null }>;
-/** The host effect ports: `spawn` runs one foreground command on the person's terminal (stdio inherited, so sudo asks on it directly). */
+/** This process's terminal input as far as the run needs it: whether it is a terminal and read in flowing mode, and pausing/resuming it. */
+export type DockerTerminalInput = Readonly<{ isTTY?: boolean; readableFlowing: boolean | null; pause: () => unknown; resume: () => unknown }>;
+/** The host effect ports: `spawn` runs one foreground command on the person's terminal (stdio inherited, so sudo asks on it directly);
+ * `input` is this process's own terminal input (default `process.stdin`). */
 export type DockerInstallPorts = Readonly<{ sudo: string; spawn: (file: string, args: readonly string[], options: Readonly<{ env: DetectEnvironment; timeoutMs: number }>) => Promise<DockerStepRun>;
-  version: () => Promise<string | null>; verify?: () => Promise<boolean> }>;
+  version: () => Promise<string | null>; verify?: () => Promise<boolean>; input?: DockerTerminalInput }>;
 /** `mismatch`: the installed key or source file was not the shipped one; the run stopped before `apt-get update` trusted it. */
 export type DockerInstallResult = Readonly<{ status: 'succeeded' | 'failed' | 'uncertain'; step: number | null; exitCode: number | null; version: string | null; mismatch?: boolean }>;
 
@@ -44,6 +47,12 @@ export const verifyInstalledSource = (plan: Extract<DockerInstallPlan, { kind: '
 export async function runDockerInstall(plan: Extract<DockerInstallPlan, { kind: 'install' }>, env: DetectEnvironment, ports: DockerInstallPorts): Promise<DockerInstallResult> {
   let interrupted = false;
   const onInterrupt = () => { interrupted = true; }, clean = sudoEnvironment(env);
+  // The terminal belongs to sudo while the steps run: this process stops reading it (a card that just closed can leave it read). Two readers
+  // of one terminal race for the keys — sudo can lose password characters, and a read that loses the race can block this process (CI-104).
+  // A card that closed leaves no listener but the terminal read still open (`readableFlowing` null), so a terminal is always paused; it is
+  // resumed afterwards only if it was being read in flowing mode before (measured: 5 of 13 one-CPU runs hung before, 18 of 18 passed after).
+  const input = ports.input ?? process.stdin, terminal = input.isTTY === true, reading = terminal && input.readableFlowing === true;
+  if (terminal) input.pause();
   process.on('SIGINT', onInterrupt);
   try {
     const reset = await ports.spawn(ports.sudo, ['-k'], { env: clean, timeoutMs: DOCKER_APT.timeoutsMs.probe });
@@ -55,5 +64,5 @@ export async function runDockerInstall(plan: Extract<DockerInstallPlan, { kind: 
       if (step.id === 'sources' && !await (ports.verify ?? verifyInstalledSource(plan))()) return { status: 'failed', step: index + 1, exitCode: null, version: null, mismatch: true };
     }
     return { status: 'succeeded', step: null, exitCode: 0, version: await ports.version() };
-  } finally { process.off('SIGINT', onInterrupt); }
+  } finally { process.off('SIGINT', onInterrupt); if (reading) input.resume(); }
 }

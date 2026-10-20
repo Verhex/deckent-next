@@ -188,6 +188,25 @@ describe('foreground executor (cond. 2, 4)', () => {
     }
     expect(sudoEnvironment(env)).not.toHaveProperty('SUDO_ASKPASS');
   });
+  it('the terminal belongs to sudo while the steps run: a read of it left by the card is paused for every step and resumed after (CI-104)', async () => {
+    const seen: Array<boolean | null> = [];
+    const input = { isTTY: true, readableFlowing: true as boolean | null, pause() { this.readableFlowing = false; }, resume() { this.readableFlowing = true; } };
+    const spawn = async () => { seen.push(input.readableFlowing); return { code: 0, signal: null }; };
+    await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn, version: async () => null, verify: async () => true, input });
+    expect(seen).toEqual(Array(plan.steps.length + 1).fill(false));
+    expect(input.readableFlowing).toBe(true);
+    // Also after a failed step.
+    await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: async () => ({ code: 1, signal: null }), version: async () => null, input });
+    expect(input.readableFlowing).toBe(true);
+    // A card that closed leaves no listener but its terminal read open (readableFlowing null): paused for the steps, not resumed after.
+    let paused = 0, resumed = 0;
+    const left = { isTTY: true, readableFlowing: null as boolean | null, pause: () => { paused++; }, resume: () => { resumed++; } };
+    await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: async () => ({ code: 0, signal: null }), version: async () => null, verify: async () => true, input: left });
+    expect([paused, resumed]).toEqual([1, 0]);
+    // Not a terminal (pipe, test runner): untouched.
+    const pipe = { isTTY: false, readableFlowing: true as boolean | null, pause: () => { throw new Error('paused a pipe'); }, resume: () => { throw new Error('resumed a pipe'); } };
+    await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: async () => ({ code: 0, signal: null }), version: async () => null, verify: async () => true, input: pipe });
+  });
   it('a non-zero step stops the run (failed, nothing after it ran); no exit (timeout, signal) is uncertain; nothing is retried', async () => {
     const failed = fake([{ code: 0, signal: null }, { code: 0, signal: null }, { code: 0, signal: null }, { code: 0, signal: null }, { code: 100, signal: null }]);
     expect(await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn: failed.spawn, version: async () => null, verify: async () => true })).toEqual({ status: 'failed', step: 4, exitCode: 100, version: null });

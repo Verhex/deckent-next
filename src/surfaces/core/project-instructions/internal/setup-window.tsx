@@ -43,7 +43,7 @@ export async function mountSetupWindow(initial: SetupWindowModel, step: SetupWin
   const palette = resolveWorklinePalette(colorCapability({ env: io.env, isTTY: true, argv: [] }));
   const view = render(<WorklinePaletteProvider palette={palette}><RenderGlyphsContext.Provider value={resolveRenderGlyphs(prefersAsciiGlyphs(io.env))}>
     <WindowStackProvider reservedRows={1}><SetupWindow initial={initial} step={step} failed={error => { failure = error; }} /></WindowStackProvider>
-  </RenderGlyphsContext.Provider></WorklinePaletteProvider>, { stdout: io.stdout, stdin: io.stdin, exitOnCtrlC: false, patchConsole: false });
+  </RenderGlyphsContext.Provider></WorklinePaletteProvider>, { stdout: io.stdout, stdin: io.stdin, exitOnCtrlC: false, patchConsole: false, interactive: true });
   try { await view.waitUntilExit(); } finally { view.unmount(); }
   if (failure !== null) throw failure;
 }
