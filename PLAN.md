@@ -28,7 +28,7 @@ Yeni sabit lane/worker sayısı yok. Ayrıntılar [beta öncesi](.deckent/docs/p
 
 ## Sıradaki (karar verildi; sıralı)
 
-1. **Beta.1 → dogfood ağırlıklı beta:** sekiz koşul ve owner kabulü; yayımlama tarihi uydurulmaz. alpha.46 = beta adayı (owner 2026-10-18); sonrası yalnız kanıt.
+1. **Beta.1 → dogfood ağırlıklı beta:** sekiz koşul ve owner kabulü; yayımlama tarihi uydurulmaz. alpha.46 = beta adayı (owner 2026-10-18); sonrası yalnız kanıt. beta.1, 2026-10-28 Node 26 geçişini bekler; kontroller Node 26'da tekrarlanır (owner 2026-10-20). Canlı+N1: alpha.49 (2026-10-20).
 2. **NPM-PUBLISH:** hazırlık beta öncesi, yayın beta geçişinde `beta`, kararlıda `latest`; isim/scope/paket sayısının açık kalan kararı korunur.
 3. **Masaüstü + ajan organizasyonu:** beta sonrası, tanıtım kapısı. §8'deki 17 dilim; ilk karne/havuz/olay akışı, desktop 4'ten itibaren bağımlılıkla; altı owner sorusu **açık**. **POST-BETA-PRODUCTIZATION-COMPARISON** (owner 2026-10-15): Paperclip/Hermes karşılaştırmasıyla Desktop yönetimi, hızlı onboarding, entegrasyon ömrü, çıktı inceleme ve insan yükü A0–A7 aşamaları; ilk adım güncel kaynak/boşluk matrisi → AL/UYARLA/ALMA → kabul kanıtlı dilimler ([brief](.deckent/docs/plan/post-beta-productization-paperclip-hermes.md)).
 4. **ATAMA + HEADLESS-BRAIN:** sistem WorkClass→model/effort atar, Brain frontier; agent/skill tier, başarı defteri. Headless abonelik Brain **zorunlu**; N2-0, tier, kimlik ve H5 ölçüm tavanı bağımlılıkları.
@@ -51,6 +51,8 @@ Yeni sabit lane/worker sayısı yok. Ayrıntılar [beta öncesi](.deckent/docs/p
     - **İnsan modunda ham JSON yok, listeler bekleyen önce (owner 2026-10-19):** `approval` (`approvals.ts:28` her sonucu `JSON.stringify` basar), `mcp list/get`, `policy vocabulary` ve kuyruk listesi okunur tabloya döner; JSON yalnız `--json`. `approval`, `run list`, `decide`, kuyruk listeleri bekleyen önce, sonra yeniden eskiye.
     - **Kabul kanıtı dürüstlüğü (owner 2026-10-19):** `run inspect`, `report` ve `/runs` kabul satırı kanıt türünü söyler (ör. `process-exit@1` → "kabul: çıkış kodu · içerik bağımsız doğrulanmadı"); Kanun 1.
     - **Run bulma (owner 2026-10-19):** `deckent run list` + kısa kimlik (git gibi); `report`, `run inspect`, `task` aynı seçiciyi kullanır.
+
+15. **AGENT-TAKEOVER (owner 2026-10-20; beta, masaüstü tamamlandıktan sonra):** "agentı devral" ile çalışan bir worker'ı/agent'ı her yüzeyden (terminal, CLI, masaüstü, MCP) devralıp müdahale etmek; "agentı devret" ile yeniden otonom Deckent yürütmesine bırakmak. Yetki, kapsam ve denetim kaydı mevcut sözleşmelerle; devir sırasında iş kaybolmaz.
 
 Bu liste gerçek bağımlılıkla yürür; güvenlik/live kırılması öne geçer, analiz önerisi otomatik admission olmaz. Ayrıntı ve tüm karar kimlikleri [yol haritasında](.deckent/docs/plan/roadmap-2026-10-15.md). Altı ajan-organizasyon sorusu, H5 tavanı, KC ayrıntısı ve Claude kimliği [açık girdilerdir](.deckent/docs/plan/roadmap-2026-10-15.md#acik-sorular).
 
