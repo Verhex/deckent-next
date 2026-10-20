@@ -258,6 +258,8 @@ export class DockerSupervisor implements ExecutionSupervisor {
     if (answer === null) throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
     return answer;
   }
+  /** REVISE 2691: the service-start sweep entry. Removal only: its caller never holds a launch-capable supervisor (S6 launch-site test). */
+  static sweepPreflightProbes(input: DockerSupervisorOptions, runner?: DockerCommandRunner) { return new DockerSupervisor(input, runner).releasePreflightProbes(); }
   /** REVISE 2691, startup recovery: this installation's labelled probe containers (none is live at service start) are removed and observed
    * absent; another installation's or any unlabelled container is never listed. Unproven removals are reported, never assumed. */
   async releasePreflightProbes(): Promise<Readonly<{ removed: number; unsettled: readonly string[] }>> {

@@ -10,5 +10,5 @@ export async function releaseConfiguredPreflightProbes(projectRoot: string, opti
   // No workspaces directory: no probe ever ran here, and a start never creates it (the refresh gate precedes every write).
   if (!config.execution || os.uid <= 0 || os.gid < 0 || !existsSync(productResourcePath(config.productLayout, 'workspaces'))) return null;
   const workspaceRoot = await prepareProductDirectory(config.productLayout, 'workspaces');
-  return new DockerSupervisor({ ...config.execution.docker, workspaceRoot, uid: os.uid, gid: os.gid }).releasePreflightProbes();
+  return DockerSupervisor.sweepPreflightProbes({ ...config.execution.docker, workspaceRoot, uid: os.uid, gid: os.gid });
 }
