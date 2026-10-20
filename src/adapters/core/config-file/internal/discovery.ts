@@ -7,8 +7,8 @@ import { createRequire } from 'node:module';
 import { probeDockerImageSetAvailability, runNodeDockerCommand, type DockerCommandRunner } from '#adapters/core/docker-supervisor/index.js';
 const exec = promisify(execFile);
 export interface ConfigDiscoveryLimits { readonly timeoutMs: number; readonly outputBytes: number; readonly maxEntries: number }
-/** A discovery's answer; `partial` only when its time limit cut it short (a size bound is not partial). The values found are kept as before. */
-export type ConfigDiscovery = Readonly<{ values: readonly string[]; partial: boolean }>;
+/** A discovery's answer; `partial` names what cut it short: its time limit, or a size bound with entries left unread. The values found are kept as before. */
+export type ConfigDiscovery = Readonly<{ values: readonly string[]; partial: false | 'time' | 'size' }>;
 /**
  * Scan bounds beside the caller's limits (Astra 2456): at most this many PATH directories are probed, and a directory listing reads at most
  * `maxEntries × CONFIG_DISCOVERY_SCAN_FACTOR` entries (every entry seen counts, not only matches); both stop at the limits' `timeoutMs`.
@@ -19,13 +19,13 @@ export const CONFIG_DISCOVERY_BOUNDS = Object.freeze({ pathDirectories: 256, sca
 /** Discovery never starts a shell, mutates Git, pulls an image or opens a ledger writer. */
 export async function discoverConfigExecutables(name: 'docker' | 'git', env: NodeJS.ProcessEnv, limits: Pick<ConfigDiscoveryLimits, 'timeoutMs'>): Promise<ConfigDiscovery> {
   const deadline = AbortSignal.timeout(limits.timeoutMs);
-  const paths = (env['PATH'] ?? env['Path'] ?? '').split(delimiter).filter(Boolean).slice(0, CONFIG_DISCOVERY_BOUNDS.pathDirectories), extensions = process.platform === 'win32' ? (env['PATHEXT'] ?? '.EXE').split(';').filter(extension => extension.toLowerCase() === '.exe') : [''];
+  const listed = (env['PATH'] ?? env['Path'] ?? '').split(delimiter).filter(Boolean), paths = listed.slice(0, CONFIG_DISCOVERY_BOUNDS.pathDirectories), extensions = process.platform === 'win32' ? (env['PATHEXT'] ?? '.EXE').split(';').filter(extension => extension.toLowerCase() === '.exe') : [''];
   const candidates = [...new Set(paths.flatMap(path => extensions.map(extension => resolve(path, name + extension))))];
   const probes = Promise.all(candidates.map(async path => { try { await access(path, constants.X_OK); return path; } catch { return null; } }));
   // The whole probe shares one deadline: a hung network mount answers nothing rather than holding the window.
   const expired = new Promise<null>(resolve => { if (deadline.aborted) resolve(null); else deadline.addEventListener('abort', () => resolve(null), { once: true }); });
   const observed = await Promise.race([probes, expired]);
-  return { values: (observed ?? []).filter((path): path is string => path !== null), partial: observed === null };
+  return { values: (observed ?? []).filter((path): path is string => path !== null), partial: observed === null ? 'time' : listed.length > paths.length && 'size' };
 }
 export async function discoverConfigBranches(executable: string, root: string, env: NodeJS.ProcessEnv, limits: ConfigDiscoveryLimits): Promise<readonly string[]> {
   const result = await exec(executable, ['for-each-ref', '--format=%(refname)', 'refs/heads/'], { cwd: root, env, encoding: 'utf8', timeout: limits.timeoutMs, maxBuffer: limits.outputBytes });
@@ -34,20 +34,22 @@ export async function discoverConfigBranches(executable: string, root: string, e
 export async function discoverConfigImages(executable: string, limits: ConfigDiscoveryLimits, runner: DockerCommandRunner = runNodeDockerCommand): Promise<ConfigDiscovery> {
   const started = performance.now(), deadline = AbortSignal.timeout(limits.timeoutMs);
   const output = await runner({ executable, args: ['image', 'ls', '--no-trunc', '--quiet'], ...limits }, deadline);
-  const imageIds = [...new Set(output.stdout.trim().split('\n'))].filter(id => /^sha256:[a-f0-9]{64}$/u.test(id)).slice(0, limits.maxEntries);
+  const listed = [...new Set(output.stdout.trim().split('\n'))].filter(id => /^sha256:[a-f0-9]{64}$/u.test(id)), imageIds = listed.slice(0, limits.maxEntries);
   if (!imageIds.length) return { values: [], partial: false };
+  const size = listed.length > imageIds.length && 'size'; // a time cut below is named first: fewer than the bound were proven
   // One endpoint pin and daemon id check around all inspects; images not proven by the deadline are left out, the proven ones kept.
   const probe = { executable, imageIds, outputBytes: limits.outputBytes, timeoutMs: Math.max(1, Math.floor(limits.timeoutMs - (performance.now() - started))),
     chunkSize: CONFIG_DISCOVERY_BOUNDS.imageChunk, processes: CONFIG_DISCOVERY_BOUNDS.imageProcesses };
-  return probeDockerImageSetAvailability(probe, runner, deadline).then(set => ({ values: set.imageIds, partial: set.partial }),
+  return probeDockerImageSetAvailability(probe, runner, deadline).then(set => ({ values: set.imageIds, partial: set.partial ? 'time' as const : size }),
     () => ({ values: [], partial: false })); // Changed daemon or unreachable endpoint: nothing is proposed (refused, not partial).
 }
 export async function discoverConfigFiles(directory: string, limits: ConfigDiscoveryLimits): Promise<ConfigDiscovery> {
   const paths: string[] = [], deadline = Date.now() + limits.timeoutMs, scanLimit = limits.maxEntries * CONFIG_DISCOVERY_BOUNDS.scanFactor;
-  let scanned = 0, partial = false;
-  for await (const entry of await opendir(directory)) {
+  let scanned = 0, partial: ConfigDiscovery['partial'] = false;
+  for await (const entry of await opendir(directory)) { // an entry read past a full list or the scan bound: the listing had more (size)
+    if (paths.length >= limits.maxEntries || scanned >= scanLimit) { partial = 'size'; break; }
     if (entry.isFile()) paths.push(join(directory, entry.name));
-    if (paths.length >= limits.maxEntries || ++scanned >= scanLimit || (partial = Date.now() >= deadline)) break;
+    scanned++; if (Date.now() >= deadline) { partial = 'time'; break; }
   }
   return { values: paths, partial };
 }

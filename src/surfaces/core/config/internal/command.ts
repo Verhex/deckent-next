@@ -140,7 +140,9 @@ async function chosenValueShown(context: ConfigCommandContext, root: string, opt
 async function valueMissing(context: ConfigCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, keyPath: string) {
   const field = await context.configApplication!(root, options).explain({ keyPath });
   const model = await configValueModel(field, root, locale, context.configChoiceSources?.(root, options));
-  return ErrorRegistry.createError('CLI_CONFIG_VALUE_MISSING', { params: { key: keyPath, values: configChoiceWords(model.choices, schemaWord(field.schema, locale), locale) }, locale });
+  // CONFIG-PARTIAL-CLI: a list its discovery cut short says so, and `--json` carries the cut (`partial`: time | size, `found`) beside the values.
+  return ErrorRegistry.createError('CLI_CONFIG_VALUE_MISSING', { params: { key: keyPath, values: configChoiceWords(model.choices, schemaWord(field.schema, locale), locale),
+    ...(model.partial ? { partial: model.partial.reason, found: model.partial.found } : {}) }, locale });
 }
 /** Opens the `/config` window (whole, or narrowed to one key) and prints what it left: its summaries, then an approval to decide. */
 async function openPanel(context: ConfigCommandContext, root: string, options: ConfigLoadOptions, locale: Locale, keyPath: string | null,
