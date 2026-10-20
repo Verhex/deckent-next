@@ -397,6 +397,11 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **Commands that read the installation start in about 0.45–0.6 s** (`doctor`, `config`, `operation`, `approval`, `run`, the terminal)
   on a 16-core host, because Node loads ~1400 modules; `--version` and help start in about 0.12 s. Faster starts for the other
   commands are an open owner decision after beta (bundling or a module-boundary change).
+- **`deckent monitor --once` is a summary.** It prints the counts, the tables and why each stopped Run stopped; a worker's full
+  detail (task text, report claims, transcript excerpt) is printed with `--once --verbose` (`/monitor --verbose` in the terminal).
+  A worker that waits for a person always shows its detail. `--json` is unchanged and carries everything.
+- **A Run without a recorded title** (a delivery-queue verify Run records none) is shown as its task and kind, e.g.
+  `readme-clone-note (verify task)`; the terminal `/runs` window still says "Untitled run".
 - **`deckent terminal status` does not contact the chat model**, so its reachability reads "not tested"; the first answer in
   `deckent` or the `/provider` check shows it. The context window reads "?" until the first answer is measured.
 - **`deckent workers watch` has no row selection.** It redraws one window on a terminal (Esc or q closes); details come from

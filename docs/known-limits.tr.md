@@ -401,6 +401,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Kurulumu okuyan komutlar yaklaşık 0,45–0,6 s'de açılır** (`doctor`, `config`, `operation`, `approval`, `run`, terminal); 16
   çekirdekli bir makinede Node ~1400 modül yükler. `--version` ve yardım yaklaşık 0,12 s'de açılır. Diğer komutların daha hızlı
   açılması beta sonrası açık bir owner kararıdır (paketleme ya da modül sınırı değişikliği).
+- **`deckent monitor --once` bir özettir.** Sayıları, tabloları ve duran her Run'ın nedenini basar; bir işçinin tam ayrıntısı (iş
+  metni, rapor iddiaları, transcript kesiti) `--once --verbose` ile gelir (terminalde `/monitor --verbose`). Bir kişiyi bekleyen işçi
+  ayrıntısını her zaman gösterir. `--json` değişmedi ve her şeyi taşır.
+- **Başlığı kaydedilmemiş bir Run** (teslim kuyruğu doğrulama Run'ı başlık kaydetmez) görevi ve türüyle gösterilir, örneğin
+  `readme-clone-note (verify işi)`; terminaldeki `/runs` penceresi hâlâ "Başlıksız iş" der.
 - **`deckent terminal status` sohbet modeline bağlanmaz,** bu yüzden erişim "sınanmadı" görünür; `deckent` içindeki ilk yanıt ya da
   `/provider` kontrolü gösterir. Bağlam penceresi ilk yanıt ölçülene kadar "?" görünür.
 - **`deckent workers watch` satır seçmeye izin vermez.** Terminalde tek pencereyi yeniden çizer (Esc ya da q kapatır); ayrıntı
