@@ -168,9 +168,19 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   `Static` used (`workline-transcript.tsx`), outside React's render (a nested reconciler pass crashes Yoga), so only shown rows are laid
   out. The opening banner and the how-to line are the first viewport block; on exit the conversation is written to the main screen
   (native scrollback); `/clear` resets the view and sends ED 3 only. Mouse (owner 2026-10-18, Claude Code fullscreen model): SGR reporting
-  (?1000/?1006) only while the full window is shown, switched off on unmount/abort/error/process exit; `mouse.ts` takes reports out of the
-  input before Ink parses it (wheel → `WheelContext` → three lines a notch; clicks dropped), so no mouse event reaches the composer or a
-  card; native selection with the terminal's modifier (Shift; Option in iTerm2). Jump to latest: while anchored the last row counts new
+  (?1000/?1002/?1006; never ?1003) only while the full window is shown, switched off on unmount/abort/error/process exit; `mouse.ts` takes
+  reports out of the input before Ink parses it (wheel → `WheelContext` → three lines a notch; left press/drag/release → `PointerContext`;
+  every other report dropped), so no mouse event reaches the composer or a card. Selection (TERM-POLISH, owner 2026-10-20; Claude Code
+  fullscreen "click and drag … copies automatically on mouse release", code.claude.com/docs/en/fullscreen read 2026-10-20): click and drag
+  over the conversation highlights it in reverse video (`selection.ts`, content-anchored by block key/line/cell, so streaming or the wheel
+  never moves it); the release copies exactly the displayed (secret-projected) text, SGR and trailing padding removed, as one OSC 52 write
+  (`osc52Copy`) from `runTerminalWorkline`, and the hint row shows `terminal.viewport.copied` for 4 s (fixed height). A plain click or any
+  key but the scroll keys clears it; a press outside the drawn lines starts nothing; a drag past the view clamps (no autoscroll, no
+  double/triple click). Unlike Claude Code's local path (pbcopy / wl-copy / PowerShell `Set-Clipboard`), Deckent writes only OSC 52: no
+  process is spawned and nothing but the person's selection reaches the clipboard. Native selection stays on the terminal's modifier
+  (Shift; Option in iTerm2) and `terminal.layout: inline` captures no mouse at all. Spacing (TERM-POLISH): `stepSpaceBefore`
+  (terminal-work) is the one rule — a row gets one blank line above it when it is a tool step or follows one — used by `Static`, the
+  transcript blocks and `AssistantLive` (`spaceBefore`; the running call carries its own blank line), so a landing row never jumps. Jump to latest: while anchored the last row counts new
   entries ("↓ N new messages · End") or lines; End/Home jump while anchored (Ctrl+End/Ctrl+Home always), streaming never moves the view. `terminal.layout: inline` (and non-TTY / TERM=dumb) keeps the R3 inline layout: the live area bounded to rows − 1, the
   measured footer never shrinks, completed records print once through Ink `Static` (no live-area transcript replay). Composer draft rows follow the caret.
   Slice 2 active work strip (`terminal-work/active-work.tsx`; in the full window one `ActiveWorkSummary` row under the bar, the list above the bar only while Ctrl+T selects it): a footer view over the running /do (planning, waiting with approval

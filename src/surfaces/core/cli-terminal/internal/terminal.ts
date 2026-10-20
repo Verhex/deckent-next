@@ -179,7 +179,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       stops: modeStopWords(locale), cycled: t('terminal.mode.cycled', {}, locale), cycledFullAccess: t('terminal.mode.cycledFullAccess', {}, locale),
       askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale), fullAccessLine: t('tui.panel.mode.fullAccessLine', {}, locale) },
     viewport: { below: t('terminal.viewport.below', {}, locale), newMessages: t('terminal.viewport.newMessages', {}, locale), search: t('terminal.viewport.search', {}, locale),
-      searchNone: t('terminal.viewport.searchNone', {}, locale) },
+      searchNone: t('terminal.viewport.searchNone', {}, locale), copied: t('terminal.viewport.copied', {}, locale) },
     decisionArm: { arming: t('terminal.decision.arming', {}, locale), ignored: t('terminal.decision.ignored', {}, locale) },
     reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale), unsupported: t('tui.model.reason.reasoningOff', {}, locale) },
     scratch: { summary: t('terminal.scratch.summary', {}, locale), empty: t('terminal.scratch.empty', {}, locale), entry: t('terminal.scratch.entry', {}, locale),

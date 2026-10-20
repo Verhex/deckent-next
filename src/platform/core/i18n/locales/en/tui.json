@@ -1071,6 +1071,7 @@
   "terminal.activeWork.more": "+{count} more",
   "terminal.viewport.below": "↓ {count} more lines below · End latest · PgDn scrolls · Ctrl+F search · Ctrl+↑↓ your messages",
   "terminal.viewport.newMessages": "↓ {count} new messages · End latest · Ctrl+F search",
+  "terminal.viewport.copied": "Copied {count} characters to the clipboard (OSC 52) · terminal's own selection: Shift+drag",
   "terminal.decision.arming": "Just opened · its keys work in a moment",
   "terminal.decision.ignored": "Key not counted: this card just opened · press it again",
   "terminal.viewport.search": "Search this view: {query}{state} · Enter/↑ older · ↓ newer · Esc close",

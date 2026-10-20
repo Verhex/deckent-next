@@ -197,21 +197,26 @@ function WaitingLine({ waiting, labels, clock }: { readonly waiting: WaitingView
   return <Box paddingLeft={INDENT}><Text {...palette.muted} wrap="truncate-end">{glyphs.spinner[frame % glyphs.spinner.length]} {text}</Text></Box>;
 }
 
-/** The small dynamic region of a streaming answer: narration plus the unfinished tail, bounded to its last lines. */
-export function AssistantLive({ tail, narration, labels, lead, activeTool = null, maxLines = LIVE_TAIL_LINES, waiting = null, reasoningPreview = [], clock = SYSTEM_CLOCK }: {
+/** The small dynamic region of a streaming answer: narration plus the unfinished tail, bounded to its last lines. `spaceBefore`: the last
+ * finished row is a tool step, so what streams now starts after one blank line, as its row will when it lands (TERM-POLISH spacing rule,
+ * `stepSpaceBefore`); the running call always stands one blank line apart from what is above it. */
+export function AssistantLive({ tail, narration, labels, lead, activeTool = null, maxLines = LIVE_TAIL_LINES, waiting = null, reasoningPreview = [], clock = SYSTEM_CLOCK, spaceBefore = false }: {
   readonly tail: LiveTail; readonly narration: Narration | null; readonly labels: AssistantRenderLabels; readonly lead: boolean;
   readonly activeTool?: ActiveTool | null; readonly maxLines?: number;
   readonly clock?: TrustedClock;
   /** TL-A: the silent wait to show, and the reasoning preview lines (empty when hidden). */
   readonly waiting?: WaitingView | null; readonly reasoningPreview?: readonly string[];
+  readonly spaceBefore?: boolean;
 }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs(), width = useBodyWidth();
   const known = useHumanTextSecrets();
   const projection = renderHumanMarkdown(tail.markdown, { width, glyphs, codeLabel: labels.code }, known);
   const lines = tail.markdown === '' ? [] : projection.lines;
   const hidden = Math.max(0, lines.length - maxLines);
+  // The running call alone is a tool step: its own blank line is the one above it (never two).
+  const toolOnly = activeTool !== null && !waiting && !narration && lines.length === 0 && projection.hiddenCount === 0;
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" marginTop={spaceBefore && !toolOnly ? 1 : 0}>
       {waiting && <WaitingLine waiting={waiting} labels={labels} clock={clock} />}
       {narration && <ReasoningNarration narration={narration} labels={labels} clock={clock} preview={reasoningPreview} />}
       {lead && lines.length > 0 && <Text {...palette.assistantLabel}>{glyphs.assistant} {labels.assistant}</Text>}
@@ -233,7 +238,7 @@ function ToolRunning({ tool, labels, clock }: { readonly tool: ActiveTool; reado
   const text = fillTemplate(labels.toolRunning, { tool: toolText(tool, labels), seconds: seconds(clock.sample().wallMs - tool.startedAtMs) });
   const tail = tool.output.replace(/\n+$/u, '').split('\n').filter(line => line.length > 0).slice(-TOOL_OUTPUT_LINES);
   return (
-    <Box flexDirection="column" paddingLeft={INDENT}>
+    <Box flexDirection="column" paddingLeft={INDENT} marginTop={1}>
       <Text {...palette.muted} wrap="truncate-end">{glyphs.spinner[frame % glyphs.spinner.length]} {text}</Text>
       {tail.map((line, index) => <Box key={index} paddingLeft={INDENT}><Text {...palette.muted} wrap="truncate-end">{line}</Text></Box>)}
     </Box>
