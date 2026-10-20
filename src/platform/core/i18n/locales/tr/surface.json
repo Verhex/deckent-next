@@ -496,7 +496,7 @@
   "monitor.cause.interrupted": "yarıda kesildi",
   "monitor.cause.cancelled": "iptal edildi",
   "monitor.cause.skipped": "bağlı olduğu görev bitmediği için atlandı",
-  "monitor.cause.notLaunched": "worker başlatılmadan durduruldu",
+  "monitor.cause.notLaunched": "işçi başlatılmadan durduruldu",
   "monitor.cause.noAttempt": "hiç deneme başlatılmadı",
   "monitor.cause.outputDenied": "çıktıyı okuma izni yok; neden görülemiyor",
   "monitor.cause.rejected": "değerlendirme kabul etmedi",
