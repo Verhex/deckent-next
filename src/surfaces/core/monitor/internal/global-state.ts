@@ -1,6 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
 import { projectHumanState, type HumanState, type HumanStateCode, type HumanNextAction, type MonitorRun, type MonitorSnapshot } from '#engine/index.js';
-import { blockerLabel, clockText } from './labels.js';
+import { blockerDetailText, blockerLabel, clockText } from './labels.js';
 import { span, type MonitorLine, type MonitorRole, type MonitorSpan } from '#surfaces/core/monitor-view/index.js';
 
 export function globalStateLabel(state: HumanStateCode, locale: Locale): string {
@@ -21,7 +21,7 @@ function actionLabel(action: HumanNextAction, locale: Locale): string {
 export function globalStateLines(value: HumanState, locale: Locale): MonitorLine[] {
   if (value.state !== 'held') return [];
   const time = (at: number | null) => at === null ? t('monitor.time.unknown', {}, locale) : clockText(at);
-  return [[span(t('monitor.global.hold', { waitingOn: waitLabel(value.waitingOn, locale), reason: `${blockerLabel(value.reason, locale)}${value.detail ? ` (${value.detail})` : ''}`,
+  return [[span(t('monitor.global.hold', { waitingOn: waitLabel(value.waitingOn, locale), reason: `${blockerLabel(value.reason, locale)}${value.detail ? ` (${blockerDetailText(value.detail, locale)})` : ''}`,
     since: time(value.since), deadline: time(value.deadline), nextAction: actionLabel(value.nextAction, locale) }, locale), 'warning')]];
 }
 /** A held row shows who even when its detail drawer is closed. */

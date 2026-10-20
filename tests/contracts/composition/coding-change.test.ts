@@ -163,6 +163,8 @@ it.for([
   for (const locale of ['en', 'tr'] as const) {
     const text = surface.renderMonitorText({ ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!, runs: [run] }] }, { locale, width: 200, ascii: true });
     expect(text).toContain(t(key, {}, locale)); expect(text).not.toContain(t('task.acceptance.noChangeProduced', {}, locale));
+    // PRE-7 (lead): the not-run reason names its next step (declare the requirement on the task's template); other reasons do not.
+    expect(text.includes('deckent config set admission.registry')).toBe(reason === 'acceptance-check-not-run');
   }
 });
 it.for([

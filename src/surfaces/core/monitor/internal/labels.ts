@@ -1,6 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
 import type { WorkerPhase } from '#domain/index.js';
-import type { WorkerProcessState } from '#engine/index.js';
+import { MONITOR_ENVIRONMENT_DETAIL, type WorkerProcessState } from '#engine/index.js';
 import type { MonitorDeliveryState, MonitorDeliveryOutlook, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState, MonitorTask, StopCause } from '#engine/index.js';
 import { phaseLabel } from './transcript.js';
 
@@ -89,6 +89,11 @@ export function notAcceptedLabel(reason: NonNullable<MonitorTask['evaluation']['
     'report-invalid': t('task.acceptance.reportInvalid', {}, locale), 'declared-check-not-passed': t('task.acceptance.declaredCheckNotPassed', {}, locale),
     'worker-stalled': t('task.acceptance.workerStalled', {}, locale), 'acceptance-check-not-run': t('task.acceptance.checkNotRun', {}, locale) };
   return labels[reason];
+}
+/** A blocker's detail in words where one is known (a missing patch; PRE-7: an environment park names its requirement); else the recorded detail. */
+export function blockerDetailText(detail: string, locale: Locale): string {
+  if (detail === 'patch-missing') return t('monitor.blocker.patchMissing', {}, locale);
+  return detail.startsWith(MONITOR_ENVIRONMENT_DETAIL) ? t('monitor.blocker.environmentNotReady', { requirement: detail.slice(MONITOR_ENVIRONMENT_DETAIL.length) }, locale) : detail;
 }
 /** PRE-7: the next step after an acceptance check the worker could not run. Deckent's preflight checks only declared requirements, so an
  * undeclared missing tool reaches the worker; the operator may declare it on the task's template (never added automatically). */
