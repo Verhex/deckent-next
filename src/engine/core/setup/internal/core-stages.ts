@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/index.js';
 import { LOCALES, ErrorRegistry, type MessageKey } from '#platform/index.js';
-import type { CoreSetupStageId, SetupDecision, SetupObservationFacts, SetupStageState } from './contract.js';
+import { setupProfileRefSchema, type CoreSetupStageId, type SetupDecision, type SetupObservationFacts, type SetupStageState } from './contract.js';
 
 /** Inputs every Core evaluator reads; `states` holds the states decided so far (stage order). */
 export type CoreStageInput = Readonly<{ facts: SetupObservationFacts; answers: Readonly<Record<string, unknown>>; scopeId: string | null;
@@ -57,14 +57,13 @@ function folder(input: CoreStageInput): CoreStageResult {
   return result({ state: 'needs-answer', reason: reason(homeRoot ? 'setup.reason.homeRoot' : 'setup.reason.scopeRequired'),
     question: question('setup.question.folder', { scope: suggestedScope ?? '' }), default: suggestedScope });
 }
-const profileRef = z.object({ id: identitySchema, version: z.number().int().positive().safe() }).strict();
 function profile(input: CoreStageInput): CoreStageResult {
-  const available = input.facts.profile.available, solo = available.find(entry => entry.id === SOLO) ?? null;
-  const chosen = answer(input, 'core:profile', profileRef);
+  const { available, selected } = input.facts.profile, solo = available.find(entry => entry.id === SOLO) ?? null;
+  // A saved selection is observed, never asked or written again (SOLO-PROFILE, owner 2026-10-20).
+  if (selected) return result({ state: 'done', reason: reason('setup.reason.profileConfigured', { profile: selected.id }) });
+  const chosen = answer(input, 'core:profile', setupProfileRefSchema);
   if (chosen === undefined) return result({ state: 'needs-answer', reason: reason('setup.reason.profileChoice'), question: question('setup.question.profile'), default: solo });
   if (!available.some(entry => entry.id === chosen.id && entry.version === chosen.version)) throw ErrorRegistry.createError('SETUP_ANSWER_INVALID', { params: { stage: 'core:profile' } });
-  // D4: solo is the first-run template as is; nothing more is written.
-  if (chosen.id === SOLO) return result({ state: 'done', reason: reason('setup.reason.profileSolo'), default: chosen });
   if (!input.scopeId || !installed(input.facts)) return result({ ...waits(input.scopeId ? 'core:policy' : 'core:folder').decision, default: chosen });
   return result({ state: 'ready', reason: reason('setup.reason.profileChosen', { profile: chosen.id }), default: chosen,
     operation: { id: 'identity-profile.preview', version: 1, input: { scopeId: input.scopeId, profile: chosen } },

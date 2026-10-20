@@ -46,8 +46,8 @@ export function configuredSetup(host: object) {
         return status === 'installed' || status === 'replayed' ? result('applied') : result('refused', status);
       }
       if (op === 'config.set') { await config(String(input['keyPath']), input['value'], input['layer'] === 'global' ? 'global' : 'project'); return result('applied'); }
-      // The team or enterprise selection (template data, never authority; the `identity` section is global-layer only, as `config set
-      // identity.profile --global`); distribution stays `deckent identity distribute` with its card.
+      // Every profile's selection, solo included (SOLO-PROFILE; template data, never authority; the `identity` section is global-layer only,
+      // as `config set identity.profile --global`; the next observation reads it back); distribution stays `deckent identity distribute`.
       if (op === 'identity-profile.preview') { await config('identity.profile', input['profile'], 'global'); return result('applied'); }
       if (op === 'shell-realm.inspect') { await inspectConfiguredShellRealm(root, options); return result('applied'); }
       if (op === 'doctor.inspect') { await verdict(options.env ?? process.env, root); return result('applied'); }

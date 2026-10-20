@@ -58,12 +58,23 @@ describe('I-S1 setup planner', () => {
     expect(honest.stages.find(stage => stage.id === 'execution:runtime')!.autoEligible).toBe(false);
   });
 
-  it('D4: solo uses the first-run template as is (no operation); another profile waits for the policy, then previews', () => {
-    const solo = byId(planSetup(observe(), answers({ 'core:profile': { id: 'core:solo', version: 1 } }))).get('core:profile')!;
-    expect(solo).toMatchObject({ state: 'done', reason: { code: 'setup.reason.profileSolo' }, operation: null, cli: null });
-    expect(byId(planSetup(observe(), answers({ 'core:folder': 's', 'core:profile': { id: 'core:team', version: 1 } }))).get('core:profile')!.state).toBe('blocked');
-    const team = byId(planSetup(observe({ policy: { state: 'current' } }), answers({ 'core:folder': 's', 'core:profile': { id: 'core:team', version: 1 } }))).get('core:profile')!;
-    expect(team).toMatchObject({ state: 'ready', operation: { id: 'identity-profile.preview', input: { scopeId: 's', profile: { id: 'core:team', version: 1 } } } });
+  it('SOLO-PROFILE (owner 2026-10-20): every profile, solo included, waits for the policy, then is saved through the same operation', () => {
+    for (const id of ['core:solo', 'core:team']) {
+      expect(byId(planSetup(observe(), answers({ 'core:folder': 's', 'core:profile': { id, version: 1 } }))).get('core:profile')!.state, id).toBe('blocked');
+      const chosen = byId(planSetup(observe({ policy: { state: 'current' } }), answers({ 'core:folder': 's', 'core:profile': { id, version: 1 } }))).get('core:profile')!;
+      expect(chosen, id).toMatchObject({ state: 'ready', autoEligible: false, operation: { id: 'identity-profile.preview', input: { scopeId: 's', profile: { id, version: 1 } } } });
+    }
+  });
+
+  it('SOLO-PROFILE: a saved profile (any id, also one outside the listed packages) reads done on a re-run and is never asked or written again', () => {
+    for (const id of ['core:solo', 'core:team', 'acme.erp:approvers']) {
+      const saved = observe({ profile: { ...base.profile, selected: { id, version: 2 } }, policy: { state: 'current' }, folder: { ...base.folder, configuredScope: 's' } });
+      for (const given of [answers({}), answers({ 'core:profile': { id: 'core:team', version: 1 } })]) {
+        const stage = byId(planSetup(saved, given)).get('core:profile')!;
+        expect(stage, id).toMatchObject({ state: 'done', reason: { code: 'setup.reason.profileConfigured', params: { profile: id } }, operation: null, question: null, cli: null });
+      }
+    }
+    expect(byId(planSetup(observe())).get('core:profile')!.state).toBe('needs-answer');
   });
 
   it('a hand-built or conflicting policy is never rewritten; a declined stage is skipped', () => {
@@ -75,7 +86,7 @@ describe('I-S1 setup planner', () => {
 
   it('a finished installation re-plans as done everywhere (resumable by re-observation)', () => {
     const plan = planSetup(observe({ language: { configured: 'tr', requested: null, system: null }, folder: { ...base.folder, installation: 'present', configuredScope: 's' },
-      policy: { state: 'current' }, model: { connections: 1 }, check: { state: 'ok' } }), answers({ 'core:profile': { id: 'core:solo', version: 1 } }));
+      policy: { state: 'current' }, model: { connections: 1 }, check: { state: 'ok' }, profile: { ...base.profile, selected: { id: 'core:solo', version: 1 } } }));
     expect(plan.stages.every(stage => stage.state === 'done')).toBe(true);
   });
 
@@ -113,10 +124,13 @@ describe('I-S1 setup planner', () => {
   it('family facts drive family stages, and the final check is done only when every stage is settled', () => {
     const registry = new SetupStageRegistry([family('execution')]);
     const done = observe({ language: { configured: 'en', requested: null, system: null }, folder: { ...base.folder, configuredScope: 's' }, policy: { state: 'current' },
-      model: { connections: 1 }, check: { state: 'ok' } });
-    const solo = answers({ 'core:profile': { id: 'core:solo', version: 1 } });
-    expect(byId(planSetup(done, solo, registry)).get('core:final-check')!.state).toBe('ready');
-    const ready = planSetup({ ...done, families: { execution: { ready: true } } }, solo, registry);
+      model: { connections: 1 }, check: { state: 'ok' }, profile: { ...base.profile, selected: { id: 'core:solo', version: 1 } } });
+    const none = answers({});
+    expect(byId(planSetup(done, none, registry)).get('core:final-check')!.state).toBe('ready');
+    // A solo answer that is not saved yet is not settled: the profile is ready to apply, so the final check stays open.
+    expect(byId(planSetup({ ...done, profile: base.profile, families: { execution: { ready: true } } }, answers({ 'core:profile': { id: 'core:solo', version: 1 } }), registry))
+      .get('core:final-check')!.state).toBe('ready');
+    const ready = planSetup({ ...done, families: { execution: { ready: true } } }, none, registry);
     expect(byId(ready).get('execution:runtime')!.state).toBe('done'); expect(byId(ready).get('core:final-check')!.state).toBe('done');
   });
 

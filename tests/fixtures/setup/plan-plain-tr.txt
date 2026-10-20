@@ -1,9 +1,9 @@
-Deckent kurulum planı ab43de3c5809
+Deckent kurulum planı 3a07808e37b5
 1. Ortam · tamam · Ortam destekleniyor (linux).
 2. Dil · cevabınızı bekliyor · Algılanan dil: Türkçe.
    ? Türkçe ile devam edilsin mi?
 3. Klasör ve kapsam · tamam · "my-erp" kapsamı seçildi.
-4. Kurulumu kim kullanacak · tamam · Tek kullanıcı: ilk kurulum izinleri olduğu gibi kullanılır; başka bir şey yazılmaz.
+4. Kurulumu kim kullanacak · engelli · Önce İzinler aşamasının bitmesini bekliyor.
 5. İzinler · cevabınızı bekliyor · Henüz izin kurulmamış.
    ? İlk kurulum izinleri kurulsun mu? (yönetici sizsiniz; standart modda düzenleme ve kabuk komutları önce sorulur)
    $ deckent init policy --scope my-erp --apply

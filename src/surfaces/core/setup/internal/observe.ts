@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { basename, resolve } from 'node:path';
 import { FIRST_RUN_POLICY_TEMPLATE_VERSION } from '#domain/index.js';
 import { LOCALES, NODE_ENGINE_RANGE, assessNodeSupport, envValue, isWslHost, loadConfig, loadConfigLanguage, productResourcePath, type Locale } from '#platform/index.js';
-import { SETUP_PLAN_SCHEMA_VERSION, SetupStageRegistry, type SetupFamilyPackage, type SetupObservation } from '#engine/index.js';
+import { SETUP_PLAN_SCHEMA_VERSION, SetupStageRegistry, setupProfileRefSchema, type SetupFamilyPackage, type SetupObservation } from '#engine/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY, projectInstructionFacts, projectSkeleton } from '#surfaces/core/project-instructions/index.js';
 import { assessPoolReadiness } from '#surfaces/core/cli-admin/index.js';
 import { poolProvisioned, type FirstJobFacts } from '#surfaces/core/doctor/index.js';
@@ -45,6 +45,8 @@ export async function observeCoreSetup(context: SetupCommandContext, root: strin
   catch (error) { if (errorCode(error) !== 'BOOTSTRAP_INSTALLATION_INCOMPLETE') throw error; pending = true; }
   const terminal = (config as Record<string, unknown> | null)?.['terminal'] as { scopeId?: unknown } | undefined;
   const scopeId = typeof terminal?.scopeId === 'string' && terminal.scopeId ? terminal.scopeId : null;
+  // The saved selection (`identity.profile`, global layer; what doctor reads); an unreadable or malformed one is none, never guessed.
+  const identity = (config as Record<string, unknown> | null)?.['identity'] as { profile?: unknown } | undefined;
   const policyFile = config ? await exists(productResourcePath(config.productLayout, 'policy')) : false;
   const template = config && context.inspectPolicyTemplate ? await context.inspectPolicyTemplate(root, options) : null;
   const policy = pending ? 'pending' : template ? template.version < FIRST_RUN_POLICY_TEMPLATE_VERSION ? 'upgradable' : 'current' : policyFile ? 'hand-built' : 'absent';
@@ -58,7 +60,8 @@ export async function observeCoreSetup(context: SetupCommandContext, root: strin
       system: [envValue(env, 'LC_ALL'), envValue(env, 'LC_MESSAGES'), envValue(env, 'LANG')].map(locale).find(value => value !== null) ?? null },
     folder: { installation: pending ? 'pending' : policyFile ? 'present' : 'none', homeRoot: resolve(root) === resolve(homedir()),
       configuredScope: scopeId, suggestedScope: suggestScope(root) },
-    profile: { available: (context.listIdentityProfiles?.([]).profiles ?? []).map(entry => ({ id: entry.definition.id, version: entry.definition.version })) },
+    profile: { available: (context.listIdentityProfiles?.([]).profiles ?? []).map(entry => ({ id: entry.definition.id, version: entry.definition.version })),
+      selected: setupProfileRefSchema.safeParse(identity?.profile).data ?? null },
     policy: { state: policy },
     sandbox: { realm: realm?.selected === 'bubblewrap' || realm?.selected === 'landlock' ? realm.selected : 'none', selfTest: realm?.selfTest?.status ?? 'not-run',
       usernsRestricted: realm?.rejected.some(row => row.restricted) ?? false },

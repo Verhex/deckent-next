@@ -68,8 +68,8 @@ describe('I-S7 doctor: registry present, pool missing is a warning naming decken
 });
 
 const observation: SetupObservation = { schemaVersion: 1, environment: { platform: 'linux', node: 'supported' }, language: { configured: 'en', requested: null, system: 'en' },
-  folder: { installation: 'present', homeRoot: false, configuredScope: 'erp-demo', suggestedScope: 'erp-demo' }, profile: { available: [{ id: 'core:solo', version: 1 }] },
-  policy: { state: 'current' }, sandbox: { realm: 'bubblewrap', selfTest: 'ok', usernsRestricted: false }, model: { connections: 1 }, check: { state: 'ok' },
+  folder: { installation: 'present', homeRoot: false, configuredScope: 'erp-demo', suggestedScope: 'erp-demo' }, profile: { available: [{ id: 'core:solo', version: 1 }],
+    selected: { id: 'core:solo', version: 1 } }, policy: { state: 'current' }, sandbox: { realm: 'bubblewrap', selfTest: 'ok', usernsRestricted: false }, model: { connections: 1 }, check: { state: 'ok' },
   families: { instructions: { file: 'present', bridges: [] } } };
 const registry = new SetupStageRegistry([PROJECT_INSTRUCTION_SETUP_FAMILY]);
 
@@ -95,7 +95,7 @@ describe('I-S7 deckent init summary: text, window and --json show the same order
     const context = { root: '/x', env: {}, locale: 'en' } as unknown as SetupCommandContext;
     const rows = async (firstJob?: FirstJobFacts) => {
       const controller = createSetupController({ context, root: '/x', locale: 'en', flags: { json: false, yes: false }, observed: { observation, registry, ...(firstJob ? { firstJob } : {}) } });
-      await controller.step('core:solo'); // the only open answer here: who uses this installation (solo)
+      // Nothing is open here (the solo profile is already saved): the rows name what the first job still needs.
       return controller.model().rows;
     };
     const missing = await rows({ execution: true, registry: true, pool: false }), ready = await rows({ execution: true, registry: true, pool: true }), none = await rows();
