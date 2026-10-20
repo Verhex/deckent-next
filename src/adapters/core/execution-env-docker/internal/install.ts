@@ -50,7 +50,7 @@ export async function runDockerInstall(plan: Extract<DockerInstallPlan, { kind: 
   // The terminal belongs to sudo while the steps run: this process stops reading it (a card that just closed can leave it read). Two readers
   // of one terminal race for the keys — sudo can lose password characters, and a read that loses the race can block this process (CI-104).
   // A card that closed leaves no listener but the terminal read still open (`readableFlowing` null), so a terminal is always paused; it is
-  // resumed afterwards only if it was being read in flowing mode before (measured: 5 of 13 one-CPU runs hung before, 18 of 18 passed after).
+  // resumed afterwards only if it was being read in flowing mode before (measured on one CPU: 12 of 24 runs hung without it, 0 of 18 with it).
   const input = ports.input ?? process.stdin, terminal = input.isTTY === true, reading = terminal && input.readableFlowing === true;
   if (terminal) input.pause();
   process.on('SIGINT', onInterrupt);
