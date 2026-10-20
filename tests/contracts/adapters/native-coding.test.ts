@@ -19,7 +19,10 @@ it.each(['codex', 'claude', 'cursor'])('binds deterministic selected content and
   const resolved = resolveDockerTaskProfile(profile);
   const delivery = resolved.nativeSubscription!.promptDelivery!;
   expect(compileNativeCodingDockerProfile(template(), composed(provider))).toEqual(profile);
-  expect(delivery.core).toContain('deckent-worker-core@1');
+  expect(delivery.core).toContain('deckent-worker-core@2');
+  // PRE-1 A3 (owner 2026-10-20): the worker is told how to type the checks that verify the task's acceptance section, so a failed one
+  // reaches the report as a failed `acceptance` check (declared-check-not-passed) instead of an untyped claim.
+  for (const rule of ['role "acceptance"', 'checkId', 'role "exploratory"', 'not accepted']) expect(delivery.core).toContain(rule);
   expect(delivery.task).toContain('persona:reviewer@2');
   expect(delivery.task).toContain('skill:editing@1');
   expect(delivery.segments.map(s => s.kind)).toEqual(['core', 'persona', 'skill', 'context', 'task', 'scope', 'acceptance']);
