@@ -63,6 +63,25 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
     expect(await digest(policy)).toBe(before);
   }, 180_000);
 
+  it('SOLO-PROFILE: the solo selection goes through the same governed writer as team (global layer, never --yes); the next observation reads it done', async () => {
+    await access(cli);
+    const f = await fixture();
+    expect((await f.run(['init', '--yes', '--scope', 'erp-demo'])).code).toBe(0);
+    // `--yes` (INIT-D5) never writes the profile: without a person the answer is solo, ready to apply, and the doctor still asks for it.
+    const stages = async () => (JSON.parse((await f.run(['init', '--json'])).stdout) as { stages: SetupStage[] }).stages;
+    const ready = (await stages()).find(stage => stage.id === 'core:profile')!;
+    expect(ready).toMatchObject({ state: 'ready', autoEligible: false, operation: { id: 'identity-profile.preview', input: { scopeId: 'erp-demo', profile: { id: 'core:solo', version: 1 } } } });
+    expect((await f.run(['doctor'])).stdout).toMatch(/warning\s+No identity profile is chosen/u);
+    const result = await configuredSetup({}).applySetupStage(f.root, ready, { env: f.env, scopeId: 'erp-demo' });
+    expect(result).toEqual({ stage: 'core:profile', operation: 'identity-profile.preview', status: 'applied' });
+    expect(JSON.parse(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8'))).toMatchObject({ identity: { profile: { id: 'core:solo', version: 1 } } });
+    // Nothing in the folder's own configuration: the selection is the user's, as `config set identity.profile --global`.
+    expect((JSON.parse(await readFile(join(f.root, '.deckent', 'config.json'), 'utf8')) as Record<string, unknown>)['identity']).toBeUndefined();
+    expect((await stages()).find(stage => stage.id === 'core:profile')).toMatchObject({ state: 'done', reason: { code: 'setup.reason.profileConfigured', params: { profile: 'core:solo' } },
+      operation: null, cli: null });
+    expect((await f.run(['doctor'])).stdout).toMatch(/ok\s+Identity profile: core:solo/u);
+  }, 180_000);
+
   it('an AI agent environment: the plan only without --yes, never a Docker install offer, nothing written to the folder', async () => {
     await access(cli);
     const f = await fixture();
@@ -116,8 +135,8 @@ describe('I-S3 apply port: stages that take the terminal are refused off the win
 });
 
 const base: SetupObservation = { schemaVersion: 1, environment: { platform: 'linux', node: 'supported' }, language: { configured: 'en', requested: null, system: 'en' },
-  folder: { installation: 'present', homeRoot: false, configuredScope: 'erp-demo', suggestedScope: 'erp-demo' }, profile: { available: [{ id: 'core:solo', version: 1 }] },
-  policy: { state: 'current' }, sandbox: { realm: 'bubblewrap', selfTest: 'ok', usernsRestricted: false }, model: { connections: 1 }, check: { state: 'not-run' },
+  folder: { installation: 'present', homeRoot: false, configuredScope: 'erp-demo', suggestedScope: 'erp-demo' }, profile: { available: [{ id: 'core:solo', version: 1 }],
+    selected: { id: 'core:solo', version: 1 } }, policy: { state: 'current' }, sandbox: { realm: 'bubblewrap', selfTest: 'ok', usernsRestricted: false }, model: { connections: 1 }, check: { state: 'not-run' },
   families: { instructions: { file: 'present', bridges: [] } } };
 const registry = new SetupStageRegistry([PROJECT_INSTRUCTION_SETUP_FAMILY]);
 function surface(apply: (stage: SetupStage) => SetupApplyResult['status'], observation: SetupObservation = base) {
@@ -141,11 +160,23 @@ describe('I-S3 surface: refusals are typed and name the stage; the window never 
   it('the window closes for a terminal-taking stage (the final check runs the human doctor) instead of calling the apply port inside it', async () => {
     const run = surface(() => 'applied');
     const controller = createSetupController({ context: run.context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
-    await controller.step('core:solo');
     expect(controller.model().rows.find(row => row.startsWith('>'))).toMatch(/Final check/u);
     expect(controller.model().options.map(option => option.id)).toEqual(['apply', 'later']);
     expect(await controller.step('apply')).toBeNull();
     expect(run.applied).toEqual([]);
+  });
+
+  it('SOLO-PROFILE: a person who answers solo applies it like any profile, through the apply port (it was never applied before)', async () => {
+    const unsaved = { ...base, profile: { available: base.profile.available } };
+    const run = surface(() => 'applied', unsaved);
+    const controller = createSetupController({ context: run.context, root: '/x', locale: 'en', observed: { observation: unsaved, registry }, flags: { json: false, yes: false } });
+    await controller.step('core:solo');
+    expect(controller.model().rows.find(row => row.startsWith('>'))).toMatch(/Who uses this installation · ready/u);
+    expect(controller.model().options.map(option => option.id)).toEqual(['apply', 'later']);
+    await controller.step('apply');
+    expect(run.applied).toEqual(['identity-profile.preview']);
+    // The fake observation still has no saved profile: the stage is put off for this window, never offered again in a loop.
+    expect(controller.model().rows.find(row => row.startsWith('>'))).toMatch(/Final check/u);
   });
 
   it('an applied stage that is still open after the fresh observation is put off, never offered again in a loop', async () => {
@@ -157,9 +188,7 @@ describe('I-S3 surface: refusals are typed and name the stage; the window never 
     await controller.step('apply');
     expect(run.applied).toEqual(['config.set']);
     // The observation still says "not configured" (a fake port): the stage is put off; the window moves on.
-    expect(controller.model().rows.find(row => row.startsWith('>'))).toMatch(/Who uses/u);
-    await controller.step('core:solo');
-    // No model yet: the window offers to start `models connect` (its own picker), or not now.
+    // The solo profile is already saved (observed done), so the window goes on to the model. No model yet: the window offers to start `models connect` (its own picker), or not now.
     expect(controller.model().rows.find(row => row.startsWith('>'))).toMatch(/Model connection/u);
     expect(controller.model().options.map(option => option.id)).toEqual(['connect', 'later']);
     expect(await controller.step('connect')).toBeNull();
