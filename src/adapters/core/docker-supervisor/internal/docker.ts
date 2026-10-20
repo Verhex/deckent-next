@@ -9,6 +9,7 @@ import { identifyDockerRequest } from './identity.js';
 import { runNodeDockerCommand, DockerCommandFailure, type DockerCommandRunner } from './command.js';
 import { dockerConnectionMounts } from './connection.js';
 import { assertDockerMountsMatch, assertReadOnlyMountSource, type DockerExpectedMount } from './mounts.js';
+import { dockerNodeHeapEnvironment } from './node-heap.js';
 type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; Mounts?: unknown; State: { Status: string; ExitCode: number; StartedAt?: unknown; FinishedAt?: unknown } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
  * Only an application with durable dispatch ownership may call execute; this adapter does not grant policy.
@@ -185,7 +186,7 @@ export class DockerSupervisor implements ExecutionSupervisor {
         '--pids-limit', String(o.pids), '--memory', String(o.memoryBytes), '--memory-swap', String(o.memoryBytes), '--cpus', String(o.cpus),
         '--ipc', 'private', '--cgroupns', 'private', '--user', `${o.uid}:${o.gid}`,
         '--mount', `type=bind,src=${workspace},dst=/workspace`, '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
-        ...inputMounts, ...readOnlyMounts, ...connectionMounts, '--workdir', '/workspace', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], o.controlTimeoutMs);
+        ...inputMounts, ...readOnlyMounts, ...connectionMounts, ...dockerNodeHeapEnvironment(o.memoryBytes), '--workdir', '/workspace', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], o.controlTimeoutMs);
     } catch {
       const existing = await this.inspect(handle, digest);
       if (existing) return this.result(handle, existing);
