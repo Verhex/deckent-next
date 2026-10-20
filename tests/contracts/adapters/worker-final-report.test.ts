@@ -54,13 +54,14 @@ const principal = { id: 'fixture' } as VerifiedPrincipal;
 
 describe.skipIf(!imageId)('real Docker final report custody', () => {
   it.each([
-    ['claude', 'valid', 'reported'], ['codex', 'valid', 'reported'],
+    ['claude', 'valid', 'reported'], ['codex', 'valid', 'reported'], ['claude', 'typed', 'reported'], ['codex', 'typed', 'reported'],
     ['claude', 'invalid', 'invalid'], ['claude', 'oversized', 'oversized'], ['claude', 'missing', 'missing'],
     ['cursor', 'valid', 'unsupported'], ['claude', 'unsupported', 'unsupported'],
   ])('%s %s reaches the sealed transcript as %s', async (provider, variant, expected) => {
     const root = await mkdtemp(join(tmpdir(), 'dn-report-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
     const workspace = join(root, 'work'); await mkdir(workspace);
-    const value = variant === 'invalid' ? { ...valid, accepted: true } : variant === 'oversized' ? { ...valid, summary: 'x'.repeat(40000) } : valid;
+    const value = variant === 'invalid' ? { ...valid, accepted: true } : variant === 'oversized' ? { ...valid, summary: 'x'.repeat(40000) }
+      : variant === 'typed' ? { ...valid, checks: [{ command: 'lint', outcome: 'failed', checkId: 'lint', role: 'acceptance' }, { command: 'npm test', outcome: 'passed', ...(provider === 'codex' ? { checkId: null, role: null } : {}) }] } : valid;
     const compiled = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template, { schemaVersion: 3, provider, cliVersion: 'fixture-1',
       discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended', model: 'fixture-model', prompt: 'Work',
       ...(provider === 'claude' ? { maxTurns: 7 } : {}) }));
@@ -101,6 +102,11 @@ if (${JSON.stringify(variant !== 'missing')}) console.log(JSON.stringify(${provi
     if (expected === 'reported') {
       expect(final).toMatchObject({ status: 'reported', report: { changedFiles: ['note.txt'], summary: 'Completed [REDACTED]', openIssues: ['Bearer [REDACTED]'] } });
       expect(result.stdout).not.toContain(fixtureSecret); expect(result.stdout).not.toContain('abc.def.ghi');
+      // PRE-1: a typed failed acceptance check leaves the real bridge intact, so the domain refuses the task (owner D5a).
+      if (variant === 'typed' && final.status === 'reported') {
+        expect(final.report.checks).toEqual([{ command: 'lint', outcome: 'failed', checkId: 'lint', role: 'acceptance' }, { command: 'npm test', outcome: 'passed' }]);
+        expect(workerReportRefusal(workerReportEvidence(final))).toBe('declared-check-not-passed');
+      }
     } else expect(final).toMatchObject({ status: 'unavailable', reason: expected });
     const dropped = received.filter(e => e.kind === 'dropped').reduce((n, e) => n + (e.kind === 'dropped' ? e.count : 0), 0);
     expect(dropped).toBe(['invalid', 'oversized'].includes(expected!) ? 1 : 0);
@@ -140,4 +146,49 @@ it('does not convert duplicate, malformed or truncated sealed records into a rep
 it('rejects an array masquerading as a check outcome before the report leaves the bridge', () => {
   expect(bridge.validateFinalReport({ ...report, checks: [{ command: 'npm test', outcome: ['passed'] }] }, []))
     .toEqual({ status: 'unavailable', reason: 'invalid' });
+});
+
+// PRE-1 KABUL-DURUSTLUK: the owner D5a typed check (`checkId`, `role`) must survive the bridge, or a failed required check can never block.
+// The standalone bridge's report schema and collector are mounted-file internals with no package export (no host imports there).
+// eslint-disable-next-line no-restricted-imports
+import { createFinalReportJsonSchema, createCodexState, createNormalizerState, createNativeLineObserver, finalReportCollector } from '#adapters/core/native-connection/internal/worker.js';
+import { workerReportEvidence, workerReportRefusal, workerReportLimits } from '#domain/index.js';
+const refusalOf = (value: unknown) => {
+  const result = bridge.validateFinalReport(value, []);
+  return workerReportRefusal(workerReportEvidence({ schemaVersion: 1, kind: 'native-worker-report', ...result } as Parameters<typeof workerReportEvidence>[0]));
+};
+const typedCheck = (outcome: string, role?: string) => ({ command: 'node scripts/lint-arch.mjs', outcome, checkId: 'lint-arch', ...(role ? { role } : {}) });
+it('keeps a typed acceptance check through the bridge so its failure refuses the task as declared-check-not-passed', () => {
+  const failed = { ...report, checks: [typedCheck('failed', 'acceptance')] };
+  expect(bridge.validateFinalReport(failed, [])).toEqual({ status: 'reported', report: failed });
+  expect(workerFinalReportSchema.safeParse(failed).success).toBe(true);
+  expect(refusalOf(failed)).toBe('declared-check-not-passed');
+  // The last outcome of an acceptance check decides; a re-run that passed clears an earlier failure.
+  expect(refusalOf({ ...report, checks: [typedCheck('failed', 'acceptance'), typedCheck('passed', 'acceptance')] })).toBeNull();
+  expect(refusalOf({ ...report, checks: [typedCheck('passed', 'acceptance'), typedCheck('not-run', 'acceptance')] })).toBe('declared-check-not-passed');
+  // Negatives: a passing acceptance check, an exploratory failure and an untyped failure stay claims (owner D5a), never a refusal.
+  expect(refusalOf({ ...report, checks: [typedCheck('passed', 'acceptance')] })).toBeNull();
+  expect(refusalOf({ ...report, checks: [typedCheck('failed', 'exploratory')] })).toBeNull();
+  expect(refusalOf({ ...report, checks: [{ command: 'node scripts/lint-arch.mjs', outcome: 'failed' }] })).toBeNull();
+  // The bridge stays as strict as the domain: unknown roles, empty or oversized ids and extra keys are invalid.
+  for (const check of [typedCheck('failed', 'required'), { ...typedCheck('failed', 'acceptance'), checkId: '' },
+    { ...typedCheck('failed', 'acceptance'), checkId: 'x'.repeat(workerReportLimits.checkIdChars + 1) }, { ...typedCheck('passed', 'acceptance'), accepted: true }]) {
+    expect(bridge.validateFinalReport({ ...report, checks: [check] }, [])).toEqual({ status: 'unavailable', reason: 'invalid' });
+    expect(workerFinalReportSchema.safeParse({ ...report, checks: [check] }).success).toBe(false);
+  }
+});
+it('offers checkId and role in both report schemas and turns a strict-schema null into absence before sealing', () => {
+  const loose = createFinalReportJsonSchema(workerReportLimits, false) as { properties: { checks: { items: { properties: Record<string, unknown>; required: string[] } } } };
+  expect(Object.keys(loose.properties.checks.items.properties)).toEqual(['command', 'outcome', 'checkId', 'role']);
+  expect(loose.properties.checks.items.required).toEqual(['command', 'outcome']);
+  const strict = createFinalReportJsonSchema(workerReportLimits, true) as typeof loose;
+  expect(strict.properties.checks.items.required).toEqual(['command', 'outcome', 'checkId', 'role']);
+  const collect = (checks: unknown[]) => {
+    const collector = finalReportCollector('codex', [], workerReportLimits);
+    const observer = createNativeLineObserver('codex', createNormalizerState([]), createCodexState(), () => {}, collector);
+    observer.observe(Buffer.from(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ ...report, checks, handoff: null, exit: null }) } }) + '\n'));
+    return collector.finish();
+  };
+  expect(collect([{ command: 'npm test', outcome: 'passed', checkId: null, role: null }])).toEqual({ status: 'reported', report });
+  expect(collect([typedCheck('failed', 'acceptance')])).toEqual({ status: 'reported', report: { ...report, checks: [typedCheck('failed', 'acceptance')] } });
 });
