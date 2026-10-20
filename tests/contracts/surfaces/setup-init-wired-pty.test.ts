@@ -107,7 +107,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     await access(cli);
     const f = await fixture();
     const run = await f.pty('full-init', [process.execPath, cli, 'init'], [['Enter confirm', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'], ['> 6. Permissions', '1\r'],
-      ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 9. Model connection', '2\r'], ['> 11. Project instructions', '2\r'], ['> 12. Final check', '1\r'], ['Enter confirm', '1\r']]);
+      ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 9. Model connection', '2\r'], ['> 11. Project instructions', '2\r'], ['> 12. Final check', '1\r'], ['Final check: applied; observed again.', '1\r']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.status, run.output.slice(-2000)).toBe(0);
     // The human doctor ran on the plain terminal between two windows (its summary line, then the window again).
