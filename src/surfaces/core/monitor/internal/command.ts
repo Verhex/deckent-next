@@ -101,5 +101,6 @@ export async function runMonitorSlash(root: string, args: string, context: Monit
   if (parsed.once || parsed.json || parsed.help || parsed.language || parsed.noColor) return [t('monitor.slash.usage', {}, locale)];
   if (!context.inspectMonitor) throw ErrorRegistry.createError('MONITOR_UNAVAILABLE');
   const snapshot = await context.inspectMonitor(root, options, { schemaVersion: 1, ...(parsed.install ? { install: parsed.install } : {}) });
-  return renderMonitorText(snapshot, { locale, width, ascii: prefersAsciiGlyphs(context.env ?? process.env), filters: filtersOf(parsed), verbose: parsed.verbose }).split('\n');
+  return renderMonitorText(snapshot, { locale, width, ascii: prefersAsciiGlyphs(context.env ?? process.env), filters: filtersOf(parsed), verbose: parsed.verbose,
+    slash: true }).split('\n');
 }

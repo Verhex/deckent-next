@@ -6,8 +6,10 @@ import { MONITOR_TABS, tabLabel } from './labels.js';
 import { buildMonitorView, filterSnapshot, type MonitorFilters } from './view.js';
 
 export interface MonitorTextOptions { readonly locale: Locale; readonly width: number; readonly ascii: boolean; readonly filters?: MonitorFilters;
-  /** `--verbose`: every named scope line (J3); otherwise the display registry's bound. */
-  readonly verbose?: boolean }
+  /** `--verbose`: every named scope line (J3) and every worker's full detail; otherwise the display registry's bound and the worker table only. */
+  readonly verbose?: boolean;
+  /** PRE-5: the summary names the command that prints the worker detail it leaves out: `/monitor --verbose` in the terminal, else the CLI form. */
+  readonly slash?: boolean }
 
 /** Detail lines wrap (a summary or a model line must stay readable whole); table lines are clipped by the layout instead. */
 export function wrapDetail(lines: readonly MonitorLine[], width: number): MonitorLine[] {
@@ -34,6 +36,8 @@ export function renderMonitorText(snapshot: MonitorSnapshot, options: MonitorTex
       ? [block, ...block.rows.filter(row => row.detailInText)
         .flatMap(row => [{ kind: 'line' as const, line: [span('')] }, ...wrapDetail(row.detail(), width).map((line): MonitorBlock => ({ kind: 'line', line }))])] : [block]) : view.tabs[tab];
     lines.push(...flattenBlocks(blocks, width, ellipsis, options.ascii).map(entry => entry.line));
+    if (tab === 'workers' && !options.verbose && view.tabs[tab].some(block => block.kind === 'table' && block.rows.some(row => row.detailOnVerbose)))
+      lines.push([span(`  ${options.slash ? t('monitor.text.detailHintSlash', {}, options.locale) : t('monitor.text.detailHint', {}, options.locale)}`, 'muted')]);
   }
   lines.push([span('')], [span(t('monitor.notice', {}, options.locale))]);
   return wrapDetail(lines, width).map(line => lineText(line).trimEnd()).join('\n');

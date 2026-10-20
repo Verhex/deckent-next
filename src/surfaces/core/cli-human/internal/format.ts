@@ -50,6 +50,22 @@ export function formatClock(epochMs: number | null | undefined, locale: Locale, 
   return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}`;
 }
 
+/** A US-dollar amount in the locale's own separators (`$0.1075`, `0,1075 USD`); unknown reads as the unknown word, never `$—` or `bilinmiyor USD`. */
+export function formatUsd(amount: number | null | undefined, locale: Locale, digits = 4): string {
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) return t('cli.human.unknown', {}, locale);
+  return t('cli.human.usd', { n: formatDecimal(amount, locale, digits) }, locale);
+}
+
+/** A worker-reported or engine word that may be absent: empty or the engine's `unknown` sentinel reads in the person's language. */
+export function formatKnown(value: string | null | undefined, locale: Locale): string {
+  return value === null || value === undefined || value === '' || value === 'unknown' ? t('cli.human.unknown', {}, locale) : value;
+}
+
+/** A Run or worker that recorded no title (a delivery-queue verify Run records none): its task and kind, never "untitled work". */
+export function untitledWorkName(taskId: string, kind: string, locale: Locale): string {
+  return t('cli.human.untitledWork', { task: taskId, kind }, locale);
+}
+
 /** Lists a person reads: items that wait for someone first, then newest to oldest; stable for equal keys. */
 export function orderPendingFirst<T>(items: readonly T[], key: { readonly pending: (item: T) => boolean; readonly time: (item: T) => number | null | undefined }): T[] {
   const time = (item: T) => { const value = key.time(item); return value === null || value === undefined || !Number.isFinite(value) ? -Infinity : value; };

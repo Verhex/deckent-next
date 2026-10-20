@@ -9,7 +9,7 @@ Onayları incele
 İş: Test sonucunu açıkla (görev metni)
 Değerlendirme: ret
 Boş yama: dosya değişikliği yok
-Kullanım (mühürlü işçi bildirimi): 7 tur · token 12000/3400 · $0.4321
+Kullanım (mühürlü işçi bildirimi): 7 tur · token 12000/3400 · 0,4321 USD
 Başlangıç: zaman kaydı yok
 Bitiş: zaman kaydı yok
 İddia — son rapor (kabul kanıtı değildir): tests passed

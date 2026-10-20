@@ -357,7 +357,7 @@ describe('monitor v1.1: first failure, timeline, map, diagnostics, order', () =>
     expect(runs).toMatch(/run-stopped[\s│]+Stopped[\s│]+—[\s│]+—[\s│]+unknown[\s│]+0\/2 accepted[\s│]+rolled back[\s│]/);
     expect(runs).toMatch(/run-not-admitted[\s│]+On hold \(system\)[\s│]+not admitted yet[\s│]+1 h 33 min[\s│]+running[\s│]/);
     const workers = text.slice(text.indexOf('── Workers'), text.indexOf('── Approvals'));
-    expect(workers).toMatch(/run-broken\/build .*exited 1 .*claude\/model-alpha-2/);
+    expect(workers).toMatch(/run-broken\/build .*exit 1 .*claude\/model-alpha-2/);
   });
 });
 
@@ -625,6 +625,11 @@ for (const locale of ['en', 'tr'] as const) it(`config help derives its number f
   expect(configHint).toMatch(locale === 'en' ? /^2\s+Settings:/ : /^2\s+Ayarlar:/);
 });
 
+/** The same human detail on a finished worker (run-broken/build exited 1): nothing waits for a person, so `--once` keeps it behind --verbose. */
+function finishedHumanSnapshot(snapshot: ReturnType<typeof humanWorkerSnapshot>) {
+  const install = snapshot.installs[0]!, human = install.workers[0]!;
+  return { ...snapshot, installs: [{ ...install, workers: [{ ...fullSnapshot.installs[0]!.workers[2]!, human: human.human, usage: human.usage, usageEvidence: human.usageEvidence }] }] };
+}
 function humanWorkerSnapshot() {
   const install = fullSnapshot.installs[0]!, base = install.workers[0]!;
   return { ...fullSnapshot, installs: [{ ...install, workers: [{ ...base, usageEvidence: 'sealed' as const, usage: { ...base.files!.usage!, turns: 7 },
@@ -645,7 +650,13 @@ it.each(['en', 'tr'] as const)('H1: one human detail in text/JSON/Enter: rejecti
   expect(detail).toContain(t('monitor.verdict.rejected', {}, locale));
   expect(detail).toContain(locale === 'tr' ? 'zaman kaydı yok' : 'no time record');
   expect(detail).toContain(locale === 'tr' ? 'mühürlü' : 'sealed');
+  // PRE-5: `--once` is a summary; a finished worker's detail (report, transcript, brief) is behind --verbose, and the summary says how to get it.
+  // A held worker (it waits for a person) keeps its detail in the summary.
   expect(surface.renderMonitorText(snapshot, { locale, width: 80, ascii: true })).toContain('tests passed');
+  const finished = finishedHumanSnapshot(snapshot), summary = surface.renderMonitorText(finished, { locale, width: 80, ascii: true });
+  expect(summary).not.toContain('tests passed'); expect(summary).toContain('Test sonucunu');
+  expect(surface.renderMonitorText(finished, { locale, width: 120, ascii: true })).toContain('deckent monitor --once --verbose');
+  expect(surface.renderMonitorText(finished, { locale, width: 80, ascii: true, verbose: true })).toContain('tests passed');
   const view = mount({ load: async () => snapshot, locale, columns: 80, rows: 24 });
   try {
     await until(() => view.stdout.frame.includes(t('monitor.title', {}, locale)), 'monitor loaded');
@@ -676,14 +687,18 @@ it('H1 missing transcript/title and denied content say what is missing, live usa
   const worker = { ...base.workers[0]!, usageEvidence: 'live' as const, human: { ...base.workers[0]!.human!, title: null, titleEvidence: 'missing' as const,
     transcript: { state: 'missing' as const, excerpt: [], truncated: false }, finalReport: null } };
   const snapshot = { ...sample, installs: [{ ...base, workers: [worker] }] };
-  const text = surface.renderMonitorText(snapshot, { locale: 'tr', width: 80, ascii: true });
-  expect(text).toContain('başlık yok'); expect(text).toContain('Transcript kaydı yok'); expect(text).toContain('canlı işçi bildirimi');
+  const text = surface.renderMonitorText(snapshot, { locale: 'tr', width: 80, ascii: true, verbose: true });
+  expect(text).not.toContain('başlık yok'); expect(text).toContain('başlık kaydı yok'); expect(text).toContain('Transcript kaydı yok'); expect(text).toContain('canlı işçi bildirimi');
   const root = await project(); const handlers = { async inspectMonitor() { return snapshot; } };
-  expect((await cli(['monitor', '--once', '--lang', 'tr'], handlers, root)).out).toContain('canlı işçi bildirimi');
+  expect((await cli(['monitor', '--once', '--verbose', '--lang', 'tr'], handlers, root)).out).toContain('canlı işçi bildirimi');
+  const finished = finishedHumanSnapshot(snapshot), quiet = { async inspectMonitor() { return finished; } };
+  expect((await cli(['monitor', '--once', '--lang', 'tr'], quiet, root)).out).not.toContain('canlı işçi bildirimi');
+  expect((await cli(['monitor', '--once', '--verbose', '--lang', 'tr'], quiet, root)).out).toContain('canlı işçi bildirimi');
+  expect((await monitorSlash(root, '', { root, ...quiet }, { env: { HOME: join(root, 'h') } }, 'tr', 80)).join('\n')).toContain('/monitor --verbose');
   expect(JSON.parse((await cli(['monitor', '--json'], handlers, root)).out)).toEqual(snapshot);
-  expect((await monitorSlash(root, '', { root, ...handlers }, { env: { HOME: join(root, 'h') } }, 'tr', 80)).join('\n')).toContain('başlık yok');
+  expect((await monitorSlash(root, '--verbose', { root, ...handlers }, { env: { HOME: join(root, 'h') } }, 'tr', 80)).join('\n')).toContain('başlık kaydı yok');
   const denied = { ...snapshot, installs: [{ ...base, workers: [{ ...worker, human: { ...worker.human, transcript: { state: 'denied' as const, excerpt: [], truncated: false }, patch: { ...worker.human.patch, state: 'denied' as const, files: [], fileCount: null } } }] }] };
-  const deniedText = surface.renderMonitorText(denied, { locale: 'tr', width: 80, ascii: true });
+  const deniedText = surface.renderMonitorText(denied, { locale: 'tr', width: 80, ascii: true, verbose: true });
   expect(deniedText).toContain('policy izin vermedi'); expect(deniedText).not.toContain('canlı işçi bildirimi');
   expect(deniedText).not.toContain('tests passed');
 });
@@ -693,7 +708,7 @@ it('H1 token absence stays unknown; an explicit sealed zero remains zero', () =>
   for (const recorded of [false, true]) {
     const events: WorkerEvent[] = recorded ? [{ schemaVersion: 1, sequence: 1, atMs: 1, kind: 'usage', tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: null } }] : [];
     const worker = { ...base, usage: summarizeWorkerEvents(events) };
-    const text = surface.renderMonitorText({ ...sample, installs: [{ ...install, workers: [worker] }] }, { locale: 'tr', width: 120, ascii: true });
+    const text = surface.renderMonitorText({ ...sample, installs: [{ ...install, workers: [worker] }] }, { locale: 'tr', width: 120, ascii: true, verbose: true });
     expect(text).toContain(recorded ? 'token 0/0' : 'token —/—');
   }
 });

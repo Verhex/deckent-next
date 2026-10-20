@@ -2,6 +2,7 @@ import { identityCommand } from './identity.js';
 import { initRegistryCommand } from './registry.js';
 import { isAbsolute } from 'node:path';
 import { ErrorRegistry, emit, formatValue, loadConfigLanguage, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { policyPreviewText } from './policy-preview.js';
 import type { InstallationPreview, InstallationEvidencePreview, InstallationPublicationApplication } from '#engine/index.js';
 import type { InstallationCommandContext } from './context.js';
 
@@ -147,7 +148,8 @@ export async function initCommand(argv: readonly string[], context: Installation
     }
     if (!context.previewPolicyTemplateInstallation) throw ErrorRegistry.createError('CLI_USAGE');
     const result = await context.previewPolicyTemplateInstallation(root, scopeId);
-    emit(result, { ...sinks, json, render: value => formatValue(value) });
+    emit(result, { ...sinks, json, render: value => [policyPreviewText(value, locale),
+      ...serviceIdentityText((value as { serviceIdentity?: Parameters<typeof serviceIdentityText>[0] }).serviceIdentity, locale)].join('\n') });
     return;
   }
   if (!profilePath) throw ErrorRegistry.createError('INSTALL_PROFILE_REQUIRED');
