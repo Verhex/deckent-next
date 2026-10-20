@@ -90,7 +90,7 @@
   "cli.run.report.withheld": "  {count} attempt(s) not shown: you may not read their output.",
   "cli.run.report.allMeasured": "  Every axis was measured.",
   "cli.run.report.comparison": "Comparison: {count} recommendation(s) (details: --verbose)",
-  "cli.run.report.more": "Full ids, profiles and every raw value: --verbose",
+  "cli.run.report.more": "Full ids, profiles and every measured axis per attempt: --verbose",
   "cli.run.report.hint": "Details: deckent report --run <short id>",
   "cli.run.report.pick": "Choose a Run for the report (scope {scope})",
   "cli.run.report.again": "Same report from a script, without the picker: {command}",

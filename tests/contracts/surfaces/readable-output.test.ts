@@ -136,3 +136,16 @@ it.each(['en', 'tr'] as const)('init policy --preview reads as a plan a person c
   expect(await main(['init', 'policy', '--scope', 'demo', '--preview', '--json'], { root, env: { HOME: join(root, 'h') }, initialize() {}, stdout: json.stream, ...handlers } as never)).toBe(0);
   expect(JSON.parse(json.text())).toEqual(PREVIEW);
 });
+
+it('the re-run command after a pick names an id prefix that is unique among every Run --run resolves against, not only the offered ones', async () => {
+  const root = await project({ terminal: { scopeId: 's' } });
+  // 21 Runs: the picker offers the first 20 (run.json list.runsShown); the 21st shares the first eight characters with the picked one.
+  const ids = [`aaaaaaaa1${'0'.repeat(55)}`, ...Array.from({ length: 19 }, (_, index) => `b${String(index).padStart(63, '0')}`), `aaaaaaaa2${'0'.repeat(55)}`];
+  const views = new Map(ids.map(runId => [runId, { ...verifyRun(), runId }]));
+  card.interactive = true; card.answers = [ids[0]!];
+  const out = sink();
+  expect(await main(['report', '--scope', 's', '--lang', 'en'], { root, env: { HOME: join(root, 'h'), NO_COLOR: '1' }, initialize() {}, stdout: out.stream,
+    async inspectSurfaceRunIds() { return ids; }, async inspectRun(_root: string, query: { runId: string }) { return { schemaVersion: 1, layout: {}, run: views.get(query.runId) ?? null }; } } as never)).toBe(0);
+  expect(card.asked[0]!.options).toHaveLength(20);
+  expect(out.text()).toContain(`deckent report --scope s --run ${ids[0]!.slice(0, 9)}`);
+});

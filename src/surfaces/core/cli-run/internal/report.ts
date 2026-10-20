@@ -107,7 +107,7 @@ export async function reportCommand(argv: readonly string[], context: RunCommand
     if (!picked) return;
     runId = picked.runId;
     // PRE-5: a pick is not scriptable; the person gets the command that prints the same report without a picker.
-    io.print(t('cli.run.report.again', { command: ['deckent report --scope', scope.scopeId, '--run', shownId(runId, offered.map(run => run.runId)), ...(verbose ? ['--verbose'] : [])].join(' ') }, locale));
+    io.print(t('cli.run.report.again', { command: ['deckent report --scope', scope.scopeId, '--run', shownId(runId, runs.map(run => run.runId)), ...(verbose ? ['--verbose'] : [])].join(' ') }, locale));
   }
   const result = await context.inspectRun!(context.root ?? process.cwd(), { schemaVersion: 1, scopeId: scope.scopeId, runId }, { env: context.env ?? process.env });
   if (!result.run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
