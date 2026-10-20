@@ -24,6 +24,11 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   transport, backup and restore do not run on macOS either; platform tests skip them with a `[requires Linux …]` tag.
 - **The terminal screen layout has not been tried** on physical Windows Terminal, macOS Terminal, VS Code's terminal or tmux.
   *Impact:* the input bar, windows and colors may misbehave there. *Workaround:* use a plain Linux or WSL2 terminal.
+- **Copying with the mouse uses your terminal's clipboard sequence (OSC 52)** and was proven only on a Linux pseudo-terminal, not on
+  physical Windows Terminal, WSL inside it, xterm, tmux or iTerm2. Some terminals block it (iTerm2 until "Applications in terminal may
+  access clipboard" is on; tmux needs `set -g set-clipboard on`). Drag selection has no autoscroll and no double/triple click.
+  *Impact:* after "Copied … characters" the paste may be empty. *Workaround:* hold Shift (Option in iTerm2) and drag to use the
+  terminal's own selection, or set `terminal.layout` to `inline`.
 - **arm64 is not shipped.** The locked bubblewrap bundle ships for x86_64; an arm64 build check is not arm64 runtime proof.
   *Workaround:* use x86_64.
 - **No npm package yet.** You install from source (see [Get started](../README.md#get-started)).

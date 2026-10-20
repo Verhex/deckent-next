@@ -3,7 +3,7 @@ import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { render, renderToString, Box, Static, Text, useApp, useStdout, useWindowSize, type Instance } from 'ink';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
-  ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem } from '#surfaces/core/terminal-work/index.js';
+  ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
   type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
@@ -19,7 +19,7 @@ import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type WindowNote,
   FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT, DecisionArmLabelsContext, type DecisionArmLabels,
-  WheelContext, mouseFilteredInput, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, type WheelSource } from '#surfaces/core/terminal-window/index.js';
+  WheelContext, mouseFilteredInput, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, osc52Copy, PointerContext, usePointerCopy, CopiedNotice, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { formatContextTokens, span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
@@ -151,6 +151,7 @@ export interface WorklineProps {
   readonly decisionArmMs?: number;
   /** The full window's mouse wheel (SGR reports taken out of the input by `runTerminalWorkline`). */
   readonly wheel?: WheelSource;
+  /** TERM-POLISH: the full window's left-button pointer (click-and-drag selection) and the clipboard write of the selection (OSC 52). */ readonly pointer?: PointerSource; readonly copyText?: (text: string) => void;
   /** The opening frame drawn as the first block of the full-window conversation (until `/clear`). */
   readonly startup?: WorklineStartup;
   /** The full-window conversation as text, read once after the view closes so it is left in the terminal's own scrollback. */
@@ -198,6 +199,8 @@ export function WorklineApp(props: WorklineProps) {
   // Transcript search (Ctrl+F while scrolled back) holds the typed keys while it is open; the composer keeps its draft.
   const [searchOpen, setSearchOpen] = useState(false), searchFocus = useRef(false);
   const onSearch = useCallback((open: boolean) => { searchFocus.current = open; setSearchOpen(open); }, []);
+  // TERM-POLISH mouse selection; after a copy the fixed-height hint row says so for a moment (nothing moves).
+  const { selection: pointerSelection, copied } = usePointerCopy(props.pointer, props.copyText);
   const [bannerShown, setBannerShown] = useState(true);
   const { panel, state, execute, decide } = useWorklinePanel(props.context, props.sessions);
   const busy = state.phase === 'running' || state.phase === 'cancelling', cancelling = state.phase === 'cancelling';
@@ -625,7 +628,7 @@ export function WorklineApp(props: WorklineProps) {
   const finishResume = (choice: number | null) => { panel.choose(state.picker?.pickerHandle, choice === null ? null : String(choice)); };
   // TERMINAL-SABIT-DUZEN: the full-window conversation, laid out per row with the providers `Static` gave each row.
   const renderRow = (row: LedgerRow) => <WorklinePaletteProvider palette={palette}><RenderGlyphsContext.Provider value={glyphs}>
-    <HumanTextContext.Provider value={props.knownSecrets}><LedgerEntryRow entry={row.entry} labels={ledgerLabels} /></HumanTextContext.Provider></RenderGlyphsContext.Provider></WorklinePaletteProvider>;
+    <HumanTextContext.Provider value={props.knownSecrets}><LedgerEntryRow entry={row.entry} labels={ledgerLabels} spaceBefore={rowSpaceBefore(buffer, row)} /></HumanTextContext.Provider></RenderGlyphsContext.Provider></WorklinePaletteProvider>;
   // The conversation opens with the opening frame (until `/clear`) and the workline's own how-to line (how to cancel and quit), once, at its top.
   const startup = props.startup, bannerLine = labels.banner, bannerOf = useMemo(() => fullscreenMode ? (columns: number) => {
     const frame = bannerShown && startup && startup.banner !== 'off' ? startupFrame({ ...startup, clear: false }, palette, columns, 0) : '';
@@ -646,8 +649,8 @@ export function WorklineApp(props: WorklineProps) {
     onSubmit={(text, mentioned) => void submit(text, mentioned)} onCancel={cancel} onExit={() => { panel.close(); exit(); }}
     {...(props.inputHistory ? { history: props.inputHistory } : {})} {...(props.mentions ? { mentions: props.mentions } : {})}
     {...(props.mentionDelayMs === undefined ? {} : { mentionDelayMs: props.mentionDelayMs })} />;
-  const hintNode = <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} />;
-  const liveNode = live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool}
+  const hintNode = copied !== null ? <CopiedNotice count={copied} label={labels.viewport?.copied} /> : <WindowFocusHint composer={labels.focus?.composer} window={labels.focus?.window} fallback={labels.hint} />;
+  const liveNode = live ? <AssistantLive tail={live.step.liveTail} narration={live.step.narration} labels={labels.render} lead={live.lead} activeTool={live.step.activeTool} spaceBefore={isToolStep(buffer.tail.at(-1))}
     waiting={live.step.waiting} reasoningPreview={reasoning.show ? live.step.reasoningPreview : []} /> : null;
   const windowsNode = <>
     <PermissionModeKeys active={!busy && Boolean(props.permissionMode)} onCycle={() => void mode.cycle()} />
@@ -678,7 +681,7 @@ export function WorklineApp(props: WorklineProps) {
   const activityNode = activeLabels && stripItems.length ? <ActiveWorkSummary items={stripItems} labels={activeLabels} /> : fullAccessNode ?? <Text> </Text>;
   const layout = fullscreenMode
     ? <FullscreenWorkline
-      viewport={<WheelContext.Provider value={props.wheel ?? null}><ChatViewport blocks={transcript} live={liveNode} active={!stripFocused} labels={labels.viewport ?? NEUTRAL_VIEWPORT_LABELS} onSearch={onSearch} /></WheelContext.Provider>}
+      viewport={<WheelContext.Provider value={props.wheel ?? null}><PointerContext.Provider value={pointerSelection}><ChatViewport blocks={transcript} live={liveNode} active={!stripFocused} labels={labels.viewport ?? NEUTRAL_VIEWPORT_LABELS} onSearch={onSearch} /></PointerContext.Provider></WheelContext.Provider>}
       above={<>
         {activeLabels ? <ActiveWorkStrip items={stripItems} labels={activeLabels} rows={activeWorkRows(size.rows)} focused={stripFocused} onFocus={focusStrip} onOpen={openActive} collapsed /> : null}
         {windowsNode}</>}
@@ -686,7 +689,7 @@ export function WorklineApp(props: WorklineProps) {
       info={<>{statusNode}{infoRows >= 3 ? activityNode : null}{infoRows >= 2 ? hintNode : null}</>} />
     : <Box flexDirection="column">
       <Static key={buffer.epoch} items={[...buffer.pending]}>
-        {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} />}
+        {row => <LedgerEntryRow key={row.seq} entry={row.entry} labels={ledgerLabels} spaceBefore={rowSpaceBefore(buffer, row)} />}
       </Static>
       <PinnedWorkline enabled={pinnedMode} footer={<>
       {/* The banner wraps (never truncates): on a narrow terminal it still says how to quit; the footer's height is measured, not fixed. */}
@@ -746,12 +749,13 @@ export async function runTerminalWorkline(options: WorklineRunOptions): Promise<
   const fullscreen = out.isTTY === true && props.clearScreen !== false && props.fullscreen !== false;
   const transcriptExit: { current: (() => string) | null } = { current: null };
   if (startup && !fullscreen) writeStartup(out, startup, palette);
-  // Full window on a real TTY: mouse reports are taken out of the input (wheel = scroll, everything else dropped) and reporting is switched
+  // Full window on a real TTY: mouse reports are taken out of the input (wheel = scroll, left drag = select and copy, the rest dropped) and reporting is switched
   // off again on every exit path this process controls (unmount, abort, a thrown error, process exit).
   const realInput = stdin ?? process.stdin, mouse = fullscreen && realInput.isTTY === true ? mouseFilteredInput(realInput) : null;
   const mouseOff = () => { try { out.write(MOUSE_REPORTING_OFF); } catch { /* the terminal is gone */ } };
   const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
-    createElement(WorklineApp, { ...props, fullscreen, ...(fullscreen && startup ? { startup } : {}), transcriptExit, ...(mouse ? { wheel: mouse.wheel } : {}) }));
+    createElement(WorklineApp, { ...props, fullscreen, ...(fullscreen && startup ? { startup } : {}), transcriptExit,
+      ...(mouse ? { wheel: mouse.wheel, pointer: mouse.pointer, copyText: (text: string) => { try { out.write(osc52Copy(text)); } catch { /* the terminal is gone */ } } } : {}) }));
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   // Full window: Ink's alternate screen (left on exit, as vim/htop/the Claude Code fullscreen renderer do) with incremental line updates.
   const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: view }),

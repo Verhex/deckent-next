@@ -167,12 +167,14 @@ describe('full-window Workline on a terminal', () => {
 describe('viewport scroll model', () => {
   const blocks = (sizes: readonly number[]): ViewportBlocks => ({ keys: sizes.map((_, i) => `b${i}`),
     linesOf: index => Array.from({ length: sizes[index] ?? 0 }, (_, line) => `b${index}:${line}`) });
+  // Each drawn line's content position (TERM-POLISH selection anchor): the block key and the line in it.
+  const atOf = (lines: readonly string[]) => lines.map(text => ({ key: text.split(':')[0], line: Number(text.split(':')[1]) }));
   it('follows the end, anchors on scroll back, stays anchored as lines are appended, and returns to follow at the end', () => {
     const three = blocks([5, 5, 5]);
-    expect(viewportLines(three, null, 4)).toEqual({ lines: ['b2:1', 'b2:2', 'b2:3', 'b2:4'], below: null });
+    expect(viewportLines(three, null, 4)).toEqual({ lines: ['b2:1', 'b2:2', 'b2:3', 'b2:4'], at: atOf(['b2:1', 'b2:2', 'b2:3', 'b2:4']), below: null });
     const anchor = scrollViewport(three, null, 4, -6);
     expect(anchor).toEqual({ key: 'b1', line: 0 });
-    expect(viewportLines(three, anchor, 4)).toEqual({ lines: ['b1:0', 'b1:1', 'b1:2'], below: 7 });
+    expect(viewportLines(three, anchor, 4)).toEqual({ lines: ['b1:0', 'b1:1', 'b1:2'], at: atOf(['b1:0', 'b1:1', 'b1:2']), below: 7 });
     // Appending a block below does not move the anchored view.
     expect(viewportLines(blocks([5, 5, 5, 9]), anchor, 4).lines).toEqual(['b1:0', 'b1:1', 'b1:2']);
     expect(scrollViewport(three, anchor, 4, 100)).toBeNull();
@@ -180,7 +182,7 @@ describe('viewport scroll model', () => {
     expect(viewportStart(blocks([2]), 4)).toBeNull();
     // A block that left the bounded history: the oldest line still there.
     expect(viewportLines(blocks([5, 5]), { key: 'gone', line: 3 }, 4).lines[0]).toBe('b0:0');
-    expect(viewportLines(blocks([]), null, 4)).toEqual({ lines: [], below: null });
+    expect(viewportLines(blocks([]), null, 4)).toEqual({ lines: [], at: [], below: null });
   });
   it('searches older/newer lines from the view (colour codes ignored) and jumps between prompt blocks', () => {
     const base = blocks([3, 3, 3, 3]), coloured = { ...base, linesOf: (index: number) => base.linesOf(index).map(line => line === 'b1:1' ? '\u001b[1mB1:1\u001b[22m' : line),
@@ -196,12 +198,13 @@ describe('viewport scroll model', () => {
 });
 
 describe('mouse reports', () => {
-  it('takes wheel notches (with modifiers) out of the input, drops clicks, keeps keys and carries a report cut at the end of a read', () => {
+  it('takes wheel notches (with modifiers) and left clicks out of the input, keeps keys and carries a report cut at the end of a read', () => {
     const read = takeMouseReports('a\u001b[<64;3;4Mb\u001b[<65;3;4M\u001b[<0;1;1M\u001b[<0;1;1mc\u001b[<68;1;1M\u001b');
-    expect(read).toEqual({ text: 'abc\u001b', wheel: [-1, 1, -1], carry: '' });
+    // A left click is a pointer event for the selection (TERM-POLISH), never input text.
+    expect(read).toEqual({ text: 'abc\u001b', wheel: [-1, 1, -1], pointer: [{ kind: 'press', column: 0, row: 0 }, { kind: 'release', column: 0, row: 0 }], carry: '' });
     const cut = takeMouseReports('x\u001b[<65;1');
-    expect(cut).toEqual({ text: 'x', wheel: [], carry: '\u001b[<65;1' });
-    expect(takeMouseReports(';1M\r', cut.carry)).toEqual({ text: '\r', wheel: [1], carry: '' });
+    expect(cut).toEqual({ text: 'x', wheel: [], pointer: [], carry: '\u001b[<65;1' });
+    expect(takeMouseReports(';1M\r', cut.carry)).toEqual({ text: '\r', wheel: [1], pointer: [], carry: '' });
   });
   it('keeps a multi-byte character cut at a read boundary whole (a large paste of Turkish text; the TTY emits Buffers)', async () => {
     const real = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return real; } }) as unknown as NodeJS.ReadStream;

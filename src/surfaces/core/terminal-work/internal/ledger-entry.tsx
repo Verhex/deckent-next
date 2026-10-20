@@ -1,6 +1,6 @@
 import { Box, Text } from 'ink';
 import { useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { type WorkLedgerEntry, fillTemplate, formatRunCardLines, formatWorkerCardLines, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
+import { type LedgerBuffer, type LedgerRow, type WorkLedgerEntry, fillTemplate, formatRunCardLines, formatWorkerCardLines, formatWorkerLine, type WorkerLineLabels } from '#surfaces/core/terminal-ledger/index.js';
 import { AssistantUnitRow, HumanTextRow, projectHumanPickerText, useHumanTextSecrets, useRenderGlyphs, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import { SYSTEM_SUMMARY_ENTRY_ID, SystemSummaryLine } from '#surfaces/core/terminal-window/index.js';
 import { readApprovalDecisionNotice } from './approval-decision-notice.js';
@@ -16,7 +16,33 @@ export interface LedgerEntryLabels {
   readonly workerLine?: WorkerLineLabels;
   readonly render: AssistantRenderLabels;
 }
-export function LedgerEntryRow({ entry, labels }: { readonly entry: WorkLedgerEntry; readonly labels: LedgerEntryLabels }) {
+/** A finished agent tool call: one step of the turn (TERM-POLISH spacing). */
+export function isToolStep(entry: WorkLedgerEntry | undefined): boolean {
+  return entry?.kind === 'chat' && entry.role === 'assistant' && entry.assistant?.kind === 'tool';
+}
+
+/**
+ * The one spacing rule of the conversation (TERM-POLISH, owner 2026-10-20): a row gets one blank line above it when it is a tool step or
+ * follows one, so a tool step stands apart from the answer text before and after it and from the next tool step; consecutive text rows and
+ * the lines inside a row stay together. The live region applies the same rule (`AssistantLive` `spaceBefore`), so a row landing never jumps.
+ */
+export function stepSpaceBefore(previous: WorkLedgerEntry | undefined, entry: WorkLedgerEntry): boolean {
+  return previous !== undefined && (isToolStep(entry) || isToolStep(previous));
+}
+
+/** `stepSpaceBefore` for a buffered row: its neighbour from the kept history, else the bounded tail; none after `/clear`. */
+export function rowSpaceBefore(buffer: LedgerBuffer, row: LedgerRow): boolean {
+  const first = buffer.history[0]?.seq, kept = first !== undefined && row.seq > first ? buffer.history[row.seq - 1 - first] : undefined;
+  const index = buffer.tail.length - 1 - (buffer.nextSeq - row.seq);
+  return stepSpaceBefore(kept?.seq === row.seq - 1 ? kept.entry : index >= 0 ? buffer.tail[index] : undefined, row.entry);
+}
+
+/** One finished conversation row; `spaceBefore` (from `stepSpaceBefore`) puts the blank line above it. */
+export function LedgerEntryRow({ entry, labels, spaceBefore = false }: { readonly entry: WorkLedgerEntry; readonly labels: LedgerEntryLabels; readonly spaceBefore?: boolean }) {
+  return spaceBefore ? <Box flexDirection="column" marginTop={1}><LedgerEntryBody entry={entry} labels={labels} /></Box> : <LedgerEntryBody entry={entry} labels={labels} />;
+}
+
+function LedgerEntryBody({ entry, labels }: { readonly entry: WorkLedgerEntry; readonly labels: LedgerEntryLabels }) {
   const ink = useWorklinePalette(), glyphs = useRenderGlyphs(), known = useHumanTextSecrets();
   if (entry.kind === 'chat' && entry.role === 'assistant') {
     // A row without a unit is a complete reply: one lead unit rendered as markdown.

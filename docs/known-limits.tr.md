@@ -23,6 +23,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   geri yükleme macOS'ta da çalışmaz; platform testleri bunları `[requires Linux …]` etiketiyle atlar.
 - **Terminal ekran düzeni** fiziksel Windows Terminal, macOS Terminal, VS Code terminali ya da tmux'ta **denenmedi.**
   *Etki:* giriş çubuğu, pencereler ve renkler orada bozulabilir. *Yol:* düz bir Linux ya da WSL2 terminali kullanın.
+- **Fareyle kopyalama terminalinizin pano dizisini (OSC 52) kullanır** ve yalnız bir Linux sözde-terminalinde kanıtlandı; fiziksel
+  Windows Terminal, onun içindeki WSL, xterm, tmux ya da iTerm2'de denenmedi. Bazı terminaller bunu engeller (iTerm2'de "Applications in
+  terminal may access clipboard" açılmalı; tmux'ta `set -g set-clipboard on` gerekir). Sürükleyerek seçimde otomatik kaydırma ve çift/üçlü
+  tıklama yok. *Etki:* "… karakter panoya kopyalandı" sonrasında yapıştırma boş gelebilir. *Yol:* Shift'e (iTerm2'de Option) basılı tutup
+  sürükleyerek terminalin kendi seçimini kullanın ya da `terminal.layout` değerini `inline` yapın.
 - **arm64 yayımlanmıyor.** Kilitli bubblewrap paketi x86_64 için gelir; arm64 derleme kontrolü arm64 çalışma kanıtı değildir.
   *Yol:* x86_64 kullanın.
 - **Henüz npm paketi yok.** Kaynaktan kurarsınız ([Başlarken](../README.tr.md#başlarken)).
