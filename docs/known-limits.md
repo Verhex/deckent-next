@@ -382,10 +382,11 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   `inspection.workers.maxEntries`) and read each of them once, as `/runs` does; a short id resolves only among those Runs, so an
   older Run needs its full id. Not measured on a large scope. *Workaround:* `deckent run inspect --id <full id>`; `deckent
   inventory` pages every stored record.
-- **`deckent doctor` does not test Docker yet** and says "not tested" on that row; worker image refresh and pool rows still show
-  what the last refresh and pool read found. *Workaround:* `docker info` on the machine. The interactive doctor offers only fixes that
-  an existing product command applies (today: the worker tool update); making the installation folder private waits for its policy
-  action, so that row shows the `chmod 700 <folder>` step to run yourself.
+- **`deckent doctor` checks Docker the way `deckent init` does** (CLI on PATH, service reachable, your permission) and is read-only:
+  it never installs, starts or pulls anything. Not reachable is an error only when the `execution` section is configured, otherwise a
+  warning; no answer within the detection deadline reads "not tested". `deckent init`'s own final check does not repeat this probe.
+  The interactive doctor offers only fixes that an existing product command applies (today: the worker tool update); making the
+  installation folder private waits for its policy action, so that row shows the `chmod 700 <folder>` step to run yourself.
 - **`deckent terminal status` does not contact the chat model**, so its reachability reads "not tested"; the first answer in
   `deckent` or the `/provider` check shows it. The context window reads "?" until the first answer is measured.
 - **`deckent workers watch` has no row selection.** It redraws one window on a terminal (Esc or q closes); details come from

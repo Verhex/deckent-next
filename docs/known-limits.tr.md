@@ -386,10 +386,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   `inspection.workers.maxEntries`) ve her birini `/runs` gibi bir kez okur; kısa kimlik yalnız bu Run'lar arasında çözülür, daha eski
   bir Run tam kimliğini ister. Büyük bir kapsamda ölçülmedi. *Geçici çözüm:* `deckent run inspect --id <tam kimlik>`; `deckent
   inventory` saklanan tüm kayıtları sayfalar.
-- **`deckent doctor` henüz Docker'ı sınamaz** ve o satırda "sınanmadı" der; worker imajı yenileme ve havuz satırları son yenilemenin
-  ve havuz okumasının bulduğunu göstermeye devam eder. *Yol:* makinede `docker info`. Etkileşimli doctor yalnız mevcut bir ürün
-  komutunun uyguladığı düzeltmeleri önerir (bugün: worker araç güncellemesi); kurulum klasörünü özel yapmak kendi politika eylemini
-  bekler, bu yüzden o satır sizin çalıştıracağınız `chmod 700 <klasör>` adımını gösterir.
+- **`deckent doctor` Docker'ı `deckent init` ile aynı biçimde sınar** (PATH'te CLI, erişilebilir hizmet, izniniz) ve yalnız okur:
+  hiçbir şey kurmaz, başlatmaz, indirmez. Erişilemiyorsa, `execution` bölümü yapılandırılmışsa hata, değilse uyarıdır; algılama süresi
+  içinde yanıt gelmezse "sınanmadı" der. `deckent init`'in kendi son denetimi bu sınamayı yinelemez. Etkileşimli doctor yalnız mevcut
+  bir ürün komutunun uyguladığı düzeltmeleri önerir (bugün: worker araç güncellemesi); kurulum klasörünü özel yapmak kendi politika
+  eylemini bekler, bu yüzden o satır sizin çalıştıracağınız `chmod 700 <klasör>` adımını gösterir.
 - **`deckent terminal status` sohbet modeline bağlanmaz,** bu yüzden erişim "sınanmadı" görünür; `deckent` içindeki ilk yanıt ya da
   `/provider` kontrolü gösterir. Bağlam penceresi ilk yanıt ölçülene kadar "?" görünür.
 - **`deckent workers watch` satır seçmeye izin vermez.** Terminalde tek pencereyi yeniden çizer (Esc ya da q kapatır); ayrıntı
