@@ -144,6 +144,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Claude aboneliği:** Claude Code işçisi kendi Claude girişinizle çalışır. Abonelikli Brain (`/do`'nun arkasındaki planlayıcı)
   hazırlanıyor ve henüz yok. Claude aboneliğiyle terminal sohbeti şu an desteklenmiyor. *Yol:* terminal sohbeti ve `/do`
   planlaması için bir Anthropic API anahtarı kullanın.
+- **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** İlk oturum yalnız abonelikle sohbet edemez; kapsam
+  bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` ile API anahtarı bağlayın, bütçe koyun, `/model` seçin.
 - **Bugün işçi, girişinizi CLI'ın kendi kimlik dosyasını ev dizininizden okuyarak alır.** *Etki:* o dosya var olmalı ve
   Deckent tarafından okunabilmelidir. Bu yol değişebilir.
 - **Abonelikli işçi, çalıştığı sürece giriş token'ınızın kısa ömürlü bir kopyasını tutar.** Deckent işçinin konteynerine
@@ -163,6 +165,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Codex ya da Cursor işçisinin kullandığı model doğrulanamaz.** Model başına kullanımı yalnız Claude Code bildirir; Codex ve
   Cursor sonuçları doğrulanmamış olarak kaydedilir ve ölçütlerine göre kabul edilir. *Etki:* böyle bir işçi başka bir modelle
   çalıştıysa iş yine kabul edilir.
+- **Codex ve Cursor işçileri çalışmaları hakkında az şey bildirir.** Codex denemesi tek tur ve token kullanımı yok gösterir; Cursor
+  denemesi tur, token ya da maliyet göstermez. *Etki:* emek ve maliyetleri Claude Code ile karşılaştırılamaz. *Yol:* teslim edilen
+  sonuca göre değerlendirin.
 - **Cursor için paketli işçi model kataloğu yok.** İşçi yalnız etkin bir `native-cli` katalog kanalıyla kabul edilir; Claude Code
   ve Codex'in paketli katalogları var, Cursor'ın yok. *Yol:* bir katalog yazıp `deckent models catalog register --file` ile
   kaydedin.

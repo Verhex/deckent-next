@@ -142,6 +142,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **Claude subscription:** a Claude Code worker runs with your own Claude login. A subscription-backed Brain (the planner
   behind `/do`) is being prepared and is not available yet. Terminal chat with a Claude subscription is not supported for now.
   *Workaround:* use an Anthropic API key for terminal chat and `/do` planning.
+- **Terminal chat needs a model connection and, for a paid API, a budget.** A first session cannot chat with a subscription alone;
+  a paid API turn without a scope budget is refused. *Workaround:* connect an API key with `/provider`, set a budget, choose `/model`.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
   must exist and be readable by Deckent. This path may change.
 - **A subscription worker holds a short-lived copy of your login token while it runs.** Deckent copies only the current
@@ -163,6 +165,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **The model a Codex or Cursor worker used cannot be verified.** Only Claude Code reports per-model usage; Codex and Cursor
   results are recorded as unverified and accepted by their criteria. *Impact:* if such a worker ran another model, the work
   is still accepted.
+- **Codex and Cursor workers report little about their run.** A Codex attempt shows one turn and no token use; a Cursor attempt
+  shows no turns, tokens or cost. *Impact:* their effort and cost are not comparable with Claude Code's. *Workaround:* judge them by
+  the delivered result.
 - **Cursor has no packaged worker model catalog.** A worker is admitted only on an active `native-cli` catalog channel;
   Claude Code and Codex have packaged catalogs, Cursor does not. *Workaround:* write a catalog and register it with
   `deckent models catalog register --file`.
