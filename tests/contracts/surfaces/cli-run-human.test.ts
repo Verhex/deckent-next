@@ -207,6 +207,16 @@ it('run inspect reads request → result → tasks → acceptance evidence kind 
   expect((await run(['run', 'inspect', '--scope', 's', '--id', LONG, '--verbose', '--json'], s.context, root)).code).toBe(2);
 });
 
+it('PRE-1 B3: run inspect names an exit-code acceptance once, on the brief evaluation line (EN/TR)', async () => {
+  const root = await project();
+  const accepted = view([{ taskBrief: { ...brief('Reconcile the ledger'), criteria: [{ id: 'exit', description: 'Exit cleanly', evaluator: { id: 'process-exit', version: 1 } }] }, phase: 'accepted',
+    resultBrief: { schemaVersion: 1, attemptId: 'a-1', claimLabel: 'CLAIM', evaluation: { verdict: 'accepted' }, report: null, runDelivery: null, openIssues: null, deliveryOutlook: 'none' } }]);
+  for (const [locale, words] of [['en', 'exit code · content not independently verified'], ['tr', 'çıkış kodu · içerik bağımsız doğrulanmadı']] as const) {
+    const text = (await run(['run', 'inspect', '--scope', 's', '--id', LONG, '--lang', locale], store([accepted]).context, root)).text;
+    expect(text.split(words).length - 1).toBe(1);
+  }
+});
+
 it('report: Known and Not measurable with a reason per axis, readable units, no escape sequences (EN and TR)', () => {
   const identity = { scopeId: 's', runId: LONG, taskId: 't0', attemptId: '0e1f2a3b-0000-4000-8000-000000000000', layoutRevision: 'l', generation: 1 };
   const attempt = { schemaVersion: 1, identity, profile: { id: 'coding', version: 3 }, model: { channelId: 'claude-cli-subscription', modelId: `claude-x${ESC}[2J`, evidence: 'requested' },

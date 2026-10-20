@@ -6,7 +6,7 @@ export { renderWorkerModelLine } from './internal/worker-model.js';
 export { phaseLabel, renderWorkerTranscript, seconds, type WorkerTranscriptHandler } from './internal/transcript.js';
 export { renderResourceDetail } from './internal/resources.js';
 
-export { renderBriefLines } from './internal/brief.js';
+export { briefQualifiesAcceptance, renderBriefLines } from './internal/brief.js';
 export { renderGraphSummaryLines } from './internal/graph-summary.js';
 export { quotaWaitText, clockText, processLabel, notAcceptedLabel } from './internal/labels.js';
 

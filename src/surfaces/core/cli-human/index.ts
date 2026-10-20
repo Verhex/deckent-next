@@ -7,4 +7,4 @@ export { displayId, listRunIds, matchIdPrefix, requireIdPrefix, type IdMatch } f
 export { resolveCommandScope, scopeLister, scopeNotice, type ScopePick, type ScopeResolution } from './internal/scope.js';
 export { askCliCard, cliCardGate, standingCardOptions, type CliCardIo, type CliCardOption, type CliCardRequest, type StandingAnswer } from './internal/card.js';
 export { renderInputSchema, schemaRequested } from './internal/schema.js';
-export { acceptanceEvidenceText } from './internal/acceptance.js';
+export { acceptanceEvidenceQualifier, acceptanceEvidenceText } from './internal/acceptance.js';

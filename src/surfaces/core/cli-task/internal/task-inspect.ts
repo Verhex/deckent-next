@@ -1,4 +1,4 @@
-import { renderAcceptanceLine, renderBriefLines } from '#surfaces/core/monitor/index.js';
+import { briefQualifiesAcceptance, renderAcceptanceLine, renderBriefLines } from '#surfaces/core/monitor/index.js';
 import { acceptanceEvidenceText } from '#surfaces/core/cli-human/index.js';
 import { emit, ErrorRegistry, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { runQuerySchema, type RunView } from '#engine/index.js';
@@ -56,7 +56,7 @@ export async function inspectTask(target: Readonly<{ scopeId: string; runId: str
         ...(data.task.custodyDisposition ? [data.task.custodyDisposition === 'released' ? t('task.custody.released', {}, locale) : t('task.custody.hold-manual', {}, locale)] : []),
         ...brief,
         ...(data.task.phase !== 'accepted' ? [] : data.task.acceptedEvidence === 'model-unverified' ? [t('cli.task.decision.acceptedUnverified', {}, locale)]
-          : evaluators.map(evaluator => acceptanceEvidenceText(evaluator, locale))),
+          : data.task.resultBrief && briefQualifiesAcceptance(data.task.taskBrief, data.task.resultBrief.evaluation.verdict) ? [] : evaluators.map(evaluator => acceptanceEvidenceText(evaluator, locale))),
         ...delivery,
         ...(verbose && data.task.acceptance ? [renderAcceptanceLine(data.task.acceptance, locale)] : []),
         ...(data.task.handoffs ?? []).map(receipt => (receipt.kind === 'workspace-started-from-patch'

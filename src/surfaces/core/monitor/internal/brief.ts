@@ -1,7 +1,15 @@
 import { redactSensitive, terminalSafeText, t, type Locale } from '#platform/index.js';
 import type { TaskBrief, ResultBrief } from '#engine/index.js';
+import { acceptanceEvidenceQualifier } from '#surfaces/core/cli-human/index.js';
 import { deliveryLabel, notAcceptedLabel, verdictLabel } from './labels.js';
 const safe = (text: string) => redactSensitive(terminalSafeText(text));
+/** PRE-1 B3: an `accepted` verdict names what it rests on (one shared label); callers that print it separately skip theirs when this is true. */
+export const briefQualifiesAcceptance = (task: TaskBrief | undefined, verdict: ResultBrief['evaluation']['verdict']) => verdict === 'accepted' && !!task?.criteria.length;
+export function evaluationText(task: TaskBrief | undefined, evaluation: ResultBrief['evaluation'], locale: Locale): string {
+  return t('monitor.human.evaluation', { verdict: verdictLabel(evaluation.verdict, locale) }, locale)
+    + (briefQualifiesAcceptance(task, evaluation.verdict) ? ` · ${acceptanceEvidenceQualifier(task!.criteria.map(row => row.evaluator), locale)}` : '')
+    + (evaluation.reason ? ` · ${notAcceptedLabel(evaluation.reason, locale)}` : '');
+}
 /** Shared EN/TR wording for worker detail and run inspect. Labels never turn worker reports into evaluation evidence. */
 export function renderBriefLines(task: TaskBrief | undefined, result: ResultBrief | undefined, locale: Locale): string[] {
   const missing = t('monitor.brief.missing', {}, locale);
@@ -19,8 +27,7 @@ export function renderBriefLines(task: TaskBrief | undefined, result: ResultBrie
   const checks = { passed: t('monitor.human.passed', {}, locale), failed: t('monitor.human.failed', {}, locale),
     'not-run': t('monitor.human.notRun', {}, locale), unknown: t('monitor.human.unknown', {}, locale) };
   if (result) {
-    lines.push(t('monitor.human.evaluation', { verdict: verdictLabel(result.evaluation.verdict, locale) }, locale)
-      + (result.evaluation.reason ? ` · ${notAcceptedLabel(result.evaluation.reason, locale)}` : ''));
+    lines.push(evaluationText(task, result.evaluation, locale));
     const report = result.report?.status === 'reported' ? result.report.report : null;
     if (report) {
       lines.push(t('monitor.brief.claim', { value: safe(report.summary) }, locale),
