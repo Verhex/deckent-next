@@ -726,7 +726,15 @@ for an ERP/CRM operation the report is the worker's structured result, with no G
 the container bridge offers `checkId`/`role` in the CLI report schema (strict schemas: required nullable, null becomes absence before
 sealing), and the worker core prompt (`deckent-worker-core@2`) asks workers to type acceptance checks; an installed template that
 supplies its own core part must carry the same rule. An exit-code acceptance is labelled where its evaluation is shown (one owner,
-`cli-human` `acceptanceEvidenceQualifier`); counts are not qualified.
+`cli-human` `acceptanceEvidenceQualifier`); counts are not qualified. PRE-7 ORTAM-HAZIR (alpha.50): a Docker task profile may declare
+`environment.requirements` (generic `{id, kind, target, expect?}`, domain `environmentRequirementsSchema`). Engine `assertTaskEnvironment`
+checks them before handoff through the probe-kind registry: Core adapter kinds (native-coding `environment-probes.json`, with
+`templateDefaults` for `coding template`) plus dotted kinds registered via `deckent/extensions` `registerEnvironmentProbeKind`, sealed by
+composeCore. `DockerSupervisor.probe` runs on the worker floor without workspace, connection, credential or model. An unmet requirement
+closes the attempt `launch-refused` (EXECUTION_ENVIRONMENT_NOT_READY + requirement); `observeRunAttemptClosure` parks the Run
+`environment-not-ready` (failure code = requirement, park deadline); resume (run-decision) checks again on a new generation; no automatic
+retry and no manual acceptance from the park. Report evidence `not-run` → task reason `acceptance-check-not-run` (a worker claim;
+`failed`/`unknown` outrank it). Worker core `deckent-worker-core@3`. Ledger v59 is an additive version step.
 
 ### SILENT-WORKER WATCHDOG (alpha.47 R3, owner D4a/D5a, 2026-10-18)
 

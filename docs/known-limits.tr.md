@@ -224,6 +224,17 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   denetlenmez. 1.0.0-alpha.50'den beri değerlendirme satırı bunu söyler ("kabul · çıkış kodu · içerik bağımsız doğrulanmadı"):
   monitör, `workers`, `/runs`, `run inspect`, `task inspect` ve `report`; "1/1 kabul" gibi sayılar nitelenmez. Gerçek doğrulama
   değerlendiricisi olan kabul profili beta işidir.
+- **Deckent yalnız görevin bildirdiği ortam gereksinimlerini denetler** (1.0.0-alpha.50'den beri). Bir görev profili ya da şablonu
+  `environment.requirements` bildirebilir; Deckent bunları işçi başlamadan denetler, biri karşılanmazsa Run'ı "ortam hazır değil: <id>"
+  diye park eder (işçi ve model çağrısı yok; düzeltip devam ettirince yeniden denetler). Bildirilmemiş eksik bir araç, çalıştırılamayan
+  kontrol (`acceptance-check-not-run`) olarak raporlanır; bu işçinin iddiasıdır, ortam kusurunun kanıtı değildir. Gereksinimler Run ile
+  dondurulur; kayda eklenen gereksinim `deckent runtime restart` sonrası yeni Run'larda geçerlidir. Core kodlama denetim türlerini
+  (executable, path-readable, node-heap) getirir; bağlayıcı ya da kimlik bilgisi türleri Enterprise/ERP paketlerinden
+  `deckent/extensions` ile gelir, kimsenin kaydetmediği tür başlatmayı reddeder. Her denetim kısa bir kap başlatır (referans makinede
+  yaklaşık 0,5 sn). `deckent coding template` varsayılanları bildirir (node, Node heap tavanı; typescript yolu yalnız `/node_modules`
+  bağımlılık bağlaması olan şablonda); mevcut görev türü şablonunu korur (komutu o tür için yeniden çalıştırmak
+  `CODING_TEMPLATE_KIND_CONFLICT` ile reddedilir), bu yüzden ona bugün gereksinim eklemek `deckent config set` ile `admission.registry`
+  düzenlemek demektir. doctor ortam yüzünden park edilen Run'ları henüz listelemez; `monitor` ve `run inspect` gösterir.
 - **Sessiz bir işçi durdurulur ve bir kez yeniden denenir, ama yalnız bazı görevler izlenir.** 1.0.0-alpha.47'den beri sessizlik sınırı
   boyunca (varsayılan 1 saat, `runRuntime.stallRecovery.stopAfterMs`; 3 dakikada uyarı) hiçbir olay ve model trafiği göndermeyen bir
   native abonelik işçisi durdurulur. Etkileri yalnız kendi çalışma alanında kalan bir görev yeni bir Attempt ile bir kez yeniden

@@ -224,6 +224,17 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   checked. Since 1.0.0-alpha.50 the evaluation line says so ("accepted · exit code · content not independently verified") in the
   monitor, `workers`, `/runs`, `run inspect`, `task inspect` and `report`; counts such as "1/1 accepted" are not qualified. An
   acceptance profile with a real verification evaluator is beta work.
+- **Deckent checks only the environment requirements a task declares** (since 1.0.0-alpha.50). A task profile or template may declare
+  `environment.requirements`; Deckent checks them before the worker starts and parks the Run as "environment not ready: <id>" when one
+  is unmet (no worker, no model call; fix it, then resume, which checks again). An undeclared missing tool is reported as a check that
+  could not run (`acceptance-check-not-run`); that is the worker's claim, not proof of an environment defect. Requirements are frozen
+  with the Run, so one added to the registry applies to new Runs after `deckent runtime restart`. Core ships coding probe kinds
+  (executable, path-readable, node-heap); connector or credential kinds come from Enterprise/ERP packages through
+  `deckent/extensions`, and a kind nobody registered refuses the launch. Each probe starts one short container (about 0.5 s on the
+  reference host). `deckent coding template` declares defaults (node, the Node heap ceiling; the typescript path only for a template
+  with a `/node_modules` dependency mount); an existing task kind keeps its template (re-running the command for it is refused with
+  `CODING_TEMPLATE_KIND_CONFLICT`), so adding a requirement to it today means editing `admission.registry` with `deckent config set`.
+  doctor does not list Runs parked for the environment yet; `monitor` and `run inspect` do.
 - **A silent worker is stopped and retried once, but only some tasks are watched.** Since 1.0.0-alpha.47 a native-subscription worker
   that sends no event and no model traffic for the silence limit (default 1 hour, `runRuntime.stallRecovery.stopAfterMs`; warning
   after 3 minutes) is stopped. A task whose effects stay in its own workspace is retried once on a new Attempt; any other task waits
