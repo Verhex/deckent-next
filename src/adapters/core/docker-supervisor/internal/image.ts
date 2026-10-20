@@ -54,15 +54,17 @@ export async function probeDockerImageAvailability(input: unknown,
   if (before !== await daemon(endpoint)) throw new DockerImageProbeError('DOCKER_IMAGE_PROBE_CHANGED');
   return Object.freeze({ endpoint, daemonId: before, imageId: input.imageId, status: 'locally-available' });
 }
+/** `partial`: the time limit cut the inspects short; an id the daemon does not have is left out without it. */
+export type DockerImageSet = Readonly<{ imageIds: readonly string[]; partial: boolean }>;
 export interface DockerImageSetProbeInput extends Omit<DockerImageAvailabilityProbeInput, 'imageId'> {
   readonly imageIds: readonly string[]; readonly chunkSize: number; readonly processes: number;
 }
 /**
  * The same checks for a list (J3-IMAGES): one endpoint pin, one daemon id before and after, exact-id `image inspect` in at most `processes`
  * concurrent chunks of at most `chunkSize` ids. Inspects stop twice the measured daemon-id read before `timeoutMs`, so the after-check fits;
- * ids not proven by then are left out. A different daemon afterwards refuses the whole list (CHANGED). Returns proven ids in input order.
+ * ids not proven by then are left out (`partial`). A different daemon afterwards refuses the whole list (CHANGED). Returns proven ids in input order.
  */
-export async function probeDockerImageSetAvailability(input: unknown, runner: DockerCommandRunner = runNodeDockerCommand, signal?: AbortSignal): Promise<readonly string[]> {
+export async function probeDockerImageSetAvailability(input: unknown, runner: DockerCommandRunner = runNodeDockerCommand, signal?: AbortSignal): Promise<DockerImageSet> {
   if (!validInput(input, value => Array.isArray(value['imageIds']) && value['imageIds'].every(digest) && boundedPositive(value['chunkSize']) && boundedPositive(value['processes'])))
     throw new DockerImageProbeError('DOCKER_IMAGE_PROBE_INVALID');
   const probe = input as unknown as DockerImageSetProbeInput, until = performance.now() + probe.timeoutMs, bound = AbortSignal.any([AbortSignal.timeout(probe.timeoutMs), ...(signal ? [signal] : [])]);
@@ -80,6 +82,7 @@ export async function probeDockerImageSetAvailability(input: unknown, runner: Do
       for (const line of stdout.split('\n')) if (chunk.includes(line.trim())) proven.add(line.trim());
     }
   }));
+  const partial = cutoff.aborted && ids.some(id => !proven.has(id)); // read before the after-check, which may outlast the inspect cut-off
   if (before !== await daemon(endpoint)) throw new DockerImageProbeError('DOCKER_IMAGE_PROBE_CHANGED');
-  return Object.freeze(ids.filter(id => proven.has(id)));
+  return Object.freeze({ imageIds: Object.freeze(ids.filter(id => proven.has(id))), partial });
 }

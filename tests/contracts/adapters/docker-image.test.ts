@@ -58,7 +58,7 @@ it('J3-IMAGES: proves a list with one endpoint pin, one daemon id read before an
     if (command.args.includes(missing)) throw new DockerCommandFailure(`${found}sha256:${'d'.repeat(64)}\n`, 'No such image', 1, false);
     return { stdout: found, stderr: '' };
   };
-  await expect(probeDockerImageSetAvailability(list, runner(['daemon-a']))).resolves.toEqual([imageId, other]);
+  await expect(probeDockerImageSetAvailability(list, runner(['daemon-a']))).resolves.toEqual({ imageIds: [imageId, other], partial: false });
   expect(calls.map(command => command.args)).toEqual([
     ['context', 'inspect', '--format', '{{json .Endpoints.docker}}'],
     ['--host', endpoint, 'info', '--format', '{{.ID}}'],
@@ -80,5 +80,5 @@ it.skipIf(process.platform !== 'linux' || !existsSync('/usr/bin/docker') || !con
   expect(result).toMatchObject({ status: 'locally-available', imageId: configuredImage });
   // The real CLI prints the found id and exits 1 for the absent one; the list probe keeps only the proven id.
   const absent = `sha256:${'f'.repeat(64)}`;
-  await expect(probeDockerImageSetAvailability({ ...control, timeoutMs: 5_000, imageIds: [absent, configuredImage!], chunkSize: 16, processes: 4 }, runNodeDockerCommand)).resolves.toEqual([configuredImage]);
+  await expect(probeDockerImageSetAvailability({ ...control, timeoutMs: 5_000, imageIds: [absent, configuredImage!], chunkSize: 16, processes: 4 }, runNodeDockerCommand)).resolves.toEqual({ imageIds: [configuredImage], partial: false });
 });

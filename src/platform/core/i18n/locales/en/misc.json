@@ -645,6 +645,8 @@
   "config.select.previewHint": "Enter confirms · Esc cancels",
   "config.select.unavailable": "Choice source unavailable",
   "config.select.empty": "No available choices",
+  "config.select.partial": "Showing the {count} found before the time limit; set another with config set {key} <json>.",
+  "config.select.partialNone": "Nothing found before the time limit; set a value with config set {key} <json>.",
   "config.select.invalidHost": "Enter one hostname without a URL or path.",
   "config.select.invalidUrl": "Enter an HTTP(S) URL without credentials.",
   "config.select.summary": "Config: {text}",

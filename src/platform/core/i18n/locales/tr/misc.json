@@ -645,6 +645,8 @@
   "config.select.previewHint": "Enter onayla · Esc vazgeç",
   "config.select.unavailable": "Seçenek kaynağına ulaşılamıyor",
   "config.select.empty": "Kullanılabilir seçenek yok",
+  "config.select.partial": "Süre sınırından önce bulunan {count} seçenek gösteriliyor; başka bir değer için config set {key} <json> kullanın.",
+  "config.select.partialNone": "Süre sınırından önce bir şey bulunamadı; değer için config set {key} <json> kullanın.",
   "config.select.invalidHost": "URL veya yol içermeyen tek bir alan adı girin.",
   "config.select.invalidUrl": "Kimlik bilgisi içermeyen bir HTTP(S) URL girin.",
   "config.select.summary": "Ayarlar: {text}",
