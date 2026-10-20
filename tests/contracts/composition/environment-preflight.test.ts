@@ -7,7 +7,7 @@ import { afterEach, expect, it, vi, type TestContext } from 'vitest';
 import { DockerSupervisor, readLocalOsIdentity } from '#adapters/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
-import { applyConfiguredRunLifecycle, createConfiguredRun, inspectConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
+import { applyConfiguredRunLifecycle, createConfiguredRun, deliverConfiguredRunCancellation, inspectConfiguredRun, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { inspectMonitor } from '#composition/core/monitor/index.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
 import { runCommand } from '#surfaces/core/cli/index.js';
@@ -41,7 +41,7 @@ async function fixture(context: TestContext, environment: object) {
   Object.assign(parameters, { imageId: dockerImage, argv: ['node', '-e', "process.stdout.write(require('node:fs').readFileSync('/workspace/README.md','utf8'))"] });
   const { argv: _argv, ...docker } = parameters; void _argv;
   Object.assign(parameters, { readOnlyMounts: [{ source: 'deps', target: '/deps' }], environment });
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1,
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, cancellation: { maxAttempts: 3, retryDelayMs: 100, claimTtlMs: 1000, maxConcurrentDeliveries: 1, recoveryPageSize: 10 }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1,
     ordering: 'input-order', registry }, execution: { docker: { executable: '/usr/bin/docker', ...docker }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
   const opened = await openConfiguredAttemptStore(project, options), store = opened.store;
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
@@ -113,6 +113,17 @@ it('after the operator fixes the environment and resumes, a new attempt is check
     expect(run.previousBindings).toEqual([expect.objectContaining({ identity: first, observedKind: 'launch-refused' })]);
     expect(run.bindings).toEqual([expect.objectContaining({ identity: second, observedKind: 'exited' })]);
     expect(await preflightContainers(probe)).toBe('');
+  } finally { f.store.close(); }
+}, 120_000);
+
+it('cancelling an environment-parked Run through the real delivery path ends it cancelled; the refused attempt needs no worker settlement', async context => {
+  const f = await fixture(context, REQUIREMENTS);
+  try {
+    await expect(executeConfiguredTask(f.project, await reserve(f, 0), f.options)).rejects.toMatchObject({ code: 'EXECUTION_ENVIRONMENT_NOT_READY' });
+    const parked = (await f.store.loadRun('s', 'r'))!;
+    await deliverConfiguredRunCancellation(f.project, { schemaVersion: 1, action: 'cancel', commandId: 'cancel', scopeId: 's', runId: 'r', expectedRevision: parked.revision }, f.options);
+    const run = (await f.store.loadRun('s', 'r'))!;
+    expect(run.state).toEqual({ kind: 'terminal', outcome: 'cancelled', reason: 'cancelled' }); expect(run.progress[0]!.phase).toBe('cancelled');
   } finally { f.store.close(); }
 }, 120_000);
 
