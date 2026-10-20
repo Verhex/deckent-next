@@ -1,6 +1,7 @@
 import { collectDockerOutputFiles } from './output-files.js';
 import { sampleDockerResources } from './resources.js';
 import { captureDockerProfile, readDockerProfile, dockerEndpointSchema } from './profile.js';
+import { randomUUID } from 'node:crypto';
 import { lstat, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { workerIncarnationSchema, containerEvidenceSchema, SupervisorError, sandboxInterruptCause, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
@@ -10,6 +11,8 @@ import { runNodeDockerCommand, DockerCommandFailure, type DockerCommandRunner } 
 import { dockerConnectionMounts } from './connection.js';
 import { assertDockerMountsMatch, assertReadOnlyMountSource, type DockerExpectedMount } from './mounts.js';
 import { dockerNodeHeapEnvironment } from './node-heap.js';
+/** `docker run`'s own exit status when the daemon could not create or start the container (not the probe's answer). */
+const DOCKER_RUN_DAEMON_FAILURE = 125;
 type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; Mounts?: unknown; State: { Status: string; ExitCode: number; StartedAt?: unknown; FinishedAt?: unknown } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
  * Only an application with durable dispatch ownership may call execute; this adapter does not grant policy.
@@ -182,9 +185,7 @@ export class DockerSupervisor implements ExecutionSupervisor {
     try {
       await this.command(['create', '--name', handle, '--label', 'deckent.request=' + digest,
         '--network', 'none', '--log-driver', 'local', '--log-opt', `max-size=${o.logMaxSizeKiB}k`,
-        '--log-opt', `max-file=${o.logMaxFiles}`, '--log-opt', 'mode=blocking', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-        '--pids-limit', String(o.pids), '--memory', String(o.memoryBytes), '--memory-swap', String(o.memoryBytes), '--cpus', String(o.cpus),
-        '--ipc', 'private', '--cgroupns', 'private', '--user', `${o.uid}:${o.gid}`,
+        '--log-opt', `max-file=${o.logMaxFiles}`, '--log-opt', 'mode=blocking', ...this.floor(),
         '--mount', `type=bind,src=${workspace},dst=/workspace`, '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
         ...inputMounts, ...readOnlyMounts, ...connectionMounts, ...dockerNodeHeapEnvironment(o.memoryBytes), '--workdir', '/workspace', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], o.controlTimeoutMs);
     } catch {
@@ -214,6 +215,30 @@ export class DockerSupervisor implements ExecutionSupervisor {
       try { await this.command(['kill', handle], o.controlTimeoutMs); } catch { /* Inspect determines terminal truth. */ }
     }
     return this.result(handle, await this.inspect(handle, digest), stdout, stderr, interrupted, true, cause);
+  }
+  /** The one sandbox floor of every container this supervisor starts (read-only root, no capabilities or new privileges, bounded resources). */
+  private floor() {
+    const o = this.options;
+    return ['--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', String(o.pids), '--memory', String(o.memoryBytes),
+      '--memory-swap', String(o.memoryBytes), '--cpus', String(o.cpus), '--ipc', 'private', '--cgroupns', 'private', '--user', `${o.uid}:${o.gid}`];
+  }
+  /** PRE-7: one environment probe on the worker's floor (same image, user, `--network none`, sandbox flags, tmpfs, Node heap environment and
+   * re-checked read-only dependency binds), without the workspace and never the connection: no credential, no model. `argv` comes only from
+   * an adapter's probe-kind registry. Exit 0 = met, any other exit of the probe = unmet, past `timeoutMs` unmet. The labelled probe container
+   * holds no evidence, so it is force-removed before the answer returns (no leftover, also after the bound). A daemon refusal (exit 125)
+   * or an unclassified failure stays a control failure (transient). */
+  async probe(input: SandboxRequest, argv: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<'met' | 'unmet'> {
+    const { digest, handle } = this.identity(input), o = this.options, name = `${handle}-env-${randomUUID()}`, mounts: string[] = [];
+    for (const mount of o.readOnlyMounts ?? []) { await assertReadOnlyMountSource(mount.source, [resolve(o.workspaceRoot)]); mounts.push('--mount', `type=bind,src=${mount.source},dst=${mount.target},readonly`); }
+    try {
+      await this.command(['run', '--name', name, '--label', 'deckent.preflight=' + digest, '--network', 'none', ...this.floor(), '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
+        ...mounts, ...dockerNodeHeapEnvironment(o.memoryBytes), '--workdir', '/tmp', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], timeoutMs, signal);
+      return 'met';
+    } catch (error) {
+      if (!(error instanceof DockerCommandFailure)) throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
+      if (error.stop === 'deadline' || (typeof error.code === 'number' && error.code !== DOCKER_RUN_DAEMON_FAILURE)) return 'unmet';
+      throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
+    } finally { await this.command(['rm', '--force', name], o.controlTimeoutMs).catch(() => undefined); }
   }
   /** EXEC-RELEASE: only the labelled, exited container of this exact request, removed by its immutable id (no name reuse between
    * inspect and rm), never forced; success requires Docker to echo that id and a later inspect to report it absent. */

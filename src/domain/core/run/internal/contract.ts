@@ -16,7 +16,7 @@ export const runBindingSchema = z.object({ identity: attemptIdentitySchema, obse
 }).strict().refine(value => (value.observedKind === 'stalled') === (value.stallCause !== undefined), 'RUN_SNAPSHOT_INCONSISTENT').readonly();
 export const runStateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('running') }).strict(),
-  z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted']),
+  z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready']),
     failureCode: identitySchema.optional(), operatorHold: z.object({ schemaVersion: z.literal(1), note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars) }).strict().optional(),
     note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars).optional(), since: counterSchema, deadline: counterSchema }).strict(),
   z.object({ kind: z.literal('terminal'), outcome: z.enum(['completed', 'incomplete', 'failed', 'cancelled']), reason: z.enum(['completed', 'cancelled', 'operator-close', 'park-timeout']) }).strict(),
@@ -42,14 +42,16 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
     if (!selected || selected.evaluator.id !== criterion.evaluator.id || selected.evaluator.version !== criterion.evaluator.version) invalid();
   }
   if (run.state.kind === 'parked' && (run.state.deadline <= run.state.since || (run.state.reason === 'operator-hold') !== (run.state.note !== undefined)
-    || (run.state.reason === 'progression-failed') !== (run.state.failureCode !== undefined)
-    || (!['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted'].includes(run.state.reason) && run.progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase))))) invalid();
+    || ['progression-failed', 'environment-not-ready'].includes(run.state.reason) !== (run.state.failureCode !== undefined)
+    // PRE-7: an environment park names the unmet requirement (failureCode) and holds the attempt its preflight refused.
+    || (run.state.reason === 'environment-not-ready' && !run.bindings.some(row => row.observedKind === 'launch-refused'))
+    || (!['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason) && run.progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase))))) invalid();
   if (run.state.kind === 'terminal' && (run.progress.some(task => task.unresolvedEffects || ['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision'].includes(task.phase)) || (run.state.outcome === 'completed' && run.progress.some(task => task.phase !== 'accepted')) || (run.state.outcome === 'incomplete' && (!run.progress.some(task => task.phase === 'accepted') || run.progress.every(task => task.phase === 'accepted'))) || (['failed', 'cancelled'].includes(run.state.outcome) && run.progress.some(task => task.phase === 'accepted')))) invalid();
   const tasks = new Set(run.graph.tasks.map(task => task.id)); const bound = new Set<string>(); const attempts = new Set<string>();
   for (const binding of run.previousBindings ?? []) {
     const id = binding.identity;
     if (!tasks.has(id.taskId) || attempts.has(id.attemptId) || id.runId !== run.identity.runId || id.scopeId !== run.identity.scopeId
-      || id.layoutRevision !== run.identity.layoutRevision || !['exited', 'quota-exhausted', 'stalled'].includes(binding.observedKind ?? '') || binding.observedRevision === null) invalid();
+      || id.layoutRevision !== run.identity.layoutRevision || !['exited', 'quota-exhausted', 'stalled', 'launch-refused'].includes(binding.observedKind ?? '') || binding.observedRevision === null) invalid();
     attempts.add(id.attemptId);
   }
   for (const binding of run.bindings) {

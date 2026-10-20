@@ -624,6 +624,7 @@
   "config.field.runRuntime": "Kabul edilen Run otomatik ilerleme taraması, sayfa boyutu, azami eşzamanlı Run sayısı (varsayılanı etkin servis yürütme tavanı), tur başına rezervasyon bütçesi, hata sonrası bekleme ve sürümlü Run/görev park zaman aşımı",
   "cli.runtime.runProgression": "Run {runId}: {count} deneme ilerletildi",
   "cli.runtime.runProgressionFailed": "Run ilerlemesi sürdürülemedi: {code}",
+  "cli.runtime.runParkedEnvironment": "Run ortamı için park edildi: {requirement} gereksinimi karşılanmıyor. Bu bir kurulum kusurudur, görev başarısızlığı değil; işçi başlatılmadı. Ortamı düzeltin, sonra Run'ı devam ettirin (deckent run resume --id <run>).",
   "config.field.approvals": "Onay ve canlı oturum ayarları",
   "mcp.tool.listApprovals": "Kapsamdaki onay isteklerini listele.",
   "mcp.tool.inspectApproval": "Bir onayı ve kanıtını incele.",

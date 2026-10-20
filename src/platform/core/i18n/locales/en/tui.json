@@ -1138,5 +1138,6 @@
   "terminal.delivery.nextDefault": "Nothing more was written. /deliver opens it again; /run shows the Run.",
   "terminal.delivery.pickerTitle": "/deliver · tasks awaiting delivery",
   "terminal.delivery.none": "No task awaits delivery.",
-  "terminal.delivery.fallbackTitle": "Accepted task"
+  "terminal.delivery.fallbackTitle": "Accepted task",
+  "terminal.jobs.parked.environment-not-ready": "environment not ready"
 }

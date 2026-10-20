@@ -1,4 +1,5 @@
 export { DockerSupervisor } from './internal/docker.js';
+export { dockerNodeHeapCeilingBytes } from './internal/node-heap.js';
 export type { DockerSupervisorOptions } from './internal/options.js';
 export { identifyDockerRequest } from './internal/identity.js';
 export { runNodeDockerCommand, DockerCommandFailure, dockerCommandEnvironment } from './internal/command.js';

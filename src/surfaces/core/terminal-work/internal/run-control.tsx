@@ -40,7 +40,7 @@ export function runControlActions(run: RunView): readonly RunControlAction[] {
   if (run.state.kind === 'terminal' || run.cancellationRequested) return [];
   if (run.state.kind !== 'parked') return ['hold'];
   const held = run.state.reason === 'operator-hold' || run.state.operatorHold !== undefined;
-  return [...(held ? [] : ['hold' as const]), ...(held || run.state.reason === 'progression-failed' ? ['resume' as const] : []), 'close'];
+  return [...(held ? [] : ['hold' as const]), ...(held || run.state.reason === 'progression-failed' || run.state.reason === 'environment-not-ready' ? ['resume' as const] : []), 'close'];
 }
 /** One typed letter selects a key; Ctrl/Alt chords, pasted or coalesced text never do (the decision-key rule for an opening key). */
 export function runControlKey(input: string, key: Readonly<{ ctrl?: boolean; meta?: boolean }>): RunControlAction | null {

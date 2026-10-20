@@ -165,7 +165,8 @@ it('keeps a typed acceptance check through the bridge so its failure refuses the
   expect(refusalOf(failed)).toBe('declared-check-not-passed');
   // The last outcome of an acceptance check decides; a re-run that passed clears an earlier failure.
   expect(refusalOf({ ...report, checks: [typedCheck('failed', 'acceptance'), typedCheck('passed', 'acceptance')] })).toBeNull();
-  expect(refusalOf({ ...report, checks: [typedCheck('passed', 'acceptance'), typedCheck('not-run', 'acceptance')] })).toBe('declared-check-not-passed');
+  // PRE-7: a last outcome `not-run` still refuses, under its own observed reason.
+  expect(refusalOf({ ...report, checks: [typedCheck('passed', 'acceptance'), typedCheck('not-run', 'acceptance')] })).toBe('acceptance-check-not-run');
   // Negatives: a passing acceptance check, an exploratory failure and an untyped failure stay claims (owner D5a), never a refusal.
   expect(refusalOf({ ...report, checks: [typedCheck('passed', 'acceptance')] })).toBeNull();
   expect(refusalOf({ ...report, checks: [typedCheck('failed', 'exploratory')] })).toBeNull();

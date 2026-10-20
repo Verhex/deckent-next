@@ -6,8 +6,18 @@ import { configServiceState, shutdownCommandSchema, type CancellationRecoveryCom
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { formatDuration as humanDuration } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
+import type { ENVIRONMENT_NOT_READY_CODE } from '#domain/index.js';
 import { adminInteractive, adminSinks, askAdminCard, confirmOptions, reportCancelled } from './io.js';
 
+/** The service journal line of a progression turn that stopped. PRE-7: an environment refusal parked the Run for its environment (an
+ * installation defect, not a task failure); it is named so, with the requirement, never as "could not continue". JSON is unchanged. */
+const ENVIRONMENT_NOT_READY: typeof ENVIRONMENT_NOT_READY_CODE = 'EXECUTION_ENVIRONMENT_NOT_READY';
+export function runProgressionErrorText(query: Readonly<{ scopeId: string; runId: string }> | null | undefined,
+  error: Pick<DeckentError, 'code'> & Partial<Pick<DeckentError, 'params' | 'localize' | 'message'>>, locale: Locale): string {
+  const prefix = query ? `${query.scopeId}/${query.runId}: ` : '', requirement = error.params?.['requirement'];
+  if (error.code === ENVIRONMENT_NOT_READY && typeof requirement === 'string') return prefix + t('cli.runtime.runParkedEnvironment', { requirement }, locale);
+  return `${prefix}${t('cli.runtime.runProgressionFailed', { code: error.code }, locale)}: ${error.localize?.(locale).message ?? error.message ?? error.code}`;
+}
 export interface RuntimeServiceHost {
   readonly endpoint: string;
   readonly layout: ProductLayout;
@@ -156,8 +166,7 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
       }
     },
     onRunProgressionError: async (query, error) => {
-      output({ schemaVersion: 1, event: 'run-progression-failed', query, code: error.code, params: error.params },
-        () => `${query ? `${query.scopeId}/${query.runId}: ` : ''}${t('cli.runtime.runProgressionFailed', { code: error.code }, locale)}: ${error.localize?.(locale).message ?? error.message ?? error.code}`, 'error');
+      output({ schemaVersion: 1, event: 'run-progression-failed', query, code: error.code, params: error.params }, () => runProgressionErrorText(query, error, locale), 'error');
     },
     onReconciliationPage: async (command, result) => {
       const changed = result.outcomes.filter(outcome => outcome.status !== 'skipped');

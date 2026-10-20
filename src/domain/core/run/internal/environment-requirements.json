@@ -1,0 +1,9 @@
+{
+  "$comment": "PRE-7 ORTAM-HAZIR (2026-10-20): bounds of a declared environment requirement list (generic form kind + target + optional expectation). Probe kinds and their commands are adapter registries; this file bounds only the declared data.",
+  "schemaVersion": 1,
+  "limits": {
+    "requirements": 16,
+    "targetChars": 512,
+    "expectChars": 128
+  }
+}

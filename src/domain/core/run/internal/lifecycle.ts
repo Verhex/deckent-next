@@ -29,7 +29,7 @@ export function reconcileRunLifecycle(input: unknown, now: number, timeoutMs: nu
   const readiness = inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, now, progress: tasks });
   let state: RunSnapshot['state'];
   if (tasks.every(task => task.phase === 'accepted')) state = { kind: 'terminal', outcome: 'completed', reason: 'completed' };
-  else if (!run.cancelRequested && run.state.kind === 'parked' && ['operator-hold', 'progression-failed', 'quota-exhausted'].includes(run.state.reason)) state = run.state;
+  else if (!run.cancelRequested && run.state.kind === 'parked' && ['operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason)) state = run.state;
   else if (!run.cancelRequested && run.bindings.some(row => row.observedKind === 'quota-exhausted' && tasks.some(task => task.taskId === row.identity.taskId && task.phase === 'pending'))) {
     const waits = (run.quotaWaits ?? []).filter(wait => run.bindings.some(row => row.identity.attemptId === wait.identity.attemptId));
     state = { kind: 'parked', reason: 'quota-exhausted', since: Math.min(...waits.map(wait => wait.since)), deadline: Math.max(...waits.map(wait => wait.deadline)) };
@@ -62,11 +62,11 @@ export function advanceRunLifecycle(input: unknown, expectedRevision: number, no
   if (reset) return reset;
   const expired = run.progress.some(task => task.decision && task.decision.deadline <= now);
   const progress = run.progress.map(task => {
-    if (run.state.kind === 'parked' && ['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted'].includes(run.state.reason) && run.state.deadline <= now && task.phase === 'pending') return { ...task, phase: 'cancelled' as const };
+    if (run.state.kind === 'parked' && ['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason) && run.state.deadline <= now && task.phase === 'pending') return { ...task, phase: 'cancelled' as const };
     if (!task.decision || (task.decision.deadline > now && !(run.state.kind === 'parked' && run.state.deadline <= now))) return task;
     return { ...task, decision: undefined, phase: 'failed' as const };
   });
-  const dueHold = run.state.kind === 'parked' && ['operator-hold', 'progression-failed', 'quota-exhausted'].includes(run.state.reason) && run.state.deadline <= now;
+  const dueHold = run.state.kind === 'parked' && ['operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason) && run.state.deadline <= now;
   const live = progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase));
   let next = reconcileRunLifecycle({ ...run, progress, ...(dueHold && !live ? { state: { kind: 'running' } } : {}) }, now, timeoutMs);
   if ((run.state.kind === 'parked' && run.state.deadline <= now) || (expired && next.state.kind === 'parked')) {
@@ -97,6 +97,12 @@ export function resumeParkedRun(input: unknown, expectedRevision: number, now: n
   }
   if (['operator-hold', 'progression-failed'].includes(run.state.reason) && run.state.deadline > now) {
     return reconcileRunLifecycle({ ...run, revision: run.revision + 1, state: { kind: 'running' } }, now, timeoutMs);
+  }
+  // PRE-7: the operator fixed the environment. The refused attempts move aside, so the next turn reserves a NEW generation whose preflight runs again.
+  if (run.state.reason === 'environment-not-ready' && run.state.deadline > now) {
+    const refused = run.bindings.filter(row => row.observedKind === 'launch-refused' && run.progress.some(task => task.taskId === row.identity.taskId && task.phase === 'pending'));
+    return reconcileRunLifecycle({ ...run, revision: run.revision + 1, state: { kind: 'running' }, bindings: run.bindings.filter(row => !refused.includes(row)),
+      previousBindings: [...run.previousBindings ?? [], ...refused] }, now, timeoutMs);
   }
   // Dependency/decision barriers survive resume; neither reset deadlines nor revive never-run work.
   return advanceRunLifecycle(run, expectedRevision, now, timeoutMs);

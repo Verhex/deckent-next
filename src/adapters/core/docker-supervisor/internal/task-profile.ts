@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { dockerOutputFilesSchema } from './output-files.js';
 import { dockerReadOnlyMountsSchema } from './mounts.js';
-import { executionProfileDefinitionSchema, type ExecutionProfileDefinition } from '#domain/index.js';
+import { environmentRequirementsSchema, executionProfileDefinitionSchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
 import { nativeSubscriptionSchema } from '#adapters/core/native-connection/index.js';
 
@@ -10,6 +10,8 @@ const dockerTaskProfileParametersSchema = DOCKER_EXECUTION_SETTINGS.omit({ execu
   nativeSubscription: nativeSubscriptionSchema.optional(), billingAxis: z.literal('local').optional(),
   outputFiles: dockerOutputFilesSchema.optional(),
   readOnlyMounts: dockerReadOnlyMountsSchema.optional(),
+  /** PRE-7: declared environment requirements (registry data), checked by Deckent before the worker starts. */
+  environment: environmentRequirementsSchema.optional(),
   argv: z.array(z.string().refine(value => !value.includes(String.fromCharCode(0)))).min(1)
     .refine(argv => (argv[0]?.length ?? 0) > 0).readonly(),
 }).strict().readonly();
@@ -34,11 +36,11 @@ export function resolveDockerTaskProfile(input: ExecutionProfileDefinition) {
   const parsed = dockerTaskProfileParametersSchema.safeParse(profile.data.parameters);
   if (!parsed.success) throw new DockerTaskProfileError();
   // `billingAxis: 'local'` declares no provider connection (spending class only); a subscription binding opens one, so both are refused.
-  const { argv, nativeSubscription, readOnlyMounts, billingAxis, ...options } = parsed.data;
+  const { argv, nativeSubscription, readOnlyMounts, billingAxis, environment, ...options } = parsed.data;
   if ((billingAxis && nativeSubscription) || (nativeSubscription?.promptDelivery && nativeSubscription.promptDelivery.argvSha256
     !== createHash('sha256').update(JSON.stringify(argv)).digest('hex'))) throw new DockerTaskProfileError();
   // Project-relative binds stay profile data; trusted composition resolves them to host paths (resolveDockerReadOnlyMounts).
-  return Object.freeze({ argv, nativeSubscription, readOnlyMounts, options: Object.freeze(options) });
+  return Object.freeze({ argv, nativeSubscription, readOnlyMounts, environment, options: Object.freeze(options) });
 }
 /** Effect reach of a frozen profile for automatic re-runs (delivery re-attempt, R3 stall retry): a profile this adapter resolves runs with
  * `--network none` and reaches only its workspace and the gateway's model tunnel; anything else is unknown and never re-run. */

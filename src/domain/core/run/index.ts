@@ -2,6 +2,8 @@ export { parkRunQuota, resetRunQuota, releaseRunQuota } from './internal/quota.j
 export type { RunQuotaWait } from './internal/quota.js';
 export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError, STALL_CAUSES } from './internal/contract.js';
 export { recoverStalledTask } from './internal/stall.js';
+export { observeRunAttemptClosure, environmentRequirementSchema, environmentRequirementsSchema } from './internal/environment.js';
+export type { EnvironmentRequirement } from './internal/environment.js';
 export type { StallCause } from './internal/stall.js';
 export type { RunIdentity, RunSnapshot } from './internal/contract.js';
 export { createRun, reserveRunTasks, observeRunAttempt, requestRunCancellation, closesAttemptWithoutExit } from './internal/reduce.js';

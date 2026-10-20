@@ -341,7 +341,8 @@
         "src/adapters/core/local-keyring",
         "src/engine/core/audit",
         "src/platform/core/utils",
-        "src/composition/core/runs"
+        "src/composition/core/runs",
+        "src/adapters/core/native-coding"
       ],
       "plan": "EXECUTION"
     },
@@ -458,6 +459,7 @@
     },
     "src/composition/core/root": {
       "dependencies": [
+        "src/engine/core/dispatch",
         "src/engine/core/provider-spend",
         "src/adapters/core/contract",
         "src/platform/core/config",
@@ -717,6 +719,7 @@
     },
     "src/engine/core/dispatch": {
       "dependencies": [
+        "src/domain/core/adapter-registry",
         "src/capabilities/core/artifacts",
         "src/domain/core/attempt",
         "src/domain/core/audit",
@@ -3203,6 +3206,7 @@
     },
     "src/surfaces/core/cli-admin": {
       "dependencies": [
+        "src/domain/core/attempt",
         "src/domain/core/audit",
         "src/surfaces/core/doctor",
         "src/platform/core/output",

@@ -11,6 +11,8 @@ export const processExitCauseSchema = z.object(processExitCauseShape).strict().r
 export type ProcessExitCause = z.infer<typeof processExitCauseSchema>;
 
 export const ATTEMPT_PROTOCOL_VERSION = 1;
+/** PRE-7: the typed launch refusal of Deckent's own environment preflight; it alone names the unmet declared requirement. */
+export const ENVIRONMENT_NOT_READY_CODE = 'EXECUTION_ENVIRONMENT_NOT_READY';
 export const attemptIdentitySchema = z.object({
   runId: identity, taskId: identity, attemptId: identity,
   scopeId: identity, layoutRevision: identity, generation: counter.positive(),
@@ -28,10 +30,14 @@ export const attemptObservationSchema = z.object({
     z.object({ kind: z.literal('cancelled') }).strict(),
     z.object({ kind: z.literal('unknown'), reasonCode: identity }).strict(),
     // Typed refusal before any dispatch claim (no launch, no effect); `code` is the refusing error code, open to adapter checks.
-    z.object({ kind: z.literal('launch-refused'), code: identity }).strict(),
+    // `requirement` (PRE-7) is the id of the unmet declared environment requirement, present exactly with ENVIRONMENT_NOT_READY_CODE.
+    z.object({ kind: z.literal('launch-refused'), code: identity, requirement: identity.optional() }).strict(),
   ]).superRefine((result, context) => {
     if ((result.kind === 'exited' || result.kind === 'quota-exhausted') && !isValidExitCause(result)) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_EXIT_CAUSE_INVALID' });
+    }
+    if (result.kind === 'launch-refused' && (result.code === ENVIRONMENT_NOT_READY_CODE) !== (result.requirement !== undefined)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_REFUSAL_INVALID' });
     }
   }).readonly(),
 }).strict().readonly();

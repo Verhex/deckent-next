@@ -7,3 +7,5 @@ export type { NativeCliCapabilities } from '#adapters/core/native-cli-registry/i
 
 export { bindNativeWorkerEffort } from './internal/effort.js';
 export { detectNativeCliVersion } from './internal/discovery.js';
+export { nativeCodingEnvironmentProbes } from './internal/environment.js';
+export type { ContainerProbeRunner } from './internal/environment.js';

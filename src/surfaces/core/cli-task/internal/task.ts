@@ -27,7 +27,7 @@ function scopeLine(scope: PatchScope, locale: Locale) {
 }
 import type { TaskCommandContext } from './context.js';
 import { patchStat, resolveLatestAttempt, terminalDeliveryPort } from '#surfaces/core/cli-terminal/index.js';
-import { notAcceptedLabel, renderWorkerTranscript } from '#surfaces/core/monitor/index.js';
+import { notAcceptedLabel, notAcceptedNextStep, renderWorkerTranscript } from '#surfaces/core/monitor/index.js';
 /**
  * SEC-5S F1: a worker-written file body reaches the owner's terminal only through `terminalSafeText`, line by line. A carriage return
  * inside a line, which would have overwritten it, becomes a visible continuation that keeps the diff marker (' ', '-', '+') of the
@@ -76,7 +76,7 @@ async function evaluateTask(values: ReadonlyMap<string, string>, context: TaskCo
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => {
     const task = data.evaluation.run.tasks.find(value => value.id === taskId); if (!task) throw ErrorRegistry.createError('RUN_STORE_CORRUPT');
     return [t('cli.task.evaluate.result', { task: taskId, command: commandId, phase: phaseWord(task.phase, locale), revision: data.evaluation.run.revision }, locale),
-      ...(task.notAcceptedReason ? [notAcceptedLabel(task.notAcceptedReason, locale)] : [])].join('\n');
+      ...(task.notAcceptedReason ? [notAcceptedLabel(task.notAcceptedReason, locale), ...notAcceptedNextStep(task.notAcceptedReason, task.profile, locale)] : [])].join('\n');
   } });
 }
 

@@ -18,3 +18,5 @@ export { LostDispatchApplication } from './internal/fence-application.js';
 export type { LostDispatchObserver } from './internal/fence-application.js';
 export { DispatchPreparationGuard, DISPATCH_PREPARATION_INSTANCE, dispatchPreparationRecordSchema } from './internal/preparation.js';
 export type { DispatchPreparationContext, DispatchPreparationInstance, DispatchPreparationPark, DispatchPreparationPhase, DispatchPreparationRecord } from './internal/preparation.js';
+export { assertTaskEnvironment, environmentProbeRegistry, registerEnvironmentProbeKind, EnvironmentProbeRegistry } from './internal/environment.js';
+export type { EnvironmentProbe, EnvironmentProbes } from './internal/environment.js';

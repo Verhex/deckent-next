@@ -1,6 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
 import type { WorkerPhase } from '#domain/index.js';
-import type { WorkerProcessState } from '#engine/index.js';
+import type { MONITOR_ENVIRONMENT_DETAIL, WorkerProcessState } from '#engine/index.js';
 import type { MonitorDeliveryState, MonitorDeliveryOutlook, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState, MonitorTask, StopCause } from '#engine/index.js';
 import { phaseLabel } from './transcript.js';
 
@@ -87,8 +87,20 @@ export function installStatusLabel(status: MonitorInstallStatus, locale: Locale)
 export function notAcceptedLabel(reason: NonNullable<MonitorTask['evaluation']['reason']>, locale: Locale): string {
   const labels = { 'no-change-produced': t('task.acceptance.noChangeProduced', {}, locale), 'report-missing': t('task.acceptance.reportMissing', {}, locale),
     'report-invalid': t('task.acceptance.reportInvalid', {}, locale), 'declared-check-not-passed': t('task.acceptance.declaredCheckNotPassed', {}, locale),
-    'worker-stalled': t('task.acceptance.workerStalled', {}, locale) };
+    'worker-stalled': t('task.acceptance.workerStalled', {}, locale), 'acceptance-check-not-run': t('task.acceptance.checkNotRun', {}, locale) };
   return labels[reason];
+}
+/** The engine's environment-park detail prefix, tied to its constant by type (a value import would load the host graph at CLI startup). */
+const ENVIRONMENT_DETAIL: typeof MONITOR_ENVIRONMENT_DETAIL = 'environment-not-ready:';
+/** A blocker's detail in words where one is known (a missing patch; PRE-7: an environment park names its requirement); else the recorded detail. */
+export function blockerDetailText(detail: string, locale: Locale): string {
+  if (detail === 'patch-missing') return t('monitor.blocker.patchMissing', {}, locale);
+  return detail.startsWith(ENVIRONMENT_DETAIL) ? t('monitor.blocker.environmentNotReady', { requirement: detail.slice(ENVIRONMENT_DETAIL.length) }, locale) : detail;
+}
+/** PRE-7: the next step after an acceptance check the worker could not run. Deckent's preflight checks only declared requirements, so an
+ * undeclared missing tool reaches the worker; the operator may declare it on the task's template (never added automatically). */
+export function notAcceptedNextStep(reason: NonNullable<MonitorTask['evaluation']['reason']>, profile: Readonly<{ id: string; version: number }> | null, locale: Locale): string[] {
+  return reason === 'acceptance-check-not-run' ? [t('task.acceptance.checkNotRunNext', { template: profile?.id ?? '—', version: profile?.version ?? '—' }, locale)] : [];
 }
 /** PRE-34: the shared stop cause in words (one map, every monitor surface); `unrecorded` keeps the honest "not recorded". */
 export function stopCauseText(cause: StopCause, locale: Locale): string {
