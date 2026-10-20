@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ENVIRONMENT_NOT_READY_CODE, applyAttemptObservation, sameAttemptIdentity, type AttemptIdentity, type AttemptObservation } from '#domain/index.js';
+import { ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE, applyAttemptObservation, sameAttemptIdentity, type AttemptIdentity, type AttemptObservation } from '#domain/index.js';
 import { AttemptStoreError, type AttemptStore } from '#engine/core/attempts/index.js';
 import type { RunStore } from './store.js';
 
@@ -34,11 +34,11 @@ const PERMANENT_LAUNCH_REFUSALS: ReadonlySet<string> = new Set(['EXECUTION_NOT_C
   // here (transient), until the Attempt's `maxTimeRefusals` are spent; only the refusal after that arrives here as WORKER_TREE_SCAN_INCOMPLETE.
   'WORKER_TREE_SECRET_REFUSED', 'WORKER_TREE_SCAN_INCOMPLETE',
   // PRE-7: Deckent's preflight found a declared requirement unmet. It carries the requirement; the Run parks for the operator (no turn retries it).
-  ENVIRONMENT_NOT_READY_CODE]);
+  ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE]);
 export function classifyLaunchRefusal(error: unknown): Readonly<{ disposition: 'permanent'; code: string; requirement?: string }> | Readonly<{ disposition: 'transient' }> {
   const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string' ? error.code : null;
   if (code === null || !PERMANENT_LAUNCH_REFUSALS.has(code)) return Object.freeze({ disposition: 'transient' as const });
-  if (code !== ENVIRONMENT_NOT_READY_CODE) return Object.freeze({ disposition: 'permanent' as const, code });
+  if (code !== ENVIRONMENT_NOT_READY_CODE && code !== ENVIRONMENT_UNCERTAIN_CODE) return Object.freeze({ disposition: 'permanent' as const, code });
   const requirement = (error as { params?: Record<string, unknown> }).params?.['requirement'];
   return typeof requirement === 'string' ? Object.freeze({ disposition: 'permanent' as const, code, requirement }) : Object.freeze({ disposition: 'transient' as const });
 }

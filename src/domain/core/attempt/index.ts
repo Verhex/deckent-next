@@ -1,4 +1,4 @@
-export { ATTEMPT_PROTOCOL_VERSION, attemptIdentitySchema, attemptObservationSchema, attemptSnapshotSchema, sameAttemptIdentity, AttemptError, ENVIRONMENT_NOT_READY_CODE } from './internal/contract.js';
+export { ATTEMPT_PROTOCOL_VERSION, attemptIdentitySchema, attemptObservationSchema, attemptSnapshotSchema, sameAttemptIdentity, AttemptError, ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE } from './internal/contract.js';
 export type { AttemptIdentity, AttemptObservation, AttemptSnapshot, AttemptPhase, AttemptErrorCode } from './internal/contract.js';
 export { createAttempt, attemptPhase, requestAttemptCancellation, applyAttemptObservation } from './internal/reduce.js';
 export { processExitCauseShape, processExitCauseSchema, isValidExitCause } from './internal/contract.js';

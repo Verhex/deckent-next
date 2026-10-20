@@ -128,6 +128,20 @@ it('cancelling an environment-parked Run through the real delivery path ends it 
   } finally { f.store.close(); }
 }, 120_000);
 
+it('REVISE 2691: a probe whose end cannot be proven is uncertain: nothing launches, the refusal is typed as uncertain with its requirement, the Run parks for the operator', async context => {
+  const f = await fixture(context, REQUIREMENTS);
+  try {
+    const execute = vi.spyOn(DockerSupervisor.prototype, 'execute'), probe = vi.spyOn(DockerSupervisor.prototype, 'probe').mockResolvedValueOnce({ uncertain: 'deckent-env-left' });
+    const identity = await reserve(f, 0);
+    await expect(executeConfiguredTask(f.project, identity, f.options)).rejects.toMatchObject({ code: 'EXECUTION_ENVIRONMENT_UNCERTAIN', params: { requirement: 'node', probe: 'deckent-env-left' } });
+    expect(probe).toHaveBeenCalledTimes(1); expect(execute).not.toHaveBeenCalled(); expect(await readdir(f.workspaces)).toEqual([]);
+    expect((await f.store.load('s', identity.attemptId))!.lastObservation?.result).toEqual({ kind: 'launch-refused', code: 'EXECUTION_ENVIRONMENT_UNCERTAIN', requirement: 'node' });
+    expect((await f.store.loadRun('s', 'r'))!.state).toMatchObject({ kind: 'parked', reason: 'environment-not-ready', failureCode: 'node' });
+    // Turns while parked start nothing, so no second probe of that identity is started behind the operator's back.
+    expect((await advanceConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, new AbortController().signal, f.options)).attempted).toBe(0); expect(probe).toHaveBeenCalledTimes(1);
+  } finally { f.store.close(); }
+}, 120_000);
+
 it('negative: a requirement whose probe kind no adapter registers refuses (fail closed); no declaration runs no probe at all', async context => {
   const f = await fixture(context, { schemaVersion: 1, requirements: [{ id: 'erp', kind: 'connector-reachable', target: 'erp-main' }] });
   try {

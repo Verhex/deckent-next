@@ -399,6 +399,9 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   // (yes|no). Without params (a later view of the recorded refusal) the summary stands. An installation defect, never a task failure.
   EXECUTION_ENVIRONMENT_NOT_READY: { category: 'error', render: (p, l) => ({ message: p['kind'] === undefined ? t('error.EXECUTION_ENVIRONMENT_NOT_READY.summary', p, l)
     : p['registered'] === 'no' ? t('error.EXECUTION_ENVIRONMENT_NOT_READY.unregistered', p, l) : t('error.EXECUTION_ENVIRONMENT_NOT_READY', p, l), suggestion: t('remedy.EXECUTION_ENVIRONMENT_NOT_READY', p, l) }) },
+  // REVISE 2691: the preflight could not prove its probe container gone; params requirement, kind, probe. Nothing launched; never met or unmet.
+  EXECUTION_ENVIRONMENT_UNCERTAIN: { category: 'error', render: (p, l) => ({ message: p['probe'] === undefined ? t('error.EXECUTION_ENVIRONMENT_UNCERTAIN.summary', p, l)
+    : t('error.EXECUTION_ENVIRONMENT_UNCERTAIN', p, l), suggestion: t('remedy.EXECUTION_ENVIRONMENT_UNCERTAIN', p, l) }) },
   // R2 (D3a 2026-10-18): a load-dependent `time` bound (limit timeoutMs or admissionTimeoutMs), retried on a later turn; params refusals, maxTimeRefusals.
   WORKER_TREE_SCAN_DEFERRED: { category: 'error', render: (p, l) => ({ message: p['limit'] === undefined ? t('error.WORKER_TREE_SCAN_DEFERRED.summary', p, l) : t('error.WORKER_TREE_SCAN_DEFERRED', p, l),
     suggestion: t('remedy.WORKER_TREE_SCAN_DEFERRED', p, l) }) },

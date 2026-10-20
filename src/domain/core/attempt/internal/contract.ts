@@ -13,6 +13,8 @@ export type ProcessExitCause = z.infer<typeof processExitCauseSchema>;
 export const ATTEMPT_PROTOCOL_VERSION = 1;
 /** PRE-7: the typed launch refusal of Deckent's own environment preflight; it alone names the unmet declared requirement. */
 export const ENVIRONMENT_NOT_READY_CODE = 'EXECUTION_ENVIRONMENT_NOT_READY';
+/** REVISE 2691: the preflight could not prove its probe container gone; nothing launched, the requirement's probe stays the owner. */
+export const ENVIRONMENT_UNCERTAIN_CODE = 'EXECUTION_ENVIRONMENT_UNCERTAIN';
 export const attemptIdentitySchema = z.object({
   runId: identity, taskId: identity, attemptId: identity,
   scopeId: identity, layoutRevision: identity, generation: counter.positive(),
@@ -36,7 +38,7 @@ export const attemptObservationSchema = z.object({
     if ((result.kind === 'exited' || result.kind === 'quota-exhausted') && !isValidExitCause(result)) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_EXIT_CAUSE_INVALID' });
     }
-    if (result.kind === 'launch-refused' && (result.code === ENVIRONMENT_NOT_READY_CODE) !== (result.requirement !== undefined)) {
+    if (result.kind === 'launch-refused' && (result.code === ENVIRONMENT_NOT_READY_CODE || result.code === ENVIRONMENT_UNCERTAIN_CODE) !== (result.requirement !== undefined)) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'ATTEMPT_REFUSAL_INVALID' });
     }
   }).readonly(),

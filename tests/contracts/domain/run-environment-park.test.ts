@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { createAttempt, applyAttemptObservation, createRun, reserveRunTasks, observeRunAttempt, observeRunAttemptClosure, resumeParkedRun, advanceRunLifecycle,
-  closeParkedRun, holdRun, requestRunCancellation, runSnapshotSchema, environmentRequirementsSchema, ENVIRONMENT_NOT_READY_CODE } from '#domain/index.js';
+  closeParkedRun, holdRun, requestRunCancellation, runSnapshotSchema, environmentRequirementsSchema, ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE } from '#domain/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 // PRE-7 ORTAM-HAZIR: a launch refused by Deckent's own preflight (an unmet declared environment requirement) parks the Run for the operator,
 // keeps the task pending for a NEW attempt after an explicit resume, and never fails the work or offers acceptance.
@@ -64,6 +64,12 @@ it('negative: any other launch refusal still fails its task; a refusal without e
   // A cancelled Run does not park: the refusal fails the task as before.
   const cancelling = requestRunCancellation(reserved(), 1, { now: 5, timeoutMs: timing.timeoutMs });
   expect(observeRunAttemptClosure(cancelling, cancelling.revision, refused('typescript'), timing.now, timing.timeoutMs).progress[0]!.phase).toBe('failed');
+});
+
+it('REVISE 2691: an uncertain probe end is a typed launch refusal with its requirement and parks the same way; without a requirement it is invalid', () => {
+  const uncertain = applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'launch-refused', code: ENVIRONMENT_UNCERTAIN_CODE, requirement: 'node' }), 0);
+  expect(observeRunAttemptClosure(reserved(), 1, uncertain, timing.now, timing.timeoutMs).state).toEqual({ kind: 'parked', reason: 'environment-not-ready', failureCode: 'node', since: 10, deadline: 110 });
+  expect(() => applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'launch-refused', code: ENVIRONMENT_UNCERTAIN_CODE }), 0)).toThrow('ATTEMPT_INVALID');
 });
 
 it('declared requirements are versioned registry data in the generic form kind + target (+ expectation), unique ids, bounded', () => {

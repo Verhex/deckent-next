@@ -6,16 +6,17 @@ import { configServiceState, shutdownCommandSchema, type CancellationRecoveryCom
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { formatDuration as humanDuration } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
-import type { ENVIRONMENT_NOT_READY_CODE } from '#domain/index.js';
+import type { ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE } from '#domain/index.js';
 import { adminInteractive, adminSinks, askAdminCard, confirmOptions, reportCancelled } from './io.js';
 
 /** The service journal line of a progression turn that stopped. PRE-7: an environment refusal parked the Run for its environment (an
  * installation defect, not a task failure); it is named so, with the requirement, never as "could not continue". JSON is unchanged. */
-const ENVIRONMENT_NOT_READY: typeof ENVIRONMENT_NOT_READY_CODE = 'EXECUTION_ENVIRONMENT_NOT_READY';
+const ENVIRONMENT_NOT_READY: typeof ENVIRONMENT_NOT_READY_CODE = 'EXECUTION_ENVIRONMENT_NOT_READY', ENVIRONMENT_UNCERTAIN: typeof ENVIRONMENT_UNCERTAIN_CODE = 'EXECUTION_ENVIRONMENT_UNCERTAIN';
 export function runProgressionErrorText(query: Readonly<{ scopeId: string; runId: string }> | null | undefined,
   error: Pick<DeckentError, 'code'> & Partial<Pick<DeckentError, 'params' | 'localize' | 'message'>>, locale: Locale): string {
   const prefix = query ? `${query.scopeId}/${query.runId}: ` : '', requirement = error.params?.['requirement'];
   if (error.code === ENVIRONMENT_NOT_READY && typeof requirement === 'string') return prefix + t('cli.runtime.runParkedEnvironment', { requirement }, locale);
+  if (error.code === ENVIRONMENT_UNCERTAIN && typeof requirement === 'string') return prefix + t('cli.runtime.runParkedEnvironmentUncertain', { requirement, probe: String(error.params?.['probe'] ?? '—') }, locale);
   return `${prefix}${t('cli.runtime.runProgressionFailed', { code: error.code }, locale)}: ${error.localize?.(locale).message ?? error.message ?? error.code}`;
 }
 export interface RuntimeServiceHost {
@@ -27,6 +28,7 @@ export interface RuntimeServiceHost {
 export interface RuntimeServiceObserver extends BackupScheduleObserver {
   onAuditIntegrity?(status: import('#engine/index.js').AuditServiceStatus): void | Promise<void>;
   onQueryFailure?(event: { readonly code: string; readonly diagnosticId: string; readonly detail: string }): void | Promise<void>;
+  onPreflightProbesSwept?(result: Readonly<{ removed: number; unsettled: readonly string[]; unlisted?: true }>): void | Promise<void>;
   onRunProgression?(query: ProgressionCursor, result: Readonly<{ run: RunView; attempted: number; stopped: boolean; waitedForSlotMs?: number }>): void | Promise<void>;
   onRunProgressionError?(query: ProgressionCursor | null, error: Pick<DeckentError, 'code'> & Partial<Pick<DeckentError, 'params' | 'localize' | 'message'>>): void | Promise<void>;
   onReconciliationPage?(command: ReconciliationRecoveryCommand, result: ReconciliationRecoveryPage): void | Promise<void>;
@@ -165,6 +167,9 @@ export async function runtimeCommand(argv: readonly string[], context: AdminComm
           () => t('cli.runtime.runProgression', { runId: query.runId, count: result.attempted }, locale));
       }
     },
+    onPreflightProbesSwept: async result => { const failed = result.unlisted || result.unsettled.length > 0;
+      output({ schemaVersion: 1, event: 'preflight-probes-swept', result }, () => result.unlisted ? t('cli.runtime.preflightUnlisted', {}, locale) : failed
+        ? t('cli.runtime.preflightUnsettled', { removed: result.removed, probes: result.unsettled.join(', ') }, locale) : t('cli.runtime.preflightSwept', { removed: result.removed }, locale), failed ? 'error' : 'info'); },
     onRunProgressionError: async (query, error) => {
       output({ schemaVersion: 1, event: 'run-progression-failed', query, code: error.code, params: error.params }, () => runProgressionErrorText(query, error, locale), 'error');
     },
