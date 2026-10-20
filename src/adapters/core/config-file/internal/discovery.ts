@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import { probeDockerImageSetAvailability, runNodeDockerCommand, type DockerCommandRunner } from '#adapters/core/docker-supervisor/index.js';
+import bounds from './discovery-bounds.json' with { type: 'json' };
 const exec = promisify(execFile);
 export interface ConfigDiscoveryLimits { readonly timeoutMs: number; readonly outputBytes: number; readonly maxEntries: number }
 /** A discovery's answer; `partial` names what cut it short: its time limit, or a size bound with entries left unread. The values found are kept as before. */
@@ -15,7 +16,8 @@ export type ConfigDiscovery = Readonly<{ values: readonly string[]; partial: fal
  * Local images are inspected in at most `imageProcesses` concurrent `docker image inspect` calls of at most `imageChunk` ids (J3-IMAGES,
  * measured on 43 images: one call 1.5 s, four 0.55 s; the CLI inspects the ids of one call one after another).
  */
-export const CONFIG_DISCOVERY_BOUNDS = Object.freeze({ pathDirectories: 256, scanFactor: 16, imageProcesses: 4, imageChunk: 16 });
+export const CONFIG_DISCOVERY_BOUNDS = Object.freeze({ pathDirectories: bounds.pathDirectories, scanFactor: bounds.scanFactor,
+  imageProcesses: bounds.imageProcesses, imageChunk: bounds.imageChunk, imageAfterCheckMs: bounds.imageAfterCheckMs });
 /** Discovery never starts a shell, mutates Git, pulls an image or opens a ledger writer. */
 export async function discoverConfigExecutables(name: 'docker' | 'git', env: NodeJS.ProcessEnv, limits: Pick<ConfigDiscoveryLimits, 'timeoutMs'>): Promise<ConfigDiscovery> {
   const deadline = AbortSignal.timeout(limits.timeoutMs);
@@ -39,7 +41,7 @@ export async function discoverConfigImages(executable: string, limits: ConfigDis
   const size = listed.length > imageIds.length && 'size'; // a time cut below is named first: fewer than the bound were proven
   // One endpoint pin and daemon id check around all inspects; images not proven by the deadline are left out, the proven ones kept.
   const probe = { executable, imageIds, outputBytes: limits.outputBytes, timeoutMs: Math.max(1, Math.floor(limits.timeoutMs - (performance.now() - started))),
-    chunkSize: CONFIG_DISCOVERY_BOUNDS.imageChunk, processes: CONFIG_DISCOVERY_BOUNDS.imageProcesses };
+    chunkSize: CONFIG_DISCOVERY_BOUNDS.imageChunk, processes: CONFIG_DISCOVERY_BOUNDS.imageProcesses, minAfterCheckMs: CONFIG_DISCOVERY_BOUNDS.imageAfterCheckMs };
   return probeDockerImageSetAvailability(probe, runner, deadline).then(set => ({ values: set.imageIds, partial: set.partial ? 'time' as const : size }),
     () => ({ values: [], partial: false })); // Changed daemon or unreachable endpoint: nothing is proposed (refused, not partial).
 }

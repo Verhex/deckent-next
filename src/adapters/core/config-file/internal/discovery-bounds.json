@@ -1,0 +1,8 @@
+{
+  "$comment": "Choice-source discovery bounds for the config window and `config set` (alpha.48 J3-IMAGES, alpha.49 CONFIG-PARTIAL, CONFIG-PARTIAL-CLI): PATH directories read, directory-listing scan factor, concurrent image-inspect processes, image ids per inspect, and the least time (ms) kept for the daemon-id check after the inspects.",
+  "pathDirectories": 256,
+  "scanFactor": 16,
+  "imageProcesses": 4,
+  "imageChunk": 16,
+  "imageAfterCheckMs": 100
+}

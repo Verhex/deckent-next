@@ -17,7 +17,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
-function fakeDocker(ids: readonly string[], options: { missing?: readonly string[]; hang?: string; daemons?: readonly string[] } = {}) {
+function fakeDocker(ids: readonly string[], options: { missing?: readonly string[]; hang?: string; daemons?: readonly string[]; infoMs?: number } = {}) {
   const calls: { args: string[]; at: number }[] = [];
   let infos = 0;
   const runner = (command: DockerCommand, signal?: AbortSignal) => new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
@@ -31,7 +31,7 @@ function fakeDocker(ids: readonly string[], options: { missing?: readonly string
       if (found.length === inspected.length) return resolve({ stdout: found.map(value => `${value}\n`).join(''), stderr: '' });
       reject(new DockerCommandFailure(found.map(value => `${value}\n`).join(''), 'Error response from daemon: No such image', 1, false));
     };
-    const timer = options.hang && inspected.includes(options.hang) ? undefined : setTimeout(answer, stepMs);
+    const timer = options.hang && inspected.includes(options.hang) ? undefined : setTimeout(answer, args[2] === 'info' ? options.infoMs ?? stepMs : stepMs);
     signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DockerCommandFailure('', '', null, true, 'signal', signal.reason)); }, { once: true });
   });
   return { runner, calls, infos: () => calls.filter(call => call.args[2] === 'info') };
@@ -66,19 +66,29 @@ it('excludes an id the inspect does not return, refuses the list when the daemon
 
 it('keeps the images proven before the deadline and still runs the daemon id check after them', async () => {
   // Fixed order: ls (t=0..10), context (10..20), info (20..30); every inspect chunk answers at t=40 except the one holding id 12, which never
-  // answers. Inspects are cut at the deadline (t=400) minus twice the measured info read (20 ms) = t=380; the after-check runs 380..390.
+  // answers. Inspects are cut at the deadline (t=400) minus the larger of twice the measured info read (20 ms) and the after-check floor
+  // (`imageAfterCheckMs`, 100 ms) = t=300; the after-check runs 300..310.
   const docker = fakeDocker(twelve, { hang: id(12) });
   const size = Math.min(CONFIG_DISCOVERY_BOUNDS.imageChunk, Math.ceil(twelve.length / CONFIG_DISCOVERY_BOUNDS.imageProcesses));
   const hung = twelve.slice(Math.floor(11 / size) * size, Math.floor(11 / size) * size + size), proven = twelve.filter(value => !hung.includes(value));
   expect(await discover(docker, limits)).toEqual({ value: { values: proven, partial: 'time' } }); // CONFIG-PARTIAL-NOTICE: cut short, said so
   expect(proven.length).toBeGreaterThan(0);
   expect(proven).not.toContain(id(12));
-  expect(docker.infos().map(call => call.at)).toEqual([20, 380]);
+  expect(docker.infos().map(call => call.at)).toEqual([20, 400 - CONFIG_DISCOVERY_BOUNDS.imageAfterCheckMs]);
   // A daemon swap is still refused when the list is partial.
   expect(await discover(fakeDocker(twelve, { hang: id(12), daemons: ['daemon-a', 'daemon-b'] }), limits)).toEqual({ value: { values: [], partial: false } });
 });
 
 // CONFIG-PARTIAL-CLI: more local images than the list holds (`maxEntries`) is a size cut, said as such; exactly `maxEntries` is complete.
+it('a near-instant daemon-id read still leaves time for the after-check: the proven images are kept, not dropped (CONFIG-PARTIAL-CLI finding)', async () => {
+  // Without the floor the reserve was 2 × 0 ms: the after-check started at the deadline, was aborted with it, and the whole list was refused.
+  const docker = fakeDocker(twelve, { hang: id(12), infoMs: 0 });
+  const outcome = await discover(docker, limits) as { value: { values: string[]; partial: unknown } };
+  expect(outcome.value.partial).toBe('time');
+  expect(outcome.value.values.length).toBeGreaterThan(0);
+  expect(outcome.value.values).not.toContain(id(12));
+  expect(docker.infos().map(call => call.at)).toEqual([20, 400 - CONFIG_DISCOVERY_BOUNDS.imageAfterCheckMs]);
+});
 it('says a list cut by its size bound is partial (size), keeps the images it holds, and calls a list that fits complete', async () => {
   const many = Array.from({ length: 9 }, (_, n) => id(n + 1)), bounded = { ...limits, maxEntries: 8 };
   expect(await discover(fakeDocker(many), bounded)).toEqual({ value: { values: many.slice(0, 8), partial: 'size' } });
