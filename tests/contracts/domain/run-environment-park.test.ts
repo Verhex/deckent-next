@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { createAttempt, applyAttemptObservation, createRun, reserveRunTasks, observeRunAttempt, observeRunAttemptClosure, resumeParkedRun, advanceRunLifecycle,
-  closeParkedRun, holdRun, requestRunCancellation, runSnapshotSchema, settleEnvironmentProbe, environmentRequirementsSchema, ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE } from '#domain/index.js';
+  closeParkedRun, holdRun, requestRunCancellation, runSnapshotSchema, settleEnvironmentProbe, environmentRequirementsSchema, ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE,
+  holdEnvironmentProbes, releaseEnvironmentProbes, preventRunAttempt, requestAttemptCancellation } from '#domain/index.js';
 import { measureTaskOccupancy } from '#engine/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 // PRE-7 ORTAM-HAZIR: a launch refused by Deckent's own preflight (an unmet declared environment requirement) parks the Run for the operator,
@@ -110,6 +111,53 @@ it('REVISE 2693: an uncertain probe on an already cancelled Run still holds the 
   const cancelling = requestRunCancellation(reserved(), 1, { now: 5, timeoutMs: timing.timeoutMs });
   const held = observeRunAttemptClosure(cancelling, cancelling.revision, uncertainAttempt(), timing.now, timing.timeoutMs);
   expect(held.progress[0]).toMatchObject({ phase: 'pending', unresolvedEffects: true }); expect(held.state.kind).not.toBe('terminal');
+});
+
+// REVISE 2695: custody is written before the first probe container can start; only the end of the probe path (an answer, or a proven
+// removal) transitions it, exactly once. Cancellation (Run or attempt), prevention and a worker observation never release it.
+const PROBES = ['deckent-env-' + 'b'.repeat(64), 'deckent-env-' + 'c'.repeat(64)];
+const custody = (run = reserved()) => holdEnvironmentProbes(run, run.revision, identity, PROBES);
+it('REVISE 2695: custody before the probe keeps the slot; cancel cannot settle, prevent or close it; nothing else may observe the attempt', () => {
+  const held = custody();
+  expect(held.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: true }); expect(held.bindings[0]).toMatchObject({ observedKind: null, probes: PROBES });
+  expect(measureTaskOccupancy(held.progress)).toEqual({ execution: 1, inFlight: 1 });
+  const cancelling = requestRunCancellation(held, held.revision, timing);
+  expect(cancelling.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: true }); expect(cancelling.state.kind).not.toBe('terminal');
+  expect(measureTaskOccupancy(cancelling.progress).execution).toBe(1);
+  expect(() => preventRunAttempt(cancelling, cancelling.revision, requestAttemptCancellation(createAttempt(identity), 0), timing)).toThrow('RUN_ATTEMPT_CONFLICT');
+  expect(() => observeRunAttempt(held, held.revision, applyAttemptObservation(createAttempt(identity), observation(1, { kind: 'started' }), 0))).toThrow('RUN_ATTEMPT_CONFLICT');
+  expect(() => observeRunAttemptClosure(held, held.revision, refused(), timing.now, timing.timeoutMs)).toThrow('RUN_ATTEMPT_CONFLICT');
+  expect(() => custody(held)).toThrow('RUN_ATTEMPT_CONFLICT');
+  const cancelled = requestRunCancellation(reserved(), 1, timing);
+  expect(() => custody(cancelled)).toThrow('RUN_CANCEL_REQUESTED');
+  // The stored shape: names exactly with an active task under an unresolved effect and an unobserved binding.
+  expect(() => runSnapshotSchema.parse({ ...held, progress: [{ ...held.progress[0]!, unresolvedEffects: false }, held.progress[1]] })).toThrow();
+  expect(() => runSnapshotSchema.parse({ ...held, bindings: [{ ...held.bindings[0]!, probes: ['x'.repeat(300)] }] })).toThrow();
+});
+it('REVISE 2695: met — the release clears the custody once; with cancel requested (Run or attempt) it closes the task cancelled in the same step', () => {
+  const held = custody(), released = releaseEnvironmentProbes(held, held.revision, createAttempt(identity), timing.now, timing.timeoutMs);
+  expect(released.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: false }); expect(released.bindings[0]).not.toHaveProperty('probes');
+  expect(() => releaseEnvironmentProbes(released, released.revision, createAttempt(identity), timing.now, timing.timeoutMs)).toThrow('RUN_ATTEMPT_CONFLICT');
+  const cancelling = requestRunCancellation(held, held.revision, timing);
+  const ended = releaseEnvironmentProbes(cancelling, cancelling.revision, requestAttemptCancellation(createAttempt(identity), 0), timing.now, timing.timeoutMs);
+  expect(ended.progress.map(task => task.phase)).toEqual(['cancelled', 'cancelled']); expect(ended.state).toMatchObject({ kind: 'terminal', reason: 'cancelled' });
+  expect(measureTaskOccupancy(ended.progress)).toEqual({ execution: 0, inFlight: 0 });
+  const attemptOnly = releaseEnvironmentProbes(held, held.revision, requestAttemptCancellation(createAttempt(identity), 0), timing.now, timing.timeoutMs);
+  expect(attemptOnly.progress[0]).toMatchObject({ phase: 'cancelled', unresolvedEffects: false });
+});
+it('REVISE 2695: an environment answer transitions from custody: unmet parks, unmet under cancel fails as before, uncertain becomes the 2693 hold', () => {
+  const parked = observeRunAttemptClosure(custody(), 2, refused('typescript'), timing.now, timing.timeoutMs);
+  expect(parked.state).toMatchObject({ kind: 'parked', reason: 'environment-not-ready', failureCode: 'typescript' });
+  expect(parked.progress[0]).toMatchObject({ phase: 'pending', unresolvedEffects: false }); expect(parked.bindings[0]).not.toHaveProperty('probes');
+  const cancelling = requestRunCancellation(custody(), 2, timing);
+  expect(observeRunAttemptClosure(cancelling, cancelling.revision, refused('typescript'), timing.now, timing.timeoutMs).progress[0]).toMatchObject({ phase: 'failed', unresolvedEffects: false });
+  for (const run of [custody(), cancelling]) {
+    const held = observeRunAttemptClosure(run, run.revision, uncertainAttempt(), timing.now, timing.timeoutMs);
+    expect(held.progress[0]).toMatchObject({ phase: 'pending', unresolvedEffects: true }); expect(held.bindings[0]).toMatchObject({ observedKind: 'launch-refused' });
+    expect(held.bindings[0]).not.toHaveProperty('probes'); expect(measureTaskOccupancy(held.progress).execution).toBe(1);
+  }
+  // A crash between the attempt's recorded answer and its Run projection: the release completes that projection instead.
+  expect(releaseEnvironmentProbes(custody(), 2, refused('typescript'), timing.now, timing.timeoutMs).state).toMatchObject({ reason: 'environment-not-ready' });
 });
 
 it('declared requirements are versioned registry data in the generic form kind + target (+ expectation), unique ids, bounded', () => {

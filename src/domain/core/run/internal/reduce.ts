@@ -46,7 +46,8 @@ export function projectRunAttempt(input: unknown, expectedRevision: number, atte
   const result = attempt.lastObservation?.result;
   if (result?.kind === 'launch-refused' && result.requirement !== undefined && !environmentFails) throw new RunError('RUN_ATTEMPT_CONFLICT');
   const binding = run.bindings.find(value => value.identity.taskId === attempt.identity.taskId);
-  if (!binding || !sameAttemptIdentity(binding.identity, attempt.identity)) throw new RunError('RUN_ATTEMPT_CONFLICT');
+  // REVISE 2695: an attempt under probe custody is observed only through its environment answer (observeRunAttemptClosure).
+  if (!binding || !sameAttemptIdentity(binding.identity, attempt.identity) || binding.probes) throw new RunError('RUN_ATTEMPT_CONFLICT');
   const observation = attempt.lastObservation;
   if (!observation || (binding.observedRevision !== null && attempt.revision <= binding.observedRevision)) throw new RunError('RUN_OBSERVATION_STALE');
   if ((binding.observedKind === 'exited' || binding.observedKind === 'cancelled' || closesAttemptWithoutExit(binding.observedKind)) && observation.result.kind !== binding.observedKind) throw new RunError('RUN_ATTEMPT_CONFLICT');

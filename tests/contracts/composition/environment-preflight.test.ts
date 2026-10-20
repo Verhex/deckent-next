@@ -170,6 +170,131 @@ it('REVISE 2693: an uncertain probe keeps its pool slot (capacity 1): another Ru
   } finally { f.store.close(); }
 }, 120_000);
 
+// REVISE 2695 (Astra REVIEW2694 F1): custody is durable before the first probe container starts. A cancel while the probe runs releases
+// nothing; only the end of the probe path (an answer, or the proven removal of every probe it covers) does, exactly once.
+const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; };
+const secondRun = async (f: Awaited<ReturnType<typeof fixture>>) => {
+  const graph = { schemaVersion: 4 as const, revision: 1, tasks: [{ id: 'b', kind: 'fixture', dependencies: [], acceptanceCriteria: ['exit'] }],
+    criterionDefinitions: [{ id: 'exit', version: 1, description: 'zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
+  await createConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r2', commandId: 'create-r2', graph }, f.options);
+  return () => reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r2', commandId: 'reserve-r2-' + Math.random(), expectedRevision: 0 }, f.options);
+};
+const cancelA = async (f: Awaited<ReturnType<typeof fixture>>) => deliverConfiguredRunCancellation(f.project,
+  { schemaVersion: 1, action: 'cancel', commandId: 'cancel-' + Math.random(), scopeId: 's', runId: 'r', expectedRevision: (await f.store.loadRun('s', 'r'))!.revision }, f.options);
+/** The real probe runs (its container proven gone), then the answer waits for the gate: the controller is still inside the probe path. */
+const pausedProbe = (gate: Promise<void>, started: () => void) => {
+  const original = DockerSupervisor.prototype.probe;
+  return vi.spyOn(DockerSupervisor.prototype, 'probe').mockImplementationOnce(async function (this: DockerSupervisor, ...args: Parameters<DockerSupervisor['probe']>) {
+    const answer = await original.apply(this, args); started(); await gate; return answer;
+  });
+};
+
+it('REVISE 2695: A cancelled while its probe container runs keeps the slot (capacity 1): B is refused; the uncertain end holds A discoverably; the proven removal releases it once', async context => {
+  const f = await fixture(context, REQUIREMENTS), gate = deferred(), started = deferred(); let name = '', running: Promise<unknown> | undefined;
+  try {
+    const reserveB = await secondRun(f), execute = vi.spyOn(DockerSupervisor.prototype, 'execute');
+    // A's probe container is really running (same deterministic name and installation label) when the cancel arrives, and it is left running.
+    vi.spyOn(DockerSupervisor.prototype, 'probe').mockImplementationOnce(async function (this: DockerSupervisor, request, argv) {
+      const identity = this.probeIdentity(request, argv); name = identity.name;
+      await exec('/usr/bin/docker', ['run', '-d', '--name', name, '--label', 'deckent.preflight.root=' + identity.root, '--network', 'none', '--entrypoint', 'node', dockerImage!, '-e', 'setTimeout(() => {}, 600000)']);
+      started.resolve(); await gate.promise; return { uncertain: name };
+    });
+    const identity = await reserve(f, 0);
+    running = executeConfiguredTask(f.project, identity, f.options).catch((error: unknown) => error);
+    await started.promise;
+    await cancelA(f);
+    await expect(reserveB()).rejects.toMatchObject({ code: 'RUN_POOL_FULL' });
+    expect((await f.store.loadRun('s', 'r'))!.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: true });
+    gate.resolve();
+    expect(await running).toMatchObject({ code: 'EXECUTION_ENVIRONMENT_UNCERTAIN', params: { requirement: 'node', probe: name } });
+    expect(execute).not.toHaveBeenCalled(); expect(await f.store.loadBoundDispatch(identity)).toBeNull();
+    expect((await f.store.loadRun('s', 'r'))!.progress[0]).toMatchObject({ phase: 'pending', unresolvedEffects: true });
+    await expect(reserveB()).rejects.toMatchObject({ code: 'RUN_POOL_FULL' });
+    // Discoverable: a check that cannot prove the removal holds it; the proven removal (the live container really removed) releases it once.
+    const remove = vi.spyOn(DockerSupervisor, 'removePreflightProbe').mockResolvedValue(false);
+    expect(await settleConfiguredEnvironmentProbes(f.project, { scopeId: 's', runId: 'r' }, f.options)).toEqual({ released: 0, held: [name] });
+    remove.mockRestore();
+    expect(await settleConfiguredEnvironmentProbes(f.project, { scopeId: 's', runId: 'r' }, f.options)).toEqual({ released: 1, held: [] });
+    expect(await settleConfiguredEnvironmentProbes(f.project, { scopeId: 's', runId: 'r' }, f.options)).toEqual({ released: 0, held: [] });
+    expect((await exec('/usr/bin/docker', ['ps', '-aq', '--filter', 'name=^' + name + '$'])).stdout.trim()).toBe('');
+    expect((await f.store.loadRun('s', 'r'))!.state).toMatchObject({ kind: 'terminal', reason: 'cancelled' });
+    await expect(reserveB()).resolves.toBeTruthy();
+  } finally { gate.resolve(); await running; f.store.close(); if (name) await exec('/usr/bin/docker', ['rm', '--force', name]).catch(() => undefined); }
+}, 120_000);
+
+it('REVISE 2695: A cancelled during a probe that then meets ends cancelled: no handoff, no dispatch claim, checkout released, the slot opens once and B reserves', async context => {
+  const f = await fixture(context, REQUIREMENTS), gate = deferred(), started = deferred(); let running: Promise<unknown> | undefined;
+  try {
+    await writeFile(join(f.project, 'deps/marker.txt'), 'present\n');
+    const reserveB = await secondRun(f), execute = vi.spyOn(DockerSupervisor.prototype, 'execute'), probe = pausedProbe(gate.promise, started.resolve);
+    const identity = await reserve(f, 0);
+    running = executeConfiguredTask(f.project, identity, f.options);
+    await started.promise;
+    await cancelA(f);
+    await expect(reserveB()).rejects.toMatchObject({ code: 'RUN_POOL_FULL' });
+    gate.resolve();
+    expect((await running as Awaited<ReturnType<typeof executeConfiguredTask>>).execution).toMatchObject({ status: 'prevented' });
+    expect(probe).toHaveBeenCalledTimes(2); expect(execute).not.toHaveBeenCalled(); expect(await f.store.loadBoundDispatch(identity)).toBeNull();
+    expect(await readdir(f.workspaces)).toEqual([]); expect(await preflightContainers(probe)).toBe('');
+    const run = (await f.store.loadRun('s', 'r'))!;
+    expect(run.progress[0]).toMatchObject({ phase: 'cancelled', unresolvedEffects: false }); expect(run.state).toMatchObject({ kind: 'terminal', reason: 'cancelled' });
+    await expect(reserveB()).resolves.toBeTruthy();
+  } finally { gate.resolve(); await running?.catch(() => undefined); f.store.close(); }
+}, 120_000);
+
+it('REVISE 2695: a controller gone mid-probe leaves its custody: a turn never touches it, a start that cannot prove removal keeps it, the proven start releases it once', async context => {
+  const f = await fixture(context, { schemaVersion: 1, requirements: [REQUIREMENTS.requirements[0]] }), gate = deferred(), started = deferred(); let running: Promise<unknown> | undefined;
+  try {
+    const reserveB = await secondRun(f), execute = vi.spyOn(DockerSupervisor.prototype, 'execute');
+    pausedProbe(gate.promise, started.resolve);
+    const identity = await reserve(f, 0);
+    running = executeConfiguredTask(f.project, identity, f.options).catch((error: unknown) => error);
+    await started.promise;
+    const names = (await f.store.loadRun('s', 'r'))!.bindings[0]!.probes!;
+    expect(names).toHaveLength(1); for (const value of names) expect(value).toMatch(/^deckent-env-[a-f0-9]{64}$/);
+    // A turn of this Run while its controller may still be probing: the custody is not reconciled and nothing starts.
+    expect(await settleConfiguredEnvironmentProbes(f.project, { scopeId: 's', runId: 'r' }, f.options)).toEqual({ released: 0, held: [] });
+    expect((await advanceConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, new AbortController().signal, f.options)).attempted).toBe(0);
+    expect((await f.store.loadRun('s', 'r'))!.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: true });
+    await cancelA(f); await expect(reserveB()).rejects.toMatchObject({ code: 'RUN_POOL_FULL' });
+    // Service start (the controller is treated as gone): an unproven removal keeps the hold; the proven one releases it exactly once.
+    const remove = vi.spyOn(DockerSupervisor, 'removePreflightProbe').mockResolvedValue(false);
+    expect(await releaseConfiguredPreflightProbes(f.project, f.options)).toMatchObject({ released: 0, held: names });
+    await expect(reserveB()).rejects.toMatchObject({ code: 'RUN_POOL_FULL' });
+    remove.mockRestore();
+    expect(await releaseConfiguredPreflightProbes(f.project, f.options)).toMatchObject({ released: 1, held: [] });
+    expect(await releaseConfiguredPreflightProbes(f.project, f.options)).toMatchObject({ released: 0, held: [] });
+    const run = (await f.store.loadRun('s', 'r'))!;
+    expect(run.progress[0]).toMatchObject({ phase: 'cancelled', unresolvedEffects: false }); expect(run.state).toMatchObject({ kind: 'terminal', reason: 'cancelled' });
+    await expect(reserveB()).resolves.toBeTruthy();
+    // The stale controller's later answer finds no custody: it neither hands off nor claims a dispatch.
+    gate.resolve(); expect(await running).toMatchObject({ code: 'RUN_STORE_CONFLICT' });
+    expect(execute).not.toHaveBeenCalled(); expect(await f.store.loadBoundDispatch(identity)).toBeNull();
+  } finally { gate.resolve(); await running; f.store.close(); }
+}, 120_000);
+
+it('REVISE 2695: a probe failure that is not an answer is never "gone" by itself: unproven removal → the uncertain hold; proven → the custody clears and the failure stays transient', async context => {
+  const f = await fixture(context, REQUIREMENTS);
+  try {
+    const remove = vi.spyOn(DockerSupervisor, 'removePreflightProbe').mockResolvedValueOnce(false);
+    vi.spyOn(DockerSupervisor.prototype, 'probe').mockRejectedValueOnce(new Error('daemon gone')).mockRejectedValueOnce(new Error('daemon gone'));
+    const identity = await reserve(f, 0);
+    const held = await executeConfiguredTask(f.project, identity, f.options).catch((error: unknown) => error) as { code: string; params: { probe: string } };
+    expect(held).toMatchObject({ code: 'EXECUTION_ENVIRONMENT_UNCERTAIN', params: { requirement: 'node', probe: expect.stringMatching(/^deckent-env-[a-f0-9]{64}$/) } });
+    expect(remove).toHaveBeenCalledWith(expect.anything(), held.params.probe);
+    expect((await f.store.loadRun('s', 'r'))!.progress[0]).toMatchObject({ phase: 'pending', unresolvedEffects: true });
+    // A fresh Run's attempt whose failing probe is proven removed: the failure propagates unclassified and the custody is cleared, not held.
+    const other = await fixture(context, REQUIREMENTS);
+    try {
+      const second = await reserve(other, 0);
+      await expect(executeConfiguredTask(other.project, second, other.options)).rejects.toMatchObject({ code: 'QUERY_UNEXPECTED_FAILURE' });
+      const run = (await other.store.loadRun('s', 'r'))!;
+      expect(run.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: false }); expect(run.bindings[0]).not.toHaveProperty('probes');
+      expect((await other.store.load('s', second.attemptId))!.lastObservation).toBeNull();
+    } finally { other.store.close(); }
+  } finally { f.store.close(); }
+}, 120_000);
+
 it('negative: a requirement whose probe kind no adapter registers refuses (fail closed); no declaration runs no probe at all', async context => {
   const f = await fixture(context, { schemaVersion: 1, requirements: [{ id: 'erp', kind: 'connector-reachable', target: 'erp-main' }] });
   try {

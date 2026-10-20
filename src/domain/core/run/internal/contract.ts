@@ -7,13 +7,16 @@ import { identitySchema, counterSchema } from '#domain/core/primitives/index.js'
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { taskGraphSchema, taskProgressSchema, inspectTaskReadiness, branchDecisionSchema, assertAdmissionBranch } from '#domain/core/task-graph/index.js';
 import { workerReportLimits } from '#domain/core/worker-event/index.js';
+import environmentLimits from './environment-requirements.json' with { type: 'json' };
 export const runIdentitySchema = z.object({ runId: identitySchema, scopeId: identitySchema, layoutRevision: identitySchema }).strict().readonly();
 /** R3 (owner D4a/D5a): why a superseded Attempt was retried by the bounded stall recovery; only on a `stalled` previous binding. */
 export const STALL_CAUSES = ['inactivity', 'report-missing', 'report-invalid'] as const;
 export const runBindingSchema = z.object({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
   observedKind: z.enum(['started', 'exited', 'quota-exhausted', 'cancelled', 'unknown', 'handoff-refused', 'launch-refused', 'stalled']).nullable(),
   stallCause: z.enum(STALL_CAUSES).optional(),
-}).strict().refine(value => (value.observedKind === 'stalled') === (value.stallCause !== undefined), 'RUN_SNAPSHOT_INCONSISTENT').readonly();
+  // REVISE 2695: the environment probes this unobserved attempt's custody covers (written before the first probe container can start).
+  probes: z.array(identitySchema).max(environmentLimits.limits.requirements).readonly().optional(),
+}).strict().refine(value => (value.observedKind === 'stalled') === (value.stallCause !== undefined) && (value.probes === undefined || value.observedKind === null), 'RUN_SNAPSHOT_INCONSISTENT').readonly();
 export const runStateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('running') }).strict(),
   z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready']),
@@ -59,6 +62,7 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
     if (!tasks.has(id.taskId) || bound.has(id.taskId) || attempts.has(id.attemptId) || id.runId !== run.identity.runId || id.scopeId !== run.identity.scopeId || id.layoutRevision !== run.identity.layoutRevision ||
       (binding.observedRevision === null) !== (binding.observedKind === null) || binding.observedKind === 'stalled') invalid();
     bound.add(id.taskId); attempts.add(id.attemptId);
+    if (binding.probes && !run.progress.some(task => task.taskId === id.taskId && task.phase === 'active' && task.unresolvedEffects)) invalid();
   }
   const waits = run.quotaWaits ?? [];
   if (new Set(waits.map(wait => wait.identity.attemptId)).size !== waits.length) invalid();

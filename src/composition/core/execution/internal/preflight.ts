@@ -30,7 +30,9 @@ async function settleProbeHolds({ config, settings }: NonNullable<Awaited<Return
   try {
     let released = 0; const held: string[] = [];
     for (const hold of await store.environmentProbeHolds(filter)) {
-      if (await DockerSupervisor.removePreflightProbe(settings, hold.probe)) { await store.settleEnvironmentProbe(hold); released++; } else held.push(hold.probe);
+      // REVISE 2695: a custody hold (start only) covers several probes; it releases once every one of them is proven removed.
+      const unproven: string[] = []; for (const probe of hold.probes) if (!await DockerSupervisor.removePreflightProbe(settings, probe)) unproven.push(probe);
+      if (unproven.length) held.push(...unproven); else { await store.settleEnvironmentProbe(hold); released++; }
     }
     return { released, held };
   } finally { store.close(); }

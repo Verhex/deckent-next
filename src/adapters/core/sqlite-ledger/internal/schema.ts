@@ -39,7 +39,8 @@ export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
 export const CURRENT_LEDGER_VERSION = 59;
 // PRE-7 ORTAM-HAZIR: environment park + `not-run` acceptance vocabularies (Run park reason and its requirement as failure code, a
-// `launch-refused` previous binding, the launch refusal's `requirement`, report evidence `not-run`, task reason `acceptance-check-not-run`).
+// `launch-refused` previous binding, the launch refusal's `requirement` and `probe`, a binding's probe custody `probes`, report evidence `not-run`,
+// task reason `acceptance-check-not-run`).
 // Additive: every v58 record already parses under the widened contracts, so no row is read or rewritten; the version step alone keeps an
 // older build (which refuses a newer ledger) from reading the new vocabulary. Downgrade = restore the pre-switch backup.
 export const ENVIRONMENT_READINESS_LEDGER_VERSION = 59;

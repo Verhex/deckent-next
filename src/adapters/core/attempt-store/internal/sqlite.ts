@@ -1,4 +1,4 @@
-import { readEnvironmentProbeHolds, commitEnvironmentProbeSettlement, type EnvironmentProbeHold } from '#adapters/core/sqlite-ledger/index.js';
+import { readEnvironmentProbeHolds, commitEnvironmentProbeSettlement, writeEnvironmentProbeCustody, releaseEnvironmentProbeCustody, type EnvironmentProbeHold } from '#adapters/core/sqlite-ledger/index.js';
 import { loadQuotaReleasePools, releaseQuota } from '#adapters/core/quota-control-store/index.js';
 import { readDispatchFence } from './dispatch-fence.js';
 import { readTaskHandoffEvaluation } from './handoff-evaluation.js';
@@ -103,6 +103,8 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   recordPoolHoldRefusal(audit: Parameters<PoolHoldStore['recordPoolHoldRefusal']>[0]) { return new SqlitePoolHoldJournal(this.db).recordPoolHoldRefusal(audit); }
   async environmentProbeHolds(filter?: Readonly<{ scopeId: string; runId: string }>) { return readEnvironmentProbeHolds(this.db, filter); }
   async settleEnvironmentProbe(hold: EnvironmentProbeHold) { return commitEnvironmentProbeSettlement(this.db, hold, this.lifecycleTiming); }
+  async holdEnvironmentProbes(identity: unknown, probes: readonly string[]) { writeEnvironmentProbeCustody(this.db, identity, probes); }
+  async releaseEnvironmentProbes(identity: unknown) { return releaseEnvironmentProbeCustody(this.db, identity, this.lifecycleTiming); }
   async projectRunAttempt(input: RunProjection) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).projectRunAttempt(input); }
   async commitTaskEvaluation(input: TaskEvaluationCommit) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).commitTaskEvaluation(input); }
   async loadAcceptedOperationSettlements(run: import('#domain/index.js').RunSnapshot) { return readAcceptedOperationSettlements(this.db, run); }

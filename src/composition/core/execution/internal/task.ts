@@ -1,7 +1,7 @@
 import { userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
 import { prepareProductDirectory, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, type ConfigLoadOptions } from '#platform/index.js';
-import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
+import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdentity } from '#domain/index.js';
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget,
   validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
   gitQueueCandidateSource, applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, type WorkerEventSealing } from '#adapters/index.js';
@@ -28,6 +28,8 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
     // Set immediately before the dispatch application may claim; a refusal after this point is never a pre-launch refusal.
     let dispatching = false;
+    // REVISE 2695: set while the ledger holds this attempt's probe custody that no closure below may transition (only its proven end releases it).
+    let custody = false;
     try {
       const existing = await store.loadBoundDispatch(identity);
       if (existing) return await preparation.settle(true).then(() => Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity,
@@ -55,10 +57,25 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
         refusals: jsonRecordDirectory(join(await prepareProductDirectory(layout, 'crashes'), 'secret-gate-time')), scan: async views => scanWorkerTree(views, { ...gate, cacheDirectory: await prepareProductDirectory(layout, 'treeScanCache'), checkoutRoot: git.sourceRoot }, getConfigKnownSecrets(config)) }, { identity, principal, policyRevision: document.revision, now: Date.now, journal: store }, audit, () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit }));
       // PRE-7: Deckent's own preflight of the declared environment on the worker's floor, without its connection (no credential, no model); an unmet
       // requirement refuses the launch typed below (the Run parks naming it) and releases the checkout, as the secret gate does.
-      const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv };
-      const probe = new DockerSupervisor({ ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid, ...(readOnlyMounts ? { readOnlyMounts } : {}) });
-      await assertTaskEnvironment(profile.environment, environmentProbeRegistry.with(nativeCodingEnvironmentProbes((argv, timeoutMs) => probe.probe(request, argv, timeoutMs))))
-        .catch(async (error: unknown) => { if (classifyLaunchRefusal(error).disposition === 'permanent') await broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit }); throw error; });
+      const request = { protocolVersion: 1 as const, identity, workspace: lease.workspace, argv: profile.argv }, release = () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit });
+      const probeOptions = { ...profile.options, executable: config.execution.docker.executable, workspaceRoot, uid: os.uid, gid: os.gid, ...(readOnlyMounts ? { readOnlyMounts } : {}) }, probe = new DockerSupervisor(probeOptions);
+      // REVISE 2695: durable custody before the first probe container can start, naming every probe this attempt can start (deterministic names).
+      if (profile.environment !== undefined) {
+        const names: string[] = [], collect = nativeCodingEnvironmentProbes(async argv => { names.push(probe.probeIdentity(request, argv).name); return 'met' as const; });
+        for (const requirement of environmentRequirementsSchema.parse(profile.environment).requirements) await collect.get(requirement.kind)?.(requirement);
+        await store.holdEnvironmentProbes(identity, names); custody = true;
+      }
+      // A probe failure that is not an answer is gone only once its container is proven removed; otherwise it is uncertain (held), never gone.
+      const ended = await assertTaskEnvironment(profile.environment, environmentProbeRegistry.with(nativeCodingEnvironmentProbes((argv, timeoutMs) => probe.probe(request, argv, timeoutMs)
+        .catch(async (error: unknown) => { const { name } = probe.probeIdentity(request, argv); if (await DockerSupervisor.removePreflightProbe(probeOptions, name)) throw error; return { uncertain: name }; }))))
+        .then(() => null, (error: unknown) => ({ error })), refusal = ended && classifyLaunchRefusal(ended.error), answered = refusal?.disposition === 'permanent' && refusal.requirement !== undefined;
+      if (refusal?.disposition === 'permanent') await release();
+      // An environment answer is projected from the custody by its closure (below); any other end of the probe path releases it here, once.
+      if (custody && !answered && await store.releaseEnvironmentProbes(identity) === 'cancelled') {
+        if (refusal?.disposition !== 'permanent') await release();
+        return Object.freeze({ schemaVersion: 1 as const, layout, execution: Object.freeze({ identity, status: 'prevented' as const, terminal: null, outputRecorded: false }) });
+      }
+      custody = false; if (ended) throw ended.error;
       await preparation.enter('handoff'); await recordAttemptHandoffStart(store, identity, [...start.events, ...start.patches.map(patch => ({ kind: 'workspace-started-from-patch' as const, source: patch.source, digest: patch.receipt.digest }))], applied);
       // Worker-reported events (redacted in the container, validated by the gateway) project live next to the other sidecars.
       const events = profile.nativeSubscription ? await openWorkerEventSink(dirname(lease.workspace)).catch(() => undefined) : undefined;
@@ -107,7 +124,7 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
     } catch (error) {
       const actor = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
       if (error instanceof HandoffError) await recordHandoffRefusal(store, identity, error, actor);
-      else if (!dispatching) {
+      else if (!dispatching && !custody) {
         // A permanent refusal before any dispatch claim closes the attempt once (no launch, no effect); transient ones keep the turn's backoff.
         const refusal = classifyLaunchRefusal(error);
         if (refusal.disposition === 'permanent' && !await store.loadBoundDispatch(identity)) await recordAttemptClosure(store, identity, { kind: 'launch-refused', code: refusal.code, ...(refusal.requirement ? { requirement: refusal.requirement } : {}), ...(refusal.probe ? { probe: refusal.probe } : {}) }, actor);

@@ -235,8 +235,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   `EXECUTION_ENVIRONMENT_UNCERTAIN`, shown in monitor and `run inspect` like any environment park), and the next service start removes
   this installation's leftover probe containers. While a probe's removal is unproven, its Run keeps its pool slot and cannot be closed
   or resumed (`RUN_DECISION_NOT_READY`); cancel and the park deadline do not free it. A probe that can never be proven gone holds the
-  slot indefinitely; the service journal names it at every start, and after `docker rm --force <name>` the next start or progression
-  turn releases the slot once. `deckent coding template` declares defaults (node, the Node heap ceiling; the typescript path only for a template
+  slot indefinitely; the service journal names it at every start, and after `docker rm --force <name>` the next service start
+  releases the slot once (a progression turn of that Run does so only when one runs; ordinary progression skips Runs parked for the
+  environment or cancelled). The slot is held from before the first probe container starts: cancelling a Run while its probe runs frees
+  nothing until the probe ends, and if the service dies mid-probe the slot stays held until the next service start proves the probes removed. `deckent coding template` declares defaults (node, the Node heap ceiling; the typescript path only for a template
   with a `/node_modules` dependency mount); an existing task kind keeps its template (re-running the command for it is refused with
   `CODING_TEMPLATE_KIND_CONFLICT`), so adding a requirement to it today means editing `admission.registry` with `deckent config set`.
   doctor does not list Runs parked for the environment yet; `monitor` and `run inspect` do.

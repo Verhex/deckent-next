@@ -343,7 +343,8 @@
         "src/engine/core/audit",
         "src/platform/core/utils",
         "src/composition/core/runs",
-        "src/adapters/core/native-coding"
+        "src/adapters/core/native-coding",
+        "src/domain/core/run"
       ],
       "plan": "EXECUTION"
     },

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
-import { attemptIdentitySchema, attemptSnapshotSchema, sameAttemptIdentity } from '#domain/core/attempt/index.js';
+import { attemptIdentitySchema, attemptSnapshotSchema, sameAttemptIdentity, type AttemptIdentity } from '#domain/core/attempt/index.js';
 import { checkedRun, runSnapshotSchema, RunError, type RunSnapshot } from './contract.js';
 import { reconcileRunLifecycle } from './lifecycle.js';
 import { projectRunAttempt } from './reduce.js';
@@ -19,7 +19,9 @@ export type EnvironmentRequirement = z.infer<typeof environmentRequirementSchema
  * operator (`environment-not-ready`, the requirement as its failure code, bounded by `timeoutMs`): the task stays pending for a NEW attempt
  * after an explicit resume, nothing fails and no acceptance is offered. Any other refusal, or one on a cancelled Run, fails its task as before. */
 export function observeRunAttemptClosure(input: unknown, expectedRevision: number, attemptInput: unknown, now: number, timeoutMs: number): RunSnapshot {
-  const run = checkedRun(input, expectedRevision), attempt = attemptSnapshotSchema.parse(attemptInput), result = attempt.lastObservation?.result;
+  const attempt = attemptSnapshotSchema.parse(attemptInput), result = attempt.lastObservation?.result;
+  // REVISE 2695: an environment answer (the probe path ended) is the one closure that transitions from the custody written before the probe.
+  const run = result?.kind === 'launch-refused' && result.requirement !== undefined ? withoutCustody(checkedRun(input, expectedRevision), attempt.identity) : checkedRun(input, expectedRevision);
   // REVISE 2693: an uncertain probe (its container not proven gone) keeps the task's slot as an unresolved effect, also on a cancelled Run.
   const uncertain = result?.kind === 'launch-refused' && result.probe !== undefined;
   if (result?.kind !== 'launch-refused' || result.requirement === undefined || (run.cancelRequested && !uncertain)) return reconcileRunLifecycle(projectRunAttempt(run, expectedRevision, attempt, true), now, timeoutMs);
@@ -42,4 +44,31 @@ export function settleEnvironmentProbe(input: unknown, expectedRevision: number,
   if (!binding || binding.observedKind !== 'launch-refused' || task?.phase !== 'pending' || !task.unresolvedEffects) throw new RunError('RUN_ATTEMPT_CONFLICT');
   return reconcileRunLifecycle({ ...run, revision: run.revision + 1,
     progress: run.progress.map(row => row === task ? { ...row, unresolvedEffects: false, ...(run.cancelRequested ? { phase: 'cancelled' as const } : {}) } : row) }, now, timeoutMs);
+}
+const withoutCustody = (run: RunSnapshot, identity: AttemptIdentity): RunSnapshot => {
+  const binding = run.bindings.find(row => sameAttemptIdentity(row.identity, identity) && row.probes); if (!binding) return run;
+  const { probes, ...plain } = binding; void probes;
+  return { ...run, progress: run.progress.map(row => row.taskId === identity.taskId ? { ...row, unresolvedEffects: false } : row), bindings: run.bindings.map(row => row === binding ? plain : row) };
+};
+/** REVISE 2695: durable custody before the first probe container can start: the active, unobserved task holds its slot as an unresolved
+ * effect naming every probe it covers, so cancellation (Run or attempt) cannot settle, prevent or close it while the probe may run. */
+export function holdEnvironmentProbes(input: unknown, expectedRevision: number, identityInput: unknown, probes: readonly string[]): RunSnapshot {
+  const run = checkedRun(input, expectedRevision), identity = attemptIdentitySchema.parse(identityInput);
+  if (run.cancelRequested) throw new RunError('RUN_CANCEL_REQUESTED');
+  const binding = run.bindings.find(row => sameAttemptIdentity(row.identity, identity)), task = run.progress.find(row => row.taskId === identity.taskId);
+  if (!binding || binding.observedKind !== null || binding.probes || task?.phase !== 'active' || task.unresolvedEffects) throw new RunError('RUN_ATTEMPT_CONFLICT');
+  return runSnapshotSchema.parse({ ...run, revision: run.revision + 1, progress: run.progress.map(row => row === task ? { ...row, unresolvedEffects: true } : row),
+    bindings: run.bindings.map(row => row === binding ? { ...row, probes } : row) });
+}
+/** REVISE 2695: the probe path ended with every covered probe proven gone (all met, or a failure whose removal was proven): the custody clears
+ * once; a cancel requested meanwhile (Run or attempt) closes the task cancelled in the same transition. An answer the attempt already recorded
+ * (a death between its two writes) completes that answer's own projection instead. */
+export function releaseEnvironmentProbes(input: unknown, expectedRevision: number, attemptInput: unknown, now: number, timeoutMs: number): RunSnapshot {
+  const run = checkedRun(input, expectedRevision), attempt = attemptSnapshotSchema.parse(attemptInput), result = attempt.lastObservation?.result;
+  const binding = run.bindings.find(row => sameAttemptIdentity(row.identity, attempt.identity)), task = run.progress.find(row => row.taskId === attempt.identity.taskId);
+  if (!binding?.probes || task?.phase !== 'active' || !task.unresolvedEffects) throw new RunError('RUN_ATTEMPT_CONFLICT');
+  if (result?.kind === 'launch-refused' && result.requirement !== undefined) return observeRunAttemptClosure(run, expectedRevision, attempt, now, timeoutMs);
+  if (result) throw new RunError('RUN_ATTEMPT_CONFLICT');
+  const cleared = withoutCustody(run, attempt.identity), cancel = run.cancelRequested || attempt.cancelRequested;
+  return reconcileRunLifecycle({ ...cleared, revision: run.revision + 1, progress: cleared.progress.map(row => row.taskId === task.taskId && cancel ? { ...row, phase: 'cancelled' as const } : row) }, now, timeoutMs);
 }
