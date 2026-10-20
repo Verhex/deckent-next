@@ -181,5 +181,9 @@ export function poolWaitLine(task: string, wait: PoolWait, locale: Locale): stri
 export function poolReadinessLines(readiness: Awaited<ReturnType<typeof assessPoolReadiness>>, locale: Locale): string[] {
   const statuses = { ready: t('doctor.poolReadiness.status.ready', {}, locale), drift: t('doctor.poolReadiness.status.drift', {}, locale), unavailable: t('doctor.poolReadiness.status.unavailable', {}, locale), unconfigured: t('doctor.poolReadiness.status.unconfigured', {}, locale),
     missing: t('doctor.poolReadiness.status.missing', {}, locale) };
-  return [t('doctor.poolReadiness', { status: statuses[readiness.status], code: readiness.code ?? '-' }, locale), ...(readiness.drift ? [poolDriftLine(readiness.drift, locale)] : [])];
+  // PRE-34: the evidence behind the status (the pool row read and its capacity, or the typed code), never a bare "(-)".
+  const pool = 'pool' in readiness ? readiness.pool : undefined, status = statuses[readiness.status];
+  const line = pool ? t('doctor.poolReadiness.evidence', { status, pool: pool.poolId, execution: pool.capacity.executionSlots, inFlight: pool.capacity.inFlightSlots }, locale)
+    : readiness.code ? t('doctor.poolReadiness', { status, code: readiness.code }, locale) : t('doctor.poolReadiness.plain', { status }, locale);
+  return [line, ...(readiness.drift ? [poolDriftLine(readiness.drift, locale)] : [])];
 }

@@ -39,6 +39,8 @@ export interface WorkerObservation {
   /** Sealed wins; live is allowed only without a sealed log. Rejected/unreadable evidence keeps its status even without usage. */
   readonly usage?: WorkerEventSummary; readonly usageEvidence?: WorkerUsageEvidence;
 }
+/** PRE-34: a worker with a recorded end (terminal result) or released custody has finished, whatever its last usage summary says. */
+export const workerFinished = (worker: Pick<WorkerObservation, 'terminal' | 'custody'>): boolean => !!worker.terminal || worker.custody === 'released';
 /** Shared selection for monitor and workers: rejected sealed evidence never admits the sidecar usage fallback. */
 export function resolveWorkerUsage(worker: Pick<WorkerObservation, 'usage' | 'usageEvidence' | 'files'>): WorkerEventSummary | null {
   if (worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable') return null;

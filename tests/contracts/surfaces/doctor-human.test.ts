@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { clearConfigCache } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
+import { poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
 import { DOCTOR_BACKUP_PASSPHRASE_SECRET, DOCTOR_FIXES, doctorChecks, renderDoctorChecks, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 
 // C-DOCTOR (alpha.48, CLI review 2026-10-19 §doctor): grouped rows, word markers, one next step per warning, internals behind --verbose,
@@ -53,13 +54,40 @@ describe('doctor rows (pure)', () => {
     expect(text).toContain('sonraki adım: chmod 700 /home/me/.deckent');
     expect(text).toContain('Yedek parolası bu kurulumun içinde saklanıyor'); // J2e: owner wording, joined with C-ADMIN's backup line
     expect(text).toContain('Etkin model model-x (codex-cli) emekliye ayrılıyor (tarih 2026-12-01)');
-    expect(text).toContain('sınanmadı  Docker bu sürümde doctor tarafından sınanmıyor');
+    expect(text).toContain('sınanmadı  Docker durumu okunamadı'); // PRE-34: unwired/unanswered detection is "not tested", never a guess
     expect(text).toContain('sonraki adım: deckent doctor --toolchains');
     // Internals stay out of the default view (CLI review §doctor findings 1, 2): no socket path, backend id, realm marker or "(-)".
     for (const internal of ['/tmp/dk-', 'core.secret-store', 'terminal.shell.realm', '[deckent]', '(-)', 'ready', 'degraded']) expect(text).not.toContain(internal);
     const en = renderDoctorChecks(doctorChecks(report, facts(), 'en'), 'en');
     expect(en.split('\n')[0]).toMatch(/^Status: ready · \d+ warning\(s\) · \d+ not tested$/);
     expect(en).toContain('Installation\n  ok          Node.js v26.10.0 (minimum 24.22.0)');
+  });
+  it('PRE-34: the Docker row is the setup decision in the setup\'s words; not reachable is an error only when work is configured to run there', () => {
+    const docker = (state: string, code: string, extra: Partial<DoctorCheckFacts> = {}) => doctorChecks(report, facts({ executionEnvironment: { state, reason: { code, params: { runtime: 'Docker', version: '27.3.1' } } }, ...extra }), 'tr')
+      .find(row => row.id === 'work.docker')!;
+    expect(docker('done', 'setup.execution.ready')).toEqual({ group: 'work', id: 'work.docker', state: 'ok', text: 'Docker 27.3.1 hazır: Run, /do ve teslim onu kullanabilir.' });
+    expect(docker('blocked', 'setup.execution.stopped')).toMatchObject({ state: 'warning', next: 'deckent init', text: expect.stringContaining('Docker kurulu ama hizmeti çalışmıyor') });
+    expect(docker('blocked', 'setup.execution.stopped', { firstJob: { execution: true, registry: true } })).toMatchObject({ state: 'error', next: 'deckent init' });
+    expect(docker('blocked', 'setup.execution.none')).toMatchObject({ state: 'warning', text: expect.stringContaining('Kurulu çalıştırma ortamı yok') });
+    expect(docker('blocked', 'setup.execution.noPermission', { firstJob: { execution: true, registry: true } })).toMatchObject({ state: 'error' });
+    expect(docker('blocked', 'setup.execution.unknown')).toMatchObject({ state: 'untested' });
+    expect(docker('blocked', 'setup.execution.unknown').next).toBeUndefined();
+    const en = doctorChecks(report, facts({ executionEnvironment: { state: 'blocked', reason: { code: 'setup.execution.none', params: {} } } }), 'en').find(row => row.id === 'work.docker')!;
+    expect(en.text).toBe('No execution environment is installed: no Run, /do or delivery. Chat, MCP and governed tools work.');
+  });
+  it('PRE-34: a current worker image without a version names the configured image instead of nothing', () => {
+    const image = { ...report, imageRefresh: { status: 'current', reason: null, imageVersion: null } };
+    const id = 'sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe';
+    expect(doctorChecks(image, facts({ imageId: id }), 'en').find(row => row.id === 'work.image')?.text).toBe('Worker image is current (sha256:8ec5d7557396)');
+    expect(doctorChecks(image, facts(), 'en').find(row => row.id === 'work.image')?.text).toBe('Worker image is current');
+    expect(doctorChecks({ ...image, imageRefresh: { status: 'current', reason: null, imageVersion: 'v7' } }, facts({ imageId: id }), 'en').find(row => row.id === 'work.image')?.text)
+      .toBe('Worker image is current (v7)');
+  });
+  it('PRE-34: the verbose pool line names the pool row and capacity it read, never a bare "(-)"', () => {
+    const pool = { schemaVersion: 1, poolId: 'live', capacity: { executionSlots: 4, inFlightSlots: 6 } } as never;
+    expect(poolReadinessLines({ status: 'ready', drift: null, pool }, 'tr')).toEqual(['Havuz hazırlığı: hazır (havuz live, kapasite 4/6: çalışan / değerlendirme dahil)']);
+    expect(poolReadinessLines({ status: 'unconfigured', drift: null }, 'en')).toEqual(['Pool readiness: not configured']);
+    expect(poolReadinessLines({ status: 'missing', code: 'RUN_POOL_REQUIRED', drift: null }, 'en')[0]).toContain('(RUN_POOL_REQUIRED)');
   });
   it('an error row reads as needing attention; a new installation without an audit checkpoint is not tested, not a problem', () => {
     const fresh = doctorChecks({ ...report, auditIntegrity: { schemaVersion: 1, scopeId: 'live', status: 'unknown', reason: 'no-checkpoint-yet', head: null, checkpoint: null } } as never, facts(), 'en');

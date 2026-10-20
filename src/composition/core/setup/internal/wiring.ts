@@ -54,5 +54,10 @@ export function configuredSetup(host: object) {
       return result('refused', 'TERMINAL_TTY_REQUIRED');
     } catch (error) { return result('refused', failure(error)); }
   };
-  return { observeSetup, applySetupStage, installExecutionEnvironment };
+  // PRE-34: doctor's Docker row, the same read-only detection and family decision as the setup stage (no install offer, never a question).
+  const inspectExecutionEnvironment = async (env: NodeJS.ProcessEnv) => {
+    const decision = executionSetupFamily().stages[0]!.evaluate({ facts: await detectExecutionFacts({ env }), answer: undefined, scopeId: null, states: new Map() });
+    return { state: decision.state, reason: { code: decision.reason.code, params: decision.reason.params ?? {} } };
+  };
+  return { observeSetup, applySetupStage, installExecutionEnvironment, inspectExecutionEnvironment };
 }

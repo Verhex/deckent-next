@@ -59,7 +59,8 @@ describe('monitor text snapshot', () => {
     expect(summary).not.toContain('run-none'); expect(summary).not.toContain('run-worker-running');
     expect(summary).toContain('3 h 12 min'); expect(summary).toContain('(appr-0001)');
     expect(text).toContain('x build: ✗ [unit-budget] src/surfaces/core/cli — 2001 lines > unit budget 2000');
-    expect(text).toContain('x build: first failing line not recorded');
+    // PRE-34: the quiet failure's output was not readable (output-denied): the row says that, not "not recorded".
+    expect(text).toContain('x build: no permission to read the output; the cause cannot be shown');
     expect(text).toContain('! remote-lab is unavailable: the ledger could not be read (LEDGER_LOCKED); service state could not be read (LOCAL_RUNTIME_DENIED)');
     expect(text).toContain('! current has problems: 1 scope(s) could not be read (LEDGER_LOCKED); their names are not shown');
     expect(text).toContain('! dogfood has problems: the ledger is version 43, older than this build: newer fields may be empty; future-code:abc');
@@ -203,7 +204,7 @@ describe('fullscreen monitor', () => {
       expect(view.stdout.frame).toContain('Delivery/adoption: no integration, delivery or adoption recorded.');
       expect(view.stdout.frame).toContain('depends on: build');
       await view.press(KEY.esc); await view.press(KEY.down); await view.press(KEY.enter);
-      expect(view.stdout.frame).toContain('first failure: the first failing line is not in the record');
+      expect(view.stdout.frame).toContain('cause: no permission to read the output; the cause cannot be shown');
       await view.press(KEY.esc);
       expect(view.stdout.frame).toMatch(/› │ run-broken-quiet/);
       await view.press('3');

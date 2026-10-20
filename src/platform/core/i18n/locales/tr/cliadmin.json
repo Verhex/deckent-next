@@ -15,6 +15,8 @@
   "cli.pool.drift": "POOL_ADMISSION_CAPACITY_DRIFT: havuz {pool}, {source} isteği {requestedExecution}/{requestedInFlight}, havuz kapasitesi {execution}/{inFlight}. Havuz kapasitesini açıkça ayarlayın.",
   "cli.pool.wait": "  Görev {task}: {reason} ({code}), havuz {pool}, doluluk {execution}/{inFlight}, etkin kapasite {executionSlots}/{inFlightSlots}",
   "doctor.poolReadiness": "Havuz hazırlığı: {status} ({code})",
+  "doctor.poolReadiness.evidence": "Havuz hazırlığı: {status} (havuz {pool}, kapasite {execution}/{inFlight}: çalışan / değerlendirme dahil)",
+  "doctor.poolReadiness.plain": "Havuz hazırlığı: {status}",
   "cli.pool.source.run": "Run politikası",
   "cli.pool.source.admission": "yapılandırılmış kabul",
   "cli.pool.quotaReleased": "{channel} kanalı: bekleyen {released} iş serbest bırakıldı.",

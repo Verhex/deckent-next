@@ -77,6 +77,7 @@
   "monitor.human.usageOutcomeError": "hata bildirdi",
   "monitor.human.usageOutcomeLimit": "sınıra ulaştı",
   "monitor.human.usageOutcomeRunning": "devam ediyor",
+  "monitor.human.usageOutcomeUnreported": "bitti, sonuç bildirilmedi",
   "cli.worker.effort.line": " · Muhakeme eforu: {level} ({source}; sınıf {workClass})",
   "cli.worker.effort.policy_revision": " · İş sınıfı politika revizyonu: {revision}",
   "cli.worker.effort.source.explicit": "açık istek",

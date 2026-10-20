@@ -37,6 +37,37 @@ for (const locale of ['en', 'tr'] as const) describe(`global monitor states ${lo
     const text = surface.renderMonitorText(snapshot, { locale, width: 400, ascii: true });
     expect(text).toContain(t('monitor.global.counts', { queued: 1, running: 0, checking: 1, held: 0, done: 0, stopped: 1 }, locale));
   });
+  it('PRE-34: the stopped counter and the stopped-Runs section count the same Runs, and each row states its cause', () => {
+    const seed = fullSnapshot.installs[0]!.runs[0]!, task = seed.tasks[0]!;
+    const failed = (runId: string, over: Partial<typeof task>) => ({ ...seed, runId, state: 'failed' as const, blocker: null, tasks: [{ ...task, phase: 'failed', ...over }] });
+    const runs = [failed('f-line', { lastAttempt: { ...task.lastAttempt!, exitCode: 134, firstFailure: 'Aborted (core dumped)' } }),
+      failed('f-stalled', { evaluation: { verdict: 'rejected', observedAtMs: null, reason: 'worker-stalled' } }),
+      failed('f-exit', { lastAttempt: { ...task.lastAttempt!, exitCode: 2 } }),
+      { ...seed, runId: 'c-cancelled', state: 'cancelled' as const, blocker: null, tasks: [{ ...task, phase: 'cancelled', lastAttempt: null }] },
+      { ...seed, runId: 'd-rolled-back', state: 'accepted' as const, blocker: null, tasks: [{ ...task, phase: 'accepted' }], delivery: { state: 'rolled-back' as const, commit: null } }];
+    const text = surface.renderMonitorText({ ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!, runs }] }, { locale, width: 400, ascii: true });
+    expect(text).toContain(t('monitor.global.counts', { queued: 0, running: 0, checking: 0, held: 0, done: 0, stopped: 5 }, locale));
+    expect(text).toContain(t('monitor.summary.failed', { count: 5 }, locale));
+    // An accepted Run whose delivery was rolled back is stopped, marked as needing attention, never with the accepted mark.
+    expect(text).toContain(`! ${t('monitor.cause.rolledBack', {}, locale)}`);
+    expect(text).toContain('build: Aborted (core dumped)'); expect(text).toContain(`build: ${t('task.acceptance.workerStalled', {}, locale)}`);
+    expect(text).toContain(`build: ${t('monitor.cause.exit', { code: 2 }, locale)}`); expect(text).toContain(`build: ${t('monitor.cause.cancelled', {}, locale)}`);
+    expect(text).not.toContain(t('monitor.detail.firstFailureMissingShort', {}, locale));
+  });
+  it('PRE-34: a worker of a replaced attempt is not "checking" once its task accepted the next attempt', () => {
+    const seed = fullSnapshot.installs[0]!.runs[0]!, task = seed.tasks[0]!;
+    const run = { ...seed, runId: 'retried', state: 'accepted' as const, blocker: null,
+      tasks: [{ ...task, phase: 'accepted', evaluation: { verdict: 'accepted' as const, observedAtMs: null }, lastAttempt: { ...task.lastAttempt!, attemptId: 'gen-2', generation: 2 } }] };
+    const old: MonitorWorker = { taskId: task.taskId, identity: { scopeId: seed.scopeId, runId: 'retried', taskId: task.taskId, attemptId: 'gen-1', layoutRevision: 'l', generation: 1 },
+      authority: 'next-ledger', provider: 'codex', workspace: null, process: 'exited', handle: null, terminal: { handle: 'h', exitCode: 0, interrupted: false },
+      outputRecorded: true, patchRecorded: false, diagnostics: [], files: null };
+    const snapshot = { ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!, runs: [run], workers: [old] }] };
+    const block = surface.buildMonitorView(snapshot, locale, true).tabs.workers[0]!;
+    if (block.kind !== 'table') throw new Error('expected table');
+    expect(block.rows[0]!.cells[1]!.text).toBe(t('monitor.global.stopped', {}, locale));
+    const text = surface.renderMonitorText(snapshot, { locale, width: 400, ascii: true });
+    expect(text).toContain(t('monitor.global.counts', { queued: 0, running: 0, checking: 0, held: 0, done: 1, stopped: 0 }, locale));
+  });
 });
 
 const identity = (taskId: string) => ({ runId: 'parallel', scopeId: 'scope-parallel', layoutRevision: 'layout-1', taskId, attemptId: `attempt-${taskId}`, generation: 1 });

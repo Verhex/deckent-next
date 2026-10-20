@@ -1,10 +1,10 @@
 import { renderAcceptanceLine } from './acceptance.js';
 import { t, type Locale } from '#platform/index.js';
-import { projectHumanState, resolveWorkerUsage, type MonitorApproval, type MonitorAttempt, type MonitorBlocker, type MonitorDeliveryState, type MonitorInstall, type MonitorPool, type MonitorRun, type MonitorRunState, type MonitorSnapshot, type MonitorTask,
+import { projectHumanState, projectRunStop, projectStopCause, resolveWorkerUsage, type StopCause, type MonitorApproval, type MonitorAttempt, type MonitorBlocker, type MonitorDeliveryState, type MonitorInstall, type MonitorPool, type MonitorRun, type MonitorRunState, type MonitorSnapshot, type MonitorTask,
   type MonitorWorker } from '#engine/index.js';
 import { boundNamedScopes, describeDiagnostics, mapBlocks, span, type MonitorBlock, type MonitorColumn, type MonitorLine, type MonitorRole, type MonitorRow, type MonitorSpan } from '#surfaces/core/monitor-view/index.js';
 import { deliveryLabel, deliveryOutlookLabel, deliveryOutlookDetail, agoText, blockerLabel, quotaWaitText, clockText, durationText, expiryText, forText, installStatusLabel, MONITOR_TABS, processLabel, runStateLabel,
-  taskPhaseLabel, verdictLabel, workerPhaseLabel, notAcceptedLabel, type MonitorTab } from './labels.js';
+  taskPhaseLabel, verdictLabel, workerPhaseLabel, notAcceptedLabel, stopCauseText, type MonitorTab } from './labels.js';
 import { renderWorkerModelLine } from './worker-model.js';
 import { humanWorkerLines } from './human-worker.js';
 import { renderResourceLine, renderResourceDetail } from './resources.js';
@@ -69,6 +69,9 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean, ver
     JSON.stringify([install.id, scopeId, runId, taskId, attempt.attemptId, attempt.generation]);
   const attempts = new Map<string, { readonly run: MonitorRun; readonly task: MonitorTask; readonly attempt: MonitorAttempt }>();
   const workers = new Map<string, MonitorWorker>();
+  // PRE-34: a worker of an earlier attempt (the task has since bound a later one) still finds its task, so its state is not guessed.
+  const tasks = new Map(snapshot.installs.flatMap(install => install.runs.flatMap(run => run.tasks.map(task =>
+    [JSON.stringify([install.id, run.scopeId, run.runId, task.taskId]), { run, task }] as const))));
   for (const install of snapshot.installs) for (const worker of install.workers) {
     const id = worker.identity; if (!id || id.taskId !== worker.taskId) continue;
     const key = identityKey(install, id.runId, id.scopeId, id.taskId, id);
@@ -77,6 +80,8 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean, ver
   for (const install of snapshot.installs) for (const run of install.runs) for (const task of run.tasks) {
     if (task.lastAttempt) attempts.set(identityKey(install, run.runId, run.scopeId, task.taskId, task.lastAttempt), { run, task, attempt: task.lastAttempt });
   }
+  const attemptOf = (install: MonitorInstall, worker: MonitorWorker) => worker.identity && worker.taskId === worker.identity.taskId
+    ? attempts.get(identityKey(install, worker.identity.runId, worker.identity.scopeId, worker.taskId, worker.identity)) ?? null : null;
   const words = {
     locale, now, marks, sep, multi, ascii,
     col: (header: string, priority: number, min: number, max: number, extra: Partial<Pick<MonitorColumn, 'cut' | 'sortKey'>> = {}): MonitorColumn => ({ header, priority, min, max, ...extra }),
@@ -116,8 +121,13 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean, ver
     notes: (install: MonitorInstall) => describeDiagnostics(install.diagnostics, locale).filter(entry => entry.note),
     /** A bare age for table cells whose header already says since/for (`3 h 12 min`); details keep the full sentence. */
     age: (since: number | null) => since === null ? t('monitor.time.unknown', {}, locale) : durationText(now - since, locale),
-    attemptOf: (install: MonitorInstall, worker: MonitorWorker) => worker.identity && worker.taskId === worker.identity.taskId
-      ? attempts.get(identityKey(install, worker.identity.runId, worker.identity.scopeId, worker.taskId, worker.identity)) ?? null : null,
+    attemptOf,
+    /** The human-state subject extras of a worker: its exact attempt's task and Run blocker, else (an earlier attempt) its task alone. */
+    workerSubject: (install: MonitorInstall, worker: MonitorWorker): { task?: MonitorTask; blocker?: MonitorBlocker | null } => {
+      const own = attemptOf(install, worker); if (own) return { task: own.task, blocker: own.run.blocker };
+      const owner = worker.identity ? tasks.get(JSON.stringify([install.id, worker.identity.scopeId, worker.identity.runId, worker.taskId])) : undefined;
+      return owner ? { task: owner.task } : {};
+    },
     workerOf: (install: MonitorInstall, run: MonitorRun, task: MonitorTask) => task.lastAttempt
       ? workers.get(identityKey(install, run.runId, run.scopeId, task.taskId, task.lastAttempt)) : undefined,
     workerName: (worker: MonitorWorker) => `${worker.identity?.runId ?? '—'}/${worker.taskId}`,
@@ -164,7 +174,7 @@ function failedTestLines(w: Words, attempt: MonitorAttempt): MonitorLine[] {
       : failed.truncated ? [[span(`      ${t('monitor.detail.failedTestsPartial', {}, locale)}`, 'muted')] as MonitorLine] : [])];
 }
 /** One attempt as a timeline: start/end/duration/exit/model, the first failing line, then the last worker-reported events. */
-function attemptLines(w: Words, attempt: MonitorAttempt, failed: boolean, live: boolean): MonitorLine[] {
+function attemptLines(w: Words, attempt: MonitorAttempt, cause: StopCause | null, live: boolean): MonitorLine[] {
   const { locale, now } = w;
   // A live attempt runs to the observation time; an ended one needs its proven end, else the duration is unknown (never guessed).
   const end = attempt.endedAtMs ?? (live ? now : null);
@@ -181,13 +191,14 @@ function attemptLines(w: Words, attempt: MonitorAttempt, failed: boolean, live: 
     ...(attempt.endedAtMs === null && live ? [[span(`    ${t('monitor.detail.live', { phase: workerPhaseLabel(attempt.workerPhase, locale),
       heartbeat: attempt.heartbeatAgeMs === null ? '—' : durationText(attempt.heartbeatAgeMs, locale) }, locale)}`, 'muted')]] : []),
     ...(attempt.firstFailure ? [[span(`    ${t('monitor.detail.firstFailure', { line: attempt.firstFailure }, locale)}`, 'error')]]
-      : failed ? [[span(`    ${t('monitor.detail.firstFailureMissing', {}, locale)}`, 'warning')]] : []),
+      : cause && cause.kind !== 'tests' ? [[span(`    ${t('monitor.detail.cause', { cause: stopCauseText(cause, locale) }, locale)}`, 'warning')]] : []),
     ...failedTestLines(w, attempt),
     ...(attempt.recentEvents?.length ? [[span(`    ${t('monitor.detail.events', { count: attempt.recentEvents.length }, locale)}`, 'muted')],
       ...attempt.recentEvents.map(event => [span(`      ${timeText(event.atMs)} ${w.marks.sep} ${event.kind} ${w.marks.sep} ${event.summary}`)])] : []),
   ];
 }
 const taskFailed = (task: MonitorTask) => task.phase === 'failed' || task.evaluation.verdict === 'rejected';
+const failureCause = (task: MonitorTask) => taskFailed(task) ? projectStopCause(task) : null;
 
 function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
   const { locale, now, sep } = w;
@@ -215,7 +226,7 @@ function runDetail(w: Words, install: MonitorInstall, run: MonitorRun) {
       ...(task.decision ? [[span(`    ${blockerLabel(task.decision.reason === 'needs-input' ? 'awaiting-decision' : task.decision.reason, locale)} ${sep} ${expiryText(now, task.decision.deadlineMs, locale)}`, 'warning')]] : []),
       ...(task.decision?.question ? [[span(t('cli.run.lifecycle.question', { question: task.decision.question }, locale), 'warning')]] : []),
       ...(task.billingAxis !== undefined ? [[span(t('billing.axis', { axis: task.billingAxis ? { subscription: t('billing.subscription', {}, locale), local: t('billing.local', {}, locale), metered: t('billing.metered', {}, locale) }[task.billingAxis] : t('proposal.planning.unknown', {}, locale) }, locale))]] : []),
-      ...(task.lastAttempt ? attemptLines(w, task.lastAttempt, taskFailed(task), task.phase === 'active') : []),
+      ...(task.lastAttempt ? attemptLines(w, task.lastAttempt, failureCause(task), task.phase === 'active') : []),
       [span(`    ${t('monitor.detail.evaluation', { verdict: verdictLabel(task.evaluation.verdict, locale),
         when: task.evaluation.observedAtMs === null ? '' : agoText(now, task.evaluation.observedAtMs, locale) }, locale).trimEnd()}`, 'muted')],
       ...(task.custodyDisposition ? [[span(task.custodyDisposition === 'released' ? t('task.custody.released', {}, locale) : t('task.custody.hold-manual', {}, locale), 'warning')]] : []),
@@ -265,7 +276,7 @@ function workerDetail(w: Words, install: MonitorInstall, worker: MonitorWorker) 
   const { locale } = w;
   return (): readonly MonitorLine[] => {
     const activity = worker.files?.activity ?? null, usage = resolveWorkerUsage(worker), own = w.attemptOf(install, worker);
-    const state = projectHumanState({ kind: 'worker', value: worker, ...(own ? { task: own.task, blocker: own.run.blocker } : {}) });
+    const state = projectHumanState({ kind: 'worker', value: worker, ...w.workerSubject(install, worker) });
     const status = [[globalStateCell(state, locale)], ...globalStateLines(state, locale)];
     const activityLine = [span(t('monitor.detail.now', { phase: workerPhaseLabel(activity?.phase ?? own?.attempt.workerPhase, locale), target: [activity?.target, activity?.detail].filter(Boolean).join(' — ') || '—' }, locale))];
     const resources = worker.resources ? renderResourceDetail(worker.resources, locale).map(text => [span(text)]) : [];
@@ -277,7 +288,7 @@ function workerDetail(w: Words, install: MonitorInstall, worker: MonitorWorker) 
         provider: worker.provider, install: install.id }, locale), 'strong')],
       activityLine,
       [span(t('monitor.detail.heartbeat', { heartbeat: w.heartbeat(worker).text, process: w.processText(worker), pid: worker.files?.pid ?? '—', handle: worker.handle ?? '—' }, locale))],
-      ...(own ? attemptLines(w, own.attempt, taskFailed(own.task), own.task.phase === 'active' && !worker.terminal) : []),
+      ...(own ? attemptLines(w, own.attempt, failureCause(own.task), own.task.phase === 'active' && !worker.terminal) : []),
       ...(usage ? [[span(t('monitor.detail.usage', { turns: usage.turns ?? '—', input: usage.tokenUsageRecorded === true ? usage.tokens.input : '—', output: usage.tokenUsageRecorded === true ? usage.tokens.output : '—',
         cost: usage.costUsd === null ? '—' : usage.costUsd.toFixed(4), tools: usage.toolErrors }, locale))]]
         : worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable' ? [[span(t('cli.workers.usageRejected', { reason: worker.usageEvidence === 'invalid' ? t('cli.workers.usageEvidence.invalid', {}, locale) : t('cli.workers.usageEvidence.unavailable', {}, locale) }, locale), 'warning')]] : []),
@@ -300,7 +311,7 @@ function workersBlock(w: Words, entries: readonly Entry<MonitorWorker>[], empty:
     w.col(t('monitor.col.attempt', {}, locale), 6, 8, 8), w.col(t('monitor.col.model', {}, locale), 4, 16, 32), ...(resources ? [w.col(t('resource.column', {}, locale), 4, 18, 88)] : []), ...w.installColumn(5)],
   rows: ordered.map(({ entry: { install, value: worker }, at }): MonitorRow => {
     const own = w.attemptOf(install, worker), phase = worker.files?.activity?.phase ?? (worker.terminal ? null : own?.attempt.workerPhase ?? null);
-    const status = projectHumanState({ kind: 'worker', value: worker, ...(own ? { task: own.task, blocker: own.run.blocker } : {}) });
+    const status = projectHumanState({ kind: 'worker', value: worker, ...w.workerSubject(install, worker) });
     return { key: `${install.id}:${worker.identity?.attemptId ?? worker.taskId}`, detail: workerDetail(w, install, worker), detailInText: !!worker.human || status.state === 'held',
       ...(status.state === 'held' ? { context: [[globalStateCell(status, locale)]] } : {}), cells: [span(worker.human?.title ?? (worker.human ? t('monitor.human.noTitle', {}, locale) : w.workerName(worker))),
       status.state === 'held' ? span(globalStateLabel('held', locale), 'warning') : globalStateCell(status, locale), w.heartbeat(worker), span(w.processText(worker), worker.process === 'running' ? undefined : 'muted'),
@@ -361,15 +372,12 @@ function summaryBlocks(w: Words, installs: readonly MonitorInstall[], runs: read
   const { locale, now, marks } = w;
   const heading = (text: string): MonitorBlock => ({ kind: 'line', line: [span(text, 'sectionHeader')] });
   const blank: MonitorBlock = { kind: 'line', line: [span('')] };
-  const failed = runs.filter(entry => entry.value.state === 'failed');
+  // PRE-34: the same projection as the counter line, so "N durdu" and this section always agree (failed, cancelled, incomplete, rolled back).
+  const failed = runs.flatMap(entry => { const stop = projectRunStop(entry.value); return stop ? [{ ...entry, stop }] : []; });
   const running = workers.filter(entry => entry.value.process === 'running');
-  // "Where did it first fail": the first failed/rejected task's recorded first failing line, or an honest "not recorded".
-  const firstFailure = (run: MonitorRun) => {
-    const first = run.tasks.find(taskFailed);
-    const tests = first?.lastAttempt?.failedTests;
-    return first ? `${marks.states.failed} ${tests ? t('monitor.summary.failedTests', { task: first.taskId, count: tests.count, name: tests.names[0] ?? '—' }, locale)
-      : `${first.taskId}: ${first.lastAttempt?.firstFailure ?? t('monitor.detail.firstFailureMissingShort', {}, locale)}`}` : '—';
-  };
+  // "Why did it stop": the first stopped task's cause from the shared projection (recorded first failing line first), or an honest "not recorded".
+  const firstFailure = (run: MonitorRun, { taskId, cause }: NonNullable<ReturnType<typeof projectRunStop>>) => `${run.state === 'accepted' ? marks.warn : marks.states[run.state]} ${cause.kind === 'tests' && taskId
+    ? t('monitor.summary.failedTests', { task: taskId, count: cause.count, name: cause.name ?? '—' }, locale) : `${taskId ? `${taskId}: ` : ''}${stopCauseText(cause, locale)}`}`;
   return [
     { kind: 'line', line: [span(globalSummary({ installs }, locale), 'strong')] },
     ...installs.filter(install => install.status !== 'available' || w.warnings(install).length).map((install): MonitorBlock => {
@@ -395,8 +403,8 @@ function summaryBlocks(w: Words, installs: readonly MonitorInstall[], runs: read
     ...(failed.length ? [blank, heading(t('monitor.summary.failed', { count: failed.length }, locale)), { kind: 'table' as const, empty: '',
       columns: [w.col(t('monitor.col.run', {}, locale), 0, 20, 44), w.col(t('monitor.col.firstFailure', {}, locale), 1, 24, 90),
         w.col(t('monitor.col.activity', {}, locale), 2, 14, 20), w.col(t('monitor.col.scope', {}, locale), 4, 8, 24), ...w.installColumn(3)],
-      rows: failed.map(({ install, value: run }) => runRow(w, install, run, [
-        span(run.runId), span(firstFailure(run), 'error'), span(agoText(now, run.lastActivityMs, locale), 'muted'), span(run.scopeId, 'muted'),
+      rows: failed.map(({ install, value: run, stop }) => runRow(w, install, run, [
+        span(run.runId), span(firstFailure(run, stop), 'error'), span(agoText(now, run.lastActivityMs, locale), 'muted'), span(run.scopeId, 'muted'),
         ...w.installCell(install)])) }] : []),
     blank, heading(t('monitor.summary.workers', { count: running.length }, locale)), workersBlock(w, running, t('monitor.summary.noWorkers', {}, locale)),
   ];

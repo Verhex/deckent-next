@@ -42,12 +42,13 @@ Takılı ya da bekleyen, en eskisi önce (12)
   │ run-unknown                   │ ! neden bilinmiyor     │
   └───────────────────────────────┴────────────────────────┘
 
-Başarısız işler ve ilk hata yeri (2)
+Duran işler ve nedeni (3)
   ┌──────────────────┬─────────────────────────────────────┐
-  │ İş kimliği       │ İlk hata                            │
+  │ İş kimliği       │ Neden                               │
   ├──────────────────┼─────────────────────────────────────┤
   │ run-broken       │ ✗ build: ✗ [unit-budget] src/surfa… │
-  │ run-broken-quiet │ ✗ build: ilk hata satırı kayıtta y… │
+  │ run-broken-quiet │ ✗ build: çıktıyı okuma izni yok; n… │
+  │ run-stopped      │ ■ iptal edildi                      │
   └──────────────────┴─────────────────────────────────────┘
 
 Şu an çalışan işçiler (2)

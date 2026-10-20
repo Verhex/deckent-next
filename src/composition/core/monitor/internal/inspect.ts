@@ -75,7 +75,7 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
         capacity: { executionSlots: pool.executionSlots, inFlightSlots: pool.inFlightSlots }, executionSlots: Math.min(pool.executionSlots, ceiling), inFlightSlots: Math.min(pool.inFlightSlots, ceiling) })),
         ...(reading.map ? { map: { ...reading.map, models } } : {}), diagnostics: [...reading.diagnostics, ...modelDiagnostics] };
       captures.set(target.path, { ...captured, reading: effective }); return effective; },
-    readShown: async (target, identities) => { const captured = captures.get(target.path)!, hydrated = await captured.readShown(identities);
+    readShown: async (target, identities, failures) => { const captured = captures.get(target.path)!, hydrated = await captured.readShown(identities, failures);
       return { ...hydrated, pools: captured.reading.pools, map: captured.reading.map,
         diagnostics: [...new Set([...hydrated.diagnostics, ...captured.reading.diagnostics])] }; },
     async observeScope(target, scopeId) {

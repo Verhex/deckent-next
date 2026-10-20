@@ -39,13 +39,14 @@ Takılı ya da bekleyen, en eskisi önce (12)
   │ run-unknown                 │ build │ ! neden bilinmiyor     │ bilinmiyor  │
   └─────────────────────────────┴───────┴────────────────────────┴─────────────┘
 
-Başarısız işler ve ilk hata yeri (2)
-  ┌──────────────────┬────────────────────────────────┬──────────────┬─────────┐
-  │ İş kimliği       │ İlk hata                       │ Son etkinlik │ Kurulum │
-  ├──────────────────┼────────────────────────────────┼──────────────┼─────────┤
-  │ run-broken       │ ✗ build: ✗ [unit-budget] src/… │ 25 dk önce   │ current │
-  │ run-broken-quiet │ ✗ build: ilk hata satırı kayı… │ 35 dk önce   │ current │
-  └──────────────────┴────────────────────────────────┴──────────────┴─────────┘
+Duran işler ve nedeni (3)
+  ┌──────────────────┬──────────────────────────────┬────────────────┬─────────┐
+  │ İş kimliği       │ Neden                        │ Son etkinlik   │ Kurulum │
+  ├──────────────────┼──────────────────────────────┼────────────────┼─────────┤
+  │ run-broken       │ ✗ build: ✗ [unit-budget] sr… │ 25 dk önce     │ current │
+  │ run-broken-quiet │ ✗ build: çıktıyı okuma izni… │ 35 dk önce     │ current │
+  │ run-stopped      │ ■ iptal edildi               │ 1 gün 2 sa ön… │ current │
+  └──────────────────┴──────────────────────────────┴────────────────┴─────────┘
 
 Şu an çalışan işçiler (2)
   ┌────────────────────────────┬───────────┬─────────────────────┬───────────┐

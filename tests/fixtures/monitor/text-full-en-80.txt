@@ -41,12 +41,13 @@ Stuck or waiting, oldest first (12)
   │ run-unknown                  │ build │ ! reason unknown       │ unknown    │
   └──────────────────────────────┴───────┴────────────────────────┴────────────┘
 
-Failed Runs and where they first failed (2)
+Stopped Runs and why (3)
   ┌──────────────────┬───────────────────────────────┬───────────────┬─────────┐
-  │ Run              │ First failure                 │ Last activity │ Install │
+  │ Run              │ Cause                         │ Last activity │ Install │
   ├──────────────────┼───────────────────────────────┼───────────────┼─────────┤
   │ run-broken       │ ✗ build: ✗ [unit-budget] src… │ 25 min ago    │ current │
-  │ run-broken-quiet │ ✗ build: first failing line … │ 35 min ago    │ current │
+  │ run-broken-quiet │ ✗ build: no permission to re… │ 35 min ago    │ current │
+  │ run-stopped      │ ■ cancelled                   │ 1 d 2 h ago   │ current │
   └──────────────────┴───────────────────────────────┴───────────────┴─────────┘
 
 Workers running now (2)

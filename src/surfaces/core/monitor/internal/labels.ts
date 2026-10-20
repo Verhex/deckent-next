@@ -1,7 +1,7 @@
 import { t, type Locale } from '#platform/index.js';
 import type { WorkerPhase } from '#domain/index.js';
 import type { WorkerProcessState } from '#engine/index.js';
-import type { MonitorDeliveryState, MonitorDeliveryOutlook, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState, MonitorTask } from '#engine/index.js';
+import type { MonitorDeliveryState, MonitorDeliveryOutlook, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState, MonitorTask, StopCause } from '#engine/index.js';
 import { phaseLabel } from './transcript.js';
 
 /** Every monitor word comes from the catalogs; the maps keep each key a literal (lint-arch i18n rule). */
@@ -81,6 +81,25 @@ export function notAcceptedLabel(reason: NonNullable<MonitorTask['evaluation']['
     'report-invalid': t('task.acceptance.reportInvalid', {}, locale), 'declared-check-not-passed': t('task.acceptance.declaredCheckNotPassed', {}, locale),
     'worker-stalled': t('task.acceptance.workerStalled', {}, locale) };
   return labels[reason];
+}
+/** PRE-34: the shared stop cause in words (one map, every monitor surface); `unrecorded` keeps the honest "not recorded". */
+export function stopCauseText(cause: StopCause, locale: Locale): string {
+  switch (cause.kind) {
+    case 'line': return cause.line;
+    case 'tests': return t('monitor.cause.tests', { count: cause.count, name: cause.name ?? '—' }, locale);
+    case 'not-accepted': return notAcceptedLabel(cause.reason, locale);
+    case 'exit': return t('monitor.cause.exit', { code: cause.code }, locale);
+    case 'signal': return t('monitor.cause.signal', {}, locale);
+    case 'interrupted': return t('monitor.cause.interrupted', {}, locale);
+    case 'cancelled': return t('monitor.cause.cancelled', {}, locale);
+    case 'skipped': return t('monitor.cause.skipped', {}, locale);
+    case 'not-launched': return t('monitor.cause.notLaunched', {}, locale);
+    case 'no-attempt': return t('monitor.cause.noAttempt', {}, locale);
+    case 'output-denied': return t('monitor.cause.outputDenied', {}, locale);
+    case 'rejected': return t('monitor.cause.rejected', {}, locale);
+    case 'rolled-back': return t('monitor.cause.rolledBack', {}, locale);
+    case 'unrecorded': return t('monitor.detail.firstFailureMissingShort', {}, locale);
+  }
 }
 export function verdictLabel(verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null, locale: Locale): string {
   if (verdict === null) return t('monitor.verdict.none', {}, locale);
