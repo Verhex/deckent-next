@@ -2,10 +2,10 @@ import { resolve } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
-import { askCliCard, cliMode, cliTableStyle, formatClock, resolveCommandScope, scopeLister, scopeNotice, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
-import { renderWorkersView } from './workers-view.js';
+import { askCliCard, cliMode, cliTableStyle, formatClock, formatDuration, formatKnown, formatUsd, resolveCommandScope, scopeLister, scopeNotice, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
+import { renderWorkersView, sourceStatusText } from './workers-view.js';
 import { resolveWorkerUsage, workerFinished, type WorkerObservation, type WorkerObservationSource } from '#engine/index.js';
-import { renderWorkerModelLine, seconds, renderResourceDetail, type MonitorCommandContext } from '#surfaces/core/monitor/index.js';
+import { processExitText, renderWorkerModelLine, renderResourceDetail, type MonitorCommandContext } from '#surfaces/core/monitor/index.js';
 function renderHeartbeat(w: WorkerObservation, locale: Locale): string {
   const h = w.files?.heartbeat;
   const absent = w.diagnostics.includes('output-denied') ? 'denied' : w.diagnostics.includes('custody-released') ? 'released'
@@ -27,18 +27,23 @@ function renderHeartbeat(w: WorkerObservation, locale: Locale): string {
     default: return t('cli.workers.heartbeat.state', { state: label }, locale);
   }
 }
-export const renderWorkerRow = (w: WorkerObservation, locale: Locale) => { const x = w.terminal, id = w.identity; return t('cli.workers.row', { ref: `${id?.runId ?? '-'}/${w.taskId}`, attempt: id?.attemptId.slice(0, 8) ?? '-', generation: id?.generation ?? '-', process: x ? `${w.process} ${x.exitCode ?? x.signal ?? '-'}` : w.process, heartbeat: renderHeartbeat(w, locale), provider: w.provider || '-' }, locale); };
+export const renderWorkerRow = (w: WorkerObservation, locale: Locale) => { const x = w.terminal, id = w.identity; return t('cli.workers.row', { ref: `${id?.runId ?? '-'}/${w.taskId}`, attempt: id?.attemptId.slice(0, 8) ?? '-', generation: id?.generation ?? '-', process: processExitText(w.process, x, locale), heartbeat: renderHeartbeat(w, locale), provider: formatKnown(w.provider, locale) }, locale); };
 // PRE-34: `running` in a usage summary only means no session end was reported; a finished worker says so instead of "still running".
 export const renderWorkerUsage = (u: NonNullable<WorkerObservation['usage']>, locale: Locale, finished = false) => {
   const outcomes = { success: t('monitor.human.usageOutcomeSuccess', {}, locale), error: t('monitor.human.usageOutcomeError', {}, locale), limit: t('monitor.human.usageOutcomeLimit', {}, locale),
     running: finished ? t('monitor.human.usageOutcomeUnreported', {}, locale) : t('monitor.human.usageOutcomeRunning', {}, locale) };
-  const d = (v: number | null | undefined) => v === null || v === undefined ? '-' : String(v); return t('cli.workers.usage', { turns: d(u.turns), duration: u.durationMs === null || u.durationMs === undefined ? '-' : seconds(u.durationMs), input: u.tokenUsageRecorded === true ? d(u.tokens?.input) : '-', output: u.tokenUsageRecorded === true ? d(u.tokens?.output) : '-', cost: u.costUsd === null || u.costUsd === undefined ? '-' : u.costUsd.toFixed(4), outcome: u.outcome ? outcomes[u.outcome] : '-' }, locale); };
+  const d = (v: number | null | undefined) => v === null || v === undefined ? '-' : String(v); return t('cli.workers.usage', { turns: d(u.turns), duration: u.durationMs === null || u.durationMs === undefined ? '-' : formatDuration(u.durationMs, locale), input: u.tokenUsageRecorded === true ? d(u.tokens?.input) : '-', output: u.tokenUsageRecorded === true ? d(u.tokens?.output) : '-', cost: u.costUsd === null || u.costUsd === undefined ? '-' : formatUsd(u.costUsd, locale), outcome: u.outcome ? outcomes[u.outcome] : '-' }, locale); };
 const renderUsage = (worker: WorkerObservation, locale: Locale): string[] => {
   const usage = resolveWorkerUsage(worker);
   if (worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable') return [t('cli.workers.usageRejected', { reason: worker.usageEvidence === 'invalid' ? t('cli.workers.usageEvidence.invalid', {}, locale) : t('cli.workers.usageEvidence.unavailable', {}, locale) }, locale)];
   return [...renderResourceDetail(worker.resources, locale), ...(usage ? [renderWorkerUsage(usage, locale, workerFinished(worker))] : [])];
 };
-export const renderWorkerSource = (s: WorkerObservationSource, locale: Locale): string[] => [t('cli.workers.source', { source: s.id, path: s.path, status: s.status }, locale) + (s.truncated ? t('cli.workers.sourceMore', { nextAfter: s.nextAfter ?? '-' }, locale) : ''), ...(s.workers.length ? s.workers.flatMap(w => [renderWorkerRow(w, locale), ...(w.model ? [t('cli.workers.model', { task: w.taskId, line: renderWorkerModelLine(w.model, locale) }, locale)] : []), ...renderUsage(w, locale)]) : [t('cli.workers.empty', {}, locale)])];
+/** `nextPage` (PRE-5): the exact command that reads the source's next page; a truncated source names it instead of a bare cursor. */
+export const renderWorkerSource = (s: WorkerObservationSource, locale: Locale, nextPage?: (source: string, after: string) => string): string[] => [
+  t('cli.workers.source', { source: s.id, path: s.path, status: sourceStatusText(s.status, locale) }, locale)
+    + (s.truncated ? t('cli.workers.sourceMore', { command: nextPage && s.nextAfter ? nextPage(s.id, s.nextAfter) : '-' }, locale) : ''),
+  ...(s.workers.length ? s.workers.flatMap(w => [renderWorkerRow(w, locale), ...(w.model ? [t('cli.workers.model', { task: w.taskId, line: renderWorkerModelLine(w.model, locale) }, locale)] : []), ...renderUsage(w, locale)])
+    : [t('cli.workers.empty', {}, locale)])];
 /** `12h`, `30m`, `2d`, `45s`: a history window for `--since`. */
 function sinceMs(value: string | undefined): number | null {
   if (value === undefined) return null;
@@ -89,6 +94,10 @@ export async function workersCommand(argv: readonly string[], context: MonitorCo
   const query = { schemaVersion: 1 as const, scopeId: scope.scopeId, ...(values.has('--source') ? { source: values.get('--source')! } : {}),
     after: values.get('--after') ?? null, ...(limit === undefined ? {} : { limit }) };
   const live = action === 'watch' && mode.mode === 'interactive', style = cliTableStyle(context);
+  // PRE-5: the next page is a command the person can run as is: the same scope, view and bounds, one source, after its cursor.
+  const nextPage = (source: string, after: string) => ['deckent workers', '--scope', scope.scopeId, '--source', source, '--after', after,
+    ...(['--limit', '--since', '--project'] as const).flatMap(flag => values.has(flag) ? [flag, values.get(flag)!] : []),
+    ...(['--all', '--verbose'] as const).filter(flag => switches.has(flag))].join(' ');
   const stop = new AbortController(), signal = context.signal ? AbortSignal.any([context.signal, stop.signal]) : stop.signal;
   const release = live ? listenForExit(context.stdin ?? process.stdin, () => stop.abort()) : () => undefined;
   try {
@@ -106,8 +115,8 @@ export async function workersCommand(argv: readonly string[], context: MonitorCo
       });
       // SEC-5S F37: model names, provider and paths are worker-reported; the human view reaches the terminal only safe.
       emit(result, { ...sinks, json, render: report => (live ? CLEAR : '') + terminalSafeText(switches.has('--verbose')
-        ? [t('cli.workers.heading', { time: formatClock(report.observedAt, locale) }, locale), ...report.sources.flatMap(source => renderWorkerSource(source, locale)), t('cli.workers.notice', {}, locale)].join('\n')
-        : renderWorkersView({ report, scopeLine: scopeNotice(scope, locale), all: switches.has('--all'), sinceMs: since, style, locale })
+        ? [t('cli.workers.heading', { time: formatClock(report.observedAt, locale) }, locale), ...report.sources.flatMap(source => renderWorkerSource(source, locale, nextPage)), t('cli.workers.notice', {}, locale)].join('\n')
+        : renderWorkersView({ report, scopeLine: scopeNotice(scope, locale), all: switches.has('--all'), sinceMs: since, style, locale, nextPage })
           + (live ? '\n' + t('cli.workers.watchHint', {}, locale) : '')) });
       if (action !== 'watch' || (samples !== undefined && ++count >= samples)) return;
       try { await wait(config.inspection.workers.heartbeatMs, undefined, { signal }); } catch { if (signal.aborted) return; throw ErrorRegistry.createError('WORKER_OBSERVATION_UNAVAILABLE'); }

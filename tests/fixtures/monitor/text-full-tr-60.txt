@@ -147,7 +147,7 @@ monitor-surface
       09:29:55Z · message · Applying the review fixes to the
 monitor view
 Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token ·
-maliyet 0.4321 USD · 1 araç hatası
+maliyet 0,4321 USD · 1 araç hatası
 subscription kanalında model: istenen model-alpha-2 (beyan
 edilen yardımcılar: yok) → başlangıç model-alpha-2 →
 kullanım yok → bekliyor [canlı, henüz mühürlenmedi]
@@ -163,7 +163,7 @@ nesil 1 · claude · kurulum current
 Heartbeat ! 1 dk 35 sn (eski) · süreç çalışıyor · pid 4242 ·
 tanıtıcı ctr-lint
 Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token ·
-maliyet 0.4321 USD · 1 araç hatası
+maliyet 0,4321 USD · 1 araç hatası
 subscription kanalında model: istenen model-alpha-2 (beyan
 edilen yardımcılar: yok) → başlangıç model-alpha-2 →
 kullanım yok → bekliyor [canlı, henüz mühürlenmedi]
@@ -179,7 +179,7 @@ nesil 1 · claude · kurulum current
 Heartbeat bırakıldı · süreç kayıp · pid 4242 · tanıtıcı
 ctr-pack
 Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token ·
-maliyet 0.4321 USD · 1 araç hatası
+maliyet 0,4321 USD · 1 araç hatası
 subscription kanalında model: istenen model-alpha-2 (beyan
 edilen yardımcılar: yok) → başlangıç model-alpha-2 →
 kullanım yok → bekliyor [canlı, henüz mühürlenmedi]

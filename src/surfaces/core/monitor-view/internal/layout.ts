@@ -27,6 +27,8 @@ export interface MonitorRow {
   readonly key: string; readonly cells: readonly MonitorSpan[]; readonly detail: () => readonly MonitorLine[];
   /** H1 workers carry the same detail in once/slash text as Enter. */
   readonly detailInText?: boolean;
+  /** PRE-5: detail that `--once` prints only with --verbose (the summary then names that command). */
+  readonly detailOnVerbose?: boolean;
   /** Essential collapsed-row context wraps at display-cell width; it never becomes another selectable item. */
   readonly context?: readonly MonitorLine[];
   readonly facets?: MonitorFacets;

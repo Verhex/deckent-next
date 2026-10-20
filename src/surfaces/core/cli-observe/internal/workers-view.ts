@@ -1,6 +1,6 @@
 import { t, type Locale } from '#platform/index.js';
-import { resolveWorkerUsage, workerFinished, type WorkerObservation, type WorkerObservationReport, type WorkerProcessState } from '#engine/index.js';
-import { displayId, formatAgo, formatBytes, formatDecimal, formatDuration, orderPendingFirst, renderCliTable, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
+import { resolveWorkerUsage, workerFinished, type WorkerObservation, type WorkerObservationReport, type WorkerObservationSource, type WorkerProcessState } from '#engine/index.js';
+import { displayId, formatAgo, formatBytes, formatDecimal, formatDuration, formatKnown, orderPendingFirst, renderCliTable, type CliTableStyle } from '#surfaces/core/cli-human/index.js';
 
 /** What a person needs to know about one worker: running now, finished (history), lost (no process and no result) or unknown (not verifiable). */
 export type WorkerKind = 'active' | 'finished' | 'lost' | 'unknown';
@@ -20,9 +20,17 @@ export function lastSignalAt(worker: WorkerObservation, observedAt: number): num
   return worker.resources?.latest?.observedAtMs ?? worker.files?.activity?.receivedAt ?? null;
 }
 
+/** A source's read status in the person's words (one map for the summary and `--verbose`). */
+export function sourceStatusText(status: WorkerObservationSource['status'], locale: Locale): string {
+  return status === 'available' ? t('cli.workers.source.available', {}, locale) : status === 'denied' ? t('cli.workers.source.denied', {}, locale)
+    : status === 'not-sampled' ? t('cli.workers.source.notSampled', {}, locale) : t('cli.workers.source.unavailable', {}, locale);
+}
+
 export interface WorkersViewInput {
   readonly report: WorkerObservationReport; readonly scopeLine: string; readonly all: boolean; readonly sinceMs: number | null;
   readonly style: CliTableStyle; readonly locale: Locale;
+  /** The exact command that reads a truncated source's next page. */
+  readonly nextPage?: (source: string, after: string) => string;
 }
 
 function stateWord(worker: WorkerObservation, kind: WorkerKind, locale: Locale): string {
@@ -48,9 +56,9 @@ export function renderWorkersView(input: WorkersViewInput): string {
   const attention = count('lost') + count('unknown');
   const lines = [t('cli.workers.summary', { scope: input.scopeLine, active: count('active'), attention, history: count('finished') }, locale)];
   for (const source of report.sources) {
-    if (source.status !== 'available') lines.push(t('cli.workers.sourceDown', { source: source.id, status: source.status === 'denied' ? t('cli.workers.source.denied', {}, locale)
-      : source.status === 'not-sampled' ? t('cli.workers.source.notSampled', {}, locale) : t('cli.workers.source.unavailable', {}, locale) }, locale));
-    if (source.truncated) lines.push(t('cli.workers.more', { source: source.id, after: source.nextAfter ?? '-' }, locale));
+    if (source.status !== 'available') lines.push(t('cli.workers.sourceDown', { source: source.id, status: sourceStatusText(source.status, locale) }, locale));
+    if (source.truncated) lines.push(t('cli.workers.more', { source: source.id,
+      command: input.nextPage && source.nextAfter ? input.nextPage(source.id, source.nextAfter) : '-' }, locale));
   }
   const shown = orderPendingFirst(workers.filter(worker => {
     if (!input.all && input.sinceMs === null) return kinds.get(worker) !== 'finished';
@@ -66,7 +74,7 @@ export function renderWorkersView(input: WorkersViewInput): string {
     const rows = shown.map(worker => {
       const usage = resolveWorkerUsage(worker), sample = worker.resources?.latest ?? null;
       return [displayId(worker.taskId, taskIds), worker.identity ? displayId(worker.identity.runId, runIds) : '-', stateWord(worker, kinds.get(worker)!, locale),
-        worker.model?.requested.modelId ?? (worker.provider || '-'), usage?.durationMs === null || usage?.durationMs === undefined ? '-' : formatDuration(usage.durationMs, locale),
+        worker.model?.requested.modelId ?? formatKnown(worker.provider, locale), usage?.durationMs === null || usage?.durationMs === undefined ? '-' : formatDuration(usage.durationMs, locale),
         sample?.cpuCores === null || sample?.cpuCores === undefined ? '-' : formatDecimal(sample.cpuCores, locale),
         formatBytes(sample?.memoryBytes ?? worker.resources?.sampledPeakBytes ?? null, locale), formatAgo(lastSignalAt(worker, now), now, locale)];
     });

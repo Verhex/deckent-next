@@ -93,6 +93,7 @@
   "cli.run.report.more": "Tam kimlikler, profiller ve tüm ham değerler: --verbose",
   "cli.run.report.hint": "Ayrıntı: deckent report --run <kısa kimlik>",
   "cli.run.report.pick": "Rapor için Run seçin (kapsam {scope})",
+  "cli.run.report.again": "Aynı rapor seçici olmadan, betikten: {command}",
   "cli.run.inventory.col.run": "İş (Run)",
   "cli.run.inventory.col.task": "Görev",
   "cli.run.inventory.col.attempt": "Deneme",

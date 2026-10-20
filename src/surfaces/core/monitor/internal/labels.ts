@@ -70,6 +70,14 @@ export function processLabel(state: WorkerProcessState, locale: Locale): string 
     'absent-unverified': t('monitor.process.absentUnverified', {}, locale), denied: t('monitor.process.denied', {}, locale) };
   return labels[state];
 }
+/** How the process ended, in words (`çıkış 0`, `kayıp, çıkış 134`, `çıktı, sinyal SIGKILL`): one form for the monitor and `workers --verbose`. */
+export function processExitText(state: WorkerProcessState, terminal: { readonly exitCode?: number | null | undefined; readonly signal?: string | null | undefined } | null | undefined, locale: Locale): string {
+  const word = processLabel(state, locale);
+  if (!terminal) return word;
+  if (terminal.exitCode !== null && terminal.exitCode !== undefined) return state === 'exited' ? t('monitor.process.exitCode', { code: terminal.exitCode }, locale)
+    : t('monitor.process.withExit', { state: word, code: terminal.exitCode }, locale);
+  return terminal.signal ? t('monitor.process.withSignal', { state: word, signal: terminal.signal }, locale) : word;
+}
 export function installStatusLabel(status: MonitorInstallStatus, locale: Locale): string {
   const labels: Record<MonitorInstallStatus, string> = { available: t('monitor.install.available', {}, locale),
     unavailable: t('monitor.install.unavailable', {}, locale), denied: t('monitor.install.denied', {}, locale) };

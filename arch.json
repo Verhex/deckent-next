@@ -2567,7 +2567,8 @@
         "src/engine/core/runs",
         "src/surfaces/core/terminal-theme",
         "src/engine/core/resource-observation",
-        "src/domain/core/work-cost"
+        "src/domain/core/work-cost",
+        "src/surfaces/core/cli-human"
       ],
       "plan": "MONITOR"
     },

@@ -1,14 +1,15 @@
 import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { WorkCostReport } from '#domain/index.js';
-const USD_NANOS_PER_UNIT = 1000000000n, USD_FRACTION_DIGITS = 9;
+import { formatBytes, formatDuration, formatUsd } from '#surfaces/core/cli-human/index.js';
+import UNITS from './units.json' with { type: 'json' };
+/** PRE-5: exact nano-dollars shown in the locale's own separators through the shared formatter; unknown is the unknown word, never `bilinmiyor USD`. */
 function money(amount: string | null | undefined, locale: Locale): string {
-  if (amount == null) return t('resource.unknown', {}, locale);
-  const nanos = BigInt(amount), fraction = (nanos % USD_NANOS_PER_UNIT).toString().padStart(USD_FRACTION_DIGITS, '0').replace(/0+$/, '');
-  return `${nanos / USD_NANOS_PER_UNIT}${fraction ? '.' + fraction : ''}`;
+  return amount == null ? t('resource.unknown', {}, locale) : formatUsd(Number(BigInt(amount)) / UNITS.usdNanosPerUnit, locale, UNITS.usdFractionDigits);
 }
+const seconds = (value: number | null | undefined, locale: Locale) => formatDuration(value == null ? null : value * UNITS.msPerSecond, locale);
 export function renderCostSummary(report: WorkCostReport, locale: Locale): string {
   return t('resource.cost.summary', { run: terminalSafeText(report.runId), accepted: report.summary.acceptedTasks, failed: report.summary.failedTasks, unknown: report.summary.unknownTasks,
-    cpu: report.summary.measuredCpuSeconds ?? t('resource.unknown', {}, locale), api: money(report.summary.measuredApiUsdNanos, locale),
+    cpu: seconds(report.summary.measuredCpuSeconds, locale), api: money(report.summary.measuredApiUsdNanos, locale),
     missing: report.summary.unknownApiAttempts, withheld: report.withheld }, locale);
 }
 export function renderCostReport(report: WorkCostReport, locale: Locale): string {
@@ -18,8 +19,8 @@ export function renderCostReport(report: WorkCostReport, locale: Locale): string
   return [renderCostSummary(report, locale), t('resource.cost.partial', {}, locale), ...report.attempts.map(row => t('resource.cost.attempt', {
     task: terminalSafeText(row.identity.taskId), attempt: terminalSafeText(row.identity.attemptId), workClass: terminalSafeText(row.acceptance.workClass ?? unknown),
     profile: terminalSafeText(`${row.profile.id}@${row.profile.version}`), model: terminalSafeText(row.model?.modelId ?? unknown), effort: terminalSafeText(row.effort ?? unknown),
-    outcome: outcomes[row.acceptance.outcome], cpu: row.axes.cpuSeconds ?? unknown, peak: row.axes.sampledPeakBytes ?? unknown, wall: row.axes.wallMs ?? unknown,
-    api: money(row.axes.apiMoney?.amountUsdNanos, locale), subscription: row.axes.subscription?.calls ?? unknown, subscriptionMs: row.axes.subscription?.durationMs ?? unknown,
+    outcome: outcomes[row.acceptance.outcome], cpu: seconds(row.axes.cpuSeconds, locale), peak: formatBytes(row.axes.sampledPeakBytes, locale), wall: formatDuration(row.axes.wallMs, locale),
+    api: money(row.axes.apiMoney?.amountUsdNanos, locale), subscription: row.axes.subscription?.calls ?? unknown, subscriptionMs: formatDuration(row.axes.subscription?.durationMs, locale),
     local: row.axes.localModel?.calls ?? unknown, human: row.axes.humanInterventions ?? unknown, rework: row.quality.reworkCount ?? unknown, rollback: row.quality.rollbackCount ?? unknown,
   }, locale)), ...renderRecommendationLines(report, locale)].join('\n');
 }

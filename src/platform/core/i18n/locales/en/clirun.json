@@ -93,6 +93,7 @@
   "cli.run.report.more": "Full ids, profiles and every raw value: --verbose",
   "cli.run.report.hint": "Details: deckent report --run <short id>",
   "cli.run.report.pick": "Choose a Run for the report (scope {scope})",
+  "cli.run.report.again": "Same report from a script, without the picker: {command}",
   "cli.run.inventory.col.run": "Run",
   "cli.run.inventory.col.task": "Task",
   "cli.run.inventory.col.attempt": "Attempt",

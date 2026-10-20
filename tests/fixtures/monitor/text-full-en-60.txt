@@ -113,17 +113,17 @@ run-unknown  ·  Waiting on system · reason: reason unknown ·
 since: unknown · deadline: unknown · next: Inspect the Run
 
 ── Workers ─────────────────────────────────────────────────
-  ┌──────────────────────┬─────────┬────────────┬──────────┐
-  │ Run/Task             │ State   │ Heartbeat  │ Process  │
-  ├──────────────────────┼─────────┼────────────┼──────────┤
-  │ run-blocked-approva… │ On hold │ 1 s        │ running  │
+  ┌───────────────────────┬─────────┬────────────┬─────────┐
+  │ Run/Task              │ State   │ Heartbeat  │ Process │
+  ├───────────────────────┼─────────┼────────────┼─────────┤
+  │ run-blocked-approval… │ On hold │ 1 s        │ running │
   │ On hold (you)                                          │
-  │ run-broken/build     │ Stopped │ —          │ exited 1 │
-  │ run-blocked-approva… │ On hold │ ! 1 min 3… │ running  │
+  │ run-broken/build      │ Stopped │ —          │ exit 1  │
+  │ run-blocked-approval… │ On hold │ ! 1 min 3… │ running │
   │ On hold (system)                                       │
-  │ run-blocked-approva… │ On hold │ released   │ missing  │
+  │ run-blocked-approval… │ On hold │ released   │ missing │
   │ On hold (system)                                       │
-  └──────────────────────┴─────────┴────────────┴──────────┘
+  └───────────────────────┴─────────┴────────────┴─────────┘
 
 On hold (you)
 Waiting on you · reason: awaiting approval (appr-0001) ·
@@ -147,7 +147,7 @@ monitor-surface
       09:29:55Z · message · Applying the review fixes to the
 monitor view
 Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
-0.4321 USD · 1 tool errors
+$0.4321 · 1 tool errors
 Model on subscription: requested model-alpha-2 (declared
 auxiliary: none) → init model-alpha-2 → usage none → pending
 [live, not sealed yet]
@@ -163,7 +163,7 @@ Doing now: running · src/app.ts — apply patch
 Heartbeat ! 1 min 35 s (stale) · process running · pid 4242
 · handle ctr-lint
 Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
-0.4321 USD · 1 tool errors
+$0.4321 · 1 tool errors
 Model on subscription: requested model-alpha-2 (declared
 auxiliary: none) → init model-alpha-2 → usage none → pending
 [live, not sealed yet]
@@ -178,7 +178,7 @@ Doing now: — · —
 Heartbeat released · process missing · pid 4242 · handle
 ctr-pack
 Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
-0.4321 USD · 1 tool errors
+$0.4321 · 1 tool errors
 Model on subscription: requested model-alpha-2 (declared
 auxiliary: none) → init model-alpha-2 → usage none → pending
 [live, not sealed yet]

@@ -330,7 +330,7 @@ describe('monitor human worker evidence', () => {
       expect(refused.size).toBe(0); expect(outputDecisions).toBe(0);
     }
 
-    const humanText = (await loadMonitorSurface()).renderMonitorText(snapshot, { locale: 'tr', width: 80, ascii: true });
+    const humanText = (await loadMonitorSurface()).renderMonitorText(snapshot, { locale: 'tr', width: 80, ascii: true, verbose: true }); // PRE-5: worker detail is the --verbose text
     const worker = install.workers.find(w => w.identity?.attemptId === identity.attemptId)!;
     if (allowed) {
       expect(worker).toMatchObject({ human: { transcript: { state: transcript === 'invalid' ? 'unavailable' : transcript }, patch: { state: 'recorded', fileCount: count, files: count ? ['note.txt'] : [] }, finalReport: { status: 'reported' }, evaluation: 'rejected', title: input.task, titleEvidence: 'task' } });
@@ -413,7 +413,7 @@ describe('MONITOR-H1-R usage evidence', () => {
     for (const command of ['list', 'watch'] as const) for (const locale of ['en', 'tr'] as const) {
       const text = await workers(current, command, locale);
       expect(text).toContain(reason[locale]);
-      expect(text).not.toMatch(/(?:tokens? 987|987 (?:in|giriş))/); expect(text).not.toContain('$0.1234');
+      expect(text).not.toMatch(/(?:tokens? 987|987 (?:in|giriş))/); expect(text).not.toMatch(/0[.,]1234/u);
     }
     const value = (await inspectConfiguredWorkers(current.dir, { schemaVersion: 1, scopeId: 's' }, current.options)).sources[0]!.workers[0]!;
     expect(value.usageEvidence).toBe(sealed === 'unavailable' ? 'unavailable' : 'invalid');
@@ -422,7 +422,7 @@ describe('MONITOR-H1-R usage evidence', () => {
     expect(value).not.toHaveProperty('usage');
     const snapshot = await inspectMonitor(current.dir, current.options), surface = await loadMonitorSurface();
     for (const locale of ['en', 'tr'] as const) {
-      const text = surface.renderMonitorText(snapshot, { locale, width: 120, ascii: true });
+      const text = surface.renderMonitorText(snapshot, { locale, width: 120, ascii: true, verbose: true });
       if (sealed === 'unavailable') expect(snapshot.installs[0]).toMatchObject({ status: 'unavailable', workers: [] });
       else {
         expect(text).toContain(reason[locale]); expect(await inkDetail(snapshot, locale)).toContain(reason[locale]);
@@ -430,7 +430,7 @@ describe('MONITOR-H1-R usage evidence', () => {
         const detail = surface.buildMonitorView(legacyView, locale, true).tabs.workers.flatMap(block => block.kind === 'table' ? block.rows : [])[0]!.detail().flat().map(span => span.text).join('\n');
         expect(detail).toContain(reason[locale]); expect(detail).not.toMatch(/(?:tokens? 987|987 (?:in|giriş))/);
       }
-      expect(text).not.toMatch(/(?:tokens? 987|987 (?:in|giriş))/); expect(text).not.toContain('0.1234');
+      expect(text).not.toMatch(/(?:tokens? 987|987 (?:in|giriş))/); expect(text).not.toMatch(/0[.,]1234/u);
     }
   });
   async function inkDetail(snapshot: Awaited<ReturnType<typeof inspectMonitor>>, locale: 'en' | 'tr') {
@@ -462,7 +462,7 @@ describe('MONITOR-H1-R usage evidence', () => {
     const snapshot = await inspectMonitor(current.dir, current.options), worker = snapshot.installs[0]!.workers[0]!, surface = await loadMonitorSurface();
     const expected = amount === null ? '—/—' : `${amount}/${amount}`;
     for (const locale of ['en', 'tr'] as const) {
-      expect(surface.renderMonitorText(snapshot, { locale, width: 120, ascii: true })).toContain(`token${locale === 'en' ? 's' : ''} ${expected}`);
+      expect(surface.renderMonitorText(snapshot, { locale, width: 120, ascii: true, verbose: true })).toContain(`token${locale === 'en' ? 's' : ''} ${expected}`);
       expect(await inkDetail(snapshot, locale)).toContain(`token${locale === 'en' ? 's' : ''} ${expected}`);
       // The Ink detail renderer reads this same production snapshot; no hand-set usage flag.
       const detail = surface.buildMonitorView(snapshot, locale, true).tabs.workers.flatMap(block => block.kind === 'table' ? block.rows : [])[0]!.detail().flat().map(span => span.text).join('\n');
@@ -476,7 +476,8 @@ describe('MONITOR-H1-R usage evidence', () => {
         const text = await workers(current, command, locale), count = amount === null ? '-' : String(amount);
         expect(text).toContain(locale === 'en' ? `tokens ${count} in / ${count} out` : `token ${count} giriş / ${count} çıkış`);
         expect(text).not.toMatch(/(?:tokens? 987|987 (?:in|giriş))/);
-        if (source !== 'live' && ended && amount !== null) { expect(text).toContain(amount === 0 ? '$0.0000' : '$0.0017'); expect(text).not.toContain('$0.1234'); }
+        // PRE-5: the cost reads in the locale's own form through the shared formatter (`$0.0017`, `0,0017 USD`).
+        if (source !== 'live' && ended && amount !== null) { expect(text).toContain(locale === 'en' ? (amount === 0 ? '· $0 ·' : '· $0.0017 ·') : (amount === 0 ? 'maliyet 0 USD ·' : 'maliyet 0,0017 USD ·')); expect(text).not.toMatch(/0[.,]1234/u); }
       }
     }
     expect(JSON.parse(JSON.stringify(worker))).toMatchObject({ usageEvidence: source === 'live' ? 'live' : 'sealed',
