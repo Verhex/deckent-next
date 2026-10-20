@@ -61,7 +61,7 @@
   "setup.reason.scopeRequired": "Bu kurulum için bir kapsam adı gerekiyor.",
   "setup.reason.homeRoot": "Burası ana klasörünüz; genellikle bir proje klasörü daha uygun olur. Bir kapsam adı gerekiyor.",
   "setup.reason.profileChoice": "Bu kurulumu kimin kullanacağını seçin; ekip ve şirket sonradan eklenebilir.",
-  "setup.reason.profileChosen": "{profile} kimlik profili, izinler kurulduktan sonra önizlenecek.",
+  "setup.reason.profileChosen": "{profile} kimlik profili, uyguladığınızda kullanıcınızın genel yapılandırmasına kaydedilir; bütün kurulumlarınız onu kullanır.",
   "setup.reason.policyCurrent": "İzinler zaten güncel.",
   "setup.reason.policyHandBuilt": "İzinler elle yazılmış; kurulum onlara dokunmaz.",
   "setup.reason.policyConflict": "Mevcut izin dosyaları ilk kurulum kurallarından farklı; hiçbir şey yazılmaz. deckent doctor ile kontrol edin.",

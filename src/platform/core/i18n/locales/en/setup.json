@@ -61,7 +61,7 @@
   "setup.reason.scopeRequired": "A scope name is needed for this installation.",
   "setup.reason.homeRoot": "This is your home folder; a project folder is usually a better place. A scope name is needed.",
   "setup.reason.profileChoice": "Choose who will use this installation; teams and companies can be added later.",
-  "setup.reason.profileChosen": "The identity profile {profile} will be previewed after the permissions are installed.",
+  "setup.reason.profileChosen": "The identity profile {profile} is saved in your user's global configuration when you apply it, so every installation of yours uses it.",
   "setup.reason.policyCurrent": "The permissions are already current.",
   "setup.reason.policyHandBuilt": "The permissions were written by hand; setup leaves them unchanged.",
   "setup.reason.policyConflict": "Existing permission files differ from the first-run rules; nothing is written. Check them with deckent doctor.",
