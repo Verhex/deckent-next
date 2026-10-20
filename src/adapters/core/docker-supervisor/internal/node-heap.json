@@ -1,0 +1,8 @@
+{
+  "$comment": "PRE-2 VERIFY-CRASH (2026-10-20). Node's default old-space ceiling inside a cgroup-limited container is ~55 % of the limit (measured on node 24.21.0: 1120 MiB at 2 GiB, 1728 MiB at 3 GiB); the repository's `tsc --noEmit` needs ~1.17 GiB, so verify-light aborted with exit 134 (V8 heap out of memory, not a cgroup kill) at peak RSS 1.22 GB of 2 GiB. The adapter passes this fraction of memoryBytes as the Node heap ceiling; `--max-old-space-size` is understood by every supported Node, unlike the newer percentage flag. A task argv that sets NODE_OPTIONS itself still wins.",
+  "schemaVersion": 1,
+  "environment": "NODE_OPTIONS",
+  "flag": "--max-old-space-size=",
+  "memoryFraction": 0.75,
+  "bytesPerUnit": 1048576
+}
