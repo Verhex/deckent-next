@@ -8,7 +8,8 @@ import { approvalRequestSchema } from '#domain/index.js';
 import { configChangeApprovalFacts, sealApproval, type ConfigChangeOutcome } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 import { approvalCardLines } from '#surfaces/core/terminal-work/index.js';
-import { createWorklineLedgerPorts, workSurfaceLabels } from '#surfaces/core/cli/index.js';
+import { workSurfaceLabels } from '#surfaces/core/cli/index.js';
+import { createWorklineLedgerPorts } from '../support/cli-ledger-ports.js';
 import { configCommand, configSlash, type ConfigCommandContext } from '#surfaces/core/config/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 
@@ -103,7 +104,8 @@ describe('the model cannot reach a config write', () => {
     const writers = files('src').filter(path => /\.(ts|tsx)$/.test(path))
       .filter(path => /createConfiguredConfigApplication|configApplication!?\(|configWrite\(|terminalConfigWrite\(|configPanelPort\(/.test(readFileSync(path, 'utf8')))
       .map(path => path.replaceAll('\\', '/')).sort();
-    expect(writers).toEqual(['src/composition/core/cli/internal/entry.ts', 'src/composition/core/config/index.ts', 'src/composition/core/config/internal/configured.ts',
+    // COLDSTART: the human CLI entry's host wiring lives in its host module (loaded only when a command runs).
+    expect(writers).toEqual(['src/composition/core/cli/internal/host.ts', 'src/composition/core/config/index.ts', 'src/composition/core/config/internal/configured.ts',
       // POLICY-V12: `init policy --apply|--upgrade` writes a missing `service.identity` through the same governed writer (the person's own config
       // grant, digest CAS, audited). Reached only from the human CLI entry (asserted below): no SDK export, no MCP tool, no agent unit.
       'src/composition/core/installation/internal/policy-template.ts',
@@ -132,7 +134,7 @@ describe('the model cannot reach a config write', () => {
     // Only composition and surfaces can call composition (engine's own `PolicyTemplateInstallationApplication` is a name match, not a caller).
     expect([...files('src/composition'), ...files('src/surfaces')].filter(path => /\.(ts|tsx)$/.test(path) && !path.replaceAll('\\', '/').startsWith('src/composition/core/installation/'))
       .filter(path => installer.test(readFileSync(path, 'utf8'))).map(path => path.replaceAll('\\', '/')).sort())
-      .toEqual(['src/composition/core/cli/internal/entry.ts',
+      .toEqual(['src/composition/core/cli/internal/host.ts',
         // I-S3 (alpha.48): `deckent init`'s permissions stage reaches the same installer through the setup wiring and the setup window's
         // foreground owner, on a person's terminal only; no agent or MCP unit names the setup surface (asserted below).
         'src/composition/core/setup/internal/wiring.ts',
@@ -143,7 +145,7 @@ describe('the model cannot reach a config write', () => {
     expect(readFileSync('src/index.ts', 'utf8') + readFileSync('src/composition/index.ts', 'utf8')).not.toMatch(installer);
     // I-S3: the setup wiring is composed only by the CLI entry; no SDK/composition export and no agent or MCP unit names it.
     expect(files('src').filter(path => /\.(ts|tsx)$/.test(path) && !path.replaceAll('\\', '/').startsWith('src/composition/core/setup/'))
-      .filter(path => /configuredSetup\b/.test(readFileSync(path, 'utf8'))).map(path => path.replaceAll('\\', '/'))).toEqual(['src/composition/core/cli/internal/entry.ts']);
+      .filter(path => /configuredSetup\b/.test(readFileSync(path, 'utf8'))).map(path => path.replaceAll('\\', '/'))).toEqual(['src/composition/core/cli/internal/host.ts']);
     expect(readFileSync('src/index.ts', 'utf8') + readFileSync('src/composition/index.ts', 'utf8')).not.toMatch(/composition\/core\/setup|configuredSetup/);
     const mcp = readFileSync('src/surfaces/core/mcp/internal/server.ts', 'utf8');
     expect([...mcp.matchAll(/name: '([a-z_]+)'/g)].map(match => match[1]).filter(name => /config/.test(name!))).toEqual([]);

@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { createWorklineLedgerPorts } from '#surfaces/core/cli/index.js';
+import { createWorklineLedgerPorts } from './cli-ledger-ports.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { ensureConfiguredTerminalIdentity } from '#composition/core/scoped-request/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';

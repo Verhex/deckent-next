@@ -1,5 +1,5 @@
 import type { Locale } from '#platform/index.js';
-import { createWorklineLedgerPorts as createLedgerPorts, launchTerminal } from '#surfaces/core/cli-terminal/index.js';
+import { launchTerminal } from '#surfaces/core/cli-terminal/index.js';
 import { mcpSlash } from './mcp.js';
 import { renderRunCancellation } from '#surfaces/core/cli-run/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
@@ -15,9 +15,4 @@ export async function terminalCommand(argv: readonly string[], context: CommandC
       runMcp: context.runMcpCommand } : {}),
     renderRunCancellation,
   });
-}
-
-/** Terminal ports over the same handlers as the CLI commands, with the CLI's `run cancel` text (the tests' and callers' existing entry). */
-export function createWorklineLedgerPorts(input: Omit<Parameters<typeof createLedgerPorts>[0], 'renderRunCancellation'>): ReturnType<typeof createLedgerPorts> {
-  return createLedgerPorts({ ...input, renderRunCancellation });
 }

@@ -1,3 +1,4 @@
+import { lazyFunction } from '#surfaces/core/cli-kit/index.js';
 export { dispatch, main } from '#surfaces/core/cli/index.js';
 export type { ExitCode } from '#surfaces/core/cli/index.js';
 export type { McpApplications, McpLimits } from '#surfaces/core/mcp/index.js';
@@ -6,13 +7,19 @@ export type { McpApplications, McpLimits } from '#surfaces/core/mcp/index.js';
 export function loadMcpSurface(): Promise<typeof import('#surfaces/core/mcp/index.js')> { return import('#surfaces/core/mcp/index.js'); }
 export type { ToolResultSummary, TurnDelta, WorklineStreamTurn } from '#surfaces/core/terminal/index.js';
 export type { PanelTurnBinding } from '#surfaces/core/terminal-kit/index.js';
-export { attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
+// COLDSTART: the terminal turn, doctor's verdict and the CLI families reach the engine barrel; the CLI entry loads them on their first call,
+// so `--version` and help never evaluate that graph. Each lazy export keeps its module's signature.
+const terminalTurn = () => import('#surfaces/core/terminal-turn/index.js');
+export const attachTerminalMentions = lazyFunction(terminalTurn, 'attachTerminalMentions'), findTerminalMentions = lazyFunction(terminalTurn, 'findTerminalMentions');
+export async function* streamTerminalAgentTurn(...args: Parameters<typeof import('#surfaces/core/terminal-turn/index.js')['streamTerminalAgentTurn']>) {
+  return yield* (await terminalTurn()).streamTerminalAgentTurn(...args);
+}
 export type { ConfigChoiceList, ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/core/config/index.js';
-export { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 export { askDeliveryConfirmation, askQueueConfirmation } from '#surfaces/core/effect-confirmation/index.js';
 export { resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 export { openConfigWindow } from '#surfaces/core/config-window/index.js';
 export { askCliCard, cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
 // I-S3: `deckent init`'s setup reader (loads the setup surface lazily, as `init` does) and doctor's own measurement for the final check.
 export function loadSetupSurface(): Promise<typeof import('#surfaces/core/setup/index.js')> { return import('#surfaces/core/setup/index.js'); }
-export { doctorVerdict, type KernelCommandContext } from '#surfaces/core/cli-observe/index.js';
+export const doctorVerdict = lazyFunction(() => import('#surfaces/core/cli-observe/index.js'), 'doctorVerdict');
+export type { KernelCommandContext } from '#surfaces/core/cli-observe/index.js';
