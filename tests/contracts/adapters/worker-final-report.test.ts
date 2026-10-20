@@ -16,7 +16,7 @@ it('validates every report field, rejects extra authority fields and oversized c
     expect(workerFinalReportSchema.safeParse(value).success).toBe(false);
   }
   expect(bridge.validateFinalReport({ ...report, summary: 'a'.repeat(40000) }, [])).toEqual({ status: 'unavailable', reason: 'oversized' });
-  const sensitive = { ...report, summary: 'fixture-secret', changedFiles: ['fixture-secret.txt'], checks: [{ command: 'echo fixture-secret', outcome: 'passed' }], openIssues: ['Bearer abc.def.ghi'] };
+  const sensitive = { ...report, summary: 'fixture-secret', changedFiles: ['fixture-secret.txt'], checks: [{ command: 'echo fixture-secret', outcome: 'passed', checkId: 'fixture-secret', role: 'exploratory' }], openIssues: ['Bearer abc.def.ghi'] };
   const clean = JSON.stringify(bridge.validateFinalReport(sensitive, ['fixture-secret']));
   expect(clean).not.toContain('fixture-secret'); expect(clean).not.toContain('abc.def.ghi'); expect(clean).toContain('[REDACTED]');
 });
