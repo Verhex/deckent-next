@@ -136,4 +136,26 @@ describe('click-and-drag selection in the full window', () => {
     pointer.send({ kind: 'press', column: 4, row: first }); pointer.send({ kind: 'release', column: 4, row: first }); await settle(30);
     expect(copies).toHaveLength(1);
   });
+
+  it('while an answer streams under a full view (the column clipped at the top), a press on the top row selects the line shown there', async () => {
+    const pointer = fakePointer(), copies: string[] = [];
+    let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+    const streamTurn = async function* (messages: readonly { content: unknown }[]): AsyncGenerator<TurnDelta> {
+      if (messages.at(-1)?.content === 'fill') { yield { kind: 'text', text: Array.from({ length: 40 }, (_, i) => `fill-line-${i}`).join('\n\n') + '\n' }; yield { kind: 'done', finish: 'stop' }; return; }
+      yield { kind: 'text', text: 'streaming one\nstreaming two\nstreaming three' }; await gate; yield { kind: 'done', finish: 'stop' };
+    };
+    const view = mountWorkline({ streamTurn, fullscreen: true, pointer: pointer.source, copyText: text => { copies.push(text); },
+      labels: { ...WORKLINE_TEST_LABELS, viewport: { below: 'BELOW {count}', copied: 'COPIED {count}' } } }, 80, { rows: 24, debug: true });
+    mounted.push(view.instance);
+    view.stdin.write('fill'); await settle(20); view.stdin.write('\r');
+    await until(() => view.stdout.frame.includes('fill-line-39') && view.stdout.frame.includes('READY'), 'filled');
+    view.stdin.write('more'); await settle(20); view.stdin.write('\r');
+    await until(() => view.stdout.frame.includes('streaming three'), 'streaming');
+    await settle(60);
+    const top = view.stdout.frame.split('\n').find(row => row.trim() !== '')!, index = view.stdout.frame.split('\n').indexOf(top);
+    pointer.send({ kind: 'press', column: 0, row: index }); pointer.send({ kind: 'drag', column: 11, row: index }); pointer.send({ kind: 'release', column: 11, row: index });
+    await settle(40);
+    expect(copies, view.stdout.frame).toEqual([top.slice(0, 12).trimEnd()]);
+    release();
+  });
 });
