@@ -233,7 +233,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   `deckent/extensions` ile gelir, kimsenin kaydetmediği tür başlatmayı reddeder. Her denetim kısa bir kap başlatır ve yanıt vermeden önce
   kabın silindiğini kanıtlar (referans makinede yaklaşık 0,85 sn); silindiği kanıtlanamazsa Run belirsiz olarak park edilir (deneme kodu
   `EXECUTION_ENVIRONMENT_UNCERTAIN`; monitör ve `run inspect` bunu diğer ortam parkları gibi gösterir) ve sonraki hizmet açılışı bu
-  kurulumun artakalan denetim kaplarını kaldırır. `deckent coding template` varsayılanları bildirir (node, Node heap tavanı; typescript yolu yalnız `/node_modules`
+  kurulumun artakalan denetim kaplarını kaldırır. Bir denetimin silindiği kanıtlanmadıkça Run'ı havuz yerini tutar, kapatılamaz ve
+  devam ettirilemez (`RUN_DECISION_NOT_READY`); iptal ve park süresi bu yeri açmaz. Silindiği hiç kanıtlanamayan denetim yeri süresiz
+  tutar; hizmet günlüğü her açılışta onu adlandırır ve `docker rm --force <ad>` sonrası bir sonraki açılış ya da ilerleme turu yeri bir
+  kez açar. `deckent coding template` varsayılanları bildirir (node, Node heap tavanı; typescript yolu yalnız `/node_modules`
   bağımlılık bağlaması olan şablonda); mevcut görev türü şablonunu korur (komutu o tür için yeniden çalıştırmak
   `CODING_TEMPLATE_KIND_CONFLICT` ile reddedilir), bu yüzden ona bugün gereksinim eklemek `deckent config set` ile `admission.registry`
   düzenlemek demektir. doctor ortam yüzünden park edilen Run'ları henüz listelemez; `monitor` ve `run inspect` gösterir.
