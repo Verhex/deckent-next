@@ -7,7 +7,7 @@ export function loadMcpSurface(): Promise<typeof import('#surfaces/core/mcp/inde
 export type { ToolResultSummary, TurnDelta, WorklineStreamTurn } from '#surfaces/core/terminal/index.js';
 export type { PanelTurnBinding } from '#surfaces/core/terminal-kit/index.js';
 export { attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
-export type { ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/core/config/index.js';
+export type { ConfigChoiceList, ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/core/config/index.js';
 export { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 export { askDeliveryConfirmation, askQueueConfirmation } from '#surfaces/core/effect-confirmation/index.js';
 export { resolveCliLocale } from '#surfaces/core/cli-kit/index.js';

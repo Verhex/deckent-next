@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "planSchemaVersion": 1,
-  "planDigest": "632807bd741077a6b9fc192d85e7c6d0a3c36de895fefb42bffd866bd3e2c0a1",
+  "planDigest": "13164cc87ba40f6ce806c217a49b7d09e6924a6dd44cf521cf25e6485434d88f",
   "registryDigest": "46e34130c9004cd86c881235d7f9a65a9c73b826312fde65e1d57016b494d15e",
   "stages": [
     {
@@ -66,11 +66,13 @@
     {
       "id": "core:profile",
       "namespace": "core",
-      "state": "done",
+      "state": "blocked",
       "title": "setup.stage.profile",
       "reason": {
-        "code": "setup.reason.profileSolo",
-        "params": {}
+        "code": "setup.reason.waitsFor",
+        "params": {
+          "stage": "core:folder"
+        }
       },
       "question": null,
       "default": {

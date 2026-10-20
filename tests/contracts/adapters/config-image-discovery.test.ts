@@ -48,7 +48,7 @@ const twelve = Array.from({ length: 12 }, (_, n) => id(n + 1));
 it('verifies a slow daemon\'s whole image list within the deadline with one endpoint pin and one daemon id check before and after', async () => {
   const docker = fakeDocker(twelve);
   // Before J3-IMAGES: 1 + 12 × 4 sequential calls × 10 ms > 400 ms → the deadline fired and every verified image was thrown away.
-  expect(await discover(docker, limits)).toEqual({ value: twelve });
+  expect(await discover(docker, limits)).toEqual({ value: { values: twelve, partial: false } });
   expect(docker.calls.filter(call => call.args[0] === 'context')).toHaveLength(1);
   expect(docker.infos()).toHaveLength(2);
   const inspects = docker.calls.filter(call => call.args[3] === 'inspect').map(call => call.args);
@@ -59,9 +59,9 @@ it('verifies a slow daemon\'s whole image list within the deadline with one endp
 
 it('excludes an id the inspect does not return, refuses the list when the daemon changes between the checks, and proposes nothing else', async () => {
   const ids = [id(1), id(2), id(3)];
-  expect(await discover(fakeDocker(ids, { missing: [id(2)] }), limits)).toEqual({ value: [id(1), id(3)] });
-  expect(await discover(fakeDocker(ids, { daemons: ['daemon-a', 'daemon-b'] }), limits)).toEqual({ value: [] });
-  expect(await discover(fakeDocker([...ids, 'sha256:short', 'not-an-id']), limits)).toEqual({ value: ids });
+  expect(await discover(fakeDocker(ids, { missing: [id(2)] }), limits)).toEqual({ value: { values: [id(1), id(3)], partial: false } }); // missing is not partial
+  expect(await discover(fakeDocker(ids, { daemons: ['daemon-a', 'daemon-b'] }), limits)).toEqual({ value: { values: [], partial: false } });
+  expect(await discover(fakeDocker([...ids, 'sha256:short', 'not-an-id']), limits)).toEqual({ value: { values: ids, partial: false } });
 });
 
 it('keeps the images proven before the deadline and still runs the daemon id check after them', async () => {
@@ -70,10 +70,10 @@ it('keeps the images proven before the deadline and still runs the daemon id che
   const docker = fakeDocker(twelve, { hang: id(12) });
   const size = Math.min(CONFIG_DISCOVERY_BOUNDS.imageChunk, Math.ceil(twelve.length / CONFIG_DISCOVERY_BOUNDS.imageProcesses));
   const hung = twelve.slice(Math.floor(11 / size) * size, Math.floor(11 / size) * size + size), proven = twelve.filter(value => !hung.includes(value));
-  expect(await discover(docker, limits)).toEqual({ value: proven });
+  expect(await discover(docker, limits)).toEqual({ value: { values: proven, partial: true } }); // CONFIG-PARTIAL-NOTICE: cut short, said so
   expect(proven.length).toBeGreaterThan(0);
   expect(proven).not.toContain(id(12));
   expect(docker.infos().map(call => call.at)).toEqual([20, 380]);
   // A daemon swap is still refused when the list is partial.
-  expect(await discover(fakeDocker(twelve, { hang: id(12), daemons: ['daemon-a', 'daemon-b'] }), limits)).toEqual({ value: [] });
+  expect(await discover(fakeDocker(twelve, { hang: id(12), daemons: ['daemon-a', 'daemon-b'] }), limits)).toEqual({ value: { values: [], partial: false } });
 });

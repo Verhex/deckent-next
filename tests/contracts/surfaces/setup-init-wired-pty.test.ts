@@ -18,7 +18,8 @@ import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const driver = resolve('tests/fixtures/setup-init-handoff-driver.mjs');
-const PASSWORD = 'Pty-Pw-I-S3';
+// What the test types at the fake sudo prompt: a fixed, obviously fake answer that must never appear in the output.
+const SUDO_ANSWER = 'fake-sudo-answer-i-s3';
 // The PTY helper is found on the runner's PATH: a case may give the CLI a PATH without it (no docker anywhere on it).
 const python = (process.env['PATH'] ?? '').split(':').map(dir => join(dir, 'python3')).find(path => existsSync(path)) ?? 'python3';
 const ROWS = 50, COLUMNS = 110;
@@ -107,7 +108,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     await access(cli);
     const f = await fixture();
     const run = await f.pty('full-init', [process.execPath, cli, 'init'], [['Enter confirm', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'], ['> 6. Permissions', '1\r'],
-      ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 9. Model connection', '2\r'], ['> 11. Project instructions', '2\r'], ['> 12. Final check', '1\r'], ['Final check: applied; observed again.', '1\r']]);
+      ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 5. Who uses this installation · ready', '1\r'], ['> 9. Model connection', '2\r'], ['> 11. Project instructions', '2\r'], ['> 12. Final check', '1\r'], ['Final check: applied; observed again.', '1\r']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.status, run.output.slice(-2000)).toBe(0);
     // The human doctor ran on the plain terminal between two windows (its summary line, then the window again).
@@ -118,6 +119,9 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     for (const line of ['2. Language · done', '6. Permissions · done', '3. Folder and scope · done · This folder already uses the scope "erp-demo"', '11. Project instructions · skipped'])
       expect(summary).toContain(line);
     expect(summary).toContain('core:policy: applied'); expect(summary).toContain('core:language: applied'); expect(summary).toContain('core:final-check: applied');
+    // SOLO-PROFILE (owner 2026-10-20): the solo choice is saved like any profile (the user's global layer) and doctor no longer asks for one.
+    expect(summary).toContain('core:profile: applied');
+    expect(JSON.parse(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8'))).toMatchObject({ identity: { profile: { id: 'core:solo', version: 1 } } });
     // I-S7: the summary ends with what the first job still needs, in order, each with its exact command (configuration and ledger reads only).
     const firstJob = summary.slice(summary.indexOf('Before the first job (/do), still to do, in this order:'));
     expect(firstJob.length).toBeLessThan(summary.length);
@@ -130,8 +134,17 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect((await readdir(f.root)).sort()).toEqual(['.deckent']);
     // Done stages are detected again on the next run, not remembered.
     const again = await f.plan();
-    expect(again).toMatchObject({ 'core:language': 'done:setup.reason.languageConfigured', 'core:folder': 'done:setup.reason.scopeConfigured', 'core:policy': 'done:setup.reason.policyCurrent' });
-    expect((await f.deckent(['doctor'])).code).toBe(0);
+    expect(again).toMatchObject({ 'core:language': 'done:setup.reason.languageConfigured', 'core:folder': 'done:setup.reason.scopeConfigured', 'core:policy': 'done:setup.reason.policyCurrent',
+      'core:profile': 'done:setup.reason.profileConfigured' });
+    const checked = await f.deckent(['doctor']);
+    expect(checked.code).toBe(0);
+    expect(checked.stdout).toMatch(/ok\s+Identity profile: core:solo/u); expect(checked.stdout).not.toContain('No identity profile is chosen');
+    // A re-run on a person's terminal shows the profile stage done and never asks it again.
+    const rerun = await f.pty('rerun', [process.execPath, cli, 'init'], [['Deckent setup', '\u001b']]);
+    expect(rerun.timeout, rerun.output?.slice(-3000)).toBeUndefined();
+    // The plain summary after the window (raw bytes: the line is wider than the test terminal).
+    expect(rerun.output).toContain('5. Who uses this installation · done · The identity profile core:solo is already saved in your user\'s configuration.');
+    expect(rerun.output).not.toContain('Will only you use this installation?');
   }, 240_000);
 
   it('interrupted after the permissions (Esc): the next run shows them done and asks the rest again', async () => {
@@ -188,7 +201,8 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     const delta: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
     await writeFile(path, JSON.stringify({ ...current, revision: 'first-run-template-v12', grants: current.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
     expect(await f.plan()).toMatchObject({ 'core:policy': 'needs-answer:setup.reason.policyUpgrade' });
-    const run = await f.pty('policy-upgrade', [process.execPath, cli, 'init'], [['> 5. Who uses', '1\r'], ['> 6. Permissions', '1\r'], ['Apply now', '1\r'],
+    const run = await f.pty('policy-upgrade', [process.execPath, cli, 'init'], [['> 5. Who uses', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'],
       ['Add these rules', 'y'], ['Permissions: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     const card = run.output.indexOf('Upgrade the permissions'), reopened = run.output.indexOf('Permissions: applied', card);
@@ -227,8 +241,8 @@ printf 'fake-sudo ran: %s\\n' "\${*:2}"
     await chmod(sudo, 0o755);
     // PATH without any docker; the caller's environment carries a secret that must never reach sudo.
     const run = await f.pty('docker-handoff', [process.execPath, driver, f.root, work, sudo], [['Enter confirm', '1\r'], ['Apply now', '1\r'], ['> 5. Who uses', '1\r'],
-      ['> 8. Execution environment', '1\r'], ['Apply now', '1\r'], ['apt-get install -y docker-ce', 'y'], ['[fake-sudo] password for fake:', `${PASSWORD}\r`],
-      ['> 9. Model connection', '\u001b']], { PATH: join(work, 'bin'), TMPDIR: work, DECKENT_SECRET_PASSPHRASE: 'must-not-reach-sudo' });
+      ['> 5. Who uses this installation · ready', '1\r'], ['> 8. Execution environment', '1\r'], ['Apply now', '1\r'], ['apt-get install -y docker-ce', 'y'], ['[fake-sudo] password for fake:', `${SUDO_ANSWER}\r`],
+      ['> 9. Model connection', '\u001b']], { PATH: join(work, 'bin'), TMPDIR: work, DECKENT_SECRET_PASSPHRASE: 'must-not-reach-sudo' }); // ggignore: fixed fake values the test proves never reach sudo (secret-scanner false positive)
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.output).toContain('DRIVER-STATUS=closed');
     // Order on the terminal: the window offers the stage → the window closes → the card → sudo's own prompt → re-detection → the window again.
@@ -239,8 +253,8 @@ printf 'fake-sudo ran: %s\\n' "\${*:2}"
     expect(offered < card && card < prompt && prompt < ready && ready < reopened).toBe(true);
     expect(screen(run.output.slice(0, at('\u001b[?2026l', reopened) + 8))).toContain('8. Execution environment · done');
     // sudo read the password from the terminal itself: the window had released it (the typed length arrived, nothing echoed).
-    expect((await readFile(join(work, 'typed-length.log'), 'utf8')).trim()).toBe(String(PASSWORD.length));
-    expect(run.output).not.toContain(PASSWORD);
+    expect((await readFile(join(work, 'typed-length.log'), 'utf8')).trim()).toBe(String(SUDO_ANSWER.length));
+    expect(run.output).not.toContain(SUDO_ANSWER);
     const argv = (await readFile(join(work, 'argv.log'), 'utf8')).split('\n').filter(Boolean);
     expect(argv[0]).toBe('-k');
     expect(argv.slice(1).map(line => line.split(' ').slice(0, 3).join(' '))).toEqual(['-- install -m', '-- install -m', '-- install -m', '-- apt-get update', '-- apt-get install', '-- usermod -aG']);

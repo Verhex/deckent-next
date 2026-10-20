@@ -34,12 +34,12 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   `npm run worker:image` ile worker imajı, `deckent config set execution`, `deckent init registry`, `deckent init pool`), doctor'un
   havuz satırı ilkini gösterir; liste yalnız yapılandırmayı ve havuz defterini okur, ayarlı imajın makinede olup olmadığını
   denetlemez; teslim klonu da kurulum aşaması değildir.
-  Kurulum kaydedilmiş profili geri okumaz: tek kullanıcı hiçbir şey yazmaz (doctor yine kimlik profili ister), ekip ya da
-  kurum seçimi kullanıcınızın genel yapılandırmasına kaydeder (dağıtım `deckent identity distribute` olarak kalır) ve
-  sonraki `deckent init` yeniden sorar. Son kontrol
+  Seçtiğiniz profil (tek kullanıcı, ekip, kurum ya da özel) kullanıcınızın genel yapılandırmasına kaydedilir
+  (`identity.profile`; dağıtım `deckent identity distribute` olarak kalır); sonraki `deckent init` onu geri okur ve aşamayı tamam
+  gösterir, doctor da artık profil istemez. Gözetimsiz `--yes` profili kaydetmez. Son kontrol
   doctor'ın kendi satırlarıdır: yalnız hiç uyarı yokken ve diğer her aşama tamam ya da atlanmışken "tamam" olur; bu yüzden
-  yeni kurulumda "uygulanmaya hazır" kalır (doctor kimlik profili ve worker havuzu için uyarır ve ikisi için de `deckent init`
-  der). Gözetimsiz `deckent init --yes --scope <kimlik>` yalnız yeni izinleri, dili ve son kontrolü uygular.
+  yeni kurulumda "uygulanmaya hazır" kalır (doctor worker havuzu için uyarır ve ilk iş için eksik ilk adımı
+  gösterir; yalnız `--yes` sonrasında kimlik profilini de ister). Gözetimsiz `deckent init --yes --scope <kimlik>` yalnız yeni izinleri, dili ve son kontrolü uygular.
 - **Kurulumdan Docker Engine kurmak yeni** (alpha.48 I-D2; I-S3'ten beri `deckent init` penceresinde, yalnız gerçek bir
   terminaldeki kişiye önerilir). Yalnız Docker'ın resmi apt deposundan, Docker'ın listelediği Ubuntu ve Debian sürümlerinde
   (2026-10-19'da kontrol edildi), Deckent ile gelen Docker imza anahtarıyla kurar; geri kalan her durumda (yerel
@@ -344,8 +344,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   `deckent pool status` aynı kararı kullanır.
 - **Config penceresi seçenekleri ilk kareden önce yükler.** PATH'te Docker varsa yerel imaj listesini bekler (burada 43 imaj için
   yaklaşık 0,7 sn, ilk kare toplam 2,2 sn); seçenekler henüz anahtar açılınca yüklenmiyor. Liste süre sınırına takılırsa o ana kadar
-  doğrulanan imajlar "kısmi" uyarısı olmadan önerilir; ikinci kimlik okumasında yoğun bir daemon hiç imaj önermez. *Yol:* imaj
-  kimliğini yazın; `deckent config explain execution` şemayı gösterir.
+  doğrulanan imajlar önerilir ve anahtar listenin eksik olduğunu söyler ("Süre sınırından önce bulunan N seçenek gösteriliyor"); ikinci
+  kimlik okumasında yoğun bir daemon hiç imaj önermez. *Yol:* listenin ulaşmadığı imaj için
+  `deckent config set execution.docker.imageId '"sha256:…"'`; `deckent config explain execution` şemayı gösterir.
 - **Kurulum teklifi yalnız çıplak `deckent` içindir.** Kurulumsuz bir klasörde `deckent --full-access` ve `deckent terminal`
   `TERMINAL_SCOPE_REQUIRED` vermeye devam eder. *Yol:* çıplak `deckent` ya da `deckent init` çalıştırın.
 - **Monitor okuyamadığı kapsamın adını yalnız `monitor inspect-scope-diagnostics` iznine sahip izleyiciye gösterir.** Bu izleyici

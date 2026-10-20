@@ -61,8 +61,7 @@
   "setup.reason.scopeRequired": "Bu kurulum için bir kapsam adı gerekiyor.",
   "setup.reason.homeRoot": "Burası ana klasörünüz; genellikle bir proje klasörü daha uygun olur. Bir kapsam adı gerekiyor.",
   "setup.reason.profileChoice": "Bu kurulumu kimin kullanacağını seçin; ekip ve şirket sonradan eklenebilir.",
-  "setup.reason.profileSolo": "Tek kullanıcı: ilk kurulum izinleri olduğu gibi kullanılır; başka bir şey yazılmaz.",
-  "setup.reason.profileChosen": "{profile} kimlik profili, izinler kurulduktan sonra önizlenecek.",
+  "setup.reason.profileChosen": "{profile} kimlik profili, uyguladığınızda kullanıcınızın genel yapılandırmasına kaydedilir; bütün kurulumlarınız onu kullanır.",
   "setup.reason.policyCurrent": "İzinler zaten güncel.",
   "setup.reason.policyHandBuilt": "İzinler elle yazılmış; kurulum onlara dokunmaz.",
   "setup.reason.policyConflict": "Mevcut izin dosyaları ilk kurulum kurallarından farklı; hiçbir şey yazılmaz. deckent doctor ile kontrol edin.",
@@ -180,5 +179,6 @@
   "setup.foreground.upgradeApply": "Bu kuralları ekle",
   "setup.foreground.notApplied": "Hiçbir şey değiştirilmedi.",
   "error.SETUP_STAGE_REFUSED": "Kurulum {stage} aşamasında durdu ({code}); ondan sonrası uygulanmadı. Bir kişi isteyen aşama (terminal, kart ya da sudo) yalnız terminalde deckent init içinde çalışır.",
-  "setup.firstJob.window": "İlk işten önce: {step}"
+  "setup.firstJob.window": "İlk işten önce: {step}",
+  "setup.reason.profileConfigured": "{profile} kimlik profili kullanıcı yapılandırmanızda zaten kayıtlı."
 }

@@ -61,8 +61,7 @@
   "setup.reason.scopeRequired": "A scope name is needed for this installation.",
   "setup.reason.homeRoot": "This is your home folder; a project folder is usually a better place. A scope name is needed.",
   "setup.reason.profileChoice": "Choose who will use this installation; teams and companies can be added later.",
-  "setup.reason.profileSolo": "Solo use: the first-run permissions are used as they are; nothing more is written.",
-  "setup.reason.profileChosen": "The identity profile {profile} will be previewed after the permissions are installed.",
+  "setup.reason.profileChosen": "The identity profile {profile} is saved in your user's global configuration when you apply it, so every installation of yours uses it.",
   "setup.reason.policyCurrent": "The permissions are already current.",
   "setup.reason.policyHandBuilt": "The permissions were written by hand; setup leaves them unchanged.",
   "setup.reason.policyConflict": "Existing permission files differ from the first-run rules; nothing is written. Check them with deckent doctor.",
@@ -180,5 +179,6 @@
   "setup.foreground.upgradeApply": "Add these rules",
   "setup.foreground.notApplied": "Nothing was changed.",
   "error.SETUP_STAGE_REFUSED": "Setup stopped at the stage {stage} ({code}); nothing after it was applied. A stage that needs a person (a terminal, a card or sudo) runs only in deckent init on a terminal.",
-  "setup.firstJob.window": "Before the first job: {step}"
+  "setup.firstJob.window": "Before the first job: {step}",
+  "setup.reason.profileConfigured": "The identity profile {profile} is already saved in your user's configuration."
 }

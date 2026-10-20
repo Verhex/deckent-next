@@ -3,15 +3,15 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, delimiter, dirname, join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { delimiter, dirname, join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configuredConfigChoiceSources } from '#composition/core/config/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { CONFIG_DISCOVERY_BOUNDS, discoverConfigExecutables, discoverConfigBranches, discoverConfigImages, discoverConfigFiles, discoverConfigPools } from '#adapters/index.js';
 import { clearConfigCache, getConfigFieldDefault, prepareProductDirectory, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { DatabaseSync } from 'node:sqlite';
 const exec = promisify(execFile), roots: string[] = [];
-afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { vi.restoreAllMocks(); vi.useRealTimers(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 describe('CS-1 production choice discovery', () => {
   it.skipIf(process.platform === 'win32')('[unsupported on Windows: installation policy template needs POSIX layout and OS-user identity] observes principal scopes, the policy company, identity profiles, layout key files and environment names without reading values', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cs1-sources-')); roots.push(root);
@@ -42,7 +42,7 @@ describe('CS-1 production choice discovery', () => {
   });
   it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed private ledger files] discovers executables and local branches and reads bounded pool records without a ledger writer', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cs1-git-')); roots.push(root);
-    const limits = { timeoutMs: 5000, outputBytes: 65536, maxEntries: 16 }, git = (await discoverConfigExecutables('git', process.env, limits))[0]!;
+    const limits = { timeoutMs: 5000, outputBytes: 65536, maxEntries: 16 }, git = (await discoverConfigExecutables('git', process.env, limits)).values[0]!;
     expect(git).toBeTruthy();
     await exec(git, ['init', '-b', 'main', root]);
     await exec(git, ['-C', root, '-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--allow-empty', '-m', 'fixture']);
@@ -53,7 +53,7 @@ describe('CS-1 production choice discovery', () => {
     const db = new DatabaseSync(path); db.prepare('INSERT INTO execution_pools(pool_id,policy) VALUES(?,?)').run('known-pool', '{}'); db.close();
     expect(discoverConfigPools(path, 100, 1)).toEqual(['known-pool']);
     const files = join(root, 'files'); await mkdir(files); await writeFile(join(files, 'file.key'), 'secret');
-    expect((await discoverConfigFiles(files, limits)).map(path => basename(path))).toEqual(['file.key']);
+    expect(await discoverConfigFiles(files, limits)).toEqual({ values: [join(files, 'file.key')], partial: false });
     await expect(discoverConfigBranches(git, root, process.env, { ...limits, outputBytes: 1 })).rejects.toThrow();
   });
 });
@@ -69,7 +69,7 @@ it('local image choices reuse the existing endpoint/daemon/image probe and rejec
       : args.includes(' info ') ? 'daemon-one' : args.includes(rejected) ? imageId : imageId;
     return { stdout, stderr: '' };
   });
-  expect(images).toEqual([imageId]);
+  expect(images).toEqual({ values: [imageId], partial: false });
   expect(seen.some(args => args.includes('--host') && args.includes('info'))).toBe(true);
   expect(seen.some(args => args.includes('inspect') && args.includes(rejected))).toBe(true);
 });
@@ -77,13 +77,34 @@ it('local image choices reuse the existing endpoint/daemon/image probe and rejec
 // Astra 2456 N3: the PATH probe and the directory listing are bounded as a whole, not only by matches.
 it('probes at most the bounded number of PATH directories and reads a bounded number of directory entries', async () => {
     const root = await mkdtemp(join(tmpdir(), 'cs1-bounds-')); roots.push(root);
-    const real = (await discoverConfigExecutables('git', process.env, { timeoutMs: 5000 }))[0]!;
+    const real = (await discoverConfigExecutables('git', process.env, { timeoutMs: 5000 })).values[0]!;
     const filler = Array.from({ length: CONFIG_DISCOVERY_BOUNDS.pathDirectories }, (_, index) => join(root, `empty-${index}`));
     const beyond = { ...process.env, PATH: [...filler, dirname(real)].join(delimiter) };
-    expect(await discoverConfigExecutables('git', beyond, { timeoutMs: 5000 })).toEqual([]);
+    expect(await discoverConfigExecutables('git', beyond, { timeoutMs: 5000 })).toEqual({ values: [], partial: false }); // a bound, not the time limit
     const within = { ...process.env, PATH: [...filler.slice(1), dirname(real)].join(delimiter) };
-    expect(await discoverConfigExecutables('git', within, { timeoutMs: 5000 })).toEqual([real]);
+    expect(await discoverConfigExecutables('git', within, { timeoutMs: 5000 })).toEqual({ values: [real], partial: false });
     const many = join(root, 'many'); await mkdir(many);
     for (let index = 0; index < 40; index++) await mkdir(join(many, `dir-${index}`));
-    expect(await discoverConfigFiles(many, { timeoutMs: 5000, outputBytes: 1, maxEntries: 1 })).toEqual([]);
+    expect(await discoverConfigFiles(many, { timeoutMs: 5000, outputBytes: 1, maxEntries: 1 })).toEqual({ values: [], partial: false });
+});
+
+// CONFIG-PARTIAL-NOTICE: a discovery its time limit cut short says so; the values it offers do not change; a complete one is not partial.
+it('flags the executable and file discoveries the time limit cut short, and the port carries the flag to the window', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'cs1-partial-')); roots.push(root);
+  const files = join(root, 'files'); await mkdir(files);
+  for (const name of ['a.key', 'b.key']) await writeFile(join(files, name), 'secret');
+  vi.useFakeTimers({ toFake: ['Date'] }); // The listing's deadline is Date.now() + timeoutMs: a zero limit is spent after the first entry.
+  const cut = await discoverConfigFiles(files, { timeoutMs: 0, outputBytes: 1, maxEntries: 16 });
+  expect(cut.partial).toBe(true); expect(cut.values).toHaveLength(1);
+  vi.useRealTimers();
+  expect((await discoverConfigFiles(files, { timeoutMs: 5000, outputBytes: 1, maxEntries: 16 })).partial).toBe(false);
+  const source = configuredConfigChoiceSources(root, { env: { ...process.env, DECKENT_GLOBAL_HOME: join(root, 'global') } });
+  const complete = await source.list('git-executables', 'execution.git.gitExecutable');
+  expect(complete.length).toBeGreaterThan(0); expect(complete.partial).toBe(false);
+  // An already spent deadline: the PATH probe answers nothing before it (as before), now flagged as cut short, here and for the sources that need it.
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => AbortSignal.abort(new DOMException('timeout', 'TimeoutError')));
+  expect(await discoverConfigExecutables('git', process.env, { timeoutMs: 5000 })).toEqual({ values: [], partial: true });
+  for (const [kind, key] of [['git-executables', 'execution.git.gitExecutable'], ['images', 'execution.docker.imageId'], ['branches', 'execution.adoption.targets']] as const) {
+    const listed = await source.list(kind, key); expect([kind, listed.length, listed.partial]).toEqual([kind, 0, true]);
+  }
 });

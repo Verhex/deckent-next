@@ -12,13 +12,16 @@ export type CoreSetupStageId = typeof CORE_SETUP_STAGES[number];
 
 const locale = z.enum(LOCALES);
 const scope = identitySchema.nullable();
+/** One identity profile by id and version (template data, never authority). */
+export const setupProfileRefSchema = z.object({ id: identitySchema, version: z.number().int().positive().safe() }).strict();
 /** Core facts from read-only observation ports. Family facts stay opaque here and are validated by the family's own schema. */
 export const setupObservationSchema = z.object({
   schemaVersion: z.literal(SETUP_PLAN_SCHEMA_VERSION),
   environment: z.object({ platform: z.enum(['linux', 'wsl', 'windows', 'macos', 'other']), node: z.enum(['supported', 'below-floor']) }).strict(),
   language: z.object({ configured: locale.nullable(), requested: locale.nullable(), system: locale.nullable() }).strict(),
   folder: z.object({ installation: z.enum(['none', 'present', 'pending']), homeRoot: z.boolean(), configuredScope: scope, suggestedScope: scope }).strict(),
-  profile: z.object({ available: z.array(z.object({ id: identitySchema, version: z.number().int().positive().safe() }).strict()).max(256) }).strict(),
+  /** `selected`: the saved `identity.profile` (template data, never authority; any registered or custom package id), null when none is saved. */
+  profile: z.object({ available: z.array(setupProfileRefSchema).max(256), selected: setupProfileRefSchema.nullable().default(null) }).strict(),
   policy: z.object({ state: z.enum(['absent', 'current', 'upgradable', 'hand-built', 'conflict', 'pending']) }).strict(),
   sandbox: z.object({ realm: z.enum(['bubblewrap', 'landlock', 'none']), selfTest: z.enum(['ok', 'failed', 'not-run']), usernsRestricted: z.boolean() }).strict(),
   model: z.object({ connections: z.number().int().nonnegative().safe() }).strict(),

@@ -34,11 +34,11 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   its summary (and `deckent init --json`, `firstJob`) lists the missing first-job steps in order with their exact commands (worker image
   with `npm run worker:image` in the source checkout, `deckent config set execution`, `deckent init registry`, `deckent init pool`) and
   doctor's pool row names the first one; the list reads configuration and the pool ledger only and does not check that the configured
-  image exists; a delivery clone is not a setup stage either. Setup does not read a saved profile back: solo writes nothing (doctor then
-  still asks for an identity profile), team or enterprise saves the selection in your user's global configuration
-  (distribution stays `deckent identity distribute`), and the next `deckent init` asks again. The final check is doctor's own rows: it reads done only with no
+  image exists; a delivery clone is not a setup stage either. The profile you choose (solo, team, enterprise or custom) is saved in your user's global configuration
+  (`identity.profile`; distribution stays `deckent identity distribute`); the next `deckent init` reads it back and shows the stage done,
+  and doctor no longer asks for one. Unattended `--yes` does not save the profile. The final check is doctor's own rows: it reads done only with no
   warning and every other stage done or skipped, so on a fresh install it stays "ready to apply" (doctor still warns about
-  the identity profile and the worker pool, and names `deckent init` for both). Unattended
+  the worker pool and names the first missing first-job step; after `--yes` only, it also asks for the identity profile). Unattended
   `deckent init --yes --scope <id>` applies only the fresh permissions, the language and the final check.
 - **Docker Engine install from setup is new** (alpha.48 I-D2; offered in the `deckent init` window since I-S3, only to a
   person at a real terminal). It installs only from Docker's official apt repository on the Ubuntu and Debian releases Docker
@@ -341,8 +341,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   MCP shows only that count; v13 (fresh, or after `deckent init policy --upgrade`) gives it `pool inspect` in the installed scope. *Workaround:* ask an administrator for `pool inspect` on that pool; `deckent pool status` uses the same decision.
 - **The config window loads choices before its first frame.** With Docker on the path it waits for the local image list (about 0.7 s for
   43 images here, 2.2 s first frame in total); choices are not loaded when a key is opened yet. When the list runs out of time the
-  images proven so far are offered without a "partial" notice, and a busy daemon at the second identity read offers none.
-  *Workaround:* type the image id; `deckent config explain execution` shows the schema.
+  images proven so far are offered and the key says the list is partial ("Showing the N found before the time limit"); a busy
+  daemon at the second identity read offers none. *Workaround:* `deckent config set execution.docker.imageId '"sha256:…"'` sets an
+  image the list did not reach; `deckent config explain execution` shows the schema.
 - **The setup offer is made only for bare `deckent`.** In a folder with no installation, `deckent --full-access` and `deckent terminal`
   keep `TERMINAL_SCOPE_REQUIRED`. *Workaround:* run bare `deckent` or `deckent init`.
 - **The monitor names a scope it could not read only to a viewer holding `monitor inspect-scope-diagnostics`.** That viewer (v13:
