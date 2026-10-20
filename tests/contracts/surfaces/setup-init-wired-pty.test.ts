@@ -18,7 +18,8 @@ import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const driver = resolve('tests/fixtures/setup-init-handoff-driver.mjs');
-const PASSWORD = 'Pty-Pw-I-S3';
+// What the test types at the fake sudo prompt: a fixed, obviously fake answer that must never appear in the output.
+const SUDO_ANSWER = 'fake-sudo-answer-i-s3';
 // The PTY helper is found on the runner's PATH: a case may give the CLI a PATH without it (no docker anywhere on it).
 const python = (process.env['PATH'] ?? '').split(':').map(dir => join(dir, 'python3')).find(path => existsSync(path)) ?? 'python3';
 const ROWS = 50, COLUMNS = 110;
@@ -227,8 +228,8 @@ printf 'fake-sudo ran: %s\\n' "\${*:2}"
     await chmod(sudo, 0o755);
     // PATH without any docker; the caller's environment carries a secret that must never reach sudo.
     const run = await f.pty('docker-handoff', [process.execPath, driver, f.root, work, sudo], [['Enter confirm', '1\r'], ['Apply now', '1\r'], ['> 5. Who uses', '1\r'],
-      ['> 8. Execution environment', '1\r'], ['Apply now', '1\r'], ['apt-get install -y docker-ce', 'y'], ['[fake-sudo] password for fake:', `${PASSWORD}\r`],
-      ['> 9. Model connection', '\u001b']], { PATH: join(work, 'bin'), TMPDIR: work, DECKENT_SECRET_PASSPHRASE: 'must-not-reach-sudo' });
+      ['> 8. Execution environment', '1\r'], ['Apply now', '1\r'], ['apt-get install -y docker-ce', 'y'], ['[fake-sudo] password for fake:', `${SUDO_ANSWER}\r`],
+      ['> 9. Model connection', '\u001b']], { PATH: join(work, 'bin'), TMPDIR: work, DECKENT_SECRET_PASSPHRASE: 'must-not-reach-sudo' }); // ggignore: fixed fake values the test proves never reach sudo (secret-scanner false positive)
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.output).toContain('DRIVER-STATUS=closed');
     // Order on the terminal: the window offers the stage → the window closes → the card → sudo's own prompt → re-detection → the window again.
@@ -239,8 +240,8 @@ printf 'fake-sudo ran: %s\\n' "\${*:2}"
     expect(offered < card && card < prompt && prompt < ready && ready < reopened).toBe(true);
     expect(screen(run.output.slice(0, at('\u001b[?2026l', reopened) + 8))).toContain('8. Execution environment · done');
     // sudo read the password from the terminal itself: the window had released it (the typed length arrived, nothing echoed).
-    expect((await readFile(join(work, 'typed-length.log'), 'utf8')).trim()).toBe(String(PASSWORD.length));
-    expect(run.output).not.toContain(PASSWORD);
+    expect((await readFile(join(work, 'typed-length.log'), 'utf8')).trim()).toBe(String(SUDO_ANSWER.length));
+    expect(run.output).not.toContain(SUDO_ANSWER);
     const argv = (await readFile(join(work, 'argv.log'), 'utf8')).split('\n').filter(Boolean);
     expect(argv[0]).toBe('-k');
     expect(argv.slice(1).map(line => line.split(' ').slice(0, 3).join(' '))).toEqual(['-- install -m', '-- install -m', '-- install -m', '-- apt-get update', '-- apt-get install', '-- usermod -aG']);

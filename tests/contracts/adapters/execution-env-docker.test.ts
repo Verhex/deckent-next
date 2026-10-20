@@ -132,6 +132,15 @@ describe('read-only host probes', () => {
     expect((await planOf({ run: answer({ code: 1, stdout: '' }) })).plan).toMatchObject({ kind: 'install' });
     expect((await planOf({ run: answer({ code: 0, stdout: 'docker.io ii \n' }) })).plan).toMatchObject({ kind: 'print', reason: 'conflicts' });
   });
+  it('negative (review 2674 P2): the architecture counts only from a clean dpkg exit; stdout with a failed exit is no architecture (print only)', async () => {
+    const files = { '/etc/os-release': 'ID=ubuntu\nVERSION_CODENAME=noble\n' };
+    for (const code of [1, 2, null]) {
+      const observed = await observeDockerHost({ PATH: '/usr/bin' }, false, ports({ files, run: async (file: string) => file.endsWith('dpkg')
+        ? { code, stdout: 'amd64\n', stderr: '' } : { code: 1, stdout: '', stderr: '' } }).port);
+      expect(observed.architecture, String(code)).toBeNull();
+      expect(planDockerInstall(observed, '/tmp/s'), String(code)).toMatchObject({ kind: 'print', reason: 'distribution' });
+    }
+  });
   it('the host exists probe: present → true, ENOENT → false, anything else (EACCES) → null', async () => {
     const root = await mkdtemp(join(tmpdir(), 'docker-exists-')), locked = join(root, 'locked');
     try {
@@ -174,7 +183,7 @@ describe('foreground executor (cond. 2, 4)', () => {
       return typeof next === 'function' ? next(calls.length) : next ?? { code: 0, signal: null };
     } };
   };
-  const env = { PATH: '/home/alice/bin:/usr/bin', TERM: 'xterm-256color', LANG: 'tr_TR.UTF-8', DECKENT_SECRET_PASSPHRASE: 'pass', ANTHROPIC_API_KEY: 'sk-x', SUDO_ASKPASS: '/tmp/a' };
+  const env = { PATH: '/home/alice/bin:/usr/bin', TERM: 'xterm-256color', LANG: 'tr_TR.UTF-8', DECKENT_SECRET_PASSPHRASE: 'pass', ANTHROPIC_API_KEY: 'sk-x', SUDO_ASKPASS: '/tmp/a' }; // ggignore: fixed fake values the test proves never reach sudo (secret-scanner false positive)
   it('sudo -k first, then each step with `--` in order, a fixed clean environment and the registry timeouts; the version is recorded', async () => {
     const { calls, spawn } = fake();
     const result = await runDockerInstall(plan, env, { sudo: '/usr/bin/sudo', spawn, version: async () => '5:29.0.0-1~ubuntu.24.04~noble', verify: async () => true });

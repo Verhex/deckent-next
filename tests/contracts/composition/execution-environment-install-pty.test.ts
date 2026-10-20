@@ -14,7 +14,8 @@ import { productResourcePath, resolveProductLayout } from '#platform/index.js';
  */
 const execute = promisify(execFile);
 const driver = resolve('tests/fixtures/execution-install-driver.mjs');
-const PASSWORD = 'S3cret-PTY-pw-I-D2';
+// What the test types at the fake sudo prompt: a fixed, obviously fake answer whose bytes must never reach argv, env, files, audit or output.
+const SUDO_ANSWER = 'fake-sudo-answer-i-d2';
 const PTY = String.raw`
 import fcntl, json, os, pty, select, struct, sys, termios, time
 steps, argv = json.loads(sys.argv[1]), json.loads(sys.argv[2])
@@ -90,7 +91,7 @@ printf 'fake-sudo ran: %s\\n' "\${*:2}"
   await chmod(sudo, 0o755);
   // A person's terminal: no AI-agent or CI marker (the test runner may itself run inside one), a real terminal type, no Deckent variables.
   const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1',
-    DECKENT_GLOBAL_HOME: join(home, '.deckent-global'), DECKENT_SECRET_PASSPHRASE: 'must-not-reach-sudo', TMPDIR: work };
+    DECKENT_GLOBAL_HOME: join(home, '.deckent-global'), DECKENT_SECRET_PASSPHRASE: 'must-not-reach-sudo', TMPDIR: work }; // ggignore: fixed fake values the test proves never reach sudo (secret-scanner false positive)
   const run = async (name: string, steps: ReadonlyArray<readonly [string, string]>, locale = 'en', extra: Record<string, string> = {}) => {
     const { stdout } = await execute('python3', ['-c', PTY, JSON.stringify(steps), JSON.stringify([process.execPath, driver, root, work, sudo, locale])],
       { cwd: root, env: { ...env, ...extra }, timeout: 150_000, maxBuffer: 16 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
@@ -126,7 +127,7 @@ describe.skipIf(process.platform !== 'linux')('I-D2: the Docker install card on 
 
   it('approved: sudo -k, then every step in the foreground; sudo asks on the terminal itself; the password reaches no argv, env, file, audit or output', async () => {
     const f = await fixture();
-    const run = await f.run('approved-fake-sudo', [['apt-get install -y docker-ce', 'y'], ['[fake-sudo] password for fake:', `${PASSWORD}\r`]]);
+    const run = await f.run('approved-fake-sudo', [['apt-get install -y docker-ce', 'y'], ['[fake-sudo] password for fake:', `${SUDO_ANSWER}\r`]]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.output).toContain('DRIVER-STATUS=succeeded');
     expect(run.output).toContain('Docker 5:29.0.0-1~ubuntu.24.04~noble is installed.');
@@ -136,14 +137,14 @@ describe.skipIf(process.platform !== 'linux')('I-D2: the Docker install card on 
     expect(argv.slice(1)).toEqual([expect.stringMatching(/^-- install -m 0755 -d \/etc\/apt\/keyrings$/u), expect.stringMatching(/^-- install -m 0644 \/.+\/docker\.asc \/etc\/apt\/keyrings\/docker\.asc$/u),
       expect.stringMatching(/^-- install -m 0644 \/.+\/docker\.sources \/etc\/apt\/sources\.list\.d\/docker\.sources$/u), '-- apt-get update',
       '-- apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin', '-- usermod -aG docker fake']);
-    expect((await readFile(join(f.work, 'typed-length.log'), 'utf8')).trim()).toBe(String(PASSWORD.length));
+    expect((await readFile(join(f.work, 'typed-length.log'), 'utf8')).trim()).toBe(String(SUDO_ANSWER.length));
     // The environment every sudo call got: the fixed PATH, terminal type and language (bash adds PWD, SHLVL and _ itself).
     for (const file of (await readdir(f.work)).filter(name => name.startsWith('env-'))) {
       const names = (await readFile(join(f.work, file), 'utf8')).split('\n').filter(Boolean).map(line => line.slice(0, line.indexOf('=')));
       expect(names.filter(name => !['PWD', 'SHLVL', '_'].includes(name)).sort(), file).toEqual(['LANG', 'PATH', 'TERM']);
     }
-    for (const file of await f.everyFile(f.base)) expect((await readFile(file)).includes(PASSWORD), file).toBe(false);
-    expect(run.output).not.toContain(PASSWORD);
+    for (const file of await f.everyFile(f.base)) expect((await readFile(file)).includes(SUDO_ANSWER), file).toBe(false);
+    expect(run.output).not.toContain(SUDO_ANSWER);
     expect(run.output).not.toContain('must-not-reach-sudo');
     const audit = await f.audit();
     expect(audit.map(subject => subject.phase)).toEqual(['intent', 'succeeded']);

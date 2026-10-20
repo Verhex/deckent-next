@@ -226,7 +226,7 @@ async function clientCheck() {
     child.once('close', code => { clearTimeout(timer); done({ status: code, text: plain(raw), timedOut, cards: next }); });
   });
   let value = null;
-  for (let at = answered.text.lastIndexOf('{'); at >= 0 && value === null; at = answered.text.lastIndexOf('{', at - 1)) {
+  for (let at = answered.text.lastIndexOf('{'); at >= 0 && value === null; at = at > 0 ? answered.text.lastIndexOf('{', at - 1) : -1) {
     try { value = JSON.parse(answered.text.slice(at).trim()); } catch { /* an inner brace: keep looking back */ }
   }
   const trusted = answered.status === 0 && !answered.timedOut && answered.cards === cards.length && value?.trust === 'trusted' && value.pinnedTools > 0

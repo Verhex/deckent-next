@@ -29,7 +29,8 @@ export async function observeDockerHost(env: DetectEnvironment, desktop: boolean
   };
   let osRelease: Record<string, string> | null = null;
   for (const path of data.osRelease) if (!osRelease) osRelease = parseOsRelease(await ports.read(path));
-  const architecture = (await run('dpkg', ['--print-architecture']))?.stdout.trim() || null;
+  // Only a clean exit names the architecture (review 2674 P2); anything else reads as unknown, so no supported source → the install only prints.
+  const printed = await run('dpkg', ['--print-architecture']), architecture = printed?.code === 0 ? printed.stdout.trim() || null : null;
   const unknown: string[] = [];
   // dpkg-query exits 0 (all listed) or 1 (some not found: the normal no-match/partial match); a missing tool, no exit (timeout, abort, output
   // bound) or any other code is no answer, and its partial stdout is not trusted (Astra 2672 R1).
