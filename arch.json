@@ -1220,7 +1220,9 @@
         "src/platform/core/i18n",
         "src/platform/core/output",
         "src/engine/core/project-instructions",
-        "src/surfaces/core/cli-human"
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/project-instructions",
+        "src/surfaces/core/setup"
       ],
       "plan": "SURFACES"
     },
@@ -1247,7 +1249,9 @@
         "src/surfaces/core/cli-approval",
         "src/surfaces/core/cli-task",
         "src/surfaces/core/cli-human",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/surfaces/core/monitor",
+        "src/surfaces/core/config"
       ],
       "plan": "SURFACES"
     },

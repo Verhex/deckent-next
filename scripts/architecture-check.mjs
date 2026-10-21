@@ -154,6 +154,12 @@ function symbolDependency(symbol) {
   return null;
 }
 
+function dependencyTarget(file, specifier) {
+  const aliasPrefix = arch.imports?.aliasPrefix ?? '#';
+  if (specifier.startsWith(aliasPrefix)) return resolve(ROOT, 'src', specifier.slice(aliasPrefix.length).replace(/\.js$/, '.ts'));
+  return specifier.startsWith('.') ? resolve(dirname(file), specifier.replace(/\.js$/, '.ts')) : null;
+}
+
 function effectiveDependencies(file) {
   const sourceFile = program.getSourceFile(file);
   const dependencies = new Set();
@@ -169,10 +175,7 @@ function effectiveDependencies(file) {
         for (const exported of moduleSymbol ? checker.getExportsOfModule(moduleSymbol) : []) add(exported.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(exported) : exported);
       }
       if (!resolved) {
-        const specifier = statement.moduleSpecifier.text;
-        const target = specifier.startsWith(arch.imports?.aliasPrefix ?? '#')
-          ? resolve(ROOT, 'src', specifier.slice((arch.imports?.aliasPrefix ?? '#').length).replace(/\.js$/, '.ts'))
-          : specifier.startsWith('.') ? resolve(dirname(file), specifier.replace(/\.js$/, '.ts')) : null;
+        const target = dependencyTarget(file, statement.moduleSpecifier.text);
         const dependency = target ? dependencyId(target) : null;
         if (dependency) dependencies.add(dependency);
       }
@@ -190,14 +193,20 @@ function effectiveDependencies(file) {
       for (const exported of moduleSymbol ? checker.getExportsOfModule(moduleSymbol) : []) add(exported.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(exported) : exported);
     }
     if (!resolved) {
-      const specifier = statement.moduleSpecifier.text;
-      let target;
-      if (specifier.startsWith(arch.imports?.aliasPrefix ?? '#')) target = resolve(ROOT, 'src', specifier.slice((arch.imports?.aliasPrefix ?? '#').length).replace(/\.js$/, '.ts'));
-      else if (specifier.startsWith('.')) target = resolve(dirname(file), specifier.replace(/\.js$/, '.ts'));
+      const target = dependencyTarget(file, statement.moduleSpecifier.text);
       const dependency = target ? dependencyId(target) : null;
       if (dependency) dependencies.add(dependency);
     }
   }
+  const visit = node => {
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments[0] && ts.isStringLiteralLike(node.arguments[0])) {
+      const target = dependencyTarget(file, node.arguments[0].text);
+      const dependency = target ? dependencyId(target) : null;
+      if (dependency) dependencies.add(dependency);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
   return dependencies;
 }
 
