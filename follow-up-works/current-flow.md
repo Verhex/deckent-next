@@ -16,3 +16,6 @@ Son güncelleme: 2026-10-11 00:25 TR (21:25Z, lead 927cf03e). **Canlı = N1 runt
 | audit-checkpoint (composition 6705/6700) | Lead | Bekliyor | composition'dan ≥5 satır boşaltma kartı (bütçe yükseltilmez) | — |
 | Astra 2492/2494/2496 (owner "ikisini de yap") | Astra | İzleyici çalışıyor | Yanıt gelince değerlendirme | — |
 | Belge borcu | Lead → Haiku | Bekliyor | S1 kanıtı /tmp → proof; Kanun 8 güncellemesi owner'da; ARCHITECTURE notları | — |
+| alpha.51 paket hazırlığı (PRE-8/9/10, alpha.50 takipleri) | Lead | Hazırlık; lane briefleri yazılacak | Briefler; PRE-8 briefi yasa denetçisinden geçer | PLAN Sıradaki 18 |
+| Kanıt işleri: N1 50 görev, temiz kurulum provası, test-ERP gözlemi, owner terminal denemesi | Lead; owner denemesi | Açık | Görev/kanıt sırası lead'de; sonuçlar PLAN kanıt satırlarına | PLAN Şimdi tablosu |
+| Node 26 geçişi ve tam doğrulama (LTS 2026-10-28) | Lead | Planlandı | 10-28'de Node 26 tam doğrulama → beta adayı | PLAN Sıradaki 1 |
