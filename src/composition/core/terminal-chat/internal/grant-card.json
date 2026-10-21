@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "note": "PRE-8 first-use card (owner decisions 2026-10-21): identity profiles whose human terminal is offered the card; team, enterprise and custom installations grant through their admin (`deckent secret grant`).",
+  "cardProfiles": ["core:solo"],
+  "cardWithoutProfile": true
+}

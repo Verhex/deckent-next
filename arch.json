@@ -482,7 +482,8 @@
         "src/engine/core/agent-turn",
         "src/adapters/core/provider-openai-chat",
         "src/composition/core/root",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/adapters/core/local-principal"
       ],
       "plan": "SURFACES"
     },
@@ -1153,7 +1154,18 @@
         "src/engine/core/project-instructions",
         "src/surfaces/core/terminal-delivery",
         "src/platform/core/common",
-        "src/engine/core/run-proposal"
+        "src/engine/core/run-proposal",
+        "src/surfaces/core/terminal-conversation"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-conversation": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render",
+        "src/platform/core/redaction",
+        "src/surfaces/core/terminal-ledger",
+        "src/surfaces/core/terminal-work"
       ],
       "plan": "SURFACES"
     },

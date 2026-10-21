@@ -5,7 +5,7 @@ import { render, renderToString, Box, Static, Text, useApp, useStdout, useWindow
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
-  type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
+  type TerminalLocalContext, type WorklineInkPalette, type WorklineStreamTurn, secretGrantTurn, type SecretGrantCardPort, type SecretGrantQuestion } from '#surfaces/core/terminal-kit/index.js';
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
@@ -14,7 +14,7 @@ import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import type { RunProposalResult } from '#engine/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, type LedgerRow, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
-import { freshContextHistory } from './workline-history.js';
+import { freshContextHistory } from '#surfaces/core/terminal-conversation/index.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
 import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type WindowNote,
@@ -27,7 +27,7 @@ import { messageWithMentions, type WorklineAttachMentions, type WorklineMentionL
 import { PermissionModeKeys, useWorklineMode, type WorklineModeLabels, type WorklinePermissionModePort } from './workline-mode.js';
 import { useReasoningPreview, type WorklineReasoningLabels } from './workline-reasoning.js';
 import { runScratchWindow, useWorklineScratch, type WorklineScratchLabels, type WorklineScratchPort } from './workline-scratch.js';
-import { askSlashWindow, isReasoningChoice, reasoningSpec, reasoningStatus, unknownCommandSpec, useWindowSlot, type SlashPickSpec, type SlashWindowLabels } from './workline-windows.js';
+import { askGrantWindow, askSlashWindow, isReasoningChoice, reasoningSpec, reasoningStatus, unknownCommandSpec, useWindowSlot, type SlashPickSpec, type SlashWindowLabels } from './workline-windows.js';
 import { CLEAR_SCREEN_AND_SCROLLBACK, CLEAR_SCROLLBACK, startupFrame, writeStartup, type WorklineStartup } from './startup-banner.js';
 import { useTranscriptBlocks } from './workline-transcript.js';
 import { useWorklineSettings, type WorklinePanels } from './workline-settings.js';
@@ -97,6 +97,8 @@ export interface WorklineProps {
   readonly pollMs?: number;
   /** Streamed form of the governed turn (S-STREAM); when present it replaces `completeTurn` for chat. */
   readonly streamTurn?: WorklineStreamTurn;
+  /** PRE-8: the first-use card of a main-vault key without a grant in this project (streamed turns; absent: the typed refusal only). */
+  readonly secretGrant?: SecretGrantCardPort;
   /** Approval notification cadence override (tests); production uses max(pollMs, 10 s). */
   readonly approvalPollMs?: number;
   /** Governed restart of the runtime service onto the current build; returns the line to show. */
@@ -363,8 +365,14 @@ export function WorklineApp(props: WorklineProps) {
         const turnIdentity = pinnedLabels.current.get(execution.input.context.sessionId)
           ?? (props.model && props.provider ? { model: props.model, provider: props.provider } : undefined);
         // Forward the session and reasoning choices with the composition's generated binding callback.
-        for await (const delta of props.streamTurn(messages, signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: execution.input.context.sessionId, onTurnBound: stream.onTurnBound,
-          ...(mode.fullAccess.current ? { fullAccess: true as const } : {}), ...pinnedFor(execution.input.context.sessionId) })) {
+        // PRE-8: a turn refused by its local preflight (never bound to the service) may start once more after the first-use grant card.
+        let bound = false;
+        const start = () => props.streamTurn!(messages, signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: execution.input.context.sessionId,
+          onTurnBound: binding => { bound = true; stream.onTurnBound(binding); }, ...(mode.fullAccess.current ? { fullAccess: true as const } : {}), ...pinnedFor(execution.input.context.sessionId) });
+        // While the card waits the turn waits for the person, not the model: the open tail is hidden and comes back for the restarted turn.
+        const position = labels.work?.window.position ?? '{from}-{to}/{total}', ask = (question: SecretGrantQuestion, cancel: AbortSignal) => {
+          setLive(null); return askGrantWindow(slot, position, question, cancel).finally(() => setLive({ step: opened, lead: true })); };
+        for await (const delta of props.secretGrant ? secretGrantTurn(start, props.secretGrant, ask, signal, () => bound) : start()) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
           session.noteContext(delta); if (delta.kind === 'usage') { const id = execution.input.context.sessionId;
