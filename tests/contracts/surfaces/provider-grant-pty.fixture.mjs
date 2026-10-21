@@ -43,5 +43,6 @@ const notices = [];
 const view = createElement(SettingsPanel, { kind: 'provider', ports: { provider: port }, labels: terminalPanelLabels(locale),
   push: items => { notices.push(...items); }, onError: error => { process.stdout.write(`\nNOTICE ERR:${error?.code ?? 'error'} ${error?.suggestion ?? ''}\n`); },
   errorText: error => String(error?.code ?? error), openApproval: () => {}, onClose: () => { process.stdout.write('\nCLOSED\n'); instance.unmount(); } });
-const instance = render(view, { exitOnCtrlC: true, patchConsole: false });
+// Ink 7 defers every frame under CI (is-in-ci) even on a TTY; the product terminal passes `interactive: true` on a TTY (workline.tsx), so does this PTY fixture.
+const instance = render(view, { exitOnCtrlC: true, patchConsole: false, interactive: true });
 await instance.waitUntilExit();

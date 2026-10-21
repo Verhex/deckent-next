@@ -49,5 +49,6 @@ const view = createElement(WorklinePaletteProvider, { palette: resolveWorklinePa
   labels, target: 'scope-a · model', systemPrompt: 'SYSTEM', historyMessages: 20, completeTurn: async () => 'unused', pollMs: 60_000, approvalPollMs: 60_000,
   errorText: error => `ERR:${error?.code ?? 'error'} ${error?.suggestion ?? ''}`, streamTurn, secretGrant,
 }) });
-const instance = render(view, { exitOnCtrlC: false, patchConsole: false });
+// Ink 7 defers every frame under CI (is-in-ci) even on a TTY; the product terminal passes `interactive: true` on a TTY (workline.tsx), so does this PTY fixture.
+const instance = render(view, { exitOnCtrlC: false, patchConsole: false, interactive: true });
 await instance.waitUntilExit();
