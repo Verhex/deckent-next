@@ -49,22 +49,26 @@ export function readWorkerFinalReport(stdout: string): WorkerFinalReportResult {
   return result ?? unavailable;
 }
 /** R5 (owner D5a): the host-read status of a worker's structured result report, recorded with the evaluation. Generic: the report
- * of a coding patch and of a business operation alike. `acceptanceChecks: 'not-passed'` is the last outcome of an acceptance check. */
+ * of a coding patch and of a business operation alike. `acceptanceChecks` summarises the last outcome of the acceptance checks:
+ * `not-passed` when one ran and did not pass (`failed`, or `unknown` = ran with an unreadable outcome), else `not-run` (PRE-7) when one
+ * was reported as not run. Both refuse the task; `not-run` is an observed worker claim, never an environment verdict (Law 1). */
 export const workerReportEvidenceSchema = z.object({ status: z.enum(['reported', 'missing', 'invalid', 'oversized', 'unsupported']),
-  acceptanceChecks: z.literal('not-passed').optional() }).strict().refine(value => value.status === 'reported' || value.acceptanceChecks === undefined).readonly();
+  acceptanceChecks: z.enum(['not-passed', 'not-run']).optional() }).strict().refine(value => value.status === 'reported' || value.acceptanceChecks === undefined).readonly();
 export type WorkerReportEvidence = z.infer<typeof workerReportEvidenceSchema>;
 export function workerReportEvidence(result: WorkerFinalReportResult): WorkerReportEvidence {
   if (result.status !== 'reported') return { status: result.reason };
-  const last = new Map<string, string>(); let notPassed = false;
+  const last = new Map<string, string>(), untyped: string[] = [];
   for (const check of result.report.checks) if (check.role === 'acceptance') {
-    if (check.checkId === undefined) notPassed ||= check.outcome !== 'passed'; else last.set(check.checkId, check.outcome);
+    if (check.checkId === undefined) untyped.push(check.outcome); else last.set(check.checkId, check.outcome);
   }
-  return notPassed || [...last.values()].some(outcome => outcome !== 'passed') ? { status: 'reported', acceptanceChecks: 'not-passed' } : { status: 'reported' };
+  const outcomes = [...untyped, ...last.values()];
+  if (outcomes.some(outcome => outcome === 'failed' || outcome === 'unknown')) return { status: 'reported', acceptanceChecks: 'not-passed' };
+  return outcomes.includes('not-run') ? { status: 'reported', acceptanceChecks: 'not-run' } : { status: 'reported' };
 }
 /** The typed refusal of a work task's report evidence. Absence of a valid report fails (missing evidence, never a claim of success);
  * `unsupported` (the worker CLI declares no structured result channel) is not gated and stays visible on the evaluation. */
-export function workerReportRefusal(evidence: WorkerReportEvidence): 'report-missing' | 'report-invalid' | 'declared-check-not-passed' | null {
+export function workerReportRefusal(evidence: WorkerReportEvidence): 'report-missing' | 'report-invalid' | 'declared-check-not-passed' | 'acceptance-check-not-run' | null {
   if (evidence.status === 'missing') return 'report-missing';
   if (evidence.status === 'invalid' || evidence.status === 'oversized') return 'report-invalid';
-  return evidence.acceptanceChecks === 'not-passed' ? 'declared-check-not-passed' : null;
+  return evidence.acceptanceChecks === 'not-passed' ? 'declared-check-not-passed' : evidence.acceptanceChecks === 'not-run' ? 'acceptance-check-not-run' : null;
 }

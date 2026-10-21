@@ -3,7 +3,7 @@ import * as extensions from '../../../src/extensions.js';
 import * as sdk from '../../../src/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { openConfiguredSecretStore } from '#adapters/index.js';
-import { mcpCapabilityRegistry, providerSpendNoChargeRegistry } from '#engine/index.js';
+import { environmentProbeRegistry, mcpCapabilityRegistry, providerSpendNoChargeRegistry } from '#engine/index.js';
 
 // ENTERPRISE-EXT-1 (owner K7 = A): `deckent/extensions` is the one public registration entry. This file's module graph is fresh (vitest
 // isolates files), so nothing has composed Core yet when the first registration runs.
@@ -16,8 +16,8 @@ const memoryBackend = (id: string) => ({ id, create: () => {
 
 it('exports exactly the declared extension surface; the SDK entry exports none of its registrations', () => {
   expect(Object.keys(extensions).sort()).toEqual(['CORE_API_VERSION', 'EffectTargetError', 'RegistryError', 'SECRET_STORE_ID_PATTERN', 'createSecretHelperFactory',
-    'registerApprovalAssuranceProducer', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretStoreBackend', 'runCli', 'runMcp']);
-  expect(['registerApprovalAssuranceProducer', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretStoreBackend', 'registerProviderConfig'].filter(name => name in sdk)).toEqual([]);
+    'registerApprovalAssuranceProducer', 'registerEnvironmentProbeKind', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretStoreBackend', 'runCli', 'runMcp']);
+  expect(['registerApprovalAssuranceProducer', 'registerEnvironmentProbeKind', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretStoreBackend', 'registerProviderConfig'].filter(name => name in sdk)).toEqual([]);
 });
 
 it('the distribution MCP runner preserves Core argument validation', async () => {
@@ -37,7 +37,14 @@ it('registers a non-Core secret backend before the composition root seals, and r
   extensions.registerProviderSpendNoChargeCertification(certification);
   const producer = { manifest: { schemaVersion: 1 as const, id: 'overlay.assurance', version: 1, level: 'overlay-step-up', rank: 2 }, create: () => ({ attests: () => false }) };
   extensions.registerApprovalAssuranceProducer(producer);
+  // PRE-7: an ERP package adds an environment probe kind (dotted, its own namespace); Core's undotted coding kinds stay Core's.
+  const reachable = async () => 'met' as const;
+  expect(() => extensions.registerEnvironmentProbeKind('executable', reachable)).toThrow(expect.objectContaining({ code: 'REGISTRY_NAMESPACE_RESERVED' }));
+  extensions.registerEnvironmentProbeKind('overlay.connector-reachable', reachable);
+  expect(() => extensions.registerEnvironmentProbeKind('overlay.connector-reachable', reachable)).toThrow(expect.objectContaining({ code: 'REGISTRY_ADAPTER_DUPLICATE' }));
   composeCore();
+  expect(environmentProbeRegistry.with(new Map([['executable', reachable]])).get('overlay.connector-reachable')).toBe(reachable);
+  expect(() => extensions.registerEnvironmentProbeKind('overlay.late', reachable)).toThrow(expect.objectContaining({ code: 'REGISTRY_SEALED' }));
   expect(providerSpendNoChargeRegistry.find('https://llm.erp.example/v1/chat/completions', 429)).toMatchObject({ vendor: 'overlay.erp-llm' });
   expect(mcpCapabilityRegistry.get(capability.id)).toEqual(capability);
   // The registered backend resolves through the same selection path as Core's own backends.

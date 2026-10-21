@@ -443,5 +443,13 @@
   "proposal.planning.plan-usage": "plan usage; no monetary charge",
   "proposal.planning.subscription": "Planning: {model}, subscription plan ({evidence}).",
   "models.invocation.planUsage": "Plan usage recorded; no money reserved or charged. Provider counters: {counters}.",
-  "models.invocation.planUsageCounters": "available"
+  "models.invocation.planUsageCounters": "available",
+  "error.EXECUTION_ENVIRONMENT_NOT_READY": "Deckent did not start this worker: its environment does not meet requirement {requirement} ({kind} {target}). This is an installation defect, not a failure of the task; no worker or model was started and the Run waits for you.",
+  "error.EXECUTION_ENVIRONMENT_NOT_READY.unregistered": "Deckent did not start this worker: requirement {requirement} names probe kind {kind}, which no installed adapter registers, so it cannot be checked. This is an installation defect, not a failure of the task; no worker or model was started.",
+  "error.EXECUTION_ENVIRONMENT_NOT_READY.summary": "Deckent did not start this worker: its environment does not meet a declared requirement. This is an installation defect, not a failure of the task; no worker or model was started.",
+  "remedy.EXECUTION_ENVIRONMENT_NOT_READY": "Fix the worker environment so the requirement holds (worker image, dependency mount, memory), then resume the Run: deckent run resume --id <run>. Deckent checks the requirement again before it starts the worker; the park ends on its own deadline otherwise.",
+  "cli.run.lifecycle.environmentNotReady": "Environment not ready: {requirement}. This is an installation defect, not a failure of the task: no worker or model was started. Fix the worker environment, then resume the Run: deckent run resume --id {run}. Deckent checks the requirement again before the worker starts; otherwise the park ends at its deadline.",
+  "error.EXECUTION_ENVIRONMENT_UNCERTAIN": "Deckent did not start this worker: the environment probe for requirement {requirement} ({kind}) could not be proven stopped and removed (container {probe}). Its answer is not trusted and no second probe starts while it may still run.",
+  "error.EXECUTION_ENVIRONMENT_UNCERTAIN.summary": "Deckent did not start this worker: an environment probe could not be proven stopped and removed. No worker or model was started.",
+  "remedy.EXECUTION_ENVIRONMENT_UNCERTAIN": "Check Docker (docker ps -a --filter label=deckent.preflight), remove the container if it is still there (docker rm --force <container>); the next service start proves it removed and releases the slot, then resume the Run: deckent run resume --id <run>. Deckent removes a leftover of the same probe before it checks again."
 }

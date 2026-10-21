@@ -8,7 +8,8 @@ import { DECISION_ARM_DEFAULT } from '#surfaces/core/terminal-window/index.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { approvalCommandSchema } from '#engine/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
-import { createWorklineLedgerPorts, main } from '#surfaces/core/cli/index.js';
+import { main } from '#surfaces/core/cli/index.js';
+import { createWorklineLedgerPorts } from '../support/cli-ledger-ports.js';
 import type { WorklineApproval } from '#surfaces/core/terminal/index.js';
 import { mountWorkline, settle, until } from '../support/workline-harness.js';
 

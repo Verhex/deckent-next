@@ -92,3 +92,27 @@ describe('M2 blocker detail for exited work without a patch', () => {
     expect(detail(snapshotWith(waiting), 'tr')).toContain('yama henüz hazırlanmadı'); expect(detail(snapshotWith(waiting), 'en')).not.toContain('patch-missing');
   });
 });
+
+/** PRE-1 B3 (owner 2026-10-20 "Önerilen yol"): an exit-code acceptance is never shown as a plain "accepted" evaluation line. */
+describe('the evaluation line says what an acceptance rests on', () => {
+  const task = (evaluators: readonly { id: string; version: number }[]) => ({ schemaVersion: 1 as const, task: 'Add a note', scopePaths: null, acceptance: null,
+    criteria: evaluators.map((evaluator, index) => ({ id: `c${index}`, description: 'Process exit alone is not durable proof.', evaluator })),
+    profile: null, model: null, effort: null, contextRefs: [] });
+  const result = (verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown') => ({ schemaVersion: 1 as const, attemptId: 'a', claimLabel: 'CLAIM' as const,
+    report: null, evaluation: { verdict }, runDelivery: null, openIssues: null });
+  const exit = { id: 'process-exit', version: 1 }, operation = { id: 'operation-evidence', version: 1 };
+  const evaluation = (lines: string[]) => lines.find(line => line.startsWith('Evaluation') || line.startsWith('Değerlendirme'))!;
+  it('qualifies an exit-code acceptance with the shared label (EN/TR), once per distinct evaluator', () => {
+    expect(evaluation(renderBriefLines(task([exit, exit]), result('accepted'), 'tr'))).toMatch(/· çıkış kodu · içerik bağımsız doğrulanmadı$/);
+    expect(evaluation(renderBriefLines(task([exit]), result('accepted'), 'en'))).toMatch(/· exit code · content not independently verified$/);
+    expect(evaluation(renderBriefLines(task([exit, operation]), result('accepted'), 'en')))
+      .toContain('exit code · content not independently verified; operation record read back by the system · checked by the system, not by the worker\'s claim');
+  });
+  it('negative: a non-accepted verdict, a model-unverified acceptance and a brief without criteria keep their line unchanged', () => {
+    for (const verdict of ['rejected', 'unknown', 'accepted-unverified'] as const) {
+      expect(evaluation(renderBriefLines(task([exit]), result(verdict), 'en'))).not.toContain('exit code');
+    }
+    expect(evaluation(renderBriefLines(task([]), result('accepted'), 'en'))).not.toContain('exit code');
+    expect(evaluation(renderBriefLines(undefined, result('accepted'), 'en'))).not.toContain('exit code');
+  });
+});

@@ -23,6 +23,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   geri yükleme macOS'ta da çalışmaz; platform testleri bunları `[requires Linux …]` etiketiyle atlar.
 - **Terminal ekran düzeni** fiziksel Windows Terminal, macOS Terminal, VS Code terminali ya da tmux'ta **denenmedi.**
   *Etki:* giriş çubuğu, pencereler ve renkler orada bozulabilir. *Yol:* düz bir Linux ya da WSL2 terminali kullanın.
+- **Fareyle kopyalama terminalinizin pano dizisini (OSC 52) kullanır** ve yalnız bir Linux sözde-terminalinde kanıtlandı; fiziksel
+  Windows Terminal, onun içindeki WSL, xterm, tmux ya da iTerm2'de denenmedi. Bazı terminaller bunu engeller (iTerm2'de "Applications in
+  terminal may access clipboard" açılmalı; tmux'ta `set -g set-clipboard on` gerekir). Sürükleyerek seçimde otomatik kaydırma ve çift/üçlü
+  tıklama yok. *Etki:* "… karakter panoya kopyalandı" sonrasında yapıştırma boş gelebilir. *Yol:* Shift'e (iTerm2'de Option) basılı tutup
+  sürükleyerek terminalin kendi seçimini kullanın ya da `terminal.layout` değerini `inline` yapın.
 - **arm64 yayımlanmıyor.** Kilitli bubblewrap paketi x86_64 için gelir; arm64 derleme kontrolü arm64 çalışma kanıtı değildir.
   *Yol:* x86_64 kullanın.
 - **Henüz npm paketi yok.** Kaynaktan kurarsınız ([Başlarken](../README.tr.md#başlarken)).
@@ -54,6 +59,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 ## Yalıtım
 
+- **Docker görevleri, bellek sınırlarının %75'i kadar Node heap tavanı alır.** Deckent `NODE_OPTIONS=--max-old-space-size` ayarlar;
+  böylece Node tabanlı kontroller (ör. `tsc`) konteynerin belleğini kullanır. Görev komutu `NODE_OPTIONS`'ı kendisi ayarlarsa o geçerlidir;
+  imajın kendi ortamında ayarlanan `NODE_OPTIONS` ise ezilir. Aynı konteynerdeki birden çok Node süreci sınırı paylaşır ve yine de
+  sınırda durdurulabilir (çıkış 137).
 - **Docker işçisi sanal makine değildir.** Host çekirdeğini paylaşır. *Etki:* çekirdek düzeyinde bir kaçışı Deckent
   sınırlamaz. microVM sandbox'ı planlıdır, yapılmadı.
 - **Kodlama işçisinin kendi araçları Deckent'in model giriş yolunun dışındadır.** Claude Code, Codex ve Cursor konteyner
@@ -139,6 +148,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Claude aboneliği:** Claude Code işçisi kendi Claude girişinizle çalışır. Abonelikli Brain (`/do`'nun arkasındaki planlayıcı)
   hazırlanıyor ve henüz yok. Claude aboneliğiyle terminal sohbeti şu an desteklenmiyor. *Yol:* terminal sohbeti ve `/do`
   planlaması için bir Anthropic API anahtarı kullanın.
+- **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** İlk oturum yalnız abonelikle sohbet edemez; kapsam
+  bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` ile API anahtarı bağlayın, bütçe koyun, `/model` seçin.
 - **Bugün işçi, girişinizi CLI'ın kendi kimlik dosyasını ev dizininizden okuyarak alır.** *Etki:* o dosya var olmalı ve
   Deckent tarafından okunabilmelidir. Bu yol değişebilir.
 - **Abonelikli işçi, çalıştığı sürece giriş token'ınızın kısa ömürlü bir kopyasını tutar.** Deckent işçinin konteynerine
@@ -158,6 +169,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Codex ya da Cursor işçisinin kullandığı model doğrulanamaz.** Model başına kullanımı yalnız Claude Code bildirir; Codex ve
   Cursor sonuçları doğrulanmamış olarak kaydedilir ve ölçütlerine göre kabul edilir. *Etki:* böyle bir işçi başka bir modelle
   çalıştıysa iş yine kabul edilir.
+- **Codex ve Cursor işçileri çalışmaları hakkında az şey bildirir.** Codex denemesi tek tur ve token kullanımı yok gösterir; Cursor
+  denemesi tur, token ya da maliyet göstermez. *Etki:* emek ve maliyetleri Claude Code ile karşılaştırılamaz. *Yol:* teslim edilen
+  sonuca göre değerlendirin.
 - **Cursor için paketli işçi model kataloğu yok.** İşçi yalnız etkin bir `native-cli` katalog kanalıyla kabul edilir; Claude Code
   ve Codex'in paketli katalogları var, Cursor'ın yok. *Yol:* bir katalog yazıp `deckent models catalog register --file` ile
   kaydedin.
@@ -200,9 +214,34 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 - **Bir iş görevi geçerli bir sonuç raporu ister, ama raporu olmayan bir işçi CLI'ı denetlenmez.** 1.0.0-alpha.47'den beri 0 ile
   çıkan ve geçerli rapor bırakmayan bir iş görevi `report-missing` ya da `report-invalid` ile başarısız olur. Yapılandırılmış sonuç
-  kanalı olmayan (bugün Cursor) ya da kurulu sürümü bunu artık sunmayan bir CLI `unsupported` okunur ve bu kapıdan geçmez. Tipli
-  rapor kontrolleri (`checkId`, `role`) tanımlıdır ama konteyner köprüsü onları henüz kabul etmez. *Geçici çözüm:* tamamlanması
-  kanıtlanması gereken işlerde Claude ya da Codex işçilerini tercih edin.
+  kanalı olmayan (bugün Cursor) ya da kurulu sürümü bunu artık sunmayan bir CLI `unsupported` okunur ve bu kapıdan geçmez. 1.0.0-alpha.50'den
+  beri işçi rapor kontrolünü `checkId` ve `role: acceptance` ile işaretleyebilir ve işçi talimatı bunu ister; son sonucu `passed`
+  olmayan kabul kontrolü görevi reddeder (`declared-check-not-passed`). Kontrollerini tiplemeyen işçi yakalanmaz: tipsiz ve keşif
+  amaçlı kontroller iddia olarak kalır ve kabulü engellemez. *Geçici çözüm:* tamamlanması kanıtlanması gereken işlerde Claude ya da
+  Codex işçilerini tercih edin.
+- **Bir kodlama görevi çıkış koduyla kabul edilir.** Ölçütü daha fazlasını isteyebilir (saklanan fark, geri okuma), ama kodlama
+  görevlerinin kullanabildiği tek değerlendirici `process-exit`'tir ve hiçbir Core iş sınıfı kabul profili bağlamaz; bu yüzden ek kanıt
+  denetlenmez. 1.0.0-alpha.50'den beri değerlendirme satırı bunu söyler ("kabul · çıkış kodu · içerik bağımsız doğrulanmadı"):
+  monitör, `workers`, `/runs`, `run inspect`, `task inspect` ve `report`; "1/1 kabul" gibi sayılar nitelenmez. Gerçek doğrulama
+  değerlendiricisi olan kabul profili beta işidir.
+- **Deckent yalnız görevin bildirdiği ortam gereksinimlerini denetler** (1.0.0-alpha.50'den beri). Bir görev profili ya da şablonu
+  `environment.requirements` bildirebilir; Deckent bunları işçi başlamadan denetler, biri karşılanmazsa Run'ı "ortam hazır değil: <id>"
+  diye park eder (işçi ve model çağrısı yok; düzeltip devam ettirince yeniden denetler). Bildirilmemiş eksik bir araç, çalıştırılamayan
+  kontrol (`acceptance-check-not-run`) olarak raporlanır; bu işçinin iddiasıdır, ortam kusurunun kanıtı değildir. Gereksinimler Run ile
+  dondurulur; kayda eklenen gereksinim `deckent runtime restart` sonrası yeni Run'larda geçerlidir. Core kodlama denetim türlerini
+  (executable, path-readable, node-heap) getirir; bağlayıcı ya da kimlik bilgisi türleri Enterprise/ERP paketlerinden
+  `deckent/extensions` ile gelir, kimsenin kaydetmediği tür başlatmayı reddeder. Her denetim kısa bir kap başlatır ve yanıt vermeden önce
+  kabın silindiğini kanıtlar (referans makinede yaklaşık 0,85 sn); silindiği kanıtlanamazsa Run belirsiz olarak park edilir (deneme kodu
+  `EXECUTION_ENVIRONMENT_UNCERTAIN`; monitör ve `run inspect` bunu diğer ortam parkları gibi gösterir) ve sonraki hizmet açılışı bu
+  kurulumun artakalan denetim kaplarını kaldırır. Bir denetimin silindiği kanıtlanmadıkça Run'ı havuz yerini tutar, kapatılamaz ve
+  devam ettirilemez (`RUN_DECISION_NOT_READY`); iptal ve park süresi bu yeri açmaz. Silindiği hiç kanıtlanamayan denetim yeri süresiz
+  tutar; hizmet günlüğü her açılışta onu adlandırır ve `docker rm --force <ad>` sonrası bir sonraki hizmet açılışı yeri bir kez açar
+  (o Run'ın ilerleme turu bunu yalnız böyle bir tur koştuğunda yapar; olağan ilerleme ortam yüzünden park edilmiş ya da iptal edilmiş
+  Run'ları atlar). Yer, ilk denetim kabı başlamadan önce tutulur: denetim sürerken Run'ı iptal etmek denetim bitene kadar hiçbir şeyi
+  açmaz; hizmet denetimin ortasında ölürse yer, bir sonraki hizmet açılışı denetimlerin kaldırıldığını kanıtlayana kadar tutulur. `deckent coding template` varsayılanları bildirir (node, Node heap tavanı; typescript yolu yalnız `/node_modules`
+  bağımlılık bağlaması olan şablonda); mevcut görev türü şablonunu korur (komutu o tür için yeniden çalıştırmak
+  `CODING_TEMPLATE_KIND_CONFLICT` ile reddedilir), bu yüzden ona bugün gereksinim eklemek `deckent config set` ile `admission.registry`
+  düzenlemek demektir. doctor ortam yüzünden park edilen Run'ları henüz listelemez; `monitor` ve `run inspect` gösterir.
 - **Sessiz bir işçi durdurulur ve bir kez yeniden denenir, ama yalnız bazı görevler izlenir.** 1.0.0-alpha.47'den beri sessizlik sınırı
   boyunca (varsayılan 1 saat, `runRuntime.stallRecovery.stopAfterMs`; 3 dakikada uyarı) hiçbir olay ve model trafiği göndermeyen bir
   native abonelik işçisi durdurulur. Etkileri yalnız kendi çalışma alanında kalan bir görev yeni bir Attempt ile bir kez yeniden
@@ -344,7 +383,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   `deckent pool status` aynı kararı kullanır.
 - **Config penceresi seçenekleri ilk kareden önce yükler.** PATH'te Docker varsa yerel imaj listesini bekler (burada 43 imaj için
   yaklaşık 0,7 sn, ilk kare toplam 2,2 sn); seçenekler henüz anahtar açılınca yüklenmiyor. Liste süre sınırına takılırsa o ana kadar
-  doğrulanan imajlar önerilir ve anahtar listenin eksik olduğunu söyler ("Süre sınırından önce bulunan N seçenek gösteriliyor"); ikinci
+  doğrulanan imajlar önerilir ve anahtar listenin eksik olduğunu söyler ("Süre sınırından önce bulunan N seçenek gösteriliyor"); boyut sınırına takılan liste
+  (`inspection.maxPageSize` imaj ya da dizin girdisi, 256 PATH dizini) "Boyut sınırından önce bulunan N seçenek gösteriliyor" der; terminal
+  dışında değersiz `deckent config set <anahtar>` reddinde aynısını söyler ve `--json` bunu `params.partial` (`time` | `size`) ve
+  `params.found` olarak taşır; dal ve havuz listeleri `inspection.maxPageSize`'da hâlâ sessizce kesilir; ikinci
   kimlik okumasında yoğun bir daemon hiç imaj önermez. *Yol:* listenin ulaşmadığı imaj için
   `deckent config set execution.docker.imageId '"sha256:…"'`; `deckent config explain execution` şemayı gösterir.
 - **Kurulum teklifi yalnız çıplak `deckent` içindir.** Kurulumsuz bir klasörde `deckent --full-access` ve `deckent terminal`
@@ -369,10 +411,19 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   `inspection.workers.maxEntries`) ve her birini `/runs` gibi bir kez okur; kısa kimlik yalnız bu Run'lar arasında çözülür, daha eski
   bir Run tam kimliğini ister. Büyük bir kapsamda ölçülmedi. *Geçici çözüm:* `deckent run inspect --id <tam kimlik>`; `deckent
   inventory` saklanan tüm kayıtları sayfalar.
-- **`deckent doctor` henüz Docker'ı sınamaz** ve o satırda "sınanmadı" der; worker imajı yenileme ve havuz satırları son yenilemenin
-  ve havuz okumasının bulduğunu göstermeye devam eder. *Yol:* makinede `docker info`. Etkileşimli doctor yalnız mevcut bir ürün
-  komutunun uyguladığı düzeltmeleri önerir (bugün: worker araç güncellemesi); kurulum klasörünü özel yapmak kendi politika eylemini
-  bekler, bu yüzden o satır sizin çalıştıracağınız `chmod 700 <klasör>` adımını gösterir.
+- **`deckent doctor` Docker'ı `deckent init` ile aynı biçimde sınar** (PATH'te CLI, erişilebilir hizmet, izniniz) ve yalnız okur:
+  hiçbir şey kurmaz, başlatmaz, indirmez. Erişilemiyorsa, `execution` bölümü yapılandırılmışsa hata, değilse uyarıdır; algılama süresi
+  içinde yanıt gelmezse "sınanmadı" der. `deckent init`'in kendi son denetimi bu sınamayı yinelemez. Etkileşimli doctor yalnız mevcut
+  bir ürün komutunun uyguladığı düzeltmeleri önerir (bugün: worker araç güncellemesi); kurulum klasörünü özel yapmak kendi politika
+  eylemini bekler, bu yüzden o satır sizin çalıştıracağınız `chmod 700 <klasör>` adımını gösterir.
+- **Kurulumu okuyan komutlar yaklaşık 0,45–0,6 s'de açılır** (`doctor`, `config`, `operation`, `approval`, `run`, terminal); 16
+  çekirdekli bir makinede Node ~1400 modül yükler. `--version` ve yardım yaklaşık 0,12 s'de açılır. Diğer komutların daha hızlı
+  açılması beta sonrası açık bir owner kararıdır (paketleme ya da modül sınırı değişikliği).
+- **`deckent monitor --once` bir özettir.** Sayıları, tabloları ve duran her Run'ın nedenini basar; bir işçinin tam ayrıntısı (iş
+  metni, rapor iddiaları, transcript kesiti) `--once --verbose` ile gelir (terminalde `/monitor --verbose`). Bir kişiyi bekleyen işçi
+  ayrıntısını her zaman gösterir. `--json` değişmedi ve her şeyi taşır.
+- **Başlığı kaydedilmemiş bir Run** (teslim kuyruğu doğrulama Run'ı başlık kaydetmez) görevi ve türüyle gösterilir, örneğin
+  `readme-clone-note (verify işi)`; terminaldeki `/runs` penceresi hâlâ "Başlıksız iş" der.
 - **`deckent terminal status` sohbet modeline bağlanmaz,** bu yüzden erişim "sınanmadı" görünür; `deckent` içindeki ilk yanıt ya da
   `/provider` kontrolü gösterir. Bağlam penceresi ilk yanıt ölçülene kadar "?" görünür.
 - **`deckent workers watch` satır seçmeye izin vermez.** Terminalde tek pencereyi yeniden çizer (Esc ya da q kapatır); ayrıntı

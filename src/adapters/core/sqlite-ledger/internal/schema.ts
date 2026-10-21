@@ -37,7 +37,13 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 58;
+export const CURRENT_LEDGER_VERSION = 59;
+// PRE-7 ORTAM-HAZIR: environment park + `not-run` acceptance vocabularies (Run park reason and its requirement as failure code, a
+// `launch-refused` previous binding, the launch refusal's `requirement` and `probe`, a binding's probe custody `probes`, report evidence `not-run`,
+// task reason `acceptance-check-not-run`).
+// Additive: every v58 record already parses under the widened contracts, so no row is read or rewritten; the version step alone keeps an
+// older build (which refuses a newer ledger) from reading the new vocabulary. Downgrade = restore the pre-switch backup.
+export const ENVIRONMENT_READINESS_LEDGER_VERSION = 59;
 // BENIMSEME-DEPO-KIMLIGI: adoptions numbered per (repository, target); pre-v58 rows stamped 'pre-v58'; settled 2 = released as not applied.
 export const ADOPTION_REPOSITORY_LEDGER_VERSION = 58;
 export const MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION = 55;
@@ -63,6 +69,7 @@ export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  59: 'PRAGMA user_version=59;',
   // Table rebuild (UNIQUE and CHECK change): every row is kept byte for byte with repository 'pre-v58'. Downgrade = restore the pre-switch backup.
   58: `CREATE TABLE workspace_adoptions_v58(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,repository TEXT NOT NULL,target_ref TEXT NOT NULL,
     sequence INTEGER NOT NULL CHECK(sequence>0),kind TEXT NOT NULL CHECK(kind IN('adopt','rollback')),intent TEXT NOT NULL,

@@ -5,6 +5,7 @@ import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/inde
 import { compileNativeCodingDockerProfile, nativeCodingInvocationFields, NativeCodingProfileError } from './command.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { promptPartSchema } from './composition.js';
+import { nativeCodingTemplateEnvironment } from './environment.js';
 
 /**
  * K3 = A (owner 2026-09-30): a reusable native coding TEMPLATE is an ordinary registry profile of this adapter identity. It holds
@@ -51,9 +52,11 @@ export function nativeCodingTemplateTurnLimit(profile: ExecutionProfileDefinitio
 /** The Docker task profile a template compiles onto (installation preview reads its image through this). Throws on an invalid template. */
 export function nativeCodingTemplateBase(profile: ExecutionProfileDefinition): ExecutionProfileDefinition { return parseTemplate(profile).docker; }
 
-/** Adapter-owned template wire shape and content identity; host configuration supplies every resource and CLI selection. */
+/** Adapter-owned template wire shape and content identity; host configuration supplies every resource and CLI selection. PRE-7: a template
+ * that declares no environment gets the adapter's default requirements (registry data), so they are part of its content identity. */
 export function createNativeCodingTemplate(resourceLimits: unknown, invocation: unknown): ExecutionProfileDefinition {
-  const parsed = templateParametersSchema.safeParse({ schemaVersion: 1, docker: resourceLimits, invocation });
+  const declared = resourceLimits && typeof resourceLimits === 'object' && !('environment' in resourceLimits) ? { ...resourceLimits, environment: nativeCodingTemplateEnvironment(resourceLimits) } : resourceLimits;
+  const parsed = templateParametersSchema.safeParse({ schemaVersion: 1, docker: declared, invocation });
   if (!parsed.success) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
   const parameters = immutableJsonObjectSchema.parse(parsed.data);
   const profile = executionProfileDefinitionSchema.parse({ id: `native-coding-template-${createHash('sha256').update(JSON.stringify(parameters)).digest('hex')}`,

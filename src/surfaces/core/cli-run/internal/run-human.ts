@@ -1,5 +1,5 @@
 import { ErrorRegistry, HOST_LIMITS_REGISTRY, loadConfig, mapBounded, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { askCliCard, displayId, listRunIds, matchIdPrefix, orderPendingFirst, requireIdPrefix, resolveCommandScope, scopeLister, scopeNotice,
+import { askCliCard, displayId, listRunIds, matchIdPrefix, orderPendingFirst, requireIdPrefix, resolveCommandScope, scopeLister, scopeNotice, untitledWorkName,
   type CliCardRequest, type ScopeResolution } from '#surfaces/core/cli-human/index.js';
 import { runQuerySchema, type RunView } from '#engine/index.js';
 import type { RunCommandContext } from './context.js';
@@ -19,12 +19,15 @@ export async function runHumanIo(context: RunCommandContext, locale: Locale): Pr
       ...(context.agentEnvironment ? { agentEnvironment: context.agentEnvironment } : {}) }) };
 }
 
-/** The Run as a person names it: its first titled task, else the first line of a task request, else the terminal's untitled word (as `/runs`). */
+/** The Run as a person names it: its first titled task, else the first line of a task request, else (PRE-5: a delivery-queue verify Run records
+ * no brief) its first task and kind; the terminal's untitled word only for a Run without tasks. */
 export function runTitle(run: RunView, locale: Locale): string {
   const titled = run.tasks.find(task => task.taskBrief?.title)?.taskBrief?.title;
   if (titled) return titled;
   const task = run.tasks.find(item => item.taskBrief?.task?.trim())?.taskBrief?.task;
-  return task ? task.trim().split(/\r?\n/u)[0]!.replace(/\s+/gu, ' ').trim() : t('terminal.jobs.runFallback', {}, locale);
+  if (task) return task.trim().split(/\r?\n/u)[0]!.replace(/\s+/gu, ' ').trim();
+  const first = run.tasks[0];
+  return first ? untitledWorkName(first.id, first.kind, locale) : t('terminal.jobs.runFallback', {}, locale);
 }
 
 /** The Run state in the `/runs` window's words (one catalog: `terminal.jobs.state.*`), with the park reason when parked. */
@@ -39,7 +42,8 @@ export function runStateWord(run: RunView, locale: Locale): string {
     'dependency-failed': () => t('terminal.jobs.parked.dependency-failed', {}, locale), 'dependency-cancelled': () => t('terminal.jobs.parked.dependency-cancelled', {}, locale),
     'awaiting-decision': () => t('terminal.jobs.parked.awaiting-decision', {}, locale), 'evaluation-not-ready': () => t('terminal.jobs.parked.evaluation-not-ready', {}, locale),
     'needs-input': () => t('terminal.jobs.parked.needs-input', {}, locale), 'operator-hold': () => t('terminal.jobs.parked.operator-hold', {}, locale),
-    'progression-failed': () => t('terminal.jobs.parked.progression-failed', {}, locale), 'quota-exhausted': () => t('terminal.jobs.parked.quota-exhausted', {}, locale) };
+    'progression-failed': () => t('terminal.jobs.parked.progression-failed', {}, locale), 'quota-exhausted': () => t('terminal.jobs.parked.quota-exhausted', {}, locale),
+    'environment-not-ready': () => t('terminal.jobs.parked.environment-not-ready', {}, locale) };
   return t('cli.run.list.stateReason', { state, reason: reasons[run.state.reason]() }, locale);
 }
 

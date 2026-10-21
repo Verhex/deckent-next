@@ -8,7 +8,8 @@ import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 /**
  * TERMINAL-SABIT-DUZEN on a real pseudo-terminal through the production entry (alternate screen + mouse filter): the wheel scrolls the
  * conversation, a "new messages" row appears while scrolled back during streaming, End jumps to the latest, the bar never moves, and mouse
- * reports (wheel or click) never answer a card. Requires `npm run build`.
+ * reports (wheel or click) never answer a card. TERM-POLISH: a tool step stands one blank line apart from the text around it and from the next
+ * tool step; click and drag selects the conversation and the release copies it with OSC 52. Requires `npm run build`.
  */
 const execute = promisify(execFile);
 const built = resolve('dist/surfaces/core/terminal/index.js');
@@ -60,7 +61,7 @@ async function pty(steps: readonly Step[]) {
   expect(result.timeout, result.output?.slice(-2000)).toBeUndefined();
   const complete = (end: number) => { const at = result.output.lastIndexOf('\u001b[?2026l', end); return at < 0 ? end : at + '\u001b[?2026l'.length; };
   // The replay fixture does not know mouse-mode toggles; they are presentation only.
-  const clean = (text: string) => text.replaceAll('\u001b[?1000h', '').replaceAll('\u001b[?1006h', '').replaceAll('\u001b[?1006l', '').replaceAll('\u001b[?1000l', '');
+  const clean = (text: string) => ['\u001b[?1000h', '\u001b[?1002h', '\u001b[?1006h', '\u001b[?1006l', '\u001b[?1002l', '\u001b[?1000l'].reduce((rest, mode) => rest.replaceAll(mode, ''), text);
   const screen = (mark: number) => terminalBuffers(clean(result.output.slice(0, complete(result.marks[mark]!))), COLUMNS, ROWS).text.split('\n');
   return { ...result, screen };
 }
@@ -72,7 +73,7 @@ describe.skipIf(process.platform === 'win32')('full window on a real PTY (produc
     const run = await pty([
       ['READY', 'first\r', 0.2], ['first-line-3', 'long\r', 0.2], ['long-line-20', `${WHEEL_UP}${WHEEL_UP}${WHEEL_UP}${WHEEL_UP}`, 0.1],
       ['NEW ', '', 0.6], ['NEW ', '', 3.6], ['NEW ', '\u001b[F', 0.1], ['long-line-79', '', 0.6]]);
-    expect(run.output).toContain('\u001b[?1000h'); expect(run.output).toContain('\u001b[?1006h'); expect(run.output).toContain('\u001b[?1000l');
+    expect(run.output).toContain('\u001b[?1000h\u001b[?1002h\u001b[?1006h'); expect(run.output).toContain('\u001b[?1006l\u001b[?1002l\u001b[?1000l');
     const start = run.screen(0), scrolled = run.screen(4), jumped = run.screen(6);
     expect(barTop(start)).toBeGreaterThan(10);
     expect(barTop(scrolled)).toBe(barTop(start)); expect(barTop(jumped)).toBe(barTop(start));
@@ -110,5 +111,28 @@ describe.skipIf(process.platform === 'win32')('full window on a real PTY (produc
     expect(found).toContain('FIND[alpha-line-1]'); expect(found).toMatch(/^ +alpha-line-1$/mu); expect(found).not.toContain('NONE');
     // Ctrl+Up: the person's previous message ("long") is now the view's first row block.
     expect(run.screen(7).slice(0, 3).join('\n')).toMatch(/│ long|you/u);
+  }, 120_000);
+
+  it('tool steps stand one blank line apart; drag selects the conversation and the release copies the shown text with OSC 52 (bar fixed)', async () => {
+    const PRESS = '\u001b[<0;1;1M', DRAG = '\u001b[<32;40;10M', DRAG_OUT = '\u001b[<32;80;20M', RELEASE = '\u001b[<0;80;20m';
+    const run = await pty([['READY', 'long\r', 0.2], ['long-line-79', 'tool\r', 0.2], ['TXT-AFTER', '', 0.8], ['READY', `${PRESS}${DRAG}${DRAG_OUT}${RELEASE}`, 0.8],
+      ['COPIED', '', 0.4]]);
+    const turn = run.screen(3), bar = barTop(turn);
+    const at = (token: string) => turn.findIndex(row => row.includes(token));
+    const before = at('TXT-BEFORE'), first = at('TOOL read_file a.ts'), second = at('TOOL grep needle'), after = at('TXT-AFTER');
+    expect([before, first, second, after], turn.join('\n')).toEqual([before, before + 2, before + 4, before + 6]);
+    for (const row of [before + 1, first + 1, second + 1]) expect(turn[row]).toBe('');
+    // The selection ran from the first screen row to past the last conversation line (clamped to it): exactly the rows the screen showed.
+    // eslint-disable-next-line no-control-regex -- the OSC 52 clipboard sequence is a control sequence.
+    const copy = /\u001b\]52;c;([A-Za-z0-9+/=]*)\u0007/u.exec(run.output.slice(run.marks[3]!));
+    expect(copy, run.output.slice(run.marks[3]!, run.marks[3]! + 400)).not.toBeNull();
+    const pasted = Buffer.from(copy![1]!, 'base64').toString('utf8'), shown = turn.slice(0, bar).map(row => row.trimEnd()).join('\n');
+    expect(pasted.replace(/\n+$/u, '')).toBe(shown.replace(/\n+$/u, ''));
+    expect(pasted).toContain('TXT-AFTER');
+    const copied = run.screen(4);
+    expect(copied.join('\n')).toMatch(/COPIED \d+/u);
+    expect(barTop(copied)).toBe(bar);
+    // The mouse reports never reached the composer as text.
+    expect(copied.join('\n')).not.toMatch(/\[<(?:0|32);/u);
   }, 120_000);
 });

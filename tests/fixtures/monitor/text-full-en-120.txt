@@ -38,12 +38,13 @@ Stuck or waiting, oldest first (12)
   │ run-unknown                   │ build │ ! reason unknown                  │ unknown    │ scope-a │ current │
   └───────────────────────────────┴───────┴───────────────────────────────────┴────────────┴─────────┴─────────┘
 
-Failed Runs and where they first failed (2)
+Stopped Runs and why (3)
   ┌──────────────────┬─────────────────────────────────────────────────────────────┬───────────────┬─────────┬─────────┐
-  │ Run              │ First failure                                               │ Last activity │ Scope   │ Install │
+  │ Run              │ Cause                                                       │ Last activity │ Scope   │ Install │
   ├──────────────────┼─────────────────────────────────────────────────────────────┼───────────────┼─────────┼─────────┤
   │ run-broken       │ ✗ build: ✗ [unit-budget] src/surfaces/core/cli — 2001 line… │ 25 min ago    │ scope-a │ current │
-  │ run-broken-quiet │ ✗ build: first failing line not recorded                    │ 35 min ago    │ scope-a │ current │
+  │ run-broken-quiet │ ✗ build: no permission to read the output; the cause canno… │ 35 min ago    │ scope-a │ current │
+  │ run-stopped      │ ■ cancelled                                                 │ 1 d 2 h ago   │ scope-a │ current │
   └──────────────────┴─────────────────────────────────────────────────────────────┴───────────────┴─────────┴─────────┘
 
 Workers running now (2)
@@ -98,17 +99,17 @@ next: Inspect the Run
 run-unknown  ·  Waiting on system · reason: reason unknown · since: unknown · deadline: unknown · next: Inspect the Run
 
 ── Workers ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  ┌────────────────────────────┬─────────┬──────────────────────┬──────────┬──────────┬──────────────────────┬─────────┐
-  │ Run/Task                   │ State   │ Heartbeat            │ Process  │ Attempt  │ Provider/model       │ Install │
-  ├────────────────────────────┼─────────┼──────────────────────┼──────────┼──────────┼──────────────────────┼─────────┤
-  │ run-blocked-approval/build │ On hold │ 1 s                  │ running  │ c76f549a │ claude/model-alpha-2 │ current │
-  │ On hold (you)                                                                                                      │
-  │ run-broken/build           │ Stopped │ —                    │ exited 1 │ 09bb856b │ claude/model-alpha-2 │ current │
-  │ run-blocked-approval/lint  │ On hold │ ! 1 min 35 s (stale) │ running  │ ed5a5613 │ claude/model-alpha-2 │ current │
-  │ On hold (system)                                                                                                   │
-  │ run-blocked-approval/pack  │ On hold │ released             │ missing  │ a465c0eb │ claude/model-alpha-2 │ current │
-  │ On hold (system)                                                                                                   │
-  └────────────────────────────┴─────────┴──────────────────────┴──────────┴──────────┴──────────────────────┴─────────┘
+  ┌────────────────────────────┬─────────┬──────────────────────┬─────────┬──────────┬──────────────────────┬─────────┐
+  │ Run/Task                   │ State   │ Heartbeat            │ Process │ Attempt  │ Provider/model       │ Install │
+  ├────────────────────────────┼─────────┼──────────────────────┼─────────┼──────────┼──────────────────────┼─────────┤
+  │ run-blocked-approval/build │ On hold │ 1 s                  │ running │ c76f549a │ claude/model-alpha-2 │ current │
+  │ On hold (you)                                                                                                     │
+  │ run-broken/build           │ Stopped │ —                    │ exit 1  │ 09bb856b │ claude/model-alpha-2 │ current │
+  │ run-blocked-approval/lint  │ On hold │ ! 1 min 35 s (stale) │ running │ ed5a5613 │ claude/model-alpha-2 │ current │
+  │ On hold (system)                                                                                                  │
+  │ run-blocked-approval/pack  │ On hold │ released             │ missing │ a465c0eb │ claude/model-alpha-2 │ current │
+  │ On hold (system)                                                                                                  │
+  └────────────────────────────┴─────────┴──────────────────────┴─────────┴──────────┴──────────────────────┴─────────┘
 
 On hold (you)
 Waiting on you · reason: awaiting approval (appr-0001) · since: 2026-10-02 06:18:00Z · deadline: unknown · next: Inspect
@@ -123,7 +124,7 @@ Heartbeat 1 s · process running · pid 4242 · handle ctr-build
       09:28:30Z · tool.call · edit src/surfaces/core/monitor/internal/view.ts
       09:29:30Z · tool.call · shell npm test -- monitor-surface
       09:29:55Z · message · Applying the review fixes to the monitor view
-Usage so far: 12 turns · 12000 in / 3400 out tokens · cost 0.4321 USD · 1 tool errors
+Usage so far: 12 turns · 12000 in / 3400 out tokens · cost $0.4321 · 1 tool errors
 Model on subscription: requested model-alpha-2 (declared auxiliary: none) → init model-alpha-2 → usage none → pending
 [live, not sealed yet]
 Workspace /srv/deckent/workspaces/build
@@ -134,7 +135,7 @@ worker
 Worker run-blocked-approval/lint · attempt ed5a5613-attempt · gen 1 · claude · install current
 Doing now: running · src/app.ts — apply patch
 Heartbeat ! 1 min 35 s (stale) · process running · pid 4242 · handle ctr-lint
-Usage so far: 12 turns · 12000 in / 3400 out tokens · cost 0.4321 USD · 1 tool errors
+Usage so far: 12 turns · 12000 in / 3400 out tokens · cost $0.4321 · 1 tool errors
 Model on subscription: requested model-alpha-2 (declared auxiliary: none) → init model-alpha-2 → usage none → pending
 [live, not sealed yet]
 Workspace /srv/deckent/workspaces/lint
@@ -144,7 +145,7 @@ Waiting on system · reason: reason unknown · since: unknown · deadline: unkno
 Worker run-blocked-approval/pack · attempt a465c0eb-attempt · gen 1 · claude · install current
 Doing now: — · —
 Heartbeat released · process missing · pid 4242 · handle ctr-pack
-Usage so far: 12 turns · 12000 in / 3400 out tokens · cost 0.4321 USD · 1 tool errors
+Usage so far: 12 turns · 12000 in / 3400 out tokens · cost $0.4321 · 1 tool errors
 Model on subscription: requested model-alpha-2 (declared auxiliary: none) → init model-alpha-2 → usage none → pending
 [live, not sealed yet]
 Workspace /srv/deckent/workspaces/pack

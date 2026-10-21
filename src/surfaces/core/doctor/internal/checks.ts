@@ -1,6 +1,7 @@
-import { t, type Locale } from '#platform/index.js';
+import { MESSAGE_REGISTRY, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { DoctorRenderInput } from './report.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
+import { shortImageId } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
 import { firstJobCommand, firstJobSteps, firstJobTitle } from './first-job.js';
 
@@ -27,7 +28,13 @@ export interface DoctorCheckFacts {
   /** I-S7: whether an execution section (worker image) and an admission registry are configured; absent → the pool status alone decides. */
   readonly firstJob?: Readonly<{ execution: boolean; registry: boolean }> | null;
   readonly toolchainUpdateEnabled: boolean;
+  /** PRE-34: the configured worker image (evidence when the refresh marker names no version); null when no execution section sets one. */
+  readonly imageId?: string | null;
+  /** PRE-34: the execution environment as `deckent init` decides it (same detection and setup decision; read-only); null when it could not be asked. */
+  readonly executionEnvironment?: ExecutionEnvironmentDoctorView | null;
 }
+/** The setup family's decision for the execution environment: its state and its reason (a `setup.execution.*` key and parameters). */
+export type ExecutionEnvironmentDoctorView = Readonly<{ state: string; reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }> }>;
 
 /** Core secret store backends in plain words; another backend shows its id. */
 function secretBackendWord(backend: string, l: Locale): string {
@@ -109,8 +116,8 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   if (image && image.status !== 'unknown') rows.push(image.status === 'failed'
     ? row('work', 'work.image', 'warning', t('doctor.check.image.failed', {}, l), 'deckent toolchains update', f.toolchainUpdateEnabled ? fix : undefined)
     : row('work', 'work.image', 'ok', image.status === 'updating' ? t('doctor.check.image.updating', {}, l)
-      : image.imageVersion ? t('doctor.check.image.current', { version: image.imageVersion }, l) : t('doctor.check.image.currentUnnamed', {}, l)));
-  rows.push(row('work', 'work.docker', 'untested', t('doctor.check.docker', {}, l)));
+      : image.imageVersion || shortImageId(f.imageId) ? t('doctor.check.image.current', { version: image.imageVersion ?? shortImageId(f.imageId)! }, l) : t('doctor.check.image.currentUnnamed', {}, l)));
+  rows.push(executionRow(f, l));
   for (const finding of r.modelInvocationDelivery ?? []) rows.push(row('work', 'work.delivery', 'warning', t('doctor.check.delivery', { profile: finding.profileId, model: finding.reference.modelId }, l),
     finding.surface === 'mcp' ? 'deckent config set mcp.responseMaxBytes' : 'deckent config set service.responseMaxBytes'));
   if (f.retiringModels === null) rows.push(row('work', 'work.models', 'untested', t('doctor.check.models.unknown', {}, l)));
@@ -118,6 +125,22 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   else for (const model of f.retiringModels) rows.push(row('work', 'work.models', 'warning', t('doctor.check.models.retiring', { model: model.modelId, channel: model.channelId, state: model.state === 'retired' ? t('doctor.check.models.state.retired', {}, l) : t('doctor.check.models.state.deprecated', {}, l), date: model.date ?? '-' }, l),
     scoped('deckent models list', f)));
   return rows;
+}
+
+/** The setup family's reason in the catalogs' words (the same `setup.execution.*` text `deckent init` shows); an unknown key stays visible as itself. */
+function setupReasonText(key: string, params: Readonly<Record<string, string | number>>, l: Locale): string {
+  const text = (MESSAGE_REGISTRY.catalogs[l] as Readonly<Record<string, string>>)[key];
+  return text === undefined ? key : text.replace(/\{(\w+)\}/gu, (whole, name: string) => Object.hasOwn(params, name) ? terminalSafeText(String(params[name])) : whole);
+}
+/** PRE-34: Docker (the execution environment) through the same detection and decision `deckent init` uses: ready is ok; not reachable is an
+ * error when work is configured to run in it, else a warning; no answer in time is "not tested". The reason text is the setup's own. */
+function executionRow(f: DoctorCheckFacts, l: Locale): DoctorCheck {
+  const view = f.executionEnvironment;
+  if (!view) return row('work', 'work.docker', 'untested', t('doctor.check.docker.unknown', {}, l));
+  const text = setupReasonText(view.reason.code, view.reason.params, l);
+  if (view.state === 'done') return row('work', 'work.docker', 'ok', text);
+  if (view.reason.code === 'setup.execution.unknown' || view.reason.code === 'setup.execution.unavailable') return row('work', 'work.docker', 'untested', text);
+  return row('work', 'work.docker', f.firstJob?.execution ? 'error' : 'warning', text, 'deckent init');
 }
 
 function toolChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {

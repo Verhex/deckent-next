@@ -1,5 +1,8 @@
 import { t, type Locale } from '#platform/index.js';
 import type { ResourceView } from '#engine/index.js';
+import { formatBytes, formatClock, formatDecimal, formatDuration } from '#surfaces/core/cli-human/index.js';
+import UNITS from './units.json' with { type: 'json' };
+const MS_PER_SECOND = UNITS.msPerSecond;
 function resourceWords(locale: Locale) {
   return { states: { fresh: t('resource.state.fresh', {}, locale), stale: t('resource.state.stale', {}, locale), gap: t('resource.state.gap', {}, locale),
     unavailable: t('resource.state.unavailable', {}, locale), disabled: t('resource.state.disabled', {}, locale) },
@@ -8,15 +11,20 @@ function resourceWords(locale: Locale) {
     overload: t('resource.reason.overload', {}, locale), 'store-unavailable': t('resource.reason.store-unavailable', {}, locale), 'queue-full': t('resource.reason.queue-full', {}, locale),
     disabled: t('resource.reason.disabled', {}, locale), missing: t('resource.reason.missing', {}, locale), 'counter-reset': t('resource.reason.counter-reset', {}, locale) } };
 }
+/** `· 2026-10-14 13:58 öncesi örnekler silindi`: the retention boundary as a local date, or nothing when none was applied. */
+const trimmedText = (view: ResourceView, locale: Locale) => view.trimmedBeforeMs === null ? '' : t('resource.trimmed', { time: formatClock(view.trimmedBeforeMs, locale) }, locale);
+/** PRE-5: units come from the shared formatter (`557 MB / 2 GB`, `4 g 0 sa`, `0,49 sn`); a view with no sample says so in one line instead of a row of unknowns. */
 export function renderResourceLine(view: ResourceView | undefined, locale: Locale): string {
   if (!view) return t('resource.unavailable', {}, locale);
-  const n = (value: number | null | undefined) => value == null ? t('resource.unknown', {}, locale) : String(Math.round(value * 100) / 100);
-  return t('resource.worker', { cpu: n(view.latest?.cpuCores), memory: n(view.latest?.memoryBytes), limit: n(view.latest?.memoryLimitBytes),
-    age: n(view.ageMs), state: resourceWords(locale).states[view.state] }, locale);
+  const words = resourceWords(locale), latest = view.latest;
+  if (!latest && view.sampleCount === 0) return t('resource.none', { reason: view.reason ? words.reasons[view.reason] : words.states[view.state], trimmed: trimmedText(view, locale) }, locale);
+  return t('resource.worker', { cpu: latest?.cpuCores == null ? t('resource.unknown', {}, locale) : t('resource.cores', { n: formatDecimal(latest.cpuCores, locale) }, locale),
+    memory: formatBytes(latest?.memoryBytes, locale), limit: formatBytes(latest?.memoryLimitBytes, locale), age: formatDuration(view.ageMs, locale), state: words.states[view.state] }, locale);
 }
 export function renderResourceDetail(view: ResourceView | undefined, locale: Locale): string[] {
-  return [renderResourceLine(view, locale), ...(view ? [t('resource.detail', { cpu: view.cpuSeconds ?? t('resource.unknown', {}, locale),
-    peak: view.sampledPeakBytes ?? t('resource.unknown', {}, locale), kernel: view.latest?.kernelPeakBytes ?? t('resource.unknown', {}, locale),
+  if (!view || (!view.latest && view.sampleCount === 0)) return [renderResourceLine(view, locale)];
+  return [renderResourceLine(view, locale), t('resource.detail', { cpu: formatDuration(view.cpuSeconds === null ? null : view.cpuSeconds * MS_PER_SECOND, locale),
+    peak: formatBytes(view.sampledPeakBytes, locale), kernel: formatBytes(view.latest?.kernelPeakBytes, locale),
     count: view.sampleCount, gaps: view.gapCount, reason: view.reason ? resourceWords(locale).reasons[view.reason] : t('resource.partial', {}, locale),
-    trimmed: view.trimmedBeforeMs ?? t('resource.unknown', {}, locale) }, locale)] : [])];
+    trimmed: trimmedText(view, locale) }, locale)];
 }

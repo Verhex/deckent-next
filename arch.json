@@ -296,7 +296,7 @@
         "src/composition/core/root",
         "src/composition/core/identity-profile",
         "src/composition/core/model-connect",
-        "src/surfaces/core/terminal-turn",
+        "src/surfaces",
         "src/composition/core/project-instructions",
         "src/composition/core/backup",
         "src/engine/core/provider-spend",
@@ -314,6 +314,7 @@
     },
     "src/composition/core/execution": {
       "dependencies": [
+        "src/platform/core/host",
         "src/adapters/core/attempt-store",
         "src/adapters/core/docker-supervisor",
         "src/adapters/core/file-artifacts",
@@ -341,7 +342,9 @@
         "src/adapters/core/local-keyring",
         "src/engine/core/audit",
         "src/platform/core/utils",
-        "src/composition/core/runs"
+        "src/composition/core/runs",
+        "src/adapters/core/native-coding",
+        "src/domain/core/run"
       ],
       "plan": "EXECUTION"
     },
@@ -458,6 +461,7 @@
     },
     "src/composition/core/root": {
       "dependencies": [
+        "src/engine/core/dispatch",
         "src/engine/core/provider-spend",
         "src/adapters/core/contract",
         "src/platform/core/config",
@@ -717,6 +721,7 @@
     },
     "src/engine/core/dispatch": {
       "dependencies": [
+        "src/domain/core/adapter-registry",
         "src/capabilities/core/artifacts",
         "src/domain/core/attempt",
         "src/domain/core/audit",
@@ -1217,7 +1222,6 @@
         "src/platform/core/output",
         "src/surfaces/core/cli-models",
         "src/surfaces/core/cli-kit",
-        "src/surfaces/core/monitor",
         "src/surfaces/core/cli-decision",
         "src/surfaces/core/cli-identity",
         "src/surfaces/core/work-labels",
@@ -2550,6 +2554,7 @@
     },
     "src/surfaces/core/monitor": {
       "dependencies": [
+        "src/surfaces/core/cli-human",
         "src/engine/core/monitor",
         "src/surfaces/core/monitor-view",
         "src/surfaces/core/cli-kit",
@@ -3203,6 +3208,7 @@
     },
     "src/surfaces/core/cli-admin": {
       "dependencies": [
+        "src/domain/core/attempt",
         "src/domain/core/audit",
         "src/surfaces/core/doctor",
         "src/platform/core/output",

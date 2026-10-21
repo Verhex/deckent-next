@@ -3,7 +3,7 @@ import { userInfo } from 'node:os';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { authenticate, reservationRefusalOutcome, RunPolicyAuthorization, RunProgressionFailure, RunProgressionTurn, runQuerySchema, RunStoreError, type RunQuery } from '#engine/index.js';
-import { executeConfiguredTask } from '#composition/core/execution/index.js';
+import { executeConfiguredTask, settleConfiguredEnvironmentProbes } from '#composition/core/execution/index.js';
 import { advanceConfiguredRunLifecycle, evaluateConfiguredTask, reserveConfiguredRunTasks } from '#composition/core/runs/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -25,7 +25,8 @@ export async function advanceConfiguredRun(projectRoot: string, input: RunQuery,
       try { return await work(store); } finally { store.close(); }
     }
     const turn = new RunProgressionTurn({
-      async advanceLifecycle(request) { await advanceConfiguredRunLifecycle(projectRoot, request, options); },
+      // REVISE 2693: a held uncertain probe of this Run is proven again first; only its proven removal releases the slot.
+      async advanceLifecycle(request) { await settleConfiguredEnvironmentProbes(projectRoot, request, options); await advanceConfiguredRunLifecycle(projectRoot, request, options); },
       read: request => withRunStore(request, store => store.loadRun(request.scopeId, request.runId).then(run => { if (!run) throw new RunStoreError('RUN_STORE_CONFLICT'); return run; })),
       async reserve(command) {
         try { await reserveConfiguredRunTasks(projectRoot, command, options); return 'reserved'; }

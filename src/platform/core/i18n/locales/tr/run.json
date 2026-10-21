@@ -443,5 +443,13 @@
   "proposal.planning.plan-usage": "plan kullanımı; parasal ücret yok",
   "proposal.planning.subscription": "Planlama: {model}, abonelik planı ({evidence}).",
   "models.invocation.planUsage": "Plan kullanımı kaydedildi; para ayrılmadı veya ücret yazılmadı. Sağlayıcı sayaçları: {counters}.",
-  "models.invocation.planUsageCounters": "mevcut"
+  "models.invocation.planUsageCounters": "mevcut",
+  "error.EXECUTION_ENVIRONMENT_NOT_READY": "Deckent bu işçiyi başlatmadı: ortamı {requirement} gereksinimini karşılamıyor ({kind} {target}). Bu bir kurulum kusurudur, görevin başarısızlığı değil; işçi ya da model başlatılmadı ve Run sizi bekliyor.",
+  "error.EXECUTION_ENVIRONMENT_NOT_READY.unregistered": "Deckent bu işçiyi başlatmadı: {requirement} gereksinimi {kind} denetim türünü kullanıyor, ancak kurulu hiçbir adapter bu türü kaydetmiyor; bu yüzden denetlenemiyor. Bu bir kurulum kusurudur, görevin başarısızlığı değil; işçi ya da model başlatılmadı.",
+  "error.EXECUTION_ENVIRONMENT_NOT_READY.summary": "Deckent bu işçiyi başlatmadı: ortamı bildirilen bir gereksinimi karşılamıyor. Bu bir kurulum kusurudur, görevin başarısızlığı değil; işçi ya da model başlatılmadı.",
+  "remedy.EXECUTION_ENVIRONMENT_NOT_READY": "Gereksinim karşılanacak şekilde işçi ortamını düzeltin (işçi imajı, bağımlılık bağlaması, bellek), sonra Run'ı devam ettirin: deckent run resume --id <run>. Deckent işçiyi başlatmadan önce gereksinimi yeniden denetler; aksi halde park kendi süresi dolunca biter.",
+  "cli.run.lifecycle.environmentNotReady": "Ortam hazır değil: {requirement}. Bu bir kurulum kusurudur, görevin başarısızlığı değil: işçi ya da model başlatılmadı. İşçi ortamını düzeltin, sonra Run'ı devam ettirin: deckent run resume --id {run}. Deckent işçiyi başlatmadan önce gereksinimi yeniden denetler; aksi halde park süresi dolunca biter.",
+  "error.EXECUTION_ENVIRONMENT_UNCERTAIN": "Deckent bu işçiyi başlatmadı: {requirement} gereksiniminin ortam denetimi ({kind}) durdurulup kaldırıldığı doğrulanamadı (kap {probe}). Yanıtına güvenilmez ve o hâlâ çalışıyor olabilirken ikinci bir denetim başlamaz.",
+  "error.EXECUTION_ENVIRONMENT_UNCERTAIN.summary": "Deckent bu işçiyi başlatmadı: bir ortam denetiminin durdurulup kaldırıldığı doğrulanamadı. İşçi ya da model başlatılmadı.",
+  "remedy.EXECUTION_ENVIRONMENT_UNCERTAIN": "Docker'ı denetleyin (docker ps -a --filter label=deckent.preflight), kap hâlâ duruyorsa kaldırın (docker rm --force <kap>); bir sonraki hizmet açılışı kaldırıldığını doğrular ve yeri açar, sonra Run'ı devam ettirin: deckent run resume --id <run>. Deckent yeniden denetlemeden önce aynı denetimden kalanı kaldırır."
 }

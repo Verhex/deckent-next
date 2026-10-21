@@ -193,6 +193,19 @@ describe('monitor application over ports', () => {
       expect(port.mock.calls.map(call => (call as readonly unknown[])[0])).toEqual([selected]);
     }
   });
+  it('PRE-34: names every admitted failed task\'s attempt for its first failing line, beyond the shown workers and never another scope\'s', async () => {
+    const failedRun = (scopeId: string) => ({ snapshot: { ...snapshot([{ id: 'a', phase: 'failed' }, { id: 'b', phase: 'accepted' }]), identity: { runId: 'r', scopeId, layoutRevision: 'l' } } as RunSnapshot,
+      poolId: 'p', admitted: true, createdAtMs: 50, attempts: [exited('a', { evaluationObserved: true }), exited('b', { evaluationObserved: true })] });
+    const ledger = { ledgerVersion: 44, scopeIds: ['s', 'hidden'], diagnostics: [], approvals: [], pools: [], runs: [failedRun('s'), failedRun('hidden')] };
+    const readShown = vi.fn(async () => ledger);
+    const app = new MonitorApplication({ now: () => NOW, indexLedger: async () => indexOf(ledger), readLedger: async () => ledger, readShown, ...allPools,
+      describeService: async () => ({ schemaVersion: 1 as const, instanceId: 'i', shutdownAvailable: false, identity: null }),
+      observeScope: async (_target, scopeId) => scopeId === 'hidden' ? { access: 'denied' as const, workers: [], workerStatus: 'denied', truncated: false }
+        : { access: 'admitted' as const, workers: [], workerStatus: 'available', truncated: false } });
+    await app.inspect([{ id: 'current', path: '/c' }], { schemaVersion: 1 });
+    expect(readShown).toHaveBeenCalledTimes(1);
+    expect((readShown.mock.calls[0] as unknown as readonly unknown[]).slice(1)).toEqual([[], [identity('a')]]);
+  });
   const reading = (scopeIds: string[]) => ({ ledgerVersion: 44, scopeIds, diagnostics: ['info:ledger-version-older:43'], approvals: [{ ...approval('a'), scopeId: 's' }, { ...approval('a'), scopeId: 'hidden', approvalId: 'h' }],
     pools: [pool({ execution: 1, inFlight: 1, hold: { state: 'held' as const, changedAtMs: 400, changedBy: 'ops' } })],
     runs: [{ snapshot: snapshot([{ id: 'a', phase: 'active' }]), poolId: 'p', admitted: true, createdAtMs: 50, attempts: [attempt('a')] },

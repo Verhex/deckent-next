@@ -42,12 +42,13 @@ Takılı ya da bekleyen, en eskisi önce (12)
   │ run-unknown                   │ ! neden bilinmiyor     │
   └───────────────────────────────┴────────────────────────┘
 
-Başarısız işler ve ilk hata yeri (2)
+Duran işler ve nedeni (3)
   ┌──────────────────┬─────────────────────────────────────┐
-  │ İş kimliği       │ İlk hata                            │
+  │ İş kimliği       │ Neden                               │
   ├──────────────────┼─────────────────────────────────────┤
   │ run-broken       │ ✗ build: ✗ [unit-budget] src/surfa… │
-  │ run-broken-quiet │ ✗ build: ilk hata satırı kayıtta y… │
+  │ run-broken-quiet │ ✗ build: çıktıyı okuma izni yok; n… │
+  │ run-stopped      │ ■ iptal edildi                      │
   └──────────────────┴─────────────────────────────────────┘
 
 Şu an çalışan işçiler (2)
@@ -146,7 +147,7 @@ monitor-surface
       09:29:55Z · message · Applying the review fixes to the
 monitor view
 Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token ·
-maliyet 0.4321 USD · 1 araç hatası
+maliyet 0,4321 USD · 1 araç hatası
 subscription kanalında model: istenen model-alpha-2 (beyan
 edilen yardımcılar: yok) → başlangıç model-alpha-2 →
 kullanım yok → bekliyor [canlı, henüz mühürlenmedi]
@@ -162,7 +163,7 @@ nesil 1 · claude · kurulum current
 Heartbeat ! 1 dk 35 sn (eski) · süreç çalışıyor · pid 4242 ·
 tanıtıcı ctr-lint
 Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token ·
-maliyet 0.4321 USD · 1 araç hatası
+maliyet 0,4321 USD · 1 araç hatası
 subscription kanalında model: istenen model-alpha-2 (beyan
 edilen yardımcılar: yok) → başlangıç model-alpha-2 →
 kullanım yok → bekliyor [canlı, henüz mühürlenmedi]
@@ -178,7 +179,7 @@ nesil 1 · claude · kurulum current
 Heartbeat bırakıldı · süreç kayıp · pid 4242 · tanıtıcı
 ctr-pack
 Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token ·
-maliyet 0.4321 USD · 1 araç hatası
+maliyet 0,4321 USD · 1 araç hatası
 subscription kanalında model: istenen model-alpha-2 (beyan
 edilen yardımcılar: yok) → başlangıç model-alpha-2 →
 kullanım yok → bekliyor [canlı, henüz mühürlenmedi]

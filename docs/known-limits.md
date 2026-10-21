@@ -24,6 +24,11 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   transport, backup and restore do not run on macOS either; platform tests skip them with a `[requires Linux …]` tag.
 - **The terminal screen layout has not been tried** on physical Windows Terminal, macOS Terminal, VS Code's terminal or tmux.
   *Impact:* the input bar, windows and colors may misbehave there. *Workaround:* use a plain Linux or WSL2 terminal.
+- **Copying with the mouse uses your terminal's clipboard sequence (OSC 52)** and was proven only on a Linux pseudo-terminal, not on
+  physical Windows Terminal, WSL inside it, xterm, tmux or iTerm2. Some terminals block it (iTerm2 until "Applications in terminal may
+  access clipboard" is on; tmux needs `set -g set-clipboard on`). Drag selection has no autoscroll and no double/triple click.
+  *Impact:* after "Copied … characters" the paste may be empty. *Workaround:* hold Shift (Option in iTerm2) and drag to use the
+  terminal's own selection, or set `terminal.layout` to `inline`.
 - **arm64 is not shipped.** The locked bubblewrap bundle ships for x86_64; an arm64 build check is not arm64 runtime proof.
   *Workaround:* use x86_64.
 - **No npm package yet.** You install from source (see [Get started](../README.md#get-started)).
@@ -55,6 +60,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 ## Isolation
 
+- **Docker tasks get a Node heap ceiling of 75 % of their memory limit.** Deckent sets `NODE_OPTIONS=--max-old-space-size` so Node-based
+  checks (for example `tsc`) use the memory the container has. A task command that sets `NODE_OPTIONS` itself wins; an image that sets
+  `NODE_OPTIONS` in its own environment is overridden. Several Node processes in one container share the limit and can still be stopped
+  by it (exit 137).
 - **A Docker worker is not a virtual machine.** It shares the host kernel. *Impact:* a kernel-level escape is not
   contained by Deckent. A microVM sandbox is planned, not built.
 - **A coding worker's own tools sit outside Deckent's model ingress.** Claude Code, Codex and Cursor use their own tools
@@ -137,6 +146,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **Claude subscription:** a Claude Code worker runs with your own Claude login. A subscription-backed Brain (the planner
   behind `/do`) is being prepared and is not available yet. Terminal chat with a Claude subscription is not supported for now.
   *Workaround:* use an Anthropic API key for terminal chat and `/do` planning.
+- **Terminal chat needs a model connection and, for a paid API, a budget.** A first session cannot chat with a subscription alone;
+  a paid API turn without a scope budget is refused. *Workaround:* connect an API key with `/provider`, set a budget, choose `/model`.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
   must exist and be readable by Deckent. This path may change.
 - **A subscription worker holds a short-lived copy of your login token while it runs.** Deckent copies only the current
@@ -158,6 +169,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **The model a Codex or Cursor worker used cannot be verified.** Only Claude Code reports per-model usage; Codex and Cursor
   results are recorded as unverified and accepted by their criteria. *Impact:* if such a worker ran another model, the work
   is still accepted.
+- **Codex and Cursor workers report little about their run.** A Codex attempt shows one turn and no token use; a Cursor attempt
+  shows no turns, tokens or cost. *Impact:* their effort and cost are not comparable with Claude Code's. *Workaround:* judge them by
+  the delivered result.
 - **Cursor has no packaged worker model catalog.** A worker is admitted only on an active `native-cli` catalog channel;
   Claude Code and Codex have packaged catalogs, Cursor does not. *Workaround:* write a catalog and register it with
   `deckent models catalog register --file`.
@@ -200,9 +214,34 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 - **A work task needs a valid result report, but a worker CLI without one is not checked.** Since 1.0.0-alpha.47 a work task that
   exits 0 without a valid report fails as `report-missing` or `report-invalid`. A CLI that has no structured result channel (today
-  Cursor) or whose installed version no longer offers it reads `unsupported` and is not gated. Typed report checks (`checkId`,
-  `role`) are defined but the container bridge does not accept them yet. *Workaround:* prefer Claude or Codex workers for tasks
+  Cursor) or whose installed version no longer offers it reads `unsupported` and is not gated. Since 1.0.0-alpha.50 a worker
+  can mark a report check with `checkId` and `role: acceptance`, and the worker instructions ask it to; an acceptance check whose last
+  result is not `passed` refuses the task (`declared-check-not-passed`). A worker that does not type its checks is not caught:
+  untyped and exploratory checks remain claims and do not block acceptance. *Workaround:* prefer Claude or Codex workers for tasks
   whose completion must be proven.
+- **A coding task is accepted on its exit code.** Its criterion may ask for more (a retained diff, a readback), but the only evaluator
+  available to coding tasks is `process-exit` and no Core work class binds an acceptance profile, so the extra evidence is not
+  checked. Since 1.0.0-alpha.50 the evaluation line says so ("accepted · exit code · content not independently verified") in the
+  monitor, `workers`, `/runs`, `run inspect`, `task inspect` and `report`; counts such as "1/1 accepted" are not qualified. An
+  acceptance profile with a real verification evaluator is beta work.
+- **Deckent checks only the environment requirements a task declares** (since 1.0.0-alpha.50). A task profile or template may declare
+  `environment.requirements`; Deckent checks them before the worker starts and parks the Run as "environment not ready: <id>" when one
+  is unmet (no worker, no model call; fix it, then resume, which checks again). An undeclared missing tool is reported as a check that
+  could not run (`acceptance-check-not-run`); that is the worker's claim, not proof of an environment defect. Requirements are frozen
+  with the Run, so one added to the registry applies to new Runs after `deckent runtime restart`. Core ships coding probe kinds
+  (executable, path-readable, node-heap); connector or credential kinds come from Enterprise/ERP packages through
+  `deckent/extensions`, and a kind nobody registered refuses the launch. Each probe starts one short container and proves it removed before
+  answering (about 0.85 s on the reference host); when removal cannot be proven the Run parks as uncertain (the attempt code
+  `EXECUTION_ENVIRONMENT_UNCERTAIN`, shown in monitor and `run inspect` like any environment park), and the next service start removes
+  this installation's leftover probe containers. While a probe's removal is unproven, its Run keeps its pool slot and cannot be closed
+  or resumed (`RUN_DECISION_NOT_READY`); cancel and the park deadline do not free it. A probe that can never be proven gone holds the
+  slot indefinitely; the service journal names it at every start, and after `docker rm --force <name>` the next service start
+  releases the slot once (a progression turn of that Run does so only when one runs; ordinary progression skips Runs parked for the
+  environment or cancelled). The slot is held from before the first probe container starts: cancelling a Run while its probe runs frees
+  nothing until the probe ends, and if the service dies mid-probe the slot stays held until the next service start proves the probes removed. `deckent coding template` declares defaults (node, the Node heap ceiling; the typescript path only for a template
+  with a `/node_modules` dependency mount); an existing task kind keeps its template (re-running the command for it is refused with
+  `CODING_TEMPLATE_KIND_CONFLICT`), so adding a requirement to it today means editing `admission.registry` with `deckent config set`.
+  doctor does not list Runs parked for the environment yet; `monitor` and `run inspect` do.
 - **A silent worker is stopped and retried once, but only some tasks are watched.** Since 1.0.0-alpha.47 a native-subscription worker
   that sends no event and no model traffic for the silence limit (default 1 hour, `runRuntime.stallRecovery.stopAfterMs`; warning
   after 3 minutes) is stopped. A task whose effects stay in its own workspace is retried once on a new Attempt; any other task waits
@@ -341,7 +380,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   MCP shows only that count; v13 (fresh, or after `deckent init policy --upgrade`) gives it `pool inspect` in the installed scope. *Workaround:* ask an administrator for `pool inspect` on that pool; `deckent pool status` uses the same decision.
 - **The config window loads choices before its first frame.** With Docker on the path it waits for the local image list (about 0.7 s for
   43 images here, 2.2 s first frame in total); choices are not loaded when a key is opened yet. When the list runs out of time the
-  images proven so far are offered and the key says the list is partial ("Showing the N found before the time limit"); a busy
+  images proven so far are offered and the key says the list is partial ("Showing the N found before the time limit"); a list cut by a size bound
+  (`inspection.maxPageSize` images or directory entries, 256 PATH directories) says "Showing the N found before the size limit"; off a
+  terminal, `deckent config set <key>` without a value says the same in its refusal and `--json` carries `params.partial` (`time` | `size`)
+  and `params.found`; branch and pool lists are still cut at `inspection.maxPageSize` without saying so; a busy
   daemon at the second identity read offers none. *Workaround:* `deckent config set execution.docker.imageId '"sha256:…"'` sets an
   image the list did not reach; `deckent config explain execution` shows the schema.
 - **The setup offer is made only for bare `deckent`.** In a folder with no installation, `deckent --full-access` and `deckent terminal`
@@ -365,10 +407,19 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   `inspection.workers.maxEntries`) and read each of them once, as `/runs` does; a short id resolves only among those Runs, so an
   older Run needs its full id. Not measured on a large scope. *Workaround:* `deckent run inspect --id <full id>`; `deckent
   inventory` pages every stored record.
-- **`deckent doctor` does not test Docker yet** and says "not tested" on that row; worker image refresh and pool rows still show
-  what the last refresh and pool read found. *Workaround:* `docker info` on the machine. The interactive doctor offers only fixes that
-  an existing product command applies (today: the worker tool update); making the installation folder private waits for its policy
-  action, so that row shows the `chmod 700 <folder>` step to run yourself.
+- **`deckent doctor` checks Docker the way `deckent init` does** (CLI on PATH, service reachable, your permission) and is read-only:
+  it never installs, starts or pulls anything. Not reachable is an error only when the `execution` section is configured, otherwise a
+  warning; no answer within the detection deadline reads "not tested". `deckent init`'s own final check does not repeat this probe.
+  The interactive doctor offers only fixes that an existing product command applies (today: the worker tool update); making the
+  installation folder private waits for its policy action, so that row shows the `chmod 700 <folder>` step to run yourself.
+- **Commands that read the installation start in about 0.45–0.6 s** (`doctor`, `config`, `operation`, `approval`, `run`, the terminal)
+  on a 16-core host, because Node loads ~1400 modules; `--version` and help start in about 0.12 s. Faster starts for the other
+  commands are an open owner decision after beta (bundling or a module-boundary change).
+- **`deckent monitor --once` is a summary.** It prints the counts, the tables and why each stopped Run stopped; a worker's full
+  detail (task text, report claims, transcript excerpt) is printed with `--once --verbose` (`/monitor --verbose` in the terminal).
+  A worker that waits for a person always shows its detail. `--json` is unchanged and carries everything.
+- **A Run without a recorded title** (a delivery-queue verify Run records none) is shown as its task and kind, e.g.
+  `readme-clone-note (verify task)`; the terminal `/runs` window still says "Untitled run".
 - **`deckent terminal status` does not contact the chat model**, so its reachability reads "not tested"; the first answer in
   `deckent` or the `/provider` check shows it. The context window reads "?" until the first answer is measured.
 - **`deckent workers watch` has no row selection.** It redraws one window on a terminal (Esc or q closes); details come from

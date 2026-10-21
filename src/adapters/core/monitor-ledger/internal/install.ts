@@ -38,8 +38,10 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
   const contentNamespace = JSON.stringify([productResourcePath(layout, 'artifacts'), config.artifacts.maxBytes]);
   const map = run ? scan.reading.map ?? null : await installMap(config, env ?? process.env, scan.reading.map ?? null, diagnostics);
   const reading = await authorizeMonitorDelivery(Object.freeze({ ...scoped, map, diagnostics: Object.freeze([...diagnostics]) }), readOutput);
-  return { reading, async readShown(identities: readonly AttemptIdentity[]): Promise<MonitorLedgerReading> {
-    const selected = scan.files.filter(files => identities.some(identity => sameAttemptIdentity(identity, files.identity)));
+  // PRE-34: `failures` are failed tasks' attempts beyond the shown workers: only their first failing line is read (same read-output gate).
+  return { reading, async readShown(identities: readonly AttemptIdentity[], failures: readonly AttemptIdentity[] = []): Promise<MonitorLedgerReading> {
+    const among = (list: readonly AttemptIdentity[], files: MonitorAttemptFiles) => list.some(identity => sameAttemptIdentity(identity, files.identity));
+    const selected = scan.files.filter(files => among(identities, files) || (files.failed && among(failures, files)));
     const extra = new Map<string, { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; diagnostics?: readonly string[]; observedEndAtMs?: number | null }>();
     for (const files of selected) {
       const key = `${files.identity.scopeId}/${files.identity.attemptId}`;
@@ -47,6 +49,8 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
         // Security: recorded output and worker events are content of the attempt — read only after its read-output decision (workers list/transcript).
         const needsEnd = files.finished && !files.sealed && !!files.workspace;
         if (!(await readOutput(files.identity))) { extra.set(key, { content: emptyWorkerContent('denied'), firstFailure: null, diagnostics: ['output-denied'] }); continue; }
+        if (!among(identities, files)) { const failure = await failureEvidence(artifacts, files);
+          extra.set(key, { firstFailure: failure.line, ...(failure.failedTests ? { failedTests: failure.failedTests } : {}) }); continue; }
         const found: { content?: MonitorWorkerContent; firstFailure?: string | null; failedTests?: MonitorFailedTests; recentEvents?: readonly MonitorEvent[]; observedEndAtMs?: number | null } = { content: await readMonitorWorkerContent(artifacts, files, contentNamespace) };
         if (files.failed) {
           const failure = await failureEvidence(artifacts, files);

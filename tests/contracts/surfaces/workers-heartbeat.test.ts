@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { readWorkerSidecars } from '#adapters/index.js';
 import type { WorkerObservation, WorkerSidecars } from '#engine/index.js';
+import { t } from '#platform/index.js';
 import { renderWorkerRow } from '../../../src/surfaces/core/cli-observe/index.js';
 
 const roots: string[] = [];
@@ -70,5 +71,20 @@ it.skipIf(process.platform !== 'linux' || !existsSync('/proc/self/fd'))('[requir
     const files = await readWorkerSidecars(root, 'worker', { maxFileBytes: 4096, maxEntries: 64, staleMs: 1000 }, now, identity);
     expect(files.heartbeat).toMatchObject({ state, freshness: 'fresh' });
     expect(label(worker(files), 'en')).toBe(state);
+  }
+});
+
+it('PRE-34: a finished worker whose events never reported a session end says so, never "still running"', async () => {
+  const { renderWorkerSource } = await import('../../../src/surfaces/core/cli-observe/internal/workers.js');
+  const usage = { provider: 'cursor', model: null, outcome: 'running', turns: null, durationMs: null, apiDurationMs: null, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: null },
+    cacheReadRatio: null, costUsd: null, costBasis: null, toolCalls: { read: 0, edit: 0, write: 0, shell: 0, search: 0, network: 0, agent: 0, other: 0 }, toolErrors: 0, filesTouched: [],
+    messages: 0, quota: [], unmapped: 0, dropped: 0, events: 0, models: null, modelVerification: null } as const;
+  const live = { ...worker(null), usage, usageEvidence: 'sealed' as const };
+  const released = { ...live, process: 'missing' as const, terminal: { handle: 'h', exitCode: 0, interrupted: false }, custody: 'released' as const };
+  const lines = (w: WorkerObservation, locale: 'en' | 'tr') => renderWorkerSource({ id: 'current', path: '/p', kind: 'next', status: 'available', workers: [w], nextAfter: null, truncated: false }, locale).join('\n');
+  for (const locale of ['en', 'tr'] as const) {
+    expect(lines(released, locale)).toContain(t('monitor.human.usageOutcomeUnreported', {}, locale));
+    expect(lines(released, locale)).not.toContain(t('monitor.human.usageOutcomeRunning', {}, locale));
+    expect(lines(live, locale)).toContain(t('monitor.human.usageOutcomeRunning', {}, locale));
   }
 });

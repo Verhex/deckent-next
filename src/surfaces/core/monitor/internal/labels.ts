@@ -1,7 +1,7 @@
 import { t, type Locale } from '#platform/index.js';
 import type { WorkerPhase } from '#domain/index.js';
-import type { WorkerProcessState } from '#engine/index.js';
-import type { MonitorDeliveryState, MonitorDeliveryOutlook, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState, MonitorTask } from '#engine/index.js';
+import type { MONITOR_ENVIRONMENT_DETAIL, WorkerProcessState } from '#engine/index.js';
+import type { MonitorDeliveryState, MonitorDeliveryOutlook, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState, MonitorTask, StopCause } from '#engine/index.js';
 import { phaseLabel } from './transcript.js';
 
 /** Every monitor word comes from the catalogs; the maps keep each key a literal (lint-arch i18n rule). */
@@ -70,6 +70,14 @@ export function processLabel(state: WorkerProcessState, locale: Locale): string 
     'absent-unverified': t('monitor.process.absentUnverified', {}, locale), denied: t('monitor.process.denied', {}, locale) };
   return labels[state];
 }
+/** How the process ended, in words (`çıkış 0`, `kayıp, çıkış 134`, `çıktı, sinyal SIGKILL`): one form for the monitor and `workers --verbose`. */
+export function processExitText(state: WorkerProcessState, terminal: { readonly exitCode?: number | null | undefined; readonly signal?: string | null | undefined } | null | undefined, locale: Locale): string {
+  const word = processLabel(state, locale);
+  if (!terminal) return word;
+  if (terminal.exitCode !== null && terminal.exitCode !== undefined) return state === 'exited' ? t('monitor.process.exitCode', { code: terminal.exitCode }, locale)
+    : t('monitor.process.withExit', { state: word, code: terminal.exitCode }, locale);
+  return terminal.signal ? t('monitor.process.withSignal', { state: word, signal: terminal.signal }, locale) : word;
+}
 export function installStatusLabel(status: MonitorInstallStatus, locale: Locale): string {
   const labels: Record<MonitorInstallStatus, string> = { available: t('monitor.install.available', {}, locale),
     unavailable: t('monitor.install.unavailable', {}, locale), denied: t('monitor.install.denied', {}, locale) };
@@ -79,8 +87,39 @@ export function installStatusLabel(status: MonitorInstallStatus, locale: Locale)
 export function notAcceptedLabel(reason: NonNullable<MonitorTask['evaluation']['reason']>, locale: Locale): string {
   const labels = { 'no-change-produced': t('task.acceptance.noChangeProduced', {}, locale), 'report-missing': t('task.acceptance.reportMissing', {}, locale),
     'report-invalid': t('task.acceptance.reportInvalid', {}, locale), 'declared-check-not-passed': t('task.acceptance.declaredCheckNotPassed', {}, locale),
-    'worker-stalled': t('task.acceptance.workerStalled', {}, locale) };
+    'worker-stalled': t('task.acceptance.workerStalled', {}, locale), 'acceptance-check-not-run': t('task.acceptance.checkNotRun', {}, locale) };
   return labels[reason];
+}
+/** The engine's environment-park detail prefix, tied to its constant by type (a value import would load the host graph at CLI startup). */
+const ENVIRONMENT_DETAIL: typeof MONITOR_ENVIRONMENT_DETAIL = 'environment-not-ready:';
+/** A blocker's detail in words where one is known (a missing patch; PRE-7: an environment park names its requirement); else the recorded detail. */
+export function blockerDetailText(detail: string, locale: Locale): string {
+  if (detail === 'patch-missing') return t('monitor.blocker.patchMissing', {}, locale);
+  return detail.startsWith(ENVIRONMENT_DETAIL) ? t('monitor.blocker.environmentNotReady', { requirement: detail.slice(ENVIRONMENT_DETAIL.length) }, locale) : detail;
+}
+/** PRE-7: the next step after an acceptance check the worker could not run. Deckent's preflight checks only declared requirements, so an
+ * undeclared missing tool reaches the worker; the operator may declare it on the task's template (never added automatically). */
+export function notAcceptedNextStep(reason: NonNullable<MonitorTask['evaluation']['reason']>, profile: Readonly<{ id: string; version: number }> | null, locale: Locale): string[] {
+  return reason === 'acceptance-check-not-run' ? [t('task.acceptance.checkNotRunNext', { template: profile?.id ?? '—', version: profile?.version ?? '—' }, locale)] : [];
+}
+/** PRE-34: the shared stop cause in words (one map, every monitor surface); `unrecorded` keeps the honest "not recorded". */
+export function stopCauseText(cause: StopCause, locale: Locale): string {
+  switch (cause.kind) {
+    case 'line': return cause.line;
+    case 'tests': return t('monitor.cause.tests', { count: cause.count, name: cause.name ?? '—' }, locale);
+    case 'not-accepted': return notAcceptedLabel(cause.reason, locale);
+    case 'exit': return t('monitor.cause.exit', { code: cause.code }, locale);
+    case 'signal': return t('monitor.cause.signal', {}, locale);
+    case 'interrupted': return t('monitor.cause.interrupted', {}, locale);
+    case 'cancelled': return t('monitor.cause.cancelled', {}, locale);
+    case 'skipped': return t('monitor.cause.skipped', {}, locale);
+    case 'not-launched': return t('monitor.cause.notLaunched', {}, locale);
+    case 'no-attempt': return t('monitor.cause.noAttempt', {}, locale);
+    case 'output-denied': return t('monitor.cause.outputDenied', {}, locale);
+    case 'rejected': return t('monitor.cause.rejected', {}, locale);
+    case 'rolled-back': return t('monitor.cause.rolledBack', {}, locale);
+    case 'unrecorded': return t('monitor.detail.firstFailureMissingShort', {}, locale);
+  }
 }
 export function verdictLabel(verdict: 'accepted' | 'accepted-unverified' | 'rejected' | 'unknown' | 'pending' | null, locale: Locale): string {
   if (verdict === null) return t('monitor.verdict.none', {}, locale);

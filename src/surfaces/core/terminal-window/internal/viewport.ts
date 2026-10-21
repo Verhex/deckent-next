@@ -71,20 +71,22 @@ export function viewportStart(blocks: ViewportBlocks, height: number): ViewportA
 
 /**
  * The lines to draw. Following: the last `height` lines (the live answer follows them and the frame clips the top). Anchored: `height - 1`
- * lines from the anchor and `below`, the count of lines under the view, for the one indicator row that replaces the last line.
+ * lines from the anchor and `below`, the count of lines under the view, for the one indicator row that replaces the last line. `at`: the
+ * block key and line of each drawn line (the selection's content anchor).
  */
-export function viewportLines(blocks: ViewportBlocks, anchor: ViewportAnchor, height: number): Readonly<{ lines: readonly string[]; below: number | null }> {
+export function viewportLines(blocks: ViewportBlocks, anchor: ViewportAnchor, height: number): Readonly<{ lines: readonly string[]; at: readonly Readonly<{ key: string; line: number }>[]; below: number | null }> {
   const view = Math.max(1, height);
   const from = anchor ? positionOf(blocks, anchor) : followTop(blocks, view);
-  if (!from) return { lines: [], below: null };
-  const room = anchor ? Math.max(1, view - 1) : view, lines: string[] = [];
+  if (!from) return { lines: [], at: [], below: null };
+  const room = anchor ? Math.max(1, view - 1) : view, lines: string[] = [], at: Array<Readonly<{ key: string; line: number }>> = [];
   let { index, line } = from;
   while (index < blocks.keys.length && lines.length < room) {
-    const block = blocks.linesOf(index);
-    lines.push(...block.slice(line, line + room - lines.length));
+    const block = blocks.linesOf(index), taken = block.slice(line, line + room - lines.length);
+    taken.forEach((_, offset) => at.push({ key: blocks.keys[index]!, line: line + offset }));
+    lines.push(...taken);
     index += 1; line = 0;
   }
-  return { lines, below: anchor ? Math.max(0, linesToEnd(blocks, from, Number.MAX_SAFE_INTEGER) - room) : null };
+  return { lines, at, below: anchor ? Math.max(0, linesToEnd(blocks, from, Number.MAX_SAFE_INTEGER) - room) : null };
 }
 
 /**

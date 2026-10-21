@@ -1,6 +1,7 @@
 import { collectDockerOutputFiles } from './output-files.js';
 import { sampleDockerResources } from './resources.js';
 import { captureDockerProfile, readDockerProfile, dockerEndpointSchema } from './profile.js';
+import { createHash } from 'node:crypto';
 import { lstat, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { workerIncarnationSchema, containerEvidenceSchema, SupervisorError, sandboxInterruptCause, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
@@ -9,6 +10,11 @@ import { identifyDockerRequest } from './identity.js';
 import { runNodeDockerCommand, DockerCommandFailure, type DockerCommandRunner } from './command.js';
 import { dockerConnectionMounts } from './connection.js';
 import { assertDockerMountsMatch, assertReadOnlyMountSource, type DockerExpectedMount } from './mounts.js';
+import { dockerNodeHeapEnvironment } from './node-heap.js';
+/** `docker run`'s own exit status when the daemon could not create or start the container (not the probe's answer). */
+const DOCKER_RUN_DAEMON_FAILURE = 125;
+/** The only container names a probe removal may touch (probeIdentity's form). */
+const PREFLIGHT_PROBE_NAME = /^deckent-env-[a-f0-9]{64}$/;
 type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; Mounts?: unknown; State: { Status: string; ExitCode: number; StartedAt?: unknown; FinishedAt?: unknown } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
  * Only an application with durable dispatch ownership may call execute; this adapter does not grant policy.
@@ -181,11 +187,9 @@ export class DockerSupervisor implements ExecutionSupervisor {
     try {
       await this.command(['create', '--name', handle, '--label', 'deckent.request=' + digest,
         '--network', 'none', '--log-driver', 'local', '--log-opt', `max-size=${o.logMaxSizeKiB}k`,
-        '--log-opt', `max-file=${o.logMaxFiles}`, '--log-opt', 'mode=blocking', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-        '--pids-limit', String(o.pids), '--memory', String(o.memoryBytes), '--memory-swap', String(o.memoryBytes), '--cpus', String(o.cpus),
-        '--ipc', 'private', '--cgroupns', 'private', '--user', `${o.uid}:${o.gid}`,
+        '--log-opt', `max-file=${o.logMaxFiles}`, '--log-opt', 'mode=blocking', ...this.floor(),
         '--mount', `type=bind,src=${workspace},dst=/workspace`, '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
-        ...inputMounts, ...readOnlyMounts, ...connectionMounts, '--workdir', '/workspace', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], o.controlTimeoutMs);
+        ...inputMounts, ...readOnlyMounts, ...connectionMounts, ...dockerNodeHeapEnvironment(o.memoryBytes), '--workdir', '/workspace', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], o.controlTimeoutMs);
     } catch {
       const existing = await this.inspect(handle, digest);
       if (existing) return this.result(handle, existing);
@@ -213,6 +217,62 @@ export class DockerSupervisor implements ExecutionSupervisor {
       try { await this.command(['kill', handle], o.controlTimeoutMs); } catch { /* Inspect determines terminal truth. */ }
     }
     return this.result(handle, await this.inspect(handle, digest), stdout, stderr, interrupted, true, cause);
+  }
+  /** The one sandbox floor of every container this supervisor starts (read-only root, no capabilities or new privileges, bounded resources). */
+  private floor() {
+    const o = this.options;
+    return ['--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', String(o.pids), '--memory', String(o.memoryBytes),
+      '--memory-swap', String(o.memoryBytes), '--cpus', String(o.cpus), '--ipc', 'private', '--cgroupns', 'private', '--user', `${o.uid}:${o.gid}`];
+  }
+  /** PRE-7 / REVISE 2691: a probe's identity is deterministic per installation (workspace root), Run, task and probe argv — not per attempt —
+   * so a re-entry or a resumed generation meets the same container instead of starting a second one. Labels carry the installation. */
+  probeIdentity(input: SandboxRequest, argv: readonly string[]) {
+    const { request } = this.identity(input), root = this.probeRoot(), { scopeId, runId, taskId } = request.identity;
+    return Object.freeze({ name: 'deckent-env-' + createHash('sha256').update(JSON.stringify({ root, scopeId, runId, taskId, argv })).digest('hex'), root });
+  }
+  private probeRoot() { return createHash('sha256').update(JSON.stringify(resolve(this.options.workspaceRoot))).digest('hex'); }
+  /** Removed and observed absent; `false` when that cannot be proven (rm failed, still present, or the daemon gave no answer). */
+  private async gone(ref: string): Promise<boolean> {
+    await this.command(['rm', '--force', ref], this.options.controlTimeoutMs).catch(() => undefined);
+    try { await this.command(['inspect', '--format', '{{.Id}}', ref], this.options.controlTimeoutMs); return false; }
+    catch (error) { return error instanceof DockerCommandFailure && error.stderr.toLowerCase().includes('no such object: ' + ref.toLowerCase()); }
+  }
+  /** PRE-7: one environment probe on the worker's floor (same image, user, `--network none`, sandbox flags, tmpfs, Node heap environment and
+   * re-checked read-only dependency binds), without the workspace and never the connection: no credential, no model. `argv` comes only from
+   * an adapter's probe-kind registry. Exit 0 = met, any other exit = unmet, past `timeoutMs` unmet — but only once the container is removed
+   * and observed absent (a deadline stops the CLI, not the container). REVISE 2691: a leftover of the same identity (crashed controller) is
+   * removed first; whenever removal cannot be proven the answer is `uncertain` with the container name and no new container is started.
+   * A daemon refusal (exit 125) or an unclassified failure with the container proven gone stays a control failure (transient). */
+  async probe(input: SandboxRequest, argv: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<'met' | 'unmet' | Readonly<{ uncertain: string }>> {
+    const { digest } = this.identity(input), o = this.options, { name, root } = this.probeIdentity(input, argv), mounts: string[] = [];
+    for (const mount of o.readOnlyMounts ?? []) { await assertReadOnlyMountSource(mount.source, [resolve(o.workspaceRoot)]); mounts.push('--mount', `type=bind,src=${mount.source},dst=${mount.target},readonly`); }
+    const leftover = await this.command(['inspect', '--format', '{{.Id}}', name], o.controlTimeoutMs).then(() => true, (error: unknown) => !(error instanceof DockerCommandFailure && error.stderr.toLowerCase().includes('no such object: ' + name)));
+    if (leftover && !await this.gone(name)) return Object.freeze({ uncertain: name });
+    let answer: 'met' | 'unmet' | null = null;
+    try {
+      await this.command(['run', '--name', name, '--label', 'deckent.preflight=' + digest, '--label', 'deckent.preflight.root=' + root, '--network', 'none', ...this.floor(), '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
+        ...mounts, ...dockerNodeHeapEnvironment(o.memoryBytes), '--workdir', '/tmp', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], timeoutMs, signal);
+      answer = 'met';
+    } catch (error) {
+      if (error instanceof DockerCommandFailure && (error.stop === 'deadline' || (typeof error.code === 'number' && error.code !== DOCKER_RUN_DAEMON_FAILURE))) answer = 'unmet';
+    }
+    if (!await this.gone(name)) return Object.freeze({ uncertain: name });
+    if (answer === null) throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
+    return answer;
+  }
+  /** REVISE 2691: the service-start sweep entry. Removal only: its caller never holds a launch-capable supervisor (S6 launch-site test). */
+  static sweepPreflightProbes(input: DockerSupervisorOptions, runner?: DockerCommandRunner) { return new DockerSupervisor(input, runner).releasePreflightProbes(); }
+  /** REVISE 2693, removal-only: proves one recorded probe container (by its deterministic `deckent-env-` name) removed; false when not provable. */
+  static removePreflightProbe(input: DockerSupervisorOptions, name: string, runner?: DockerCommandRunner): Promise<boolean> {
+    return PREFLIGHT_PROBE_NAME.test(name) ? new DockerSupervisor(input, runner).gone(name) : Promise.resolve(false);
+  }
+  /** REVISE 2691, startup recovery: this installation's labelled probe containers (none is live at service start) are removed and observed
+   * absent; another installation's or any unlabelled container is never listed. Unproven removals are reported, never assumed. */
+  async releasePreflightProbes(): Promise<Readonly<{ removed: number; unsettled: readonly string[] }>> {
+    const listed = (await this.command(['ps', '-aq', '--no-trunc', '--filter', 'label=deckent.preflight.root=' + this.probeRoot()], this.options.controlTimeoutMs)).stdout.split('\n').map(line => line.trim()).filter(Boolean);
+    const unsettled: string[] = []; let removed = 0;
+    for (const id of listed) { if (/^[a-f0-9]{64}$/.test(id) && await this.gone(id)) removed++; else unsettled.push(id); }
+    return Object.freeze({ removed, unsettled: Object.freeze(unsettled) });
   }
   /** EXEC-RELEASE: only the labelled, exited container of this exact request, removed by its immutable id (no name reuse between
    * inspect and rm), never forced; success requires Docker to echo that id and a later inspect to report it absent. */

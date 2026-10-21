@@ -9,7 +9,9 @@ import type { ApprovalCommandContext } from '#surfaces/core/cli-approval/index.j
 import type { AdminCommandContext, RuntimeServiceDescribeHandler, SecretDeleteHandler, SecretNamesHandler, SecretSetHandler } from '#surfaces/core/cli-admin/index.js';
 import type { KernelCommandContext } from '#surfaces/core/cli-observe/index.js';
 import type { McpCommandHandler } from './mcp.js';
-export { runKernelCommand } from '#surfaces/core/cli-observe/index.js';
+import { lazyFunction } from '#surfaces/core/cli-kit/index.js';
+/** doctor, paths and policy (COLDSTART: loaded on the first call; they reach the engine barrel). */
+export const runKernelCommand = lazyFunction(() => import('#surfaces/core/cli-observe/index.js'), 'runKernelCommand');
 
 export type { RuntimeServiceReadinessView } from '#surfaces/core/cli-terminal/index.js';
 export type { InstallationBindingReport, ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
@@ -22,6 +24,8 @@ export interface CommandContext extends InstallationCommandContext, IdentityComm
   RunCommandContext, TaskCommandContext, ApprovalCommandContext, AdminCommandContext, KernelCommandContext {
   runMcpCommand?: McpCommandHandler;
   initialize?: () => void;
+  /** COLDSTART: the host's operations, loaded only when a command or the terminal runs (never for help, `--version` or an unknown command). */
+  loadHost?: () => Promise<CommandContext>;
   // The terminal launch context names these with its own narrower types; the CLI commands' types win here, as before the unit split.
   checkWorkspaceIntegration?: TaskIntegrationCheckHandler;
   prepareWorkspaceIntegration?: TaskIntegrationPrepareHandler;

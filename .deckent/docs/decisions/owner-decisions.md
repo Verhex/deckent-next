@@ -536,3 +536,24 @@ Bu ek önceki tarihlerdeki eksik kararları kaynağıyla tamamlar. Aynı günün
 - **DIR3:** SIWC indirilmeli: N1 OAuth dalı + Astra notları, sonra ortak N2-0 billing ekseni; bu docs lane indirmez. Kaynak: `/home/alperen/.claude-team/projects/-home-alperen-deckent-next/memory/project-beta-dogfood-promotion-2026-10-15.md`. Plan: [ilgili iş](../plan/roadmap-2026-10-15.md#beta-sonrasi).
 - **DIR4:** Codex ağırlıklı worker; PTY/soket host doğrulaması lead'de, lane sonucu bağımsız veya canlı kabul değildir. Kaynak: `/home/alperen/.claude-team/projects/-home-alperen-deckent-next/memory/project-beta-dogfood-promotion-2026-10-15.md`. Plan: [ilgili iş](../plan/roadmap-2026-10-15.md#beta-sonrasi).
 - **PROD-CMP:** Beta sonrası Paperclip/Hermes karşılaştırmasıyla Desktop, ürünleşme, hızlı onboarding ve entegrasyon aşamaları (A0–A7) ayrıntılı ele alınır; brief beta sonrası iş planına referansla alınır, beta sırası korunur. Kaynak: kanal 2560 (Codex analiz oturumu, owner 2026-10-15), `.deckent/docs/plan/post-beta-productization-paperclip-hermes.md`.
+
+<a id="beta-rakip-2026-10-20"></a>
+
+## Owner kararı — 2026-10-20: rakip taramasından beta işleri
+
+Kaynak: bu Codex analiz oturumunda 20 Ekim 2026 tarihli rakip taraması tesliminden sonra owner'ın “Güzel betadaki iş maddeleerine ekleyebilirsin bunları detaylarıyla.” talimatı.
+
+- **BETA-RAKIP:** öncelikli dört sorumluluk ayrıntılarıyla beta süreci planına alınır: ilk kalıcı işe kadar yönlendirilmiş kurulum; işçinin sorusuna aynı terminalden cevap; kesinti/yeniden başlatma ve belirsiz dış etki kanıtı; aynı sürüme bağlı uçtan uca kabul paketi.
+- Mevcut INSTALLATION/MUSTERI-YOLCULUK, KOMUT-BIRLESTIRME S3/S8 + S12a, RESTART-RECOVERY W11 ve beta kanıt işleriyle eşlenir. Her kart kullanıcı sonucu, kapsam, bağımlılık, sorumlu alan, gerçek yüzey/kalıcı sonuç ve negatif kabul ölçütlerini taşır. Uygulama sahiplerini lead belirler.
+- Kullanıcı sayısı ve yaygınlık ölçütleri dışarıda; ilk kalıcı sonuç süresi, insan emeği, kurtarma doğruluğu ve ölçülebilen maliyet esas. Kod doğrulaması dogfood kanıtıdır; müşteri ERP/CRM kabulü genel iş koşulu ve kalıcı etki kanıtıdır.
+- Bu kayıt beta planına ekleme kararıdır; uygulama tamamlanması, beta kabulü, yayın/canlı geçiş veya beta öncesi kod dondurması istisnası değildir. Daha geniş MCP-OAUTH/Run bütçesi kuyruğu ile Desktop ve M3/M4'ün mevcut sırası korunur.
+
+Plan: [PLAN Sıradaki 15](../../../PLAN.md), [beta iş eşlemesi](../plan/roadmap-2026-10-15.md#beta-rakip), [ayrıntılı kartlar](../plan/competitor-beta-knowhow-2026-10-20.md#beta-isleri).
+
+<a id="beta-oncesi-atama-2026-10-20"></a>
+
+## Owner kararı — 2026-10-20: beta öncesi / beta zamanı ataması
+
+- beta.1, 2026-10-28 Node 26 geçişini bekler; kontroller Node 26'da tekrarlanır. Owner şimdilik kapı adımı atmaz; GitHub yavaşlığı bitene kadar CI ayarına dokunulmaz.
+- Lead'in önerdiği atama onaylandı ("Önerildiği gibi"): beta öncesi PRE-1…PRE-6 + PB-COLDSTART; beta zamanı BETA-RAKIP-1…4, BETA-ISCI-BAGLAM, BETA-SAGLAYICI-GOZLEM, BETA-CLI-DO-DEVAM; AGENT-TAKEOVER masaüstünden sonra.
+- Kaynaklar: BETA-RAKIP kaydı (yukarıda) ve Deckent terminal oturumu `94e9b6b3-41eb-45ff-8001-26ca70b5a4c8`. Plan: [PLAN Sıradaki 1, 16, 17](../../../PLAN.md), [atama tablosu](../plan/roadmap-2026-10-15.md#beta-oncesi-2026-10-20).

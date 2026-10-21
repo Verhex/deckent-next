@@ -1071,6 +1071,7 @@
   "terminal.activeWork.more": "+{count} daha",
   "terminal.viewport.below": "↓ aşağıda {count} satır daha · End en yeni · PgDn kaydırır · Ctrl+F ara · Ctrl+↑↓ mesajların",
   "terminal.viewport.newMessages": "↓ {count} yeni mesaj · End en yeni · Ctrl+F ara",
+  "terminal.viewport.copied": "{count} karakter panoya kopyalandı (OSC 52) · terminalin kendi seçimi: Shift+sürükle",
   "terminal.decision.arming": "Yeni açıldı · tuşları birazdan çalışır",
   "terminal.decision.ignored": "Tuş sayılmadı: kart yeni açıldı · yeniden basın",
   "terminal.viewport.search": "Bu görünümde ara: {query}{state} · Enter/↑ eski · ↓ yeni · Esc kapat",
@@ -1137,5 +1138,6 @@
   "terminal.delivery.nextDefault": "Başka bir şey yazılmadı. /deliver yeniden açar; /run işi gösterir.",
   "terminal.delivery.pickerTitle": "/deliver · teslim bekleyen görevler",
   "terminal.delivery.none": "Teslim bekleyen görev yok.",
-  "terminal.delivery.fallbackTitle": "Kabul edilen görev"
+  "terminal.delivery.fallbackTitle": "Kabul edilen görev",
+  "terminal.jobs.parked.environment-not-ready": "ortam hazır değil"
 }

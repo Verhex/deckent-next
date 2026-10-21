@@ -20,9 +20,11 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const identity = (config as Record<string, unknown>)['identity'] as { profile?: { id?: unknown } } | undefined;
   const names = context.listSecretNames ? await context.listSecretNames(root, options).then(view => view.names, () => null) : null;
   const catalog = context.inspectModelCatalog && scopeId ? await context.inspectModelCatalog(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
+  const executionEnvironment = context.inspectExecutionEnvironment ? await context.inspectExecutionEnvironment(options.env ?? process.env).catch(() => null) : null;
   return {
     scopeId, toolchainsRequested, poolStatus, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
     firstJob: { execution: !!config.execution?.docker, registry: !!config.admission?.registry }, // I-S7: the first-job steps doctor names
+    imageId: config.execution?.docker?.imageId ?? null, executionEnvironment,
     identityProfile: typeof identity?.profile?.id === 'string' ? { state: 'selected', id: identity.profile.id } : { state: 'missing' },
     backupPassphraseStored: names === null ? null : names.includes(DOCTOR_BACKUP_PASSPHRASE_SECRET),
     retiringModels: catalog === null ? null : retiringModels(catalog, config.models.retirementWarningDays),
@@ -108,7 +110,8 @@ export async function doctorCommand(call: KernelCall, context: KernelCommandCont
   const show = (measured: Awaited<ReturnType<typeof measure>>) => output(measured.data, result => {
     const grouped = renderDoctorChecks(measured.checks, call.locale);
     return args.verbose ? [grouped, '', t('doctor.details', {}, call.locale),
-      renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, call.locale) : [], call.locale, { status: false })].join('\n') : grouped;
+      renderDoctorReport(result, result.poolReadiness ? poolReadinessLines(result.poolReadiness, call.locale) : [], call.locale,
+        { status: false, imageId: measured.config.execution?.docker?.imageId ?? null })].join('\n') : grouped;
   });
   let measured = await measure(call, context);
   show(measured);

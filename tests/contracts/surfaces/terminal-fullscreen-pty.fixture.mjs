@@ -1,7 +1,7 @@
 /**
  * The production Workline entry (`runTerminalWorkline`: alternate screen, mouse filter) on the process TTY with a fake streaming model.
  * The PTY test is the parent; this file is the child. Imports the built surface (`#surfaces` → dist). Run only after `npm run build`.
- * "long" answers 80 lines slowly; "card" asks for an approval and waits for the decision.
+ * "long" answers 80 lines slowly; "card" asks for an approval and waits for the decision; "tool" answers text, two tool calls and text again.
  */
 import { runTerminalWorkline, resolveWorklinePalette } from '#surfaces/core/terminal/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
@@ -17,7 +17,7 @@ const labels = {
     toolStatus: {}, context: 'CTX', compacted: 'COMPACTED' },
   composer: { pasteChip: '[PASTE {lines}]', search: 'SEARCH', exitArmed: 'EXIT-ARMED', shortcuts: 'KEYS', stashed: 'STASHED', slash: {} },
   focus: { composer: 'INPUT-FOCUS', window: 'WINDOW-FOCUS', decide: 'DECIDE-HERE' },
-  viewport: { below: 'BELOW {count} END', newMessages: 'NEW {count} END', search: 'FIND[{query}]{state}', searchNone: ' NONE' },
+  viewport: { below: 'BELOW {count} END', newMessages: 'NEW {count} END', search: 'FIND[{query}]{state}', searchNone: ' NONE', copied: 'COPIED {count}' },
   work: workSurfaceLabels('en'),
 };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -34,6 +34,14 @@ const streamTurn = async function* (messages, signal, turn) {
       expiresAt: Date.now() + 600_000, risk: 'shell-destructive', tool: 'run_shell', target: 'rm -rf build' };
     while (!decided && !signal.aborted) await sleep(20);
     yield { kind: 'done', finish: 'stop' }; return;
+  }
+  if (last === 'tool') {
+    yield { kind: 'text', text: 'TXT-BEFORE\n' };
+    for (const [callId, name, target] of [['c1', 'read_file', 'a.ts'], ['c2', 'grep', 'needle']]) {
+      yield { kind: 'tool', phase: 'started', callId, name, target, status: null, ms: null }; await sleep(150);
+      yield { kind: 'tool', phase: 'finished', callId, name, target, status: 'ok', ms: 150 };
+    }
+    yield { kind: 'text', text: 'TXT-AFTER\n' }; yield { kind: 'done', finish: 'stop' }; return;
   }
   const count = last === 'long' ? 80 : 4;
   for (let i = 0; i < count && !signal.aborted; i++) { yield { kind: 'text', text: `${last}-line-${i}\n` }; await sleep(last === 'long' ? 40 : 1); }

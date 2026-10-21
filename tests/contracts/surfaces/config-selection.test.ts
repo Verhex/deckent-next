@@ -59,19 +59,29 @@ describe('CS-1 registry coverage and selection contract', () => {
   // CONFIG-PARTIAL-NOTICE: a source cut short by its time limit says so (EN/TR); its values are offered unchanged; a complete list says nothing.
   it('says when a choice list is partial (EN/TR), says nothing for a complete list and keeps the found values', async () => {
     const found = [{ id: 'r0', label: 'Docker · 0123', value: 'sha256:0123' }];
-    const port = (choices: readonly typeof found[number][], partial?: boolean) => ({ list: async () => Object.freeze(Object.assign([...choices], partial === undefined ? {} : { partial })) });
+    const port = (choices: readonly typeof found[number][], partial?: 'time' | 'size' | false) => ({ list: async () => Object.freeze(Object.assign([...choices], partial === undefined ? {} : { partial })) });
     const image = field('execution.docker.imageId', { type: 'string' });
-    const partial = await configValueModel(image, '/project', 'en', port(found, true));
+    const partial = await configValueModel(image, '/project', 'en', port(found, 'time'));
     expect(partial.choices).toEqual(found); expect(partial.readOnly).toBeNull();
     expect(partial.notice).toBe('Showing the 1 found before the time limit; set another with config set execution.docker.imageId <json>.');
-    expect((await configValueModel(image, '/project', 'tr', port(found, true))).notice)
+    expect((await configValueModel(image, '/project', 'tr', port(found, 'time'))).notice)
       .toBe('Süre sınırından önce bulunan 1 seçenek gösteriliyor; başka bir değer için config set execution.docker.imageId <json> kullanın.');
     for (const complete of [port(found, false), port(found)]) expect((await configValueModel(image, '/project', 'en', complete)).notice).toBeNull();
-    const none = await configValueModel(image, '/project', 'en', port([], true));
+    const none = await configValueModel(image, '/project', 'en', port([], 'time'));
     expect(none.choices).toEqual([]);
     expect(none.notice).toBe('Nothing found before the time limit; set a value with config set execution.docker.imageId <json>.'); expect(none.readOnly).toBe(none.notice);
-    expect((await configValueModel(image, '/project', 'tr', port([], true))).notice).toBe('Süre sınırından önce bir şey bulunamadı; değer için config set execution.docker.imageId <json> kullanın.');
+    expect((await configValueModel(image, '/project', 'tr', port([], 'time'))).notice).toBe('Süre sınırından önce bir şey bulunamadı; değer için config set execution.docker.imageId <json> kullanın.');
     expect((await configValueModel(image, '/project', 'en', port([], false))).notice).toBe('No available choices');
+    // CONFIG-PARTIAL-CLI: the cut's kind travels as data (the CLI refusal reads it); a size cut is never called a time limit.
+    expect(partial.partial).toEqual({ reason: 'time', found: 1 }); expect(none.partial).toEqual({ reason: 'time', found: 0 });
+    for (const complete of [port(found, false), port(found)]) expect((await configValueModel(image, '/project', 'en', complete)).partial).toBeNull();
+    const size = await configValueModel(image, '/project', 'en', port(found, 'size'));
+    expect(size.choices).toEqual(found); expect(size.partial).toEqual({ reason: 'size', found: 1 });
+    expect(size.notice).toBe('Showing the 1 found before the size limit; set another with config set execution.docker.imageId <json>.');
+    expect((await configValueModel(image, '/project', 'tr', port(found, 'size'))).notice)
+      .toBe('Boyut sınırından önce bulunan 1 seçenek gösteriliyor; başka bir değer için config set execution.docker.imageId <json> kullanın.');
+    expect((await configValueModel(image, '/project', 'en', port([], 'size'))).notice).toBe('Nothing found before the size limit; set a value with config set execution.docker.imageId <json>.');
+    expect((await configValueModel(image, '/project', 'tr', port([], 'size'))).notice).toBe('Boyut sınırından önce bir şey bulunamadı; değer için config set execution.docker.imageId <json> kullanın.');
   });
   it('derives names, regenerates IDs and only allows the explicit entry exceptions', async () => {
     const project = await configValueModel(field('projectName', { type: 'string' }), '/work/my_project', 'en');

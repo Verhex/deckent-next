@@ -8,7 +8,9 @@
 export { registerOperationAdapterModule, registerSecretStoreBackend } from '#adapters/index.js';
 export { createSecretHelperFactory, type SecretHelperOptions } from '#adapters/index.js';
 export { CORE_API_VERSION, RegistryError } from '#domain/index.js';
-export { registerApprovalAssuranceProducer, registerMcpCapabilityGroup, registerProviderSpendNoChargeCertification } from '#engine/index.js';
+export { registerApprovalAssuranceProducer, registerEnvironmentProbeKind, registerMcpCapabilityGroup, registerProviderSpendNoChargeCertification } from '#engine/index.js';
+export type { EnvironmentProbe } from '#engine/index.js';
+export type { EnvironmentRequirement } from '#domain/index.js';
 export type { McpCapabilityGroup } from '#domain/index.js';
 export type { AdapterModuleManifest, EffectTargetRef, OperationDescriptor } from '#domain/index.js';
 export { EffectTargetError, SECRET_STORE_ID_PATTERN } from '#engine/index.js';

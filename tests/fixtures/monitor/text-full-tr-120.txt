@@ -37,13 +37,14 @@ Takılı ya da bekleyen, en eskisi önce (12)
   │ run-unknown                   │ build │ ! neden bilinmiyor              │ bilinmiyor  │ scope-a │ current │
   └───────────────────────────────┴───────┴─────────────────────────────────┴─────────────┴─────────┴─────────┘
 
-Başarısız işler ve ilk hata yeri (2)
-  ┌──────────────────┬──────────────────────────────────────────────────────────────┬──────────────┬─────────┬─────────┐
-  │ İş kimliği       │ İlk hata                                                     │ Son etkinlik │ Kapsam  │ Kurulum │
-  ├──────────────────┼──────────────────────────────────────────────────────────────┼──────────────┼─────────┼─────────┤
-  │ run-broken       │ ✗ build: ✗ [unit-budget] src/surfaces/core/cli — 2001 lines… │ 25 dk önce   │ scope-a │ current │
-  │ run-broken-quiet │ ✗ build: ilk hata satırı kayıtta yok                         │ 35 dk önce   │ scope-a │ current │
-  └──────────────────┴──────────────────────────────────────────────────────────────┴──────────────┴─────────┴─────────┘
+Duran işler ve nedeni (3)
+  ┌──────────────────┬────────────────────────────────────────────────────────────┬────────────────┬─────────┬─────────┐
+  │ İş kimliği       │ Neden                                                      │ Son etkinlik   │ Kapsam  │ Kurulum │
+  ├──────────────────┼────────────────────────────────────────────────────────────┼────────────────┼─────────┼─────────┤
+  │ run-broken       │ ✗ build: ✗ [unit-budget] src/surfaces/core/cli — 2001 lin… │ 25 dk önce     │ scope-a │ current │
+  │ run-broken-quiet │ ✗ build: çıktıyı okuma izni yok; neden görülemiyor         │ 35 dk önce     │ scope-a │ current │
+  │ run-stopped      │ ■ iptal edildi                                             │ 1 gün 2 sa ön… │ scope-a │ current │
+  └──────────────────┴────────────────────────────────────────────────────────────┴────────────────┴─────────┴─────────┘
 
 Şu an çalışan işçiler (2)
   ┌────────────────────────────┬───────────┬─────────────────────┬───────────┬──────────┬────────────────────┬─────────┐
@@ -103,7 +104,7 @@ run-unknown  ·  sistem bekleniyor · neden: neden bilinmiyor · başlangıç: b
   ├────────────────────────────┼───────────┼─────────────────────┼───────────┼──────────┼────────────────────┼─────────┤
   │ run-blocked-approval/build │ Beklemede │ 1 sn                │ çalışıyor │ c76f549a │ claude/model-alph… │ current │
   │ Beklemede (sen bekleniyor)                                                                                         │
-  │ run-broken/build           │ Durdu     │ —                   │ çıktı 1   │ 09bb856b │ claude/model-alph… │ current │
+  │ run-broken/build           │ Durdu     │ —                   │ çıkış 1   │ 09bb856b │ claude/model-alph… │ current │
   │ run-blocked-approval/lint  │ Beklemede │ ! 1 dk 35 sn (eski) │ çalışıyor │ ed5a5613 │ claude/model-alph… │ current │
   │ Beklemede (sistem bekleniyor)                                                                                      │
   │ run-blocked-approval/pack  │ Beklemede │ bırakıldı           │ kayıp     │ a465c0eb │ claude/model-alph… │ current │
@@ -123,7 +124,7 @@ Heartbeat 1 sn · süreç çalışıyor · pid 4242 · tanıtıcı ctr-build
       09:28:30Z · tool.call · edit src/surfaces/core/monitor/internal/view.ts
       09:29:30Z · tool.call · shell npm test -- monitor-surface
       09:29:55Z · message · Applying the review fixes to the monitor view
-Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0.4321 USD · 1 araç hatası
+Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0,4321 USD · 1 araç hatası
 subscription kanalında model: istenen model-alpha-2 (beyan edilen yardımcılar: yok) → başlangıç model-alpha-2 → kullanım
 yok → bekliyor [canlı, henüz mühürlenmedi]
 Çalışma alanı /srv/deckent/workspaces/build
@@ -134,7 +135,7 @@ sistem bekleniyor · neden: işçi sessiz (heartbeat eski) · başlangıç: bili
 İşçi run-blocked-approval/lint · deneme ed5a5613-attempt · nesil 1 · claude · kurulum current
 Şu an: çalıştırıyor · src/app.ts — apply patch
 Heartbeat ! 1 dk 35 sn (eski) · süreç çalışıyor · pid 4242 · tanıtıcı ctr-lint
-Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0.4321 USD · 1 araç hatası
+Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0,4321 USD · 1 araç hatası
 subscription kanalında model: istenen model-alpha-2 (beyan edilen yardımcılar: yok) → başlangıç model-alpha-2 → kullanım
 yok → bekliyor [canlı, henüz mühürlenmedi]
 Çalışma alanı /srv/deckent/workspaces/lint
@@ -145,7 +146,7 @@ incele
 İşçi run-blocked-approval/pack · deneme a465c0eb-attempt · nesil 1 · claude · kurulum current
 Şu an: — · —
 Heartbeat bırakıldı · süreç kayıp · pid 4242 · tanıtıcı ctr-pack
-Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0.4321 USD · 1 araç hatası
+Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0,4321 USD · 1 araç hatası
 subscription kanalında model: istenen model-alpha-2 (beyan edilen yardımcılar: yok) → başlangıç model-alpha-2 → kullanım
 yok → bekliyor [canlı, henüz mühürlenmedi]
 Çalışma alanı /srv/deckent/workspaces/pack

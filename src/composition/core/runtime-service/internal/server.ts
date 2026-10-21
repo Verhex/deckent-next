@@ -16,6 +16,7 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { releaseSettledModelSlots } from '#composition/core/model-invocation/index.js';
 import { loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity, registerConfiguredScopesAtStart } from '#composition/core/scoped-request/index.js';
 import { sweepConfiguredAttemptCustody } from '#composition/core/runs/index.js';
+import { releaseConfiguredPreflightProbes } from '#composition/core/execution/index.js';
 import { startToolchainRefresh, type ToolchainRefreshDependencies, type ToolchainRefreshObserver } from '#composition/core/toolchains/index.js';
 import { executeConfiguredRuntimeOperation } from './operations.js';
 import { executeConfiguredRuntimeModelOperation } from './model-invocation.js';
@@ -41,6 +42,7 @@ export interface ConfiguredRuntimeServiceObserver extends ConfiguredCancellation
   /** Pending tool-call approvals of turns no longer running, closed as expired at this start; `failed` counts records not verified or not closed; `keyUnavailable`: the integrity key could not be opened, so nothing was closed. */ onToolCallApprovalsExpired?(result: { readonly expired: number; readonly failed: number; readonly keyUnavailable: boolean }): void | Promise<void>;
   /** INFLIGHT-FIX/FIX-2143-SLOTS: settle ended-instance calls unknown and release settled slots; unverifiable records stay untouched. */ onModelAllocationSlotsReleased?(result: Awaited<ReturnType<typeof releaseSettledModelSlots>>): void | Promise<void>;
   /** Scratch areas unused past retention removed at start and by the running service's periodic sweep (SCR-A S4). */ onScratchSwept?(result: ScratchSweepResult): void | Promise<void>;
+  /** REVISE 2691: labelled environment-probe containers of this installation removed at start (or not provable). */ onPreflightProbesSwept?(result: Readonly<{ removed: number; unsettled: readonly string[]; unlisted?: true; released?: number; held?: readonly string[] }>): void | Promise<void>;
   /** EXEC-RELEASE: attempts with a verified retained patch, released or held (typed) under the same custody at start. */ onAttemptCustodySwept?(result: Awaited<ReturnType<typeof sweepConfiguredAttemptCustody>>): void | Promise<void>;
 }
 /** LEDGER-SINGLETON (Astra 2054 R1): backup/upgrade under ledger and endpoint custody before accepting connections. */ async function upgradeLedgerAtStart(config: Awaited<ReturnType<typeof loadComposedConfig>>, observer: ConfiguredRuntimeServiceObserver) {
@@ -97,7 +99,7 @@ async function startUnderCustody(projectRoot: string, observer: ConfiguredRuntim
   const auditMonitor = new AuditCheckpointMonitor(() => checkpointConfiguredAudit(projectRoot, installation.status === 'available' ? installation.value.installationId : null, options),
     status => observer.onAuditIntegrity?.(status)); await auditMonitor.check();
   await interruptAgentTurnsAtStart(config, observer, guard.custodyId, options);
-  const custody = await sweepConfiguredAttemptCustody(projectRoot, [...scopes?.pins.keys() ?? []], options); if (custody.length) await observer.onAttemptCustodySwept?.(custody);
+  const custody = await sweepConfiguredAttemptCustody(projectRoot, [...scopes?.pins.keys() ?? []], options); if (custody.length) await observer.onAttemptCustodySwept?.(custody); /* REVISE 2691: no probe is live at a start; this installation's leftover probe containers are removed (proven) or reported. */ const probes = await releaseConfiguredPreflightProbes(projectRoot, options).catch(() => ({ removed: 0, unsettled: [], unlisted: true as const })); if (probes && (probes.removed || probes.unsettled.length || 'unlisted' in probes || ('released' in probes && (probes.released || probes.held.length)))) await observer.onPreflightProbesSwept?.(probes);
   /* SCR-A S4: under the same custody, scratch areas unused past retention (a restart leaves no turn running, so none is held). The one scratch custody of this service: start sweep, periodic sweep and turns claim and hold areas through it (Astra 2149). */ const scratchRoot = await scratchResource(config.productLayout), scratchLimits = readTerminalScratchConfig(config as unknown as Record<string, unknown>);
   const scratchActivity = createScratchActivity();
   const swept = scratchRoot ? await sweepScratch(scratchRoot, scratchLimits, Date.now(), scratchActivity) : null;

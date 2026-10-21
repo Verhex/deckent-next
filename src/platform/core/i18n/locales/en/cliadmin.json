@@ -15,6 +15,8 @@
   "cli.pool.drift": "POOL_ADMISSION_CAPACITY_DRIFT: pool {pool}, {source} requests {requestedExecution}/{requestedInFlight}, pool capacity {execution}/{inFlight}. Set pool capacity explicitly.",
   "cli.pool.wait": "  Task {task}: {reason} ({code}), pool {pool}, occupancy {execution}/{inFlight}, effective capacity {executionSlots}/{inFlightSlots}",
   "doctor.poolReadiness": "Pool readiness: {status} ({code})",
+  "doctor.poolReadiness.evidence": "Pool readiness: {status} (pool {pool}, capacity {execution}/{inFlight}: running / including evaluation)",
+  "doctor.poolReadiness.plain": "Pool readiness: {status}",
   "cli.pool.source.run": "per-Run policy",
   "cli.pool.source.admission": "configured admission",
   "cli.pool.quotaReleased": "Channel {channel}: released {released} waiting job(s).",

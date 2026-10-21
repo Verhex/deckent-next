@@ -60,7 +60,7 @@ Doing now: editing · src/app.ts — apply patch
 Heartbeat ! 1 h 0 min (stale) · process running · pid 4242 ·
 handle ctr-task-with-a-long-name-0123456789
 Usage so far: 12 turns · 12000 in / 3400 out tokens · cost
-0.4321 USD · 1 tool errors
+$0.4321 · 1 tool errors
 Model on subscription: requested model-alpha-2 (declared
 auxiliary: none) → init model-alpha-2 → usage none → pending
 [live, not sealed yet]

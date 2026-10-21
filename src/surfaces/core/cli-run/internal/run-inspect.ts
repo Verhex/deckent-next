@@ -2,7 +2,7 @@ import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { acceptanceEvidenceText } from '#surfaces/core/cli-human/index.js';
 import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
 import type { RunView } from '#engine/index.js';
-import { notAcceptedLabel, quotaWaitText, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
+import { briefQualifiesAcceptance, notAcceptedLabel, notAcceptedNextStep, quotaWaitText, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 import { runTitle, shownId } from './run-human.js';
 import type { RunCommandContext } from './context.js';
 import REGISTRY from './run.json' with { type: 'json' };
@@ -46,11 +46,12 @@ function taskLines(run: RunView, task: TaskView, models: InspectData['models'], 
   const delivery = task.resultBrief ? brief.splice(-1) : [];
   return [t('cli.run.inspect.task', { task: task.id, kind: task.kind }, locale), ...brief,
     t('cli.run.inspect.stateLabel', { phase: task.acceptedEvidence === 'model-unverified' ? t('cli.task.decision.acceptedUnverified', {}, locale) : phaseText(task.phase, locale) }, locale),
-    ...(task.notAcceptedReason ? [notAcceptedLabel(task.notAcceptedReason, locale)] : []),
+    ...(task.notAcceptedReason ? [notAcceptedLabel(task.notAcceptedReason, locale), ...notAcceptedNextStep(task.notAcceptedReason, task.profile, locale)] : []),
     ...(task.skippedReason ? [t('cli.run.lifecycle.reason', { reason: task.skippedReason }, locale)] : []),
     ...(task.decision ? [t('cli.run.lifecycle.deadline', { since: task.decision.since, deadline: task.decision.deadline }, locale), t('cli.run.lifecycle.reason', { reason: task.decision.reason }, locale)] : []),
     ...(task.decision?.question ? [t('cli.run.lifecycle.question', { question: task.decision.question }, locale)] : []),
-    ...(task.acceptedEvidence === 'model-unverified' ? [] : acceptanceEvidenceLines(run, task, locale)),
+    // PRE-1 B3: the brief's evaluation line already names it; printed once.
+    ...(task.acceptedEvidence === 'model-unverified' || (task.resultBrief && briefQualifiesAcceptance(task.taskBrief, task.resultBrief.evaluation.verdict)) ? [] : acceptanceEvidenceLines(run, task, locale)),
     ...delivery,
     ...(models ?? []).filter(model => model.taskId === task.id).map(model => t('cli.run.inspect.model', {
       attempt: model.attemptId ? (verbose ? model.attemptId : shownId(model.attemptId)) : '—', line: renderWorkerModelLine(model, locale) }, locale)),
@@ -83,7 +84,9 @@ export function renderRunInspect(data: InspectData, locale: Locale, verbose: boo
     ...(run.state.kind === 'terminal' ? [t('cli.run.lifecycle.outcome', { outcome: run.state.outcome }, locale)] : []),
     ...(run.state.kind === 'parked' && run.state.reason === 'quota-exhausted' ? [quotaWaitText(run.state.deadline, (run.quotaWaits ?? []).every(wait => wait.resetsAtMs !== null), locale, (run.quotaWaits ?? []).some(wait => wait.retryLimitReached))] : []),
     ...(run.state.kind === 'parked' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
-    ...(run.state.kind === 'parked' && run.state.failureCode ? [t('cli.run.lifecycle.failure', { code: run.state.failureCode }, locale)] : []),
+    // PRE-7: an environment park names the unmet requirement as an installation defect and its next step (fix, then resume: the preflight runs again).
+    ...(run.state.kind === 'parked' && run.state.failureCode ? [run.state.reason === 'environment-not-ready' ? t('cli.run.lifecycle.environmentNotReady', { requirement: run.state.failureCode, run: runShown }, locale)
+      : t('cli.run.lifecycle.failure', { code: run.state.failureCode }, locale)] : []),
     // Crash-loop breaker: the typed park reason in words (the per-attempt count and phase are in the audit event and the service journal).
     ...(run.state.kind === 'parked' && run.state.failureCode === 'DISPATCH_PREPARATION_ABORTED' ? [t('error.DISPATCH_PREPARATION_ABORTED.summary', {}, locale)] : []),
     ...(run.state.kind === 'parked' && run.state.note ? [t('cli.run.lifecycle.note', { note: run.state.note }, locale)] : []),

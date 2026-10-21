@@ -21,7 +21,10 @@
 export const PREVIOUS_LEDGER_VERSION = 50;
 /** v58 → v57: the adoption journal back to one sequence per ref name (no repository column, settled 0/1). A released row, or two
  * repositories' rows of one target at the same sequence, makes it fail, as it must; restoring the pre-switch backup is the real path. */
-export const DOWNGRADE_TO_V57_LEDGER_SQL = `CREATE TABLE workspace_adoptions_v57(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,target_ref TEXT NOT NULL,
+/** v59 → v58 (PRE-7): v59 widened only record vocabularies (environment park, `not-run` acceptance), so the version alone goes back —
+ * exact for a ledger that holds none of them; restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V58_LEDGER_SQL = 'PRAGMA user_version=58;';
+export const DOWNGRADE_TO_V57_LEDGER_SQL = `${DOWNGRADE_TO_V58_LEDGER_SQL} CREATE TABLE workspace_adoptions_v57(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,target_ref TEXT NOT NULL,
     sequence INTEGER NOT NULL CHECK(sequence>0),kind TEXT NOT NULL CHECK(kind IN('adopt','rollback')),intent TEXT NOT NULL,
     settled INTEGER NOT NULL CHECK(settled IN(0,1)),PRIMARY KEY(scope_id,command_id),UNIQUE(target_ref,sequence));
   INSERT INTO workspace_adoptions_v57 SELECT scope_id,command_id,target_ref,sequence,kind,intent,settled FROM workspace_adoptions;

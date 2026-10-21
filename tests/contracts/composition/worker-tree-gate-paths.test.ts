@@ -25,8 +25,11 @@ it('has exactly one production launch site, and it is the gated one', () => {
   // A provider connection for a worker and a launch-capable supervisor are built only there (open.ts is the test/runtime assembly that never
   // launches; its supervisor is not exported from the public SDK).
   expect(sites(/\bopenNativeConnection\(\{/u)).toEqual([TASK]);
-  // docker.ts is `restoreProfile` of an already-claimed recorded dispatch (reconcile/cancel/recover/release), never a new claim.
+  // docker.ts is `restoreProfile` of an already-claimed recorded dispatch (reconcile/cancel/recover/release) and the removal-only probe
+  // sweep entry (`sweepPreflightProbes`), never a new claim.
   expect(sites(/new DockerSupervisor\(/u)).toEqual(['src/adapters/core/docker-supervisor/internal/docker.ts', 'src/composition/core/execution/internal/open.ts', TASK]);
+  // REVISE 2691: the service-start probe sweep removes only and goes through the adapter's removal-only entry, never a supervisor of its own.
+  expect(sites(/DockerSupervisor\.sweepPreflightProbes\(/u)).toEqual(['src/composition/core/execution/internal/preflight.ts']);
   expect(sites(/openConfiguredExecution/u)).toEqual(['src/composition/core/execution/index.ts', 'src/composition/core/execution/internal/open.ts']);
   expect(readFileSync(join(ROOT, 'src/index.ts'), 'utf8')).not.toContain('openConfiguredExecution');
 });

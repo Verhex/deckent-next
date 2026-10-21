@@ -34,6 +34,6 @@ Takılı ya da bekleyen, en eskisi önce (12)
   │ run-waiting-pool-slot         │ build │ ~ havuzda yer bekliyor          │ 14 dk       │ scope-a │ current │
   │ run-unknown                   │ build │ ! neden bilinmiyor              │ bilinmiyor  │ scope-a │ current │
   └───────────────────────────────┴───────┴─────────────────────────────────┴─────────────┴─────────┴─────────┘
-↓ 19 satır daha
+↓ 20 satır daha
 2 sn aralıkla yenilenir · görüntü 2026-10-02 09:30:00Z
 Tab/←→ sekme · ↑↓ seç · Enter ayrıntı · / süz · s sırala · g grupla · r yenile · p duraklat · ? yardım · q çık

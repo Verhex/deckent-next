@@ -58,19 +58,24 @@ export async function probeDockerImageAvailability(input: unknown,
 export type DockerImageSet = Readonly<{ imageIds: readonly string[]; partial: boolean }>;
 export interface DockerImageSetProbeInput extends Omit<DockerImageAvailabilityProbeInput, 'imageId'> {
   readonly imageIds: readonly string[]; readonly chunkSize: number; readonly processes: number;
+  /** The least time kept for the daemon-id check after the inspects, also when the first read was near-instant (CONFIG-PARTIAL-CLI finding). */
+  readonly minAfterCheckMs?: number;
 }
 /**
  * The same checks for a list (J3-IMAGES): one endpoint pin, one daemon id before and after, exact-id `image inspect` in at most `processes`
- * concurrent chunks of at most `chunkSize` ids. Inspects stop twice the measured daemon-id read before `timeoutMs`, so the after-check fits;
+ * concurrent chunks of at most `chunkSize` ids. Inspects stop twice the measured daemon-id read (at least `minAfterCheckMs`) before
+ * `timeoutMs`, so the after-check fits;
  * ids not proven by then are left out (`partial`). A different daemon afterwards refuses the whole list (CHANGED). Returns proven ids in input order.
  */
 export async function probeDockerImageSetAvailability(input: unknown, runner: DockerCommandRunner = runNodeDockerCommand, signal?: AbortSignal): Promise<DockerImageSet> {
-  if (!validInput(input, value => Array.isArray(value['imageIds']) && value['imageIds'].every(digest) && boundedPositive(value['chunkSize']) && boundedPositive(value['processes'])))
+  if (!validInput(input, value => Array.isArray(value['imageIds']) && value['imageIds'].every(digest) && boundedPositive(value['chunkSize']) && boundedPositive(value['processes'])
+    && (value['minAfterCheckMs'] === undefined || boundedPositive(value['minAfterCheckMs']))))
     throw new DockerImageProbeError('DOCKER_IMAGE_PROBE_INVALID');
   const probe = input as unknown as DockerImageSetProbeInput, until = performance.now() + probe.timeoutMs, bound = AbortSignal.any([AbortSignal.timeout(probe.timeoutMs), ...(signal ? [signal] : [])]);
   const run: DockerArgs = (args, on = bound) => runner({ executable: probe.executable, args, timeoutMs: probe.timeoutMs, outputBytes: probe.outputBytes }, on);
   const { endpoint: pin, daemon } = pinned(run), endpoint = await pin, started = performance.now(), before = await daemon(endpoint), now = performance.now();
-  const cutoff = AbortSignal.any([bound, AbortSignal.timeout(Math.max(0, Math.floor(until - now - 2 * (now - started))))]);
+  const reserve = Math.max(2 * (now - started), probe.minAfterCheckMs ?? 0);
+  const cutoff = AbortSignal.any([bound, AbortSignal.timeout(Math.max(0, Math.floor(until - now - reserve)))]);
   const ids = [...new Set(probe.imageIds)], size = Math.max(1, Math.min(probe.chunkSize, Math.ceil(ids.length / probe.processes)));
   const chunks = Array.from({ length: Math.ceil(ids.length / size) }, (_, index) => ids.slice(index * size, (index + 1) * size)), proven = new Set<string>();
   let next = 0;

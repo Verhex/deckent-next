@@ -39,10 +39,15 @@ export function closesAttemptWithoutExit(kind: string | null | undefined): boole
 /** Only consumes authoritative attempt evidence; process exit is evaluation input, never acceptance.
  * Unknown effects remain held until a separate reconciler establishes their disposition.
  */
-export function observeRunAttempt(input: unknown, expectedRevision: number, attemptInput: unknown) {
+export function observeRunAttempt(input: unknown, expectedRevision: number, attemptInput: unknown) { return projectRunAttempt(input, expectedRevision, attemptInput, false); }
+/** `environmentFails`: only the timed closure (`observeRunAttemptClosure`) may fail an environment-refused task, and only on a cancelled Run. */
+export function projectRunAttempt(input: unknown, expectedRevision: number, attemptInput: unknown, environmentFails: boolean) {
   const run = checkedRun(input, expectedRevision); const attempt = attemptSnapshotSchema.parse(attemptInput);
+  const result = attempt.lastObservation?.result;
+  if (result?.kind === 'launch-refused' && result.requirement !== undefined && !environmentFails) throw new RunError('RUN_ATTEMPT_CONFLICT');
   const binding = run.bindings.find(value => value.identity.taskId === attempt.identity.taskId);
-  if (!binding || !sameAttemptIdentity(binding.identity, attempt.identity)) throw new RunError('RUN_ATTEMPT_CONFLICT');
+  // REVISE 2695: an attempt under probe custody is observed only through its environment answer (observeRunAttemptClosure).
+  if (!binding || !sameAttemptIdentity(binding.identity, attempt.identity) || binding.probes) throw new RunError('RUN_ATTEMPT_CONFLICT');
   const observation = attempt.lastObservation;
   if (!observation || (binding.observedRevision !== null && attempt.revision <= binding.observedRevision)) throw new RunError('RUN_OBSERVATION_STALE');
   if ((binding.observedKind === 'exited' || binding.observedKind === 'cancelled' || closesAttemptWithoutExit(binding.observedKind)) && observation.result.kind !== binding.observedKind) throw new RunError('RUN_ATTEMPT_CONFLICT');
@@ -65,12 +70,13 @@ export function observeRunAttempt(input: unknown, expectedRevision: number, atte
 export function requestRunCancellation(input: unknown, expectedRevision: number, timing: RunLifecycleTiming) {
   const run = checkedRun(input, expectedRevision);
   const bound = new Set(run.bindings.map(binding => binding.identity.taskId));
-  const pendingCanClose = (taskId: string) => !bound.has(taskId) || run.bindings.some(binding => binding.identity.taskId === taskId && binding.observedKind === 'quota-exhausted');
-  const unreserved = run.progress.some(task => (task.phase === 'pending' && pendingCanClose(task.taskId)) || task.phase === 'awaiting-decision');
+  const pendingCanClose = (taskId: string) => !bound.has(taskId) || run.bindings.some(binding => binding.identity.taskId === taskId && ['quota-exhausted', 'launch-refused'].includes(binding.observedKind ?? ''));
+  // REVISE 2693: a pending task with an unresolved effect (an uncertain probe) keeps its slot until its settlement closes it.
+  const unreserved = run.progress.some(task => (task.phase === 'pending' && !task.unresolvedEffects && pendingCanClose(task.taskId)) || task.phase === 'awaiting-decision');
   if (run.cancelRequested && !unreserved) return run;
   return reconcileRunLifecycle({ ...run, revision: run.revision + 1, cancelRequested: true,
     progress: run.progress.map(task => {
-      if (task.phase !== 'awaiting-decision' && !(task.phase === 'pending' && pendingCanClose(task.taskId))) return task;
+      if (task.phase !== 'awaiting-decision' && !(task.phase === 'pending' && !task.unresolvedEffects && pendingCanClose(task.taskId))) return task;
       return { ...task, decision: undefined, phase: 'cancelled' };
     }) }, timing.now, timing.timeoutMs);
 }

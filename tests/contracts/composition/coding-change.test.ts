@@ -149,7 +149,9 @@ it.for([
   ['schema-invalid report', 1, reportLine({ schemaVersion: 1, summary: 'done' }), 'report-invalid', 'task.acceptance.reportInvalid'],
   ['oversized report', 1, JSON.stringify({ schemaVersion: 1, kind: 'native-worker-report', status: 'unavailable', reason: 'oversized' }), 'report-invalid', 'task.acceptance.reportInvalid'],
   ['failed acceptance check claim', 1, workerReport([{ command: 'npm test', outcome: 'failed', checkId: 'unit', role: 'acceptance' }]), 'declared-check-not-passed', 'task.acceptance.declaredCheckNotPassed'],
-  ['acceptance check last outcome not passed', 1, workerReport([{ command: 'npm test', outcome: 'passed', checkId: 'unit', role: 'acceptance' }, { command: 'npm test', outcome: 'not-run', checkId: 'unit', role: 'acceptance' }]), 'declared-check-not-passed', 'task.acceptance.declaredCheckNotPassed'],
+  ['acceptance check last outcome not passed', 1, workerReport([{ command: 'npm test', outcome: 'passed', checkId: 'unit', role: 'acceptance' }, { command: 'npm test', outcome: 'failed', checkId: 'unit', role: 'acceptance' }]), 'declared-check-not-passed', 'task.acceptance.declaredCheckNotPassed'],
+  // PRE-7: a last outcome `not-run` still fails the task, under its own observed reason (never an environment verdict).
+  ['acceptance check last outcome not run', 1, workerReport([{ command: 'npm test', outcome: 'passed', checkId: 'unit', role: 'acceptance' }, { command: 'npm test', outcome: 'not-run', checkId: 'unit', role: 'acceptance' }]), 'acceptance-check-not-run', 'task.acceptance.checkNotRun'],
 ] as const)('exit 0 with %s -> failed/%s, shown by inspect and monitor (EN/TR)', async ([, files, stdout, reason, key], context) => {
   const f = await fixture(context, files, undefined, stdout); const result = await evaluateConfiguredTask(f.project, f.command, f.options);
   expect(result.evaluation.run.tasks[0]).toMatchObject({ phase: 'failed', notAcceptedReason: reason });
@@ -161,6 +163,8 @@ it.for([
   for (const locale of ['en', 'tr'] as const) {
     const text = surface.renderMonitorText({ ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!, runs: [run] }] }, { locale, width: 200, ascii: true });
     expect(text).toContain(t(key, {}, locale)); expect(text).not.toContain(t('task.acceptance.noChangeProduced', {}, locale));
+    // PRE-7 (lead): the not-run reason names its next step (declare the requirement on the task's template); other reasons do not.
+    expect(text.includes('deckent config set admission.registry')).toBe(reason === 'acceptance-check-not-run');
   }
 });
 it.for([

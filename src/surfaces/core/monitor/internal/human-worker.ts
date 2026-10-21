@@ -1,13 +1,13 @@
-import { renderBriefLines } from './brief.js';
+import { evaluationText, renderBriefLines } from './brief.js';
 import { renderWorkerModelLine } from './worker-model.js';
-import { notAcceptedLabel } from './labels.js';
 import { redactSensitive, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { resolveWorkerUsage, type MonitorWorker } from '#engine/index.js';
 import { span, type MonitorLine } from '#surfaces/core/monitor-view/index.js';
-import { clockText, verdictLabel } from './labels.js';
+import { clockText } from './labels.js';
+import { formatUsd } from '#surfaces/core/cli-human/index.js';
 const safe = (text: string) => redactSensitive(terminalSafeText(text));
 /** Human hierarchy from the shared snapshot. Reports are claims; only the engine's evaluation line states acceptance. */
-export function humanWorkerLines(worker: MonitorWorker, locale: Locale): MonitorLine[] {
+export function humanWorkerLines(worker: MonitorWorker, locale: Locale, fallbackTitle?: string): MonitorLine[] {
   const h = worker.human; if (!h) return [];
   const line = (text: string, role?: 'strong' | 'warning' | 'muted'): MonitorLine => [span(text, role)];
   const sources = { title: t('monitor.human.titleShort', {}, locale), task: t('monitor.human.titleTask', {}, locale),
@@ -21,16 +21,16 @@ export function humanWorkerLines(worker: MonitorWorker, locale: Locale): Monitor
   const transcriptMissing = h.transcript.state === 'denied' ? t('monitor.human.transcriptDenied', {}, locale)
     : h.transcript.state === 'unavailable' ? t('monitor.human.transcriptUnavailable', {}, locale) : t('monitor.human.transcriptMissing', {}, locale);
   return [
-    line(t('monitor.human.title', { title: h.title ? safe(h.title) : t('monitor.human.noTitle', {}, locale), source: sources[h.titleEvidence] }, locale), 'strong'),
+    line(t('monitor.human.title', { title: h.title ? safe(h.title) : fallbackTitle ? safe(fallbackTitle) : t('monitor.human.noTitle', {}, locale), source: sources[h.titleEvidence] }, locale), 'strong'),
     ...renderBriefLines(h.taskBrief, h.resultBrief, locale).map(text => line(text)),
     ...(worker.model?.reasoningEffort ? [line(renderWorkerModelLine(worker.model, locale))] : []),
-    ...(h.resultBrief ? [] : [line(t('monitor.human.evaluation', { verdict: verdictLabel(h.evaluation, locale) }, locale)
-      + (h.evaluationReason ? ` · ${notAcceptedLabel(h.evaluationReason, locale)}` : ''), h.evaluation === 'rejected' ? 'warning' : undefined)]),
+    ...(h.resultBrief ? [] : [line(evaluationText(h.taskBrief, { verdict: h.evaluation, ...(h.evaluationReason ? { reason: h.evaluationReason } : {}) }, locale),
+      h.evaluation === 'rejected' ? 'warning' : undefined)]),
     ...(h.evaluationReason === 'no-change-produced' && h.patch.state === 'recorded' && h.patch.fileCount === 0 ? [] : [h.patch.state === 'recorded' ? h.patch.fileCount === 0 ? line(t('monitor.human.emptyPatch', {}, locale), h.evaluation === 'rejected' ? 'warning' : undefined)
       : line(t('monitor.human.patch', { count: h.patch.fileCount ?? '—', files: h.patch.files.map(safe).join(', ') }, locale)) : line(patchMissing, 'muted')]),
     ...(h.patch.truncated ? [line(t('monitor.human.bounded', {}, locale), 'muted')] : []),
     usage ? line(t('monitor.human.usage', { source: worker.usageEvidence === 'sealed' ? t('monitor.human.sealed', {}, locale) : t('monitor.human.live', {}, locale),
-      turns: usage.turns ?? '—', input: usage.tokenUsageRecorded === true ? usage.tokens.input : '—', output: usage.tokenUsageRecorded === true ? usage.tokens.output : '—', cost: usage.costUsd === null ? '—' : usage.costUsd.toFixed(4) }, locale))
+      turns: usage.turns ?? '—', input: usage.tokenUsageRecorded === true ? usage.tokens.input : '—', output: usage.tokenUsageRecorded === true ? usage.tokens.output : '—', cost: usage.costUsd === null ? '—' : formatUsd(usage.costUsd, locale) }, locale))
       : worker.usageEvidence === 'invalid' || worker.usageEvidence === 'unavailable'
         ? line(t('cli.workers.usageRejected', { reason: worker.usageEvidence === 'invalid' ? t('cli.workers.usageEvidence.invalid', {}, locale) : t('cli.workers.usageEvidence.unavailable', {}, locale) }, locale), 'warning')
         : line(t('monitor.human.usageMissing', {}, locale), 'muted'),

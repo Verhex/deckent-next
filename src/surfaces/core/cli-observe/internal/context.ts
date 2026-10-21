@@ -2,7 +2,7 @@ import type { ConfigLoadOptions } from '#platform/index.js';
 import type { ModelCatalogInspection, ModelInvocationDeliveryFinding } from '#engine/index.js';
 import type { ModelCatalogQuery } from '#domain/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
-import type { InstallationBindingReport, InstallationStartabilityView, RecoveryFilesDoctorView, ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
+import type { ExecutionEnvironmentDoctorView, InstallationBindingReport, InstallationStartabilityView, RecoveryFilesDoctorView, ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
 import type { AdminCommandContext } from '#surfaces/core/cli-admin/index.js';
 import type { ApprovalCommandContext } from '#surfaces/core/cli-approval/index.js';
 
@@ -23,4 +23,6 @@ export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandC
   inspectToolchainRefresh?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly status: string; readonly reason: string | null; readonly imageVersion: string | null } | null>;
   // Doctor-only, read-soft: whether the installation identity can be bound to this machine (relocation/copy detection); null when unwired or unreadable.
   inspectInstallationBinding?: (root: string, options: ConfigLoadOptions) => Promise<InstallationBindingReport | null>;
+  // PRE-34: the execution environment (Docker) as `deckent init` detects and decides it; doctor-only, read-only, bounded by the detection deadline.
+  inspectExecutionEnvironment?: (env: NodeJS.ProcessEnv) => Promise<ExecutionEnvironmentDoctorView>;
 }

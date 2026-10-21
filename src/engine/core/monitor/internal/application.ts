@@ -95,7 +95,10 @@ export class MonitorApplication {
     if (finished.length > MONITOR_FINISHED_WORKERS) diagnostics.push('info:workers-finished-capped:' + (finished.length - MONITOR_FINISHED_WORKERS));
     const shown = workers.filter(value => !value.terminal || kept.has(value)).sort((a, b) => rank(b) - rank(a));
     if (this.ports.readShown) {
-      try { reading = await this.ports.readShown(target, shown.flatMap(value => value.identity ? [value.identity] : []));
+      // PRE-34: every failed task's attempt states why it stopped, even when its worker is beyond the finished-worker limit (bounded by the Run page).
+      const failures = reading.runs.filter(run => admitted.has(run.snapshot.identity.scopeId)).flatMap(run => run.snapshot.bindings
+        .filter(binding => run.snapshot.progress.some(task => task.taskId === binding.identity.taskId && task.phase === 'failed')).map(binding => binding.identity));
+      try { reading = await this.ports.readShown(target, shown.flatMap(value => value.identity ? [value.identity] : []), failures);
         diagnostics.push(...reading.diagnostics.filter(value => !diagnostics.includes(value))); }
       catch (error) { diagnostics.push('shown-content-unavailable:' + code(error)); }
     }

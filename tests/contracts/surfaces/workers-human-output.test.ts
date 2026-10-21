@@ -30,22 +30,27 @@ it('workers list --verbose keeps the per-source detail lines, JSON is unchanged'
   const human = await run(['--verbose']); expect(human.code).toBe(0);
   const lines = human.text.split('\n').filter(Boolean);
   for (const line of lines) expect(() => JSON.parse(line), line).toThrow();
-  expect(lines).toContain('Source a (/p/a): available · truncated, next page after cursor9');
+  // PRE-5: the next page is the exact command to run, not a bare cursor.
+  expect(lines).toContain('Source a (/p/a): available · more records; next page: deckent workers --scope s --source a --after cursor9 --verbose');
   expect(lines).toContain('Source b (/p/b): available');
   const at = (task: string) => lines.findIndex(l => l.includes(`run1/${task} `));
-  expect(lines[at('t1')]).toBe('  run1/t1 · attempt abcdefgh · gen 3 · exited 0 · heartbeat fresh · claude');
+  expect(lines[at('t1')]).toBe('  run1/t1 · attempt abcdefgh · gen 3 · exit 0 · heartbeat fresh · claude');
   expect(lines[at('t1') + 1]).toContain('Task t1: Model on codex-cli');
   expect(lines[at('t1') + 2]).toBe('Resources unmeasured');
-  expect(lines[at('t1') + 3]).toBe('  Usage: 6 turns · 24.7s · tokens 8 in / 1066 out · $0.1075 · reported success');
+  expect(lines[at('t1') + 3]).toBe('  Usage: 6 turns · 24.7 s · tokens 8 in / 1066 out · $0.1075 · reported success');
   expect(lines[at('t1') + 3]!.length).toBeLessThanOrEqual(100);
   expect(lines[at('t2')]).toBe('  run1/t2 · attempt 12345678 · gen 3 · running · heartbeat stale · codex');
   expect(lines.filter(l => l.includes('Usage:'))).toHaveLength(2);
   expect(lines[at('t5') + 1]).toBe('Resources unmeasured');
-  expect(lines[at('t5') + 2]).toBe('  Usage: 11 turns · 48.0s · tokens 18 in / 4786 out · $0.2039 · reported success');
+  expect(lines[at('t5') + 2]).toBe('  Usage: 11 turns · 48 s · tokens 18 in / 4786 out · $0.2039 · reported success');
   const tr = (await run(['--verbose'], 'list', 'tr')).text.split('\n');
-  expect(tr).toContain('  Kullanım: 6 tur · süre 24.7s · token 8 giriş / 1066 çıkış · maliyet $0.1075 · başarılı bildirdi');
-  expect(lines[at('t3')]).toBe('  run1/t3 · attempt qrstuvwx · gen 3 · exited 1 · heartbeat missing · docker');
-  expect(lines).toContain('  -/t4 · attempt - · gen - · unknown · heartbeat unavailable (unknown) · -');
+  expect(tr).toContain('  Kullanım: 6 tur · süre 24,7 sn · token 8 giriş / 1066 çıkış · maliyet 0,1075 USD · başarılı bildirdi');
+  // PRE-5: one language per output — engine words (missing, unknown, available) reach a Turkish reader in Turkish.
+  expect(tr).toContain('Kaynak a (/p/a): erişilebilir · daha fazla kayıt var; sonraki sayfa: deckent workers --scope s --source a --after cursor9 --verbose');
+  expect(tr[tr.findIndex(l => l.includes('run1/t5 '))]).toBe('  run1/t5 · deneme released · nesil 3 · kayıp, çıkış 0 · heartbeat serbest bırakıldı · bilinmiyor');
+  for (const line of tr) expect(line, line).not.toMatch(/\b(missing|exited|unknown|available)\b/u);
+  expect(lines[at('t3')]).toBe('  run1/t3 · attempt qrstuvwx · gen 3 · exit 1 · heartbeat missing · docker');
+  expect(lines).toContain('  -/t4 · attempt - · gen - · unknown · heartbeat unavailable (unknown) · unknown');
   expect(lines[lines.indexOf('Source b (/p/b): available') + 1]).toBe('  No workers.');
   expect((await run(['--json'])).text).toBe(JSON.stringify(report) + '\n');
   expect(await run(['--verbose', '--samples', '1'], 'watch')).toEqual(human);
@@ -64,7 +69,7 @@ it('C-DOCTOR: the default view lists only open workers with a summary first; --a
   const view = await run(['list']); expect(view.code).toBe(0);
   const lines = view.text.split('\n');
   expect(lines[0]).toBe('scope: s (default) · 1 running · 1 need attention · 3 in history');
-  expect(view.text).toContain('Source a has more records: add --after cursor9');
+  expect(view.text).toContain('Source a has more records; next page: deckent workers --scope s --source a --after cursor9');
   for (const header of ['Task', 'Run', 'State', 'Model', 'Duration', 'CPU (cores)', 'Memory', 'Last signal']) expect(view.text).toContain(header);
   expect(view.text).toMatch(/t2 +run1 +running, signal old +codex/u);
   expect(view.text).not.toMatch(/\bt1\b/u); // finished: history only
@@ -77,6 +82,7 @@ it('C-DOCTOR: the default view lists only open workers with a summary first; --a
   const tr = await run(['list', '--all'], 'tr');
   expect(tr.text.split('\n')[0]).toBe('scope: s (varsayılan) · 1 çalışan · 1 dikkat bekleyen · 3 geçmiş');
   expect(tr.text).toContain('hatayla bitti');
+  expect(tr.text).not.toMatch(/\bunknown\b/u); // PRE-5: the engine's unknown provider reads in Turkish in the table too
   // A lost worker (no process, no result) names the command that shows its Run.
   const lost = { ...report, sources: [{ ...report.sources[0]!, workers: [{ ...base, taskId: 't9', identity: id('t9', 'lostlostlost'), provider: 'codex', process: 'missing', terminal: null }] }] };
   const out: string[] = [];

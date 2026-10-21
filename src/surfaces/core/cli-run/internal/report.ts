@@ -103,9 +103,11 @@ export async function reportCommand(argv: readonly string[], context: RunCommand
           : [t('cli.run.list.empty', { scope: data.scopeId }, locale)])].join('\n')) });
       return;
     }
-    const picked = await pickRun(io, scope.scopeId, runs.slice(0, REGISTRY.list.runsShown), t('cli.run.report.pick', { scope: scope.scopeId }, locale));
+    const offered = runs.slice(0, REGISTRY.list.runsShown), picked = await pickRun(io, scope.scopeId, offered, t('cli.run.report.pick', { scope: scope.scopeId }, locale));
     if (!picked) return;
     runId = picked.runId;
+    // PRE-5: a pick is not scriptable; the person gets the command that prints the same report without a picker.
+    io.print(t('cli.run.report.again', { command: ['deckent report --scope', scope.scopeId, '--run', shownId(runId, runs.map(run => run.runId)), ...(verbose ? ['--verbose'] : [])].join(' ') }, locale));
   }
   const result = await context.inspectRun!(context.root ?? process.cwd(), { schemaVersion: 1, scopeId: scope.scopeId, runId }, { env: context.env ?? process.env });
   if (!result.run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });

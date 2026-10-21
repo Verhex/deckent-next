@@ -179,7 +179,7 @@ it('TTY cancel and close: a yes sends one command with a system command id at th
 
 it('the TTY control offer equals the terminal /runs keys for hold, resume and close in every Run state', () => {
   const states = [{ kind: 'running' }, { kind: 'terminal', outcome: 'failed', reason: 'completed' },
-    ...['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted']
+    ...['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready']
       .map(reason => ({ kind: 'parked', reason, since: 1, deadline: 2 })), { kind: 'parked', reason: 'needs-input', since: 1, deadline: 2, operatorHold: { schemaVersion: 1, note: 'n' } }];
   for (const state of states) for (const cancellationRequested of [false, true]) {
     const runView = { ...view(), state, cancellationRequested } as never;
@@ -205,6 +205,16 @@ it('run inspect reads request → result → tasks → acceptance evidence kind 
     expect(verbose.text).toContain('evt-1'); expect(verbose.text).toContain(LONG); expect(verbose.text).toContain('coding v3');
   }
   expect((await run(['run', 'inspect', '--scope', 's', '--id', LONG, '--verbose', '--json'], s.context, root)).code).toBe(2);
+});
+
+it('PRE-1 B3: run inspect names an exit-code acceptance once, on the brief evaluation line (EN/TR)', async () => {
+  const root = await project();
+  const accepted = view([{ taskBrief: { ...brief('Reconcile the ledger'), criteria: [{ id: 'exit', description: 'Exit cleanly', evaluator: { id: 'process-exit', version: 1 } }] }, phase: 'accepted',
+    resultBrief: { schemaVersion: 1, attemptId: 'a-1', claimLabel: 'CLAIM', evaluation: { verdict: 'accepted' }, report: null, runDelivery: null, openIssues: null, deliveryOutlook: 'none' } }]);
+  for (const [locale, words] of [['en', 'exit code · content not independently verified'], ['tr', 'çıkış kodu · içerik bağımsız doğrulanmadı']] as const) {
+    const text = (await run(['run', 'inspect', '--scope', 's', '--id', LONG, '--lang', locale], store([accepted]).context, root)).text;
+    expect(text.split(words).length - 1).toBe(1);
+  }
 });
 
 it('report: Known and Not measurable with a reason per axis, readable units, no escape sequences (EN and TR)', () => {

@@ -10,10 +10,10 @@ import { readLocalOsIdentity } from '#adapters/index.js';
 import { discoverConfigRecordFiles, readConfigRecordFile, discoverConfigExecutables, discoverConfigBranches, discoverConfigImages, discoverConfigFiles, discoverConfigPools } from '#adapters/index.js';
 import { ErrorRegistry, inspectProductDirectory, resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import type { ConfigChoiceList, ConfigChoiceSourcePort, ConfigValueChoice } from '#surfaces/index.js';
-/** Each inspection gets a fresh snapshot. No source grants write authority; ConfigApplication still admits the chosen value. A discovery its time limit cut short stays `partial` on its list. */
+/** Each inspection gets a fresh snapshot. No source grants write authority; ConfigApplication still admits the chosen value. A discovery its time limit or a size bound cut short stays `partial` (which) on its list. */
 export function configuredConfigChoiceSources(root: string, options: ConfigLoadOptions): ConfigChoiceSourcePort {
   const reading = loadComposedConfig(root, { ...options, heal: false });
-  const values = (entries: readonly string[] | Readonly<{ values: readonly string[]; partial: boolean }>, label: (value: string) => string = value => value): ConfigChoiceList => { const found = 'partial' in entries ? entries : { values: entries, partial: false }; return Object.freeze(Object.assign(found.values.map((value, i): ConfigValueChoice => ({ id: `r${i}`, label: label(value), value, detail: value })), { partial: found.partial })); };
+  const values = (entries: readonly string[] | Awaited<ReturnType<typeof discoverConfigFiles>>, label: (value: string) => string = value => value): ConfigChoiceList => { const found = 'partial' in entries ? entries : { values: entries, partial: false as const }; return Object.freeze(Object.assign(found.values.map((value, i): ConfigValueChoice => ({ id: `r${i}`, label: label(value), value, detail: value })), { partial: found.partial })); };
   const files = new Set<string>();
   return {
     async browse(directory) {
@@ -33,7 +33,8 @@ export function configuredConfigChoiceSources(root: string, options: ConfigLoadO
     if (source === 'environment') return values(Object.keys(env).filter(key => env[key] !== undefined).sort());
     if (source === 'docker-executables' || source === 'git-executables') return values(await discoverConfigExecutables(source === 'docker-executables' ? 'docker' : 'git', env, limits), basename);
     if (source === 'paths') return values([...new Set([root, dirname(root), config.productLayout.root])], basename);
-    if (source === 'machine-files') { const found = await discoverConfigFiles('/etc', limits); return values({ ...found, values: found.values.filter(path => basename(path) === 'machine-id') }, basename); }
+    // /etc holds one `machine-id` at most: once it is found the list is complete, whatever cut the listing.
+    if (source === 'machine-files') { const found = await discoverConfigFiles('/etc', limits), id = found.values.filter(path => basename(path) === 'machine-id'); return values({ values: id, partial: !id.length && found.partial }, basename); }
     if (source === 'key-files') { const found = await discoverConfigFiles(await inspectProductDirectory(config.productLayout, 'approvals'), limits); return values({ ...found, values: found.values.filter(path => /\.key$/u.test(path) && basename(path) !== 'prefix-cache-salt.key').map(path => basename(path)) }); }
     if (source === 'branches') {
       const found = await discoverConfigExecutables('git', env, limits), git = found.values[0]; if (!git) return values(found);

@@ -79,6 +79,24 @@ it.each(['progression-failed', 'quota-exhausted', 'needs-input'] as const)('hold
   await expect(f.lifecycle.execute(command('resume', held.snapshot.revision))).rejects.toMatchObject({ code: 'TASK_DECISION_HUMAN_REQUIRED' });
   expect((await f.store.loadRun('s', 'r'))!.state).toEqual(held.snapshot.state); expect(f.audits).toHaveLength(1);
 });
+// PRE-7: an environment park is resumed like a progression failure: a decision, never a workload-identity side effect.
+function environmentRun(): RunSnapshot {
+  const run = baseRun(), identity = { ...run.identity, taskId: 't', attemptId: 'env-a', generation: 1 };
+  return { ...run, state: { kind: 'parked', reason: 'environment-not-ready', failureCode: 'typescript', since: 10, deadline: 1010 }, bindings: [{ identity, observedKind: 'launch-refused', observedRevision: 1 }] };
+}
+it.each(['workload-verified', 'os-user'] as const)('MCP %s cannot resume an environment park, nor launder it through a hold, without the explicit decision cell', async assurance => {
+  const run = environmentRun(), f = await fixture(run, [], { ...ai, assurance }, true);
+  await expect(f.lifecycle.execute(command('resume', run.revision))).rejects.toMatchObject({ code: 'TASK_DECISION_HUMAN_REQUIRED' });
+  const held = await f.lifecycle.execute(command('hold', run.revision, { holdReason: 'attempt to turn this into operator hold' }));
+  expect(held.snapshot.state).toMatchObject({ reason: 'environment-not-ready', failureCode: 'typescript', since: 10, deadline: 1010 });
+  await expect(f.lifecycle.execute(command('resume', held.snapshot.revision))).rejects.toMatchObject({ code: 'TASK_DECISION_HUMAN_REQUIRED' });
+});
+it('the explicit resume cell resumes an environment park as an ai-policy decision; the refused attempt moves aside', async () => {
+  const run = environmentRun(), f = await fixture(run, [grant('run-decision', ['resume'])]);
+  const resumed = await f.lifecycle.execute(command('resume', run.revision));
+  expect(resumed.snapshot.state.kind).toBe('running'); expect(resumed.snapshot.previousBindings).toEqual([expect.objectContaining({ observedKind: 'launch-refused' })]);
+  expect(f.audits[0]).toMatchObject({ subject: { action: 'resume', deciderClass: 'ai-policy' } });
+});
 it('explicit resume cell permits the step and records ai-policy; revocation denies replay', async () => {
   const run = parkRunProgression(baseRun(), 0, 'PROGRESSION_FAILED', 10, 1000), f = await fixture(run, [grant('run-decision', ['resume'])]);
   const resumed = await f.lifecycle.execute(command('resume', run.revision));
