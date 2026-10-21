@@ -23,6 +23,18 @@ export async function directoryLocation(path: string): Promise<ProjectVaultLocat
   } catch { return null; }
 }
 const sameLocation = (a: ProjectVaultLocation | null, b: ProjectVaultLocation) => a !== null && a.canonicalRoot === b.canonicalRoot && a.device === b.device && a.inode === b.inode;
+/**
+ * Astra REVISE 2706 P2-2: the handover's strict observation of the recorded owner's data root. `gone` only when proven: the path does not resolve
+ * (ENOENT, ENOTDIR) or it resolves to another directory identity; `present` for the recorded identity; `unknown` for any other error (EACCES, EIO,
+ * ELOOP, …) — never read as gone. Other consumers keep `directoryLocation`.
+ */
+export async function observeOwnerRoot(location: ProjectVaultLocation): Promise<'present' | 'gone' | 'unknown'> {
+  const absent = (error: unknown) => ['ENOENT', 'ENOTDIR'].includes(String((error as NodeJS.ErrnoException | null)?.code));
+  try {
+    const canonicalRoot = await realpath(location.canonicalRoot), info = await stat(canonicalRoot, { bigint: true });
+    return info.isDirectory() && canonicalRoot === location.canonicalRoot && String(info.dev) === location.device && String(info.ino) === location.inode ? 'present' : 'gone';
+  } catch (error) { return absent(error) ? 'gone' : 'unknown'; }
+}
 /** Whether a recorded directory still exists with its recorded identity (the handover rule: only a moved owner is gone). */
 export const locationPresent = async (location: ProjectVaultLocation) => sameLocation(await directoryLocation(location.canonicalRoot), location);
 
@@ -140,7 +152,9 @@ export async function handOverProjectVault(directory: string, anchor: ProjectVau
     const record = await loadOwnership(directory);
     if (record === 'lost' || record === 'absent') throw ownershipLost(anchor);
     if (assessProjectVaultOwnership(record, anchor) === 'match') return record;
-    const next = projectVaultHandover(record, anchor, await locationPresent(record.anchor.binding), nowMs);
+    const owner = await observeOwnerRoot(record.anchor.binding);
+    if (owner === 'unknown') throw ErrorRegistry.createError('SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE', { params: { project: record.anchor.projectRoot } });
+    const next = projectVaultHandover(record, anchor, owner === 'present', nowMs);
     await authorize(record);
     await writeRecord(recordPath(directory), next);
     return next;

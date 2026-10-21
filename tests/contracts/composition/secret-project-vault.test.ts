@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -202,8 +203,10 @@ describe.skipIf(process.platform !== 'linux')('REVISE 2702 P1-B: a vault whose o
 // Astra REVISE 2704 A: a normal handover (intact record, original root gone) is authorized on the existing `secret`/`set` cell and sealed as an
 // `authority-decision` BEFORE the binding changes; refused or unrecorded, nothing changes.
 describe.skipIf(process.platform !== 'linux')('REVISE 2704 A: the handover is authorized and sealed before the binding changes', () => {
-  const moved = async () => {
-    const { base, env } = await home(), root = await project(base, 'orig');
+  const moved = async (where = 'orig') => {
+    const { base, env } = await home();
+    await mkdir(join(base, dirname(where)), { recursive: true });
+    const root = await project(base, where);
     await changeProjectSecretGrant(root, 'scope', 'DECKENT_ANTHROPIC_KEY', 'grant', 'admin', { env }, human);
     const copy = join(base, 'moved');
     await cp(root, copy, { recursive: true });
@@ -230,6 +233,12 @@ describe.skipIf(process.platform !== 'linux')('REVISE 2704 A: the handover is au
     await writeFile(join(m.copy, '.deckent/policy.json'), policy(false), { mode: 0o600 }); clearConfigCache();
     expect(await code(handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human))).toBe('SECRET_CHANGE_DENIED');
     expect(await readFile(m.record, 'utf8')).toBe(before);
+    // REVISE 2706 evidence: the refusal itself is the sealed decision row.
+    const audit = await openSqliteAuditStore(join(m.copy, '.deckent/state/ledger.db'), SQLITE, 'forbid');
+    try {
+      expect(audit.page('scope', 0, 1_000).map(record => record.event.subject)).toContainEqual(expect.objectContaining({ kind: 'authority-decision', action: 'secret-vault-handover',
+        verdict: expect.objectContaining({ decision: 'deny' }) }));
+    } finally { audit.close(); }
   });
   it('the original still present: refused, unchanged', async () => {
     const m = await moved(), before = await readFile(m.record, 'utf8');
@@ -241,6 +250,43 @@ describe.skipIf(process.platform !== 'linux')('REVISE 2704 A: the handover is au
     await rm(m.root, { recursive: true, force: true });
     await rm(join(m.copy, '.deckent/state/ledger.db'));
     expect(await code(handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human))).not.toBeNull();
+    expect(await readFile(m.record, 'utf8')).toBe(before); expect(await readFile(m.grants, 'utf8')).toBe(grants);
+  });
+});
+
+describe.skipIf(process.platform !== 'linux' || process.getuid?.() === 0)('REVISE 2706: handover proves the original gone; an unobservable original and a failed record write change nothing', () => {
+  const movedAt = async (where: string) => {
+    const { base, env } = await home(); await mkdir(join(base, dirname(where)), { recursive: true });
+    const root = await project(base, where);
+    await changeProjectSecretGrant(root, 'scope', 'DECKENT_ANTHROPIC_KEY', 'grant', 'admin', { env }, human);
+    const copy = join(base, 'moved'); await cp(root, copy, { recursive: true });
+    clearConfigCache(); await resolveConfiguredInstallationIdentity(copy, 'keep', { env });
+    const anchor = (await resolveProjectVaultAnchor(await loadConfiguredScopeContext(copy, 'scope', { env }, 'read'), { env }))!;
+    const record = join(installationSecretRoot(env)!, PROJECT_VAULT.directory, projectVaultKey(anchor), PROJECT_VAULT.projectFile);
+    return { base, env, root, copy, record, grants: join(dirname(record), PROJECT_VAULT.grantsFile) };
+  };
+  it('the original is present but cannot be observed (EACCES on its parent): refused, binding and grants unchanged', async () => {
+    const m = await movedAt('locked/orig'), before = await readFile(m.record, 'utf8'), grants = await readFile(m.grants, 'utf8');
+    await chmod(join(m.base, 'locked'), 0o000);
+    try { expect(await code(handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human))).toBe('SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE'); }
+    finally { await chmod(join(m.base, 'locked'), 0o700); }
+    expect(await readFile(m.record, 'utf8')).toBe(before); expect(await readFile(m.grants, 'utf8')).toBe(grants);
+  });
+  it('a truly moved original (gone): the authorized handover works', async () => {
+    const m = await movedAt('away/orig');
+    await rm(join(m.base, 'away'), { recursive: true, force: true });
+    await handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human);
+    expect(JSON.parse(await readFile(m.record, 'utf8'))).toMatchObject({ anchor: { projectRoot: m.copy } });
+  });
+  it('the decision record write fails inside the running store (an injected insert abort on the audit table): nothing changes', async () => {
+    const m = await movedAt('busy/orig'), before = await readFile(m.record, 'utf8'), grants = await readFile(m.grants, 'utf8');
+    await rm(join(m.base, 'busy'), { recursive: true, force: true });
+    const ledger = new DatabaseSync(join(m.copy, '.deckent/state/ledger.db'));
+    try { ledger.exec("CREATE TRIGGER pre8_injected_audit_failure BEFORE INSERT ON audit_events BEGIN SELECT RAISE(ABORT, 'injected'); END;"); } finally { ledger.close(); }
+    // The store still opens with the trigger (the failure is the decision's INSERT, not the open) …
+    (await openSqliteAuditStore(join(m.copy, '.deckent/state/ledger.db'), SQLITE, 'forbid')).close();
+    // … and the handover's sealed-decision write fails there: typed, before any binding change.
+    expect(await code(handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human))).toBe('AUDIT_UNAVAILABLE');
     expect(await readFile(m.record, 'utf8')).toBe(before); expect(await readFile(m.grants, 'utf8')).toBe(grants);
   });
 });
