@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto';
-import { execFile, execFileSync } from 'node:child_process';
-import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
-import { hostname, tmpdir, userInfo } from 'node:os';
-import { join, resolve } from 'node:path';
-import { promisify, stripVTControlCharacters } from 'node:util';
+import { execFileSync } from 'node:child_process';
+import { lstat, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { userInfo } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { evaluateTask, prepareConfiguredWorkspacePatch } from '../../../src/index.js';
@@ -15,8 +14,8 @@ import { DockerSupervisor, GitIntegrationAdoption } from '#adapters/index.js';
 import { adoptionFenceRef, adoptionFenceText, queueCommandIds, queueGenerationRef, targetQueueKey, TargetBatchExecutor, WorkspaceAdoptionApplication, type TargetQueueView } from '#engine/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import { clearConfigCache, ErrorRegistry, productResourcePath } from '#platform/index.js';
-import { fixtureDockerRegistry } from '../support/execution-registry.js';
-import { DRIVER, type Step } from '../support/pty-steps.js';
+import { exec, git, TARGET, SCOPE, graph, cliInPty, queueProject } from '../support/delivery-queue-fixture.js';
+import type { Step } from '../support/pty-steps.js';
 import { DOWNGRADE_TO_V57_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 import { startTestRuntimeService, stopTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 
@@ -27,21 +26,14 @@ import { startTestRuntimeService, stopTestRuntimeService, stopTestRuntimeService
 // evaluates through the ordinary Run applications. The batch is then confirmed by the shipped CLI on its own controlling PTY (the product's
 // terminal confirmation port: one publication card and one adoption card for the whole batch), after a first answer of n that writes
 // nothing. A fourth Attempt whose path overlaps the adopted prefix ends as conflict-needs-reattempt with nothing written to the target.
-const exec = promisify(execFile);
 const roots: string[] = [], cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => { await stopTestRuntimeServices();
   vi.restoreAllMocks();
   for (const close of cleanup.splice(0).reverse()) await close();
   clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
-const git = async (cwd: string, ...args: string[]) => (await exec('/usr/bin/git', ['-C', cwd, ...args])).stdout.trim();
-const TARGET = 'refs/heads/dogfood/adopted', SCOPE = 's';
 /** The adoption card asks whether the branch moves (QUEUE-SMALL 5); the publication card keeps its reference-write question. */
 const ADOPT_PROMPT = `Move ${TARGET} to the verified commit? y/N: `;
-const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
-const attemptActions = ['execute', 'read-output', 'recover-output', 'prepare-integration', 'deliver-integration', 'evaluate', 'adopt-integration', 'rollback-integration'];
-const criterion = { id: 'exit', version: 1, description: 'Zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } };
-const graph = (kind: string) => ({ schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind, dependencies: [], acceptanceCriteria: ['exit'] }], criterionDefinitions: [criterion] });
 /** Each coding kind writes one file; `overlap` writes a.txt again, the path the first delivery added. `verify` reads every queued path it can. */
 const WORKERS: Readonly<Record<string, string>> = {
   'write-a': "require('node:fs').writeFileSync('a.txt','first\\n')",
@@ -60,41 +52,7 @@ async function repositoryDigest(repository: string) {
 }
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'dn-queue-e2e-')); roots.push(root);
-  const project = join(root, 'project'), target = join(root, 'target'), data = join(root, 'data');
-  await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
-  await git(project, 'init', '-q'); await git(project, 'config', 'user.email', 'live@example.invalid'); await git(project, 'config', 'user.name', 'Live');
-  await writeFile(join(project, 'note.txt'), 'before\n'); await git(project, 'add', 'note.txt'); await git(project, 'commit', '-q', '-m', 'base');
-  const base = await git(project, 'rev-parse', 'HEAD');
-  await exec('/usr/bin/git', ['clone', '-q', project, target]);
-  await git(target, 'config', 'user.email', 'target@example.invalid'); await git(target, 'config', 'user.name', 'Target');
-  await git(target, 'branch', 'dogfood/adopted', base); await git(target, 'checkout', '-q', '--detach', base);
-  const template = fixtureDockerRegistry(['x']).profiles[0]!;
-  const parameters = { ...template.parameters, imageId: process.env.DECKENT_TEST_DOCKER_IMAGE! };
-  const profiles = Object.entries(WORKERS).map(([kind, script]) => ({ ...template, id: `fixture-${kind}`, parameters: { ...parameters, argv: ['node', '-e', script] } }));
-  const registry = { ...fixtureDockerRegistry([]), profiles, kinds: Object.keys(WORKERS).map(kind => ({ kind, profile: { id: `fixture-${kind}`, version: 1 } })) };
-  const { argv: _argv, ...bounds } = parameters; void _argv;
-  const options = { env: { HOME: join(root, 'home') } };
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 16_777_216 },
-    admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry },
-    execution: { docker: { executable: '/usr/bin/docker', ...bounds }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 },
-      // The installation's adoption bar (a `verify` Run on the exact candidate) is added to each Task's own criterion.
-      adoption: { targets: [TARGET], verification: { kind: 'verify', required: true, criteria: [{ evaluator: criterion.evaluator, parameters: criterion.parameters }] } },
-      workTargets: { schemaVersion: 1, targets: [{ id: 'n1', kind: 'git', path: target, baseRef: TARGET }] } },
-    // Three enqueues land inside one collection window, so they form one FIFO prefix of one epoch.
-    targetQueue: { batchWindowMs: 4000 },
-    cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
-    cancellationRuntime: { scopeIds: [SCOPE], pollIntervalMs: 1000, failureBackoffMs: 1000 },
-    service: { inputMaxBytes: 65536, responseMaxBytes: 1_048_576, maxConnections: 8, maxConcurrentRequests: 4, maxConcurrentExecutions: 1, headerTimeoutMs: 1000, shutdownGraceMs: 1000 } }));
-  const opened = await openConfiguredAttemptStore(project, options);
-  await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
-  await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'queue-e2e', restrictions: [], grants: [
-    { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect'], scopes: [SCOPE], principals, resource: { kind: 'run', ids: 'all' } },
-    { id: 'pool', effect: 'allow', actions: ['use'], scopes: [SCOPE], principals, resource: { kind: 'pool', ids: ['p'] } },
-    { id: 'attempt', effect: 'allow', actions: attemptActions, scopes: [SCOPE], principals, resource: { kind: 'attempt', ids: 'all' } },
-    { id: 'target', effect: 'allow', actions: ['use', 'adopt'], scopes: [SCOPE], principals, resource: { kind: 'work-target', ids: ['n1'] } },
-    { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: [SCOPE], principals, resource: { kind: 'scope', ids: [SCOPE] } },
-  ] }), { mode: 0o600 });
+  const { root, project, target, data, base, options, layout } = await queueProject({ roots, prefix: 'dn-queue-e2e-', workers: WORKERS, revision: 'queue-e2e' });
   const runRevision = async (runId: string) => {
     const store = await openConfiguredAttemptStore(project, options);
     try { return (await store.store.loadRun(SCOPE, runId))?.revision ?? null; } finally { store.store.close(); }
@@ -123,7 +81,7 @@ async function fixture() {
     await evaluate(runId, identity);
     return identity;
   };
-  const ledger = productResourcePath(opened.layout, 'ledger');
+  const ledger = productResourcePath(layout, 'ledger');
   return { root, project, target, data, base, options, ledger, coding, execute, evaluate, runRevision };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -189,19 +147,6 @@ async function until<T>(read: () => Promise<T>, done: (value: T) => boolean, lab
     if (Date.now() > deadline) throw new Error(`timed out waiting for ${label}: ${JSON.stringify(value)}`);
     await new Promise(resolve => setTimeout(resolve, 250));
   }
-}
-
-/** The shared PTY driver, except that a step whose text arrived together with the program's exit is met (the CLI prints its result and ends). */
-const CLI_DRIVER = DRIVER.replace('if time.time() > deadline or not read_for(0.1):', 'if time.time() > deadline or (not read_for(0.1) and wait.encode() not in out[since:]):');
-/** The shipped CLI on its own controlling PTY (python `pty`), typing each step's keys once its text is shown. */
-async function cliInPty(project: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: readonly Step[]) {
-  const argv = [process.execPath, resolve('dist/composition/core/cli/internal/entry.js'), ...args];
-  const { stdout } = await exec('python3', ['-c', CLI_DRIVER, JSON.stringify(argv), JSON.stringify(steps), 'tty'],
-    { cwd: project, env: { ...process.env, ...env }, timeout: 180_000, maxBuffer: 32 * 1024 * 1024 });
-  const result = JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string };
-  if (result.timeout) throw new Error(`waited for ${JSON.stringify(result.timeout)}\n${result.output.slice(-6000)}`);
-  expect(CLI_DRIVER).not.toBe(DRIVER);
-  return { ...result, output: stripVTControlCharacters(result.output) };
 }
 
 describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKER_IMAGE'])('delivery queue end to end: real Git, Docker Runs, runtime service and terminal', () => {

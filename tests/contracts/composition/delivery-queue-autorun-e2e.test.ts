@@ -1,8 +1,4 @@
-import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { hostname, tmpdir, userInfo } from 'node:os';
-import { join, resolve } from 'node:path';
-import { promisify, stripVTControlCharacters } from 'node:util';
+import { rm } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
 import { evaluateTask, prepareConfiguredWorkspacePatch } from '../../../src/index.js';
 import { configuredTargetQueueTerminal, startConfiguredRuntimeService } from '../../../src/composition/core/runtime-service/index.js';
@@ -12,9 +8,8 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { DockerSupervisor } from '#adapters/index.js';
 import { queueCommandIds, type TargetQueueView } from '#engine/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
-import { clearConfigCache, productResourcePath } from '#platform/index.js';
-import { fixtureDockerRegistry } from '../support/execution-registry.js';
-import { DRIVER, type Step } from '../support/pty-steps.js';
+import { clearConfigCache } from '#platform/index.js';
+import { git, TARGET, SCOPE, graph, cliInPty, queueProject } from '../support/delivery-queue-fixture.js';
 
 // TESLIM-KUYRUGU R6: the queue's verification Runs progress unattended. The runtime service starts with automatic Run progression on, as a
 // production installation does (runRuntime is a bound restart field, default poll 1 s). Two coding Runs on H0 with disjoint paths are fixture
@@ -22,18 +17,11 @@ import { DRIVER, type Step } from '../support/pty-steps.js';
 // a `verify` Run on it, and its own Run progression (run-progression, wired in runtime-service server.ts) reserves, executes in Docker and
 // evaluates that Run; the queue sees the accepted verification and moves the ticket to awaiting-confirmation. Nothing here calls execute,
 // evaluate or reserve for a verification Run. The batch is then confirmed on the shipped CLI's own PTY.
-const exec = promisify(execFile);
 const roots: string[] = [], cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
   clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
-const git = async (cwd: string, ...args: string[]) => (await exec('/usr/bin/git', ['-C', cwd, ...args])).stdout.trim();
-const TARGET = 'refs/heads/dogfood/adopted', SCOPE = 's';
-const principals = [{ issuer: hostname(), subject: String(userInfo().uid) }];
-const attemptActions = ['execute', 'read-output', 'recover-output', 'prepare-integration', 'deliver-integration', 'evaluate', 'adopt-integration', 'rollback-integration'];
-const criterion = { id: 'exit', version: 1, description: 'Zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } };
-const graph = (kind: string) => ({ schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind, dependencies: [], acceptanceCriteria: ['exit'] }], criterionDefinitions: [criterion] });
 const WORKERS: Readonly<Record<string, string>> = {
   'write-a': "require('node:fs').writeFileSync('a.txt','first\\n')",
   'write-b': "require('node:fs').writeFileSync('b.txt','second\\n')",
@@ -42,43 +30,11 @@ const WORKERS: Readonly<Record<string, string>> = {
 };
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'dn-queue-autorun-')); roots.push(root);
-  const project = join(root, 'project'), target = join(root, 'target'), data = join(root, 'data');
-  await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
-  await git(project, 'init', '-q'); await git(project, 'config', 'user.email', 'live@example.invalid'); await git(project, 'config', 'user.name', 'Live');
-  await writeFile(join(project, 'note.txt'), 'before\n'); await git(project, 'add', 'note.txt'); await git(project, 'commit', '-q', '-m', 'base');
-  const base = await git(project, 'rev-parse', 'HEAD');
-  await exec('/usr/bin/git', ['clone', '-q', project, target]);
-  await git(target, 'config', 'user.email', 'target@example.invalid'); await git(target, 'config', 'user.name', 'Target');
-  await git(target, 'branch', 'dogfood/adopted', base); await git(target, 'checkout', '-q', '--detach', base);
-  const template = fixtureDockerRegistry(['x']).profiles[0]!;
-  const parameters = { ...template.parameters, imageId: process.env.DECKENT_TEST_DOCKER_IMAGE! };
-  const profiles = Object.entries(WORKERS).map(([kind, script]) => ({ ...template, id: `fixture-${kind}`, parameters: { ...parameters, argv: ['node', '-e', script] } }));
-  const registry = { ...fixtureDockerRegistry([]), profiles, kinds: Object.keys(WORKERS).map(kind => ({ kind, profile: { id: `fixture-${kind}`, version: 1 } })) };
-  const { argv: _argv, ...bounds } = parameters; void _argv;
-  const options = { env: { HOME: join(root, 'home') } };
-  // Production shape: runRuntime is present (the shipped default polls every second); targetQueue keeps its shipped verification timeout and
-  // TTL. Only the collection window is widened so both enqueues form one FIFO prefix, and the toolchain refresh is off (no network here).
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, artifacts: { maxBytes: 16_777_216 },
-    admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry },
-    execution: { docker: { executable: '/usr/bin/docker', ...bounds }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 },
-      adoption: { targets: [TARGET], verification: { kind: 'verify', required: true, criteria: [{ evaluator: criterion.evaluator, parameters: criterion.parameters }] } },
-      workTargets: { schemaVersion: 1, targets: [{ id: 'n1', kind: 'git', path: target, baseRef: TARGET }] } },
-    runRuntime: { pollIntervalMs: 250, failureBackoffMs: 1000 },
-    targetQueue: { batchWindowMs: 4000 },
-    toolchains: { update: { atStartup: false, intervalMs: 0 } },
-    cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 },
-    cancellationRuntime: { scopeIds: [SCOPE], pollIntervalMs: 1000, failureBackoffMs: 1000 },
-    service: { inputMaxBytes: 65536, responseMaxBytes: 1_048_576, maxConnections: 8, maxConcurrentRequests: 4, maxConcurrentExecutions: 1, headerTimeoutMs: 1000, shutdownGraceMs: 1000 } }));
-  const opened = await openConfiguredAttemptStore(project, options);
-  await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } }); opened.store.close();
-  await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'queue-autorun', restrictions: [], grants: [
-    { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect'], scopes: [SCOPE], principals, resource: { kind: 'run', ids: 'all' } },
-    { id: 'pool', effect: 'allow', actions: ['use'], scopes: [SCOPE], principals, resource: { kind: 'pool', ids: ['p'] } },
-    { id: 'attempt', effect: 'allow', actions: attemptActions, scopes: [SCOPE], principals, resource: { kind: 'attempt', ids: 'all' } },
-    { id: 'target', effect: 'allow', actions: ['use', 'adopt'], scopes: [SCOPE], principals, resource: { kind: 'work-target', ids: ['n1'] } },
-    { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: [SCOPE], principals, resource: { kind: 'scope', ids: [SCOPE] } },
-  ] }), { mode: 0o600 });
+  const { project, target, base, options } = await queueProject({ roots, prefix: 'dn-queue-autorun-', workers: WORKERS, revision: 'queue-autorun',
+    // Production shape: runRuntime is present (the shipped default polls every second); targetQueue keeps its shipped verification timeout and
+    // TTL. Only the collection window is widened so both enqueues form one FIFO prefix, and the toolchain refresh is off (no network here).
+    config: { runRuntime: { pollIntervalMs: 250, failureBackoffMs: 1000 }, toolchains: { update: { atStartup: false, intervalMs: 0 } } },
+  });
   const loadRun = async (runId: string) => {
     const store = await openConfiguredAttemptStore(project, options);
     try { return await store.store.loadRun(SCOPE, runId); } finally { store.store.close(); }
@@ -115,18 +71,6 @@ async function until<T>(read: () => Promise<T>, done: (value: T) => boolean, lab
     if (Date.now() > deadline) throw new Error(`timed out waiting for ${label}: ${JSON.stringify(value)}; service notes ${JSON.stringify(notes())}`);
     await new Promise(resolve => setTimeout(resolve, 250));
   }
-}
-
-/** The shared PTY driver, except that a step whose text arrived together with the program's exit is met (the CLI prints its result and ends). */
-const CLI_DRIVER = DRIVER.replace('if time.time() > deadline or not read_for(0.1):', 'if time.time() > deadline or (not read_for(0.1) and wait.encode() not in out[since:]):');
-async function cliInPty(project: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: readonly Step[]) {
-  const argv = [process.execPath, resolve('dist/composition/core/cli/internal/entry.js'), ...args];
-  const { stdout } = await exec('python3', ['-c', CLI_DRIVER, JSON.stringify(argv), JSON.stringify(steps), 'tty'],
-    { cwd: project, env: { ...process.env, ...env }, timeout: 180_000, maxBuffer: 32 * 1024 * 1024 });
-  const result = JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string };
-  if (result.timeout) throw new Error(`waited for ${JSON.stringify(result.timeout)}\n${result.output.slice(-6000)}`);
-  expect(CLI_DRIVER).not.toBe(DRIVER);
-  return { ...result, output: stripVTControlCharacters(result.output) };
 }
 
 describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKER_IMAGE'])('delivery queue verification runs unattended: the service progresses its own verification Runs', () => {
