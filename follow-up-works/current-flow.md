@@ -6,16 +6,7 @@ Son güncelleme: 2026-10-22 (lead 4d4830b2). **Canlı = N1 runtime = alpha.51** 
 
 | İş | Kimde | Durum | Sonraki adım | Belge borcu |
 |---|---|---|---|---|
-| SDK-IMPORT-FIX hotfix (alpha.27): `lane/sdk-import-fix` d272b639 + eaab5207 (sürüm) + c1189872 (PLAN canlı satırı) | Lead | Derlenmiş adayda sdk-import-graph + startup-graph 6/6; kanun denetçisi çalışıyor | PASS → PR + admin merge → canlı + N1 geçişi → `lead-switch.sh n1-sync` | CHANGELOG alpha.27 tarih |
-| Paralel dogfood tur 1: K-C/K-D taban kırmızısıyla düştü, K-B tanılama + iptal | Lead (dogfood ajanı durdu) | alpha.27'yi bekliyor | n1-sync → kartsız taban verify → K-C, K-D verify2 (paralel teslimin ilk gerçek sınaması) | TERM-TEST-FA-INDICATOR kapat; verify ~16,7 dk seri (M5 girdisi) |
-| NEEDS-INPUT-RESUME `3ba26463` (supervisor seçenek reddi kök neden + tipli park) | Codex Sol FIX-1 (pid 1740887) | Güvenlik bulgusu: istemciye ham hata ayrıntısı + redaksiyondan önce kesme → düzeltiliyor | Lead commit → batch G | ARCHITECTURE needs-input notu (DOCS-PROPOSAL.md) |
-| Devam artifact'ı (yarım iş devri) | Lead/Jev 8648a15f 0.92/0.69 | Karar: D2 N1 kanıtından sonra M5 kartı CONTINUATION-ARTIFACT | PLAN satırı (batch G belge turu) | PLAN |
-| Batch G `wave/batch-g` (taban c1189872): D1 f921a761, D2 e8f25661, K8 d6a9539b+3c51eb76 (host 8/8), K10 5ebbd373+bfd9a7b5 | Lead | Hedefli: typecheck/lint-arch/lint-docs 0, 6 test 64/64; composition 6683/6700, adapters 26193/26300 | + NEEDS-INPUT FIX-1 → main merge → kanun denetimi → iniş (alpha.28) | PLAN M5 satırları, CHANGELOG |
-| Masaüstü tasarım turu (18 bulgu + lead kararları 1–7) | Codex GPT-6.1 Sol high (pid 1741700; Cursor aylık limit, 10-18 sıfırlanır) | Sürüyor | Lead inceleme → commit → yeniden paketle → owner önizlemesi | design-dna font kaydı bayat |
 | Oynak saat testi `terminal-turn-phases.test.ts:144` | Lead | Kart açılacak | Enjekte saat kök neden kartı | — |
-| audit-checkpoint (composition 6705/6700) | Lead | Bekliyor | composition'dan ≥5 satır boşaltma kartı (bütçe yükseltilmez) | — |
-| Astra 2492/2494/2496 (owner "ikisini de yap") | Astra | İzleyici çalışıyor | Yanıt gelince değerlendirme | — |
-| Belge borcu | Lead → Haiku | Bekliyor | S1 kanıtı /tmp → proof; Kanun 8 güncellemesi owner'da; ARCHITECTURE notları | — |
 | alpha.51 canlıda; owner tam Deckent kullanımı + test kontrol listesi | Owner; lead takip | alpha.51 canlı+N1 22:02Z; owner komple Deckent ile çalışmaya geçiyor | Owner kontrol listesi sonuçlarını PLAN kanıt satırlarına bildirir | PLAN Şimdi tablosu |
 | N1 dalga 8 yeniden koşusu (d50-w8-r2) | Lead | Başladı; N1 teslim klonu `1e74dd23` | Sonuç → 50 görev kanıtı; tur iptali etkisi IPTAL-ETKI-DOGRULUGU | PLAN Gelen kutusu |
 | DOGFOOD-50-PORT: 41 benimseme | Lead | Karar: alpha.51'den sonra ayrı PR (owner 2026-10-21) | Ayrı PR | PLAN Gelen kutusu |

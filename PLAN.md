@@ -95,6 +95,7 @@ Kural: bulgu triyajda sıraya ya da arşive gider; yalnız güvenlik/canlıyı b
     - Dalga 8 yeniden koşusu alpha.51'den sonra (kaynak: alpha.50 takipleri). Tur iptali etkisi için bkz. IPTAL-ETKI-DOGRULUGU.
     - known-limits `runtime restart` satırında 'environment never read' yerine 'target service process environment is not read' ifadesi tercih edilsin (Astra 2714, engelleyici değil).
     - `secret handover` yalnız terminal tanığıyla korunuyor; mühürlü `secret-handover` kararı (politika hücresi + audit) beta adayı (Astra 2702 açık sorusu; HANDOFF-PRE8 REVISE 2702).
+    - MONITOR-ETKILESIM (owner 2026-10-22, beta monitor düzenlemesine girdi): `deckent monitor` gelen kutusu ve onaylar etkileşimli değil; owner N1 w8a işçi sorusunu monitorden cevaplayamadı ve işçinin içine giremedi (cevap yalnız terminal/CLI `run resume`; işçiye girme = Sıradaki 16 AGENT-TAKEOVER).
 - **Açık P1/P0 listesi:** aşağıda.
 
 ## Alan kimlikleri (arch.json `plan` bağları)
