@@ -1,6 +1,6 @@
 ---
 name: deckent-next-refactor
-description: Guide owner-admitted Deckent Next development, fixes, refactoring, reviews and handoffs through current authority, bounded scope, evidence and documentation reconciliation. Use as the common entry point for Next work and select specialist skills when relevant.
+description: Entry point for any Deckent Next development, fix, refactor, review, diagnosis or handoff - current authority, bounded scope, evidence and document reconciliation, then the moment's specialist skill.
 ---
 
 # Deckent Next development workflow
@@ -71,6 +71,7 @@ once per session for a Next card, and again only when it changes.
 4. **Perform only admitted actions.** Implement the smallest complete responsibility; keep read-only work
    read-only. Work only in assigned paths, preserve WIP, record exact evidence and partial effects, and never
    claim acceptance from an exit code alone. Fix root causes with negative proof; bound retries.
+   For a defect that resists a first look, read [diagnosis.md](diagnosis.md): no hypothesis before a red signal.
    Delegation needs authorized independent work, disjoint writes and one writer per shared resource.
 5. **Verify the behavior in scope.** Trace producer → application → adapter → actual surface and exercise the
    relevant failure, cancellation, replay, scope and recovery paths. Verification cadence and resource limits
@@ -95,7 +96,8 @@ does not admit an outcome. Use logged Jev for material uncertainty.
 
 Carry the exact source/recipient role, admitted objective and first action, base/head and owned dirty diff,
 scopes and transition ownership, verification artifacts, review status, unresolved effects/holds and
-permission boundaries. The recipient checks the actual candidate and current authority before acting; a
+permission boundaries, and the skills the recipient should load first. Point to existing records (PLAN,
+proof, commits) instead of copying them. The recipient checks the actual candidate and current authority before acting; a
 transcript or digest grants no authority. Do not invent legacy prepared/verified/committed states or
 automatic authority transfer. A handoff is not commit/push permission.
 
@@ -130,5 +132,7 @@ unchanged question. Jev advice never changes owner authority, proves behavior or
 - `node .agents/refactor/effort.mjs` records slice durations (`start|phase|pause|end|status|report`) as
   forecast input for the PLAN M1–M5 table; use it when the lead asks for duration data.
 - `node .agents/refactor/board.mjs render|report` produce HTML views when the owner asks for one.
+- `node .agents/refactor/skill-usage.mjs report [--days N]` summarises which skills Claude Code sessions on this
+  host loaded (fed by a local, non-blocking hook); a weekly report decides whether reminders are worth adding.
 - [contributor-process.md](contributor-process.md) keeps the retained host process: branches, checks,
   WORKER-GIT-PR, the development host entry and the effort tool usage.

@@ -1,6 +1,6 @@
 ---
 name: deckent-design-critic
-description: Use for assigned evidence-backed Deckent design review across product, interaction, visual, component, accessibility and enterprise surfaces. Independent verdicts require a separate reviewer; implementer self-review reports findings.
+description: Review Deckent design output (product, interaction, visual, component, accessibility, enterprise surfaces) with evidence and a verdict. An independent verdict needs a separate reviewer; implementer self-review reports findings.
 ---
 
 

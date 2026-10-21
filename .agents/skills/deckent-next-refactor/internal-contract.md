@@ -37,6 +37,9 @@ The complete stable contract for Next work. Dated owner rules live in the laws
 - Continue authorized work without repeated permission; new scope or authority boundaries need a checkpoint.
 - Use logged Jev for material judgments (law 8); advice is not acceptance.
 - Verify actual producer-to-surface behavior and relevant failure paths; test green alone is not closure (law 1).
+- Test through public seams agreed for the slice, one red → green slice at a time. Expected values come from an
+  independent source (spec, worked example, known-good literal); an assertion that recomputes the code's own
+  formula is tautological and proves nothing.
 - Verification cadence, the 16 GB limit, `VITEST_MAX_FORKS=2` and "no build during a suite" follow law 7.
 - Commit inside the assigned scope without asking; workers never push. Release, landing, live/N1 switch and
   dogfood are lead-only with owner approval per merge and per switch and green hosted PR CI before merge.

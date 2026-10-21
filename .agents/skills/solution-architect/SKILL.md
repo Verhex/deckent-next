@@ -1,6 +1,6 @@
 ---
 name: solution-architect
-description: Use for Deckent architectural boundaries, reusable contract changes and governance or control-flow design tradeoffs; inspect existing mechanisms, ergonomics and reversibility.
+description: Decide Deckent architectural boundaries, reusable contract changes, deep-module seams and governance or control-flow tradeoffs; inspect existing mechanisms, ergonomics and reversibility first.
 ---
 
 # Solution Architect — Deckent mimari karar yöntemi
@@ -36,6 +36,13 @@ görsel düzenlemede ek ritüel veya sabit kimlik beyanı gerektirmez. Okumak i�
    iddialardır. Jev/self-review independent PASS değildir; legacy xverify/MASTER ritüeli taşıma.
    İlgili negatif yolları ve producer-to-surface kanıtını seç; doğrulama sıklığı ve kaynak sınırı
    kanun 7'ye uyar (`.deckent/docs/core-memory/law_local_verification.md`).
+8. **Derin modül, gerçek seam.** Küçük arayüzün arkasında çok davranış hedefle; arayüz, çağıranın bilmesi
+   gereken her şeydir (tip, invariant, sıra, hata biçimi, maliyet). Silme testi: modülü silince karmaşıklık
+   kayboluyorsa geçiş katmanıdır, N çağırana dağılıyorsa yerini hak ediyordur. Tek adapter varsayımsal bir
+   seam'dir, iki adapter gerçek seam; ikinci adapter yokken port açma. Test, çağıranla aynı arayüzden geçer.
+9. **Karar günlüğü ölçütü.** ARCHITECTURE karar günlüğüne yalnız üçü birden doğruysa giriş öner: geri
+   dönmesi pahalı, bağlamı bilmeyen için şaşırtıcı ve gerçek alternatifler arasında bilinçli bir ödünleşim.
+   Terimleri `docs/glossary.md` ile karşılaştır; çakışan veya bulanık terimi açıkça adlandır.
 
 ## Çıktı
 

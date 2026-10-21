@@ -1,6 +1,6 @@
 ---
 name: deckent-authority-bootstrap
-description: Establish a read-only Deckent Next snapshot of owner authority, repository scope, work ownership and evidence freshness at session start or after relevant context changes. Inspect runtime only when the task needs it; this skill does not admit or execute work.
+description: Session start, after compaction or an authority change - take a read-only snapshot of Deckent Next owner authority, repository scope, work ownership and evidence freshness. Reads runtime only when the task needs it and admits no work.
 ---
 
 # Deckent Next authority bootstrap

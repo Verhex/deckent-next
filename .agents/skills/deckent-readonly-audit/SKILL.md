@@ -1,6 +1,6 @@
 ---
 name: deckent-readonly-audit
-description: Investigate a bounded Deckent Next repository, wiring, runtime or incident question through read-only evidence. Report coverage, findings and proof limits; do not implement fixes, run tests, admit work or change state.
+description: Investigate a bounded Deckent Next repository, wiring, runtime or incident question through read-only evidence and report coverage, findings and proof limits; fixes, tests and state changes stay outside it.
 ---
 
 # Deckent Next read-only audit
