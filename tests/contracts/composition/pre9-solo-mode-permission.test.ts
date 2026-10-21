@@ -12,6 +12,7 @@ import { FIRST_RUN_POLICY_TEMPLATE_VERSION, INSTALLER_PERMISSION_MODES_COMMAND_P
 import { FIRST_RUN_TOOL_NAMES, PermissionModeApplication, admitFullAccessTurn, decideAgentToolCall } from '#engine/index.js';
 import { getConfigFieldDefault, productResourcePath, resolveProductLayout, t } from '#platform/index.js';
 import { main } from '#surfaces/index.js';
+import { permissionModeStop, runModeCommand } from '#surfaces/core/terminal/index.js';
 
 // PRE-9 SOLO-MOD-IZNI (owner 2026-10-21; law audit AUDIT-PRE9-LAW R1–R8): on a fresh solo installation the installation owner opens full-auto and
 // full-access with `deckent init policy --scope <id> --modes <set>` confirmed at the terminal; an AI (MCP) or a pipe cannot; the hard floor stays
@@ -172,6 +173,66 @@ describe.skipIf(process.platform !== 'linux')('PRE-9: the installation owner ope
     expect(await openWitnessed(f.root, [])).toMatchObject({ status: 'applied', removed: [RULE_IDS['full-auto'], RULE_IDS['full-access']] });
     expect(await f.permissionRules()).toEqual([]);
     expect(await f.set('full-auto')).toEqual({ code: 'PERMISSION_MODE_DENIED' });
+  });
+});
+
+// Lead decision (Jev 0de38b48, option b): a stored full-auto is re-checked against its grant on every call, exactly like full access. A revoked grant
+// — `--modes none`, a company deny on permission-mode/set, or a removed hand rule — makes the very next call behave as standart, and no surface shows
+// full-auto as active while it is not in effect. Bindings, ledger, protocol and template are unchanged (the stored choice stays; it is not effective).
+describe.skipIf(process.platform !== 'linux')('PRE-9 (b): a stored full-auto without its grant is standart on the very next call', () => {
+  /** A narrow mutating shell command: lowered only in full-auto (the template's edit/shell rule is mode-eligible). */
+  const shellCall = (policy: unknown, principal: VerifiedPrincipal) => decideAgentToolCall(policy, { principal, scopeId: SCOPE, cell: 'shell-narrow-mutating',
+    tool: { name: 'run_shell' }, operation: { id: FIRST_RUN_TOOL_NAMES.shellOperationId } });
+  const rewrite = async (path: string, edit: (policy: { grants: { id: string }[] }) => unknown) =>
+    writeFile(path, JSON.stringify(edit(JSON.parse(await readFile(path, 'utf8')) as { grants: { id: string }[] })), { mode: 0o600 });
+  async function inFullAuto(edit?: (policy: { grants: unknown[] }) => unknown, open = true) {
+    const f = await freshInstallation(edit);
+    if (open) await openWitnessed(f.root, ['full-auto']);
+    expect(await f.set('full-auto')).toMatchObject({ result: { mode: 'full-auto' } });
+    // Control: while the grant holds, full-auto lowers the call (audited relaxation).
+    expect(shellCall(await f.load(), f.person)).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto', cell: 'shell-modify' } });
+    return f;
+  }
+  const expectStandart = async (f: Awaited<ReturnType<typeof freshInstallation>>) => {
+    const policy = await f.load();
+    expect(shellCall(policy, f.person)).toMatchObject({ decision: 'require-approval', relaxation: null });
+    // The stored choice is still there (no bindings change) but no surface reads it as the mode in effect.
+    const view = permissionModeView(policySchema.parse(policy), f.person, SCOPE);
+    expect(view).toMatchObject({ mode: 'full-auto', fullAuto: false });
+    expect(permissionModeStop(view, false)).toBe('standart');
+  };
+
+  it('closing with --modes none: the next call asks (standart)', async () => {
+    const f = await inFullAuto();
+    await openWitnessed(f.root, []);
+    await expectStandart(f);
+  });
+
+  it('a company deny on permission-mode/set full-auto: the next call asks (standart)', async () => {
+    const f = await inFullAuto();
+    await rewrite(f.policyPath, policy => ({ ...policy, grants: [...policy.grants, { id: 'company-no-full-auto', effect: 'deny', actions: ['set'], scopes: [SCOPE], principals: 'all',
+      resource: { kind: 'permission-mode', ids: ['full-auto'] } }] }));
+    await expectStandart(f);
+  });
+
+  it('removing the hand rule that granted full-auto: the next call asks (standart)', async () => {
+    const owner = readLocalOsIdentity();
+    const f = await inFullAuto(policy => ({ ...policy, grants: [...policy.grants, { id: 'hand-full-auto', effect: 'allow', actions: ['set'], scopes: [SCOPE],
+      principals: [{ issuer: owner.issuer, subject: owner.subject }], resource: { kind: 'permission-mode', ids: ['full-auto'] } }] }), false);
+    await rewrite(f.policyPath, policy => ({ ...policy, grants: policy.grants.filter(rule => rule.id !== 'hand-full-auto') }));
+    await expectStandart(f);
+  });
+
+  it('/mode says full-auto is no longer granted and the stored choice is not in effect (typed notice, EN and TR)', async () => {
+    const view = { schemaVersion: 1 as const, scopeId: SCOPE, supported: true, mode: 'full-auto' as const, askEdits: false, revision: 'r', eligible: true, fullAccess: false, fullAuto: false };
+    const port = { async inspect() { return view; }, async set(): Promise<never> { throw new Error('not called'); } };
+    for (const locale of ['en', 'tr'] as const) {
+      const revoked = t('terminal.mode.fullAutoRevoked', {}, locale);
+      expect(revoked).not.toBe('terminal.mode.fullAutoRevoked');
+      const shown = await runModeCommand('show', port, null, { current: '/mode · {mode}', changed: '{previous} → {mode}', inert: '', unsupported: 'v1', usage: 'usage', fullAutoRevoked: revoked } as never);
+      expect(shown.entries.map(entry => JSON.stringify(entry)).join('\n')).toContain(revoked);
+      expect(JSON.stringify(shown.entries[0])).toContain('/mode · standart');
+    }
   });
 });
 
