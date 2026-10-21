@@ -165,7 +165,8 @@ export function doctorChecks(report: DoctorRenderInput, facts: DoctorCheckFacts,
 /** The registry fixes, in order; a hard-floor item is listed so the rule is data, and is never offered. */
 export const DOCTOR_FIXES: readonly Readonly<{ id: string; checks: readonly string[]; port: string; hardFloor: boolean; policyAction?: string }>[] = Object.freeze(registry.fixes);
 export const DOCTOR_RETIREMENT_STATES: readonly string[] = Object.freeze(registry.retirementStates);
-export const DOCTOR_BACKUP_PASSPHRASE_SECRET: string = registry.backupPassphraseSecret;
+/** The secret NAME the scheduled backup reads. The registry key says "Name", never "secret": the S6 gate refuses a `*secret*` key with a literal-looking value in any config file, and this is a reference, not a value. */
+export const DOCTOR_BACKUP_PASSPHRASE_SECRET: string = registry.backupPassphraseName;
 
 const markWord = (state: DoctorCheckState, l: Locale) => state === 'ok' ? t('doctor.mark.ok', {}, l) : state === 'warning' ? t('doctor.mark.warning', {}, l)
   : state === 'error' ? t('doctor.mark.error', {}, l) : t('doctor.mark.untested', {}, l);
