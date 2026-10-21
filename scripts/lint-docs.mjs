@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Fast, offline documentation size, release-drift and link gate (owner 2026-10-08; links 2026-10-18).
+// Fast, offline documentation size, release-drift, link and EN/TR pair gate (owner 2026-10-08; links 2026-10-18).
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -87,7 +87,9 @@ try {
   // Stage 1 link gate (Jev g3-lint-docs, 2026-10-18): relative Markdown links resolve to an existing file and anchor, and
   // every docs/X.md has docs/X.tr.md linking the same targets (anchors are language-specific and ignored for the pair).
   const publicDocs = readdirSync(join(ROOT, 'docs'), { withFileTypes: true }).filter(entry => entry.isFile() && entry.name.endsWith('.md')).map(entry => `docs/${entry.name}`);
-  const linkScope = ['README.md', 'README.tr.md', 'SECURITY.md', 'CHANGELOG.md', 'PLAN.md', 'ARCHITECTURE.md', ...architectureFiles('.deckent/docs/architecture'), ...publicDocs];
+  // Every root Markdown file except COMPLETED-PLAN.md (its history links name host folders outside the repository), docs/ recursively.
+  const rootDocs = readdirSync(ROOT, { withFileTypes: true }).filter(entry => entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'COMPLETED-PLAN.md').map(entry => entry.name);
+  const linkScope = [...new Set([...rootDocs, ...architectureFiles('.deckent/docs/architecture'), ...architectureFiles('docs')])];
   for (const name of linkScope.map(path => path.replaceAll('\\', '/'))) {
     for (const link of markdownLinks(read(name))) {
       const where = `${name}:${link.line}`, target = linkTarget(name, link.target);
@@ -101,10 +103,13 @@ try {
     const turkish = name.replace(/\.md$/u, '.tr.md');
     const paired = existsSync(join(ROOT, turkish));
     if (UNPAIRED_BASELINE.has(name)) { if (paired) fail(name, `${turkish} exists; remove ${name} from the unpaired baseline`); continue; }
-    if (!paired) { fail(name, `missing Turkish pair ${turkish}`); continue; }
-    const english = linkTargets(name), translated = linkTargets(turkish);
-    for (const target of english) if (!translated.has(target)) fail(turkish, `missing link target ${target} present in ${name}`);
-    for (const target of translated) if (!english.has(target)) fail(name, `missing link target ${target} present in ${turkish}`);
+    if (!paired) fail(name, `missing Turkish pair ${turkish}`);
+  }
+  // Every Turkish page (README, docs/, architecture documents) is compared with its English page.
+  const turkishPages = ['README.tr.md', ...publicDocs, ...architectureFiles('.deckent/docs/architecture')].map(path => path.replaceAll('\\', '/')).filter(path => path.endsWith('.tr.md'));
+  for (const turkish of turkishPages) {
+    const name = turkish.replace(/\.tr\.md$/u, '.md');
+    if (existsSync(join(ROOT, name))) checkPair(name, turkish); else fail(turkish, `missing English pair ${name}`);
   }
 } catch (error) { fail('input', error.message); }
 // Fenced code blocks are not prose: yields [line number, text] for lines outside them.
@@ -140,6 +145,19 @@ function linkTargets(name) {
     const local = linkTarget(name, target);
     return local ? local.path.replace(/\.tr\.md$/u, '.md') : target.split('#')[0];
   }));
+}
+// An EN/TR pair links the same targets and keeps the same ATX heading levels in the same order (heading text is translated).
+function checkPair(name, turkish) {
+  const english = linkTargets(name), translated = linkTargets(turkish);
+  for (const target of english) if (!translated.has(target)) fail(turkish, `missing link target ${target} present in ${name}`);
+  for (const target of translated) if (!english.has(target)) fail(name, `missing link target ${target} present in ${turkish}`);
+  const levels = headingLevels(name), turkishLevels = headingLevels(turkish);
+  const at = levels.findIndex((level, index) => level !== turkishLevels[index]);
+  const index = at >= 0 ? at : levels.length < turkishLevels.length ? levels.length : -1;
+  if (index >= 0) fail(turkish, `heading ${index + 1} is h${turkishLevels[index] ?? '-'} but h${levels[index] ?? '-'} in ${name}; heading levels must match in order`);
+}
+function headingLevels(name) {
+  return proseLines(read(name)).flatMap(([, line]) => { const marks = /^\s{0,3}(#{1,6})\s+\S/u.exec(line)?.[1]; return marks ? [marks.length] : []; });
 }
 // GitHub heading ids (github-slugger): lowercase, drop every character that is not alphabetic, a mark, a decimal/letter
 // number, connector punctuation, hyphen or space, turn spaces into hyphens, suffix repeats -1, -2...; explicit

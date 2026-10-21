@@ -137,4 +137,25 @@ describe('documentation release drift gate', () => {
     const root = await fixture(); await rm(join(root, 'docs'), { recursive: true });
     expect(lint(root).output).toContain('lint-docs: input:');
   });
+  it('compares heading levels in order for README, docs/ and architecture EN/TR pairs, and needs the English page of every Turkish page', async () => {
+    expect(lint(await fixture({ 'docs/guide.md': '# Guide\n```\n## fenced\n```\n[Türkçe](guide.tr.md) · [readme](../README.md)\n' })).status).toBe(0);
+    const docs = lint(await fixture({ 'docs/guide.tr.md': '# Kılavuz\n## Ek\n[English](guide.md) · [readme](../README.md)\n' }));
+    expect(docs.status).toBe(1); expect(docs.output).toContain('docs/guide.tr.md: heading 2 is h2 but h- in docs/guide.md');
+    const readme = lint(await fixture({ 'README.md': 'Current alpha.17.\n# Deckent\n## Start', 'README.tr.md': 'Güncel alpha.17.\n# Deckent\n### Başlarken' }));
+    expect(readme.status).toBe(1); expect(readme.output).toContain('README.tr.md: heading 2 is h3 but h2 in README.md');
+    const architecture = lint(await fixture({ '.deckent/docs/architecture/ref.md': '# Ref\n[readme](../../../README.md)', '.deckent/docs/architecture/ref.tr.md': '# Ref',
+      '.deckent/docs/architecture/nested/only.tr.md': '# Yalnız' }));
+    expect(architecture.status).toBe(1);
+    expect(architecture.output).toContain('.deckent/docs/architecture/ref.tr.md: missing link target README.md present in .deckent/docs/architecture/ref.md');
+    expect(architecture.output).toContain('.deckent/docs/architecture/nested/only.tr.md: missing English pair .deckent/docs/architecture/nested/only.md');
+  });
+  it('checks relative links in every root Markdown file except COMPLETED-PLAN.md and in nested docs/ folders', async () => {
+    const root = await fixture({ 'CONTRIBUTING.md': '# Contributing\n[gone](missing.md)', 'COMPLETED-PLAN.md': '[history](../outside/gone.md)' });
+    await mkdir(join(root, 'docs/reports')); await writeFile(join(root, 'docs/reports/r.md'), '[x](../nowhere.md)');
+    const result = lint(root);
+    expect(result.status).toBe(1);
+    expect(result.output).toContain('CONTRIBUTING.md:2: link target missing.md does not exist');
+    expect(result.output).toContain('docs/reports/r.md:1: link target ../nowhere.md does not exist');
+    expect(result.output).not.toContain('COMPLETED-PLAN.md');
+  });
 });
