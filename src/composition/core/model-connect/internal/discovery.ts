@@ -2,7 +2,8 @@ import { ModelCatalogPolicyAuthorization, ModelConnectError } from '#engine/inde
 import { PROVIDER_CONNECT_REGISTRY, discoverProviderModels, discoveredProviderCatalog, providerDiscoveryChannel, providerConnectSecretName,
   providerProbeBase, connectionAdapter, providerConnectModelPriced, ProviderModelListError, ProviderConnectError, ProviderProbeError,
   type ProviderConnectRegistry, type ProviderProbeOptions } from '#adapters/index.js';
-import { configuredSecretResolver, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
+import { projectCredentialResolver } from '#composition/core/secrets/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
@@ -20,7 +21,7 @@ export async function listConfiguredConnectionModels(projectRoot: string, scopeI
     } }).authorize('inspect', scopeId, { channelId, modelId: null }, context.principal, 'scope');
     await authorize();
     const secure = new URL(base).protocol === 'https:', name = providerConnectSecretName(kind, base);
-    const key = secure && name ? await configuredSecretResolver(context.config, options)(name) ?? null : null;
+    const key = secure && name ? await projectCredentialResolver(context, scopeId, options).resolve(name) ?? null : null;
     await authorize();
     const ids = await discoverProviderModels(kind, base, key, host.discoveryOptions);
     await authorize();

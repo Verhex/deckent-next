@@ -1,4 +1,5 @@
 import { createLocalTls } from '../../fixtures/local-tls.js';
+import { grantFixtureSecrets } from '../../fixtures/project-grant.js';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:https';
@@ -74,6 +75,8 @@ async function fixture() {
       actions: ['invoke', 'inspect', 'inspect-content'], scopes: ['scope'], principals: [{ issuer: identity.issuer, subject: identity.subject }],
       resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } }] : [] }), { mode: 0o600 });
   await policy(true);
+  // PRE-8 v2: the admin lent the main-vault key to this project (the grant floor itself is proven in secret-project-grant tests).
+  await grantFixtureSecrets(project, 'scope', ['FIXTURE_PROVIDER_TOKEN'], { env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } });
   const command = (commandId: string) => ({ schemaVersion: 1 as const, commandId, scopeId: 'scope', reference,
     catalogRevision: catalog.revision, expectedBinding: binding, nativeRequest: { model: 'vendor/model',
       messages: [{ role: 'user', content: 'hello' }], max_completion_tokens: 4 } });

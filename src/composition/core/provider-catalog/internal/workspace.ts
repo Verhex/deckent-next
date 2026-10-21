@@ -1,7 +1,8 @@
 import { modelInvocationProfileSchema } from '#domain/index.js';
 import { ModelInvocationPolicyAuthorization, openInvocationWorkspaceSelection } from '#engine/index.js';
 import { listProviderWorkspaces, providerProfileWorkspaceOffer, PROVIDER_CONNECT_KINDS } from '#adapters/index.js';
-import { configuredSecretResolver, type ConfigLoadOptions } from '#platform/index.js';
+import type { ConfigLoadOptions } from '#platform/index.js';
+import { projectCredentialResolver } from '#composition/core/secrets/index.js';
 import { snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 /** Wiring only: the engine owns choice custody; adapter owns free discovery; config owns governed publication. */
@@ -14,6 +15,6 @@ export async function openConfiguredProviderWorkspaces(root: string, scopeId: st
       && kind.endpoint.default !== null && new URL(kind.connect.chatPath, kind.endpoint.default).href === profile.adapter.definition['endpoint']),
     authorize: async (profile, current) => { await new ModelInvocationPolicyAuthorization({ async load() { return current.document; } }).authorize('invoke', { scopeId, reference: profile.reference }, current.principal); },
     async credential(profile, current) { const name = (profile.adapter.definition['authentication'] as { credentialRef?: string } | undefined)?.credentialRef;
-      return name ? configuredSecretResolver(current.config, options)(name) : undefined; },
+      return name ? projectCredentialResolver(current, scopeId, options).resolve(name) : undefined; },
     discover: listProviderWorkspaces, offer: providerProfileWorkspaceOffer, snapshots: async () => [await snapshotConfiguredConfig(root, options, 'global'), await snapshotConfiguredConfig(root, options, 'project')],
   }); }

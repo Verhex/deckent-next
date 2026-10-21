@@ -7,6 +7,7 @@ import { probeProviderConnection } from '#adapters/index.js';
 import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
+import { grantFixtureSecrets } from '../../fixtures/project-grant.js';
 
 const grants = [
   { id: 'config', effect: 'allow', actions: ['write'], scopes: 'all', principals: me, resource: { kind: 'config', ids: 'all' } },
@@ -104,6 +105,7 @@ describe.skipIf(process.platform !== 'linux')('configured seedless model connect
     const host = { discoveryOptions: { fetch: async (url: string, init: { headers: Record<string, string> }) => {
       seen.push({ url, headers: init.headers }); return new Response('{"data":[{"id":"gpt-6-luna"}]}');
     } } };
+    await grantFixtureSecrets(f.project, 'scope', ['DECKENT_OAICOMPAT_API_OPENAI_COM'], { env: f.env }); // PRE-8 v2: the admin lent the main key.
     const result = await connectConfiguredModel(f.project, { ...f.command, connection: 'openai-compatible', endpoint: 'https://api.openai.com/v1',
       model: { nativeId: 'gpt-6-luna' } }, { env: f.env, secretResolver: () => key }, host);
     expect(result).toMatchObject({ status: 'connected', tariff: 'published', credentialRef: 'DECKENT_OAICOMPAT_API_OPENAI_COM' });

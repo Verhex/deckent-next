@@ -41,6 +41,7 @@ export class SecretGrantStoreRegistry {
   }
   seal(): void { this.sealed = true; }
   has(id: string): boolean { return this.factories.has(id); }
+  ids(): readonly string[] { return Object.freeze([...this.factories.keys()]); }
   open(id: string, context: SecretGrantStoreContext): SecretGrantStore {
     const create = this.factories.get(id);
     if (!create) throw ErrorRegistry.createError('SECRET_GRANT_STORE_UNSAFE', { params: { reason: 'unknown-store' } });

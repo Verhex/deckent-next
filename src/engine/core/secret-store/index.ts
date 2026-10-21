@@ -24,3 +24,5 @@ export { SECRET_GRANT_STORE_ID_PATTERN, CORE_SECRET_GRANT_STORE_ID, SecretGrantS
 export type { SecretGrantStore, SecretGrantStoreContext, SecretGrantStoreFactory, SecretGrantStoreErrorCode } from './internal/grant.js';
 export { buildSecretInventory } from './internal/inventory.js';
 export type { SecretInventory, SecretInventoryFinding, SecretInventoryInput, SecretInventoryProject, SecretInventoryRow, SecretGrantState } from './internal/inventory.js';
+export { decideSecretGrant } from './internal/grant-administration.js';
+export type { SecretGrantPorts, SecretGrantRequest } from './internal/grant-administration.js';
