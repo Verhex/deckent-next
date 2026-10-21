@@ -3,7 +3,7 @@ import { lstat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { CONFIG_FIELDS, createDefaultConfig, envValue, inspectProductDirectory, inspectProductFile, loadGlobalConfig, productResourcePath, readJsonFile, resolveGlobalConfigReadPath,
   resolveProductLayout, type Environment, type ResolvedConfig } from '#platform/index.js';
-import { sameAttemptIdentity, executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent, type RunSnapshot } from '#domain/index.js';
+import { fullAutoGrant, sameAttemptIdentity, executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent, type RunSnapshot } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
 import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerIndex, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests, type MonitorReadScope } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
@@ -134,7 +134,9 @@ async function installMap(config: ResolvedConfig, env: Environment, ledger: Moni
     const self = readLocalOsIdentity();
     const modes = (document.schemaVersion === 2 ? document.bindings.modes ?? [] : []).filter(entry => entry.principal.issuer === self.issuer && entry.principal.subject === self.subject);
     policy = Object.freeze({ grants: document.grants.length, byResourceKind: Object.freeze(byResourceKind), separationOfDuties: document.schemaVersion === 2 ? document.separationOfDuties.length : 0,
-      permissionModes: Object.freeze(modes.map(entry => Object.freeze({ principal: `${entry.principal.issuer}/${entry.principal.subject}`, mode: entry.mode }))) });
+      // PRE-9 (b): a stored full-auto reads as full-auto only where its grant allows it now (the decision's reading); otherwise it is not in effect.
+      permissionModes: Object.freeze(modes.map(entry => Object.freeze({ principal: `${entry.principal.issuer}/${entry.principal.subject}`,
+        mode: entry.mode === 'full-auto' && entry.scopes.some(scopeId => fullAutoGrant(document, { ...self, scopeIds: [scopeId] }, scopeId).decision !== 'allow') ? 'standart' : entry.mode }))) });
   } catch (error) { diagnostics.push('map-policy-unavailable:' + code(error)); }
   return Object.freeze({ models: ledger?.models ?? [], memory: { available: false },
     config: Object.freeze([{ layer: 'default' as const, path: null, sections: keys(createDefaultConfig()) },

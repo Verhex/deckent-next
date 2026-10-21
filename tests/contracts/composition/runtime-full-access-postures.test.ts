@@ -20,7 +20,9 @@ const landlockOnly: ShellSandboxFactory = layout => [{ kind: 'landlock', usable:
 const sandboxed = { schemaVersion: 1, realm: 'require-sandbox' };
 const REALMS = { bubblewrap: { shell: sandboxed }, landlock: { shell: sandboxed, sandboxes: landlockOnly } } as const;
 const FULL_ACCESS = rule('full-access', 'permission-mode', ['full-access'], 'allow', false, ['set']);
-const GRANTS = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_ACCESS];
+// PRE-9 (b): a stored full-auto counts only while its company grant allows it (re-checked on every call).
+const FULL_AUTO = rule('full-auto', 'permission-mode', ['full-auto'], 'allow', false, ['set']);
+const GRANTS = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_ACCESS, FULL_AUTO];
 const DATA = '.deckent/data';
 const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd, encoding: 'utf8' });
 const COMMIT = 'git add -A src && git -c user.name=agent -c user.email=agent@example.invalid commit -qm';
@@ -106,7 +108,7 @@ describe.skipIf(process.platform !== 'linux')('full access composed with the Ast
 // full-access grant is even consulted), so it asks in a full-access turn too. Once the owner answers such a card, `execute` runs the call
 // as `owner-approved` (mode.ts), the same authority any other card gets — never `full-access` — so the card's write text must read like
 // any other owner-approved card except for `.git`, which still follows the turn's layout (MODES-3).
-const NOT_ELIGIBLE = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval'), rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_ACCESS];
+const NOT_ELIGIBLE = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval'), rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_ACCESS, FULL_AUTO];
 
 describe.skipIf(process.platform !== 'linux')('the approval card describes the write posture the call will actually get, not a static per-realm line', () => {
   for (const realm of ['bubblewrap', 'landlock'] as const) {

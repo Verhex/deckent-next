@@ -1139,5 +1139,6 @@
   "terminal.delivery.pickerTitle": "/deliver · tasks awaiting delivery",
   "terminal.delivery.none": "No task awaits delivery.",
   "terminal.delivery.fallbackTitle": "Accepted task",
-  "terminal.jobs.parked.environment-not-ready": "environment not ready"
+  "terminal.jobs.parked.environment-not-ready": "environment not ready",
+  "terminal.info.scope.modeRevoked": "{mode} · stored full-auto is no longer granted here, so it is not in effect"
 }

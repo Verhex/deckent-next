@@ -11,7 +11,9 @@ const rule = (id: string, kind: string, ids: string[], effect: string, eligible?
   scopes: ['scope'], principals: [me], resource: { kind, ids }, ...(eligible === undefined ? {} : { modeEligible: eligible }) });
 const policy = (mode: string, toolEffect = 'require-approval', eligible = true) => resolvePolicyBindings(
   { schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions: [], grants: [rule('shell-tool', 'agent-tool', ['run_shell'], toolEffect, toolEffect === 'require-approval' ? eligible : undefined),
-    rule('shell-run', 'operation', ['host.shell.run'], 'allow')] },
+    rule('shell-run', 'operation', ['host.shell.run'], 'allow'),
+    // PRE-9 (b): a stored full-auto counts only while the company grant allows it (re-checked on every call).
+    { id: 'full-auto-set', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: [me], resource: { kind: 'permission-mode', ids: ['full-auto'] } }] },
   { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['scope'], mode }] });
 const decide = (snapshot: unknown, cell: AgentToolCallCell, realm?: ShellRealmContainment, contained = true) => decideAgentToolCall(snapshot, { principal,
   scopeId: 'scope', tool: { name: 'run_shell' }, operation: { id: 'host.shell.run' }, cell, ...(realm ? { shell: { realm, contained } } : {}) });
@@ -141,7 +143,8 @@ describe('sandbox mode relaxation and standing approvals together (SHELL-AUTONOM
   const KEY = 'v1:run_shell:command:find . -writable';
   const withStanding = (mode: string) => resolvePolicyBindings({ schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions: [], grants: [
     rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow'),
-    { ...rule('standing-1', STANDING_GRANT_KIND, [KEY], 'allow'), actions: ['invoke'] }] },
+    { ...rule('standing-1', STANDING_GRANT_KIND, [KEY], 'allow'), actions: ['invoke'] },
+    { id: 'full-auto-set', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: [me], resource: { kind: 'permission-mode', ids: ['full-auto'] } }] },
     { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['scope'], mode }] });
   const request = (realm: ShellRealmContainment, contained = true, session = true) => ({ principal, scopeId: 'scope', tool: { name: 'run_shell' },
     operation: { id: 'host.shell.run' }, cell: 'shell-read-low' as const, shell: { realm, contained }, standing: { key: KEY, session } });

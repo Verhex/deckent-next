@@ -40,6 +40,7 @@ type Effect = 'allow' | 'deny' | 'require-approval';
 /** One company rule; `eligible` sets the policy v2 `modeEligible` flag (only meaningful on require-approval). */
 export const rule = (id: string, kind: string, ids: string[], effect: Effect, eligible = false, actions = kind === 'operation' ? ['execute'] : ['invoke']) =>
   ({ id, effect, actions, scopes: ['scope'], principals: me, resource: { kind, ids }, ...(eligible ? { modeEligible: true } : {}) });
+const FULL_AUTO_GRANT = { id: 'full-auto-set', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: me, resource: { kind: 'permission-mode', ids: ['full-auto'] } };
 const baseGrants = [
   { id: 'invoke', effect: 'allow', actions: ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], scopes: ['scope'], principals: me,
     resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } },
@@ -96,8 +97,10 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     .admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference, expectedRevision: 0,
       catalogRevision: 'catalog-1', expectedBinding: binding });
   const writeAuthority = async (grants: Record<string, unknown>[], mode: Mode | null, revision = 'r1') => {
+    // PRE-9 (b): a stored full-auto counts only while the company grant allows it (re-checked on every call), so a fixture in full-auto holds it.
+    const fullAuto = mode === 'full-auto' || (typeof mode === 'object' && mode?.mode === 'full-auto') ? [FULL_AUTO_GRANT] : [];
     await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 2, revision: `p-${revision}`, roles: [], separationOfDuties: [],
-      restrictions: [], grants: [...baseGrants, ...grants] }), { mode: 0o600 });
+      restrictions: [], grants: [...baseGrants, ...fullAuto, ...grants] }), { mode: 0o600 });
     await writeFile(join(data, 'bindings.json'), JSON.stringify(mode === null ? { schemaVersion: 1, revision: `b-${revision}`, bindings: [] }
       : typeof mode === 'string' ? { schemaVersion: 2, revision: `b-${revision}`, bindings: [], modes: [{ id: 'me-mode', principal: me[0], scopes: ['scope'], mode }] }
         : { schemaVersion: 3, revision: `b-${revision}`, bindings: [], modes: [{ id: 'me-mode', principal: me[0], scopes: ['scope'], ...mode }] }), { mode: 0o600 });

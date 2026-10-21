@@ -5,7 +5,8 @@ import { attempt } from './failure.js';
 import type { TerminalAdminCall } from './context.js';
 
 type Attempt<T> = Readonly<{ value: T }> | Readonly<{ note: string }>;
-type ModeView = Readonly<{ mode: string; askEdits: boolean; revision: number | string; supported: boolean; fullAccess: boolean }>;
+type ModeView = Readonly<{ mode: string; askEdits: boolean; revision: number | string; supported: boolean; fullAccess: boolean; fullAuto?: boolean }>;
+const revoked = (view: ModeView) => view.mode === 'full-auto' && view.fullAuto === false; // PRE-9 (b): stored full-auto without its grant: not in effect
 /** What `/scope` reads on every call; a part that could not be read is a note that names it, never a guessed value. */
 async function readScopeFacts(call: TerminalAdminCall): Promise<Readonly<{ company: Attempt<string>; mode: Attempt<ModeView>;
   access: Attempt<Readonly<{ binding: string; kinds: readonly string[] }> | null> }>> {
@@ -46,6 +47,7 @@ export async function scopeLines(call: TerminalAdminCall, identity: Readonly<{ i
     // A stored full-access start mode without the session holding it runs as standart (the decision's own reading).
     ...('value' in mode ? [sessionFullAccess ? t('terminal.admin.scope.modeSession', { mode: t('terminal.mode.stop.full-access', {}, locale), stored: stopWord(mode.value, locale) }, locale)
       : mode.value.mode === 'full-access' ? t('terminal.admin.scope.modeStored', { mode: t('terminal.mode.stop.standart', {}, locale), stored: stopWord(mode.value, locale) }, locale)
+        : revoked(mode.value) ? t('terminal.admin.scope.modeRevoked', { mode: t('terminal.mode.stop.standart', {}, locale) }, locale)
         : t('terminal.admin.scope.modeShort', { mode: stopWord(mode.value, locale) }, locale), t('terminal.admin.scope.rule', { revision: mode.value.revision }, locale)] : []),
   ].join(' · ');
   const accessLine = 'note' in access ? access.note : access.value
@@ -55,7 +57,7 @@ export async function scopeLines(call: TerminalAdminCall, identity: Readonly<{ i
     ...('note' in company ? [company.note] : []), ...('note' in mode ? [mode.note] : []),
     t('terminal.admin.scope.details', {}, locale),
     ...[t('terminal.admin.scope.installation', { id: identity.installationId }, locale), t('terminal.admin.scope.project', { id: identity.projectId }, locale),
-      ...('value' in mode ? [t('terminal.admin.scope.mode', { mode: mode.value.mode, revision: mode.value.revision, supported: flag(mode.value.supported), fullAccess: flag(mode.value.fullAccess) }, locale)] : [])]
+      ...('value' in mode ? [t('terminal.admin.scope.mode', { mode: revoked(mode.value) ? 'standart' : mode.value.mode, revision: mode.value.revision, supported: flag(mode.value.supported), fullAccess: flag(mode.value.fullAccess) }, locale)] : [])]
       .map(line => `  ${line}`)];
 }
 
@@ -69,8 +71,9 @@ export async function scopeView(call: TerminalAdminCall, identity: Readonly<{ in
   const project = basename(root) || root;
   const modeText = 'value' in mode ? sessionFullAccess ? t('terminal.info.scope.modeSession', { mode: t('terminal.mode.stop.full-access', {}, locale), stored: stopWord(mode.value, locale) }, locale)
     : mode.value.mode === 'full-access' ? t('terminal.info.scope.modeStored', { mode: t('terminal.mode.stop.standart', {}, locale), stored: stopWord(mode.value, locale) }, locale)
+      : revoked(mode.value) ? t('terminal.info.scope.modeRevoked', { mode: t('terminal.mode.stop.standart', {}, locale) }, locale)
       : stopWord(mode.value, locale) : null;
-  const modeShort = 'value' in mode ? sessionFullAccess ? t('terminal.mode.stop.full-access', {}, locale) : mode.value.mode === 'full-access' ? t('terminal.mode.stop.standart', {}, locale) : stopWord(mode.value, locale)
+  const modeShort = 'value' in mode ? sessionFullAccess ? t('terminal.mode.stop.full-access', {}, locale) : mode.value.mode === 'full-access' || revoked(mode.value) ? t('terminal.mode.stop.standart', {}, locale) : stopWord(mode.value, locale)
     : t('terminal.info.chip.notRead', {}, locale);
   const rules: InfoRow[] = 'value' in mode ? [{ key: t('terminal.info.scope.key.mode', {}, locale), value: modeText!, ...(sessionFullAccess || mode.value.mode === 'full-access' ? { chip: { state: 'warn' as const, text: t('terminal.mode.stop.full-access', {}, locale) } } : {}) },
     { key: t('terminal.info.scope.key.rule', {}, locale), value: String(mode.value.revision) }, { key: t('terminal.info.scope.key.modes', {}, locale), value: '', chip: flag(mode.value.supported) },

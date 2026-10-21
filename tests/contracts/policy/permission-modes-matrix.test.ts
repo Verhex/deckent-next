@@ -14,12 +14,15 @@ const CELLS: readonly AgentToolCallCell[] = ['read', 'edit', 'edit-floor', 'edit
 const REALMS = ['host', 'sandbox-contained', 'sandbox-uncontained', 'degraded'] as const;
 type Realm = typeof REALMS[number];
 type Policy = 'allow' | 'eligible' | 'unmarked' | 'deny';
-type Person = { readonly label: string; readonly entry: { mode: string; askEdits?: true } | null; readonly launched: boolean; readonly grant: 'allow' | 'deny' | null };
+/** `autoGrant: false` (PRE-9 b): the company's full-auto set grant is gone, so a stored full-auto is standart on every call; every other row holds it. */
+type Person = { readonly label: string; readonly entry: { mode: string; askEdits?: true } | null; readonly launched: boolean; readonly grant: 'allow' | 'deny' | null; readonly autoGrant?: false };
 const PEOPLE: readonly Person[] = [
   { label: 'standart (no entry)', entry: null, launched: false, grant: null },
   { label: 'standart + askEdits', entry: { mode: 'standart', askEdits: true }, launched: false, grant: null },
   { label: 'full-auto', entry: { mode: 'full-auto' }, launched: false, grant: null },
   { label: 'full-auto + askEdits', entry: { mode: 'full-auto', askEdits: true }, launched: false, grant: 'allow' },
+  { label: 'full-auto, its grant withdrawn', entry: { mode: 'full-auto' }, launched: false, grant: null, autoGrant: false },
+  { label: 'full-auto + askEdits, its grant withdrawn', entry: { mode: 'full-auto', askEdits: true }, launched: false, grant: 'allow', autoGrant: false },
   { label: 'stored full-access, not launched', entry: { mode: 'full-access' }, launched: false, grant: 'allow' },
   { label: 'full-access launched', entry: null, launched: true, grant: 'allow' },
   { label: 'full-access launched + askEdits', entry: { mode: 'full-access', askEdits: true }, launched: true, grant: 'allow' },
@@ -43,7 +46,8 @@ function expected(cell: AgentToolCallCell, realm: Realm, person: Person, policy:
   }
   if (policy === 'allow') return RAISING.has(cell) ? 'require-approval' : 'allow';
   if (policy === 'unmarked') return 'require-approval';
-  const mode = person.entry === null || person.entry.mode === 'full-access' ? 'standart' : person.entry.mode, askEdits = person.entry?.askEdits === true;
+  const mode = person.entry === null || person.entry.mode === 'full-access' || (person.entry.mode === 'full-auto' && person.autoGrant === false) ? 'standart' : person.entry.mode;
+  const askEdits = person.entry?.askEdits === true;
   if (cell === 'edit') return askEdits ? 'require-approval' : 'allow';
   if (mode !== 'full-auto') return 'require-approval';
   if (cell === 'shell-narrow-mutating' || cell === 'mcp-call') return 'allow';
@@ -57,6 +61,7 @@ function policyFor(cell: AgentToolCallCell, person: Person, policy: Policy) {
     ...(policy === 'eligible' ? { modeEligible: true } : {}) });
   const grants: unknown[] = [rule('tool', 'agent-tool', [tool], 'invoke'), ...(operation ? [{ ...rule('op', 'operation', [operation], 'execute') }] : [])];
   if (person.grant) grants.push({ id: 'fa', effect: person.grant, actions: ['set'], scopes: ['scope'], principals: [me], resource: { kind: 'permission-mode', ids: ['full-access'] } });
+  if (person.autoGrant !== false) grants.push({ id: 'auto', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: [me], resource: { kind: 'permission-mode', ids: ['full-auto'] } });
   return resolvePolicyBindings({ schemaVersion: 2, revision: 'p', roles: [], separationOfDuties: [], restrictions: [], grants },
     { schemaVersion: 3, revision: 'b', bindings: [], modes: person.entry ? [{ id: 'mine', principal: me, scopes: ['scope'], ...person.entry }] : [] });
 }
@@ -91,7 +96,7 @@ describe('the three permission modes: the whole decision matrix (MODES-3)', () =
       const launched = person.launched && person.grant === 'allow';
       if (launched && row.cell !== 'read') expect({ ...row, full: row.actual.fullAccess }).toMatchObject({ full: { cell: row.cell, grant: 'fa' } });
       else if (launched) expect(row.actual.fullAccess).toBeUndefined();
-      else if (row.policy === 'eligible') expect(row.actual.relaxation).toMatchObject({ mode: person.entry?.mode === 'full-auto' ? 'full-auto' : 'standart' });
+      else if (row.policy === 'eligible') expect(row.actual.relaxation).toMatchObject({ mode: person.entry?.mode === 'full-auto' && person.autoGrant !== false ? 'full-auto' : 'standart' });
       else expect(row.actual.relaxation).toBeNull();
     }
   });

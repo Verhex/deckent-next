@@ -2502,6 +2502,7 @@
     },
     "src/adapters/core/monitor-ledger": {
       "dependencies": [
+        "src/domain/core/policy",
         "src/engine/core/workspaces",
         "src/adapters/core/sqlite-ledger",
         "src/domain/core/approval",

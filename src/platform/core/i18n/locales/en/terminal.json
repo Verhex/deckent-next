@@ -418,5 +418,7 @@
   "terminal.info.usage.cachePartial": "at least {tokens} tokens ({measured}/{reports} reports measured)",
   "terminal.info.usage.cacheHit": "{percent}% ({read}/{prompt} prompt tokens)",
   "terminal.info.usage.cacheHitPartial": "{percent}% in measured reports ({measured}/{reports}); full session unknown",
-  "terminal.slash.policy": "MCP permissions by selection"
+  "terminal.slash.policy": "MCP permissions by selection",
+  "terminal.mode.fullAutoRevoked": "Full-auto is no longer granted in this scope, so your stored full-auto choice is not in effect: this session runs as standart and every call is decided as standart. The installation owner can open it again with deckent init policy --scope <scope> --modes full-auto.",
+  "terminal.admin.scope.modeRevoked": "Mode: {mode} (stored full-auto is no longer granted here, so it is not in effect)"
 }

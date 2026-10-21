@@ -1,5 +1,5 @@
 import type { AgentToolSpec } from '#domain/index.js';
-import { principalPermissionMode, type PermissionMode, type VerifiedPrincipal } from '#domain/index.js';
+import { effectivePermissionMode, type PermissionMode, type VerifiedPrincipal } from '#domain/index.js';
 import { PACKAGE_VERSION } from '#platform/index.js';
 import type { AgentTurnShellPosture } from './system-prompt.js';
 
@@ -96,7 +96,7 @@ export async function agentSessionSnapshot(input: { readonly policy: unknown; re
   readonly model: { readonly nativeId: string; readonly providerId: string; readonly modelId: string; readonly protocols: Protocols };
   readonly tools: readonly AgentToolSpec[]; readonly shell: AgentTurnShellPosture | null;
   readonly decide: (tool: AgentToolSpec, cell: AgentSessionCell, shell?: AgentSessionShellInput) => Promise<AgentSessionDecision> }): Promise<AgentSessionSnapshot> {
-  const person = (() => { try { return input.policy === null ? null : principalPermissionMode(input.policy, input.principal, input.scopeId); } catch { return null; } })();
+  const person = (() => { try { return input.policy === null ? null : effectivePermissionMode(input.policy, input.principal, input.scopeId); } catch { return null; } })();
   const name: PermissionMode | null = input.fullAccess ? 'full-access' : person ? (person.mode === 'full-access' ? 'standart' : person.mode) : null;
   const shell: AgentSessionShellInput | undefined = input.shell?.kind === 'sandbox' ? { realm: 'sandbox', contained: true } : input.shell?.kind === 'host' ? { realm: 'host', contained: true } : undefined;
   const tools = await Promise.all(input.tools.map(async tool => ({ name: tool.name, effects: await Promise.all(agentSessionCells(tool).map(async cell => ({ cell,

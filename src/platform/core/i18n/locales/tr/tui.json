@@ -1139,5 +1139,6 @@
   "terminal.delivery.pickerTitle": "/deliver · teslim bekleyen görevler",
   "terminal.delivery.none": "Teslim bekleyen görev yok.",
   "terminal.delivery.fallbackTitle": "Kabul edilen görev",
-  "terminal.jobs.parked.environment-not-ready": "ortam hazır değil"
+  "terminal.jobs.parked.environment-not-ready": "ortam hazır değil",
+  "terminal.info.scope.modeRevoked": "{mode} · kayıtlı tam otomatik burada artık izinli değil, bu yüzden geçerli değil"
 }

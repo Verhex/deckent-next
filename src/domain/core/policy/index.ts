@@ -10,7 +10,7 @@ export type { FirstRunPolicyTemplate, FirstRunPolicyTemplateInput } from './inte
 export { companyIdSchema, policyDeclaredScopes, policyScopeGrants, policyScopeMembership } from './internal/scope.js';
 export type { Policy, PolicyRequest, PolicyDecision } from './internal/evaluate.js';
 export type { ApprovalAssuranceRule, BindingsFile, BindingsV3, PermissionMode, PermissionModeEntry, PolicyFile, PrincipalPermissionMode } from './internal/schema.js';
-export { fullAccessGrant, parsePermissionModeCommand, parsePermissionModeQuery, permissionModeChangeSchema, permissionModeCommandSchema, permissionModeQuerySchema, permissionModeView,
+export { effectivePermissionMode, fullAccessGrant, fullAutoGrant, fullAutoNotInEffect, parsePermissionModeCommand, parsePermissionModeQuery, permissionModeChangeSchema, permissionModeCommandSchema, permissionModeQuerySchema, permissionModeView,
   permissionModeViewSchema, withPrincipalPermissionMode } from './internal/mode.js';
 export type { PermissionModeChange, PermissionModeCommand, PermissionModeQuery, PermissionModeView } from './internal/mode.js';
 export { policyResources, getPolicyVocabulary } from './internal/vocabulary.js';

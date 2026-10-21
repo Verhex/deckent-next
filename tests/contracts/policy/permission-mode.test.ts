@@ -12,6 +12,8 @@ const rule = (id: string, kind: string, ids: string[], effect: Effect, eligible?
 const policyOf = (grants: unknown[], modes: unknown[] | null, roles: unknown[] = [], bindings: unknown[] = []) => resolvePolicyBindings(
   { schemaVersion: 2, revision: 'p', roles, separationOfDuties: [], restrictions: [], grants },
   modes === null ? { schemaVersion: 1, revision: 'b', bindings } : { schemaVersion: 2, revision: 'b', bindings, modes });
+/** PRE-9 (b): a stored full-auto counts only while the company grant allows it (re-checked on every call, like full access). */
+const FULL_AUTO_SET = rule('full-auto-set', 'permission-mode', ['full-auto'], 'allow', undefined, ['set']);
 const person = (mode: string, scopes = ['scope'], id = 'me-mode', who = me) => ({ id, principal: who, scopes, mode });
 const editGrants = (tool: Effect, op: Effect, eligible: { tool?: boolean; op?: boolean } = {}) =>
   [rule('edit-tool', 'agent-tool', ['edit_file'], tool, eligible.tool), rule('file-write', 'operation', ['workspace.file.write'], op, eligible.op)];
@@ -77,7 +79,7 @@ describe('permission-mode policy data (T-L4 slice 4a)', () => {
 describe('the one permission decision of an agent tool call (T-L4 slice 4a)', () => {
   it('lowers an eligible require-approval on an ordinary edit in standart (the default) and full-auto, never while the person asks for edits too', () => {
     for (const [mode, expected] of [['auto-edit', 'standart'], ['full-auto', 'full-auto']] as const) {
-      expect(decide(policyOf(editGrants('require-approval', 'allow', { tool: true }), [person(mode)]), 'edit')).toEqual({ decision: 'allow', revision: 'p+b',
+      expect(decide(policyOf([...editGrants('require-approval', 'allow', { tool: true }), FULL_AUTO_SET], [person(mode)]), 'edit')).toEqual({ decision: 'allow', revision: 'p+b',
         relaxation: { mode: expected, cell: 'edit-non-floor', company: 'edit-tool', person: 'me-mode' } });
     }
     expect(decide(policyOf(editGrants('require-approval', 'require-approval', { tool: true, op: true }), [person('auto-edit')]), 'edit').relaxation)
@@ -109,7 +111,7 @@ describe('the one permission decision of an agent tool call (T-L4 slice 4a)', ()
   });
 
   it('lowers the narrow mutating shell cell in full-auto only', () => {
-    const grants = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')];
+    const grants = [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_AUTO_SET];
     expect(decide(policyOf(grants, [person('full-auto')]), 'shell-narrow-mutating', 'run_shell')).toMatchObject({ decision: 'allow',
       relaxation: { mode: 'full-auto', cell: 'shell-modify', company: 'shell-tool' } });
     expect(decide(policyOf(grants, [person('auto-edit')]), 'shell-narrow-mutating', 'run_shell')).toMatchObject({ decision: 'require-approval', relaxation: null });
