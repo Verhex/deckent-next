@@ -601,6 +601,18 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   // The prompt of `secret set` was ended with Ctrl-C (nothing sent).
   SECRET_CHANGE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_CHANGE_DENIED', p, l) }) },
   SECRET_INPUT_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_INPUT_CANCELLED', p, l) }) },
+  // PRE-8 v2 (owner 2026-10-21): project vault, reference-only `.deck`, grant at use. Params carry names, a project root, a scope, a reason
+  // or a line number only — never a value or a `.deck` line.
+  DECK_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: p['line'] === undefined ? t('error.DECK_FILE_INVALID.file', p, l) : t('error.DECK_FILE_INVALID', p, l) }) },
+  DECK_DECLARATION_REQUIRED: { category: 'config', render: (p, l) => ({ message: t('error.DECK_DECLARATION_REQUIRED', p, l), suggestion: t('remedy.DECK_DECLARATION_REQUIRED', p, l) }) },
+  SECRET_GRANT_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_GRANT_REQUIRED', p, l), suggestion: t('remedy.SECRET_GRANT_REQUIRED', p, l) }) },
+  SECRET_PROJECT_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_MISSING', p, l), suggestion: t('remedy.SECRET_PROJECT_MISSING', p, l) }) },
+  SECRET_PROJECT_IDENTITY_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_IDENTITY_REQUIRED', p, l) }) },
+  SECRET_PROJECT_VAULT_CLAIMED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_VAULT_CLAIMED', p, l), suggestion: t('remedy.SECRET_PROJECT_VAULT_CLAIMED', p, l) }) },
+  SECRET_GRANT_STORE_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_GRANT_STORE_UNSAFE', p, l) }) },
+  SECRET_GRANT_STORE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_GRANT_STORE_INVALID', p, l) }) },
+  // `secret set` off a terminal must name the vault (`--main` or `--project`): no silent scope (owner 2026-10-19).
+  SECRET_VAULT_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.SECRET_VAULT_REQUIRED', p, l) }) },
   PERMISSION_MODE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_CONFLICT', p, l) }) },
   PERMISSION_MODE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_UNSUPPORTED', p, l) }) },
   PERMISSION_MODE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_DENIED', p, l) }) },
