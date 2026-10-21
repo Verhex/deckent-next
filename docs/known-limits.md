@@ -335,6 +335,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 ## Recovery and upgrades
 
+- **A step shown as `cancelled` may already have taken effect** (owner 2026-10-21: fix planned in beta). When a turn is cancelled
+  (disconnect, explicit cancel, shutdown) after an approved tool call finished, the call is still reported `cancelled`; a write set
+  stopped by the cancellation can be partly applied. The result text lists what was written. *Workaround:* before running a cancelled
+  step again, check its result text and the files or records it targets; do not assume nothing happened.
 - **Backup sets are not fully encrypted.** Only the authority key inside a set is encrypted with your passphrase; the ledger and
   the state archive are plain files. *Workaround:* store sets on encrypted storage and keep the passphrase apart.
 - **A restore turns the backup schedule off,** and provider keys and the backup passphrase are not in the set. *Workaround:*

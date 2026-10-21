@@ -337,6 +337,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 ## Kurtarma ve yükseltme
 
+- **`cancelled` (iptal) görünen bir adımın etkisi uygulanmış olabilir** (owner 2026-10-21: düzeltme betada planlandı). Onaylanan
+  bir araç çağrısı bittikten sonra tur iptal edilirse (bağlantı kopması, açık iptal, kapanış) çağrı yine `cancelled` bildirilir;
+  iptalle durdurulan bir yazma kümesi kısmen uygulanmış kalabilir. Sonuç metni yazılanları listeler. *Yol:* iptal görünen bir
+  adımı yeniden çalıştırmadan önce sonuç metnine ve hedeflediği dosya/kayıtlara bakın; hiçbir şey olmadığını varsaymayın.
 - **Yedek kümeleri tamamen şifreli değildir.** Kümenin içindeki yalnız yetki anahtarı parolanızla şifrelenir; ledger ve durum
   arşivi düz dosyadır. *Yol:* kümeleri şifreli depolamada saklayın, parolayı ayrı tutun.
 - **Geri yükleme yedek zamanlamasını kapatır** ve sağlayıcı anahtarları ile yedek parolası kümede değildir. *Yol:* geri
