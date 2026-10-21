@@ -1645,18 +1645,19 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 
 - `src/domain/core/approval/index.ts`: `d9920351b89a86cc6d62984cbeb7bbd8c28fbfd2a31935f08c9aa05db00ebb4b`
 - `src/domain/core/approval/internal/contract.ts`: `10a07d273d83e76858c4ef935d84f8db0ac52ccd5007ba1254ebf3b77fc023fa`
-- `src/domain/core/policy/index.ts`: `b33acc0768c61d72f4c359cb2913f50a23ebbba2ec5be7886c51afae33f73372`
+- `src/domain/core/policy/index.ts`: `97f9ff96e4a906a101c2f34992e0ff2830aeed87362822a45b03ce8c6d9f791f`
 - `src/domain/core/policy/internal/administer.ts`: `7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004`
 - `src/domain/core/policy/internal/administration.ts`: `85ea655acb0a388542fae3740c47c81f6cfe7763434117e8d5aef10bc40c93b0`
 - `src/domain/core/policy/internal/ai-floor.ts`: `0634a53500e224bada3d582879e6fb5a1703efbd16783cfb802a772f9db4b106`
 - `src/domain/core/policy/internal/decision-step.ts`: `70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe`
 - `src/domain/core/policy/internal/delegations.ts`: `c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
-- `src/domain/core/policy/internal/evaluate.ts`: `75be554942eb2071ad95900a4a828418c5cc04e681be4aa7c40fc3fc820a8d7d`
-- `src/domain/core/policy/internal/first-run-template.ts`: `5d4327ac29077e7295c242f83b2b21605b482d255ebdfaccda4cae146cd6948e`
+- `src/domain/core/policy/internal/evaluate.ts`: `61b1172eabcab5da8a7a0935bc2d0bf523d5327a4c95e96b4a70ec7b191714f2`
+- `src/domain/core/policy/internal/first-run-template.ts`: `b04f76abdfaf2a54bd8f1fb12e4a384928a2062a7bc23b61f752e3e895a8d8d1`
 - `src/domain/core/policy/internal/mcp-capabilities.ts`: `c864257ab5ce5852f0799805d358f7b8790ec54fe8656157a1e4addd8cdeafb4`
 - `src/domain/core/policy/internal/mcp-grant.ts`: `8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a`
-- `src/domain/core/policy/internal/mode.ts`: `ea7d39a53c386e5d8a16c64f52cfad9466355450d63786b7412d08954f498827`
+- `src/domain/core/policy/internal/mode.ts`: `b1f9479911852c8b3842c6b2135156534e16a8e2016e3c7120c2b4f627f4c444`
+- `src/domain/core/policy/internal/permission-mode-grant.ts`: `cb8e1567461e8a4cc9a384e4b02fe9edb8b583d2fbee565383bb534c6d540505`
 - `src/domain/core/policy/internal/schema.ts`: `7ee507ceee1166b0f2fada5ad67e334ab5c883b47ad7a16f4ec3f0665220df9c`
 - `src/domain/core/policy/internal/scope.ts`: `7515bab07e7ee92d03be12c0a8710f72d6973419ca53a79fdeff61a84a496da4`
 - `src/domain/core/policy/internal/standing.ts`: `bb3b4f7c301474d2df1f690d85f3b1ea7219fbfe6f90af8b8d680017bb50d5db`
