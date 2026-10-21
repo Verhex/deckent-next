@@ -1,7 +1,12 @@
 import { modelInvocationResponseEvidenceUpperBound } from './response-evidence.js';
-import { IDENTITY_MAX_LENGTH, MODEL_INVOCATION_NATIVE_JSON_LIMITS, MODEL_INVOCATION_RECEIPT_JSON_LIMITS,
+import { IDENTITY_MAX_LENGTH, MODEL_INVOCATION_NATIVE_JSON_LIMITS, MODEL_INVOCATION_OUTCOME_VERSION, MODEL_INVOCATION_RECEIPT_JSON_LIMITS,
   identitySchema, type ModelInvocationReceipt } from '#domain/index.js';
 import { ModelInvocationStoreError } from './port.js';
+
+// Worst-case placeholders for byte bounds (format invariants, not policy): lone UTF-16 surrogates are accepted identity
+// code units and JSON escapes each as six ASCII bytes; a SHA-256 hex digest has 64 characters.
+export const WORST_CASE_IDENTITY = identitySchema.parse(String.fromCharCode(0xd800).repeat(IDENTITY_MAX_LENGTH));
+export const WORST_CASE_DIGEST = 'f'.repeat(64);
 
 /** Internal caller capacity, never a permission or a persisted invocation field. */
 export interface ModelInvocationDelivery { readonly maxResultBytes: number }
@@ -14,12 +19,12 @@ export function validateInvocationDelivery(delivery?: ModelInvocationDelivery): 
 /** Prove that a maximum retained rejection fits the canonical receipt parser, independently of the caller's transport. */
 export function assertInvocationEvidenceStorageFit(receipt: ModelInvocationReceipt): void {
   const evidenceBytes = modelInvocationResponseEvidenceUpperBound(receipt.profile);
-  const descriptor = { schemaVersion: 1, kind: 'response-body', encoding: 'base64', digest: 'f'.repeat(64),
+  const descriptor = { schemaVersion: 1, kind: 'response-body', encoding: 'base64', digest: WORST_CASE_DIGEST,
     byteLength: Number.MAX_SAFE_INTEGER };
-  const maximum = bytes({ ...receipt, outcome: { schemaVersion: 4, state: 'unknown', reason: 'transport-error', evidence: {
+  const maximum = bytes({ ...receipt, outcome: { schemaVersion: MODEL_INVOCATION_OUTCOME_VERSION, state: 'unknown', reason: 'transport-error', evidence: {
     schemaVersion: 1, adapter: receipt.profile.adapter, reason: 'response-limit', httpStatus: null,
     body: { encoding: 'base64', byteLength: Number.MAX_SAFE_INTEGER, observedBytes: Number.MAX_SAFE_INTEGER,
-      complete: false, digest: 'f'.repeat(64) } }, content: descriptor, observedAtMs: Number.MAX_SAFE_INTEGER } });
+      complete: false, digest: WORST_CASE_DIGEST } }, content: descriptor, observedAtMs: Number.MAX_SAFE_INTEGER } });
   // Serialized UTF-8 bytes conservatively bound the parser's code-unit budget, including all fixed receipt fields.
   if (evidenceBytes > BigInt(MODEL_INVOCATION_NATIVE_JSON_LIMITS.maxCodeUnits)
     || maximum > BigInt(MODEL_INVOCATION_RECEIPT_JSON_LIMITS.maxCodeUnits)) {
@@ -41,27 +46,25 @@ export function modelInvocationNativeResponseUpperBound(responseMaxBytes: number
  * (doctor, activation) can report the exact required byte count, reusing the same computation as the throwing gate. */
 function requiredDeliveryBytes(receipt: ModelInvocationReceipt, responseBytes: bigint): bigint {
   // false is longer than true. null is a placeholder only; native-response bytes include its complete wrapper.
-  const nativeDescriptor = { schemaVersion: 1, kind: 'native-response', encoding: 'canonical-json', digest: 'f'.repeat(64),
+  const nativeDescriptor = { schemaVersion: 1, kind: 'native-response', encoding: 'canonical-json', digest: WORST_CASE_DIGEST,
     byteLength: Number.MAX_SAFE_INTEGER };
-  const responded = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 4,
+  const responded = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: MODEL_INVOCATION_OUTCOME_VERSION,
     state: 'responded', content: nativeDescriptor, observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null,
     contentStatus: 'retained', purge: null }) - bytes(null) + responseBytes;
-  const unknown = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 4,
+  const unknown = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: MODEL_INVOCATION_OUTCOME_VERSION,
     state: 'unknown', reason: 'transport-error', evidence: null, content: null, observedAtMs: Number.MAX_SAFE_INTEGER } },
     response: null, contentStatus: 'not-captured', purge: null });
-  // Lone UTF-16 surrogates are accepted identity code units and JSON escapes each as six ASCII bytes.
-  const maximumCancellationCommandId = identitySchema.parse(String.fromCharCode(0xd800).repeat(IDENTITY_MAX_LENGTH));
-  const notSent = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 4,
-    state: 'not-sent', reason: 'cancelled-before-permission', cancellationCommandId: maximumCancellationCommandId,
+  const notSent = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: MODEL_INVOCATION_OUTCOME_VERSION,
+    state: 'not-sent', reason: 'cancelled-before-permission', cancellationCommandId: WORST_CASE_IDENTITY,
     observedAtMs: Number.MAX_SAFE_INTEGER, content: null } }, response: null, contentStatus: 'not-captured', purge: null });
   const responseBodyDescriptor = { ...nativeDescriptor, kind: 'response-body', encoding: 'base64' };
   const summary = { schemaVersion: 1, adapter: receipt.profile.adapter, reason: 'response-limit', httpStatus: null,
     body: { encoding: 'base64', byteLength: Number.MAX_SAFE_INTEGER, observedBytes: Number.MAX_SAFE_INTEGER,
-      complete: false, digest: 'f'.repeat(64) } };
-  const rejected = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 4,
+      complete: false, digest: WORST_CASE_DIGEST } };
+  const rejected = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: MODEL_INVOCATION_OUTCOME_VERSION,
     state: 'rejected', evidence: { ...summary, reason: 'invalid-response', body: { ...summary.body, complete: true } },
     content: responseBodyDescriptor, observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null, contentStatus: 'retained', purge: null });
-  const partial = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: 4,
+  const partial = bytes({ replayed: false, receipt: { ...receipt, outcome: { schemaVersion: MODEL_INVOCATION_OUTCOME_VERSION,
     state: 'unknown', reason: 'transport-error', evidence: summary, content: responseBodyDescriptor,
     observedAtMs: Number.MAX_SAFE_INTEGER } }, response: null, contentStatus: 'retained', purge: null });
   let max = rejected;

@@ -1,13 +1,11 @@
-import { IDENTITY_MAX_LENGTH, identitySchema, type ModelBindingDefinition, type ModelInvocationProfile, type ModelReference } from '#domain/index.js';
+import { type ModelBindingDefinition, type ModelInvocationProfile, type ModelReference } from '#domain/index.js';
 import { modelInvocationDeliveryFits, modelInvocationNativeResponseUpperBound, modelInvocationProfileDeliveryRequirement,
-  type ModelInvocationDelivery } from './delivery.js';
+  type ModelInvocationDelivery, WORST_CASE_DIGEST, WORST_CASE_IDENTITY } from './delivery.js';
 import { createModelInvocationClaimReceipt, modelInvocationProfileDigest } from './evidence.js';
 import { ModelInvocationStoreError, type ModelInvocationAdmission } from './port.js';
 
-// Lone UTF-16 surrogates are accepted identity code units and JSON escapes each as six ASCII bytes: a conservative
-// stand-in for any real actor/authorization/claim identity this profile could ever be invoked under.
-const WORST_CASE_IDENTITY = identitySchema.parse(String.fromCharCode(0xd800).repeat(IDENTITY_MAX_LENGTH));
-const WORST_CASE_DIGEST = 'f'.repeat(64);
+// WORST_CASE_IDENTITY (delivery.ts) is a conservative stand-in for any real actor/authorization/claim identity this
+// profile could ever be invoked under.
 
 export interface ModelInvocationProfileDeliveryAssessment {
   readonly fits: boolean;

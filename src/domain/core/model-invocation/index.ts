@@ -12,7 +12,7 @@ export type { ModelInvocationActor, ModelInvocationAuthorization, ModelInvocatio
 
 export { modelInvocationResponseEvidenceSchema, modelInvocationResponseSummarySchema, modelInvocationRejectionReasonSchema } from './internal/response-evidence.js';
 export type { ModelInvocationResponseEvidence, ModelInvocationResponseSummary, ModelInvocationRejectionReason } from './internal/response-evidence.js';
-export { MODEL_INVOCATION_RECEIPT_JSON_LIMITS, MODEL_INVOCATION_RECEIPT_VERSION, modelInvocationContentDescriptorSchema,
+export { MODEL_INVOCATION_OUTCOME_VERSION, MODEL_INVOCATION_RECEIPT_JSON_LIMITS, MODEL_INVOCATION_RECEIPT_VERSION, modelInvocationContentDescriptorSchema,
   modelInvocationNativeResultSchema, modelInvocationResponseContentSchema, parseModelInvocationNativeResult } from './internal/contract.js';
 export type { ModelInvocationNativeResult } from './internal/contract.js';
 export { modelInvocationCancellationCommandSchema, modelInvocationCancellationCommandInputSchema,

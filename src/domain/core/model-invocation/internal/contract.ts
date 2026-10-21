@@ -10,6 +10,8 @@ import { modelReferenceSchema, parseModelBindingDefinition,
 
 export const MODEL_INVOCATION_SCHEMA_VERSION = 1;
 export const MODEL_INVOCATION_RECEIPT_VERSION = 4;
+// The receipt outcome is versioned independently of the receipt envelope (both are 4 today).
+export const MODEL_INVOCATION_OUTCOME_VERSION = 4;
 export const MODEL_INVOCATION_REQUEST_PREFIX = 'deckent.model-invocation-request.v1\n';
 export const MODEL_INVOCATION_PROFILE_PREFIX = 'deckent.model-invocation-profile.v1\n';
 export const MODEL_INVOCATION_NATIVE_JSON_LIMITS = Object.freeze({ maxDepth: 16, maxNodes: 262_144,
@@ -96,13 +98,13 @@ export const modelInvocationNativeResultSchema = z.union([modelInvocationNativeR
   z.object({ kind: z.literal('rejected'), evidence: modelInvocationResponseEvidenceSchema }).strict().readonly()]);
 export type ModelInvocationNativeResult = z.infer<typeof modelInvocationNativeResultSchema>;
 export const modelInvocationOutcomeSchema = z.discriminatedUnion('state', [
-  z.object({ schemaVersion: z.literal(4), state: z.literal('responded'), content: modelInvocationContentDescriptorSchema,
+  z.object({ schemaVersion: z.literal(MODEL_INVOCATION_OUTCOME_VERSION), state: z.literal('responded'), content: modelInvocationContentDescriptorSchema,
     observedAtMs: counterSchema }).strict(),
-  z.object({ schemaVersion: z.literal(4), state: z.literal('unknown'), reason: z.literal('transport-error'),
+  z.object({ schemaVersion: z.literal(MODEL_INVOCATION_OUTCOME_VERSION), state: z.literal('unknown'), reason: z.literal('transport-error'),
     evidence: modelInvocationResponseSummarySchema.nullable(), content: modelInvocationContentDescriptorSchema.nullable(), observedAtMs: counterSchema }).strict(),
-  z.object({ schemaVersion: z.literal(4), state: z.literal('rejected'),
+  z.object({ schemaVersion: z.literal(MODEL_INVOCATION_OUTCOME_VERSION), state: z.literal('rejected'),
     evidence: modelInvocationResponseSummarySchema, content: modelInvocationContentDescriptorSchema, observedAtMs: counterSchema }).strict(),
-  z.object({ schemaVersion: z.literal(4), state: z.literal('not-sent'), reason: z.literal('cancelled-before-permission'),
+  z.object({ schemaVersion: z.literal(MODEL_INVOCATION_OUTCOME_VERSION), state: z.literal('not-sent'), reason: z.literal('cancelled-before-permission'),
     cancellationCommandId: identitySchema, observedAtMs: counterSchema, content: z.null() }).strict(),
 ]).superRefine((outcome, context) => {
   const invalidKind = outcome.content && (outcome.state === 'responded'
@@ -112,7 +114,7 @@ export const modelInvocationOutcomeSchema = z.discriminatedUnion('state', [
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'MODEL_INVOCATION_RESPONSE_COMPLETENESS_INVALID' });
   }
 }).readonly();
-export const modelInvocationReceiptSchema = z.object({ schemaVersion: z.literal(4), request: modelInvocationRequestEvidenceSchema,
+export const modelInvocationReceiptSchema = z.object({ schemaVersion: z.literal(MODEL_INVOCATION_RECEIPT_VERSION), request: modelInvocationRequestEvidenceSchema,
   actor: modelActivationActorSchema, authorization: modelActivationAuthorizationSchema, definition: definitionSchema,
   activationRevision: counterSchema.positive(), profile: modelInvocationProfileSchema, profileDigest: digest,
   claim: modelInvocationClaimSchema, claimedAtMs: counterSchema, outcome: modelInvocationOutcomeSchema.nullable(),
