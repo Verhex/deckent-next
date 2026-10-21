@@ -571,7 +571,7 @@
   "error.MODEL_CONNECT_KEY_INSECURE": "This provider needs its key, and a key is only sent over https.",
   "error.MODEL_CONNECT_DEFINITION_INVALID": "The connection settings this provider would get are not valid for its adapter.",
   "error.TERMINAL_DEFAULT_MODEL_PROJECT_LAYER": "`terminal.defaultModel` is your own default model: only your user settings can hold it, not the project file.",
-  "error.TERMINAL_CHAT_MODEL_NOT_DECLARED": "The terminal chat model is not declared in the current provider catalog.",
+  "error.TERMINAL_CHAT_MODEL_NOT_DECLARED": "The terminal chat model {model} is not declared in the current provider catalog; no other model is used in its place. Choose a declared model with `/model`.",
   "error.TERMINAL_CHAT_TRUNCATED": "The model used its whole completion budget ({maxCompletionTokens} tokens) before answering; reasoning models often need more. Raise terminal.chat.maxCompletionTokens (within the profile maxOutputTokens).",
   "error.TERMINAL_CHAT_EMPTY": "The model returned no assistant text for this turn.",
   "error.TERMINAL_CHAT_CANCELLED": "The chat turn was cancelled; cancellation was requested from the model invocation service.",

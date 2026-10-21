@@ -86,7 +86,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   if (!reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const chat = { ...configuredChat, maxCompletionTokens: effectiveTerminalOutputCap(config, command.scopeId, reference) };
   const binding = await inspectModelBinding(projectRoot, reference, options);
-  if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
+  if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED', { params: { model: `${reference.providerId}/${reference.modelId}@${reference.modelVersion}` } });
   const declares = (id: string) => binding.definition.model.protocols.some(protocol => (protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY || protocol.family === ANTHROPIC_MESSAGES_FAMILY)
     && protocol.capabilities.some(capability => capability.id === id && capability.version === 1 && capability.state === 'supported'));
   const toolCapable = declares(OPENAI_CHAT_TOOL_CALLS_CAPABILITY);

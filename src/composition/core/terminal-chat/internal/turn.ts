@@ -30,6 +30,7 @@ export interface TerminalChatTurnInput {
   readonly options: ConfigLoadOptions;
   readonly signal?: AbortSignal;
 }
+const describeModel = (reference: ModelReference): string => `${reference.providerId}/${reference.modelId}@${reference.modelVersion}`;
 export async function describeTerminalChat(projectRoot: string, options: ConfigLoadOptions = {}): Promise<TerminalChatPlan> {
   const chat = readTerminalChatConfig(await loadComposedConfig(projectRoot, options) as Record<string, unknown>);
   if (!chat) return Object.freeze({ schemaVersion: 1, status: 'not-configured', reference: null, source: null, catalogRevision: null, maxCompletionTokens: null, historyMessages: null });
@@ -54,7 +55,7 @@ export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, s
   if (!reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const chat = { ...configuredChat, maxCompletionTokens: settings.maxCompletionTokens ?? effectiveTerminalOutputCap(config, input.scopeId, reference) };
   const binding = await inspectModelBinding(input.projectRoot, reference, input.options);
-  if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
+  if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED', { params: { model: describeModel(reference) } });
   if (settings.reasoning === 'off' && !binding.definition.model.protocols.some(protocol => protocol.family === openAiChatProtocol.family
     && protocol.version === openAiChatProtocol.version && protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_ENABLE_THINKING_CAPABILITY
       && capability.version === 1 && capability.state === 'supported'))) throw ErrorRegistry.createError('MODEL_INVOCATION_REASONING_UNSUPPORTED');
@@ -102,12 +103,14 @@ export async function completeTerminalChatTurn(input: TerminalChatTurnInput, por
  */
 export async function assertTerminalChatReady(projectRoot: string, options: ConfigLoadOptions = {}, reference?: ModelReference, scopeId?: string): Promise<AgentTurnAdmission> {
   const plan = await describeTerminalChat(projectRoot, options);
-  if (plan.status === 'not-configured') throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
+  // PRE-10: a session pin is a model choice of its own; only an unpinned turn needs a persistent model. Terminal chat settings are still required.
+  if (plan.status === 'not-configured' && !reference) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   // T4 MODEL-SWITCH (S19): a session pin is checked as itself; the configured model's state neither blocks nor stands in for it.
   const declared = reference ? (await inspectModelBinding(projectRoot, reference, options)).status === 'declared' : plan.status !== 'model-not-declared';
-  if (!declared) throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED');
+  if (!declared) throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED', { params: { model: describeModel(reference ?? plan.reference!) } });
   const config = await loadComposedConfig(projectRoot, options) as { service: { inputMaxBytes: number } };
   const chat = readTerminalChatConfig(config as unknown as Record<string, unknown>);
+  if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_NOT_CONFIGURED');
   const configuredScope = (config as unknown as { terminal?: { scopeId?: string } }).terminal?.scopeId ?? '';
-  return agentTurnAdmission(effectiveTerminalOutputCap(config as unknown as Record<string, unknown>, scopeId ?? configuredScope, reference ?? plan.reference!), config.service.inputMaxBytes, chat?.compactionThresholdTokens);
+  return agentTurnAdmission(effectiveTerminalOutputCap(config as unknown as Record<string, unknown>, scopeId ?? configuredScope, (reference ?? plan.reference)!), config.service.inputMaxBytes, chat.compactionThresholdTokens);
 }

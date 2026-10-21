@@ -10,7 +10,7 @@ import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/pr
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredModelActivation } from '#composition/core/model-activation/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
-import { describeTerminalChat } from '#composition/core/terminal-chat/index.js';
+import { assertTerminalChatReady, describeTerminalChat } from '#composition/core/terminal-chat/index.js';
 import { cachePanelPort, modelPanelSource } from '#surfaces/core/cli-terminal/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { streamTerminalAgentTurn } from '#surfaces/core/terminal-turn/index.js';
@@ -153,6 +153,36 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
       commandId: 'unsupported-adapter' })).status).toBe('applied');
     await openGroup(LOCAL); await until(() => frame().includes('desteklenen protokol'), 'refusal and next step'); await press(ENTER, ESC, ESC);
     await press('still Claude', ENTER); await until(() => requests.length === 5, 'refused switch preserves pin');
+    expect(f.state.requests).toHaveLength(1);
+  }, 60_000);
+
+  // PRE-10 OTURUM-MODEL-PIN (owner 2026-10-21): the same real /model window and composed stream on a fresh installation with no persistent model.
+  it('with no configured model, choosing "this session only" in /model sends the first turn to the pinned model (PRE-10)', async () => {
+    const f = await runtime({ extraGrants: grants, windowTokens: 1_050_000, serviceLanguage: 'tr' });
+    const path = join(f.project, '.deckent/config.json');
+    const config = JSON.parse(await readFile(path, 'utf8'));
+    config.service.responseMaxBytes = 1_048_576;
+    delete config.terminal.chat.reference; config.terminal.scopeId = 'scope';
+    await writeFile(path, JSON.stringify(config)); clearConfigCache();
+    const options = { env: f.env, heal: false as const };
+    await f.start();
+    const host = { inspectDeclaredModels, inspectModelBinding, inspectModelActivation: inspectConfiguredModelActivation, describeTerminalChatPlan: describeTerminalChat,
+      inspectInvocableModels: inspectConfiguredInvocableModels, inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch,
+      listSecretNames: async () => ({ schemaVersion: 1 as const, backend: 'fixture', names: [] as string[] }) };
+    const source = modelPanelSource(f.project, 'scope', host, options, 'tr');
+    const view = mountWorkline({ model: 'chat', context: { installationId: 'fixture-installation', projectId: 'fixture-project', scopeId: 'scope' }, panels: { ports: { model: source }, labels: terminalPanelLabels('tr') },
+      streamTurn: (messages, signal, input) => streamTerminalAgentTurn({ projectRoot: f.project, scopeId: 'scope', messages, options, signal,
+        ...input }, { chatTurn: async (_root, command, onEvent) => f.client().chatTurn(command, onEvent), cancelChatTurn: async (_root, command) => f.client().cancelChatTurn(command),
+        preflight: assertTerminalChatReady }) });
+    mounted.push(view); await settle(60);
+    const press = async (...keys: string[]) => { for (const key of keys) { await new Promise(resolve => setImmediate(resolve)); view.stdin.write(key); await settle(35); } };
+    const frame = () => view.stdout.frame, loading = t('tui.panel.loading', {}, 'tr');
+    await press('/model', ENTER); await until(() => frame().includes('chat (local-openai)') && !frame().includes('[engellendi]') && !frame().includes(loading), 'model list');
+    await press(ENTER); await until(() => frame().includes(t('tui.panel.model.session', {}, 'tr')), 'confirmation step');
+    await press(ENTER); await until(() => !frame().includes(t('tui.model.title', { scope: 'scope' }, 'tr')) && !frame().includes(loading) && frame().includes('READY'), 'switch closes');
+    expect((await describeTerminalChat(f.project, options)).status).toBe('not-configured'); // the pin is for this session only
+    f.state.script.push({ content: 'Yalnız oturum yanıtı.' }); await press('first turn', ENTER);
+    await until(() => view.stdout.text.includes('Yalnız oturum yanıtı.'), 'pinned first turn answer');
     expect(f.state.requests).toHaveLength(1);
   }, 60_000);
 });
