@@ -43,6 +43,15 @@ export function evaluatePolicy(input: unknown, requestInput: unknown): PolicyDec
     : Object.freeze({ decision: 'deny', revision: policy.revision, reason: 'NO_GRANT' });
 }
 
+/** PRE-9: the ids of every rule of this effect that matches the request (direct and role rules, evaluation order), so a caller can name each rule
+ * that still decides — e.g. an unmanaged allow that keeps a mode open after a managed rule is removed. Pure; never a decision by itself. */
+export function matchingRuleIds(input: unknown, requestInput: unknown, effect: 'allow' | 'deny' | 'require-approval'): readonly string[] {
+  const policy = policySchema.parse(input), request = policyRequestSchema.parse(requestInput);
+  const rules = [...principalGrants(policy, request.principal).filter(rule => rule.effect === effect && matches(rule, request)),
+    ...(effect === 'deny' ? policy.restrictions.filter(rule => matches(rule, request)) : [])];
+  return Object.freeze([...new Set(rules.map(rule => rule.id))]);
+}
+
 /**
  * Whether a `require-approval` decision may be lowered by a permission mode (T-L4 slice 4a): the ids of **every** matching
  * `require-approval` rule when all of them are marked `modeEligible` (company data, policy v2), else null. Evaluated in the same

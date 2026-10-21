@@ -736,7 +736,7 @@
   "error.PERMISSION_MODE_CONFLICT": "Modunuz okunduktan sonra policy ya da bindings değişti; hiçbir şey yazılmadı. /mode ile bakıp yeniden deneyin.",
   "error.PERMISSION_MODE_UNSUPPORTED": "Policy'niz v1 olduğu için izin modları kapalı; edit/shell çağrıları policy'nin dediği gibi onay ister; hiçbir şey yazılmadı. /mode için bindings dosyalı bir v2 policy'ye geçin (yeni kurulumda `deckent init policy --scope <kapsam> --preview`, ardından `--apply`; mevcut policy.json'un üzerine yazmaz). auto-edit ya da full-auto için ayrıca bir allow grant ekleyin: kaynak türü `permission-mode`, eylem `set`, ids [auto-edit, full-auto].",
   "error.PERMISSION_MODE_INVALID": "İzin modu isteği geçerli değil: mod standart, full-auto ya da full-access olmalı.",
-  "error.PERMISSION_MODE_DENIED": "Bu kapsamda {mode} modunu ayarlamanıza izin veren bir grant yok; hiçbir şey yazılmadı. Policy'ye bir allow grant ekleyin (kaynak `permission-mode`, eylem `set`, id {mode}).",
+  "error.PERMISSION_MODE_DENIED": "Bu kapsamda {mode} modunu ayarlamanıza izin veren bir grant yok; hiçbir şey yazılmadı. Kurulumun sahibi bunu kendi terminalinden açabilir: deckent init policy --scope <kapsam> --modes {mode} --preview (sonra --apply).",
   "error.PERMISSION_MODE_LOCKED": "Şu an başka bir Deckent süreci policy dosyalarını değiştiriyor (kilit {path}, pid {pid}, {ageSeconds} sn); hiçbir şey yazılmadı. Biraz bekleyip /mode'u yeniden çalıştırın; bitmiş bir süreçten kalan kilit kendiliğinden temizlenir.",
   "error.SECRET_NAME_INVALID": "Secret'ların adları büyük harf, rakam ve alt çizgi içerir; harf ya da alt çizgiyle başlar ve en fazla 128 karakterdir ($DECK:NAME biçimi).",
   "error.SECRET_VALUE_INVALID": "Secret'ın değeri boş olamaz ve en fazla 64 KiB olabilir.",

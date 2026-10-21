@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
 import { evaluatePolicy } from './evaluate.js';
-import { includes, PERMISSION_MODES, principalGrants, principalPermissionMode, upgradeBindingsDocument, type PermissionMode, type PermissionModeEntry, type Policy } from './schema.js';
+import { includes, PERMISSION_MODES, principalGrants, principalPermissionMode, upgradeBindingsDocument, type PermissionMode, type PermissionModeEntry, type Policy,
+  type PrincipalPermissionMode } from './schema.js';
 import { policyResources } from './vocabulary.js';
 import type { VerifiedPrincipal } from '#domain/core/principal/index.js';
 
@@ -51,6 +52,19 @@ const same = (left: Actor, right: Actor) => left.issuer === right.issuer && left
 export function fullAccessGrant(input: unknown, principal: VerifiedPrincipal, scopeId: string) {
   return evaluatePolicy(input, { principal, scopeId, action: policyResources.permissionMode.actions[0], resource: { kind: policyResources.permissionMode.kind, id: 'full-access' } });
 }
+/** PRE-9 (b), lead decision 2026-10-21 (Jev 0de38b48): whether a company grant allows this person full-auto in this scope now — re-checked on every
+ * call like full access, so a revoked grant (closed, denied, removed) takes effect on the very next call. */
+export function fullAutoGrant(input: unknown, principal: VerifiedPrincipal, scopeId: string) {
+  return evaluatePolicy(input, { principal, scopeId, action: policyResources.permissionMode.actions[0], resource: { kind: policyResources.permissionMode.kind, id: 'full-auto' } });
+}
+/** The person's mode as the decision applies it: a stored full-auto without its grant now is standart (the "ask for edits too" preference and the
+ * entry id are kept; the stored choice is unchanged, only not in effect). A stored full-access start mode is the caller's (a launched turn). */
+export function effectivePermissionMode(input: unknown, principal: VerifiedPrincipal, scopeId: string): PrincipalPermissionMode {
+  const person = principalPermissionMode(input, principal, scopeId);
+  return person.mode === 'full-auto' && fullAutoGrant(input, principal, scopeId).decision !== 'allow' ? Object.freeze({ ...person, mode: 'standart' as const }) : person;
+}
+/** PRE-9 (b): a view whose stored full-auto has no grant here now: not in effect (every surface reads it as standart, the decision applies standart). */
+export const fullAutoNotInEffect = (view: Pick<PermissionModeView, 'mode' | 'fullAuto'>): boolean => view.mode === 'full-auto' && view.fullAuto === false;
 /** The person's effective mode in one scope over a resolved snapshot (ambiguity reads as standart with every edit asked, as in the decision). */
 export function permissionModeView(input: Policy, principal: VerifiedPrincipal, scopeId: string): PermissionModeView {
   const actor = { issuer: principal.issuer, subject: principal.subject };
@@ -58,8 +72,7 @@ export function permissionModeView(input: Policy, principal: VerifiedPrincipal, 
     && includes(rule.scopes, scopeId) && (rule.principals === 'all' || rule.principals.some(principal => same(principal, actor))));
   const person = principalPermissionMode(input, actor, scopeId);
   const fullAccess = input.schemaVersion === 2 && fullAccessGrant(input, principal, scopeId).decision === 'allow';
-  const fullAuto = input.schemaVersion === 2 && evaluatePolicy(input, { principal, scopeId, action: policyResources.permissionMode.actions[0],
-    resource: { kind: policyResources.permissionMode.kind, id: 'full-auto' } }).decision === 'allow';
+  const fullAuto = input.schemaVersion === 2 && fullAutoGrant(input, principal, scopeId).decision === 'allow';
   return Object.freeze({ schemaVersion: 1 as const, scopeId, supported: input.schemaVersion === 2, mode: person.mode, askEdits: person.askEdits, revision: input.revision,
     eligible, fullAccess, fullAuto });
 }

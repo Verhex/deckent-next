@@ -9,7 +9,7 @@ import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunPolicyTemplate, getPolicyVo
 import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
   FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, FIRST_RUN_EXECUTION_ENVIRONMENT_IDS } from '#engine/index.js';
 import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
-import { upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
+import { openPermissionModesInstallation, upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
 import { closeModeRuntimes, me, modeRuntime } from '../support/agent-turn-modes.js';
 import { clearConfigCache } from '#platform/index.js';
 
@@ -155,6 +155,9 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     writeFileSync(join(f.project, '.deckent', 'mcp.json'), JSON.stringify({ mcpServers: { files: { command: process.execPath, args: [FIXTURE, '--mode', 'dual', '--tools', tools, '--log', log], realm: 'host' } } }));
     expect((await turnOf(f, 'mcp__files__echo', { text: 'trust' }, 'allow', 't1')).status).toBe('ok');
     expect(grants().filter(grant => grant.id.startsWith('mcp-')).map(grant => [grant.resource.kind, grant.resource.ids])).toEqual([['mcp-server', ['files']]]);
+    // PRE-9 (b): the stored full-auto counts only with its grant: the owner opens it with the product command (`init policy --modes full-auto`).
+    expect(await openPermissionModesInstallation(f.project, 'scope', { modes: ['full-auto'], apply: true }, { env: f.env }, process.getuid?.(), { attest: async () => true }))
+      .toMatchObject({ status: 'applied' });
     expect(await turnOf(f, 'mcp__files__echo', { text: 'auto' }, 'deny', 't2')).toEqual({ cards: 0, status: 'ok' });
     // Another person's first-run policy (the read rule names someone else): not this person's to upgrade; nothing is written.
     const other = { ...JSON.parse(upgraded) as { grants: { id: string; principals: unknown }[] } };

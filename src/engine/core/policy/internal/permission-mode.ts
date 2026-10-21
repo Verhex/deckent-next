@@ -1,4 +1,4 @@
-import { isAiPrincipal, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, evaluatePolicy, fullAccessGrant, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema, principalPermissionMode,
+import { isAiPrincipal, AUDIT_EVENT_SCHEMA_VERSION, AUDIT_TRACKED_PATHS_MAX, effectivePermissionMode, evaluatePolicy, fullAccessGrant, identitySchema, isStandingGrantId, modeEligibleApproval, policyResources, policySchema,
   standingCell, STANDING_GRANT_ACTION, STANDING_GRANT_KIND, type AuditEvent, type PermissionMode, type ShellRealmContainment, type VerifiedPrincipal } from '#domain/index.js';
 import { agentToolPolicyResource } from './agent-tool.js';
 
@@ -45,7 +45,7 @@ const relaxableFor = (request: AgentToolCallRequest, askEdits: boolean): Relaxab
 
 // Card presentation reads the same policy-owned mode; composition never evaluates bindings itself.
 export function agentCallPermissionMode(policy: unknown, principal: VerifiedPrincipal, scopeId: string): PermissionMode {
-  const mode = principalPermissionMode(policy, principal, scopeId)?.mode;
+  const mode = effectivePermissionMode(policy, principal, scopeId).mode;
   return mode === 'full-access' ? 'standart' : mode ?? 'standart';
 }
 
@@ -129,7 +129,8 @@ export function decideAgentToolCall(policy: unknown, request: AgentToolCallReque
   // the effect gate's second decision no longer matches the audited one and nothing runs.
   const grant = request.fullAccess === true ? fullAccessGrant(policy, request.principal, request.scopeId) : null;
   const access = grant?.decision === 'allow' && grant.ruleId !== undefined ? grant.ruleId : null;
-  const person = access ? null : principalPermissionMode(policy, request.principal, request.scopeId);
+  // PRE-9 (b): a stored full-auto counts only while its grant allows it on this very snapshot (like full access): revoked, the call is standart's.
+  const person = access ? null : effectivePermissionMode(policy, request.principal, request.scopeId);
   // A stored full-access start mode without a launched turn is standart (MODES-3: an explicit parameter, never implied by bindings).
   const mode = person === null ? null : person.mode === 'full-access' ? { mode: 'standart' as const, askEdits: person.askEdits, id: person.id } : person;
   // A standing approval names a persistable cell's pattern (self-source only names a session pattern). It is asked like any other rule (a company deny or require-approval on the

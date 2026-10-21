@@ -221,7 +221,7 @@ type AdditionNames = { readonly proposeMcpToolName: string; readonly mcpCallOper
   /** v13: the execution-environment registry ids the install rule names. */
   readonly executionEnvironmentIds: readonly string[] };
 /** Whether a rule NAMES this person: a rule for `all` principals names nobody (security, lead 2026-10-07: never proof of an owner). */
-const namesPerson = (grant: PolicyGrant, person: Person) => grant.principals !== 'all' && grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
+export const namesPerson = (grant: PolicyGrant, person: Person) => grant.principals !== 'all' && grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
 /**
  * The first-run v4 → v5 additions (owner 2026-10-07): over any v2 policy that carries the template's `first-run-read-tools` rule naming this person
  * explicitly (a rule for `all` principals does not count)
@@ -277,7 +277,7 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
 }
 
 /** An allow rule that names this person explicitly in exactly this scope (its scopes list it; `all` scopes or `all` principals never count). */
-const anchorsPerson = (grant: PolicyGrant, person: Person, scopeId: string) => grant.effect === 'allow' && namesPerson(grant, person)
+export const anchorsPerson = (grant: PolicyGrant, person: Person, scopeId: string) => grant.effect === 'allow' && namesPerson(grant, person)
   && grant.scopes !== 'all' && grant.scopes.includes(scopeId);
 /**
  * The people a v2 policy explicitly names on an allow rule of this scope (first appearance order, distinct, at most `limit`): the display hint

@@ -504,7 +504,7 @@
   "tui.panel.mode.title": "İzin modu",
   "tui.panel.mode.hints": "↑↓ seç · Enter geç · Esc kapat · Shift+Tab aynı modlar arasında geçer",
   "tui.panel.mode.effect.askEdits": "standart; her dosya düzenlemesi de sorar (kişisel tercihiniz; şirket kuralları aynı kalır)",
-  "tui.panel.mode.fullAutoOff": "Şirketiniz bu kapsamda tam otomatik modu alabileceğiniz modlara katmıyor.",
+  "tui.panel.mode.fullAutoOff": "Tam otomatik bu kapsamda sizin için açık değil. Kurulumun sahibi bunu deckent init policy --scope <kapsam> --modes full-auto ile açar.",
   "tui.panel.mode.fullAccessLine": "Tam erişim · araçlar sormadan çalışır · Deckent durumu, politikası ve kimlik bilgileri kapalı · deny kuralları geçerli · her çağrı denetime yazılır · yalnız bu oturum · değiştirmek için Shift+Tab",
   "tui.panel.config.hints": "↑↓ seç · yazarak süz · Enter aç · Esc geri",
   "tui.panel.config.scope.project": "proje (bu projenin ayarları)",
@@ -1139,5 +1139,6 @@
   "terminal.delivery.pickerTitle": "/deliver · teslim bekleyen görevler",
   "terminal.delivery.none": "Teslim bekleyen görev yok.",
   "terminal.delivery.fallbackTitle": "Kabul edilen görev",
-  "terminal.jobs.parked.environment-not-ready": "ortam hazır değil"
+  "terminal.jobs.parked.environment-not-ready": "ortam hazır değil",
+  "terminal.info.scope.modeRevoked": "{mode} · kayıtlı tam otomatik burada artık izinli değil, bu yüzden geçerli değil"
 }

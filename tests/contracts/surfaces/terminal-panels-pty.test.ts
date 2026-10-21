@@ -104,9 +104,9 @@ async function keep(name: string, result: { output: string; frames: [string, str
 }
 const ESC = '\u001b', DOWN = '\u001b[B', ENTER = '\r', SHIFT_TAB = '\u001b[Z';
 const WORDS = {
-  en: { mode: 'Permission mode', locked: '[blocked]', grant: "company's grant", denied: 'does not let you change this setting in this layer', approval: 'asks for approval (rule company-config-approval)',
+  en: { mode: 'Permission mode', locked: '[blocked]', grant: 'Full access needs a grant', denied: 'does not let you change this setting in this layer', approval: 'asks for approval (rule company-config-approval)',
     mcp: 'MCP servers', http: "Streamable HTTP, with headers", line: 'Full access · tools run without asking', general: 'general' },
-  tr: { mode: 'İzin modu', locked: '[engellendi]', grant: "şirketinizin grant'ı gerekir", denied: 'bu katmanda değiştirmenize izin vermiyor', approval: 'onay ister (kural company-config-approval)',
+  tr: { mode: 'İzin modu', locked: '[engellendi]', grant: 'Tam erişim için bu kapsamda bir grant gerekir', denied: 'bu katmanda değiştirmenize izin vermiyor', approval: 'onay ister (kural company-config-approval)',
     mcp: 'MCP sunucuları', http: "Streamable HTTP, başlıklarla", line: 'Tam erişim · araçlar sormadan çalışır', general: 'genel' },
 } as const;
 

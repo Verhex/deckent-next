@@ -6,6 +6,9 @@ import { decideAgentToolCall, type AgentToolCallCell } from '#engine/index.js';
 // SCR-B (owner 2026-09-28, checkpoint option B, proof/SCR-B-2026-09-28/review.md): the versioned default policy
 // a fresh, terminal-only installation gets from `deckent init policy`.
 const me = { issuer: 'os', subject: 'alperen' };
+/** PRE-9 (b): a stored full-auto counts only with its grant, so the person first opens it (`init policy --modes full-auto`: the managed rule). */
+const openFullAuto = (policy: unknown) => ({ ...(policy as object), grants: [...(policy as { grants: readonly unknown[] }).grants, { id: 'installer-permission-mode-full-auto', effect: 'allow',
+  actions: ['set'], scopes: ['installation'], principals: [me], resource: { kind: 'permission-mode', ids: ['full-auto'] } }] });
 const principal = { id: 'os:alperen', ...me, assurance: 'os-user' as const, scopeIds: ['installation'] };
 const READ_TOOLS = ['read_file', 'list_dir', 'grep', 'glob'];
 const SCRATCH_TOOLS = ['scratch_write', 'scratch_read', 'scratch_list'];
@@ -54,7 +57,7 @@ describe('firstRunPolicyTemplate (domain, pure)', () => {
     expect(decide(narrowed, 'scratch_write', 'edit', 'workspace.scratch.write').decision).not.toBe('allow');
   });
   it('marks the edit/shell rule modeEligible: a later full-auto mode relaxes exactly it, never read or scratch', () => {
-    const policy = resolvePolicyBindings(firstRunPolicyTemplate(input).policy,
+    const policy = resolvePolicyBindings(openFullAuto(firstRunPolicyTemplate(input).policy),
       { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['installation'], mode: 'full-auto' }] });
     expect(decide(policy, 'edit_file', 'edit', 'workspace.file.write')).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto', cell: 'edit-non-floor' } });
     expect(decide(policy, 'run_shell', 'shell-narrow-mutating', 'host.shell.run')).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto', cell: 'shell-modify' } });
@@ -124,7 +127,7 @@ describe('matchFirstRunPolicyTemplate (doctor recognition, never authority)', ()
 // Owner 2026-10-07 MCP decisions (Jev 04f75210 authority kind + v5, 71eeb4ab effect, d3d1817d proposal tool).
 describe('first-run v5: MCP server authority, trust grant and the proposal tool', () => {
   const template = () => firstRunPolicyTemplate(input);
-  const withModes = (policy: unknown, mode?: 'full-auto') => resolvePolicyBindings(policy, mode
+  const withModes = (policy: unknown, mode?: 'full-auto') => resolvePolicyBindings(mode ? openFullAuto(policy) : policy, mode
     ? { schemaVersion: 2, revision: 'b', bindings: [], modes: [{ id: 'me-mode', principal: me, scopes: ['installation'], mode }] } : template().bindings);
   const trusted = (server: string) => {
     const change = mcpToolGrantChange({ digest: 'd'.repeat(24), principal: me, scopes: ['installation'], server, replaces: [] });

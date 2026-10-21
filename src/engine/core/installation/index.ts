@@ -24,5 +24,6 @@ export { FIRST_RUN_TOOL_NAMES, FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_READ_T
   FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_EXECUTION_ENVIRONMENT_IDS,
   inspectFirstRunPolicyTemplate, firstRunServiceIdentity, settleFirstRunServiceIdentity, SKIPPED_SERVICE_IDENTITY, upgradeInstalledPolicyTemplate,
   PolicyTemplateInstallationApplication, preparePolicyTemplateInstallation, upgradePolicyTemplate } from './internal/policy-template.js';
+export { setInstallerPermissionModes, type InstallerPermissionModesResult } from './internal/policy-modes.js';
 export type { FirstRunServiceIdentityPort, FirstRunServiceIdentityResult, InstalledPolicyTemplateUpgrade, FirstRunToolNames, PolicyTemplateDocumentWriter, PolicyTemplateUpgradeResult, PolicyTemplateInstallationPorts, PolicyTemplatePreview, PolicyTemplatePublishTarget, PolicyTemplateResource, PolicyTemplateSource,
   PreparedPolicyTemplateInstallation, PreparePolicyTemplateInput } from './internal/policy-template.js';

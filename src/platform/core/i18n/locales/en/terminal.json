@@ -302,7 +302,7 @@
   "terminal.scratch.usage": "Usage: /scratch [path|clear]",
   "terminal.mode.effect.standart": "reads, scratch and the in-project edits the company marked mode-eligible run without a card; shell and the write floor ask",
   "terminal.mode.effect.full-access": "everything runs without a card — host shell, destructive commands, the write floor, .git (commit, push) — except Deckent's own state, policy, approvals, audit and credentials, which stay closed; deny rules always hold; for this session only (the next launch opens in your last stored mode)",
-  "terminal.mode.fullAccessGrant": "Full access needs your company's grant in this scope (resource `permission-mode`, action `set`, id full-access); with it, Shift+Tab or `/mode full-access` switches into it and every turn is audited.",
+  "terminal.mode.fullAccessGrant": "Full access needs a grant in this scope. The installation owner opens it at their own terminal: deckent init policy --scope <scope> --modes full-auto,full-access --preview (then --apply). With it, Shift+Tab or `/mode full-access` switches into it and every turn is audited.",
   "terminal.mode.startSaved": "Start mode saved: your next launch opens in full access. This session keeps its mode (a stored start mode runs as standart until you relaunch).",
   "terminal.mode.askEditsOn": "every edit asks too (your own setting)",
   "terminal.mode.askEditsOff": "edits run without a card again where the company allows it (your own setting)",
@@ -320,7 +320,7 @@
   "terminal.banner.hint": "/help · Shift+Tab mode · ? shortcuts",
   "terminal.banner.compact": "Deckent {version} · {name} · /help · ? shortcuts",
   "terminal.fullAccess.banner": "Full access is on: tool calls run without asking — host shell, destructive commands, the write floor, .git. Deckent's own state, policy, approvals, audit and credentials stay closed; deny rules still hold; every call is audited; for this session only. It suits an isolated environment best.",
-  "terminal.fullAccess.startDenied": "Your start mode is full access, but no company grant allows it in this scope now; this session runs as standart.",
+  "terminal.fullAccess.startDenied": "Your start mode is full access, but no grant allows it in this scope now; this session runs as standart. The installation owner opens it with deckent init policy --scope <scope> --modes full-access.",
   "terminal.slash.monitor": "Monitor window: stuck runs, workers, approvals, pools and installs (--install/--scope: text snapshot)",
   "terminal.slash.approvalsArgument": "[number|id|clear-session]",
   "terminal.approval.standing.unconfirmedSession": "Approval {id}: session permission could not be confirmed ({reason}).",
@@ -418,5 +418,7 @@
   "terminal.info.usage.cachePartial": "at least {tokens} tokens ({measured}/{reports} reports measured)",
   "terminal.info.usage.cacheHit": "{percent}% ({read}/{prompt} prompt tokens)",
   "terminal.info.usage.cacheHitPartial": "{percent}% in measured reports ({measured}/{reports}); full session unknown",
-  "terminal.slash.policy": "MCP permissions by selection"
+  "terminal.slash.policy": "MCP permissions by selection",
+  "terminal.mode.fullAutoRevoked": "Full-auto is no longer granted in this scope, so your stored full-auto choice is not in effect: this session runs as standart and every call is decided as standart. The installation owner can open it again with deckent init policy --scope <scope> --modes full-auto.",
+  "terminal.admin.scope.modeRevoked": "Mode: {mode} (stored full-auto is no longer granted here, so it is not in effect)"
 }

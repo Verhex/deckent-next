@@ -3,6 +3,7 @@ import { initRegistryCommand } from './registry.js';
 import { isAbsolute } from 'node:path';
 import { ErrorRegistry, emit, formatValue, loadConfigLanguage, resolveLocale, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { policyPreviewText } from './policy-preview.js';
+import { parseModes, policyModesCommand } from './policy-modes.js';
 import type { InstallationPreview, InstallationEvidencePreview, InstallationPublicationApplication } from '#engine/index.js';
 import type { InstallationCommandContext } from './context.js';
 
@@ -53,6 +54,7 @@ export async function initCommand(argv: readonly string[], context: Installation
   const action = argv[1]; let profilePath: string | undefined, language: string | undefined, dockerExecutable: string | undefined;
   let proposalDigest: string | undefined, json = false, allowShutdown = false, acceptCustom = false;
   let scopeId: string | undefined, policyPreview = false, policyApply = false, policyUpgrade = false, expect: string | undefined, person: Person | undefined;
+  let modes: readonly string[] | undefined, modesText: string | undefined;
   if (!['preview', 'inspect', 'apply', 'resume', 'policy', 'pool', '--help', '-h'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
   for (let i = 2; i < argv.length; i++) {
     const flag = argv[i];
@@ -68,6 +70,7 @@ export async function initCommand(argv: readonly string[], context: Installation
       continue;
     }
     if (flag === '--person' && action === 'policy' && person === undefined) { person = parsePerson(argv[++i]); continue; }
+    if (flag === '--modes' && action === 'policy' && modes === undefined) { modesText = argv[++i]; modes = parseModes(modesText); continue; }
     if (flag === '--scope' && ['policy', 'pool'].includes(action) && scopeId === undefined) {
       scopeId = argv[++i];
       if (!scopeId || scopeId.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
@@ -96,7 +99,7 @@ export async function initCommand(argv: readonly string[], context: Installation
     }
     throw ErrorRegistry.createError('CLI_USAGE');
   }
-  const locale = resolveLocale(language, context.env, (policyUpgrade || action === 'pool') && language === undefined
+  const locale = resolveLocale(language, context.env, (policyUpgrade || modes !== undefined || action === 'pool') && language === undefined
     ? await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }) : undefined); context.onLocale?.(locale);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (action === '--help' || action === '-h') {
@@ -130,9 +133,15 @@ export async function initCommand(argv: readonly string[], context: Installation
     return;
   }
   if (action === 'policy') {
-    if ((expect !== undefined || person !== undefined) && !policyUpgrade) throw ErrorRegistry.createError('CLI_USAGE');
+    // PRE-9: `--modes` is its own installer change; never together with `--upgrade`.
+    if (modes !== undefined && policyUpgrade) throw ErrorRegistry.createError('CLI_USAGE');
+    if ((expect !== undefined || person !== undefined) && !policyUpgrade && modes === undefined) throw ErrorRegistry.createError('CLI_USAGE');
     if (!scopeId || policyPreview === policyApply || profilePath || dockerExecutable || proposalDigest || acceptCustom || allowShutdown) {
       throw ErrorRegistry.createError('CLI_USAGE');
+    }
+    if (modes !== undefined) {
+      return policyModesCommand(context, { root, scopeId, modes, modesText: modesText!, apply: policyApply, json, locale, sinks,
+        ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) });
     }
     if (policyUpgrade) {
       if (!context.upgradePolicyTemplateInstallation || (expect !== undefined && !policyApply)) throw ErrorRegistry.createError('CLI_USAGE');
