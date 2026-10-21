@@ -25,7 +25,7 @@ export function classifyShellAuthority(command: string): boolean {
 const PAYLOAD_DEPTH = 4;
 /** Decoding the shell would do but the strict scanner does not: ANSI-C/locale quoting (`$'…'`, `$"…"`), brace expansion, globbing. */
 const UNDECODED = /\$['"]|\{[^{}]*(?:,|\.\.)[^{}]*\}/u;
-/** A glob can turn into an authority word only from file names; it is undecoded where the product itself runs (`deckent s*t grant`). */
+/** A glob turns into file names the scanner does not know (`deckent s*t grant`, `unbuffer deckent [s]ecret grant`): undecoded in any launcher argument. */
 const GLOB = /[*?[]/u;
 /** A word another shell (or `expect`) may parse again: quotes, escapes, separators or blanks inside it. */
 const REPARSED = /[\s'"\\;&|<>()`$]/u;
@@ -48,7 +48,7 @@ function runsAuthority(command: string, depth: number): boolean {
     if (names(rest.map(word => word.text).join(' '))) return true;
     // `$` the scanner kept (`$'…'`), brace expansion or a glob: the shell would run another argv than the one decoded here.
     if (rest.some(word => !word.quoted && UNDECODED.test(word.text)) || rest.some(word => word.text.includes('$'))) return true;
-    if (Object.hasOwn(PRODUCT_AUTHORITY_COMMANDS, programName(head.text)) && rest.some(word => !word.quoted && GLOB.test(word.text))) return true;
+    if (rest.some(word => !word.quoted && GLOB.test(word.text))) return true;
     for (const word of rest) {
       if (!REPARSED.test(word.text)) continue;
       if (depth + 1 >= PAYLOAD_DEPTH || runsAuthority(word.text, depth + 1)) return true;
