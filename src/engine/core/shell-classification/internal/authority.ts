@@ -46,7 +46,8 @@ function launchesProgram(command: string): boolean {
       while (tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(tokens[0]!)) tokens.shift();
       const name = tokens.length ? programName(tokens[0]!.replace(/['"\\]/gu, '')) : '';
       if (!LAUNCHERS.has(name)) continue;
-      if (tokens.length > 1 || (index > 0 && readsProgramFromStdin(name, []))) return true;
+      // Fail closed: any launcher at a command position keeps the card — except a redirection-only `exec` (it opens descriptors, runs nothing).
+      if (name !== 'exec' || tokens.length > 1 || index > 0) return true;
     }
   }
   return false;
@@ -65,7 +66,8 @@ function runsAuthority(command: string, depth: number): boolean {
     if (!head || !LAUNCHERS.has(programName(head.text))) continue;
     const rest = stage.words.slice(1);
     // A shell fed by a pipe runs whatever the pipe carries: never decoded here, the card stays.
-    if (index > 0 && readsProgramFromStdin(programName(head.text), rest.map(word => word.text))) return true;
+    // An input redirection (`<`, `0<`, a here-document) feeds the program the same way.
+    if ((index > 0 || stage.inputPaths.length > 0) && readsProgramFromStdin(programName(head.text), rest.map(word => word.text))) return true;
     // `expect` runs Tcl, not a shell: its payload is never decoded here, so it always keeps the card.
     if (programName(head.text) === 'expect') return true;
     if (names(rest.map(word => word.text).join(' '))) return true;

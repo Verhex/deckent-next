@@ -37,7 +37,9 @@ const AUTHORITY = ['deckent secret grant DECKENT_ANTHROPIC_KEY --scope s --json'
   'script -qc "deckent secret grant K --scope s --json" /dev/null', "script -qc 'deckent approval decide x approve'", 'unbuffer deckent secret set K --main',
   "expect -c 'spawn deckent secret grant K'", 'bash -c "deckent secret grant K"', 'sh -c "script -qc \\"deckent secret grant K\\" /dev/null"',
   'script -qc "$CMD" /dev/null', "echo 'deckent secret grant K --scope s --json' | bash", "printf 'deckent approval decide x approve' | sh -s",
-  'exec deckent secret grant K', 'exec 3<>/dev/tcp/x/1 && exec deckent secret grant K', 'unbuffer $TOOL', 'node dist/composition/core/cli/internal/entry.js secret grant K --scope s', 'npx deckent secret grant K'];
+  'exec deckent secret grant K', 'exec 3<>/dev/tcp/x/1 && exec deckent secret grant K',
+  "bash <<< 'deckent secret grant K --scope s --json'", 'sh < /tmp/x.sh', "bash <(printf 'deckent secret grant K')", "sh -s <<EOF\ndeckent approval decide x approve\nEOF",
+  'bash 0< /tmp/x.sh', 'sh -s < /tmp/x.sh', "zsh <<< 'deckent init policy --modes'", 'unbuffer $TOOL', 'node dist/composition/core/cli/internal/entry.js secret grant K --scope s', 'npx deckent secret grant K'];
 const ORDINARY = ['exec 3<>/dev/tcp/127.0.0.1/8080 && printf \'GET / HTTP/1.0\\r\\n\\r\\n\' >&3 && cat <&3', 'exec 2>/dev/null', 'script -qc "npm test" /dev/null', 'git commit -m "secret set later"', 'echo deckent secret grant', 'deckent secret list', 'deckent init policy --preview',
   'bash -c "npm run build"', 'unbuffer npm test'];
 
