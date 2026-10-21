@@ -53,6 +53,14 @@ it('legacy main key, no .deck: refused, one card, y → sealed grant → the sam
     const decision = audit.page('scope-a', 0, 1_000).find(record => record.event.eventId === grants.grants[0].decisionEventId);
     expect(decision?.event.subject).toMatchObject({ kind: 'authority-decision', action: 'secret-grant', resource: { kind: 'secret', id: 'DECKENT_ANTHROPIC_KEY' }, verdict: { decision: 'allow' } });
   } finally { audit.close(); }
+  // Rollback (alpha.50): the audit schema, store and verifier are unchanged since 71bb7b81, so the shipped `audit verify` here is alpha.50's
+  // verifier on the same ledger — the sealed grant decision is an existing `authority-decision` and the chain still verifies.
+  const verify = spawn(process.execPath, [cli, 'audit', 'verify', '--scope', 'scope-a', '--json'], { cwd: where.project,
+    env: { PATH: process.env['PATH'] ?? '', ...where.env, DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let verified = ''; verify.stdout!.on('data', chunk => { verified += String(chunk); }); verify.stderr!.on('data', chunk => { verified += String(chunk); });
+  await new Promise(done => verify.once('exit', done));
+  // A fresh ledger has no checkpoint yet (status unknown, exit 1 by contract); what matters is that every record parsed and chained.
+  expect(verified).not.toContain('AUDIT_INTEGRITY'); expect(JSON.parse(verified)).toMatchObject({ scopeId: 'scope-a', head: { sequence: 1 } });
 });
 
 it('off a terminal (a pipe, or a detached agent-shell-shaped child) the grant is refused before anything is read or written', async () => {
