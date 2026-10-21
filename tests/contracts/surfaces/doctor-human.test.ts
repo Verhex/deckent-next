@@ -244,3 +244,27 @@ describe('interactive doctor (person on a terminal)', () => {
     expect(io.written.join('')).toContain('Status: ');
   });
 });
+
+describe('PRE-8 v2: doctor names the keys a model here cannot use, with the exact next command (lead 2026-10-21)', () => {
+  it('pure rows EN/TR: no grant, undeclared project key, declared but not stored, granted but not stored', () => {
+    const secretUse = [{ kind: 'grant-required' as const, name: 'DECKENT_ANTHROPIC_KEY' }, { kind: 'undeclared-project-key' as const, name: 'OWN_KEY' },
+      { kind: 'declared-missing' as const, name: 'GLM_KEY' }, { kind: 'not-stored' as const, name: 'OPENAI_API_KEY' }];
+    for (const locale of ['en', 'tr'] as const) {
+      const rows = doctorChecks(report, facts({ secretUse }), locale).filter(row => row.id === 'security.secretUse');
+      expect(rows.map(row => [row.state, row.next])).toEqual([['warning', 'deckent secret grant DECKENT_ANTHROPIC_KEY --scope live'], ['warning', expect.stringContaining('OWN_KEY=project')],
+        ['warning', 'deckent secret set GLM_KEY --project --scope live'], ['warning', 'deckent secret set OPENAI_API_KEY --main --scope live']]);
+      for (const row of rows) expect(row.text).not.toMatch(/\{\w+\}/u);
+    }
+    expect(doctorChecks(report, facts({ secretUse: [] }), 'en').some(row => row.id === 'security.secretUse')).toBe(false);
+  });
+  it('the shipped doctor reads the one inventory (names only) for the terminal scope and prints the rows', async () => {
+    const root = await project({ terminal: { scopeId: 'live' } }), out: string[] = [], asked: unknown[] = [];
+    await runKernelCommand(['doctor', '--lang', 'en'], { root, env: { HOME: join(root, 'h') }, stdout: { write: (v: string) => { out.push(v); } }, stderr: { write() {} },
+      inspectSecretInventory: async (_root: string, input: unknown) => { asked.push(input); return { schemaVersion: 1, project: root, mainStore: 'core.secret-store.env@1', all: false,
+        rows: [{ name: 'DECKENT_ANTHROPIC_KEY', vault: 'main', project: root, usedBy: ['claude@1'], deck: 'undeclared', grant: { state: 'none' }, presence: 'unverified' }],
+        findings: [{ kind: 'grant-required', name: 'DECKENT_ANTHROPIC_KEY', project: root }] }; } } as never).catch((error: unknown) => out.push(`[${(error as { code?: string }).code}]`));
+    expect(asked).toEqual([{ scopeId: 'live', all: false }]);
+    expect(out.join('')).toContain('Key DECKENT_ANTHROPIC_KEY is used by a model here but not granted to this project');
+    expect(out.join('')).toContain('deckent secret grant DECKENT_ANTHROPIC_KEY --scope live');
+  });
+});

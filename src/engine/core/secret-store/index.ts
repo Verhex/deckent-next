@@ -14,3 +14,15 @@ export { RENEWABLE_SECRET_PREFIX } from './internal/port.js';
 export { assertSecretStorageProtection } from './internal/protection.js';
 export { createSecretHelperBackend } from './internal/helper.js';
 export type { SecretHelperOptions, SecretHelperReadPort } from './internal/helper.js';
+export { DECK_FILE, parseDeckDeclarations, deckDeclaration } from './internal/deck.js';
+export type { DeckDeclaration, DeckDeclarations, DeckInvalidReason, SecretVault } from './internal/deck.js';
+export { PROJECT_VAULT, projectVaultAnchorSchema, projectVaultRecordSchema, projectVaultKey, assessProjectVaultOwnership, projectVaultHandover, projectVaultClaimed,
+  secretGrantSchema, secretGrantFileSchema, emptySecretGrantFile, findSecretGrant, decideCredentialSource, credentialSourceError } from './internal/project.js';
+export type { ProjectVaultLocation, ProjectVaultAnchor, ProjectVaultRecord, SecretGrant, SecretGrantFile, CredentialSource, CredentialSourceInput, CredentialSourceRefusal,
+  ProjectCredentialResolver } from './internal/project.js';
+export { SECRET_GRANT_STORE_ID_PATTERN, CORE_SECRET_GRANT_STORE_ID, SecretGrantStoreRegistry } from './internal/grant.js';
+export type { SecretGrantStore, SecretGrantStoreContext, SecretGrantStoreFactory, SecretGrantStoreErrorCode } from './internal/grant.js';
+export { buildSecretInventory } from './internal/inventory.js';
+export type { SecretInventory, SecretInventoryFinding, SecretInventoryInput, SecretInventoryProject, SecretInventoryRow, SecretGrantState } from './internal/inventory.js';
+export { authorizeSecretInventoryAll, decideSecretGrant } from './internal/grant-administration.js';
+export type { SecretGrantPorts, SecretGrantRequest } from './internal/grant-administration.js';

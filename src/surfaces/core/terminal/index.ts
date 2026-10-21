@@ -1,5 +1,5 @@
 export { runTerminalWorkline, WorklineApp, type WorklineCompleteTurn, type WorklineLabels, type WorklineProps, type WorklineRunOptions } from './internal/workline.js';
-export { resumedHistoryEntries, RESUME_SHOWN_MESSAGES, RESUME_USER_TEXT_CHARS, type ResumedHistoryLabels } from './internal/workline-history.js';
+export { resumedHistoryEntries, RESUME_SHOWN_MESSAGES, RESUME_USER_TEXT_CHARS, type ResumedHistoryLabels } from '#surfaces/core/terminal-conversation/index.js';
 export type { WorklineReasoningLabels } from './internal/workline-reasoning.js';
 export type { SlashWindowLabels } from './internal/workline-windows.js';
 export { helpInfoModel } from './internal/workline-info.js';

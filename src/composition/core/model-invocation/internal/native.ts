@@ -4,7 +4,7 @@ import { modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type Mode
 import { ProviderSpendError, providerSpendLocalZeroTariff, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
 import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
-import { scopedInvocationCredentialResolver } from './credential.js';
+import { admitInvocationCredential, scopedInvocationCredentialResolver } from './credential.js';
 import type { loadInvocationContext } from './context.js';
 import { invocationEffectAuthority } from './authority.js';
 /** One tariff per (endpoint, model, tag, CA) for the process lifetime of the freshness window: calls inside it make no metadata request. The fetcher is resolved per miss. */
@@ -66,6 +66,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       });
       selected = { profile, priced, cell }; return priced.native;
     },
+    admit: (profile: ModelInvocationProfile) => admitInvocationCredential(context, profile, options),
     async acquire(input: { readonly profile: ModelInvocationProfile; readonly definition: ModelBindingDefinition; readonly native: ModelInvocationNativePort }, signal?: AbortSignal): Promise<void> {
       const openaiDefinition = isOpenAiChatHttpAdapter(input.profile.adapter) ? parseOpenAiChatHttpDefinition(input.profile.adapter.definition) : null;
       const metadataTariff = openaiDefinition?.tariff.kind === 'openrouter-endpoint' ? openaiDefinition.tariff : null;

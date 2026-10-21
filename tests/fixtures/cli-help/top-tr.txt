@@ -83,7 +83,7 @@ Kurulum/Bakım:
       add | add-json | import | list | get | remove | approve | revoke
       [<ad>] [--check] [--scope local|project|user]
   secret      Saklanan gizli değerleri yönet (eylemsiz: list)
-      list | set | delete | store
+      list | set | delete | grant | revoke | handover | store
       [<ad>] [--scope <id>]
   toolchains  İşçi araçlarını kontrol et veya güncelle
       update

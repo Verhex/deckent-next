@@ -1,7 +1,7 @@
 import { relative, resolve, sep } from 'node:path';
 import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
-  classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
+  classifyShellAuthority, classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { globalStateRoot, loadConfig, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { agentShellEffectCommandId, createGlobMatcher, createLocalPeerSession, createShellPathContext, createShellProtectedNames, createShellWriteContext, describeHostShellResult,
   describeShellEffectRefusal, hostShellCleanupNote, HOST_SHELL_COMMAND_MAX_CHARS, HOST_SHELL_RUN_OPERATION, HOST_SHELL_TARGET_KIND, HostShellTarget, HOST_SHELL_NOTES, resolveShellRealm,
@@ -86,7 +86,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
     for (const verdict of [readOnly, mutation]) {
       if (verdict.reasonCode === 'PATH_PROTECTED' && namesProductState(verdict.detail)) return { ok: false, text: `[deckent] run_shell: error=PRODUCT_STATE_PROTECTED (${verdict.detail}); Deckent's own state is not opened by any approval; nothing was run` };
     }
-    const planned: ShellPlan = { ok: true, realm, command, risk, tier: shellPermissionTier(risk, readOnly, mutation), contained: classifyShellContainment(command, protectedNames, 'posix', input.fullAccess !== true && realm.containment === 'sandbox' ? path => floorNames(path) && !namesProductState(path) : undefined).contained };
+    const planned: ShellPlan = { ok: true, realm, command, risk, tier: shellPermissionTier(risk, readOnly, mutation, classifyShellAuthority(command)), contained: classifyShellContainment(command, protectedNames, 'posix', input.fullAccess !== true && realm.containment === 'sandbox' ? path => floorNames(path) && !namesProductState(path) : undefined).contained };
     plans.set(key(tool, args), planned);
     return planned;
   };

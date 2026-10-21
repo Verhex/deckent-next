@@ -43,6 +43,8 @@ export function modelInvocabilityRefusal(error: unknown): ModelInvocability {
   const kind: ModelInvocabilityReasonKind = code === 'MODEL_NOT_ACTIVATED' ? 'not-carried' : code === 'MODEL_INVOCATION_ACTIVATION_CONFLICT' ? 'stale-activation'
     : code === 'MODEL_INVOCATION_BINDING_CONFLICT' ? 'binding' : code === 'MODEL_INVOCATION_PROFILE_CONFLICT' ? 'profile'
     : code === 'MODEL_INVOCATION_RESULT_LIMIT' ? 'delivery-unfit'
+    // PRE-8 v2: the credential source refusals (grant, `.deck`, project vault) keep their typed code under the existing kind.
+    : code.startsWith('SECRET_') || code.startsWith('DECK_') ? 'no-credential'
     : code.includes('TARIFF') || code.includes('PRICING') || code === 'PROVIDER_SPEND_DATA_POLICY_REFUSED' ? 'tariff'
     : code.startsWith('PROVIDER_SPEND_') ? 'budget'
     : code.startsWith('POLICY_') || code.startsWith('PRINCIPAL_') || code.startsWith('SCOPE_') ? 'policy'

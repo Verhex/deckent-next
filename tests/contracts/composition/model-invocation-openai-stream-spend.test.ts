@@ -13,6 +13,7 @@ import { ModelActivationApplication, ModelBindingApplication, modelInvocationTar
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createLocalTls } from '../../fixtures/local-tls.js';
 import { registerProviderSpendNoChargeCertification } from '../../../src/extensions.js';
+import { grantFixtureSecrets } from '../../fixtures/project-grant.js';
 
 // Astra 2462 R1 through the governed invocation path (policy, activation, budget reservation, receipt, SQLite spend ledger) over a real
 // https OpenAI-compatible server with a non-zero operator-static v2 tariff: only the final event's own usage settles money. An interim usage
@@ -199,6 +200,8 @@ it('a credential/policy refusal before POST releases its claim without contactin
   const path = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8'));
   config.provider_invocation_profiles.profiles[0].adapter.definition.authentication = { type: 'bearer', credentialRef: 'MISSING_KEY' };
   await writeFile(path, JSON.stringify(config)); clearConfigCache();
+  // PRE-8 v2: granted but absent from the main vault — the send-time refusal after the claim (an ungranted key is refused before the claim).
+  await grantFixtureSecrets(f.project, 'scope', ['MISSING_KEY'], { env: f.env });
   const result = await invokeConfiguredModel(f.project, f.streamed, { env: f.env });
   const { inspection, integrity } = await spendOf(f, result.receipt.claim.invocationId);
   expect(result.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'not-sent', httpStatus: null } });

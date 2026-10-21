@@ -15,6 +15,7 @@ import { settledProviderCacheUsage } from '#engine/index.js';
 import { chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createLocalTls } from '../../fixtures/local-tls.js';
+import { grantFixtureSecrets } from '../../fixtures/project-grant.js';
 
 // The terminal agent turn (governed rounds, per-call tool authorization, stream events) with Claude as the model: a real runtime
 // service, a real https server speaking the Messages wire, no real API. The key reaches the send only by reference (environment here).
@@ -83,6 +84,7 @@ async function runtime(capabilities: readonly string[] = ['tool-calls', 'chat-te
     { id: 'scope', effect: 'allow', actions: ['inspect'], scopes: ['scope'], principals: me, resource: { kind: 'scope', ids: ['scope'] } },
     { id: 'read-tools', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: me, resource: { kind: 'agent-tool', ids: ['read_file', 'list_dir', 'grep', 'glob'] } }] }), { mode: 0o600 });
   const env = { HOME: home, PATH: process.env.PATH ?? '/usr/bin:/bin', ANTHROPIC_API_KEY: SECRET };
+  await grantFixtureSecrets(project, 'scope', ['ANTHROPIC_API_KEY'], { env }); // PRE-8 v2: the admin lent the main-vault key to this project.
   const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, {});
   services.push(service);
   return { project, env, requests, client: () => createConfiguredRuntimeClient(project, { env }) };

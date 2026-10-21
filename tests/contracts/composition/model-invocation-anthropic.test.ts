@@ -11,6 +11,7 @@ import { anthropicPublishedTariff, openSqliteModelActivationStore, openSqliteMod
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId, verifyProviderSpendIntegrity } from '#engine/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { createLocalTls } from '../../fixtures/local-tls.js';
+import { grantFixtureSecrets } from '../../fixtures/project-grant.js';
 
 // The governed invocation path (policy, activation, allocation, budget reservation, receipt) over a real https Anthropic-shaped
 // server: no real API is ever called. The key comes only from the injected secret resolver, by reference.
@@ -66,6 +67,8 @@ async function fixture(limitMinorUnits = 1000, allow = true, reply?: Reply) {
   const command = { schemaVersion: 1 as const, commandId: 'command', scopeId: 'scope', reference, catalogRevision: 'catalog', expectedBinding: binding,
     nativeRequest: { model: MODEL, messages: [{ role: 'user' as const, content: 'private prompt' }], max_completion_tokens: 8 } };
   const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' };
+  // PRE-8 v2: the admin lent the main-vault key to this project (a denying policy has no scope to lend it in).
+  if (allow) await grantFixtureSecrets(project, 'scope', ['ANTHROPIC_API_KEY'], { env });
   const streamed = { ...command, commandId: 'streamed', nativeRequest: { ...command.nativeRequest, stream: true, stream_options: { include_usage: true as const } } };
   return { project, ledger, command, streamed, env, seen, secretResolver: async (reference: string) => reference === 'ANTHROPIC_API_KEY' ? SECRET : undefined };
 }

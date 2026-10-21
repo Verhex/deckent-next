@@ -8,3 +8,4 @@ export { classifyShellMutation, NETWORK_PROGRAMS, PACKAGE_PROGRAMS, shellPermiss
   type ShellPermissionTier, type ShellWriteKind, type ShellWritePathContext } from './internal/mutation.js';
 export { classifyShellContainment, shellNamedPaths, type ShellContainmentReason, type ShellContainmentVerdict } from './internal/containment.js';
 export { globSegmentRegExp } from './internal/glob.js';
+export { classifyShellAuthority } from './internal/authority.js';

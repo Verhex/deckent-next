@@ -9,6 +9,7 @@ import type { OperationEffectHandler, OperationInspectHandler } from './operatio
 import type { PoolCapacityApplyHandler, PoolCapacityInspectHandler, PoolHoldApplyHandler, PoolHoldInspectHandler, QuotaReleaseHandler } from './pool.js';
 import type { AdminPathsHandler, RuntimeServiceDescribeHandler, RuntimeServiceShutdownHandler, RuntimeServiceStartHandler } from './runtime.js';
 import type { SecretDeleteHandler, SecretNamesHandler, SecretSetHandler, SecretStoreInspectHandler } from './secret.js';
+import type { ProjectSecretHandler, SecretGrantHandler, SecretHandoverHandler, SecretInventoryHandler } from './secret-project.js';
 import type { SecretStoreSwitchHandler, SecretStoresHandler } from './secret-store.js';
 import type { ToolchainUpdateHandler } from './toolchains.js';
 
@@ -36,6 +37,11 @@ export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunch
   // SECRET-WRITE: `secret set|delete` through the runtime service (the socket peer is the principal; the `secret` policy cell decides).
   setSecret?: SecretSetHandler;
   deleteSecret?: SecretDeleteHandler;
+  // PRE-8 v2: the one secret inventory; grants, project-vault changes and the handover in this process at the person's terminal.
+  inspectSecretInventory?: SecretInventoryHandler;
+  changeSecretGrant?: SecretGrantHandler;
+  setProjectSecret?: ProjectSecretHandler;
+  handOverSecrets?: SecretHandoverHandler;
   // SECRET-STORE-SWITCH (v24): the stores for the picker and the governed switch through the runtime service (`secret`/`switch`).
   listSecretStores?: SecretStoresHandler;
   switchSecretStore?: SecretStoreSwitchHandler;

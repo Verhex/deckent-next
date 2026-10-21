@@ -15,6 +15,7 @@ import { configPanelTree } from '#surfaces/core/terminal-panels/index.js';
 import { terminalPanelLabels } from '#surfaces/core/work-labels/index.js';
 import { PROVIDER_CONNECT_REGISTRY, parseProviderConnectRegistry, readProviderConnectSeed } from '#adapters/index.js';
 import { runtime, me } from '../support/chat-turn-harness.js';
+import { grantFixtureSecrets } from '../../fixtures/project-grant.js';
 
 const providerConnect: ProviderConnectHost = { kinds: [], endpoint: () => ({ ok: false, reason: 'invalid' }), probe: async () => { throw new Error('inspection must never probe'); } };
 type Fixture = Awaited<ReturnType<typeof runtime>>;
@@ -78,6 +79,8 @@ describe('one invocable-now model across monitor, /config, /model and /provider'
         profile.adapter.definition.tariff = { kind: 'openrouter-endpoint', version: 1, currency: 'USD', metadataEndpoint: 'https://openrouter.ai/api/v1/models/vendor/model/endpoints',
         endpointTag: 'provider/region', metadataLimits: { maxAgeMs: 60000, maxResponseBytes: 64000, timeoutMs: 1000 } }; }
       await writeConfig(f, config);
+      // PRE-8 v2: granted but absent keeps this the missing-key decision (an ungranted key is its own typed refusal, secret-project-vault tests).
+      if (scenario === 'no-credential') await grantFixtureSecrets(f.project, 'scope', ['W11_ABSENT_KEY'], { env: f.env });
       const before = { files: await fileNames(f.data), activations: f.rows('SELECT * FROM model_activations'), invocations: f.rows('SELECT * FROM model_invocations'),
         accounts: f.rows('SELECT * FROM provider_spend_accounts'), audit: f.rows('SELECT * FROM audit_events') };
       for (const locale of ['en', 'tr'] as const) {
@@ -100,6 +103,8 @@ describe('one invocable-now model across monitor, /config, /model and /provider'
     await f.writePolicy([...f.grants, ...extra]);
     const env = { ...f.env, DECKENT_OPENAI_KEY: 'W11-only-fake-credential', DECKENT_DEEPSEEK_KEY: 'W11-only-fake-credential',
       DECKENT_GLM_KEY: 'W11-only-fake-credential', DECKENT_ANTHROPIC_KEY: 'W11-only-fake-credential' };
+    // PRE-8 v2: the admin lent these main-vault keys to this project.
+    await grantFixtureSecrets(f.project, 'scope', ['DECKENT_OPENAI_KEY', 'DECKENT_DEEPSEEK_KEY', 'DECKENT_GLM_KEY', 'DECKENT_ANTHROPIC_KEY'], { env });
     const registry = parseProviderConnectRegistry({ ...PROVIDER_CONNECT_REGISTRY, kinds: [...PROVIDER_CONNECT_REGISTRY.kinds,
       { id: 'w11-api-fixture', labelKey: 'tui.provider.kind.openrouter', available: true, endpoint: { default: null, editable: true },
         key: null, probe: null, connect: { adapter: 'openai-chat-http', chatPath: '/v1/chat/completions', seed: 'openrouter-api',

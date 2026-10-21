@@ -11,6 +11,7 @@ import { anthropicPublishedTariff, lookupOpenAiCompatibleTariff, openAiChatMessa
   openSqliteModelActivationStore, openSqliteModelInvocationReader, openSqliteProviderSpendIntegrityReader, openTerminalSessionStore, readLocalOsIdentity } from '#adapters/index.js';
 import { type ModelInvocationResult, ModelActivationApplication, ModelBindingApplication, ModelInvocationControllers, modelInvocationProfileDigest, modelInvocationTargetId, runAgentTurn, verifyProviderSpendIntegrity } from '#engine/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
+import { grantFixtureSecrets } from '../../fixtures/project-grant.js';
 
 // Only the socket boundary is simulated. Production HTTP framing/evidence, native adapters, policy, activation, reservation,
 // receipt, usage measurement and SQLite settlement all run. This proves fixture wiring, not TLS or vendor live acceptance.
@@ -86,6 +87,7 @@ async function fixture(provider: Provider, cap = 65_536, allowActivate = true) {
     ...(allowActivate ? [{ id: 'activate', effect: 'allow', actions: ['activate'], scopes: ['scope'], principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind: 'model-activation', ids: 'all' } }] : []),
   ] }), { mode: 0o600 });
   const options = { env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' }, secretResolver: async () => 'fixture-key-only' };
+  await grantFixtureSecrets(project, 'scope', ['FIXTURE_KEY'], options); // PRE-8 v2: the admin lent the main-vault key to this project.
   const command = (id: string, messages: readonly AgentTurnMessage[], streamed = true) => ({ schemaVersion: 1 as const, commandId: id, scopeId: 'scope', reference,
     catalogRevision: catalog.revision, expectedBinding: binding, nativeRequest: { model: nativeId, messages: openAiChatNativeMessages(messages, { scopeId: 'scope', reference, profileDigest: modelInvocationProfileDigest(profile as never) }),
       max_completion_tokens: 1000, stream: streamed, ...(streamed ? { stream_options: { include_usage: true } } : {}), tools: [{ type: 'function', function: { name: tool.name, parameters: tool.inputSchema } }], tool_choice: 'auto' } });

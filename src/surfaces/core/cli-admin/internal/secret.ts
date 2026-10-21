@@ -7,6 +7,7 @@ import { cliMode, cliTableStyle, renderCliTable, resolveCommandScope, scopeListe
 import type { AdminCommandContext } from './context.js';
 import { adminInteractive, adminSinks, askAdminCard, confirmOptions, reportCancelled } from './io.js';
 import { secretStoreCommand, storeLabel } from './secret-store.js';
+import { renderSecretInventory, requirePersonTerminal, secretGrantCommand, secretHandoverCommand } from './secret-project.js';
 
 /** The installation's secret store as `doctor` shows it (SECRET-K1, owner S1): the active backend and whether it can be read now. */
 export interface SecretStoreDoctorView {
@@ -106,36 +107,53 @@ export async function secretUsers(root: string, options: ConfigLoadOptions, loca
 export async function secretCommand(argv: readonly string[], context: AdminCommandContext): Promise<void | ExitCode> {
   const action = argv[1];
   if (action === 'store') return secretStoreCommand(argv, context);
-  if (action !== 'list' && action !== 'set' && action !== 'delete') throw ErrorRegistry.createError('CLI_USAGE');
-  let name = action === 'list' || argv[2]?.startsWith('-') ? undefined : argv[2];
+  if (!['list', 'set', 'delete', 'grant', 'revoke', 'handover'].includes(action ?? '')) throw ErrorRegistry.createError('CLI_USAGE');
+  // PRE-8 v2: lending a main key and moving a vault are a person's terminal act; refused before anything is read.
+  if (action === 'grant' || action === 'revoke' || action === 'handover') requirePersonTerminal(context, `secret ${action}`);
+  let name = action === 'list' || action === 'handover' || argv[2]?.startsWith('-') ? undefined : argv[2];
   if (action === 'delete' && !name) throw ErrorRegistry.createError('CLI_USAGE');
   // Checked before stdin is read: `NAME=value` on argv is refused as a name, and the argument is never echoed.
   if (name !== undefined && !isSecretName(name)) throw ErrorRegistry.createError('SECRET_NAME_INVALID');
-  let json = false, language: string | undefined, scope: string | undefined;
+  let json = false, language: string | undefined, scope: string | undefined, vault: 'main' | 'project' | undefined, all = false;
   for (let i = name === undefined ? 2 : 3; i < argv.length; i++) {
     const flag = argv[i]!;
     const next = () => { const value = argv[++i]; if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE'); return value; };
     if (flag === '--json' && !json) json = true;
     else if (flag === '--lang' && language === undefined) language = next();
-    else if (flag === '--scope' && action !== 'list' && scope === undefined) scope = next();
+    else if (flag === '--scope' && scope === undefined) scope = next();
+    else if ((flag === '--main' || flag === '--project') && (action === 'set' || action === 'delete') && vault === undefined) vault = flag === '--main' ? 'main' : 'project';
+    else if (flag === '--all' && action === 'list' && !all) all = true;
     else if (flag !== '--no-color') throw ErrorRegistry.createError('CLI_USAGE');
   }
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, options = { env }, locale = commandLocale(context, language);
   const sinks = { json, ...adminSinks(context) }, interactive = adminInteractive(context, json);
+  const configuredScope = async () => loadConfig(root, options).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
+  if (action === 'list' && context.inspectSecretInventory && (scope ?? await configuredScope())) {
+    // PRE-8 v2: the one inventory (vault, project, users, .deck, grant, presence); names and metadata only.
+    const scopeId = scope ?? String(await configuredScope()), view = await context.inspectSecretInventory(root, { scopeId, all }, options);
+    const users = await secretUsers(root, options, locale), stored = await context.listSecretNames?.(root, options).catch(() => null);
+    // `--json` keeps the earlier shape (backend, names of the main store) and adds the inventory (project, rows, findings).
+    emit({ schemaVersion: 1, backend: stored?.backend ?? view.mainStore, ...(stored ? { names: stored.names } : {}), project: view.project, all: view.all,
+      rows: view.rows, findings: view.findings },
+      { ...sinks, render: () => renderSecretInventory(view, users, locale, cliTableStyle(context)) });
+    return;
+  }
   if (action === 'list') {
-    if (!context.listSecretNames) throw ErrorRegistry.createError('CLI_USAGE');
+    // `--all` is the inventory's: without a scope (`--scope` or the terminal's) there is none to decide it in.
+    if (!context.listSecretNames || all) throw ErrorRegistry.createError('CLI_USAGE');
     // The handler checks the local person's assurance with the installation's `enforce_principal_assurance` (as doctor does).
     const view = await context.listSecretNames(root, options), users = await secretUsers(root, options, locale);
     emit(view, { ...sinks, render: () => renderNames(view, users, locale, cliTableStyle(context)) });
     return;
   }
   const { setSecret, deleteSecret } = context;
-  if (action === 'set' ? !setSecret : !deleteSecret) throw ErrorRegistry.createError('CLI_USAGE');
+  if ((action === 'set' && !setSecret) || (action === 'delete' && !deleteSecret)) throw ErrorRegistry.createError('CLI_USAGE');
   // SEC-1 (owner A48-D5): a key is stored only from a person's terminal (the service requires the terminal witness). A pipe, script, agent or
   // CI caller is refused here, before stdin is read, so a piped key never reaches this process's memory. `--json` at a terminal is allowed.
   if (action === 'set' && cliMode(context).mode !== 'interactive') throw ErrorRegistry.createError(name === undefined ? 'CLI_USAGE' : 'SECRET_SET_TERMINAL_REQUIRED');
   const cancelled = () => { reportCancelled(context, locale); return EXIT_CODES.error; };
-  if (!name) {
+  if (!name && action !== 'handover' && action !== 'set') throw ErrorRegistry.createError('CLI_USAGE');
+  if (!name && action === 'set') {
     // A person on a terminal picks a name the config already references but the store lacks; anyone else names the key.
     if (!interactive || !context.listSecretNames) throw ErrorRegistry.createError('CLI_USAGE');
     const stored = new Set((await context.listSecretNames(root, options)).names), users = await secretUsers(root, options, locale);
@@ -145,28 +163,52 @@ export async function secretCommand(argv: readonly string[], context: AdminComma
       options: needed.map(item => ({ id: item, label: `${item} · ${(users.get(item) ?? []).join(', ')}` })) }) ?? undefined;
     if (!name) return cancelled();
   }
-  const configured = await loadConfig(root, options).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
+  const configured = await configuredScope();
   const resolved = await resolveCommandScope({ command: `deckent secret ${action}`, locale, explicit: scope, configured: typeof configured === 'string' ? configured : undefined,
     mutating: true, interactive, listScopes: () => scopeLister(context, root, options)().catch(() => []), pick: request => askAdminCard(context, locale, request) });
   if (!resolved) return cancelled();
+  if (action === 'grant' || action === 'revoke') return await secretGrantCommand(context, root, options, locale, sinks, { scope: resolved, name: name!, action }) === 'cancelled' ? cancelled() : undefined;
+  if (action === 'handover') return await secretHandoverCommand(context, root, options, locale, sinks, resolved) === 'cancelled' ? cancelled() : undefined;
   const notice = () => { if (!json) emit(scopeNotice(resolved, locale), adminSinks(context)); };
   const render = (view: SecretChangeView) => view.action === 'set' ? t('cli.secret.done.set', { name: view.name, store: storeLabel(view.backend, locale) }, locale)
     : view.removed === false ? t('cli.secret.done.absent', { name: view.name }, locale) : t('cli.secret.done.deleted', { name: view.name, store: storeLabel(view.backend, locale) }, locale);
+  // PRE-8 v2 (owner 2026-10-19 "no silent scope"): `set` names its vault; on a terminal without a flag a card asks, otherwise it is refused.
+  if (action === 'set' && vault === undefined) {
+    if (!interactive) throw ErrorRegistry.createError('SECRET_VAULT_REQUIRED');
+    const picked = await askAdminCard(context, locale, { title: t('cli.secret.card.vaultTitle', { name: name! }, locale), options: [
+      { id: 'main', label: t('cli.secret.card.vaultMain', {}, locale) }, { id: 'project', label: t('cli.secret.card.vaultProject', {}, locale) }] });
+    if (picked !== 'main' && picked !== 'project') return cancelled();
+    vault = picked;
+  }
+  if (vault === 'project' && !context.setProjectSecret) throw ErrorRegistry.createError('CLI_USAGE');
+  const projectDone = (view: { readonly name: string; readonly project: string; readonly removed: boolean }) => action === 'set'
+    ? t('cli.secret.done.setProject', { name: view.name, project: terminalSafeText(view.project) }, locale)
+    : view.removed ? t('cli.secret.done.deletedProject', { name: view.name, project: terminalSafeText(view.project) }, locale) : t('cli.secret.done.absent', { name: view.name }, locale);
   if (action === 'delete') {
     if (interactive) {
-      const users = (await secretUsers(root, options, locale)).get(name) ?? [];
-      const answer = await askAdminCard(context, locale, { title: t('cli.secret.card.deleteTitle', { name }, locale),
+      const users = (await secretUsers(root, options, locale)).get(name!) ?? [];
+      const answer = await askAdminCard(context, locale, { title: t('cli.secret.card.deleteTitle', { name: name! }, locale),
         body: [users.length ? t('cli.secret.card.deleteUsers', { users: users.join(', ') }, locale) : t('cli.secret.card.deleteUnused', {}, locale)], options: confirmOptions(locale) });
       if (answer !== 'apply') return cancelled();
     }
-    const removed = await deleteSecret!(root, { schemaVersion: 1, scopeId: resolved.scopeId, name }, options);
+    if (vault === 'project') {
+      const view = await context.setProjectSecret!(root, { scopeId: resolved.scopeId, name: name!, value: null }, options);
+      notice(); emit(view, { ...sinks, render: () => projectDone(view) });
+      return;
+    }
+    const removed = await deleteSecret!(root, { schemaVersion: 1, scopeId: resolved.scopeId, name: name! }, options);
     notice(); emit(removed, { ...sinks, render });
     return;
   }
   const stdin = (context.stdin ?? process.stdin) as Input;
-  const value = stdin.isTTY ? await readHidden(stdin, context.stderr ?? process.stderr, name) : await readPiped(stdin);
+  const value = stdin.isTTY ? await readHidden(stdin, context.stderr ?? process.stderr, name!) : await readPiped(stdin);
   if (!value || Buffer.byteLength(value, 'utf8') > VALUE_MAX_BYTES) throw ErrorRegistry.createError('SECRET_VALUE_INVALID');
-  const stored = await setSecret!(root, { schemaVersion: 1, scopeId: resolved.scopeId, name, value }, options);
+  if (vault === 'project') {
+    const view = await context.setProjectSecret!(root, { scopeId: resolved.scopeId, name: name!, value }, options);
+    notice(); emit(view, { ...sinks, render: () => projectDone(view) });
+    return;
+  }
+  const stored = await setSecret!(root, { schemaVersion: 1, scopeId: resolved.scopeId, name: name!, value }, options);
   notice(); emit(stored, { ...sinks, render });
 }
 

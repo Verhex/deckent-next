@@ -224,10 +224,11 @@ it('off a terminal: secret set is refused before stdin is read (SEC-1 note), del
   const del = io(f, secretHandlers(calls));
   expect(await main(['secret', 'delete', 'DECKENT_OPENAI_KEY'], del.context)).toBe(2);
   expect(del.err.text()).toContain('CLI_SCOPE_REQUIRED'); expect(calls).toEqual([]);
-  card.interactive = true; card.answers = ['MISSING_KEY', 'live'];
+  card.interactive = true; card.answers = ['MISSING_KEY', 'live', 'main']; // PRE-8 v2: a third card asks the vault (main | project).
   const set = io(f, { ...secretHandlers(calls), stdin: piped(`${CANARY}\n`) });
   expect(await main(['secret', 'set'], set.context)).toBe(0);
   expect(card.asked[0]!.options.map(option => option.id)).toEqual(['MISSING_KEY']);
+  expect(card.asked[2]!.options.map(option => option.id)).toEqual(['main', 'project']);
   expect(calls).toEqual([{ schemaVersion: 1, scopeId: 'live', name: 'MISSING_KEY', value: CANARY }]);
   expect(set.out.text()).toContain('MISSING_KEY saved in store: encrypted file.'); expect(set.out.text() + set.err.text()).not.toContain(CANARY);
   card.answers = ['live', 'cancel']; card.asked = [];
