@@ -140,6 +140,8 @@ describe('PRE-8 first-use card: the workline window', () => {
     await send('hello');
     await until(() => view!.stdout.frame.includes('GRANT-CARD DECKENT_ANTHROPIC_KEY /work/erp'), 'grant card');
     expect(view!.stdout.frame).toContain('GRANT-KEYS');
+    // The turn waits for the person here, not for the model: no model tail under the card.
+    expect(view!.stdout.frame).not.toContain('preparing');
     view!.stdin.write('y');
     await until(() => view!.stdout.text.includes('ANSWER-AFTER-GRANT'), 'answer after grant');
     expect(calls.grant).toEqual(['DECKENT_ANTHROPIC_KEY']);

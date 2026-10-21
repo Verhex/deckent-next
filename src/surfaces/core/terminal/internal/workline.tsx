@@ -369,7 +369,9 @@ export function WorklineApp(props: WorklineProps) {
         let bound = false;
         const start = () => props.streamTurn!(messages, signal, { ...(reasoning.current.current ? {} : { reasoning: 'off' as const }), sessionId: execution.input.context.sessionId,
           onTurnBound: binding => { bound = true; stream.onTurnBound(binding); }, ...(mode.fullAccess.current ? { fullAccess: true as const } : {}), ...pinnedFor(execution.input.context.sessionId) });
-        const position = labels.work?.window.position ?? '{from}-{to}/{total}', ask = (question: SecretGrantQuestion, cancel: AbortSignal) => askGrantWindow(slot, position, question, cancel);
+        // While the card waits the turn waits for the person, not the model: the open tail is hidden and comes back for the restarted turn.
+        const position = labels.work?.window.position ?? '{from}-{to}/{total}', ask = (question: SecretGrantQuestion, cancel: AbortSignal) => {
+          setLive(null); return askGrantWindow(slot, position, question, cancel).finally(() => setLive({ step: opened, lead: true })); };
         for await (const delta of props.secretGrant ? secretGrantTurn(start, props.secretGrant, ask, signal, () => bound) : start()) {
           if (delta.kind === 'text') answer += delta.text;
           if (delta.kind === 'message') appended.push(delta.message);
