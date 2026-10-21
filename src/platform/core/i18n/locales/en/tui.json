@@ -504,7 +504,7 @@
   "tui.panel.mode.title": "Permission mode",
   "tui.panel.mode.hints": "↑↓ choose · Enter switch · Esc close · Shift+Tab steps through the same modes",
   "tui.panel.mode.effect.askEdits": "standart, and every file edit asks too (your own preference; the company rules stay the same)",
-  "tui.panel.mode.fullAutoOff": "Your company leaves full-auto out of the modes you may take in this scope.",
+  "tui.panel.mode.fullAutoOff": "Full-auto is not open for you in this scope. The installation owner opens it with deckent init policy --scope <scope> --modes full-auto.",
   "tui.panel.mode.fullAccessLine": "Full access · tools run without asking · Deckent's state, policy and credentials stay closed · deny rules hold · every call is audited · this session only · Shift+Tab to change",
   "tui.panel.config.hints": "↑↓ choose · type to filter · Enter open · Esc back",
   "tui.panel.config.scope.project": "project (this project's settings)",

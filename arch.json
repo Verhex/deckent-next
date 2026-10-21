@@ -1205,7 +1205,8 @@
         "src/platform/core/errors",
         "src/platform/core/i18n",
         "src/platform/core/output",
-        "src/engine/core/project-instructions"
+        "src/engine/core/project-instructions",
+        "src/surfaces/core/cli-human"
       ],
       "plan": "SURFACES"
     },

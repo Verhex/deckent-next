@@ -504,7 +504,7 @@
   "tui.panel.mode.title": "İzin modu",
   "tui.panel.mode.hints": "↑↓ seç · Enter geç · Esc kapat · Shift+Tab aynı modlar arasında geçer",
   "tui.panel.mode.effect.askEdits": "standart; her dosya düzenlemesi de sorar (kişisel tercihiniz; şirket kuralları aynı kalır)",
-  "tui.panel.mode.fullAutoOff": "Şirketiniz bu kapsamda tam otomatik modu alabileceğiniz modlara katmıyor.",
+  "tui.panel.mode.fullAutoOff": "Tam otomatik bu kapsamda sizin için açık değil. Kurulumun sahibi bunu deckent init policy --scope <kapsam> --modes full-auto ile açar.",
   "tui.panel.mode.fullAccessLine": "Tam erişim · araçlar sormadan çalışır · Deckent durumu, politikası ve kimlik bilgileri kapalı · deny kuralları geçerli · her çağrı denetime yazılır · yalnız bu oturum · değiştirmek için Shift+Tab",
   "tui.panel.config.hints": "↑↓ seç · yazarak süz · Enter aç · Esc geri",
   "tui.panel.config.scope.project": "proje (bu projenin ayarları)",
