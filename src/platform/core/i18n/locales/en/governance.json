@@ -402,6 +402,7 @@
   "error.INFERENCE_METRICS_UNREAD": "Inference metrics were not read ({reason}) at {url}. Deckent does not start the server.",
   "error.RUNTIME_SHUTDOWN_UNAVAILABLE": "This runtime service has no configured identity, so it cannot be stopped through governed shutdown. On a first-run installation, deckent init policy --scope <id> --upgrade --preview (then --apply) sets service.identity and your shutdown grant; otherwise set service.identity ({scopeId, serviceId}) and grant shutdown on that service in policy. A running service reads it only at its next start: stop it once by hand (Ctrl+C on deckent runtime serve; a terminal-started service also stops after its idle time).",
   "error.RUNTIME_AUTOSTART_FAILED": "The local runtime service could not be started automatically. See the service log at {log}, or start it in the foreground with `deckent runtime serve`.",
+  "error.RUNTIME_SERVICE_EXTERNALLY_MANAGED": "This runtime service is run by a service manager, so a terminal restart would start a second competing service. Nothing was stopped. Restart it through its manager: {command}",
   "error.TERMINAL_SCOPE_REQUIRED": "Select a scope: run `deckent init policy --scope <id> --apply`, then `deckent --scope <id>`.",
   "error.LOCAL_RUNTIME_UNAVAILABLE": "The local runtime service is not running for this project. Start it with `deckent runtime serve`.",
   "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE": "The local runtime endpoint or the ledger's lock file failed ownership or filesystem checks.",
