@@ -29,7 +29,7 @@ import { getConfigFieldDefault, loadConfig, type Locale } from '#platform/index.
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile, configureNativeCodingTemplate, initializeNativeCodingRegistry } from '#composition/core/native-coding/index.js';
-import { assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat } from '#composition/core/terminal-chat/index.js';
+import { assertConfiguredTerminalCredential, assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat, terminalSecretGrantOffer } from '#composition/core/terminal-chat/index.js';
 import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand, inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { verifyConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
@@ -104,8 +104,12 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     describeTerminalChatPlan: describeTerminalChat,
     completeTerminalChat: (projectRoot, input, options, signal) => completeTerminalChatTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { invoke: invokeRuntimeModel, cancel: cancelRuntimeModelInvocation }),
+    // PRE-8 first-use card (lead fan-in): the card is UX; the grant is the governed `secret grant` (secret/set cell, terminal witness, sealed decision).
+    secretGrantCard: { offer: terminalSecretGrantOffer, grant: (root, scopeId, name, opts) => changeProjectSecretGrant(root, scopeId, name, 'grant', 'card', opts).then(() => {}) },
     streamTerminalChat: (projectRoot, input, options, signal) => streamTerminalAgentTurn({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { chatTurn: runRuntimeChatTurn, cancelChatTurn: cancelRuntimeChatTurn, preflight: assertTerminalChatReady,
+        // PRE-8 v2: the provider credential decision before the turn binds (no value read); SECRET_GRANT_REQUIRED opens the first-use card.
+        credential: (root, opts, reference, scope) => assertConfiguredTerminalCredential(root, reference, scope, opts).catch(error => { throw queryFailure(error); }),
         settledUsage: async (root, command, round, options) => {
           const reference = command.reference ?? (await describeTerminalChat(root, options)).reference;
           return settledProviderCacheUsage((reference ? await inspectConfiguredModelInvocationCommand(root, { schemaVersion: 1, scopeId: command.scopeId,

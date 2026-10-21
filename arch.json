@@ -483,7 +483,9 @@
         "src/adapters/core/provider-openai-chat",
         "src/composition/core/root",
         "src/composition/core/config",
-        "src/adapters/core/local-principal"
+        "src/adapters/core/local-principal",
+        "src/composition/core/secrets",
+        "src/composition/core/scoped-request"
       ],
       "plan": "SURFACES"
     },
