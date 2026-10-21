@@ -9,7 +9,7 @@
     "deprecated",
     "retired"
   ],
-  "backupPassphraseSecret": "BACKUP_PASSPHRASE",
+  "backupPassphraseName": "BACKUP_PASSPHRASE",
   "fixes": [
     {
       "id": "toolchain-update",
