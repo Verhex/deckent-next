@@ -608,3 +608,19 @@ kontrolü, "kimde hangi anahtar" listesi (CLI); betada: tam `deckent admin` pane
 ekip/kurumsalda izni yönetici verir.
 Plan: PLAN Sıradaki 18 (PRE-8 satırı bu modele göre).
 
+<a id="pre8-v2-decisions-2026-10-21"></a>
+
+## Owner kararları — 2026-10-21: PRE-8 v2 mimari kararları (kanun denetimi sonrası)
+
+Kaynak: ana oturum (lead 4d4830b2); tasarım `proof/ALPHA51-2026-10-21/DESIGN-PRE8v2.md`, temiz bağlamlı denetim HOLD (1 BLOCKER, 5 MAJOR;
+`AUDIT-PRE8v2-LAW.md`). Owner: "denetime göre bende kararları verek mimariyi şekillendiririm." Seçimler (AskUserQuestion):
+1. İlk kullanım kartı: beta öncesi hedef, sığmazsa betaya; o zamana kadar `deckent secret grant`; kullanım anındaki izin kontrolü her durumda beta öncesi.
+2. `.deck`'te bildirilmemiş ad: ana kasa + izin (izin yine şart); proje kasası yalnız `AD=project` bildirimiyle okunur.
+3. Satır tavanı (alpha.51): adapters 29250→29650, composition 7650→7950.
+4. Ekip/kurumsalda ana anahtarı projeye açma yetkisi: mevcut `secret`/`set` hücresi; şablon v13 kalır; ayrı grant eylemi betada.
+5. Aynı git deposunun worktree'leri: **tek proje** (kasa ve izinleri paylaşır); kopyalanmış proje klasörü yine ayrı/ret (denetim BLOCKER düzeltmesi).
+6. Native macOS'ta terminal tanığı yok: beta bilinen sınırı (NATIVE-PLATFORMLAR ile gelir).
+7. alpha.50'ye geri dönüşte izin ayrımı kalkar: bilinen sınır; geçiş notunda bildirilir.
+8. beta.1 tarihi 2026-10-28 korunur.
+Denetim düzeltmeleri (BLOCKER + MAJOR) uygulama brief'ine girer.
+
