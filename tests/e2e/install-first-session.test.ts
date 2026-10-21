@@ -58,7 +58,7 @@ describe.skipIf(process.platform !== 'linux')('README first session, actual bina
       let pipedLog = ''; piped.stdout.on('data', chunk => { pipedLog += String(chunk); }); piped.stderr.on('data', chunk => { pipedLog += String(chunk); });
       const refused = new Promise<number | null>(resolve => piped.once('exit', resolve)); piped.stdin.end('offline-fixture-key\n');
       expect(await refused, pipedLog).not.toBe(0); expect(pipedLog).toContain('SECRET_SET_TERMINAL_REQUIRED'); expect(pipedLog).not.toContain('offline-fixture-key');
-      const set = await runInTerminal([process.execPath, binary, 'secret', 'set', 'INSTALL_FLOW_TEST', '--scope', 'my-project'], project, personEnv(env), [{ when: 'INSTALL_FLOW_TEST: ', send: 'offline-fixture-key\r' }]);
+      const set = await runInTerminal([process.execPath, binary, 'secret', 'set', 'INSTALL_FLOW_TEST', '--main', '--scope', 'my-project'], project, personEnv(env), [{ when: 'INSTALL_FLOW_TEST: ', send: 'offline-fixture-key\r' }]);
       expect(set.code, set.output).toBe(0); expect(set.output).not.toContain('offline-fixture-key');
       const listed = await run(['secret', 'list']); expect(listed.stdout + listed.stderr).toContain('INSTALL_FLOW_TEST');
       const doctor = await run(['doctor', '--verbose']); expect(doctor.stdout + doctor.stderr).toContain('Runtime startability: ready'); // C-DOCTOR: details behind --verbose

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Ne dedin"
+  short_description: "Re-explain the last message in plain Turkish"
+  default_prompt: "Use $ne-dedin to re-explain your last message in plain Turkish."
+policy:
+  allow_implicit_invocation: false

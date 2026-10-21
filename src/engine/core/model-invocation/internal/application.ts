@@ -54,6 +54,9 @@ export interface ModelInvocationNativeRegistry {
   resolve(profile: ModelInvocationProfile): ModelInvocationNativePort | null;
   /** Called only after initial identity, policy, activation and profile checks; no secrets or model execution. */
   acquire?(input: ModelInvocationAcquisitionInput, signal?: AbortSignal): Promise<void>;
+  /** PRE-8 v2: the credential source decision before anything is acquired, prepared or sent; a refusal is typed (grant, `.deck`, project
+   * vault), never collapsed into the transport's credential error. Reads no value. */
+  admit?(profile: ModelInvocationProfile, signal?: AbortSignal): Promise<void>;
 }
 export interface ModelInvocationRuntime {
   invocationId(): string; ownerId(): string; now(): number;
@@ -168,6 +171,7 @@ export class ModelInvocationApplication {
     modelActivationAuthorizationSchema.parse(await this.authorization.authorize('invoke', { scopeId: command.scopeId, reference: command.reference }, principal));
     const { binding, activation, profile, native } = await this.admittedTarget(command, checks ? 'invocable-now' : true);
     if (checks) await assertModelInvocableNow(activation, profile, binding.definition, binding.catalogRevision, checks);
+    await this.natives.admit?.(profile, signal);
     await acquireModelInvocationEvidence(this.natives, { profile, definition: binding.definition, native }, signal);
     const prepared = await native.prepare(profile, binding.definition, command.nativeRequest, signal);
     const spending = await authorizeModelInvocationSpending(this.spending, { command, requestDigest: modelInvocationRequestDigest(command), profile,
@@ -228,6 +232,7 @@ export class ModelInvocationApplication {
       }
       const { binding, activation, profile, native } = await this.admittedTarget(command);
       if (!this.spending && !(profile.schemaVersion === 2 && profile.billingAxis === 'subscription')) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
+      await this.natives.admit?.(profile, signal);
       await acquireModelInvocationEvidence(this.natives, { profile, definition: binding.definition, native }, signal);
       const prepared = await native.prepare(profile, binding.definition, command.nativeRequest, signal);
       if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');

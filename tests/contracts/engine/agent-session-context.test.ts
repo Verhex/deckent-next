@@ -15,9 +15,11 @@ const TOOLS = [spec('read_file', 'read'), spec('list_dir', 'read'), spec('grep',
   spec('run_shell', 'shell'), spec('scratch_write', 'edit'), spec('scratch_read', 'read'), spec('scratch_list', 'read'), spec('propose_mcp_server', 'read'), SESSION_STATE_TOOL_SPEC];
 const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: person, ...FIRST_RUN_TOOL_NAMES });
 const FULL_ACCESS = { id: 'company-full-access', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: [person], resource: { kind: 'permission-mode', ids: ['full-access'] } };
+// PRE-9 (b): a stored full-auto counts only while the company grant allows it (re-checked on every call).
+const FULL_AUTO = { id: 'company-full-auto', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: [person], resource: { kind: 'permission-mode', ids: ['full-auto'] } };
 const SESSION_GRANT = { id: 'session-state', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: [person], resource: { kind: 'agent-tool', ids: ['session_state'] } };
 type Mode = 'standart' | 'full-auto' | 'full-access';
-const policyOf = (mode: Mode | null, grants: readonly unknown[] = [SESSION_GRANT, FULL_ACCESS]) => resolvePolicyBindings({ ...template.policy, grants: [...template.policy.grants, ...grants] },
+const policyOf = (mode: Mode | null, grants: readonly unknown[] = [SESSION_GRANT, FULL_ACCESS, FULL_AUTO]) => resolvePolicyBindings({ ...template.policy, grants: [...template.policy.grants, ...grants] },
   { schemaVersion: 3, revision: `b-${mode ?? 'none'}`, bindings: [], modes: mode ? [{ id: 'me', principal: person, scopes: ['scope'], mode }] : [] });
 // The composition's operation map (the effect each tool's call is): the decision itself is the policy engine's.
 const operation = (tool: AgentToolSpec) => tool.name === 'scratch_write' ? 'workspace.scratch.write' : tool.toolClass === 'edit' ? 'workspace.file.write' : tool.toolClass === 'shell' ? 'host.shell.run' : null;

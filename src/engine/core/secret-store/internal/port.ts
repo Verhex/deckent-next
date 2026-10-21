@@ -19,7 +19,7 @@ export const SECRET_STORE_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*\.
 export type SecretStoreErrorCode = 'SECRET_NAME_INVALID' | 'SECRET_VALUE_INVALID' | 'SECRET_STORE_UNKNOWN' | 'SECRET_STORE_UNAVAILABLE'
   | 'SECRET_STORE_UNSAFE' | 'SECRET_STORE_CORRUPT' | 'SECRET_STORE_READ_ONLY' | 'SECRET_STORE_UNSUPPORTED' | 'SECRET_STORE_FULL'
   | 'SECRET_HELPER_INVALID' | 'SECRET_HELPER_DENIED' | 'SECRET_HELPER_TIMEOUT' | 'SECRET_HELPER_OUTPUT_LIMIT' | 'SECRET_HELPER_FAILED'
-  | 'SECRET_STORE_PROTECTION_REQUIRED';
+  | 'SECRET_STORE_PROTECTION_REQUIRED' | 'SECRET_PROJECT_VAULT_CLAIMED';
 
 export interface SecretStoreDescriptor {
   /** The registry id this store was opened under (the audit names the backend by it). */
@@ -46,8 +46,11 @@ export interface SecretStore {
   listNames(): Promise<readonly string[]>;
   inspect(): Promise<SecretStoreInspection>;
 }
-/** What a backend is opened with: the caller's environment and platform, and the installation (global) root when one resolves. */
-export interface SecretStoreContext { readonly env: Environment; readonly platform: string; readonly root: string | null }
+/** What a backend is opened with: the caller's environment and platform, and the installation (global) root when one resolves.
+ * `vault` (PRE-8 v2, additive; port v1 stays): present when the store is a project vault — the vault's directory key and its anchor
+ * identities — so a backend (an Enterprise vault) can serve per-project paths; absent for the installation's main vault. */
+export interface SecretStoreContext { readonly env: Environment; readonly platform: string; readonly root: string | null;
+  readonly vault?: { readonly key: string; readonly installationId: string; readonly projectId: string } }
 /** One registered backend. `create` must not touch the store (opening is lazy); the store it returns must carry this `id`. */
 export interface SecretStoreFactory { readonly id: string; create(context: SecretStoreContext): SecretStore }
 

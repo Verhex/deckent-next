@@ -19,8 +19,10 @@ const FLOOR = [`${DATA}/policy.json`, `${DATA}/bindings.json`, `${DATA}/approval
   `${DATA}/audit/authority-revisions/k-1.json`, '.git/config', '.git/hooks/pre-commit', '.env', 'keys/server.pem'];
 const principal = { id: 'os:1000', issuer: 'host', subject: '1000', assurance: 'os-user' as const, scopeIds: ['s'] };
 const kinds = getPolicyVocabulary().resources.map(resource => resource.kind);
+// PRE-9 (b): the stored full-auto counts only while a grant allows it, so the owner root allows `permission-mode` (every other kind asks, mode-eligible).
 const maximal = resolvePolicyBindings({ schemaVersion: 2, revision: 'p1', grants: [], restrictions: [], separationOfDuties: [],
-  roles: [{ id: INSTALLATION_OWNER_ROLE_ID, permissions: installationOwnerPermissions(kinds).map(permission => ({ ...permission, effect: 'require-approval', modeEligible: true })) }] },
+  roles: [{ id: INSTALLATION_OWNER_ROLE_ID, permissions: installationOwnerPermissions(kinds).map(permission => permission.resource.kind === 'permission-mode' ? permission
+    : ({ ...permission, effect: 'require-approval', modeEligible: true })) }] },
 { schemaVersion: 2, revision: 'b1', bindings: [{ id: 'root', principals: [{ issuer: 'host', subject: '1000' }], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }],
   modes: [{ id: 'fa', principal: { issuer: 'host', subject: '1000' }, scopes: ['s'], mode: 'full-auto' }] });
 

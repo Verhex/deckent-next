@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "deck": {
+    "fileName": ".deck",
+    "formatKey": "DECK_FORMAT",
+    "format": 1,
+    "maxBytes": 65536,
+    "maxEntries": 256
+  },
+  "vault": {
+    "directory": "project-secrets",
+    "keySalt": "deckent.project-secrets/v1",
+    "projectFile": "project.json",
+    "projectMaxBytes": 16384,
+    "grantsFile": "grants.json",
+    "grantsMaxBytes": 262144,
+    "grantsMaxEntries": 512,
+    "handoverResourceId": "project-vault"
+  },
+  "grantStore": {
+    "core": "core.secret-grant.file@1"
+  }
+}

@@ -205,6 +205,21 @@ export const VERSION_FLAGS = new Set(['--version', '-v', '-V', 'version', '--v']
 
 export const PRIVILEGE_PROGRAMS = new Set(['sudo', 'doas', 'su', 'runas', 'pkexec']);
 export const INTERPRETER_PROGRAMS = new Set(['bash', 'sh', 'zsh', 'fish', 'dash', 'ksh', 'csh', 'tcsh', 'pwsh', 'powershell', 'cmd', 'node', 'nodejs', 'python', 'python2', 'python3', 'perl', 'ruby', 'php', 'lua', 'tclsh', 'osascript', 'deno', 'bun', 'irb', 'ipython']);
-export const EVAL_PROGRAMS = new Set(['eval', 'exec', 'source', '.', 'command', 'builtin', 'time', 'nice', 'nohup', 'timeout', 'watch', 'script', 'invoke-expression', 'iex', 'invoke-command', 'icm', 'start-process', 'saps', 'start', 'call']);
+export const EVAL_PROGRAMS = new Set(['eval', 'exec', 'source', '.', 'command', 'builtin', 'time', 'nice', 'nohup', 'timeout', 'watch', 'script', 'unbuffer', 'expect', 'invoke-expression', 'iex', 'invoke-command', 'icm', 'start-process', 'saps', 'start', 'call']);
 export const XARGS_PROGRAMS = new Set(['xargs', 'parallel', 'foreach-object', 'foreach', '%', 'where-object', 'where', '?']);
 export const TEE_PROGRAMS = new Set(['tee', 'tee-object', 'out-file', 'set-content', 'add-content', 'sc', 'ac']);
+/** PRE-8 v2 (law audit MAJOR 2): the product's own key-authority commands. A host-realm agent shell that names one always asks the person's card
+ * (a pty wrapper such as `script` asks too, so a forged terminal witness never runs unasked); the command itself still requires the terminal witness. */
+export const PRODUCT_AUTHORITY_COMMANDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = Object.freeze({
+  deckent: Object.freeze({ secret: Object.freeze(['grant', 'revoke', 'set', 'delete', 'handover', 'store']) }) });
+/** Programs that run their payload on a new pseudo-terminal (a forged terminal witness for the product's authority commands). */
+export const PTY_WRAPPER_PROGRAMS: ReadonlySet<string> = new Set(['script', 'unbuffer', 'expect']);
+/** Astra REVISE 2704 B: prefixes that run the next word as the program with the same argv and stdin (options and assignments before it). */
+export const TRANSPARENT_PROGRAMS: ReadonlySet<string> = new Set(['env', 'command', 'exec', 'builtin', 'nice', 'nohup', 'time', 'timeout', 'stdbuf', 'ionice', 'setsid', 'taskset', 'chrt']);
+/** Astra REVISE 2706: the product's program names (package `bin`) and the inline-program flags of interpreters (`-c`, `-e`, `--eval`, …). */
+export const PRODUCT_PROGRAM_NAMES: readonly string[] = Object.freeze(['deckent', 'deckent-mcp']);
+export const INLINE_PROGRAM_FLAGS: ReadonlySet<string> = new Set(['-c', '-e', '-E', '-r', '-p', '-x', '--eval', '--print', '--command', 'eval']);
+/** awk runs commands (`system()`, pipes): its program text is the first operand. */
+export const AWK_PROGRAMS: ReadonlySet<string> = new Set(['awk', 'gawk', 'mawk', 'nawk', 'busybox-awk']);
+/** Shells: their inline program is a shell string (decoded by the scanner, not normalised). */
+export const SHELL_PROGRAMS: ReadonlySet<string> = new Set(['bash', 'sh', 'zsh', 'fish', 'dash', 'ksh', 'csh', 'tcsh', 'pwsh', 'powershell', 'cmd']);

@@ -1,5 +1,6 @@
 import { digestText, isRecord } from '#platform/index.js';
 import { configDefinitions } from './registry.js';
+import EXEMPT from './restart-exempt.json' with { type: 'json' };
 
 const sorted = (value: unknown): unknown => Array.isArray(value) ? value.map(sorted)
   : isRecord(value) ? Object.fromEntries(Object.keys(value).sort().map(key => [key, sorted(value[key])])) : value;
@@ -14,13 +15,18 @@ function mask(value: unknown, pointer: string, secrets: ReadonlySet<string>): un
  * Fingerprint of the effective values a running service only reads at start: every section whose declared apply mode is `restart`.
  * A `live` section never changes it, so a language change never asks for a restart. Resolved secret values are masked (their pointers come from
  * the loader's provenance), so the digest never fingerprints a credential; the cost is that a rotated secret value alone is not detected.
+ * Members listed in `restart-exempt.json` are left out: every request re-reads them (the admission registry, which the service's own toolchain refresh
+ * revises), so a change to them is already applied and never asks for a restart.
  * Service and observers compute it from the same loader, so equal digests mean the service started with the configuration seen now.
  */
 export function restartConfigDigest(effective: Readonly<Record<string, unknown>>): string {
   const provenance = effective['secretPaths'];
   const secrets = new Set<string>(Array.isArray(provenance) ? provenance.filter((item): item is string => typeof item === 'string') : []);
   const picked: Record<string, unknown> = {};
-  for (const [key, definition] of configDefinitions()) if (definition.apply === 'restart') picked[key] = mask(effective[key] ?? null, `/${key}`, secrets);
+  for (const [key, definition] of configDefinitions()) if (definition.apply === 'restart') {
+    const section = mask(effective[key] ?? null, `/${key}`, secrets), exempt = (EXEMPT as Record<string, readonly string[]>)[key];
+    picked[key] = exempt && isRecord(section) ? Object.fromEntries(Object.entries(section).filter(([member]) => !exempt.includes(member))) : section;
+  }
   return digestText(JSON.stringify(sorted(picked)));
 }
 /** `unknown`: an older service that reports no digest (never guessed stale). */

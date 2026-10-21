@@ -1,5 +1,12 @@
 # Deckent Next — tamamlanan plan
 
+## alpha.50 — 2026-10-21 (PR #107, merge `71bb7b81`; canlı 08:47Z, N1 08:48Z; defter v59, runtime protocol v29)
+
+- **Paket:** PRE-1…PRE-7 (kabul dürüstlüğü, verify-crash, gözlem tutarlılığı, doctor-docker, çıktı okunurluğu, bilinen sınırlar, ortam hazır), PB-COLDSTART faz A, TERM-POLISH (fare seçimiyle kopya), CONFIG-PARTIAL-CLI; ayrıntı CHANGELOG alpha.50 satırı.
+- **Sürüm kanıtı:** yerel tam test `5e50f038` 1076 dosya / 9677 geçti / 0 başarısız / 8 atlandı; Astra REVISE 2691/2693/2695/2698 düzeltildi, PASS 2700 (yalnız kaynak incelemesi; bütün-paket, görsel/PTY, kurulu binary veya canlı kanıt iddiası yok); hosted CI exact head üzerinde yeşil (deneme 2; deneme 1'de tek zamanlama flake'i: `runtime-overlay-parents.test.ts:60`, node 24, 781 ms).
+- **Canlı öncesi gerçek binary denemesi (owner isteği) 4/4 geçti:** karşılanmayan gereksinim park eder; uyan gereksinim başlatır; probe sürerken iptal yuvayı tutar, ikinci Run `RUN_POOL_FULL` alır, probe bitince bir serbest bırakma; servis başlangıcı bu kurulumun artık probe konteynerini kaldırır, yabancı konteyneri dokunmaz.
+- **Açık takipler:** PLAN Gelen kutusu "alpha.50 takipleri" (a–e).
+
 ## alpha.36–38 — 2026-10-14 (PR #85, #86, #87; PLAN satırlarının kapanışı)
 
 - **alpha.36 — canlıya + terminal teslim penceresi:** TERMINAL-SABIT R2 (sabit giriş alanı, odak kuralı, aktif iş şeridi), terminal `/deliver` penceresi, TESLIM-GUVENLIK (doğrulanmış insan y/N + anlamlı commit), KUCUK-DUZELTMELER; commit `c9b36b7c`, canlı + N1 2026-10-14 09:38Z.

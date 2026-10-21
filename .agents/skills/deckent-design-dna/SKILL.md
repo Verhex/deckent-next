@@ -1,6 +1,6 @@
 ---
 name: deckent-design-dna
-description: Use first for Deckent product, Desktop, Terminal, Dashboard observability, interaction, visual-language, or design-system work. Routes the task to the smallest Deckent design skill set and enforces current product authority; do not use for unrelated generic marketing design.
+description: First stop for Deckent product, Desktop, Terminal or Dashboard design, interaction, visual-language or design-system work - routes to the smallest Deckent design skill set under current product authority.
 ---
 
 

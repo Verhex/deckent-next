@@ -8,7 +8,7 @@ import type { LocalExecution, ResumePickerItem } from '#surfaces/core/terminal-w
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { notice, type WorkLedgerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { systemSummaryEntry } from '#surfaces/core/terminal-work/index.js';
-import { resumedHistoryEntries, type ResumedHistoryLabels } from './workline-history.js';
+import { resumedHistoryEntries, type ResumedHistoryLabels } from '#surfaces/core/terminal-conversation/index.js';
 
 export { bindSessionScope } from '#surfaces/core/terminal-kit/index.js';
 export type { ConversationSessionSummary, ConversationSessionPort, TerminalSessionStoreView, SessionRefusal } from '#surfaces/core/terminal-kit/index.js';

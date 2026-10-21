@@ -1,5 +1,5 @@
 import { scanPosixCommand, type ShellReasonCode, type ShellStage, type ShellWord } from './scanner.js';
-import { EVAL_PROGRAMS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PROGRAM_ALIASES, TEE_PROGRAMS, XARGS_PROGRAMS } from './programs.js';
+import { EVAL_PROGRAMS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PRODUCT_AUTHORITY_COMMANDS, PROGRAM_ALIASES, TEE_PROGRAMS, XARGS_PROGRAMS } from './programs.js';
 import type { ShellDialect, ShellReadOnlyVerdict } from './classify.js';
 import type { ShellPathContext, ShellPathVerdict } from './grammar.js';
 import type { ShellRiskClassification } from './risk.js';
@@ -51,6 +51,13 @@ function alwaysAsk(name: string): ShellMutationVerdict | null {
   return null;
 }
 
+/** A stage that runs one of the product's key-authority commands (`deckent secret grant …`): the always-ask floor, like privilege escalation. */
+function productAuthority(stage: ShellStage): ShellMutationVerdict | null {
+  const [head, group, action] = stage.words, name = head ? (PROGRAM_ALIASES[head.text] ?? head.text).split('/').pop()!.toLowerCase() : '';
+  const actions = Object.hasOwn(PRODUCT_AUTHORITY_COMMANDS, name) && group && Object.hasOwn(PRODUCT_AUTHORITY_COMMANDS[name]!, group.text) ? PRODUCT_AUTHORITY_COMMANDS[name]![group.text]! : null;
+  return actions && action && actions.includes(action.text) ? verdict('always-ask', 'PRIVILEGE_ESCALATION', `${name} ${group!.text} ${action.text}`) : null;
+}
+
 async function classifyStage(stage: ShellStage, reads: ShellPathContext, writes: ShellWritePathContext): Promise<ShellMutationVerdict> {
   const [head, ...args] = stage.words;
   if (head === undefined) return verdict('always-ask', 'UNPARSEABLE');
@@ -99,7 +106,7 @@ export async function classifyShellMutation(command: string, reads: ShellPathCon
   const stages = scan.pipelines.flat();
   for (const stage of stages) {
     const name = stage.words[0]?.text;
-    const floor = name === undefined ? null : alwaysAsk((PROGRAM_ALIASES[name] ?? name).toLowerCase());
+    const floor = name === undefined ? null : alwaysAsk((PROGRAM_ALIASES[name] ?? name).toLowerCase()) ?? productAuthority(stage);
     if (floor) return floor;
   }
   if (scan.pipelines.length !== 1) return verdict('unrecognized', 'NOT_NARROW', ';');
@@ -109,8 +116,10 @@ export async function classifyShellMutation(command: string, reads: ShellPathCon
 }
 
 /** The permission tier of a shell command (what the mode decision sees as the call's cell); worst wins, destructive first. */
-export type ShellPermissionTier = 'read-none' | 'read-low' | 'narrow-mutating' | 'destructive' | 'always-ask' | 'other-modify';
-export function shellPermissionTier(risk: ShellRiskClassification, readOnly: ShellReadOnlyVerdict, mutation: ShellMutationVerdict): ShellPermissionTier {
+/** `authority` (lead 2026-10-21): the product's authority commands (`classifyShellAuthority`) — the `edit-authority` cell, asked in every mode. */
+export type ShellPermissionTier = 'read-none' | 'read-low' | 'narrow-mutating' | 'destructive' | 'always-ask' | 'other-modify' | 'authority';
+export function shellPermissionTier(risk: ShellRiskClassification, readOnly: ShellReadOnlyVerdict, mutation: ShellMutationVerdict, authority = false): ShellPermissionTier {
+  if (authority) return 'authority';
   if (risk.risk === 'destructive') return 'destructive';
   if (readOnly.readOnly) {
     if (risk.risk !== 'safe-read') return 'other-modify';

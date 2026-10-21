@@ -482,7 +482,10 @@
         "src/engine/core/agent-turn",
         "src/adapters/core/provider-openai-chat",
         "src/composition/core/root",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/adapters/core/local-principal",
+        "src/composition/core/secrets",
+        "src/composition/core/scoped-request"
       ],
       "plan": "SURFACES"
     },
@@ -1153,7 +1156,18 @@
         "src/engine/core/project-instructions",
         "src/surfaces/core/terminal-delivery",
         "src/platform/core/common",
-        "src/engine/core/run-proposal"
+        "src/engine/core/run-proposal",
+        "src/surfaces/core/terminal-conversation"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-conversation": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render",
+        "src/platform/core/redaction",
+        "src/surfaces/core/terminal-ledger",
+        "src/surfaces/core/terminal-work"
       ],
       "plan": "SURFACES"
     },
@@ -1205,7 +1219,8 @@
         "src/platform/core/errors",
         "src/platform/core/i18n",
         "src/platform/core/output",
-        "src/engine/core/project-instructions"
+        "src/engine/core/project-instructions",
+        "src/surfaces/core/cli-human"
       ],
       "plan": "SURFACES"
     },
@@ -1450,7 +1465,8 @@
         "src/adapters/core/provider-connect",
         "src/composition/core/config",
         "src/composition/core/scoped-request",
-        "src/engine/core/model-invocation"
+        "src/engine/core/model-invocation",
+        "src/composition/core/secrets"
       ],
       "plan": "PROVIDERS"
     },
@@ -1574,7 +1590,8 @@
         "src/adapters/core/provider-openai-chat",
         "src/adapters/core/provider-anthropic-messages",
         "src/domain/core/provider-catalog",
-        "src/adapters/core/contract"
+        "src/adapters/core/contract",
+        "src/composition/core/secrets"
       ],
       "plan": "PROVIDERS"
     },
@@ -1718,7 +1735,8 @@
         "src/adapters/core/mcp-transport",
         "src/adapters/core/provider-anthropic-messages",
         "src/adapters/core/provider-decision-http",
-        "src/adapters/core/workspace-read"
+        "src/adapters/core/workspace-read",
+        "src/composition/core/secrets"
       ],
       "plan": "PROVIDERS"
     },
@@ -2009,7 +2027,8 @@
         "src/adapters/core/mcp-client",
         "src/platform/core/host",
         "src/platform/core/common",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/engine/core/secret-store"
       ],
       "plan": "SURFACES"
     },
@@ -2453,7 +2472,8 @@
         "src/domain/core/primitives",
         "src/domain/core/principal",
         "src/platform/core/errors",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/domain/core/command"
       ],
       "plan": "SECURITY"
     },
@@ -2474,7 +2494,18 @@
         "src/engine/core/secret-store",
         "src/platform/core/config",
         "src/platform/core/identity",
-        "src/composition/core/root"
+        "src/composition/core/root",
+        "src/platform/core/errors",
+        "src/platform/core/clock",
+        "src/adapters/core/secret-store",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/installation-files",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/audit-store",
+        "src/engine/core/runtime",
+        "src/engine/core/audit",
+        "src/composition/core/scoped-request",
+        "src/domain/core/model-invocation"
       ],
       "plan": "SECURITY"
     },
@@ -2501,6 +2532,7 @@
     },
     "src/adapters/core/monitor-ledger": {
       "dependencies": [
+        "src/domain/core/policy",
         "src/engine/core/workspaces",
         "src/adapters/core/sqlite-ledger",
         "src/domain/core/approval",
@@ -3443,9 +3475,9 @@
       "domain": 10000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 29250,
+      "adapters": 29650,
       "surfaces": 45000,
-      "composition": 7650
+      "composition": 7950
     },
     "totalSrcLines": 200000,
     "testCases": 8000,
@@ -3576,6 +3608,7 @@
       ".agents/skills/deckent-design-dna/references/*.md",
       ".agents/skills/deckent-design-system/*.md",
       ".agents/skills/deckent-enterprise-ux/*.md",
+      ".agents/skills/deckent-grill/*.md",
       ".agents/skills/deckent-next-refactor/*.md",
       ".agents/skills/deckent-observe/*.md",
       ".agents/skills/deckent-outcome-plan/*.md",
@@ -3583,10 +3616,13 @@
       ".agents/skills/deckent-product-design/*.md",
       ".agents/skills/deckent-readonly-audit/*.md",
       ".agents/skills/deckent-recovery/*.md",
+      ".agents/skills/deckent-retro/*.md",
+      ".agents/skills/deckent-skill-authoring/*.md",
       ".agents/skills/deckent-terminal-design/*.md",
       ".agents/skills/deckent-visual-language/*.md",
       ".agents/skills/deckent-workspace-design/*.md",
       ".agents/skills/design-tokens-pipeline/*.md",
+      ".agents/skills/ne-dedin/*.md",
       ".agents/skills/solution-architect/*.md",
       ".claude/agents/*.md",
       ".claude/rules/*.md",
@@ -4444,6 +4480,7 @@
       "registrations": [
         "registerApprovalAssuranceProducer",
         "registerOperationAdapterModule",
+        "registerSecretGrantStore",
         "registerSecretStoreBackend"
       ],
       "compositionOnly": [

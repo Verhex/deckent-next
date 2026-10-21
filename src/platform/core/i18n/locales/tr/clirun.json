@@ -9,6 +9,7 @@
   "inventory.next": "Sonraki sayfa: --after {after}",
   "cli.run.inspect.heading": "Run {run} | kayıtlı revizyon {revision} (canlı durum değil)",
   "cli.run.inspect.cancelRequested": "  İptal: istek kaydedilmiş; worker sonlanması doğrulanmadı.",
+  "cli.run.inspect.cancelNoWorker": "  İptal: istek kaydedilmiş; iptal edilen iş için hiçbir worker başlatılmadı (başlatılmadan durduruldu).",
   "cli.run.inspect.cancelAbsent": "  İptal: istek kaydedilmemiş.",
   "cli.run.inspect.unresolved": "  Etkiler çözümlenmemiş; uzlaştırma gerekli.",
   "cli.run.cancel.heading": "Run {run} | iptal isteği kaydedildi | komut {command}",

@@ -76,7 +76,7 @@ it.skipIf(process.platform !== 'linux').each(['core.secret-store.file@1', 'core.
   expect(piped.code).not.toBe(0); expect(piped.stdout + piped.stderr).toContain('SECRET_SET_TERMINAL_REQUIRED'); expect(piped.stdout + piped.stderr).not.toContain('AUTHORITY_WITNESS_REQUIRED');
   await expect(createConfiguredRuntimeClient(project, { env }).setSecret({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', value: CANARY }))
     .rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
-  const set = await runInTerminal([process.execPath, cli, 'secret', 'set', 'PROVIDER_TOKEN', '--scope', 'installation', '--json'], project, personEnv(env), [{ when: 'PROVIDER_TOKEN: ', send: `${CANARY}\r` }]);
+  const set = await runInTerminal([process.execPath, cli, 'secret', 'set', 'PROVIDER_TOKEN', '--main', '--scope', 'installation', '--json'], project, personEnv(env), [{ when: 'PROVIDER_TOKEN: ', send: `${CANARY}\r` }]);
   printed.push(set.output);
   expect(set.code, set.output).toBe(0);
   expect(lastJson(set.output)).toEqual({ schemaVersion: 1, scopeId: 'installation', name: 'PROVIDER_TOKEN', action: 'set', backend, removed: null });

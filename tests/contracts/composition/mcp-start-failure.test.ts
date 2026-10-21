@@ -2,7 +2,9 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { mcpStartFailureText, run } from '#composition/core/mcp/index.js';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { mcpHelpRequested, mcpHelpText, mcpStartFailureText, run } from '#composition/core/mcp/index.js';
 import { DeckentError, ErrorRegistry, t } from '#platform/index.js';
 
 // g2-mcp-hata (analysis 2026-10-18): a failed deckent-mcp start said only MCP_START_FAILED. The first stderr line stays exactly that (clients
@@ -32,4 +34,24 @@ it('the real start path: a project whose configuration cannot load fails with a 
   expect(failure).toBeInstanceOf(DeckentError);
   const text = mcpStartFailureText(failure, { LANG: 'en_US.UTF-8' });
   expect(text.split('\n')[0]).toBe('MCP_START_FAILED'); expect(text).toContain(`[${(failure as DeckentError).code}]`);
+});
+
+// inbox 2026-10-21: `deckent-mcp --help` fell into the strict option parser, so a request for help printed MCP_START_FAILED. Help is answered
+// before any start work: usage on stdout in the resolved language, exit 0; every real start failure keeps its non-zero exit.
+it('--help / -h is recognized before the parser; other options are not help', () => {
+  expect(mcpHelpRequested(['--help'])).toBe(true); expect(mcpHelpRequested(['--project', 'x', '-h'])).toBe(true);
+  expect(mcpHelpRequested(['--project', 'x'])).toBe(false); expect(mcpHelpRequested(['--bogus'])).toBe(false);
+});
+it('the help text names the usage and the project option, in English and Turkish, with no MCP_START_FAILED', () => {
+  const en = mcpHelpText({ LANG: 'en_US.UTF-8' }), tr = mcpHelpText({ DECKENT_LANG: 'tr' });
+  expect(en).toContain('deckent-mcp'); expect(en).toContain('--project'); expect(tr).toContain('--project'); expect(tr).not.toBe(en);
+  expect(en + tr).not.toContain('MCP_START_FAILED'); expect(en.endsWith('\n')).toBe(true);
+});
+it.skipIf(process.platform === 'win32')('the real built entry: --help prints help on stdout and exits 0; an unknown option still fails non-zero', async () => {
+  const entry = fileURLToPath(new URL('../../../dist/composition/core/mcp/internal/entry.js', import.meta.url));
+  const env = { PATH: process.env['PATH'] ?? '', HOME: tmpdir(), LANG: 'en_US.UTF-8' };
+  const help = spawnSync(process.execPath, [entry, '--help'], { env, encoding: 'utf8', input: '' });
+  expect(help.status).toBe(0); expect(help.stdout).toContain('--project'); expect(help.stderr).toBe('');
+  const bad = spawnSync(process.execPath, [entry, '--bogus'], { env, encoding: 'utf8', input: '' });
+  expect(bad.status).not.toBe(0); expect(bad.stderr.split('\n')[0]).toBe('MCP_START_FAILED'); expect(bad.stdout).toBe('');
 });

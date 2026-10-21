@@ -32,7 +32,10 @@ export interface DoctorCheckFacts {
   readonly imageId?: string | null;
   /** PRE-34: the execution environment as `deckent init` decides it (same detection and setup decision; read-only); null when it could not be asked. */
   readonly executionEnvironment?: ExecutionEnvironmentDoctorView | null;
+  /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
+  readonly secretUse?: readonly DoctorSecretUse[] | null;
 }
+export type DoctorSecretUse = Readonly<{ kind: 'grant-required' | 'undeclared-project-key' | 'declared-missing' | 'not-stored'; name: string }>;
 /** The setup family's decision for the execution environment: its state and its reason (a `setup.execution.*` key and parameters). */
 export type ExecutionEnvironmentDoctorView = Readonly<{ state: string; reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }> }>;
 
@@ -94,6 +97,14 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
       : row('security', 'security.secrets', 'error', t('doctor.check.secretStore.problem', { backend, code: store.code ?? store.status }, l), 'deckent secret store'));
     const missing = Object.values(store.envGuard ?? {}).some(guard => guard.code || guard.names.length);
     if (missing || store.leftover?.entries || store.leftover?.unverified?.length) rows.push(row('security', 'security.secretsLeftover', 'warning', t('doctor.check.secretStore.leftover', {}, l), 'deckent secret store'));
+  }
+  // PRE-8 v2: one row per key a profile uses that this project cannot read now, with the exact next command (names only).
+  for (const use of f.secretUse ?? []) {
+    const params = { name: use.name };
+    rows.push(use.kind === 'grant-required' ? row('security', 'security.secretUse', 'warning', t('doctor.check.secretUse.grant', params, l), scoped(`deckent secret grant ${use.name}`, f))
+      : use.kind === 'undeclared-project-key' ? row('security', 'security.secretUse', 'warning', t('doctor.check.secretUse.undeclared', params, l), t('doctor.check.secretUse.undeclared.next', params, l))
+      : use.kind === 'declared-missing' ? row('security', 'security.secretUse', 'warning', t('doctor.check.secretUse.declaredMissing', params, l), scoped(`deckent secret set ${use.name} --project`, f))
+      : row('security', 'security.secretUse', 'warning', t('doctor.check.secretUse.notStored', params, l), scoped(`deckent secret set ${use.name} --main`, f)));
   }
   if (f.backupPassphraseStored) rows.push(row('security', 'security.backupPassphrase', 'warning', t('doctor.check.backupPassphrase', {}, l), t('doctor.check.backupPassphrase.next', {}, l)));
   const self = r.shellRealm?.selfTest;
@@ -165,7 +176,8 @@ export function doctorChecks(report: DoctorRenderInput, facts: DoctorCheckFacts,
 /** The registry fixes, in order; a hard-floor item is listed so the rule is data, and is never offered. */
 export const DOCTOR_FIXES: readonly Readonly<{ id: string; checks: readonly string[]; port: string; hardFloor: boolean; policyAction?: string }>[] = Object.freeze(registry.fixes);
 export const DOCTOR_RETIREMENT_STATES: readonly string[] = Object.freeze(registry.retirementStates);
-export const DOCTOR_BACKUP_PASSPHRASE_SECRET: string = registry.backupPassphraseSecret;
+/** The secret NAME the scheduled backup reads. The registry key says "Name", never "secret": the S6 gate refuses a `*secret*` key with a literal-looking value in any config file, and this is a reference, not a value. */
+export const DOCTOR_BACKUP_PASSPHRASE_SECRET: string = registry.backupPassphraseName;
 
 const markWord = (state: DoctorCheckState, l: Locale) => state === 'ok' ? t('doctor.mark.ok', {}, l) : state === 'warning' ? t('doctor.mark.warning', {}, l)
   : state === 'error' ? t('doctor.mark.error', {}, l) : t('doctor.mark.untested', {}, l);

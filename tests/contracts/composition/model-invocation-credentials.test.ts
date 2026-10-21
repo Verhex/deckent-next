@@ -1,4 +1,5 @@
 import { createLocalTls } from '../../fixtures/local-tls.js';
+import { grantFixtureSecrets } from '../../fixtures/project-grant.js';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:https';
@@ -74,6 +75,8 @@ async function fixture() {
       actions: ['invoke', 'inspect', 'inspect-content'], scopes: ['scope'], principals: [{ issuer: identity.issuer, subject: identity.subject }],
       resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } }] : [] }), { mode: 0o600 });
   await policy(true);
+  // PRE-8 v2: the admin lent the main-vault key to this project (the grant floor itself is proven in secret-project-grant tests).
+  await grantFixtureSecrets(project, 'scope', ['FIXTURE_PROVIDER_TOKEN'], { env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } });
   const command = (commandId: string) => ({ schemaVersion: 1 as const, commandId, scopeId: 'scope', reference,
     catalogRevision: catalog.revision, expectedBinding: binding, nativeRequest: { model: 'vendor/model',
       messages: [{ role: 'user', content: 'hello' }], max_completion_tokens: 4 } });
@@ -145,6 +148,19 @@ it.each(['missing', 'backend-error'] as const)('keeps %s secret resolution failu
   expect(result.receipt.outcome).toMatchObject({ state: 'rejected', evidence: { reason: 'not-sent', httpStatus: null } }); expect(f.headers).toEqual([]); // SPEND-HOLDS: certified not-sent
   expect(f.metadataHeaders).toEqual([undefined]);
   expect(JSON.stringify(result)).not.toContain(secret); expect((await readFile(f.ledger)).includes(Buffer.from(secret))).toBe(false);
+});
+
+it('PRE-8 v2: an ungranted main key is the typed SECRET_GRANT_REQUIRED before any claim, metadata or provider request (headless callers too)', async () => {
+  const f = await fixture(), lookups: string[] = [];
+  const config = JSON.parse(await readFile(f.configPath, 'utf8'));
+  config.provider_invocation_profiles.profiles[0].adapter.definition.authentication.credentialRef = 'UNGRANTED_TOKEN';
+  await writeFile(f.configPath, JSON.stringify(config), { mode: 0o600 }); clearConfigCache();
+  const refusal = await invokeConfiguredModel(f.project, f.command('ungranted'), { env: f.env, async secretResolver(ref: string) { lookups.push(ref); return secret; } })
+    .catch((error: { code?: string; suggestion?: string }) => error);
+  expect(refusal).toMatchObject({ code: 'SECRET_GRANT_REQUIRED' });
+  expect((refusal as { suggestion?: string }).suggestion).toContain('deckent secret grant UNGRANTED_TOKEN --scope scope');
+  expect(lookups).toEqual([]); expect(f.headers).toEqual([]); expect(f.metadataHeaders).toEqual([]);
+  expect((await readFile(f.ledger)).includes(Buffer.from('ungranted'))).toBe(false);
 });
 
 it('SECRET-K1: with the file backend selected, the provider credential comes from the store, reaches the provider, and stays out of the ledger', async () => {

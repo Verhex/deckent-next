@@ -40,6 +40,7 @@ type Effect = 'allow' | 'deny' | 'require-approval';
 /** One company rule; `eligible` sets the policy v2 `modeEligible` flag (only meaningful on require-approval). */
 export const rule = (id: string, kind: string, ids: string[], effect: Effect, eligible = false, actions = kind === 'operation' ? ['execute'] : ['invoke']) =>
   ({ id, effect, actions, scopes: ['scope'], principals: me, resource: { kind, ids }, ...(eligible ? { modeEligible: true } : {}) });
+const FULL_AUTO_GRANT = { id: 'full-auto-set', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: me, resource: { kind: 'permission-mode', ids: ['full-auto'] } };
 const baseGrants = [
   { id: 'invoke', effect: 'allow', actions: ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], scopes: ['scope'], principals: me,
     resource: { kind: 'model-invocation', ids: [modelInvocationTargetId(reference)] } },
@@ -96,8 +97,10 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     .admit({ schemaVersion: 1, action: 'activate', commandId: 'activate', scopeId: 'scope', reference, expectedRevision: 0,
       catalogRevision: 'catalog-1', expectedBinding: binding });
   const writeAuthority = async (grants: Record<string, unknown>[], mode: Mode | null, revision = 'r1') => {
+    // PRE-9 (b): a stored full-auto counts only while the company grant allows it (re-checked on every call), so a fixture in full-auto holds it.
+    const fullAuto = mode === 'full-auto' || (typeof mode === 'object' && mode?.mode === 'full-auto') ? [FULL_AUTO_GRANT] : [];
     await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 2, revision: `p-${revision}`, roles: [], separationOfDuties: [],
-      restrictions: [], grants: [...baseGrants, ...grants] }), { mode: 0o600 });
+      restrictions: [], grants: [...baseGrants, ...fullAuto, ...grants] }), { mode: 0o600 });
     await writeFile(join(data, 'bindings.json'), JSON.stringify(mode === null ? { schemaVersion: 1, revision: `b-${revision}`, bindings: [] }
       : typeof mode === 'string' ? { schemaVersion: 2, revision: `b-${revision}`, bindings: [], modes: [{ id: 'me-mode', principal: me[0], scopes: ['scope'], mode }] }
         : { schemaVersion: 3, revision: `b-${revision}`, bindings: [], modes: [{ id: 'me-mode', principal: me[0], scopes: ['scope'], ...mode }] }), { mode: 0o600 });
@@ -107,6 +110,10 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   await ensureConfiguredTerminalIdentity(project, 'scope', { env });
   const service = await startConfiguredRuntimeService(project, { async onPage() {}, async onError() {} }, { env }, input.sandboxes ? { shellSandboxes: input.sandboxes } : {});
   services.push(service);
+  // LIVENESS-EINTR: what a failed status assertion needs to tell the turn's abort sources apart (service shutdown vs. a turn-level abort
+  // with the service still running), without any runtime field: the service's own settlement and the last turn's decision responses.
+  let serviceState = 'running', decisions: unknown[] = [];
+  service.done.then(() => { serviceState = 'stopped'; }, (error: unknown) => { serviceState = `failed:${String((error as { code?: unknown } | null)?.code ?? 'unknown')}`; });
   const rows = (sql: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   const exec = (sql: string) => { const db = new DatabaseSync(ledger); try { db.exec(sql); } finally { db.close(); } };
   const client = createConfiguredRuntimeClient(project, { env });
@@ -119,6 +126,7 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     const answer = await terminalRequest({ project, data, env }, 'chatTurn', { schemaVersion: 1, scopeId: 'scope', turnId,
       messages: [{ role: 'user', content: 'go' }], ...(options.fullAccess ? { fullAccess: true as const } : {}) }, decision);
     // The wire error keeps its typed code and params (createError takes the params inside its options object).
+    decisions = answer.decisions;
     if (!answer.response.ok) throw ErrorRegistry.createError(answer.response.error!.code, answer.response.error!.params ? { params: answer.response.error!.params } : {});
     const events = answer.events as AgentTurnStreamEvent[];
     const finished = events.find(event => event.kind === 'tool.finished');
@@ -129,7 +137,11 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
   const audit = (inventory = false) => rows(`SELECT record FROM audit_events${inventory ? '' : " WHERE kind <> 'approval-assurance-registration'"} ORDER BY sequence`).map(row => JSON.parse(String((row as { record: string }).record)) as
     { event: { eventId: string; policyRevision: string; principal: unknown; subject: Record<string, unknown> & { call: Record<string, unknown> } } });
   const counters = () => Object.fromEntries(rows('SELECT counter, count FROM audit_counters').map(row => [(row as { counter: string }).counter, (row as { count: number }).count]));
-  return { project, data, ledger, rows, exec, call, audit, counters, writeAuthority, sent: state.sent, client, env,
+  /** The failure message for a turn assertion: the full event stream (with the `done` finish and note), the decision responses and the
+   * service's settlement, e.g. `expect(result, f.evidence(result)).toMatchObject(...)`. */
+  const evidence = (result: { readonly turnId: string; readonly events: readonly unknown[] }) =>
+    JSON.stringify({ turnId: result.turnId, service: serviceState, events: result.events, decisions });
+  return { project, data, ledger, rows, exec, call, audit, counters, writeAuthority, sent: state.sent, client, env, evidence,
     /** Queues the next turn's one tool call (for a test that drives `client.chatTurn` itself). */
     script: (name: string, args: Record<string, unknown>) => { state.script.push({ name, arguments: JSON.stringify(args) }); } };
 }

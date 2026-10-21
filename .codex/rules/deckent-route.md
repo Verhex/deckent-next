@@ -1,6 +1,6 @@
 # deckent-route
 
-Moment → skill. Load the smallest set; `deckent-next-refactor` is the shared method; skills grant no authority.
+Moment → skill. Load the smallest set; `deckent-next-refactor` is the shared method; skills grant no authority. Editing skills or rule files: `deckent-skill-authoring`.
 | Moment | Load |
 |---|---|
 | Session start, after compact or an authority change | `deckent-authority-bootstrap` |

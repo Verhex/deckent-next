@@ -13,8 +13,10 @@ import type { createAgentCallApprovals } from './call-approvals.js';
 import type { createAgentMcp } from './mcp.js';
 type Execution = { readonly round: number; readonly index: number };
 type Context = Awaited<ReturnType<typeof loadPeerInvocationContext>>;
-const SHELL_CELLS: Readonly<Record<ShellPermissionTier, AgentToolCallCell>> = { 'read-none': 'shell-read-none', 'read-low': 'shell-read-low',
-  'narrow-mutating': 'shell-narrow-mutating', destructive: 'shell-destructive', 'always-ask': 'shell-always-ask', 'other-modify': 'shell-other-modify' };
+export const SHELL_CELLS: Readonly<Record<ShellPermissionTier, AgentToolCallCell>> = { 'read-none': 'shell-read-none', 'read-low': 'shell-read-low',
+  'narrow-mutating': 'shell-narrow-mutating', destructive: 'shell-destructive', 'always-ask': 'shell-always-ask', 'other-modify': 'shell-other-modify',
+  // Lead 2026-10-21 (PRE-8): the product's authority commands from an agent shell are the configuration-authority cell: a person's card in every mode.
+  authority: 'edit-authority' };
 export const SILENT_DECISION_COUNTERS = Object.freeze({ edit: 'agent-tool.silent.edit', shell: 'agent-tool.silent.shell' }); // Silent without any mode (owner q5): counted, not recorded.
 /** Audit event identity of a mode relaxation (or, tag `full-access-call`, a full-access call): one per call position of a turn (the effect
  * gate may be asked several times). */

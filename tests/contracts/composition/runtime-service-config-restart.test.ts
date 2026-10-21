@@ -83,3 +83,12 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] a
   expect(events).toEqual([900_000]);
   await expect(describeOf(f.project, env)).rejects.toMatchObject({ code: 'LOCAL_RUNTIME_UNAVAILABLE' });
 });
+
+it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] a service run by a service manager is never stopped or doubled by a restart: typed refusal naming the manager command, nothing launched', async () => {
+  const f = await fixture(); await start(f.project, f.env); let launched = 0; const before = (await describeOf(f.project, f.env)).instanceId;
+  const managed = async () => ({ manager: 'systemd' as const, scope: 'user' as const, unit: 'proje-wsl.service' });
+  const error = await restartConfiguredRuntimeService(f.project, { env: f.env }, async () => { launched++; return { pid: 1 }; }, fileURLToPath(import.meta.url), managed).catch((value: unknown) => value);
+  expect(error).toMatchObject({ code: 'RUNTIME_SERVICE_EXTERNALLY_MANAGED', params: { command: 'systemctl --user restart proje-wsl.service' } });
+  expect(launched).toBe(0);
+  expect((await describeOf(f.project, f.env)).instanceId).toBe(before);
+});

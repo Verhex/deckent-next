@@ -1,10 +1,10 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ListPicker, pickerView, projectPickerTree, PICKER_INITIAL, type PickerLabels, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
-import { usePickerRoom } from '#surfaces/core/terminal-panels/index.js';
+import { Window, WINDOW_PRIORITY, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import { QuestionWindow, usePickerRoom } from '#surfaces/core/terminal-panels/index.js';
 import { fillTemplate, projectHumanPickerText, span, useHumanTextSecrets } from '#surfaces/core/terminal-render/index.js';
 import type { ScratchView } from '#domain/index.js';
-import type { SlashCommand } from '#surfaces/core/terminal-kit/index.js';
+import type { SecretGrantQuestion, SlashCommand } from '#surfaces/core/terminal-kit/index.js';
 
 /**
  * SLASH-WINDOWS (owner 2026-10-08): the small windows of the session and palette commands (`/reasoning`, `/scratch`, an unknown command).
@@ -95,6 +95,13 @@ export function useWindowSlot() {
 }
 export type WindowSlot = ReturnType<typeof useWindowSlot>;
 
+/** PRE-8: the first-use grant card in the slot (the decision-card keys: y yes; n, Enter, Esc, Ctrl+C no); a cancelled turn closes it unanswered. */
+export function askGrantWindow(slot: WindowSlot, position: string, question: SecretGrantQuestion, signal: AbortSignal): Promise<boolean> {
+  const close = () => slot.close();
+  signal.addEventListener('abort', close, { once: true });
+  return slot.ask(answer => <QuestionWindow title={question.title} lines={question.lines} hints={question.prompt} position={position} priority={WINDOW_PRIORITY.approval}
+    onAnswer={value => answer(value === true ? 'yes' : null)} />).then(id => id === 'yes').finally(() => signal.removeEventListener('abort', close));
+}
 /** A list window of the session and palette commands, shown in the workline's window slot (null without window words). */
 export function askSlashWindow(slot: WindowSlot, labels: SlashWindowLabels | undefined, spec: SlashPickSpec): Promise<string | null> {
   return labels ? slot.ask(answer => <SlashPickWindow spec={spec} labels={labels} onAnswer={answer} />) : Promise.resolve(null);

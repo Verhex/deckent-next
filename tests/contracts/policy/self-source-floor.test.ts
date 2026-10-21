@@ -9,7 +9,9 @@ const KEY = 'v1:session:edit-self-source:edit_file:directory:src/*';
 const policy = (mode: 'standart' | 'full-auto' | 'full-access', effect: 'allow' | 'require-approval' | 'deny', extra: unknown[] = []) => resolvePolicyBindings({ schemaVersion: 2, revision: 'p',
   roles: [], separationOfDuties: [], restrictions: [], grants: [{ id: 'edit', effect, actions: ['invoke'], scopes: ['scope'], principals: [me],
     resource: { kind: 'agent-tool', ids: ['edit_file'] }, ...(effect === 'require-approval' ? { modeEligible: true } : {}) },
-  { id: 'write', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: [me], resource: { kind: 'operation', ids: ['workspace.file.write'] } }, ...extra] },
+  { id: 'write', effect: 'allow', actions: ['execute'], scopes: ['scope'], principals: [me], resource: { kind: 'operation', ids: ['workspace.file.write'] } },
+  // PRE-9 (b): a stored full-auto counts only while the company grant allows it (re-checked on every call).
+  { id: 'full-auto-set', effect: 'allow', actions: ['set'], scopes: ['scope'], principals: [me], resource: { kind: 'permission-mode', ids: ['full-auto'] } }, ...extra] },
 { schemaVersion: 3, revision: 'b', bindings: [], modes: [{ id: 'mode', principal: me, scopes: ['scope'], mode }] });
 const decide = (snapshot: unknown, session = false) => decideAgentToolCall(snapshot, { principal, scopeId: 'scope', tool: { name: 'edit_file' },
   operation: { id: 'workspace.file.write' }, cell: 'edit-self-source', standing: { key: KEY, session } });

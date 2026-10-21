@@ -261,7 +261,7 @@ describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real p
     expect(text).toContain('careful'); expect(text).toContain('full auto');
     // T2: the company grants full access here, so it is offered like any other mode (no launch-only refusal any more).
     expect(text).toContain('full access');
-    expect(text).not.toContain('Full access needs your company'); expect(text).not.toContain('[blocked]');
+    expect(text).not.toContain('Full access needs a grant'); expect(text).not.toContain('[blocked]');
   }, 180_000);
 
   it('a v1 policy: /mode says modes are off and asks the service for nothing (no file, no audit row)', async () => {
@@ -280,9 +280,9 @@ describe.skipIf(process.platform !== 'linux')('/mode explains itself in a real p
     const before = await readFile(join(f.data, 'bindings.json'), 'utf8');
     // SLASH-WINDOWS: the typed refusal is replaced by the window itself: a mode the person may not take is a locked row with its reason.
     const run = await inPty(f.projectRoot, f.env, ['terminal', 'workline', '--scope', 'scope'], [['Deckent workline', '/mode\r'], ['standard · now', '\u001b[B\u001b[B'],
-      ['leaves full-auto out', '\r'], ['leaves full-auto out', '\u001b'], ['Deckent workline', '/exit\r']]);
+      ['not open for you', '\r'], ['not open for you', '\u001b'], ['Deckent workline', '/exit\r']]);
     expect(run.timeout, run.output).toBeUndefined();
-    expect(modeLines(run.output)).toContain('Your company leaves full-auto out of the modes you may take in this scope');
+    expect(modeLines(run.output)).toContain('Full-auto is not open for you in this scope');
     expect(modeLines(run.output)).not.toContain('Policy does not permit');
     expect(await readFile(join(f.data, 'bindings.json'), 'utf8')).toBe(before);
     expect(changes(f)).toEqual([]);

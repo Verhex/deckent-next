@@ -302,7 +302,7 @@
   "terminal.scratch.usage": "Kullanım: /scratch [path|clear]",
   "terminal.mode.effect.standart": "okuma, scratch ve şirketin mod-uygun işaretlediği proje içi düzenlemeler kartsız çalışır; kabuk ve yazım tabanı sorar",
   "terminal.mode.effect.full-access": "her şey kartsız çalışır — host kabuğu, yıkıcı komutlar, yazım tabanı, .git (commit, push) — Deckent'in kendi durumu, policy, onaylar, denetim ve kimlik bilgileri hariç (kapalı kalır); deny kuralları her zaman geçerli; yalnız bu oturum için (sonraki açılış son kayıtlı modunla başlar)",
-  "terminal.mode.fullAccessGrant": "Tam erişim için bu kapsamda şirketinizin grant'ı gerekir (kaynak `permission-mode`, eylem `set`, id full-access); grant varsa Shift+Tab ya da `/mode full-access` ile geçilir ve her tur denetime yazılır.",
+  "terminal.mode.fullAccessGrant": "Tam erişim için bu kapsamda bir grant gerekir. Kurulumun sahibi bunu kendi terminalinden açar: deckent init policy --scope <kapsam> --modes full-auto,full-access --preview (sonra --apply). Grant varsa Shift+Tab ya da `/mode full-access` ile geçilir ve her tur denetime yazılır.",
   "terminal.mode.startSaved": "Başlangıç modu kaydedildi: sonraki açılış tam erişimle başlar. Bu oturum kendi modunda kalır (kayıtlı başlangıç modu yeniden açılana dek standart çalışır).",
   "terminal.mode.askEditsOn": "her düzenleme de sorar (kişisel ayarınız)",
   "terminal.mode.askEditsOff": "şirketin izin verdiği yerde düzenlemeler yeniden kartsız çalışır (kişisel ayarınız)",
@@ -320,7 +320,7 @@
   "terminal.banner.hint": "/help · Shift+Tab mod · ? kısayollar",
   "terminal.banner.compact": "Deckent {version} · {name} · /help · ? kısayollar",
   "terminal.fullAccess.banner": "Tam erişim açık: araç çağrıları sormadan çalışır — host kabuğu, yıkıcı komutlar, yazım tabanı, .git. Deckent'in kendi durumu, policy, onaylar, denetim ve kimlik bilgileri kapalı kalır; deny kuralları geçerli; her çağrı denetime yazılır; yalnız bu oturum için. En uygun yeri yalıtılmış bir ortamdır.",
-  "terminal.fullAccess.startDenied": "Başlangıç modunuz tam erişim, ancak bu kapsamda şu an buna izin veren bir şirket grant'ı yok; bu oturum standart çalışır.",
+  "terminal.fullAccess.startDenied": "Başlangıç modunuz tam erişim, ancak bu kapsamda şu an buna izin veren bir grant yok; bu oturum standart çalışır. Kurulumun sahibi bunu deckent init policy --scope <kapsam> --modes full-access ile açar.",
   "terminal.slash.monitor": "İzleme penceresi: takılı işler, işçiler, onaylar, havuzlar ve kurulumlar (--install/--scope: metin özeti)",
   "terminal.slash.approvalsArgument": "[numara|kimlik|clear-session]",
   "terminal.approval.standing.unconfirmedSession": "Onay {id}: oturum izni doğrulanamadı ({reason}).",
@@ -418,5 +418,7 @@
   "terminal.info.usage.cachePartial": "en az {tokens} token ({reports} raporun {measured} tanesi ölçüldü)",
   "terminal.info.usage.cacheHit": "%{percent} ({read}/{prompt} istem tokeni)",
   "terminal.info.usage.cacheHitPartial": "ölçülen raporlarda %{percent} ({measured}/{reports}); tüm oturum bilinmiyor",
-  "terminal.slash.policy": "MCP izinlerini seçimle yönet"
+  "terminal.slash.policy": "MCP izinlerini seçimle yönet",
+  "terminal.mode.fullAutoRevoked": "Tam otomatik bu kapsamda artık izinli değil, bu yüzden kayıtlı tam otomatik seçiminiz geçerli değil: bu oturum standart çalışır ve her çağrı standart olarak karar alır. Kurulumun sahibi bunu deckent init policy --scope <kapsam> --modes full-auto ile yeniden açabilir.",
+  "terminal.admin.scope.modeRevoked": "Mod: {mode} (kayıtlı tam otomatik burada artık izinli değil, bu yüzden geçerli değil)"
 }

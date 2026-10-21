@@ -1,6 +1,6 @@
 ---
 name: deckent-terminal-design
-description: Use for Deckent CLI/TUI ergonomics, information hierarchy, keyboard interaction, command palette, logs, worker trees, run inspection, ANSI color tiers, TTY behavior, piping, or Terminal/Desktop semantic parity. Do not use for generic CLI backend implementation.
+description: Deckent CLI/TUI ergonomics - information hierarchy, keyboard interaction, slash commands and palette, logs, worker trees, run inspection, ANSI color tiers, TTY behaviour, piping and Terminal/Desktop parity.
 ---
 
 

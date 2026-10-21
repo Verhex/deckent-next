@@ -3,9 +3,10 @@ import { lstat, readFile, stat } from 'node:fs/promises';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInteractiveTerminal, inspectInstallationFile, localPrincipalChannel, openLocalIntegrityAuthority, openSqliteAuditStore, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
 import { userInfo } from 'node:os'; import { randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
 import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
-  upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, assertAuthorityWitness, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
+  upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, assertAuthorityWitness, setInstallerPermissionModes, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
 import { getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
+import type { AuditEvent } from '#domain/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { assertConfiguredInstallationIdentity, configuredInstallationBinding } from './apply.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -71,14 +72,38 @@ export async function upgradePolicyTemplateInstallation(projectRoot: string, sco
   if (apply) await assertConfiguredInstallationIdentity(projectRoot);
   // Ownership (lead 2026-10-07): the caller's uid owns both authority documents (the same custody the policy source enforces on every read);
   // missing, foreign or unreadable documents fail closed as `not-owner`.
-  const owns = async (path: string) => { try { const stat = await lstat(path); return callerUid !== undefined && stat.isFile() && !stat.isSymbolicLink() && stat.uid === callerUid; } catch { return false; } };
-  const owner = await owns(productResourcePath(layout, 'policy')) && await owns(productResourcePath(layout, 'bindings'));
+  const owner = await ownsAuthority(layout, callerUid);
   const writer = createLayoutPolicySource(layout, callerUid ?? userInfo().uid, config.inspection.policyMaxBytes);
   const clock = new SystemTrustedClock(), input = { scopeId, principal: { issuer: identity.issuer, subject: identity.subject }, toolNames: FIRST_RUN_TOOL_NAMES, owner, apply,
     peopleLimit: config.inspection.maxPageSize, now: () => clock.sample().wallMs, ...(expect === undefined ? {} : { expect }), ...(person === undefined ? {} : { person }) };
-  return upgradeInstalledPolicyTemplate(writer, identityPort(projectRoot, scopeId, options), { ...input, openAudit: async () => {
-    const store = await openSqliteAuditStore(await prepareProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite, 'allow');
-    try { const audit = new AuditApplication(store, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true)); return { record: event => { audit.record(event); }, close: () => store.close() }; } catch (error) { store.close(); throw error; } } });
+  return upgradeInstalledPolicyTemplate(writer, identityPort(projectRoot, scopeId, options), { ...input, openAudit: () => installerAudit(layout, config) });
+}
+/** The sealed audit store of this installation, opened for one authority write (the installer's own record precedes the publication). */
+async function installerAudit(layout: ProductLayout, config: Awaited<ReturnType<typeof loadComposedConfig>>) {
+  const store = await openSqliteAuditStore(await prepareProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite, 'allow');
+  try { const audit = new AuditApplication(store, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true)); return { record: (event: AuditEvent) => { audit.record(event); }, close: () => store.close() }; }
+  catch (error) { store.close(); throw error; }
+}
+/** `deckent init policy --scope <id> --modes <set> --preview|--apply [--expect <revision>] [--person <issuer>/<subject>]` (PRE-9, owner 2026-10-21): the
+ * installation owner opens or closes full-auto / full-access for a person. The same custody as `--upgrade`: `--apply` needs the authority witness
+ * (Core: this process's controlling terminal) and is refused for the MCP actor with `AUTHORITY_WITNESS_REQUIRED` before anything is read or written;
+ * only the owner of both authority documents writes; the plan is the effective decision per mode (the engine's). */
+export async function openPermissionModesInstallation(projectRoot: string, scopeId: string, input: { readonly modes: readonly string[]; readonly apply: boolean;
+  readonly expect?: string; readonly person?: { readonly issuer: string; readonly subject: string } }, options: ConfigLoadOptions = {}, callerUid: number | undefined = process.getuid?.(),
+  witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }) {
+  if (input.apply) await assertAuthorityWitness('policyPermissionModes', localPrincipalChannel(), witness);
+  const config = await loadComposedConfig(projectRoot, { ...options, heal: false }), layout = config.productLayout, identity = readLocalOsIdentity();
+  if (input.apply) await assertConfiguredInstallationIdentity(projectRoot);
+  const owner = await ownsAuthority(layout, callerUid), clock = new SystemTrustedClock();
+  return setInstallerPermissionModes(createLayoutPolicySource(layout, callerUid ?? userInfo().uid, config.inspection.policyMaxBytes), { scopeId,
+    principal: { issuer: identity.issuer, subject: identity.subject }, ...(input.person === undefined ? {} : { person: input.person }), modes: input.modes, apply: input.apply,
+    ...(input.expect === undefined ? {} : { expect: input.expect }), owner, peopleLimit: config.inspection.maxPageSize, now: () => clock.sample().wallMs, openAudit: () => installerAudit(layout, config) });
+}
+/** Ownership (lead 2026-10-07): the caller's uid owns both authority documents (the custody the policy source enforces on every read); missing,
+ * foreign or unreadable documents fail closed. */
+async function ownsAuthority(layout: ProductLayout, callerUid: number | undefined) {
+  const owns = async (path: string) => { try { const stat = await lstat(path); return callerUid !== undefined && stat.isFile() && !stat.isSymbolicLink() && stat.uid === callerUid; } catch { return false; } };
+  return await owns(productResourcePath(layout, 'policy')) && await owns(productResourcePath(layout, 'bindings'));
 }
 /** Doctor-only, read-soft: not the trusted gate (that stays FilePolicySource); oversized/missing/unparsable/custom -> null, never a doctor failure. */
 export async function inspectPolicyTemplate(projectRoot: string, options: ConfigLoadOptions = {}) {

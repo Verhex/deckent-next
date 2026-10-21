@@ -6,6 +6,7 @@ import { isDirectoryWriteApprovalFloored, isWriteApprovalFloored, isSelfSourceWr
 import type { SandboxWriteCell, ShellSandboxLayout } from '#adapters/core/host-shell/index.js';
 import { MCP_PROJECT_REGISTRY_PATH } from '#adapters/core/mcp-client/index.js';
 import { inspectShellRealmSelection, shippedShellSandboxes, type ShellRealmReport } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { DECK_FILE } from '#engine/index.js';
 import { agentTurnWriteFloor, isSelfSourceProject } from './self-source.js';
 
 /**
@@ -27,7 +28,9 @@ export function agentWorkspaceDeny(projectRoot: string, layout: ProductLayout, f
   // MODES-3: a full-access turn opens only the repository internals (`.git`: commit, branch, push); credentials and product state stay closed.
   const base = fullAccess ? CREDENTIAL_WORKSPACE_DENY : DEFAULT_WORKSPACE_READ_DENY;
   // MCP-CLIENT: the project's MCP registry widens authority; the agent never reads or writes it (nor a writer's temporary beside it).
-  return Object.freeze([...base, ...agentProductStateDeny(projectRoot, layout), `${MCP_PROJECT_REGISTRY_PATH}*`,
+  // PRE-8 v2 (law audit MAJOR 2): `.deck` steers which vault a key is read from; humans edit it, the agent never reads or writes it (full access
+  // included). It holds no value, so it stays out of the worker-tree secret gate (a committed `.deck` never refuses a worker).
+  return Object.freeze([...base, ...agentProductStateDeny(projectRoot, layout), DECK_FILE.fileName, `${DECK_FILE.fileName}.*`, `${MCP_PROJECT_REGISTRY_PATH}*`,
     MCP_PROJECT_REGISTRY_PATH.replace(/[^/]+$/u, name => `.${name}*`)]);
 }
 /** MODES-3 `edit-authority`: the installation's configuration file inside the project (it decides where policy, bindings and approvals live, the

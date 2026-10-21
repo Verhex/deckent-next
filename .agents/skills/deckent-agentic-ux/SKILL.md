@@ -1,6 +1,6 @@
 ---
 name: deckent-agentic-ux
-description: Use for Deckent runs, agents, workers, tool or MCP calls, approvals, verification, autonomy, checkpoints, pause/resume/cancel, failure, recovery, or human intervention. Do not use for generic chat layout or static visual styling.
+description: Design how Deckent shows agent work - runs, workers, tool and MCP calls, approvals, verification, autonomy, checkpoints, pause/resume/cancel, failure, recovery and human intervention. Static layout and styling belong to deckent-visual-language.
 ---
 
 

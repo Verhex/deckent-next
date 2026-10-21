@@ -9,6 +9,9 @@
 #include <sys/file.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <signal.h>
+#include <sys/syscall.h>
+#include <time.h>
 #include <string>
 #include <unistd.h>
 #include <cerrno>
@@ -20,6 +23,30 @@
 namespace {
 #ifdef DECKENT_LOCAL_PEER_TEST_FAULTS
 thread_local int next_start_fault = 0;
+#endif
+
+// One zero-duration kernel observation of a connected descriptor, with `during` as the signal mask while it runs (null: the caller's
+// own mask, as poll()).
+#ifdef DECKENT_LOCAL_PEER_TEST_FAULTS
+// Test seam: a handled signal (SA_RESTART, as libuv installs SIGCHLD) arrives at the next observations. The signal is made pending while
+// blocked, so the kernel itself decides at the observation: under the caller's own mask it is deliverable there (it arrived during the
+// call); under `during` it stays pending until the call returns. Nothing is simulated beyond the arrival time.
+thread_local unsigned signalled_observations = 0;
+volatile sig_atomic_t handled_signals = 0;
+void observed_signal(int) { handled_signals = handled_signals + 1; }
+int observe(pollfd& descriptor, const sigset_t* during) {
+  const timespec now{};
+  if (signalled_observations == 0) return ppoll(&descriptor, 1, &now, during);
+  --signalled_observations;
+  sigset_t probe, ordinary; sigemptyset(&probe); sigaddset(&probe, SIGRTMAX);
+  pthread_sigmask(SIG_BLOCK, &probe, &ordinary);
+  syscall(SYS_tgkill, getpid(), gettid(), SIGRTMAX);
+  const int result = ppoll(&descriptor, 1, &now, during ? during : &ordinary); const int error = errno;
+  pthread_sigmask(SIG_SETMASK, &ordinary, nullptr);
+  errno = error; return result;
+}
+#else
+int observe(pollfd& descriptor, const sigset_t* during) { const timespec now{}; return ppoll(&descriptor, 1, &now, during); }
 #endif
 
 napi_value fail(napi_env env, const char* code) {
@@ -219,6 +246,17 @@ napi_value fail_next_start(napi_env env, napi_callback_info info) {
     return fail(env, "LOCAL_PEER_TEST_OPTIONS");
   next_start_fault = mode; napi_value result; napi_get_undefined(env, &result); return result;
 }
+napi_value signal_next_observations(napi_env env, napi_callback_info info) {
+  size_t count = 1; napi_value arg; int32_t observations = 0;
+  napi_get_cb_info(env, info, &count, &arg, nullptr, nullptr);
+  struct sigaction handler{}; handler.sa_handler = observed_signal; handler.sa_flags = SA_RESTART; sigemptyset(&handler.sa_mask);
+  if (count != 1 || napi_get_value_int32(env, arg, &observations) != napi_ok || observations < 0 || observations > 64
+      || sigaction(SIGRTMAX, &handler, nullptr) != 0) return fail(env, "LOCAL_PEER_TEST_OPTIONS");
+  signalled_observations = static_cast<unsigned>(observations); napi_value result; napi_get_undefined(env, &result); return result;
+}
+napi_value observed_signals(napi_env env, napi_callback_info) {
+  napi_value result; napi_create_uint32(env, static_cast<uint32_t>(handled_signals), &result); return result;
+}
 #endif
 napi_value create_listener(napi_env env, napi_callback_info info) {
   size_t count = 6; napi_value args[6]; napi_valuetype type;
@@ -315,8 +353,12 @@ napi_value connection_active(napi_env env, napi_callback_info info) {
     if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &peer, &length) == 0 && length == sizeof(peer)
         && peer.pid == static_cast<pid_t>(values[1]) && peer.uid == static_cast<uid_t>(values[2]) && peer.gid == static_cast<gid_t>(values[3])) {
       struct pollfd descriptor{}; descriptor.fd = fd;
+      // LIVENESS-EINTR: a handled signal arriving during the observation (SIGCHLD of a shell exit) made poll() fail with EINTR on a
+      // healthy socket, which read as a gone peer and cancelled its turn. Catchable signals are blocked atomically for this one
+      // zero-duration call and delivered when it returns: no retry, and every remaining failure still refuses.
+      sigset_t blocked; sigfillset(&blocked);
       // HUP/ERR/NVAL are reported even with events=0. A normal request half-close is not HUP.
-      active = poll(&descriptor, 1, 0) >= 0 && !(descriptor.revents & (POLLHUP | POLLERR | POLLNVAL));
+      active = observe(descriptor, &blocked) >= 0 && !(descriptor.revents & (POLLHUP | POLLERR | POLLNVAL));
     }
   }
   napi_value result; napi_get_boolean(env, active, &result); return result;
@@ -366,6 +408,10 @@ NAPI_MODULE_INIT() {
 #ifdef DECKENT_LOCAL_PEER_TEST_FAULTS
   napi_property_descriptor injection = {"__testFailNextStart", nullptr, fail_next_start, nullptr, nullptr, nullptr, napi_default, nullptr};
   napi_define_properties(env, exports, 1, &injection);
+  napi_property_descriptor signalled = {"__testSignalNextObservations", nullptr, signal_next_observations, nullptr, nullptr, nullptr, napi_default, nullptr};
+  napi_define_properties(env, exports, 1, &signalled);
+  napi_property_descriptor handled = {"__testHandledSignals", nullptr, observed_signals, nullptr, nullptr, nullptr, napi_default, nullptr};
+  napi_define_properties(env, exports, 1, &handled);
 #endif
   return exports;
 }

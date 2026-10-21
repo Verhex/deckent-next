@@ -1,6 +1,6 @@
 ---
 name: deckent-enterprise-ux
-description: Use for Deckent installation/company/resource scope, principals, RBAC, policies, approvals, audit, secrets, cost controls, compliance or large-scale administration. Do not use to add enterprise-looking tables without real governance semantics.
+description: Deckent governance surfaces - installation/company/resource scope, principals, RBAC, policies, approvals, audit, secrets, cost controls, compliance and large-scale administration, built on real governance semantics.
 ---
 
 

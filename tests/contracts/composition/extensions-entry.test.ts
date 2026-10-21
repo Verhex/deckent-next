@@ -15,9 +15,11 @@ const memoryBackend = (id: string) => ({ id, create: () => {
 } });
 
 it('exports exactly the declared extension surface; the SDK entry exports none of its registrations', () => {
-  expect(Object.keys(extensions).sort()).toEqual(['CORE_API_VERSION', 'EffectTargetError', 'RegistryError', 'SECRET_STORE_ID_PATTERN', 'createSecretHelperFactory',
-    'registerApprovalAssuranceProducer', 'registerEnvironmentProbeKind', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretStoreBackend', 'runCli', 'runMcp']);
-  expect(['registerApprovalAssuranceProducer', 'registerEnvironmentProbeKind', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretStoreBackend', 'registerProviderConfig'].filter(name => name in sdk)).toEqual([]);
+  expect(Object.keys(extensions).sort()).toEqual(['CORE_API_VERSION', 'EffectTargetError', 'RegistryError', 'SECRET_GRANT_STORE_ID_PATTERN', 'SECRET_STORE_ID_PATTERN', 'createSecretHelperFactory',
+    'registerApprovalAssuranceProducer', 'registerEnvironmentProbeKind', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretGrantStore',
+    'registerSecretStoreBackend', 'runCli', 'runMcp']);
+  expect(['registerApprovalAssuranceProducer', 'registerEnvironmentProbeKind', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretGrantStore',
+    'registerSecretStoreBackend', 'registerProviderConfig'].filter(name => name in sdk)).toEqual([]);
 });
 
 it('the distribution MCP runner preserves Core argument validation', async () => {

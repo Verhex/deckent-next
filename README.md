@@ -29,7 +29,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> **Pre-release `1.0.0-alpha.50`** (release candidate; the latest released version is the first dated line in [CHANGELOG.md](CHANGELOG.md)). Deckent is not on npm yet; install it from source
+> **Pre-release `1.0.0-alpha.51`** (release candidate; the latest released version is the first dated line in [CHANGELOG.md](CHANGELOG.md)). Deckent is not on npm yet; install it from source
 > as shown in [Get started](#get-started). Every release is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What is Deckent
@@ -128,7 +128,7 @@ deckent init policy --scope my-project --apply
    Local loopback models are free-measured; a remote model without a verified published price is listed but
    locked, with the reason and the next step (Zhipu GLM China stays locked because its prices are in CNY).
    OpenRouter offers model connections; paid calls still require verified pricing and routing. Subscriptions today: a Claude Code worker runs with your own Claude login; a subscription-backed Brain is being prepared (not available yet); terminal chat with a Claude subscription is not supported for now, so use an Anthropic API key for chat. Sign in with ChatGPT is listed in `/provider` as not available yet. The same from the
-   command line: `deckent secret set <NAME>` and `deckent models connect --scope <id> --connection <kind>
+   command line: `deckent secret set <NAME> --main` and `deckent models connect --scope <id> --connection <kind>
    --command-id <id> --model <exact id>`.
 4. **Set a budget.** Every paid API model turn reserves against one shared USD budget of the scope; without one, every
    paid turn is refused and the windows say so (local loopback models and subscription models run without one). The first row of `/provider`, **Create budget**, opens the budget window: 5, 10, 25,
@@ -183,7 +183,7 @@ Before you start: Docker is running; the project is a Git repository with at lea
 as worker (Claude Code or Codex) is logged in on this machine with its own login; and your installation has the current
 first-run policy (a fresh `deckent init policy --scope <id> --apply` does; an older one upgrades with
 `deckent init policy --scope <id> --upgrade --preview`, then `--apply --expect <value>` with the exact value the preview printed; it binds the
-policy revision and the runtime service identity, so a change of either in between is refused and asks for a new preview).
+policy revision and the runtime service identity, so a change of either in between is refused and asks for a new preview). The installation owner opens full-auto or full-access with `deckent init policy --scope <id> --modes full-auto,full-access --preview`, then `--apply` at their own terminal; `--modes none` removes the grant (the very next call no longer has the mode; the stored choice stays and the terminal says it is not granted). AI tools, pipes and CI cannot.
 
 1. **Build the worker image** once, in the Deckent source checkout (it needs Docker and writes a new receipt file):
 
@@ -232,12 +232,12 @@ policy revision and the runtime service identity, so a change of either in betwe
    needs its own login on this machine:
 
    ```sh
-   deckent secret set DECKENT_ANTHROPIC_KEY
+   deckent secret set DECKENT_ANTHROPIC_KEY --main
    deckent models create-budget --scope my-project --usd 10
    deckent models connect --scope my-project --connection anthropic-api --command-id connect-1 --model claude-sonnet-5-5
    ```
 
-   `secret set` asks for the key in a hidden prompt. Each connection kind has its own secret name:
+   `secret set` asks for the key in a hidden prompt; `--main` stores it in the installation vault, `--project` in the project's own vault (names listed in a `.deck` file, references only). A main key is used in a project only after a grant: the terminal chat asks once on a solo installation, or run `deckent secret grant NAME --scope <id>`; `deckent secret list --all` shows every vault. Each connection kind has its own secret name:
    `DECKENT_ANTHROPIC_KEY`, `DECKENT_OPENAI_KEY`, `DECKENT_DEEPSEEK_KEY`, `DECKENT_GLM_KEY`, `DECKENT_GLM_CN_KEY`
    or `DECKENT_OPENROUTER_KEY` (`/provider` stores under the same name). A local server (vLLM, Ollama or LM Studio) uses
    the optional `DECKENT_LOCAL_ENDPOINT_KEY`; an OpenAI-compatible endpoint uses a name derived from its host,
@@ -408,7 +408,7 @@ Full auto still asks before `find -delete`, file truncation (`>`, `>|`) and move
 
 ### API keys
 
-You store a provider key once, in the masked field of `/provider` or with `deckent secret set NAME` (a hidden prompt in an
+You store a provider key once, in the masked field of `/provider` or with `deckent secret set NAME --main|--project` (a hidden prompt in an
 interactive terminal; never an argument, and a piped key is refused); a model profile refers to it by name. Never put it in `ANTHROPIC_API_KEY`, a shell
 profile or a `.env` file: other tools read those.
 

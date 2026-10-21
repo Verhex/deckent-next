@@ -15,6 +15,7 @@ import { terminalDeliveryPort } from './deliver-port.js';
 import { deliveryWindowLabels, pickerLabels, runtimeBuildSkew, terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { pickerNeedsTextFallback } from '#surfaces/core/terminal-picker/index.js';
 import { mcpPanelPort } from './mcp-panel.js';
+import { secretGrantCardPort } from './secret-grant-card.js';
 import { modelPanelSource } from './model-panel.js';
 import { budgetPanelPort } from './budget-panel.js';
 import { cachePanelPort } from './cache-panel.js';
@@ -177,7 +178,8 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
         'full-access': t('terminal.mode.effect.full-access', {}, locale) },
       switch: t('terminal.mode.switch', {}, locale), fullAccessGrant: t('terminal.mode.fullAccessGrant', {}, locale), startSaved: t('terminal.mode.startSaved', {}, locale),
       stops: modeStopWords(locale), cycled: t('terminal.mode.cycled', {}, locale), cycledFullAccess: t('terminal.mode.cycledFullAccess', {}, locale),
-      askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale), fullAccessLine: t('tui.panel.mode.fullAccessLine', {}, locale) },
+      askEditsOn: t('terminal.mode.askEditsOn', {}, locale), askEditsOff: t('terminal.mode.askEditsOff', {}, locale), fullAccessLine: t('tui.panel.mode.fullAccessLine', {}, locale),
+      fullAutoRevoked: t('terminal.mode.fullAutoRevoked', {}, locale) },
     viewport: { below: t('terminal.viewport.below', {}, locale), newMessages: t('terminal.viewport.newMessages', {}, locale), search: t('terminal.viewport.search', {}, locale),
       searchNone: t('terminal.viewport.searchNone', {}, locale), copied: t('terminal.viewport.copied', {}, locale) },
     decisionArm: { arming: t('terminal.decision.arming', {}, locale), ignored: t('terminal.decision.ignored', {}, locale) },
@@ -212,7 +214,9 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
     // T4: `/model` lists the declared models with their state; `/provider` connects a kind (free check, key to the secret store through the service).
     // The pin rides only on the streamed agent turn (v23): without that port the window is not offered (no pin that a turn would drop).
     ...(context.inspectDeclaredModels && context.streamTerminalChat ? { model: { ...modelPanelSource(root, scopeId, context, options, locale), ...budget, ...cache, ...protocol, ...workspace } } : {}),
-    ...(providerConnect ? { provider: { ...providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale)), ...budget, ...cache } } : {}) } } };
+    // PRE-8 v2: the same first-use card as the chat turn when a model list, a model connection or a just-stored key needs a grant here.
+    ...(providerConnect ? { provider: { ...providerPanelPort(root, scopeId, { ...context, providerConnect }, options, locale, error => errorText(error, locale),
+      context.secretGrantCard ? secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, env['HOME'] ?? env['USERPROFILE']) : undefined), ...budget, ...cache } } : {}) } } };
 }
 
 /** Line mode is the degraded adapter: it works piped (one turn per input line) and prompts only on a terminal. */
@@ -458,6 +462,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       context.streamTerminalChat!(root, { scopeId, messages, ...(turn?.reasoning ? { reasoning: turn.reasoning } : {}),
         ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}), ...(turn?.reference ? { reference: turn.reference } : {}),
         ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}) }, options, signal) } : {}),
+    ...(context.streamTerminalChat && context.secretGrantCard ? { secretGrant: secretGrantCardPort(root, scopeId, options, locale, context.secretGrantCard, home) } : {}),
     // SCR-A `/scratch`: the conversation's scratch area through the runtime service (v16); this surface reads and deletes no file.
     ...(context.inspectScratch && context.clearScratch ? { scratch: {
       inspect: (sessionId: string, signal?: AbortSignal) => context.inspectScratch!(root, { schemaVersion: 1, scopeId, sessionId }, options, signal),

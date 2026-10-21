@@ -1,6 +1,6 @@
 ---
 name: deckent-workspace-design
-description: Use for Deckent Desktop workspace architecture, docking, tabs, split panes, resizing, sidebars, inspectors, command palette, focus restoration, saved layouts, multi-window, multi-monitor, or scale-factor behavior. Do not use for backend runtime architecture alone.
+description: Deckent Desktop workspace architecture - docking, tabs, split panes, resizing, sidebars, inspectors, command palette, focus restoration, saved layouts, multi-window, multi-monitor and scale-factor behaviour.
 ---
 
 

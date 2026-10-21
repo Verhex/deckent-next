@@ -557,3 +557,70 @@ Plan: [PLAN Sıradaki 15](../../../PLAN.md), [beta iş eşlemesi](../plan/roadma
 - beta.1, 2026-10-28 Node 26 geçişini bekler; kontroller Node 26'da tekrarlanır. Owner şimdilik kapı adımı atmaz; GitHub yavaşlığı bitene kadar CI ayarına dokunulmaz.
 - Lead'in önerdiği atama onaylandı ("Önerildiği gibi"): beta öncesi PRE-1…PRE-6 + PB-COLDSTART; beta zamanı BETA-RAKIP-1…4, BETA-ISCI-BAGLAM, BETA-SAGLAYICI-GOZLEM, BETA-CLI-DO-DEVAM; AGENT-TAKEOVER masaüstünden sonra.
 - Kaynaklar: BETA-RAKIP kaydı (yukarıda) ve Deckent terminal oturumu `94e9b6b3-41eb-45ff-8001-26ca70b5a4c8`. Plan: [PLAN Sıradaki 1, 16, 17](../../../PLAN.md), [atama tablosu](../plan/roadmap-2026-10-15.md#beta-oncesi-2026-10-20).
+
+<a id="dis-proje-windows-2026-10-21"></a>
+
+## Owner kararları — 2026-10-21: iki dış proje, proje başına anahtar, native platformlar betada
+
+Kaynak: owner'ın "2 projemiz var 1i windows 1i wslde geliştirilecek … deckenti nasıl kurup kullandırabilirim" sorusu ve bir yan oturumdaki (deckent-next-d2) soru turları. Lead (ana oturum) bu kayıtları sonraki toplu pakete taşır.
+
+- **DIS-PROJE-KULLANIM** (owner kararı yalnız: iki proje Deckent ile geliştirilir ve izlenir, proje başına bütçe, canlıyı izle/sorunda sabitle; başlatıcı, `next-project` kaynağı ve MCP ayrıntıları yan oturumun uygulama tasarımıdır): owner'ın iki projesi (biri Windows'ta, biri WSL'de; adlar ve kapsam kimlikleri sonra) Deckent ile geliştirilir ve durumları izlenir. Her proje ayrı kurulumdur: kendi `.deckent` klasörü, runtime servisi, ledger'ı, politikası ve kapsamı; bütçe kapsama bağlı olduğu için proje başınadır. Proje içinde açılış N1'deki proje başlatıcısıyla olur (cwd = proje). Bugünkü host `deckent` sarmalayıcısı her klasörde deckent-next canlı kurulumuna bağlanır (`.agents/refactor/next-entry.mjs:37` `cwd: root`; `/tmp`'den `deckent monitor` = `deckent-next (current)`, 2026-10-21 çalıştırıldı). O projenin Claude Code ana oturumu `deckent-mcp` ile bağlanır (MCP aktörü yalnız gözlemle başlar, `README.tr.md:588`; Run oluşturma owner TTY onayında kalır); deckent-next `inspection.workers.sources` listesine `next-project` kaynağı olarak eklenir. Sürüm: canlıyı izler, geçiş sonrası sağlık kontrolü başarısızsa eski sürüme sabitlenir (N1 düzeni). Kod doğrulaması o projelerin git adapter kanıtıdır, kabul modeli değildir.
+- **Yan oturum bulgusu düzeltmesi:** deckent-next'te `npm run build` projelerin çalıştırdığı kodu değiştirmez; `deckent` dev-release `current` sürümünü çalıştırır (`~/.local/share/deckent-next-dev/current` → `ed76781309d2-af66d7bbe2c1`). Projeleri canlı geçiş taşır (Astra PASS + hosted CI + owner onayından sonra); açık eski servisler eski sürümde kalır.
+- **WINDOWS-YOL:** Windows projesi (`C:\Users\alperen\Desktop\Projeler\verhex-eggres-shield`) için WSL motoru denendi: `/mnt/c` izin bilgisi tutmayan 9p/drvfs olarak bağlı (`metadata` yok), `init policy --preview` orada `BOOTSTRAP_STATE_UNSAFE` ile reddetti (2026-10-21). Owner: "bu proje şuanlık beklesin deckent native windows desteğiyle geliştirme yapacağız." Windows projesi native Windows'un (NATIVE-PLATFORMLAR N2) ilk gerçek kullanıcısıdır; o zamana kadar Deckent'le geliştirilmez.
+- **Kurulan (2026-10-21):** WSL projesi `~/compact-llm-project`, kapsam `proje-wsl`: başlatıcılar `~/.local/bin/deckent-proje-wsl` ve `deckent-proje-wsl-mcp` (canlı `current`, `~/deckent-projects/proje-wsl/version-pin` ile sabitlenebilir), ayrı global kök `~/deckent-projects/proje-wsl/global-home` (anahtarlar canlıdan ve diğer projelerden ayrı), kullanıcı servisi `deckent-proje-wsl.service`, Claude Code yerel MCP kaydı, yerel Qwen Brain, Claude Code işçisi (havuz `proje-wsl-workers`, 2/2), deckent-next `inspection.workers.sources` kaynağı. Lead için: canlı geçişten sonra bu servis eski sürümde kalır, `systemctl --user restart deckent-proje-wsl` gerekir; deckent-next canlı servisi kaynak eklemesi yüzünden "yapılandırma değişti" uyarısı verir, sonraki canlı yeniden başlatmada kalkar.
+- **NATIVE-PLATFORMLAR (beta kapsamı):** owner'ın sözü birebir: "Şuan linuxta geliştiriyoruz ama Deckent tüm ortamlarda native çalışmalı beta bitene kadar beta bitiş hedefimiz bu ya da github 100k star bizi betadan çıkarır :)" (100k star şaka tonunda; çıkış kriteri olarak yazılmadı) ve "beta.1 planlanan tarihte çıkacak diğer ortamlar beta içerisinde geliştirilecek." Önceki turda: "tam native windows net beta kapsamına alınacak macos tam beta kapsamına alınacak … plan.md ye tam native iş planı eklensin gerekirse windowsa deckent kopyalanır oradada paralel geliştirilir." Sonuç: tam native Windows ve macOS beta kapsamında; betadan çıkış hedefi Deckent'in tüm ortamlarda native çalışması; beta.1 Linux/WSL ile çıkar (çıkarım: bugün native çalışan tek ortam). 10-03'teki "native Windows Core ayrı ölçülmüş karar kapısı" bu kararla kapsama alındı. İş planı taslağı: [native-platforms-2026-10-21](../plan/native-platforms-2026-10-21.md).
+- **PRE-8 PROJE-ANAHTAR (beta öncesi):** owner: "Deckent'in farklı projelerde farklı key kullanabilmesi ve keylerin çakışmaması kritik; kullanıcılar provider konsolunda proje bazlı API key kullanabiliyor, biz bu kullanıma sadık ve uyumlu olmalıyız; bu altyapı yoksa beta öncesi iş listesine eklensin." Altyapı yok: bağlantı türü başına tek sabit anahtar adı (`src/adapters/core/provider-connect/internal/registry.json:11` `DECKENT_ANTHROPIC_KEY`, `providerConnectSecretName` `registry.ts:96`) ve tek global kök deposu (`secrets.store` yalnız kurulum config'i). Aynı global kökü kullanan iki proje ya da iki kapsam aynı adı paylaşır ve çakışır. Kullanıcı sonucu: her proje/kapsam kendi sağlayıcı anahtarını ayrı adla saklar ve kullanır; bir projenin anahtarı başkasınınkini ezmez, başka bir kapsamın çağrısında çözülmez; `secret list` hangi anahtarın hangi kapsamda kullanıldığını gösterir. Owner şimdilik aboneliklerle devam eder; anahtarları gerektiğinde kendisi tanımlar.
+
+- **PRE-9 SOLO-MOD-IZNI (beta öncesi, owner seçimi "Beta öncesi ürün düzeltmesi"):** yeni solo kurulumda tam otomatik ve tam erişim engelli; ilk kurulum şablonu v13'te `permission-mode`/`set` izni yok ve izni açan ürün komutu yok (canlıdaki `live-permission-modes` elle kurulmuş). Kullanıcı sonucu: kurulum sahibi bu modları terminal onayıyla ürün komutundan açar; yapay zekâ politikayı yazmaz, hard floor tam erişimde de kapalı kalır. O zamana kadar proje standart modda çalışır.
+- **PRE-10 OTURUM-MODEL-PIN (beta öncesi, owner seçimi "Beta öncesi düzelt"):** `/model` "Yalnız bu oturum" seçimi, kalıcı proje/varsayılan model yokken ilk turda `TERMINAL_CHAT_NOT_CONFIGURED` ile düşüyor; `assertTerminalChatReady` (`src/composition/core/terminal-chat/internal/turn.ts:105`) oturum pinini hesaba katmadan reddediyor. proje-wsl'de PTY ile yeniden üretildi; geçici çözüm "Bu oturum ve varsayılanım olsun". Kabul: varsayılansız yeni kurulumda oturum pini ilk turu çalıştırır; pinlenen model kullanılamazsa başka model sessizce yerine geçmez.
+Plan: [PLAN Sıradaki 18](../../../PLAN.md).
+
+<a id="alpha50-release-2026-10-21"></a>
+
+## Owner kararları — 2026-10-21: alpha.50 merge, canlı geçiş öncesi gerçek binary denemesi, iş planı
+
+Kaynak: ana oturumdaki owner kararları (lead 4d4830b2). Kayıt yalnız owner'ın seçimlerini ve kabul edilen planı tutar; bir kabul veya beta kararı değildir.
+
+- **Merge:** owner "Merge et" dedi; PR #107, merge `71bb7b81`.
+- **Canlı geçiş öncesi:** owner "Önce deneme yap" dedi; gerçek binary denemesi 4/4 geçti (sonuç ve sınırlar [COMPLETED-PLAN alpha.50](../../../COMPLETED-PLAN.md)). Sonra owner "Kopyaladım, geç" dedi; önceki denetim noktası seq 57, head 2616, makine dışına kopyalandıktan sonra canlıya geçildi (switch `71bb7b81e155-5dee8d096a56`, ledger v59).
+- **İş planı (kabul edildi):** (1) dokümantasyon şimdi güncellenir; owner: "dokümantasyonları güncelleyelim, eski dokümantasyonla ilerleyemeyiz". (2) alpha.51 = PRE-8 PROJE-ANAHTAR, PRE-9 SOLO-MOD-IZNI, PRE-10 OTURUM-MODEL-PIN, gelen kutusu düzeltmeleri ve alpha.50 takipleri. (3) Kanıt işleri paralel: N1 50 görev, temiz kurulum provası, test-ERP gözlemi, owner terminal denemesi. (4) 2026-10-28 Node 26 geçişi ve tam doğrulama, sonra beta adayı; owner sekiz beta koşulu üzerinde karar verir.
+- Takipler: [PLAN Gelen kutusu, alpha.50 takipleri](../../../PLAN.md) (a–e).
+- **İptal-etki doğruluğu (2026-10-21, alpha.51 hazırlığı):** onaylanmış ve bitmiş bir araç çağrısı tur iptalinde `cancelled` bildirilebiliyor, iptalle duran yazma kümesi kısmen uygulanmış kalabiliyor. Owner: "betadda düzelteceğiz diye not alalım bilinen sınırlara ekleyelim." alpha.51 bilinen sınırlara (EN/TR) yazıldı; düzeltme beta işi (PLAN Gelen kutusu IPTAL-ETKI-DOGRULUGU).
+
+<a id="pre8-secret-model-2026-10-21"></a>
+
+## Owner kararı — 2026-10-21: PRE-8 secret modeli (kapsam etiketli ad tasarımı reddedildi)
+
+Kaynak: ana oturum (lead 4d4830b2). Lead'in Jev (66678036, minimal_strict 0.97) ile seçtiği kapsam etiketli ad tasarımını owner reddetti:
+"Seçilen tasarım başarılı değil aslında her projenin kendi secret yolu olmalı bu projelerdeki secret yolu ana secret yolu tarafından denetlenmeli."
+Owner'ın modeli (özet; tam söz ana oturum kaydında):
+- Her projenin kendi secret yolu (proje kasası); proje secret'ları ana secret yolu (ana kasa) tarafından denetlenir.
+- Projede `.env` gibi bir `.deck` dosyası: proje ya ana kasadaki bir anahtara referans verir ("refleyerek") ya da kendi secret'ını yönetir;
+  kendi secret'ını yönettiğini yönetici bilir ("güvenlik ve eşitlemeyle sıkı takip").
+- Yönetici kimde hangi secret olduğunu görür (solo'da aynı kişi); `deckent monitor` gibi bir `deckent admin` genel yönetim paneli.
+- Yönetici o projede izin vermediyse proje `.deck`'te ana kasadaki anahtara referans verse bile kullanamaz.
+- Sorgulanabiliyorsa anahtarların son kullanma tarihleri izlenir; sorgulanamıyorsa sorun değil.
+- Solo, ekip ve kurumsal kusursuz ve kolay yönetilmeli; "çakışma olmamalı, çakışmanın ihtimali ve riski dahi olmamalı."
+- Owner sorusu: bu doğrulamanın hızı ve uygulanabilirliği denetlenebilir mi? Lead: evet, tasarım prototipte ölçülür.
+Owner seçimleri (AskUserQuestion, önerilenler): **Çekirdek önce** — beta öncesi: proje kasası, `.deck` referansları, kullanım anında yönetici izni
+kontrolü, "kimde hangi anahtar" listesi (CLI); betada: tam `deckent admin` paneli ve son kullanma takibi. **`.deck` yalnız referans** — değerler
+şifreli kasalarda, `.deck` git'e girebilir. **Solo izni ilk kullanımda kart** — terminalde tek onay kartı izni kaydeder ve audit'e yazar; AI onaylayamaz;
+ekip/kurumsalda izni yönetici verir.
+Plan: PLAN Sıradaki 18 (PRE-8 satırı bu modele göre).
+
+<a id="pre8-v2-decisions-2026-10-21"></a>
+
+## Owner kararları — 2026-10-21: PRE-8 v2 mimari kararları (kanun denetimi sonrası)
+
+Kaynak: ana oturum (lead 4d4830b2); tasarım `proof/ALPHA51-2026-10-21/DESIGN-PRE8v2.md`, temiz bağlamlı denetim HOLD (1 BLOCKER, 5 MAJOR;
+`AUDIT-PRE8v2-LAW.md`). Owner: "denetime göre bende kararları verek mimariyi şekillendiririm." Seçimler (AskUserQuestion):
+1. İlk kullanım kartı: beta öncesi hedef, sığmazsa betaya; o zamana kadar `deckent secret grant`; kullanım anındaki izin kontrolü her durumda beta öncesi.
+2. `.deck`'te bildirilmemiş ad: ana kasa + izin (izin yine şart); proje kasası yalnız `AD=project` bildirimiyle okunur.
+3. Satır tavanı (alpha.51): adapters 29250→29650, composition 7650→7950.
+4. Ekip/kurumsalda ana anahtarı projeye açma yetkisi: mevcut `secret`/`set` hücresi; şablon v13 kalır; ayrı grant eylemi betada.
+5. Aynı git deposunun worktree'leri: **tek proje** (kasa ve izinleri paylaşır); kopyalanmış proje klasörü yine ayrı/ret (denetim BLOCKER düzeltmesi).
+6. Native macOS'ta terminal tanığı yok: beta bilinen sınırı (NATIVE-PLATFORMLAR ile gelir).
+7. alpha.50'ye geri dönüşte izin ayrımı kalkar: bilinen sınır; geçiş notunda bildirilir.
+8. beta.1 tarihi 2026-10-28 korunur.
+Denetim düzeltmeleri (BLOCKER + MAJOR) uygulama brief'ine girer.
+

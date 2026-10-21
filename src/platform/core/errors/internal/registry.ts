@@ -306,6 +306,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   INSTALLATION_NOT_STARTABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_NOT_STARTABLE', p, l) }) },
   LOCAL_RUNTIME_OPTIONS: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_OPTIONS', p, l) }) },
   RUNTIME_SHUTDOWN_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SHUTDOWN_UNAVAILABLE', p, l) }) },
+  RUNTIME_SERVICE_EXTERNALLY_MANAGED: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED', p, l) }) },
   RUNTIME_AUTOSTART_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_AUTOSTART_FAILED', p, l) }) },
   TERMINAL_SCOPE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_SCOPE_REQUIRED', p, l) }) },
   LOCAL_RUNTIME_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_UNAVAILABLE', p, l) }) },
@@ -600,6 +601,20 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   // The prompt of `secret set` was ended with Ctrl-C (nothing sent).
   SECRET_CHANGE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_CHANGE_DENIED', p, l) }) },
   SECRET_INPUT_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_INPUT_CANCELLED', p, l) }) },
+  // PRE-8 v2 (owner 2026-10-21): project vault, reference-only `.deck`, grant at use. Params carry names, a project root, a scope, a reason
+  // or a line number only — never a value or a `.deck` line.
+  DECK_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: p['line'] === undefined ? t('error.DECK_FILE_INVALID.file', p, l) : t('error.DECK_FILE_INVALID', p, l) }) },
+  DECK_DECLARATION_REQUIRED: { category: 'config', render: (p, l) => ({ message: t('error.DECK_DECLARATION_REQUIRED', p, l), suggestion: t('remedy.DECK_DECLARATION_REQUIRED', p, l) }) },
+  SECRET_GRANT_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_GRANT_REQUIRED', p, l), suggestion: t('remedy.SECRET_GRANT_REQUIRED', p, l) }) },
+  SECRET_PROJECT_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_MISSING', p, l), suggestion: t('remedy.SECRET_PROJECT_MISSING', p, l) }) },
+  SECRET_PROJECT_IDENTITY_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_IDENTITY_REQUIRED', p, l) }) },
+  SECRET_PROJECT_VAULT_OWNERSHIP_LOST: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_VAULT_OWNERSHIP_LOST', p, l), suggestion: t('remedy.SECRET_PROJECT_VAULT_OWNERSHIP_LOST', p, l) }) },
+  SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_VAULT_OWNER_UNOBSERVABLE', p, l) }) },
+  SECRET_PROJECT_VAULT_CLAIMED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_VAULT_CLAIMED', p, l), suggestion: t('remedy.SECRET_PROJECT_VAULT_CLAIMED', p, l) }) },
+  SECRET_GRANT_STORE_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_GRANT_STORE_UNSAFE', p, l) }) },
+  SECRET_GRANT_STORE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_GRANT_STORE_INVALID', p, l) }) },
+  // `secret set` off a terminal must name the vault (`--main` or `--project`): no silent scope (owner 2026-10-19).
+  SECRET_VAULT_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.SECRET_VAULT_REQUIRED', p, l) }) },
   PERMISSION_MODE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_CONFLICT', p, l) }) },
   PERMISSION_MODE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_UNSUPPORTED', p, l) }) },
   PERMISSION_MODE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_DENIED', p, l) }) },

@@ -1,10 +1,13 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { z } from 'zod';
+import { RegistryError } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, DeckentError, ErrorRegistry, installSecretResolverFactory, isRecord, normalizeGlobalScopePlatform, readJsonFile,
   registerConfigSection, resolveGlobalConfigPaths, resolveGlobalScopePaths, withConfigWriteLock, writeConfig, type Environment } from '#platform/index.js';
-import { SECRET_STORE_ID_PATTERN, SecretStoreRegistry, type SecretCustody, type SecretStore, type SecretStoreFactory, type SecretStoreSelectionPort } from '#engine/index.js';
-import { ENV_SECRET_STORE_ID, encryptedFileSecretStoreFactory, environmentSecretStoreFactory, fileSecretStoreFactory } from '#adapters/core/secret-store/index.js';
+import { CORE_SECRET_GRANT_STORE_ID, SECRET_STORE_ID_PATTERN, SecretGrantStoreRegistry, SecretStoreRegistry, projectVaultKey, type ProjectVaultAnchor, type SecretCustody, type SecretGrantStore,
+  type SecretGrantStoreFactory, type SecretStore, type SecretStoreFactory, type SecretStoreSelectionPort } from '#engine/index.js';
+import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, encryptedFileSecretStoreFactory, environmentSecretStoreFactory, fileSecretStoreFactory,
+  fileSecretGrantStoreFactory } from '#adapters/core/secret-store/index.js';
 
 /**
  * The `secrets` section v1 (SECRET-K1): which registered backend resolves `$DECK:NAME` references. An absent section is the environment
@@ -24,6 +27,23 @@ export function readSecretsConfig(config: Readonly<Record<string, unknown>>): Se
 /** The installation root the file backend lives in, from the caller's environment (null when none resolves). */
 function installationRoot(env: Environment, platform: string): string | null {
   try { return resolveGlobalScopePaths(normalizeGlobalScopePlatform(platform, env), env).stateDir; } catch { return null; }
+}
+// PRE-8 v2: where project grants live. Core keeps them beside the project vault; one Enterprise store may replace it before the seal.
+const grants = SecretGrantStoreRegistry.create([fileSecretGrantStoreFactory]);
+export function registerSecretGrantStore(factory: SecretGrantStoreFactory): void {
+  if (grants.ids().some(id => id !== CORE_SECRET_GRANT_STORE_ID)) throw new RegistryError('REGISTRY_ADAPTER_DUPLICATE');
+  grants.register(factory);
+}
+/** The installation (global) root of the caller's environment: the main vault's and every project vault's parent (null: none resolves). */
+export const installationSecretRoot = (env: Environment, platform: string = process.platform) => installationRoot(env, platform);
+/** A project vault: the encrypted-file backend in the vault's own directory, opened with the vault context (port v1, additive field). */
+export function openProjectVaultStore(directory: string, anchor: ProjectVaultAnchor, env: Environment, platform: string = process.platform): SecretStore {
+  return registry.open(ENCRYPTED_FILE_SECRET_STORE_ID, { env, platform, root: directory,
+    vault: { key: projectVaultKey(anchor), installationId: anchor.installationId, projectId: anchor.projectId } });
+}
+/** The project's grant store: the registered Enterprise store when there is one, else Core's file. */
+export function openSecretGrantStore(root: string, anchor: ProjectVaultAnchor, lockTimeoutMs: number): SecretGrantStore {
+  return grants.open(grants.ids().find(id => id !== CORE_SECRET_GRANT_STORE_ID) ?? CORE_SECRET_GRANT_STORE_ID, { root, anchor, lockTimeoutMs });
 }
 /** Whether a backend id is registered (Core or added before the registry sealed). */
 export function isRegisteredSecretStore(id: string): boolean { return registry.has(id); }
@@ -96,7 +116,7 @@ export function openConfiguredSecretStore(config: Readonly<Record<string, unknow
 let registered = false;
 export function registerSecretStoreConfig(): void {
   if (registered) return;
-  registry.seal();
+  registry.seal(); grants.seal();
   registerConfigSection('secrets', secretsConfigSchema, {
     optional: true,
     // The selection is never itself a secret reference: it is read before any reference resolves.

@@ -1,6 +1,6 @@
 ---
 name: deckent-design-system
-description: Use for Deckent component contracts, primitives, variants, design tokens, accessibility behavior, component governance, or Desktop/Terminal/Dashboard semantic parity. Do not use for a one-off mockup with no reusable system decision.
+description: Deckent component contracts, primitives, variants, design tokens, accessibility behaviour, component governance and Desktop/Terminal/Dashboard semantic parity - reusable system decisions rather than one-off mockups.
 ---
 
 

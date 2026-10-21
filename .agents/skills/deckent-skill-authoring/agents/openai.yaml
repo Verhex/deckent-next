@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Skill Authoring"
+  short_description: "Write trigger-first Deckent skills and rule files"
+  default_prompt: "Use $deckent-skill-authoring to write or edit this Deckent skill or rule file."
+policy:
+  allow_implicit_invocation: true

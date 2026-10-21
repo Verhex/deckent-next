@@ -1,6 +1,9 @@
 {
   "kernelIdentityReadBytes": 512,
+  "processFileReadBytes": 65536,
   "workerMemoryEstimateMB": 400,
   "workerCountCap": 30,
-  "observationConcurrency": 8
+  "observationConcurrency": 8,
+  "serviceManagerQueryTimeoutMs": 2000,
+  "serviceManagerQueryOutputBytes": 256
 }

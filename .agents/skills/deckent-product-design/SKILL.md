@@ -1,6 +1,6 @@
 ---
 name: deckent-product-design
-description: Use for Deckent product philosophy, personas, jobs, journeys, capability model, information architecture, progressive disclosure, or solo-to-enterprise complexity. Do not use for visual styling without a product-model question.
+description: Deckent product model questions - philosophy, personas, jobs, journeys, capability model, information architecture, progressive disclosure and solo-to-enterprise complexity.
 ---
 
 
