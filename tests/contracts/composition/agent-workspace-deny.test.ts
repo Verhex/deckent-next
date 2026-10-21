@@ -164,6 +164,28 @@ describe('agent workspace deny: the product state of a data root inside the proj
   });
 });
 
+// PRE-8 v2 (law audit MAJOR 2): the project vaults and their grants live in the installation (global) root, outside the project: neither
+// sandbox realm can read a key, write or forge a grant record — also through a `script` pty wrapper — so a sandboxed agent cannot self-approve.
+describe.skipIf(!sandboxReady || capabilities.landlock.status !== 'available')('PRE-8 v2: vault and grant records are out of reach of both sandbox realms', () => {
+  it('reading the vault key, writing grants.json and a script -qc forged grant all fail in bubblewrap and Landlock; the host records are unchanged', async () => {
+    const p = await project(), vault = join(p.base, 'home', '.deckent', 'project-secrets', 'a'.repeat(64)), scratch = join(p.base, 'scratch');
+    await mkdir(vault, { recursive: true, mode: 0o700 }); await mkdir(scratch, { recursive: true, mode: 0o700 });
+    await writeFile(join(vault, 'grants.json'), 'SYNTHETIC_GRANTS\n', { mode: 0o600 }); await writeFile(join(vault, 'secrets.key'), 'SYNTHETIC_KEY\n', { mode: 0o600 });
+    for (const provider of [bubblewrapShellSandbox({ project: p.scope, scratchDir: scratch }), landlockShellSandbox({ project: p.scope, scratchDir: scratch })]) {
+      const usable = provider.usable(capabilities); if (!usable.ok) throw new Error(usable.reason);
+      const ran = await usable.realm.run({ command: `cat '${vault}/secrets.key' 2>&1; echo "key=$?"; echo forged > '${vault}/grants.json' 2>/dev/null; echo "grants=$?";`
+        + ` script -qc "echo forged > '${vault}/forged.json'" /dev/null >/dev/null 2>&1; test -e '${vault}/forged.json'; echo "script=$?"`,
+        cwd: p.root, environment: { PATH: '/usr/bin:/bin', HOME: join(p.base, 'home') }, fixedEnv: { TMPDIR: scratch }, timeoutMs: 20_000 });
+      const lines = ran.output.split('\n');
+      expect(ran.output, provider.kind).not.toContain('SYNTHETIC_KEY');
+      for (const line of ['grants=1', 'script=1']) expect(lines, provider.kind).toContain(line);
+      expect(lines.find(line => line.startsWith('key=')), provider.kind).not.toBe('key=0');
+      expect(await readFile(join(vault, 'grants.json'), 'utf8'), provider.kind).toBe('SYNTHETIC_GRANTS\n');
+      await expect(readFile(join(vault, 'forged.json'), 'utf8'), provider.kind).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+  });
+});
+
 // Astra 2162: the product state stays closed to both sandboxes when an ancestor is an ignored directory — a `.gitignore` entry for
 // `.deckent/`, or a data root under the baseline-ignored `.cache` — and the protection does not depend on `.gitignore`. Read and write
 // are refused, ordinary project files and the conversation scratch area keep working; a chain through a symbolic link refuses the call.

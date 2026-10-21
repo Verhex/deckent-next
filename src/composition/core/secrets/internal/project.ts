@@ -98,9 +98,10 @@ async function writerContext(projectRoot: string, scopeId: string, options: Conf
   if (!anchor) throw ErrorRegistry.createError('SECRET_PROJECT_IDENTITY_REQUIRED');
   const clock = new SystemTrustedClock(), root = globalRoot(options), directory = (await projectVaultDirectory(root, anchor, true))!;
   await admitProjectVault(directory, anchor, true, clock.sample().wallMs, lockMs(context));
+  // The ledger's integrity key is created on first sealed use (as `init policy --upgrade --apply` does), so a grant works before the service ever ran.
   const open = async () => {
     const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
-    try { return { store, audit: new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile)) }; }
+    try { return { store, audit: new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)) }; }
     catch (error) { store.close(); throw error; }
   };
   return { context, anchor, root, directory, clock, open };
