@@ -389,7 +389,7 @@
   "terminal.approval.window.rule.edit": "file edits ask for approval",
   "terminal.approval.window.rule.edit-floor": "writing a protected file always asks",
   "terminal.approval.window.rule.edit-self-source": "changing Deckent's own source always asks",
-  "terminal.approval.window.rule.edit-authority": "writing the installation configuration asks in every mode",
+  "terminal.approval.window.rule.edit-authority": "changing who may do what (configuration, keys, approvals, policy) asks in every mode, full access included",
   "terminal.approval.window.rule.shell-read-none": "shell commands ask for approval here",
   "terminal.approval.window.rule.shell-read-low": "shell commands that read outside the usual set ask",
   "terminal.approval.window.rule.shell-narrow-mutating": "shell commands that change files ask",

@@ -116,8 +116,10 @@ export async function classifyShellMutation(command: string, reads: ShellPathCon
 }
 
 /** The permission tier of a shell command (what the mode decision sees as the call's cell); worst wins, destructive first. */
-export type ShellPermissionTier = 'read-none' | 'read-low' | 'narrow-mutating' | 'destructive' | 'always-ask' | 'other-modify';
-export function shellPermissionTier(risk: ShellRiskClassification, readOnly: ShellReadOnlyVerdict, mutation: ShellMutationVerdict): ShellPermissionTier {
+/** `authority` (lead 2026-10-21): the product's authority commands (`classifyShellAuthority`) — the `edit-authority` cell, asked in every mode. */
+export type ShellPermissionTier = 'read-none' | 'read-low' | 'narrow-mutating' | 'destructive' | 'always-ask' | 'other-modify' | 'authority';
+export function shellPermissionTier(risk: ShellRiskClassification, readOnly: ShellReadOnlyVerdict, mutation: ShellMutationVerdict, authority = false): ShellPermissionTier {
+  if (authority) return 'authority';
   if (risk.risk === 'destructive') return 'destructive';
   if (readOnly.readOnly) {
     if (risk.risk !== 'safe-read') return 'other-modify';

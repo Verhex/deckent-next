@@ -212,3 +212,5 @@ export const TEE_PROGRAMS = new Set(['tee', 'tee-object', 'out-file', 'set-conte
  * (a pty wrapper such as `script` asks too, so a forged terminal witness never runs unasked); the command itself still requires the terminal witness. */
 export const PRODUCT_AUTHORITY_COMMANDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = Object.freeze({
   deckent: Object.freeze({ secret: Object.freeze(['grant', 'revoke', 'set', 'delete', 'handover', 'store']) }) });
+/** Programs that run their payload on a new pseudo-terminal (a forged terminal witness for the product's authority commands). */
+export const PTY_WRAPPER_PROGRAMS: ReadonlySet<string> = new Set(['script', 'unbuffer', 'expect']);

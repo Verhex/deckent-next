@@ -389,7 +389,7 @@
   "terminal.approval.window.rule.edit": "dosya düzenlemeleri onay ister",
   "terminal.approval.window.rule.edit-floor": "korunan bir dosyaya yazmak her zaman onay ister",
   "terminal.approval.window.rule.edit-self-source": "Deckent'in kendi kaynağını değiştirmek her zaman onay ister",
-  "terminal.approval.window.rule.edit-authority": "kurulum yapılandırmasına yazmak her modda onay ister",
+  "terminal.approval.window.rule.edit-authority": "kimin ne yapabileceğini değiştirmek (yapılandırma, anahtarlar, onaylar, politika) tam erişim dahil her modda sorulur",
   "terminal.approval.window.rule.shell-read-none": "kabuk komutları burada onay ister",
   "terminal.approval.window.rule.shell-read-low": "alışılmış küme dışında okuyan kabuk komutları onay ister",
   "terminal.approval.window.rule.shell-narrow-mutating": "dosya değiştiren kabuk komutları onay ister",
