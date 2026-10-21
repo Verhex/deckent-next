@@ -1053,6 +1053,22 @@
     "mcp.approvals.detail": {
       "before": "Canonical ApprovalBroker read model'ini sunar — CLI ile AYNI kaynak — ve bekleyen her isteğin id'sini, özetini ve son geçerlilik zamanını döndürür. SALT OKUNUR: bu yüzey asla karar vermez, izin vermez veya reddetmez. Karar vermek yalnız CLI'da, etkileşimli canlı kimlik doğrulamalı TTY arkasında kalır; MCP üzerinden self-approval yolu yoktur.",
       "after": "Canonical ApprovalBroker read model'ini sunar — CLI ile AYNI kaynak — ve bekleyen her isteğin id'sini, özetini ve son geçerlilik zamanını döndürür. SALT OKUNUR: bu yüzey asla karar vermez, izin vermez veya reddetmez; MCP'de karar aracı yoktur. Kişi etkileşimli bir terminalde karar verir; bir yapay zekâ aktörü sıradan bir onaya yalnız politika açıkça approval-decide izni verdiğinde karar verir; yetki, MCP tabanı ve düzenleme tabanı kartları hiçbir zaman devredilemez."
+    },
+    "inspect.field.heartbeat": {
+      "before": "Heartbeat",
+      "after": "Canlılık sinyali"
+    },
+    "inspect.follow.task_status": {
+      "before": "Görev {taskId} · durum: {status} · heartbeat: {heartbeat} · revizyon: {revision}",
+      "after": "Görev {taskId} · durum: {status} · sinyal: {heartbeat} · revizyon: {revision}"
+    },
+    "inspect.follow.task_status_current_run": {
+      "before": "Görev {taskId} · durum: {status} · heartbeat: {heartbeat} · geçerli run: {runLifecycle}/{runStatus} · neden: {runCause} · revizyon: {revision}",
+      "after": "Görev {taskId} · durum: {status} · sinyal: {heartbeat} · geçerli run: {runLifecycle}/{runStatus} · neden: {runCause} · revizyon: {revision}"
+    },
+    "inspect.follow.run_status": {
+      "before": "Lifecycle: {lifecycle} · faz: {phase} · worker: {workers} · revizyon: {revision}",
+      "after": "Lifecycle: {lifecycle} · faz: {phase} · işçi: {workers} · revizyon: {revision}"
     }
   }
 }

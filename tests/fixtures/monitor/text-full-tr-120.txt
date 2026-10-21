@@ -20,22 +20,22 @@ Sizi bekleyen (2)
   └───────────────────────────────────────────────┴────────────┴─────────────────────┴─────────┘
 
 Takılı ya da bekleyen, en eskisi önce (12)
-  ┌───────────────────────────────┬───────┬─────────────────────────────────┬─────────────┬─────────┬─────────┐
-  │ İş kimliği                    │ Görev │ Neden                           │ Ne zamandır │ Kapsam  │ Kurulum │
-  ├───────────────────────────────┼───────┼─────────────────────────────────┼─────────────┼─────────┼─────────┤
-  │ run-blocked-approval          │ build │ ~ onay bekliyor (appr-0001)     │ 3 sa 12 dk  │ scope-a │ current │
-  │ run-not-admitted              │ build │ ~ henüz kabul edilmedi          │ 1 sa 33 dk  │ scope-a │ current │
-  │ run-cancellation-pending      │ build │ ! iptal bekleniyor              │ 1 sa 26 dk  │ scope-a │ current │
-  │ run-unresolved-effect         │ build │ ! etki sonucu belirsiz          │ 1 sa 19 dk  │ scope-a │ current │
-  │ run-evaluation-unknown        │ build │ ! değerlendirme sonucu belirsiz │ 1 sa 11 dk  │ scope-a │ current │
-  │ run-evaluation-not-ready      │ build │ ! değerlendirme hazır değil     │ 1 sa 4 dk   │ scope-a │ current │
-  │ run-worker-exited-unevaluated │ build │ ! işçi bitti, değerlendirilmedi │ 57 dk       │ scope-a │ current │
-  │ run-worker-stale-heartbeat    │ build │ ! işçi sessiz (heartbeat eski)  │ 50 dk       │ scope-a │ current │
-  │ run-waiting-dependency        │ build │ ~ bağımlılığını bekliyor        │ 28 dk       │ scope-a │ current │
-  │ run-pool-held                 │ build │ ~ havuz bekletiliyor            │ 21 dk       │ scope-a │ current │
-  │ run-waiting-pool-slot         │ build │ ~ havuzda yer bekliyor          │ 14 dk       │ scope-a │ current │
-  │ run-unknown                   │ build │ ! neden bilinmiyor              │ bilinmiyor  │ scope-a │ current │
-  └───────────────────────────────┴───────┴─────────────────────────────────┴─────────────┴─────────┴─────────┘
+  ┌───────────────────────────────┬───────┬───────────────────────────────────────┬─────────────┬─────────┬─────────┐
+  │ İş kimliği                    │ Görev │ Neden                                 │ Ne zamandır │ Kapsam  │ Kurulum │
+  ├───────────────────────────────┼───────┼───────────────────────────────────────┼─────────────┼─────────┼─────────┤
+  │ run-blocked-approval          │ build │ ~ onay bekliyor (appr-0001)           │ 3 sa 12 dk  │ scope-a │ current │
+  │ run-not-admitted              │ build │ ~ henüz kabul edilmedi                │ 1 sa 33 dk  │ scope-a │ current │
+  │ run-cancellation-pending      │ build │ ! iptal bekleniyor                    │ 1 sa 26 dk  │ scope-a │ current │
+  │ run-unresolved-effect         │ build │ ! etki sonucu belirsiz                │ 1 sa 19 dk  │ scope-a │ current │
+  │ run-evaluation-unknown        │ build │ ! değerlendirme sonucu belirsiz       │ 1 sa 11 dk  │ scope-a │ current │
+  │ run-evaluation-not-ready      │ build │ ! değerlendirme hazır değil           │ 1 sa 4 dk   │ scope-a │ current │
+  │ run-worker-exited-unevaluated │ build │ ! işçi bitti, değerlendirilmedi       │ 57 dk       │ scope-a │ current │
+  │ run-worker-stale-heartbeat    │ build │ ! işçi sessiz (canlılık sinyali eski) │ 50 dk       │ scope-a │ current │
+  │ run-waiting-dependency        │ build │ ~ bağımlılığını bekliyor              │ 28 dk       │ scope-a │ current │
+  │ run-pool-held                 │ build │ ~ havuz bekletiliyor                  │ 21 dk       │ scope-a │ current │
+  │ run-waiting-pool-slot         │ build │ ~ havuzda yer bekliyor                │ 14 dk       │ scope-a │ current │
+  │ run-unknown                   │ build │ ! neden bilinmiyor                    │ bilinmiyor  │ scope-a │ current │
+  └───────────────────────────────┴───────┴───────────────────────────────────────┴─────────────┴─────────┴─────────┘
 
 Duran işler ve nedeni (3)
   ┌──────────────────┬────────────────────────────────────────────────────────────┬────────────────┬─────────┬─────────┐
@@ -48,7 +48,7 @@ Duran işler ve nedeni (3)
 
 Şu an çalışan işçiler (2)
   ┌────────────────────────────┬───────────┬─────────────────────┬───────────┬──────────┬────────────────────┬─────────┐
-  │ İş/Görev                   │ Durum     │ Heartbeat yaşı      │ Süreç     │ Deneme   │ Sağlayıcı/model    │ Kurulum │
+  │ İş/Görev                   │ Durum     │ Sinyal yaşı         │ Süreç     │ Deneme   │ Sağlayıcı/model    │ Kurulum │
   ├────────────────────────────┼───────────┼─────────────────────┼───────────┼──────────┼────────────────────┼─────────┤
   │ run-blocked-approval/build │ Beklemede │ 1 sn                │ çalışıyor │ c76f549a │ claude/model-alph… │ current │
   │ Beklemede (sen bekleniyor)                                                                                         │
@@ -71,7 +71,7 @@ Süresi dolmuş onaylar: 1 (geçmiş; karar verilemez).
   │ run-evaluation-unknown        │ Beklemede (sistem bekleniyo… │ değerlendirme sonucu be… │ sürüyor    │ —           │
   │ run-evaluation-not-ready      │ Kontrolde                    │ değerlendirme hazır değ… │ sürüyor    │ —           │
   │ run-worker-exited-unevaluated │ Kontrolde                    │ işçi bitti, değerlendir… │ sürüyor    │ —           │
-  │ run-worker-stale-heartbeat    │ Beklemede (sistem bekleniyo… │ işçi sessiz (heartbeat … │ sürüyor    │ —           │
+  │ run-worker-stale-heartbeat    │ Beklemede (sistem bekleniyo… │ işçi sessiz (canlılık s… │ sürüyor    │ —           │
   │ run-worker-running            │ Çalışıyor                    │ işçi çalışıyor           │ sürüyor    │ —           │
   │ run-blocked-approval          │ Beklemede (sen bekleniyor)   │ onay bekliyor (appr-000… │ sürüyor    │ —           │
   │ run-waiting-dependency        │ Sırada                       │ bağımlılığını bekliyor   │ sürüyor    │ —           │
@@ -85,8 +85,8 @@ run-pool-held  ·  operatör bekleniyor · neden: havuz bekletiliyor · başlang
 bilinmiyor · sonraki: Havuzu incele
 run-blocked-approval  ·  sen bekleniyor · neden: onay bekliyor (appr-0001) · başlangıç: 2026-10-02 06:18:00Z · son
 tarih: bilinmiyor · sonraki: Onayları incele
-run-worker-stale-heartbeat  ·  sistem bekleniyor · neden: işçi sessiz (heartbeat eski) · başlangıç: 2026-10-02 08:39:42Z
-· son tarih: bilinmiyor · sonraki: İşçiyi incele
+run-worker-stale-heartbeat  ·  sistem bekleniyor · neden: işçi sessiz (canlılık sinyali eski) · başlangıç: 2026-10-02
+08:39:42Z · son tarih: bilinmiyor · sonraki: İşçiyi incele
 run-evaluation-unknown  ·  sistem bekleniyor · neden: değerlendirme sonucu belirsiz · başlangıç: 2026-10-02 08:18:03Z ·
 son tarih: bilinmiyor · sonraki: İş ayrıntılarını incele
 run-unresolved-effect  ·  sistem bekleniyor · neden: etki sonucu belirsiz · başlangıç: 2026-10-02 08:10:50Z · son tarih:
@@ -100,7 +100,7 @@ run-unknown  ·  sistem bekleniyor · neden: neden bilinmiyor · başlangıç: b
 
 ── İşçiler ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
   ┌────────────────────────────┬───────────┬─────────────────────┬───────────┬──────────┬────────────────────┬─────────┐
-  │ İş/Görev                   │ Durum     │ Heartbeat yaşı      │ Süreç     │ Deneme   │ Sağlayıcı/model    │ Kurulum │
+  │ İş/Görev                   │ Durum     │ Sinyal yaşı         │ Süreç     │ Deneme   │ Sağlayıcı/model    │ Kurulum │
   ├────────────────────────────┼───────────┼─────────────────────┼───────────┼──────────┼────────────────────┼─────────┤
   │ run-blocked-approval/build │ Beklemede │ 1 sn                │ çalışıyor │ c76f549a │ claude/model-alph… │ current │
   │ Beklemede (sen bekleniyor)                                                                                         │
@@ -116,10 +116,10 @@ sen bekleniyor · neden: onay bekliyor (appr-0001) · başlangıç: 2026-10-02 0
 Onayları incele
 İşçi run-blocked-approval/build · deneme c76f549a-attempt · nesil 1 · claude · kurulum current
 Şu an: düzenliyor · src/app.ts — apply patch
-Heartbeat 1 sn · süreç çalışıyor · pid 4242 · tanıtıcı ctr-build
+Sinyal 1 sn · süreç çalışıyor · pid 4242 · tanıtıcı ctr-build
     işçi: claude/model-alpha-2 · başladı 09:10:00Z · 20 dk süredir çalışıyor
     deneme c76f549a nesil 1 · başlatma launched · 09:10:00Z → sürüyor (20 dk) · çıkış — · claude/model-alpha-2
-    şu an düzenliyor · heartbeat 1 sn
+    şu an düzenliyor · sinyal 1 sn
     son 3 işçi olayı (işçinin bildirdiği):
       09:28:30Z · tool.call · edit src/surfaces/core/monitor/internal/view.ts
       09:29:30Z · tool.call · shell npm test -- monitor-surface
@@ -130,11 +130,11 @@ yok → bekliyor [canlı, henüz mühürlenmedi]
 Çalışma alanı /srv/deckent/workspaces/build
 
 Beklemede (sistem bekleniyor)
-sistem bekleniyor · neden: işçi sessiz (heartbeat eski) · başlangıç: bilinmiyor · son tarih: bilinmiyor · sonraki:
-İşçiyi incele
+sistem bekleniyor · neden: işçi sessiz (canlılık sinyali eski) · başlangıç: bilinmiyor · son tarih: bilinmiyor ·
+sonraki: İşçiyi incele
 İşçi run-blocked-approval/lint · deneme ed5a5613-attempt · nesil 1 · claude · kurulum current
 Şu an: çalıştırıyor · src/app.ts — apply patch
-Heartbeat ! 1 dk 35 sn (eski) · süreç çalışıyor · pid 4242 · tanıtıcı ctr-lint
+Sinyal ! 1 dk 35 sn (eski) · süreç çalışıyor · pid 4242 · tanıtıcı ctr-lint
 Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0,4321 USD · 1 araç hatası
 subscription kanalında model: istenen model-alpha-2 (beyan edilen yardımcılar: yok) → başlangıç model-alpha-2 → kullanım
 yok → bekliyor [canlı, henüz mühürlenmedi]
@@ -145,7 +145,7 @@ sistem bekleniyor · neden: neden bilinmiyor · başlangıç: bilinmiyor · son 
 incele
 İşçi run-blocked-approval/pack · deneme a465c0eb-attempt · nesil 1 · claude · kurulum current
 Şu an: — · —
-Heartbeat bırakıldı · süreç kayıp · pid 4242 · tanıtıcı ctr-pack
+Sinyal bırakıldı · süreç kayıp · pid 4242 · tanıtıcı ctr-pack
 Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token · maliyet 0,4321 USD · 1 araç hatası
 subscription kanalında model: istenen model-alpha-2 (beyan edilen yardımcılar: yok) → başlangıç model-alpha-2 → kullanım
 yok → bekliyor [canlı, henüz mühürlenmedi]

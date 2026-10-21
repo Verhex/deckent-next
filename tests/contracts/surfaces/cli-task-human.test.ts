@@ -75,7 +75,7 @@ it('transcript and patch-preview follow the host-resolved language (config langu
   expect((await run([...patchArgs, '--stat', '--lang', 'en'], handlers, root)).text).toContain('Scope:');
   const transcript = { locale: 'tr', async inspectWorkerTranscript() { return { schemaVersion: 1, sealed: false, summary: null }; } };
   const args = ['task', 'transcript', '--scope', 's', '--run', 'r', '--task', 't', '--attempt', 'a', '--generation', '1', '--layout-revision', 'l'];
-  expect((await run(args, transcript, root)).text).toContain('Bu deneme için mühürlenmiş worker olayı yok.');
+  expect((await run(args, transcript, root)).text).toContain('Bu deneme için mühürlenmiş işçi olayı yok.');
   expect((await run([...args, '--lang', 'en'], transcript, root)).text).toContain('No sealed worker events for this attempt.');
 });
 

@@ -35,7 +35,7 @@ Takılı ya da bekleyen, en eskisi önce (12)
   │ run-evaluation-unknown        │ ! değerlendirme sonuc… │
   │ run-evaluation-not-ready      │ ! değerlendirme hazır… │
   │ run-worker-exited-unevaluated │ ! işçi bitti, değerle… │
-  │ run-worker-stale-heartbeat    │ ! işçi sessiz (heartb… │
+  │ run-worker-stale-heartbeat    │ ! işçi sessiz (canlıl… │
   │ run-waiting-dependency        │ ~ bağımlılığını bekli… │
   │ run-pool-held                 │ ~ havuz bekletiliyor   │
   │ run-waiting-pool-slot         │ ~ havuzda yer bekliyor │
@@ -53,7 +53,7 @@ Duran işler ve nedeni (3)
 
 Şu an çalışan işçiler (2)
   ┌────────────────────────────┬───────────┬───────────────┐
-  │ İş/Görev                   │ Durum     │ Heartbeat ya… │
+  │ İş/Görev                   │ Durum     │ Sinyal yaşı   │
   ├────────────────────────────┼───────────┼───────────────┤
   │ run-blocked-approval/build │ Beklemede │ 1 sn          │
   │ Beklemede (sen bekleniyor)                             │
@@ -93,7 +93,7 @@ run-blocked-approval  ·  sen bekleniyor · neden: onay
 bekliyor (appr-0001) · başlangıç: 2026-10-02 06:18:00Z · son
 tarih: bilinmiyor · sonraki: Onayları incele
 run-worker-stale-heartbeat  ·  sistem bekleniyor · neden:
-işçi sessiz (heartbeat eski) · başlangıç: 2026-10-02
+işçi sessiz (canlılık sinyali eski) · başlangıç: 2026-10-02
 08:39:42Z · son tarih: bilinmiyor · sonraki: İşçiyi incele
 run-evaluation-unknown  ·  sistem bekleniyor · neden:
 değerlendirme sonucu belirsiz · başlangıç: 2026-10-02
@@ -114,7 +114,7 @@ run-unknown  ·  sistem bekleniyor · neden: neden bilinmiyor
 
 ── İşçiler ─────────────────────────────────────────────────
   ┌────────────────────────────┬───────────┬───────────────┐
-  │ İş/Görev                   │ Durum     │ Heartbeat ya… │
+  │ İş/Görev                   │ Durum     │ Sinyal yaşı   │
   ├────────────────────────────┼───────────┼───────────────┤
   │ run-blocked-approval/build │ Beklemede │ 1 sn          │
   │ Beklemede (sen bekleniyor)                             │
@@ -132,13 +132,13 @@ sonraki: Onayları incele
 İşçi run-blocked-approval/build · deneme c76f549a-attempt ·
 nesil 1 · claude · kurulum current
 Şu an: düzenliyor · src/app.ts — apply patch
-Heartbeat 1 sn · süreç çalışıyor · pid 4242 · tanıtıcı
+Sinyal 1 sn · süreç çalışıyor · pid 4242 · tanıtıcı
 ctr-build
     işçi: claude/model-alpha-2 · başladı 09:10:00Z · 20 dk
 süredir çalışıyor
     deneme c76f549a nesil 1 · başlatma launched · 09:10:00Z
 → sürüyor (20 dk) · çıkış — · claude/model-alpha-2
-    şu an düzenliyor · heartbeat 1 sn
+    şu an düzenliyor · sinyal 1 sn
     son 3 işçi olayı (işçinin bildirdiği):
       09:28:30Z · tool.call · edit
 src/surfaces/core/monitor/internal/view.ts
@@ -154,13 +154,13 @@ kullanım yok → bekliyor [canlı, henüz mühürlenmedi]
 Çalışma alanı /srv/deckent/workspaces/build
 
 Beklemede (sistem bekleniyor)
-sistem bekleniyor · neden: işçi sessiz (heartbeat eski) ·
-başlangıç: bilinmiyor · son tarih: bilinmiyor · sonraki:
-İşçiyi incele
+sistem bekleniyor · neden: işçi sessiz (canlılık sinyali
+eski) · başlangıç: bilinmiyor · son tarih: bilinmiyor ·
+sonraki: İşçiyi incele
 İşçi run-blocked-approval/lint · deneme ed5a5613-attempt ·
 nesil 1 · claude · kurulum current
 Şu an: çalıştırıyor · src/app.ts — apply patch
-Heartbeat ! 1 dk 35 sn (eski) · süreç çalışıyor · pid 4242 ·
+Sinyal ! 1 dk 35 sn (eski) · süreç çalışıyor · pid 4242 ·
 tanıtıcı ctr-lint
 Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token ·
 maliyet 0,4321 USD · 1 araç hatası
@@ -176,7 +176,7 @@ ayrıntılarını incele
 İşçi run-blocked-approval/pack · deneme a465c0eb-attempt ·
 nesil 1 · claude · kurulum current
 Şu an: — · —
-Heartbeat bırakıldı · süreç kayıp · pid 4242 · tanıtıcı
+Sinyal bırakıldı · süreç kayıp · pid 4242 · tanıtıcı
 ctr-pack
 Şimdiye kadar: 12 tur · 12000 giriş / 3400 çıkış token ·
 maliyet 0,4321 USD · 1 araç hatası

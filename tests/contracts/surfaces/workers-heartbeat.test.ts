@@ -20,7 +20,7 @@ const sidecars = (state: string, freshness: WorkerSidecars['heartbeat']['freshne
   log: { state: 'missing', byteLength: 0, truncated: false, sampledLines: 0, diagnostics: [], events: [] },
   result: { state: 'missing', exitCode: null, reportedAssessment: null }, pid: null, activity: null, usage: null, eventsTruncated: false,
 });
-const label = (w: WorkerObservation, locale: 'en' | 'tr') => renderWorkerRow(w, locale).split(' · heartbeat ')[1]!.split(' · ')[0];
+const label = (w: WorkerObservation, locale: 'en' | 'tr') => renderWorkerRow(w, locale).split(locale === 'en' ? ' · heartbeat ' : ' · sinyal ')[1]!.split(' · ')[0];
 
 it.each([
   ['identity-mismatch', 'identity-mismatch', 'kimlik uyuşmazlığı'],
