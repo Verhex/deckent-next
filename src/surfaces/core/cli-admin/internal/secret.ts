@@ -131,8 +131,11 @@ export async function secretCommand(argv: readonly string[], context: AdminComma
   if (action === 'list' && context.inspectSecretInventory && (scope ?? await configuredScope())) {
     // PRE-8 v2: the one inventory (vault, project, users, .deck, grant, presence); names and metadata only.
     const scopeId = scope ?? String(await configuredScope()), view = await context.inspectSecretInventory(root, { scopeId, all }, options);
-    const users = await secretUsers(root, options, locale);
-    emit(view, { ...sinks, render: () => renderSecretInventory(view, users, locale, cliTableStyle(context)) });
+    const users = await secretUsers(root, options, locale), stored = await context.listSecretNames?.(root, options).catch(() => null);
+    // `--json` keeps the earlier shape (backend, names of the main store) and adds the inventory (project, rows, findings).
+    emit({ schemaVersion: 1, backend: stored?.backend ?? view.mainStore, ...(stored ? { names: stored.names } : {}), project: view.project, all: view.all,
+      rows: view.rows, findings: view.findings },
+      { ...sinks, render: () => renderSecretInventory(view, users, locale, cliTableStyle(context)) });
     return;
   }
   if (action === 'list') {

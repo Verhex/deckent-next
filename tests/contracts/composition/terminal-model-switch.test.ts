@@ -18,6 +18,7 @@ import { clearConfigCache, t } from '#platform/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { mountWorkline, settle, until } from '../support/workline-harness.js';
 import { createLocalTls } from '../../fixtures/local-tls.js';
+import { grantFixtureSecrets } from '../../fixtures/project-grant.js';
 
 const ENTER = '\r', DOWN = '\u001b[B', ESC = '\u001b';
 const local: ModelReference = { providerId: 'local-openai', providerVersion: 1, modelId: 'chat', modelVersion: 1 };
@@ -69,6 +70,7 @@ describe.skipIf(process.platform !== 'linux')('W6: real terminal model switching
       connect: { adapter: 'anthropic-messages-http', chatPath: '/v1/messages', seed: 'anthropic-api' } }] });
     const options = { env: { ...f.env, DECKENT_ANTHROPIC_KEY: 'fixture-only-not-a-provider-key' }, heal: false as const };
     Object.assign(f.env, { DECKENT_ANTHROPIC_KEY: options.env.DECKENT_ANTHROPIC_KEY });
+    await grantFixtureSecrets(f.project, 'scope', ['DECKENT_ANTHROPIC_KEY'], options); // PRE-8 v2: the admin lent the main-vault key to this project.
     await f.start();
     const connected = await connectConfiguredModel(f.project, { schemaVersion: 1, commandId: 'connect-claude', scopeId: 'scope', connection: 'claude-fixture', endpoint: null,
       model: { nativeId: 'claude-sonnet-5-5' } }, options, { registry });

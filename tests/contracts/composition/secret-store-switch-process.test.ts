@@ -75,7 +75,7 @@ it.skipIf(process.platform !== 'linux')('compiled CLI + service: file → encryp
   // SEC-1 × C-ADMIN layers: from a pipe the CLI refuses `secret set` before reading stdin (SECRET_SET_TERMINAL_REQUIRED); nothing stored.
   const piped = await run(['secret', 'set', 'PLANTED_TOKEN', '--scope', 'installation', '--json'], project, env, 'synthetic-planted-value\n'); printed.push(piped.stdout, piped.stderr);
   expect(piped.code).not.toBe(0); expect(piped.stdout + piped.stderr).toContain('SECRET_SET_TERMINAL_REQUIRED');
-  const set = await terminal(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'installation', '--json'], project, env, [{ when: 'PROVIDER_TOKEN: ', send: `${CANARY}\r` }]); printed.push(set.output);
+  const set = await terminal(['secret', 'set', 'PROVIDER_TOKEN', '--main', '--scope', 'installation', '--json'], project, env, [{ when: 'PROVIDER_TOKEN: ', send: `${CANARY}\r` }]); printed.push(set.output);
   expect(set.code, set.output).toBe(0);
   expect((await readFile(join(globalRoot, 'secrets.json'), 'utf8')).includes('PLANTED_TOKEN')).toBe(false);
   expect((await readFile(join(globalRoot, 'secrets.json'))).includes(Buffer.from(CANARY))).toBe(true);
@@ -90,7 +90,7 @@ it.skipIf(process.platform !== 'linux')('compiled CLI + service: file → encryp
   expect(JSON.parse(await readFile(globalPath, 'utf8'))).toMatchObject({ secrets: { store: SEALED } });
   expect(await createEncryptedFileSecretStore({ root: globalRoot, platform: 'linux' }).get('PROVIDER_TOKEN')).toBe(CANARY);
   // The running service uses the new selection without a restart: the next change lands in the sealed store.
-  const next = await terminal(['secret', 'set', 'SECOND_TOKEN', '--scope', 'installation', '--json'], project, env, [{ when: 'SECOND_TOKEN: ', send: 'synthetic-second-value\r' }]); printed.push(next.output);
+  const next = await terminal(['secret', 'set', 'SECOND_TOKEN', '--main', '--scope', 'installation', '--json'], project, env, [{ when: 'SECOND_TOKEN: ', send: 'synthetic-second-value\r' }]); printed.push(next.output);
   expect(lastJson(next.output)).toMatchObject({ action: 'set', backend: SEALED });
   // The same switch again is current (nothing left to clean); a downgrade without confirmation moves nothing.
   const again = await terminal(['secret', 'store', '--to', SEALED, '--scope', 'installation', '--json'], project, env); printed.push(again.output);
