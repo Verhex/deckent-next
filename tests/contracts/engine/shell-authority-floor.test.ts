@@ -114,3 +114,20 @@ describe.skipIf(process.platform !== 'linux')('REVISE 2706: an inline interprete
     expect(await decide(command)).toBe('allow');
   });
 });
+
+// Astra REVISE 2708: one operand rule for every inline-program option — separate word, `--opt=value` and attached short `-e…` are equivalent.
+const CALL = `require("child_process").execFileSync("deckent",["secret","grant","K"])`;
+const LONG_FORMS = [`node --eval='${CALL}'`, `node --print='${CALL}'`, `env node --eval='${CALL}'`, `nice node --print='${CALL}'`, `bun --eval='${CALL}'`,
+  `node --eval '${CALL}'`, `node --print '${CALL}'`, `node -e'${CALL}'`, `env -u HOME bun --print='${CALL}'`];
+const LONG_ORDINARY = [`node --eval='console.log(1)'`, `node --eval 'console.log(1)'`, `node --print=1`, `bun --eval='console.log(1)'`];
+describe.skipIf(process.platform !== 'linux')('REVISE 2708: long inline-program options carry their operand like the separate-word form', () => {
+  it.each(LONG_FORMS)('%s → edit-authority', async command => {
+    expect(classify(command), command).toBe(true);
+    expect(await decide(command)).toBe('require-approval');
+    expect(await decide(command, ai)).toBe('deny');
+  });
+  it.each(LONG_ORDINARY)('%s stays card-free in full access', async command => {
+    expect(classify(command)).toBe(false);
+    expect(await decide(command)).toBe('allow');
+  });
+});

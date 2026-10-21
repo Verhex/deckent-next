@@ -41,11 +41,18 @@ const INLINE_INTERPRETER = (name: string) => (INTERPRETER_PROGRAMS.has(name) && 
 function inlinePrograms(words: readonly string[], at: number): readonly string[] {
   const name = programName(words[at]!), args = words.slice(at + 1), out: string[] = [];
   if (AWK_PROGRAMS.has(name)) { const program = args.find((arg, index) => !arg.startsWith('-') && !['-F', '-v', '-f'].includes(args[index - 1] ?? '')); return program ? [program] : []; }
-  args.forEach((arg, index) => {
-    if (INLINE_PROGRAM_FLAGS.has(arg) && args[index + 1] !== undefined) out.push(args[index + 1]!);
-    else if (/^-[ecrEpx]./u.test(arg) && !arg.startsWith('--')) out.push(arg.slice(2));
-  });
+  args.forEach((arg, index) => { const operand = inlineOperand(arg, args[index + 1]); if (operand !== null) out.push(operand); });
   return out;
+}
+/**
+ * Astra REVISE 2708: the ONE operand rule of every inline-program option — the separate word (`--eval CODE`, `-e CODE`), the long `--opt=CODE` and
+ * the attached short `-eCODE` are the same program. Null when the word is not an inline-program option.
+ */
+function inlineOperand(arg: string, next: string | undefined): string | null {
+  if (INLINE_PROGRAM_FLAGS.has(arg)) return next ?? null;
+  const equals = arg.indexOf('=');
+  if (arg.startsWith('--') && equals > 2) return INLINE_PROGRAM_FLAGS.has(arg.slice(0, equals)) ? arg.slice(equals + 1) : null;
+  return /^-[ecrEpx]./u.test(arg) && !arg.startsWith('--') ? arg.slice(2) : null;
 }
 /** Whether any interpreter in the stage (at the head, or after transparent prefixes) runs an inline program that names the product. */
 const inlineNamesProduct = (words: readonly string[]) => words.some((word, at) => (at === 0 || LAUNCHERS.has(programName(words[0]!))) && INLINE_INTERPRETER(programName(word))
