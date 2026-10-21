@@ -29,7 +29,28 @@ const UNDECODED = /\$['"]|\{[^{}]*(?:,|\.\.)[^{}]*\}/u;
 const GLOB = /[*?[]/u;
 /** A word another shell (or `expect`) may parse again: quotes, escapes, separators or blanks inside it. */
 const REPARSED = /[\s'"\\;&|<>()`$]/u;
-const tokenNames = (text: string) => text.split(/[\s;&|()<>]+/u).map(token => programName(token.replace(/['"\\]/gu, ''))).filter(Boolean);
+/** A redirection token (`3<>/dev/tcp/…`, `>&3`, `2>`, `<<<`); a bare operator also takes the next token as its target. */
+const REDIRECTION = /^\d*(?:<>|>>|>&|<&|&>|>\||<<<|<<|[<>])/u, BARE_REDIRECTION = /^\d*(?:<>|>>|>&|<&|&>|>\||<<<|<<|[<>])$/u;
+/** Reads its program from stdin when it has no non-option argument (`… | bash`, `… | sh -s`). */
+const readsProgramFromStdin = (name: string, args: readonly string[]) => INTERPRETER_PROGRAMS.has(name) && args.every(arg => arg.startsWith('-'));
+/**
+ * The undecodable fallback (the strict scanner refused the command): whether some command position really launches a program through a launcher —
+ * a launcher word followed by a program word (redirections removed: `exec 3<>/dev/tcp/…` only opens a descriptor, runs nothing), or a shell that
+ * reads its program from a pipe. Tokens are cut on the shell's separators; quotes and escapes are dropped from the head only to name it.
+ */
+function launchesProgram(command: string): boolean {
+  for (const list of command.split(/\|\||&&|[;&\n()]/u)) {
+    for (const [index, stage] of list.split('|').entries()) {
+      const tokens: string[] = [], raw = stage.trim().split(/\s+/u).filter(Boolean);
+      for (let at = 0; at < raw.length; at++) { if (REDIRECTION.test(raw[at]!)) { if (BARE_REDIRECTION.test(raw[at]!)) at++; continue; } tokens.push(raw[at]!); }
+      while (tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(tokens[0]!)) tokens.shift();
+      const name = tokens.length ? programName(tokens[0]!.replace(/['"\\]/gu, '')) : '';
+      if (!LAUNCHERS.has(name)) continue;
+      if (tokens.length > 1 || (index > 0 && readsProgramFromStdin(name, []))) return true;
+    }
+  }
+  return false;
+}
 /**
  * Astra REVISE 2702 P1-A: a stage run by the product or a launcher is decided on its decoded argv (the scanner's quote removal), and every argument
  * another shell may parse again (a `-c` string, `script -c`, `watch`, `expect -c`, …) is decoded the same way, recursively. Whatever the scanner
@@ -37,12 +58,14 @@ const tokenNames = (text: string) => text.split(/[\s;&|()<>]+/u).map(token => pr
  * past `PAYLOAD_DEPTH` — keeps the card when a launcher or the product runs it.
  */
 function runsAuthority(command: string, depth: number): boolean {
-  const scan = scanPosixCommand(command), launched = tokenNames(command).some(name => LAUNCHERS.has(name));
-  if (!scan.ok) return launched || names(command) || PTY_WORD.test(command);
-  for (const stage of scan.pipelines.flat()) {
+  const scan = scanPosixCommand(command);
+  if (!scan.ok) return launchesProgram(command) || names(command) || PTY_WORD.test(command);
+  for (const [index, stage] of scan.pipelines.flatMap(pipeline => pipeline.map((each, at) => [at, each] as const))) {
     const head = stage.words[0];
     if (!head || !LAUNCHERS.has(programName(head.text))) continue;
     const rest = stage.words.slice(1);
+    // A shell fed by a pipe runs whatever the pipe carries: never decoded here, the card stays.
+    if (index > 0 && readsProgramFromStdin(programName(head.text), rest.map(word => word.text))) return true;
     // `expect` runs Tcl, not a shell: its payload is never decoded here, so it always keeps the card.
     if (programName(head.text) === 'expect') return true;
     if (names(rest.map(word => word.text).join(' '))) return true;
