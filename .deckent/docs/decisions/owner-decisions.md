@@ -586,3 +586,25 @@ Kaynak: ana oturumdaki owner kararları (lead 4d4830b2). Kayıt yalnız owner'ı
 - **İş planı (kabul edildi):** (1) dokümantasyon şimdi güncellenir; owner: "dokümantasyonları güncelleyelim, eski dokümantasyonla ilerleyemeyiz". (2) alpha.51 = PRE-8 PROJE-ANAHTAR, PRE-9 SOLO-MOD-IZNI, PRE-10 OTURUM-MODEL-PIN, gelen kutusu düzeltmeleri ve alpha.50 takipleri. (3) Kanıt işleri paralel: N1 50 görev, temiz kurulum provası, test-ERP gözlemi, owner terminal denemesi. (4) 2026-10-28 Node 26 geçişi ve tam doğrulama, sonra beta adayı; owner sekiz beta koşulu üzerinde karar verir.
 - Takipler: [PLAN Gelen kutusu, alpha.50 takipleri](../../../PLAN.md) (a–e).
 - **İptal-etki doğruluğu (2026-10-21, alpha.51 hazırlığı):** onaylanmış ve bitmiş bir araç çağrısı tur iptalinde `cancelled` bildirilebiliyor, iptalle duran yazma kümesi kısmen uygulanmış kalabiliyor. Owner: "betadda düzelteceğiz diye not alalım bilinen sınırlara ekleyelim." alpha.51 bilinen sınırlara (EN/TR) yazıldı; düzeltme beta işi (PLAN Gelen kutusu IPTAL-ETKI-DOGRULUGU).
+
+<a id="pre8-secret-model-2026-10-21"></a>
+
+## Owner kararı — 2026-10-21: PRE-8 secret modeli (kapsam etiketli ad tasarımı reddedildi)
+
+Kaynak: ana oturum (lead 4d4830b2). Lead'in Jev (66678036, minimal_strict 0.97) ile seçtiği kapsam etiketli ad tasarımını owner reddetti:
+"Seçilen tasarım başarılı değil aslında her projenin kendi secret yolu olmalı bu projelerdeki secret yolu ana secret yolu tarafından denetlenmeli."
+Owner'ın modeli (özet; tam söz ana oturum kaydında):
+- Her projenin kendi secret yolu (proje kasası); proje secret'ları ana secret yolu (ana kasa) tarafından denetlenir.
+- Projede `.env` gibi bir `.deck` dosyası: proje ya ana kasadaki bir anahtara referans verir ("refleyerek") ya da kendi secret'ını yönetir;
+  kendi secret'ını yönettiğini yönetici bilir ("güvenlik ve eşitlemeyle sıkı takip").
+- Yönetici kimde hangi secret olduğunu görür (solo'da aynı kişi); `deckent monitor` gibi bir `deckent admin` genel yönetim paneli.
+- Yönetici o projede izin vermediyse proje `.deck`'te ana kasadaki anahtara referans verse bile kullanamaz.
+- Sorgulanabiliyorsa anahtarların son kullanma tarihleri izlenir; sorgulanamıyorsa sorun değil.
+- Solo, ekip ve kurumsal kusursuz ve kolay yönetilmeli; "çakışma olmamalı, çakışmanın ihtimali ve riski dahi olmamalı."
+- Owner sorusu: bu doğrulamanın hızı ve uygulanabilirliği denetlenebilir mi? Lead: evet, tasarım prototipte ölçülür.
+Owner seçimleri (AskUserQuestion, önerilenler): **Çekirdek önce** — beta öncesi: proje kasası, `.deck` referansları, kullanım anında yönetici izni
+kontrolü, "kimde hangi anahtar" listesi (CLI); betada: tam `deckent admin` paneli ve son kullanma takibi. **`.deck` yalnız referans** — değerler
+şifreli kasalarda, `.deck` git'e girebilir. **Solo izni ilk kullanımda kart** — terminalde tek onay kartı izni kaydeder ve audit'e yazar; AI onaylayamaz;
+ekip/kurumsalda izni yönetici verir.
+Plan: PLAN Sıradaki 18 (PRE-8 satırı bu modele göre).
+
