@@ -84,7 +84,7 @@ Setup / Maintenance:
       add | add-json | import | list | get | remove | approve | revoke
       [<name>] [--check] [--scope local|project|user]
   secret      Manage stored secrets (without an action: list)
-      list | set | delete | store
+      list | set | delete | grant | revoke | handover | store
       [<name>] [--scope <id>]
   toolchains  Check or update worker toolchains
       update

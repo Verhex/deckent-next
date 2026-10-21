@@ -77,10 +77,14 @@ it('an empty typed value is refused before the handler; the scope comes from --s
   const f = await project();
   const tty = (keys: readonly string[]) => { const stream = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stream; } }); setImmediate(() => { for (const key of keys) stream.write(key); }); return stream; };
   const calls: Call[] = [], err = capture();
-  expect(await main(['secret', 'set', 'A', '--scope', 's', '--json'], { root: f.root, env: f.env, stdin: tty(['\r']), stdout: screen().sink, stderr: err.sink, ...handlers(calls) })).toBe(2);
+  // PRE-8 v2: `set` names its vault; with --json there is no card, so no vault is a typed usage refusal before the value is read.
+  const noVault = capture();
+  expect(await main(['secret', 'set', 'A', '--scope', 's', '--json'], { root: f.root, env: f.env, stdin: tty([`${CANARY}\r`]), stdout: screen().sink, stderr: noVault.sink, ...handlers(calls) })).toBe(2);
+  expect(noVault.text()).toContain('SECRET_VAULT_REQUIRED'); expect(noVault.text()).not.toContain(CANARY);
+  expect(await main(['secret', 'set', 'A', '--main', '--scope', 's', '--json'], { root: f.root, env: f.env, stdin: tty(['\r']), stdout: screen().sink, stderr: err.sink, ...handlers(calls) })).toBe(2);
   expect(err.text()).toContain('SECRET_VALUE_INVALID');
   const noScope = capture();
-  expect(await main(['secret', 'set', 'A', '--json'], { root: f.root, env: f.env, stdin: tty([`${CANARY}\r`]), stdout: screen().sink, stderr: noScope.sink, ...handlers(calls) })).not.toBe(0);
+  expect(await main(['secret', 'set', 'A', '--main', '--json'], { root: f.root, env: f.env, stdin: tty([`${CANARY}\r`]), stdout: screen().sink, stderr: noScope.sink, ...handlers(calls) })).not.toBe(0);
   expect(noScope.text()).toMatch(/SCOPE_REQUIRED/u); expect(noScope.text()).not.toContain(CANARY);
   expect(calls).toEqual([]);
   expect(await main(['secret', 'delete', 'A', '--scope', 's', '--json'], { root: f.root, env: f.env, stdout: capture().sink, stderr: capture().sink, ...handlers(calls) })).toBe(0);
@@ -97,17 +101,43 @@ it('a terminal gets a no-echo prompt on stderr: raw mode on, backspace edits, En
   };
   const calls: Call[] = [], out = screen(), err = capture();
   const typed = tty(['sy', 'nX', '\x7f', 'th', '\r']);
-  expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'scope'], { root: f.root, env: f.env, stdin: typed, stdout: out.sink, stderr: err.sink, ...handlers(calls) })).toBe(0);
+  expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--main', '--scope', 'scope'], { root: f.root, env: f.env, stdin: typed, stdout: out.sink, stderr: err.sink, ...handlers(calls) })).toBe(0);
   expect(calls).toEqual([{ scopeId: 'scope', name: 'PROVIDER_TOKEN', value: 'synth' }]);
   expect(typed.modes).toEqual([true, false]);
   expect(err.text()).toContain('PROVIDER_TOKEN'); expect(out.text() + err.text()).not.toMatch(/syn|nX|th/u);
   // A pasted multi-byte character split across two reads is one character, not two replacement characters.
   const bytes = Buffer.from('şé', 'utf8'), split = tty([]);
   setImmediate(() => { split.write(bytes.subarray(0, 1)); split.write(bytes.subarray(1, 3)); split.write(bytes.subarray(3)); split.write('\r'); });
-  expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'scope'], { root: f.root, env: f.env, stdin: split, stdout: screen().sink, stderr: capture().sink, ...handlers(calls) })).toBe(0);
+  expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--main', '--scope', 'scope'], { root: f.root, env: f.env, stdin: split, stdout: screen().sink, stderr: capture().sink, ...handlers(calls) })).toBe(0);
   expect(calls.at(-1)).toEqual({ scopeId: 'scope', name: 'PROVIDER_TOKEN', value: 'şé' });
   const cancelled = tty(['abc', '\x03']), cancelErr = capture();
-  expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--scope', 'scope'], { root: f.root, env: f.env, stdin: cancelled, stdout: screen().sink, stderr: cancelErr.sink, ...handlers(calls) })).not.toBe(0);
+  expect(await main(['secret', 'set', 'PROVIDER_TOKEN', '--main', '--scope', 'scope'], { root: f.root, env: f.env, stdin: cancelled, stdout: screen().sink, stderr: cancelErr.sink, ...handlers(calls) })).not.toBe(0);
   expect(cancelled.modes).toEqual([true, false]); expect(calls).toHaveLength(2);
   expect(cancelErr.text()).toContain('SECRET_INPUT_CANCELLED'); expect(cancelErr.text()).not.toContain('abc');
+});
+
+it('PRE-8 v2: grant/revoke/handover need a person terminal before any handler; set --project goes to the project vault; list renders the one inventory', async () => {
+  const f = await project('scope'), seen: unknown[] = [];
+  const project_ = { setProjectSecret: async (_root: string, input: { scopeId: string; name: string; value: string | null }) => { seen.push({ project: input }); return { name: input.name, project: '/p', removed: false }; },
+    changeSecretGrant: async (_root: string, input: { scopeId: string; name: string; action: string }) => { seen.push({ grant: input }); return { name: input.name, project: '/p', granted: input.action === 'grant', revision: 1 }; },
+    handOverSecrets: async (_root: string, input: { scopeId: string }) => { seen.push({ handover: input }); return { project: '/p', handedOverAtMs: 1 }; },
+    inspectSecretInventory: async (_root: string, input: { scopeId: string; all: boolean }) => { seen.push({ list: input }); return { schemaVersion: 1 as const, project: '/p', mainStore: 'core.secret-store.env@1', all: input.all,
+      rows: [{ name: 'DECKENT_ANTHROPIC_KEY', vault: 'main' as const, project: '/p', usedBy: ['claude@1'], deck: 'undeclared' as const, grant: { state: 'none' as const }, presence: 'unverified' as const }],
+      findings: [{ kind: 'grant-required' as const, name: 'DECKENT_ANTHROPIC_KEY', project: '/p' }] }; } };
+  for (const argv of [['secret', 'grant', 'K', '--scope', 'scope'], ['secret', 'revoke', 'K', '--scope', 'scope'], ['secret', 'handover', '--scope', 'scope']]) {
+    const err = capture();
+    expect(await main(argv, { root: f.root, env: f.env, stdin: piped(''), stdout: capture().sink, stderr: err.sink, ...handlers([]), ...project_ }), argv.join(' ')).not.toBe(0);
+    expect(err.text(), argv.join(' ')).toContain('AUTHORITY_WITNESS_REQUIRED');
+  }
+  expect(seen).toEqual([]);
+  const tty = (keys: readonly string[]) => { const stream = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stream; } }); setImmediate(() => { for (const key of keys) stream.write(key); }); return stream; };
+  const granted = capture();
+  expect(await main(['secret', 'grant', 'K', '--scope', 'scope', '--json'], { root: f.root, env: f.env, stdin: tty([]), stdout: Object.assign(granted.sink, { isTTY: true }), stderr: capture().sink, ...handlers([]), ...project_ })).toBe(0);
+  expect(JSON.parse(granted.text())).toMatchObject({ name: 'K', granted: true });
+  expect(await main(['secret', 'set', 'OWN', '--project', '--scope', 'scope', '--json'], { root: f.root, env: f.env, stdin: tty([`${CANARY}\r`]), stdout: screen().sink, stderr: capture().sink, ...handlers([]), ...project_ })).toBe(0);
+  const listed = capture();
+  expect(await main(['secret', 'list'], { root: f.root, env: f.env, stdout: listed.sink, stderr: capture().sink, ...handlers([]), ...project_ })).toBe(0);
+  expect(listed.text()).toContain('DECKENT_ANTHROPIC_KEY'); expect(listed.text()).toContain('no grant');
+  expect(listed.text()).toContain('deckent secret grant DECKENT_ANTHROPIC_KEY --scope <scope>');
+  expect(seen).toEqual([{ grant: { scopeId: 'scope', name: 'K', action: 'grant' } }, { project: { scopeId: 'scope', name: 'OWN', value: CANARY } }, { list: { scopeId: 'scope', all: false } }]);
 });

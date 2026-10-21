@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { agentWorkspaceDeny, buildLandlockRules, createShellPathContext, createWorkspaceReadTools, createWorkspaceScope, landlockShellSandbox } from '#adapters/index.js';
 import { bubblewrapShellSandbox, resolveBubblewrapView } from '#adapters/core/shell-sandbox-bwrap/index.js';
+import { WORKER_TREE_DENY } from '#adapters/core/worker-tree-gate/index.js';
 import { classifyReadOnlyShellCommand } from '#engine/index.js';
 import { prepareProductFile, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
@@ -57,6 +58,18 @@ describe('agent workspace deny: the product state of a data root inside the proj
     expect((await tools.execute('read_file', { path: '.deckent/config.json' })).text).toContain('"layout"');
     expect((await tools.execute('read_file', { path: `${DATA}/notes.txt` })).text).toContain('ordinary data file');
     expect((await tools.execute('read_file', { path: 'src/a.ts' })).text).toContain('export const a = 1;');
+  });
+
+  it('PRE-8 v2: .deck is closed to the agent tools in every mode (it steers which vault a key comes from) but never refuses a worker tree', async () => {
+    const p = await project();
+    await writeFile(join(p.root, '.deck'), 'DECK_FORMAT=1\nOPENAI_API_KEY=project\n');
+    for (const deny of [p.deny, agentWorkspaceDeny(p.root, p.layout, true)]) {
+      const scope = await createWorkspaceScope(p.root, deny);
+      expect(scope.denied('.deck')).toBe(true); expect(scope.denied('.deck.4242.tmp')).toBe(true); expect(scope.denied('src/.deck')).toBe(false);
+    }
+    const tools = await createWorkspaceReadTools(p.root, { deny: p.deny });
+    expect((await tools.execute('read_file', { path: '.deck' })).text).toContain('error=path-denied');
+    expect(WORKER_TREE_DENY).not.toContain('.deck');
   });
 
   it('classifies a shell read of product state as protected without granting platform custody', async () => {

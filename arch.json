@@ -2012,7 +2012,8 @@
         "src/adapters/core/mcp-client",
         "src/platform/core/host",
         "src/platform/core/common",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/engine/core/secret-store"
       ],
       "plan": "SURFACES"
     },
@@ -2488,7 +2489,8 @@
         "src/adapters/core/audit-store",
         "src/engine/core/runtime",
         "src/engine/core/audit",
-        "src/composition/core/scoped-request"
+        "src/composition/core/scoped-request",
+        "src/domain/core/model-invocation"
       ],
       "plan": "SECURITY"
     },

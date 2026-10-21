@@ -3,6 +3,7 @@ import { commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policyR
 import { ErrorRegistry } from '#platform/index.js';
 import type { SecretGrantStore } from './grant.js';
 import { isSecretName } from './port.js';
+import { SECRET_STORE_SWITCH_RESOURCE_ID } from './switch.js';
 import type { ProjectVaultAnchor, SecretGrantFile } from './project.js';
 
 export interface SecretGrantRequest {
@@ -51,4 +52,9 @@ export async function decideSecretGrant(request: SecretGrantRequest, ports: Secr
     return request.action === 'revoke' ? others : [...others, { name, scopeId, by: { issuer: principal.issuer, subject: principal.subject }, atMs,
       source: request.source, decisionEventId: record.event.eventId }];
   });
+}
+/** `secret list --all` lists every project vault of the main vault (names only): the main vault's administration, the existing `secret`/`switch` cell. */
+export function authorizeSecretInventoryAll(policy: unknown, principal: VerifiedPrincipal, scopeId: string): void {
+  const verdict = evaluatePolicy(policy, { principal, scopeId, action: 'switch', resource: { kind: policyResources.secret.kind, id: SECRET_STORE_SWITCH_RESOURCE_ID } });
+  if (verdict.decision !== 'allow') throw ErrorRegistry.createError('SECRET_CHANGE_DENIED', { params: { action: 'switch', name: SECRET_STORE_SWITCH_RESOURCE_ID } });
 }

@@ -205,6 +205,10 @@ export const VERSION_FLAGS = new Set(['--version', '-v', '-V', 'version', '--v']
 
 export const PRIVILEGE_PROGRAMS = new Set(['sudo', 'doas', 'su', 'runas', 'pkexec']);
 export const INTERPRETER_PROGRAMS = new Set(['bash', 'sh', 'zsh', 'fish', 'dash', 'ksh', 'csh', 'tcsh', 'pwsh', 'powershell', 'cmd', 'node', 'nodejs', 'python', 'python2', 'python3', 'perl', 'ruby', 'php', 'lua', 'tclsh', 'osascript', 'deno', 'bun', 'irb', 'ipython']);
-export const EVAL_PROGRAMS = new Set(['eval', 'exec', 'source', '.', 'command', 'builtin', 'time', 'nice', 'nohup', 'timeout', 'watch', 'script', 'invoke-expression', 'iex', 'invoke-command', 'icm', 'start-process', 'saps', 'start', 'call']);
+export const EVAL_PROGRAMS = new Set(['eval', 'exec', 'source', '.', 'command', 'builtin', 'time', 'nice', 'nohup', 'timeout', 'watch', 'script', 'unbuffer', 'expect', 'invoke-expression', 'iex', 'invoke-command', 'icm', 'start-process', 'saps', 'start', 'call']);
 export const XARGS_PROGRAMS = new Set(['xargs', 'parallel', 'foreach-object', 'foreach', '%', 'where-object', 'where', '?']);
 export const TEE_PROGRAMS = new Set(['tee', 'tee-object', 'out-file', 'set-content', 'add-content', 'sc', 'ac']);
+/** PRE-8 v2 (law audit MAJOR 2): the product's own key-authority commands. A host-realm agent shell that names one always asks the person's card
+ * (a pty wrapper such as `script` asks too, so a forged terminal witness never runs unasked); the command itself still requires the terminal witness. */
+export const PRODUCT_AUTHORITY_COMMANDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = Object.freeze({
+  deckent: Object.freeze({ secret: Object.freeze(['grant', 'revoke', 'set', 'delete', 'handover', 'store']) }) });

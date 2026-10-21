@@ -150,6 +150,19 @@ it.each(['missing', 'backend-error'] as const)('keeps %s secret resolution failu
   expect(JSON.stringify(result)).not.toContain(secret); expect((await readFile(f.ledger)).includes(Buffer.from(secret))).toBe(false);
 });
 
+it('PRE-8 v2: an ungranted main key is the typed SECRET_GRANT_REQUIRED before any claim, metadata or provider request (headless callers too)', async () => {
+  const f = await fixture(), lookups: string[] = [];
+  const config = JSON.parse(await readFile(f.configPath, 'utf8'));
+  config.provider_invocation_profiles.profiles[0].adapter.definition.authentication.credentialRef = 'UNGRANTED_TOKEN';
+  await writeFile(f.configPath, JSON.stringify(config), { mode: 0o600 }); clearConfigCache();
+  const refusal = await invokeConfiguredModel(f.project, f.command('ungranted'), { env: f.env, async secretResolver(ref: string) { lookups.push(ref); return secret; } })
+    .catch((error: { code?: string; suggestion?: string }) => error);
+  expect(refusal).toMatchObject({ code: 'SECRET_GRANT_REQUIRED' });
+  expect((refusal as { suggestion?: string }).suggestion).toContain('deckent secret grant UNGRANTED_TOKEN --scope scope');
+  expect(lookups).toEqual([]); expect(f.headers).toEqual([]); expect(f.metadataHeaders).toEqual([]);
+  expect((await readFile(f.ledger)).includes(Buffer.from('ungranted'))).toBe(false);
+});
+
 it('SECRET-K1: with the file backend selected, the provider credential comes from the store, reaches the provider, and stays out of the ledger', async () => {
   const f = await fixture();
   const { resolveGlobalConfigPaths } = await import('#platform/index.js');

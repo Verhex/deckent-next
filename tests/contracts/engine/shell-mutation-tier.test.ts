@@ -31,6 +31,16 @@ async function workspace() {
 }
 
 describe.skipIf(process.platform !== 'linux')('narrow mutating shell tier (T-L4 slice 4a)', () => {
+  it('PRE-8 v2: the product key-authority commands and pty wrappers are the always-ask floor (a host-realm agent never runs them unasked)', async () => {
+    const { tier } = await workspace();
+    for (const command of ['deckent secret grant DECKENT_ANTHROPIC_KEY --scope s', 'deckent secret set OPENAI_API_KEY --project', 'deckent secret revoke K',
+      'deckent secret handover', 'deckent secret delete K', 'deckent secret store use x', 'ls && deckent secret grant K', '/usr/local/bin/deckent secret grant K',
+      'script -qc "deckent secret grant K"', 'unbuffer deckent secret grant K', 'expect -c spawn']) {
+      expect({ command, ...(await tier(command)) }, command).toMatchObject({ command, mutation: { tier: 'always-ask' }, tier: 'always-ask' });
+    }
+    expect((await tier('deckent secret list')).mutation.tier).not.toBe('always-ask');
+  });
+
   it('recognizes mkdir, touch, cp and mv on checked workspace paths', async () => {
     const { tier } = await workspace();
     for (const command of ['touch new.txt', 'touch src/a.ts', 'touch -c src/b.ts', 'mkdir build', 'mkdir -p out/sub', 'cp src/a.ts copy.ts', 'cp -n src/a.ts out/a.ts',

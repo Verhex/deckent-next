@@ -33,7 +33,7 @@ import { assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat
 import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand, inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { verifyConfiguredAudit, rebaselineConfiguredAudit } from '#composition/core/audit/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
-import { inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores } from '#composition/core/secrets/index.js';
+import { changeProjectSecretGrant, handOverProjectSecrets, inspectConfiguredSecretInventory, inspectConfiguredSecretStore, listConfiguredSecretNames, listConfiguredSecretStores, setProjectSecret } from '#composition/core/secrets/index.js';
 
 /** The call's settings the light entry resolved before any host module loaded. */
 export type CliHostBase = { readonly root: string; readonly locale: Locale; readonly signal: AbortSignal } & Pick<NonNullable<Parameters<typeof runCli>[1]>, 'agentEnvironment'>;
@@ -90,6 +90,11 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
       return (await readProviderConnectSeed(seed)).providers.flatMap(provider => provider.models.map(model => ({ nativeId: model.nativeId,
         displayName: (model as { displayName?: string }).displayName ?? model.nativeId, priced: providerConnectModelPriced(kind, model.nativeId) }))); } },
     deleteSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).deleteSecret(input),
+    // PRE-8 v2: the inventory, grants, project-vault changes and the handover run in this process at the person's witnessed terminal (no protocol op).
+    inspectSecretInventory: (projectRoot, input, options) => inspectConfiguredSecretInventory(projectRoot, input.scopeId, input.all, options).catch(error => { throw queryFailure(error); }),
+    changeSecretGrant: (projectRoot, input, options) => changeProjectSecretGrant(projectRoot, input.scopeId, input.name, input.action, 'admin', options).catch(error => { throw queryFailure(error); }),
+    setProjectSecret: (projectRoot, input, options) => setProjectSecret(projectRoot, input.scopeId, input.name, input.value, options).catch(error => { throw queryFailure(error); }),
+    handOverSecrets: (projectRoot, input, options) => handOverProjectSecrets(projectRoot, input.scopeId, options).catch(error => { throw queryFailure(error); }),
     listSecretStores: listConfiguredSecretStores,
     switchSecretStore: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).switchSecretStore(input),
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, initializeNativeCodingRegistry,
