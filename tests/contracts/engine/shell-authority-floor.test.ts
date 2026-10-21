@@ -37,7 +37,7 @@ const AUTHORITY = ['deckent secret grant DECKENT_ANTHROPIC_KEY --scope s --json'
   'script -qc "deckent secret grant K --scope s --json" /dev/null', "script -qc 'deckent approval decide x approve'", 'unbuffer deckent secret set K --main',
   "expect -c 'spawn deckent secret grant K'", 'bash -c "deckent secret grant K"', 'sh -c "script -qc \\"deckent secret grant K\\" /dev/null"',
   'script -qc "$CMD" /dev/null', 'unbuffer $TOOL', 'node dist/composition/core/cli/internal/entry.js secret grant K --scope s', 'npx deckent secret grant K'];
-const ORDINARY = ['script -qc "npm test" /dev/null', 'git commit -m "secret set later"', 'echo deckent secret grant', 'deckent secret list', 'deckent init policy --preview',
+const ORDINARY = ['npx prettier --check src/*.ts', 'script -qc "npm test" /dev/null', 'git commit -m "secret set later"', 'echo deckent secret grant', 'deckent secret list', 'deckent init policy --preview',
   'bash -c "npm run build"', 'unbuffer npm test'];
 
 describe.skipIf(process.platform !== 'linux')('PRE-8 authority commands are the edit-authority floor in every mode', () => {
@@ -48,5 +48,25 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 authority commands are the 
   it.each(ORDINARY)('ordinary full-access work is unchanged: %s', async command => {
     expect(classify(command)).toBe(false);
     expect(await decide(command)).toBe('allow');
+  });
+});
+
+// Astra REVISE 2702 P1-A: a wrapper's shell payload is decoded like the inner shell decodes it (quote removal, escapes, ANSI-C quoting, brace
+// expansion); a payload that cannot be decoded safely (expansion, substitution) keeps the card. Every authority command, every variant.
+const AUTHORITY_ARGV: readonly (readonly [string, string, string])[] = [['secret', 'grant', 'K --scope s --json'], ['secret', 'set', 'K --main'], ['secret', 'delete', 'K'],
+  ['approval', 'decide', 'x approve'], ['init', 'policy', '--upgrade --apply'], ['init', 'policy', '--modes']];
+const split = (word: string) => [word.slice(0, 2), word.slice(2)] as const;
+const QUOTED = AUTHORITY_ARGV.flatMap(([group, action, rest]) => {
+  const [g1, g2] = split(group), [a1, a2] = split(action);
+  return [`script -qc 'deckent ${g1}""${g2} ${a1}""${a2} ${rest}' /dev/null`, `script -qc "deckent ${g1}''${g2} ${action} ${rest}" /dev/null`,
+    `script -qc 'deckent ${g1}\\${g2} ${action} ${rest}' /dev/null`, `bash -c "deckent \\$'${group}' ${action} ${rest}"`, `sh -c 'deckent $G ${action} ${rest}'`,
+    `sh -c 'deckent $(printf ${group}) ${action} ${rest}'`, `deckent ${g1}$'${g2}' ${action} ${rest}`, `deckent {${group},} ${action} ${rest}`,
+    `unbuffer bash -c 'deckent ${g1}""${g2} ${action} ${rest}'`, `deckent ${g1}*${g2.slice(-1)} ${action} ${rest}`, `expect -c 'spawn deckent ${g1}""${g2} ${action} ${rest}'`];
+});
+describe.skipIf(process.platform !== 'linux')('REVISE 2702 P1-A: quoted and undecodable payloads of the authority commands keep the card', () => {
+  it.each(QUOTED)('%s → edit-authority (person asked, AI denied)', async command => {
+    expect(classify(command), command).toBe(true);
+    expect(await decide(command)).toBe('require-approval');
+    expect(await decide(command, ai)).toBe('deny');
   });
 });
