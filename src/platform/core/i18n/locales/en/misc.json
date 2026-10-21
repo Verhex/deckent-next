@@ -631,6 +631,7 @@
   "cli.runtime.preflightUnlisted": "Deckent could not list its environment-probe containers at start (Docker did not answer); a probe left by an earlier run may still be running. It is removed before that probe runs again.",
   "cli.runtime.preflightReleased": "{count} task slot(s) held by an unproven environment probe were released: the probe is proven removed.",
   "cli.runtime.preflightHeld": "Environment probes still not proven removed: {probes}. Their tasks keep their pool slots (no new work takes them); Deckent proves them again at every service start; a progression turn of their Run does so only when one runs (ordinary progression skips Runs parked for the environment or cancelled).",
+  "cli.runtime.preflightSettlementFailed": "Environment probes {probes} are proven removed, but releasing their task slot in the ledger failed ({code}); the slot stays held and Deckent releases it at the next service start.",
   "config.field.approvals": "Approval and live session settings",
   "mcp.tool.listApprovals": "List scoped approval requests.",
   "mcp.tool.inspectApproval": "Inspect one approval and its evidence.",

@@ -238,6 +238,10 @@ it('REVISE 2695: A cancelled during a probe that then meets ends cancelled: no h
     expect(await readdir(f.workspaces)).toEqual([]); expect(await preflightContainers(probe)).toBe('');
     const run = (await f.store.loadRun('s', 'r'))!;
     expect(run.progress[0]).toMatchObject({ phase: 'cancelled', unresolvedEffects: false }); expect(run.state).toMatchObject({ kind: 'terminal', reason: 'cancelled' });
+    // PRE7FU (c): `run inspect` (the CLI path) says no worker was started, not that its termination is unconfirmed.
+    const output: string[] = [];
+    await runCommand(['run', 'inspect', '--scope', 's', '--id', 'r', '--lang', 'en'], { root: f.project, env: f.options.env, stdout: { write(text: string) { output.push(text); } }, inspectRun: inspectConfiguredRun });
+    expect(output.join('')).toContain('no worker was started for the cancelled work'); expect(output.join('')).not.toContain('worker termination is not confirmed');
     await expect(reserveB()).resolves.toBeTruthy();
   } finally { gate.resolve(); await running?.catch(() => undefined); f.store.close(); }
 }, 120_000);
@@ -348,6 +352,39 @@ it('REVISE 2698: two uncertain (2693) holds of one Run are both released by one 
     expect(replay.commandId).toBe(`settle-probe-${y!.attemptId}-${listed[1]!.runRevision}`); expect((await f.store.loadRun('s', 'm'))!.revision).toBe(revision);
     expect(await settleConfiguredEnvironmentProbes(f.project, { scopeId: 's', runId: 'm' }, f.options)).toEqual({ released: 0, held: [] });
     expect((await f.store.loadRun('s', 'm'))!.progress.map(task => [task.phase, task.unresolvedEffects])).toEqual([['pending', false], ['pending', false]]);
+  } finally { f.store.close(); }
+}, 120_000);
+
+// alpha.51 PRE7FU (b), Astra 2700 P2: a settlement that fails in the ledger is reported with its own cause (not "removal unproven") and never
+// stops the other holds; a hold whose identity, probe set or kind no longer matches the ledger is refused and moves nothing.
+it('PRE7FU: an injected store rejection is reported as a settlement failure with its code (held stays removal-only); the other hold is released; the next start releases it', async context => {
+  const f = await fixture(context, REQUIREMENTS, 2);
+  try {
+    const [x, y] = await multiRun(f, 'm', ['x', 'y']); await mkdir(f.workspaces, { recursive: true });
+    await f.store.holdEnvironmentProbes(x!, [probeName('7')]); await f.store.holdEnvironmentProbes(y!, [probeName('8')]);
+    const { RunStoreError } = await import('#engine/index.js'), prototype = Object.getPrototypeOf(f.store) as { settleEnvironmentProbe: (...args: unknown[]) => Promise<unknown> };
+    const settle = vi.spyOn(prototype, 'settleEnvironmentProbe').mockRejectedValueOnce(new RunStoreError('RUN_STORE_CONFLICT'));
+    expect(await releaseConfiguredPreflightProbes(f.project, f.options)).toMatchObject({ released: 1, held: [], settlementFailed: [{ probes: [probeName('7')], code: 'RUN_STORE_CONFLICT' }] });
+    expect(settle).toHaveBeenCalledTimes(2); settle.mockRestore();
+    expect((await f.store.loadRun('s', 'm'))!.progress.map(task => task.unresolvedEffects)).toEqual([true, false]);
+    const next = await releaseConfiguredPreflightProbes(f.project, f.options);
+    expect(next).toMatchObject({ released: 1, held: [] }); expect(next).not.toHaveProperty('settlementFailed');
+  } finally { f.store.close(); }
+}, 120_000);
+
+it('PRE7FU: a listed hold whose probe set, kind or identity no longer matches is refused (RUN_STORE_CONFLICT) and moves nothing; the exact hold then settles once', async context => {
+  const f = await fixture(context, REQUIREMENTS, 2);
+  try {
+    const [x, y] = await multiRun(f, 'm', ['x', 'y']);
+    await f.store.holdEnvironmentProbes(x!, [probeName('9')]);
+    const [hold] = await f.store.environmentProbeHolds(), revision = (await f.store.loadRun('s', 'm'))!.revision;
+    for (const stale of [{ ...hold!, probes: [probeName('a')] }, { ...hold!, probing: false }, { ...hold!, identity: y! }]) {
+      await expect(f.store.settleEnvironmentProbe(stale)).rejects.toMatchObject({ code: 'RUN_STORE_CONFLICT' });
+      expect((await f.store.loadRun('s', 'm'))!.revision).toBe(revision);
+    }
+    expect((await f.store.settleEnvironmentProbe(hold!)).snapshot.revision).toBe(revision + 1);
+    expect((await f.store.loadRun('s', 'm'))!.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: false });
+    expect(await f.store.environmentProbeHolds()).toEqual([]);
   } finally { f.store.close(); }
 }, 120_000);
 

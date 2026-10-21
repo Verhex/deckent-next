@@ -71,6 +71,13 @@ function taskLines(run: RunView, task: TaskView, models: InspectData['models'], 
  * lines, full attempt ids, every secret-gate path) are `--verbose`. Worker-written text (question, model names, notes, paths) reaches the
  * terminal only through `terminalSafeText` (SEC-5S F35).
  */
+/** PRE7FU (c): every cancelled task of this Run stopped before launch (no worker was started: never dispatched, no quota-exhausted attempt behind
+ * it) and nothing is in flight or unresolved; otherwise worker termination stays "not confirmed". From the recorded view only. */
+function cancelledBeforeLaunch(run: RunView): boolean {
+  const waiting = new Set((run.quotaWaits ?? []).map(wait => wait.taskId));
+  return run.tasks.some(task => task.phase === 'cancelled') && run.tasks.every(task => !task.unresolvedEffects && !['active', 'evaluating', 'reconciling'].includes(task.phase)
+    && (task.phase !== 'cancelled' || (task.cancellation?.reason === 'prevented-before-launch' && !waiting.has(task.id))));
+}
 export function renderRunInspect(data: InspectData, locale: Locale, verbose: boolean, notice: readonly string[] = []): string {
   const run = data.run;
   if (!run) return '';
@@ -91,7 +98,7 @@ export function renderRunInspect(data: InspectData, locale: Locale, verbose: boo
     ...(run.state.kind === 'parked' && run.state.failureCode === 'DISPATCH_PREPARATION_ABORTED' ? [t('error.DISPATCH_PREPARATION_ABORTED.summary', {}, locale)] : []),
     ...(run.state.kind === 'parked' && run.state.note ? [t('cli.run.lifecycle.note', { note: run.state.note }, locale)] : []),
     ...(run.pool ? [...run.pool.drift.map(drift => poolDriftLine(drift, locale)), ...run.pool.waiting.map(wait => poolWaitLine(wait.taskId, wait.reason, locale))] : []),
-    run.cancellationRequested ? t('cli.run.inspect.cancelRequested', {}, locale) : t('cli.run.inspect.cancelAbsent', {}, locale),
+    !run.cancellationRequested ? t('cli.run.inspect.cancelAbsent', {}, locale) : cancelledBeforeLaunch(run) ? t('cli.run.inspect.cancelNoWorker', {}, locale) : t('cli.run.inspect.cancelRequested', {}, locale),
     ...(run.graphSummary ? renderGraphSummaryLines(run.graphSummary, locale).map(line => `  ${line}`) : []),
     ...run.tasks.flatMap(task => taskLines(run, task, data.models, locale, verbose)),
     ...(verbose ? [

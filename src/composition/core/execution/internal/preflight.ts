@@ -28,13 +28,16 @@ async function settleProbeHolds({ config, settings }: NonNullable<Awaited<Return
   const store = await openSqliteAttemptStore(await prepareProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']), config.storage.sqlite,
     { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid');
   try {
-    let released = 0; const held: string[] = [];
+    let released = 0; const held: string[] = [], settlementFailed: { probes: readonly string[]; code?: string }[] = [];
     for (const hold of await store.environmentProbeHolds(filter)) {
       // REVISE 2695: a custody hold (start only) covers several probes; it releases once every one of them is proven removed.
       const unproven: string[] = []; for (const probe of hold.probes) if (!await DockerSupervisor.removePreflightProbe(settings, probe)) unproven.push(probe);
-      // REVISE 2698: a hold that fails to settle (conflict, store error) is reported held; it never stops the other holds or later Runs.
-      if (unproven.length) held.push(...unproven); else if (await store.settleEnvironmentProbe(hold).then(() => true, () => false)) released++; else held.push(...hold.probes);
+      // REVISE 2698 / PRE7FU: a hold whose ledger release fails (conflict, store error) is reported with that cause and its typed code, never as
+      // an unproven removal; it never stops the other holds or later Runs.
+      if (unproven.length) { held.push(...unproven); continue; }
+      const failure = await store.settleEnvironmentProbe(hold).then(() => null, (error: unknown) => ({ probes: hold.probes, ...(typeof (error as { code?: unknown })?.code === 'string' ? { code: (error as { code: string }).code } : {}) }));
+      if (failure) settlementFailed.push(failure); else released++;
     }
-    return { released, held };
+    return { released, held, ...(settlementFailed.length ? { settlementFailed } : {}) };
   } finally { store.close(); }
 }
