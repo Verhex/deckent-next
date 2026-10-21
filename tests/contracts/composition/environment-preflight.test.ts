@@ -28,7 +28,7 @@ const preflightContainers = async (probe: { mock: { contexts: unknown[]; calls: 
   return (await Promise.all(handles.map(async handle => (await exec('/usr/bin/docker', ['ps', '-aq', '--filter', `name=${handle}-env-`])).stdout.trim()))).join('');
 };
 
-async function fixture(context: TestContext, environment: object) {
+async function fixture(context: TestContext, environment: object, slots = 1) {
   if (process.platform !== 'linux' || !dockerImage) context.skip('Docker execution and the private ledger are Linux-only here; needs DECKENT_TEST_DOCKER_IMAGE');
   const root = await mkdtemp(join(tmpdir(), 'environment-preflight-')); roots.push(root);
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
@@ -42,10 +42,10 @@ async function fixture(context: TestContext, environment: object) {
   Object.assign(parameters, { imageId: dockerImage, argv: ['node', '-e', "process.stdout.write(require('node:fs').readFileSync('/workspace/README.md','utf8'))"] });
   const { argv: _argv, ...docker } = parameters; void _argv;
   Object.assign(parameters, { readOnlyMounts: [{ source: 'deps', target: '/deps' }], environment });
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, cancellation: { maxAttempts: 3, retryDelayMs: 100, claimTtlMs: 1000, maxConcurrentDeliveries: 1, recoveryPageSize: 10 }, admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1,
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, cancellation: { maxAttempts: 3, retryDelayMs: 100, claimTtlMs: 1000, maxConcurrentDeliveries: 1, recoveryPageSize: 10 }, admission: { poolId: 'p', executionSlots: slots, inFlightSlots: slots,
     ordering: 'input-order', registry }, execution: { docker: { executable: '/usr/bin/docker', ...docker }, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } }));
   const opened = await openConfiguredAttemptStore(project, options), store = opened.store;
-  await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
+  await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: slots, inFlightSlots: slots } });
   const principal = { ...readLocalOsIdentity(), scopeIds: ['s'] }, principals = [{ issuer: principal.issuer, subject: principal.subject }];
   await writeFile(productResourcePath(opened.layout, 'policy'), JSON.stringify({ schemaVersion: 1, revision: 'fixture', restrictions: [], grants: [
     { id: 'run', effect: 'allow', actions: ['create', 'reserve', 'inspect', 'cancel'], scopes: ['s'], principals, resource: { kind: 'run', ids: 'all' } },
@@ -292,6 +292,62 @@ it('REVISE 2695: a probe failure that is not an answer is never "gone" by itself
       expect(run.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: false }); expect(run.bindings[0]).not.toHaveProperty('probes');
       expect((await other.store.load('s', second.attemptId))!.lastObservation).toBeNull();
     } finally { other.store.close(); }
+  } finally { f.store.close(); }
+}, 120_000);
+
+// REVISE 2698 (Astra REVIEW2697 F1): several holds of one Run settle in ONE pass, each against the Run's current revision with its exact
+// identity and probe set re-checked in the transaction; one unproven (or conflicting) hold never stops the others or a later Run.
+const multiRun = async (f: Awaited<ReturnType<typeof fixture>>, runId: string, tasks: readonly string[]) => {
+  const graph = { schemaVersion: 4 as const, revision: 1, tasks: tasks.map(id => ({ id, kind: 'fixture', dependencies: [], acceptanceCriteria: ['exit'] })),
+    criterionDefinitions: [{ id: 'exit', version: 1, description: 'zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
+  await createConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId, commandId: 'create-' + runId, graph }, f.options);
+  return (await reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId, commandId: 'reserve-' + runId, expectedRevision: 0 }, f.options)).reservation.identities;
+};
+const probeName = (seed: string) => 'deckent-env-' + seed.repeat(64).slice(0, 64);
+
+it('REVISE 2698: several custody holds of one Run (and a later Run) are all released in one start; an unproven one stays held while the others are released; replays release nothing twice', async context => {
+  const f = await fixture(context, REQUIREMENTS, 4);
+  try {
+    const [x, y, z] = await multiRun(f, 'm', ['x', 'y', 'z']), [w] = await multiRun(f, 'n', ['w']);
+    expect([x, y, z, w].every(Boolean)).toBe(true);
+    const names = new Map([[x!, probeName('1')], [y!, probeName('2')], [z!, probeName('3')], [w!, probeName('4')]]);
+    // A controller creates the workspaces directory before it writes custody (task.ts); here custody is written directly.
+    await mkdir(f.workspaces, { recursive: true });
+    const hold = async () => { for (const [identity, name] of names) await f.store.holdEnvironmentProbes(identity, [name]); };
+    const tasks = async (runId: string) => (await f.store.loadRun('s', runId))!.progress.map(task => [task.taskId, task.phase, task.unresolvedEffects]);
+    // Controllers gone with four probes in flight (three in one Run): one start proves every name removed and releases all four, once.
+    await hold();
+    expect(await releaseConfiguredPreflightProbes(f.project, f.options)).toMatchObject({ released: 4, held: [] });
+    expect(await releaseConfiguredPreflightProbes(f.project, f.options)).toMatchObject({ released: 0, held: [] });
+    expect([...await tasks('m'), ...await tasks('n')]).toEqual([['x', 'active', false], ['y', 'active', false], ['z', 'active', false], ['w', 'active', false]]);
+    // Again, with y's removal unproven: x and z (same Run, before and after y) and w (later Run) are released; y alone stays held.
+    await hold();
+    const original = DockerSupervisor.removePreflightProbe;
+    vi.spyOn(DockerSupervisor, 'removePreflightProbe').mockImplementation((settings, name, runner) => name === names.get(y!) ? Promise.resolve(false) : original(settings, name, runner));
+    expect(await releaseConfiguredPreflightProbes(f.project, f.options)).toMatchObject({ released: 3, held: [names.get(y!)] });
+    expect([...await tasks('m'), ...await tasks('n')]).toEqual([['x', 'active', false], ['y', 'active', true], ['z', 'active', false], ['w', 'active', false]]);
+    vi.mocked(DockerSupervisor.removePreflightProbe).mockRestore();
+    expect(await releaseConfiguredPreflightProbes(f.project, f.options)).toMatchObject({ released: 1, held: [] });
+    expect(await releaseConfiguredPreflightProbes(f.project, f.options)).toMatchObject({ released: 0, held: [] });
+    expect(await tasks('m')).toEqual([['x', 'active', false], ['y', 'active', false], ['z', 'active', false]]);
+  } finally { f.store.close(); }
+}, 120_000);
+
+it('REVISE 2698: two uncertain (2693) holds of one Run are both released by one proven check; a second check releases nothing', async context => {
+  const f = await fixture(context, REQUIREMENTS, 2);
+  try {
+    const [x, y] = await multiRun(f, 'm', ['x', 'y']);
+    vi.spyOn(DockerSupervisor.prototype, 'probe').mockResolvedValueOnce({ uncertain: probeName('5') }).mockResolvedValueOnce({ uncertain: probeName('6') });
+    for (const identity of [x!, y!]) await expect(executeConfiguredTask(f.project, identity, f.options)).rejects.toMatchObject({ code: 'EXECUTION_ENVIRONMENT_UNCERTAIN' });
+    expect((await f.store.loadRun('s', 'm'))!.progress.map(task => task.unresolvedEffects)).toEqual([true, true]);
+    const listed = await f.store.environmentProbeHolds({ scopeId: 's', runId: 'm' });
+    expect(listed.map(hold => hold.runRevision)).toEqual([listed[0]!.runRevision, listed[0]!.runRevision]);
+    expect(await settleConfiguredEnvironmentProbes(f.project, { scopeId: 's', runId: 'm' }, f.options)).toEqual({ released: 2, held: [] });
+    // A replay of a listed hold returns its receipt: nothing is released twice and the Run revision does not move.
+    const revision = (await f.store.loadRun('s', 'm'))!.revision, replay = await f.store.settleEnvironmentProbe(listed[1]!);
+    expect(replay.commandId).toBe(`settle-probe-${y!.attemptId}-${listed[1]!.runRevision}`); expect((await f.store.loadRun('s', 'm'))!.revision).toBe(revision);
+    expect(await settleConfiguredEnvironmentProbes(f.project, { scopeId: 's', runId: 'm' }, f.options)).toEqual({ released: 0, held: [] });
+    expect((await f.store.loadRun('s', 'm'))!.progress.map(task => [task.phase, task.unresolvedEffects])).toEqual([['pending', false], ['pending', false]]);
   } finally { f.store.close(); }
 }, 120_000);
 

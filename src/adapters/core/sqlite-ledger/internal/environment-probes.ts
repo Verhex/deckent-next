@@ -50,14 +50,16 @@ export function releaseEnvironmentProbeCustody(db: DatabaseSync, identityInput: 
   });
 }
 /** REVISE 2693: the one release of a hold, after the adapter proved that probe container gone. CAS on the Run revision; a replay of the same
- * command returns its receipt; the attempt must name exactly this probe. */
+ * command (attempt + listed revision) returns its receipt; the current Run must still hold exactly this hold. */
 export function commitEnvironmentProbeSettlement(db: DatabaseSync, hold: EnvironmentProbeHold, timing: Readonly<{ now: () => number; timeoutMs: number }>): RunReceipt {
   const { scopeId } = hold.identity, commandId = `settle-probe-${hold.identity.attemptId}-${hold.runRevision}`, command = JSON.stringify({ action: 'settle-environment-probe', ...hold });
   return ledgerTransaction(db, () => {
     const prior = db.prepare('SELECT command,snapshot FROM run_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
     if (prior) { if (prior.command !== command) throw new RunStoreError('RUN_COMMAND_CONFLICT'); return Object.freeze({ commandId, command, snapshot: decode(prior.snapshot) }); }
+    // REVISE 2698: against the Run's CURRENT revision (another hold of the same Run may have settled since the listing), with this exact hold
+    // (identity, probe set, kind) re-checked in this transaction; the update below stays a CAS on that revision.
     const { revision, run } = currentRun(db, hold.identity), attempt = attemptOf(db, hold.identity);
-    if (revision !== hold.runRevision || !attempt || !holdsOf(db, run).some(value => value.probing === hold.probing && JSON.stringify(value.probes) === JSON.stringify(hold.probes) && sameAttemptIdentity(value.identity, hold.identity))) throw new RunStoreError('RUN_STORE_CONFLICT');
+    if (revision < hold.runRevision || !attempt || !holdsOf(db, run).some(value => value.probing === hold.probing && JSON.stringify(value.probes) === JSON.stringify(hold.probes) && sameAttemptIdentity(value.identity, hold.identity))) throw new RunStoreError('RUN_STORE_CONFLICT');
     // REVISE 2695: a custody (controller gone at a start) clears like the controller's own release; a 2693 uncertain hold settles as before.
     const snapshot = writeRun(db, revision, hold.probing ? releaseEnvironmentProbes(run, revision, attempt, timing.now(), timing.timeoutMs) : settleEnvironmentProbe(run, revision, hold.identity, timing.now(), timing.timeoutMs));
     db.prepare('INSERT INTO run_receipts(scope_id,command_id,command,snapshot) VALUES(?,?,?,?)').run(scopeId, commandId, command, JSON.stringify(snapshot));
