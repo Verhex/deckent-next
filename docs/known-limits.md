@@ -208,11 +208,11 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   a grant per project (a card on a solo terminal, or `deckent secret grant NAME --scope S`). *Limits:* rolling back to alpha.50 lifts
   the grant floor (the old binary uses main-vault keys as before and does not see project-vault keys). Native macOS and Windows have
   no terminal witness: no first-use card, and `secret grant` is refused there (a Linux terminal or an admin grants). The first-use key
-  card appears only in the streamed terminal on Linux, at the person's own terminal on a solo installation; a pty wrapper started
-  from a host-realm agent shell is attested like a human terminal (same evidence as `approval decide`). An agent's own authority
-  commands ask a person's card in every mode, full access included, but a script file the agent writes and then runs in a full-access
-  host realm cannot be read by the classifier (the same-user limit, like reading the key files). Worktrees of a bare repository each
-  get their own project vault (no main working tree to share). `.deck` is closed to agent tools but does not stop a worker.
+  card appears only in the streamed terminal on Linux, at the person's own terminal on a solo installation. Agent turns never escape
+  this: a full-access agent turn runs only in a real open sandbox (the host realm is refused there) where the vaults are out of reach,
+  and an agent's own authority commands ask a person's card in every mode. The remaining limit is outside agent turns: on the person's
+  own account, any same-user process with a terminal (a pty wrapper such as `script` included) passes the same terminal witness as
+  `approval decide`. Worktrees of a bare repository each get their own project vault (no main working tree to share). `.deck` is closed to agent tools but does not stop a worker.
 - **A customer config key whose name contains secret, token or password and whose value looks like a literal is still refused**, even
   when the value is a secret NAME reference (for example `"secretName": "DB_PASS"`). *Workaround:* rename the key or acknowledge the path.
 

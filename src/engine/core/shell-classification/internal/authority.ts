@@ -1,11 +1,15 @@
 import { scanPosixCommand } from './scanner.js';
-import { EVAL_PROGRAMS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PRODUCT_AUTHORITY_COMMANDS, PROGRAM_ALIASES, PTY_WRAPPER_PROGRAMS, XARGS_PROGRAMS } from './programs.js';
+import { EVAL_PROGRAMS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PRODUCT_AUTHORITY_COMMANDS, PROGRAM_ALIASES, PTY_WRAPPER_PROGRAMS, TRANSPARENT_PROGRAMS, XARGS_PROGRAMS } from './programs.js';
 import { PACKAGE_PROGRAMS } from './mutation.js';
 
 /** The product's authority subcommands as they appear in any command text (the program may be `deckent`, a path to it, `node …/entry.js` or `npx`). */
 const AUTHORITY_TEXT: readonly RegExp[] = [/\bsecret\s+(?:grant|revoke|set|delete|handover|store)\b/u, /\bapproval\s+decide\b/u, /\binit\s+policy\b[^;&|\n]*?\s--(?:apply|modes)\b/u];
 const LAUNCHERS = new Set([...Object.keys(PRODUCT_AUTHORITY_COMMANDS), ...INTERPRETER_PROGRAMS, ...EVAL_PROGRAMS, ...PTY_WRAPPER_PROGRAMS, ...XARGS_PROGRAMS,
-  ...PACKAGE_PROGRAMS, ...PRIVILEGE_PROGRAMS]);
+  ...PACKAGE_PROGRAMS, ...PRIVILEGE_PROGRAMS, ...TRANSPARENT_PROGRAMS]);
+/** A prefix that hands its stdin to a later program word (`… | command bash`, `env -u X bash < f`). */
+const HANDS_ON = new Set([...TRANSPARENT_PROGRAMS, ...PRIVILEGE_PROGRAMS, ...EVAL_PROGRAMS]);
+/** Whether some later word is a shell or interpreter that reads its program from stdin (only options after it). */
+const stdinInterpreterAfter = (args: readonly string[]) => args.some((arg, at) => readsProgramFromStdin(programName(arg), args.slice(at + 1)));
 const PTY_WORD = new RegExp(`(?:^|[\\s;&|(\`$"'])(?:${[...PTY_WRAPPER_PROGRAMS].join('|')})(?=[\\s"']|$)`, 'u');
 const programName = (word: string) => { const name = PROGRAM_ALIASES[word] ?? word; return (name.split('/').pop() ?? name).toLowerCase(); };
 const names = (text: string) => AUTHORITY_TEXT.some(pattern => pattern.test(text));
@@ -67,7 +71,8 @@ function runsAuthority(command: string, depth: number): boolean {
     const rest = stage.words.slice(1);
     // A shell fed by a pipe runs whatever the pipe carries: never decoded here, the card stays.
     // An input redirection (`<`, `0<`, a here-document) feeds the program the same way.
-    if ((index > 0 || stage.inputPaths.length > 0) && readsProgramFromStdin(programName(head.text), rest.map(word => word.text))) return true;
+    const argv = rest.map(word => word.text), fed = index > 0 || stage.inputPaths.length > 0;
+    if (fed && (readsProgramFromStdin(programName(head.text), argv) || (HANDS_ON.has(programName(head.text)) && stdinInterpreterAfter(argv)))) return true;
     // `expect` runs Tcl, not a shell: its payload is never decoded here, so it always keeps the card.
     if (programName(head.text) === 'expect') return true;
     if (names(rest.map(word => word.text).join(' '))) return true;

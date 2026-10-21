@@ -214,3 +214,5 @@ export const PRODUCT_AUTHORITY_COMMANDS: Readonly<Record<string, Readonly<Record
   deckent: Object.freeze({ secret: Object.freeze(['grant', 'revoke', 'set', 'delete', 'handover', 'store']) }) });
 /** Programs that run their payload on a new pseudo-terminal (a forged terminal witness for the product's authority commands). */
 export const PTY_WRAPPER_PROGRAMS: ReadonlySet<string> = new Set(['script', 'unbuffer', 'expect']);
+/** Astra REVISE 2704 B: prefixes that run the next word as the program with the same argv and stdin (options and assignments before it). */
+export const TRANSPARENT_PROGRAMS: ReadonlySet<string> = new Set(['env', 'command', 'exec', 'builtin', 'nice', 'nohup', 'time', 'timeout', 'stdbuf', 'ionice', 'setsid', 'taskset', 'chrt']);

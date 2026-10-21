@@ -207,11 +207,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   referans); ana kasa anahtarı proje başına izin ister (solo terminalde kart ya da `deckent secret grant AD --scope S`). *Sınırlar:*
   alpha.50'ye dönüşte izin tabanı kalkar (eski sürüm ana kasa anahtarlarını eskisi gibi kullanır, proje kasasını görmez). Native
   macOS'ta ve Windows'ta terminal tanığı yok: ilk kullanım kartı çıkmaz, `secret grant` orada reddedilir (Linux terminali ya da yönetici
-  izin verir). İlk kullanım anahtar kartı yalnız Linux'ta, solo kurulumda, kişinin kendi terminalindeki akışlı sohbette görünür; host
-  alanındaki bir ajan kabuğunun başlattığı pty sarmalayıcısı insan terminali gibi tanınır (`approval decide` ile aynı kanıt). Ajanın
-  kendi yetki komutları tam erişim dahil her modda kişinin kartını sorar; ama tam erişimli host alanında ajanın yazıp çalıştırdığı
-  betik dosyasını sınıflandırıcı okuyamaz (aynı kullanıcı sınırı, anahtar dosyalarını okumak gibi). Çıplak (bare) bir deponun
-  worktree'leri ayrı proje kasası alır (paylaşılacak ana çalışma ağacı yok). `.deck` ajan araçlarına kapalıdır ama işçiyi durdurmaz.
+  izin verir). İlk kullanım anahtar kartı yalnız Linux'ta, solo kurulumda, kişinin kendi terminalindeki akışlı sohbette görünür. Ajan
+  turları bunun dışına çıkamaz: tam erişimli bir ajan turu yalnız gerçek açık sandbox'ta çalışır (host alanı orada reddedilir) ve kasalar
+  oradan erişilemez; ajanın kendi yetki komutları her modda kişinin kartını sorar. Kalan sınır ajan turlarının dışındadır: kişinin kendi
+  hesabında terminali olan aynı kullanıcılı her süreç (`script` gibi bir pty sarmalayıcısı dahil) `approval decide` ile aynı terminal
+  tanığını geçer. Çıplak (bare) bir deponun worktree'leri ayrı proje kasası alır (paylaşılacak ana çalışma ağacı yok). `.deck` ajan araçlarına kapalıdır ama işçiyi durdurmaz.
 - **Adında secret, token ya da password geçen ve değeri düz metin gibi görünen müşteri yapılandırma anahtarı yine reddedilir**; değer
   bir sır AD referansı olsa bile (örneğin `"secretName": "DB_PASS"`). *Yol:* anahtarı yeniden adlandırın ya da yolu onaylayın.
 
