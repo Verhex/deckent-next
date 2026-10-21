@@ -482,7 +482,8 @@
         "src/engine/core/agent-turn",
         "src/adapters/core/provider-openai-chat",
         "src/composition/core/root",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/adapters/core/local-principal"
       ],
       "plan": "SURFACES"
     },

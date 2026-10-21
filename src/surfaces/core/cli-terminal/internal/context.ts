@@ -3,6 +3,7 @@ import type { ProjectInstructionPort } from '#engine/index.js';
 import type { BrainPlanCommand } from '#domain/index.js';
 import type { RunProposalResult } from '#engine/index.js';
 import type { McpPanelRun } from './mcp-panel.js';
+import type { TerminalSecretGrantHandlers } from './secret-grant-card.js';
 import type { ModelReference, ProjectIdentity } from '#domain/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
 import type { EffectConfirmationView, IntegrationAdoptionCommand, IntegrationCommand, IntegrationDeliveryCommand, PatchScope, WorkspaceAdoptionApplication, WorkspaceDeliveryApplication,
@@ -122,6 +123,8 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
   completeTerminalChat?: TerminalChatTurnHandler;
   streamTerminalChat?: TerminalChatStreamHandler;
+  /** PRE-8 first-use card (streamed turns): the composition's offer decision and the governed `secret grant` (source `card`). */
+  secretGrantCard?: TerminalSecretGrantHandlers;
   findTerminalMentions?: TerminalMentionFindHandler;
   attachTerminalMentions?: TerminalMentionAttachHandler;
   inspectPermissionMode?: TerminalPermissionModeInspectHandler;

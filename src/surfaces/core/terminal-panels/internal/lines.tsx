@@ -30,11 +30,13 @@ export function LinesWindow({ title, lines, hints, position, onClose }: { readon
  * A decision window (G2-3, analysis 2026-10-18): MCP trust, provider disconnect and profile apply get the approval cards' key-race guard — keys
  * count only after the quiet arming period (arming.ts), and a burst or pasted read never answers — so a `y` typed before it appeared is swallowed.
  */
-export function QuestionWindow({ title, lines, hints, position, onAnswer }: { readonly title: string; readonly lines: readonly PanelLine[]; readonly hints: string;
-  readonly position: string; readonly onAnswer: (answer: boolean | null) => void }) {
+export function QuestionWindow({ title, lines, hints, position, onAnswer, priority }: { readonly title: string; readonly lines: readonly PanelLine[]; readonly hints: string;
+  readonly position: string; readonly onAnswer: (answer: boolean | null) => void;
+  /** An automatic decision (PRE-8 first-use card) opens at approval priority: it takes the keyboard and arms like an approval card. */
+  readonly priority?: number }) {
   const known = useHumanTextSecrets(), answered = useRef(false);
   const answer = (value: boolean | null) => { if (answered.current) return; answered.current = true; onAnswer(value); };
-  return <Window title={[span(title)]} body={panelWindowLines(lines, known)} hints={hints} position={position} decision onClose={() => answer(null)}
+  return <Window title={[span(title)]} body={panelWindowLines(lines, known)} hints={hints} position={position} decision {...(priority === undefined ? {} : { priority })} onClose={() => answer(null)}
     onInput={(input, key) => {
       if (key.return || (key.ctrl && input === 'c')) { answer(null); return true; }
       if (key.escape) return false; // the window's close gives no answer

@@ -14,6 +14,9 @@ export interface TerminalAgentTurnPorts {
   settledUsage?(projectRoot: string, command: ChatTurnCommand, round: number, options: ConfigLoadOptions): Promise<NonNullable<Extract<TurnDelta, { kind: 'usage' }>['cache']> | null>;
   /** Local preflight; returns service admission for the summarizing phase when available. */
   preflight?(projectRoot: string, options: ConfigLoadOptions, reference?: ModelReference, scopeId?: string): Promise<AgentTurnAdmission | void>;
+  /** PRE-8: the turn's provider credential decided without reading a value (`.deck`, project vault, main vault only with a grant); a refusal is
+   * typed (`SECRET_GRANT_REQUIRED` …) and nothing reaches the service. Absent: the service's own pre-send check stays the only one. */
+  credential?(projectRoot: string, options: ConfigLoadOptions, reference: ModelReference | undefined, scopeId: string): Promise<void>;
 }
 export interface TerminalAgentTurnInput {
   readonly projectRoot: string;
@@ -37,6 +40,8 @@ type Outcome = { readonly result: ChatTurnResult } | { readonly error: unknown }
 export async function* streamTerminalAgentTurn(input: TerminalAgentTurnInput, ports: TerminalAgentTurnPorts): AsyncGenerator<TurnDelta> {
   input.signal?.throwIfAborted();
   const admission = await ports.preflight?.(input.projectRoot, input.options, input.reference, input.scopeId) ?? null;
+  input.signal?.throwIfAborted();
+  await ports.credential?.(input.projectRoot, input.options, input.reference, input.scopeId);
   input.signal?.throwIfAborted();
   const command: ChatTurnCommand = { schemaVersion: 1, scopeId: input.scopeId, turnId: randomUUID(), messages: [...input.messages],
     ...(input.reasoning === 'off' ? { reasoning: 'off' as const } : {}), ...(input.sessionId ? { sessionId: input.sessionId } : {}),
