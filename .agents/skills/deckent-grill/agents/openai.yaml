@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Grill"
+  short_description: "Interview in rounds until a plan is settled"
+  default_prompt: "Use $deckent-grill to interview me about this plan until every decision is settled."
+policy:
+  allow_implicit_invocation: false

@@ -1,6 +1,6 @@
 ---
 name: deckent-outcome-plan
-description: Plan one owner-admitted Deckent Next outcome as a bounded dependency DAG, ownership map and proof contract before implementation or execution.
+description: Plan a Deckent Next package, wave, card or lane brief - one owner-admitted outcome as a bounded dependency DAG with ownership, law check, proof contract and owner question rounds, before implementation.
 ---
 
 # Deckent Next Outcome Plan
@@ -34,6 +34,8 @@ write conflicts, verification and stop condition. A join accepts evidence from i
 Identify the critical path and genuinely independent lanes; do not create parallel agents
 without authorization or when coordination costs outweigh the task.
 Name shared hot files and assign one writer. Include affected document reconciliation.
+A wide mechanical change (rename or retype across many call sites) is sequenced expand → migrate in batches →
+contract: add the new form beside the old, move callers per package with each batch green, delete the old form last.
 Resolve runtime provider/model/capacity from current typed config and policy only when runtime
 execution is admitted; a host plan must not invent a worker or resource limit.
 
@@ -78,6 +80,9 @@ For uncertain effects preserve `unknown` until reconciliation rather than promis
 Carry existing authorization forward. Identify only genuinely missing authority for destructive,
 auth, live-intervention, commit or publish actions; planning does not grant it.
 Use logged Jev for material tradeoffs, with realistic gains/losses and both abstention choices.
+Owner questions go in rounds: hold the open decisions as a tree and ask the whole frontier (every decision whose
+prerequisites are settled) at once, each with real options, gain/loss and a recommended answer that "evet"
+accepts; find facts yourself and ask only decisions. The owner can run the full interview with `/deckent-grill`.
 Return the outcome, DAG, ownership/scopes, contract/config dependencies, proof manifest,
 budgets and stop rules, unresolved decisions and first admitted next step.
 Do not start implementation or runtime merely because the plan is ready.

@@ -1,6 +1,6 @@
 ---
 name: deckent-visual-language
-description: Use for Deckent art direction, typography, color roles, density, spacing rhythm, hierarchy, motion, iconography, branding, or visual state language. Do not use to choose a random style before product states and interaction needs are known.
+description: Deckent art direction - typography, color roles, density, spacing rhythm, hierarchy, motion, iconography, branding and visual state language, chosen after product states and interaction needs are known.
 ---
 
 

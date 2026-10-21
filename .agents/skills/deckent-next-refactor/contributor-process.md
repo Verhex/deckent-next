@@ -111,7 +111,10 @@ Verification cadence and resource limits follow law 7
 slice, a full suite on each release candidate, 16 GB, `VITEST_MAX_FORKS=2`, no build during an active suite.
 
 Open a PR from the admitted branch, filling card id, scope, checks, independent review status,
-risks/limits and whether DOGFOOD/live remained untouched. CI already runs on `pull_request` via
+risks/limits and whether DOGFOOD/live remained untouched. Lead the body with the smallest summary that makes the
+change clear (a table, diagram or before/after), evidence that it works (commands and results, or retained proof),
+and a merge-danger call: one-way door (hard to undo: migrations, ledger/protocol versions, deleted data) or
+two-way door (revert is enough), plus the blast radius (which surfaces, workers or customers it touches). CI already runs on `pull_request` via
 [ci.yml](../../../.github/workflows/ci.yml). The required cells are Ubuntu on Node 24 and Node 26
 (owner 2026-10-06 ruleset; the earlier six-cell rule of 2026-10-03 is superseded). macOS and Windows run separately in the nightly
 [platform-verification.yml](../../../.github/workflows/platform-verification.yml) and are not merge gates; a red required cell is a real failure, not noise. A CI badge or author checks do not replace independent review of the exact candidate.

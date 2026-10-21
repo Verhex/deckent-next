@@ -1,6 +1,6 @@
 ---
 name: deckent-closure
-description: Assess completion of one admitted Deckent Next outcome against its exact proof contract, production wiring, real surfaces and durable effect settlement.
+description: Completion claims, assigned card audits and REVISE handling - assess one admitted Deckent Next outcome against its proof contract, production wiring, real surfaces and durable effect settlement, reporting contract and standards axes separately.
 ---
 
 # Deckent Next Closure
@@ -19,6 +19,12 @@ the current card read-only. Verify real wiring, invariants, failure evidence and
 Report PASS/REVISE; ACK is not review. Within the first ~10 tool calls write a provisional findings
 table (severity | file:line | issue | failure scenario | fix) to the card's proof review file; verify
 and update it, and end with PASS/REVISE plus surfaces checked, so an interrupted review still leaves a record.
+
+Report two axes separately and do not rerank across them: **Contract** (does the diff deliver the card's proof
+contract: missing or partial items, unasked behaviour, items that look done but are wrong; quote the card line)
+and **Standards** (does it follow the documented repository standards: `internal-contract.md`, CONTRIBUTING, the
+laws). Code smells such as duplicated logic, speculative generality, primitive obsession or shotgun surgery are
+labelled judgement calls, never hard violations; a documented standard overrides them; skip what tooling enforces.
 
 ## Verify applicable proof links
 

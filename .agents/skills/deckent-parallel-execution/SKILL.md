@@ -1,6 +1,6 @@
 ---
 name: deckent-parallel-execution
-description: Coordinate explicitly authorized independent Deckent Next implementation or execution lanes with disjoint ownership, exact evidence custody and fan-in.
+description: Dispatch and fan in authorized parallel Deckent Next lanes (Claude, Codex, Cursor workers) with disjoint ownership, single writers, exact evidence custody and merge order.
 ---
 
 # Deckent Next Parallel Execution
