@@ -37,7 +37,7 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
     const result = await f.call('run_shell', { command: 'd=package.json; mkdir -p a/b/$d/c; echo bad > a/b/$d/c/x.txt; '
       + 'g=.github; mkdir -p $g/workflows; echo on > $g/workflows/x.yml; echo ok > src/ok.ts; echo done' }, 'allow');
     approvedDestructive(result);
-    expect(result).toMatchObject({ status: 'ok' });
+    expect(result, f.evidence(result)).toMatchObject({ status: 'ok' });
     expect(existsSync(join(f.project, 'a'))).toBe(false);
     expect(existsSync(join(f.project, '.github'))).toBe(false);
     expect(result.text).toContain('a/b/package.json/ (write floor: the owner approves — use edit_file/write_file)');
@@ -57,7 +57,7 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
     const f = await runtime();
     const result = await f.call('run_shell', { command: 'mkdir -p n1/n2 && echo f > n1/n2/f && echo g > n1/n2/g; g=.github; mkdir -p a/$g/workflows && echo on > a/$g/workflows/x.yml; echo done' }, 'allow');
     approvedDestructive(result);
-    expect(result).toMatchObject({ status: 'ok' });
+    expect(result, f.evidence(result)).toMatchObject({ status: 'ok' });
     expect(await readFile(join(f.project, 'n1', 'n2', 'g'), 'utf8')).toBe('g\n');
     // The floor's `.github/**` is anchored at the root (GitHub reads workflows only there): widening it is an owner checkpoint, not this fix.
     expect(await readFile(join(f.project, 'a', '.github', 'workflows', 'x.yml'), 'utf8')).toBe('on\n');
@@ -75,7 +75,7 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
     const named = await f.call('run_shell', { command: 'mkdir src/package.json' });
     expect(named).toMatchObject({ card: true, status: 'denied' });
     const hidden = await f.call('run_shell', { command: 'd=package.json; mkdir src/$d; echo done' });
-    expect(hidden).toMatchObject({ card: false, status: 'ok' });
+    expect(hidden, f.evidence(hidden)).toMatchObject({ card: false, status: 'ok' });
     expect(hidden.text).toContain('empty new directories were not created: src/package.json');
     expect(existsSync(join(f.project, 'src', 'package.json'))).toBe(false);
   }, 120_000);
@@ -86,7 +86,7 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
     const result = await f.call('run_shell', { command: 'f=old; mv src/$f.ts src/new.ts; echo short > src/kept.ts; echo done' }, 'allow');
     expect(result.card).toBe(true);
     expect((result.events as { kind: string }[]).find(event => event.kind === 'approval.requested')).toMatchObject({ risk: 'shell-destructive', undo: 'irreversible' });
-    expect(result).toMatchObject({ status: 'ok' });
+    expect(result, f.evidence(result)).toMatchObject({ status: 'ok' });
     expect(existsSync(join(f.project, 'src', 'old.ts'))).toBe(false);
     expect(await readFile(join(f.project, 'src', 'new.ts'), 'utf8')).toBe('old\n');
     expect(await readFile(join(f.project, 'src', 'kept.ts'), 'utf8')).toBe('short\n');
@@ -115,7 +115,7 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
       await mkdir(join(f.project, '.deckent', 'docs'), { recursive: true }); await writeFile(join(f.project, '.deckent', 'docs', 'report.md'), 'original\n');
       const result = await f.call('run_shell', { command: 'd=.deckent/docs; echo changed > "$d/report.md"; echo done' }, 'allow');
       expect(result.card).toBe(true);
-      expect(result).toMatchObject({ status: 'ok' });
+      expect(result, f.evidence(result)).toMatchObject({ status: 'ok' });
       const approved = f.audit().map(record => record.event.subject).filter(subject => subject.kind === 'sandbox-write-approved');
       if (deny) {
         expect(await readFile(join(f.project, '.deckent', 'docs', 'report.md'), 'utf8')).toBe('original\n');
@@ -133,7 +133,7 @@ describe.skipIf(!ready)('full-auto write set: new parent directories (Astra 2182
     const f = await runtime([...GRANTS.slice(0, 2), rule('write-op', 'operation', ['workspace.file.write'], 'deny')]);
     const result = await f.call('run_shell', { command: 'mkdir -p n1/n2 && echo f > n1/n2/f; echo done' }, 'allow');
     approvedDestructive(result);
-    expect(result).toMatchObject({ status: 'ok' });
+    expect(result, f.evidence(result)).toMatchObject({ status: 'ok' });
     expect(existsSync(join(f.project, 'n1'))).toBe(false);
     // The entry's own decision refuses first; no directory is decided or made.
     expect(result.text).toContain('not applied: n1/n2/f (denied by policy)');

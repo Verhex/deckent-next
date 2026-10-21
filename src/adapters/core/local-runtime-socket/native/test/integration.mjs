@@ -293,6 +293,39 @@ test('kernel connection witness accepts half-close and rejects full-close, wrong
   } finally { client.destroy(); server?.destroy(); listener.close(); }
 }));
 
+// LIVENESS-EINTR (alpha.51): a handled signal at the zero-duration observation (SIGCHLD of a shell exit) interrupts poll() with EINTR on a
+// healthy socket (fs/select.c do_poll checks signal_pending before its no-wait exit). Interrupted is not gone: the witness stays true, the
+// signal is still handled once, and every real refusal holds under the same signal.
+test('kernel connection witness: a handled signal at the observation never reads as a gone peer; real refusals still refuse', () => fixture(async path => {
+  let received; const accepted = new Promise(resolve => { received = resolve; });
+  let server; let fd; let peer;
+  const listener = createTestListener(path, 8, handoff => {
+    peer = handoff.peer; fd = handoff.takeFd();
+    server = new Socket({ fd, readable: true, writable: true, allowHalfOpen: true });
+    server.on('error', () => {}); received();
+  });
+  const client = new Socket({ allowHalfOpen: true }); client.on('error', () => {});
+  const signalled = (...args) => {
+    const before = testAddon.__testHandledSignals(); testAddon.__testSignalNextObservations(1);
+    const active = testAddon.isConnectionActive(...args);
+    assert.equal(testAddon.__testHandledSignals(), before + 1, 'the injected signal was delivered and handled exactly once');
+    return active;
+  };
+  try {
+    client.connect(path); await once(client, 'connect'); await accepted;
+    assert.equal(signalled(fd, peer.pid, peer.uid, peer.gid), true);
+    // Wrong credentials and an invalid descriptor are refused before any observation, armed or not.
+    testAddon.__testSignalNextObservations(1);
+    assert.equal(testAddon.isConnectionActive(fd, peer.pid + 1, peer.uid, peer.gid), false);
+    assert.equal(testAddon.isConnectionActive(-1, peer.pid, peer.uid, peer.gid), false);
+    testAddon.__testSignalNextObservations(0);
+    const ended = once(server, 'end'); server.resume(); client.end(); await ended;
+    assert.equal(signalled(fd, peer.pid, peer.uid, peer.gid), true);
+    const closed = once(client, 'close'); client.destroy(); await closed;
+    assert.equal(signalled(fd, peer.pid, peer.uid, peer.gid), false);
+  } finally { testAddon.__testSignalNextObservations(0); client.destroy(); server?.destroy(); listener.close(); }
+}));
+
 test('ledger lock: one exclusive close-on-exec holder per file, typed refusal of unsafe files and arguments', () => fixture(async path => {
   const lock = `${path}-lock`;
   const fd = addon.lockFile(lock);
