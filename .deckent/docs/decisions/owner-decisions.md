@@ -587,6 +587,18 @@ Kaynak: ana oturumdaki owner kararları (lead 4d4830b2). Kayıt yalnız owner'ı
 - Takipler: [PLAN Gelen kutusu, alpha.50 takipleri](../../../PLAN.md) (a–e).
 - **İptal-etki doğruluğu (2026-10-21, alpha.51 hazırlığı):** onaylanmış ve bitmiş bir araç çağrısı tur iptalinde `cancelled` bildirilebiliyor, iptalle duran yazma kümesi kısmen uygulanmış kalabiliyor. Owner: "betadda düzelteceğiz diye not alalım bilinen sınırlara ekleyelim." alpha.51 bilinen sınırlara (EN/TR) yazıldı; düzeltme beta işi (PLAN Gelen kutusu IPTAL-ETKI-DOGRULUGU).
 
+<a id="alpha51-release-2026-10-21"></a>
+
+## Owner kararları — 2026-10-21/22: alpha.51 merge, canlı geçiş, sonraki plan, Docker temizliği
+
+Kaynak: ana oturum (lead 4d4830b2) owner kararları. Kayıt yalnız owner'ın seçimlerini tutar; bir kabul veya beta kararı değildir.
+
+- **Merge ve geçiş:** owner "merge et ayrıca canlı ve n1i alpha51e taşıyalım" dedi; PR #108, merge `1e74dd23`; canlı ve N1 22:02Z (switch `1e74dd23ab2d-f603d7564e1a`, defter v59).
+- **Denetim noktası:** checkpoint seq 58, head 2618; owner "kopyalamadım sen masaüstüme kopyala" dedi (lead Windows masaüstüne kopyaladı), sonra "Aldım, geç" dedi.
+- **Sonraki plan:** owner, alpha 51 canlıya alınınca "ben komple bir deckentle çalışmaya geçeceğim" dedi; Deckent ile diğer projeleri yürütecek, ardından beta-süreci kararları gelecek.
+- **Docker temizliği:** owner "temizleyelim tabi" ve "silebilirsin" dedi; 240 çıkmış test/eski worker konteyneri kaldırıldı; owner yığınları ve çalışan yerel model dokunulmadan kaldı. N1 teslim klonu `1e74dd23`'e ileri alındı ve dalga 8 yeniden koşusu (d50-w8-r2) başlatıldı.
+- **Açık takipler:** PLAN Gelen kutusu "alpha.51 sonrası beta takipleri".
+
 <a id="pre8-secret-model-2026-10-21"></a>
 
 ## Owner kararı — 2026-10-21: PRE-8 secret modeli (kapsam etiketli ad tasarımı reddedildi)
