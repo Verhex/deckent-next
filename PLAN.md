@@ -93,6 +93,7 @@ Kural: bulgu triyajda sıraya ya da arşive gider; yalnız güvenlik/canlıyı b
     - DOGFOOD-50-PORT: 41 benimseme main'e, alpha.51'den sonra ayrı PR (owner 2026-10-21).
     - `n1-switch.sh` N1 teslim klonunu eşitlesin (RUNBOOK §6b; kaynak: alpha.51 geçiş notu).
     - Dalga 8 yeniden koşusu alpha.51'den sonra (kaynak: alpha.50 takipleri). Tur iptali etkisi için bkz. IPTAL-ETKI-DOGRULUGU.
+    - `secret handover` yalnız terminal tanığıyla korunuyor; mühürlü `secret-handover` kararı (politika hücresi + audit) beta adayı (Astra 2702 açık sorusu; HANDOFF-PRE8 REVISE 2702).
 - **Açık P1/P0 listesi:** aşağıda.
 
 ## Alan kimlikleri (arch.json `plan` bağları)
