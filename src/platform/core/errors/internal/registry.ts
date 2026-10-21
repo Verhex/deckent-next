@@ -306,6 +306,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   INSTALLATION_NOT_STARTABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_NOT_STARTABLE', p, l) }) },
   LOCAL_RUNTIME_OPTIONS: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_OPTIONS', p, l) }) },
   RUNTIME_SHUTDOWN_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SHUTDOWN_UNAVAILABLE', p, l) }) },
+  RUNTIME_SERVICE_EXTERNALLY_MANAGED: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_SERVICE_EXTERNALLY_MANAGED', p, l) }) },
   RUNTIME_AUTOSTART_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_AUTOSTART_FAILED', p, l) }) },
   TERMINAL_SCOPE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_SCOPE_REQUIRED', p, l) }) },
   LOCAL_RUNTIME_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.LOCAL_RUNTIME_UNAVAILABLE', p, l) }) },

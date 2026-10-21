@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
-import { resolveLocale, isMainModule, DeckentError, formatHumanError } from '#platform/index.js';
+import { resolveLocale, isMainModule, DeckentError, formatHumanError, t } from '#platform/index.js';
 import { withMcpPrincipal, createBoundedMcpTransport } from '#adapters/index.js';
 import { loadMcpSurface } from '#surfaces/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
@@ -66,4 +66,8 @@ import { inspectMonitor } from '#composition/core/monitor/index.js';
 }
 /** Start-up failure on stderr (stdout carries the protocol): `MCP_START_FAILED`, then a typed Deckent error's localized message and code (identity or configuration that could not load); any other error stays the bare line. */
 export const mcpStartFailureText = (error: unknown, env: NodeJS.ProcessEnv = process.env): string => 'MCP_START_FAILED\n' + (error instanceof DeckentError ? `${formatHumanError(error, { locale: resolveLocale(undefined, env), env, isTTY: false })}\n` : '');
-if (isMainModule(import.meta)) void run().catch((error: unknown) => { process.stderr.write(mcpStartFailureText(error)); process.exitCode = 1; });
+/** `--help`/`-h` anywhere is a request for usage, answered before the strict option parser (which would reject it as unknown). */
+export const mcpHelpRequested = (argv: readonly string[]): boolean => argv.some(argument => argument === '--help' || argument === '-h');
+export const mcpHelpText = (env: NodeJS.ProcessEnv = process.env): string => `${t('mcp.help.text', {}, resolveLocale(undefined, env))}\n`;
+if (isMainModule(import.meta) && mcpHelpRequested(process.argv.slice(2))) process.stdout.write(mcpHelpText());
+else if (isMainModule(import.meta)) void run().catch((error: unknown) => { process.stderr.write(mcpStartFailureText(error)); process.exitCode = 1; });

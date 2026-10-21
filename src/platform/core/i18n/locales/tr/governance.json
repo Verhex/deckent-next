@@ -402,6 +402,7 @@
   "error.INFERENCE_METRICS_UNREAD": "Çıkarım metrikleri okunamadı ({reason}), uç {url}. Deckent sunucuyu başlatmaz.",
   "error.RUNTIME_SHUTDOWN_UNAVAILABLE": "Bu runtime servisinin yapılandırılmış kimliği yok; yönetilen kapatma ile durdurulamaz. İlk kurulum politikasında deckent init policy --scope <id> --upgrade --preview (sonra --apply) service.identity'yi ve sizin shutdown izninizi ayarlar; aksi halde service.identity ({scopeId, serviceId}) ayarlayın ve politikada o servise shutdown izni verin. Çalışan servis bunu yalnız bir sonraki başlangıcında okur: servisi bir kez elle durdurun (deckent runtime serve üzerinde Ctrl+C; terminalin başlattığı servis boşta kalınca da durur).",
   "error.RUNTIME_AUTOSTART_FAILED": "Yerel runtime servisi otomatik başlatılamadı. Servis günlüğü: {log}. Ön planda başlatmak için `deckent runtime serve` kullanın.",
+  "error.RUNTIME_SERVICE_EXTERNALLY_MANAGED": "Bu runtime servisini bir servis yöneticisi çalıştırıyor; terminalden yeniden başlatmak ikinci, rakip bir servis başlatırdı. Hiçbir şey durdurulmadı. Yöneticisi üzerinden yeniden başlatın: {command}",
   "error.TERMINAL_SCOPE_REQUIRED": "Bir kapsam seçin: `deckent init policy --scope <id> --apply` çalıştırın, ardından `deckent --scope <id>`.",
   "error.LOCAL_RUNTIME_UNAVAILABLE": "Bu proje için yerel runtime servisi çalışmıyor. `deckent runtime serve` ile başlatın.",
   "error.LOCAL_RUNTIME_ENDPOINT_UNSAFE": "Yerel runtime bağlantı yolu ya da ledger kilit dosyası sahiplik veya dosya sistemi denetimini geçemedi.",

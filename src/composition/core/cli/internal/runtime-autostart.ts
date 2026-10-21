@@ -2,7 +2,7 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, prepareProductFile, type ConfigLoadOptions } from '#platform/index.js';
+import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, prepareProductFile, detectServiceManager, serviceManagerRestartCommand, type ServiceManagerUnit, type ConfigLoadOptions } from '#platform/index.js';
 import { launchDetachedRuntimeService, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
@@ -57,8 +57,11 @@ export async function stopConfiguredRuntimeService(projectRoot: string, options:
 /** Stop the running service through governed shutdown, wait until its endpoint no longer answers, then start the current
  * build — all within one monotonic budget. A new service is launched only after absence is observed. */
 export async function restartConfiguredRuntimeService(projectRoot: string, options: ConfigLoadOptions = {},
-  launch = launchDetachedRuntimeService, entry = ENTRY): Promise<RuntimeServiceReadiness> {
+  launch = launchDetachedRuntimeService, entry = ENTRY, managerOf: (pid: number | undefined) => ServiceManagerUnit | null = detectServiceManager): Promise<RuntimeServiceReadiness> {
   const deadline = await lifecycleDeadline(projectRoot, options);
+  // A service run by a service manager is restarted by that manager: stopping it here would only race the manager's own restart with a second launch.
+  const managed = managerOf((await createConfiguredRuntimeClient(projectRoot, options).describeService(within(deadline))).processId);
+  if (managed) throw ErrorRegistry.createError('RUNTIME_SERVICE_EXTERNALLY_MANAGED', { params: { command: serviceManagerRestartCommand(managed) } });
   const stopped = await stopConfiguredRuntimeService(projectRoot, options, 'managed restart onto the current build and configuration', deadline);
   const client = createConfiguredRuntimeClient(projectRoot, options);
   return awaitRuntimeServiceRestart(deadline, { describe: () => client.describeService(within(deadline)),
