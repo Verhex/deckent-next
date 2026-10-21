@@ -37,4 +37,23 @@ describe.skipIf(process.platform !== 'linux')('session model pin through the run
     await expect(assertTerminalChatReady(f.project, { env: f.env })).rejects.toMatchObject({ code: 'TERMINAL_CHAT_MODEL_NOT_DECLARED' });
     await expect(assertTerminalChatReady(f.project, { env: f.env }, declared)).resolves.toBeDefined();
   }, 30_000);
+
+  // PRE-10 OTURUM-MODEL-PIN (owner 2026-10-21): on a fresh installation with no persistent model, a session pin alone runs the turn; the local
+  // preflight no longer refuses it as unconfigured, and an unusable pin is refused typed by name without any other model standing in.
+  it('with no configured model anywhere, a pinned declared model passes the preflight and answers; an undeclared pin is refused typed, nothing sent', async () => {
+    const f = await runtime(); await f.start();
+    const path = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(path, 'utf8')) as { terminal: { chat: { reference?: unknown } } };
+    delete config.terminal.chat.reference;
+    await writeFile(path, JSON.stringify(config), { mode: 0o600 }); clearConfigCache();
+    await expect(assertTerminalChatReady(f.project, { env: f.env })).rejects.toMatchObject({ code: 'TERMINAL_CHAT_NOT_CONFIGURED' });
+    await expect(assertTerminalChatReady(f.project, { env: f.env }, declared, 'scope')).resolves.toBeDefined();
+    f.state.script = [{ content: 'Only pin.' }];
+    expect(await f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-only-pin', messages: [{ role: 'user', content: 'hi' }], reference: declared },
+      () => undefined)).toMatchObject({ finish: 'stop', answer: 'Only pin.' });
+    await expect(assertTerminalChatReady(f.project, { env: f.env }, undeclared, 'scope')).rejects.toMatchObject({ code: 'TERMINAL_CHAT_MODEL_NOT_DECLARED' });
+    f.state.script = [{ content: 'never' }]; const before = f.state.requests.length;
+    await expect(f.client().chatTurn({ schemaVersion: 1, scopeId: 'scope', turnId: 'turn-bad-pin', messages: [{ role: 'user', content: 'hi' }], reference: undeclared },
+      () => undefined)).rejects.toMatchObject({ code: 'TERMINAL_CHAT_MODEL_NOT_DECLARED', message: expect.stringContaining('local-openai/gone@1') });
+    expect(f.state.requests).toHaveLength(before);
+  }, 30_000);
 });

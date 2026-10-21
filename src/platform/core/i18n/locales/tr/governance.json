@@ -571,7 +571,7 @@
   "error.MODEL_CONNECT_KEY_INSECURE": "Bu sağlayıcı anahtar ister; anahtar yalnız https üzerinden gönderilir.",
   "error.MODEL_CONNECT_DEFINITION_INVALID": "Bu sağlayıcı için oluşacak bağlantı ayarları adaptörüne uygun değil.",
   "error.TERMINAL_DEFAULT_MODEL_PROJECT_LAYER": "`terminal.defaultModel` kişinin kendi varsayılan modelidir: yalnız kullanıcı ayarlarında durabilir, proje dosyasında duramaz.",
-  "error.TERMINAL_CHAT_MODEL_NOT_DECLARED": "Terminal sohbet modeli güncel sağlayıcı kataloğunda tanımlı değil.",
+  "error.TERMINAL_CHAT_MODEL_NOT_DECLARED": "Terminal sohbet modeli {model} güncel sağlayıcı kataloğunda tanımlı değil; yerine başka model kullanılmaz. `/model` ile tanımlı bir model seçin.",
   "error.TERMINAL_CHAT_TRUNCATED": "Model yanıt vermeden tüm tamamlama bütçesini ({maxCompletionTokens} token) kullandı; düşünen modeller genelde daha fazlasına ihtiyaç duyar. terminal.chat.maxCompletionTokens değerini (profilin maxOutputTokens sınırı içinde) artırın.",
   "error.TERMINAL_CHAT_EMPTY": "Model bu tur için asistan metni döndürmedi.",
   "error.TERMINAL_CHAT_CANCELLED": "Sohbet turu iptal edildi; model çağrı servisinden iptal istendi.",
