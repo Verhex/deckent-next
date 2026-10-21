@@ -9,6 +9,7 @@
   "inventory.next": "Next page: --after {after}",
   "cli.run.inspect.heading": "Run {run} | recorded revision {revision} (not live status)",
   "cli.run.inspect.cancelRequested": "  Cancellation: request recorded; worker termination is not confirmed.",
+  "cli.run.inspect.cancelNoWorker": "  Cancellation: request recorded; no worker was started for the cancelled work (stopped before launch).",
   "cli.run.inspect.cancelAbsent": "  Cancellation: no request recorded.",
   "cli.run.inspect.unresolved": "  Effects unresolved; reconciliation required.",
   "cli.run.cancel.heading": "Run {run} | cancellation request recorded | command {command}",
