@@ -9,6 +9,7 @@ import { inspectToolchainRefresh, isToolchainRefreshInProgress, readToolchainRef
   type ToolchainRefreshEvent } from '#composition/core/toolchains/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
+import { configServiceState, restartConfigDigest } from '#engine/index.js';
 import { clearConfigCache, getConfigFieldDefault, loadConfig, prepareProductFile, productResourcePath, resolveProductLayout } from '#platform/index.js';
 import type { WorkerImageBuildRunner } from '#adapters/index.js';
 
@@ -309,5 +310,24 @@ describe('registry revision is a compare-and-set (Astra 2371 P1-2)', () => {
       config.admission.registry.revision = `raw-${++n}`; await writeFile(f.path, JSON.stringify(config)); } }, f.observer);
     expect(outcome.event!.code).toBe('CONFIG_CONCURRENT_REVISION_HOLD'); expect((await f.registry()).revision).toBe('raw-3');
     expect((await f.registry()).profiles).toHaveLength(2);
+  });
+});
+
+describe('doctor staleness after the service\'s own refresh (DOCTOR-STALE-AFTER-REFRESH)', () => {
+  const digestNow = async (f: Awaited<ReturnType<typeof fixture>>) => restartConfigDigest(await loadConfig(f.root, { ...f.options, heal: false, force: true }) as never);
+  const stateOf = (f: Awaited<ReturnType<typeof fixture>>, digest: string) => configServiceState(f.root, f.options, async () => ({ configDigest: digest }));
+  it('the registry revision the running service wrote itself is applied to new Runs: the service is not stale', async () => {
+    const f = await fixture(); const started = await digestNow(f); clearConfigCache();
+    expect(await stateOf(f, started)).toBe('current');
+    const before = await f.registry(); await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps, f.observer);
+    expect((await f.registry()).revision).not.toBe(before.revision); clearConfigCache();
+    expect(await stateOf(f, started)).toBe('current');
+  });
+  it('a refresh does not hide another change: an edit of a start-only admission field after the refresh is still stale', async () => {
+    const f = await fixture(); const started = await digestNow(f); clearConfigCache();
+    await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps, f.observer);
+    const document = JSON.parse(await readFile(f.path, 'utf8')); document.admission.executionSlots = 1; document.admission.poolId = 'edited-pool';
+    await writeFile(f.path, JSON.stringify(document)); clearConfigCache();
+    expect(await stateOf(f, started)).toBe('stale');
   });
 });
