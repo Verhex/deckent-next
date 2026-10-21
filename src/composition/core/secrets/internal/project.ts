@@ -86,6 +86,11 @@ export async function assertProjectCredential(context: ProjectSecretContext, sco
   throw credentialSourceError(decision.code, { name, project: anchor?.projectRoot ?? context.config.projectRoot, scopeId });
 }
 
+/** The same decision for a project root and scope (the terminal `/provider` window, after storing a key). */
+export async function assertConfiguredProjectCredential(projectRoot: string, scopeId: string, name: string, options: ConfigLoadOptions = {}): Promise<void> {
+  await assertProjectCredential(await loadConfiguredScopeContext(projectRoot, scopeId, options, 'read'), scopeId, name, options);
+}
+
 const defaultWitness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() };
 /** The human gate of every project-secret authority write (law audit MAJOR 2): the same terminal attestation as `approval decide`, refused for the
  * MCP actor and for any request relayed over the runtime socket (a peer); off a terminal (an agent's host shell) nothing is read or written. */

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
 import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
-import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort } from '#surfaces/core/terminal-panels/index.js';
+import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderConnectKindView, ProviderConnectProbeView, TerminalLaunchContext } from './context.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
 
@@ -103,11 +103,12 @@ function discoveryPort(root: string, scopeId: string, connect: NonNullable<Host[
   } };
 }
 export function providerPanelPort(root: string, scopeId: string, host: Host & { providerConnect: NonNullable<Host['providerConnect']> }, options: ConfigLoadOptions, locale: Locale,
-  errorText: (error: unknown) => string): ProviderPanelPort {
+  errorText: (error: unknown) => string, secretGrant?: ProviderSecretGrantPort): ProviderPanelPort {
   const connect = host.providerConnect; let backend = '-';
   const kindOf = (id: string): ProviderConnectKindView | undefined => connect.kinds.find(kind => kind.id === id);
   const refs = async () => credentialRefs(await loadConfig(root, options) as Record<string, unknown>, scopeId);
   return {
+    ...(secretGrant ? { secretGrant } : {}),
     async inspect() {
       const notes: string[] = [];
       let names: readonly string[] | null = null;
@@ -216,7 +217,8 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         : { label: t('tui.provider.field.next', {}, locale), text: probe.workspaceRequired ? t('tui.workspace.required', {}, locale) : using > 0 ? t('tui.provider.next.bound', { count: using }, locale)
         : t('tui.provider.next.unbound', { name: name ?? '-', scope: scopeId }, locale), tone: 'muted' };
       const ok = stored || request.key === null;
-      return { stored, title: ok ? t('tui.provider.result.ok', { kind: label }, locale) : t('tui.provider.result.refused', { kind: label }, locale), lines: [check, ...where, keyLine, next] };
+      return { stored, title: ok ? t('tui.provider.result.ok', { kind: label }, locale) : t('tui.provider.result.refused', { kind: label }, locale), lines: [check, ...where, keyLine, next],
+        ...(stored ? { keyName: name } : {}) };
     },
     async disconnect(id) {
       const legacy = id.startsWith(LEGACY) ? (connect.legacyKeys ?? []).find(item => `${LEGACY}${item.secretName}` === id) : undefined;
@@ -244,7 +246,12 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       const command: ModelConnectCommand = { schemaVersion: 1, commandId: pendingConnections.get(pendingKey) ?? randomUUID(), scopeId, connection: request.kind,
         endpoint: request.endpoint, model: choice as ModelConnectCommand['model'] };
       let result: ModelConnectResult;
-      try { result = await host.connectModel!(root, command, options); } catch (error) { pendingConnections.delete(pendingKey); return refused(errorText(error)); }
+      try { result = await host.connectModel!(root, command, options); } catch (error) {
+        pendingConnections.delete(pendingKey);
+        // PRE-8 v2: a main-vault key without a grant goes back to the window, which offers the first-use card.
+        if ((error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED') throw error;
+        return refused(errorText(error));
+      }
       if (result.status === 'approval-pending') pendingConnections.set(pendingKey, command.commandId); else pendingConnections.delete(pendingKey);
       while (pendingConnections.size > PENDING_CONNECTIONS_KEPT) pendingConnections.delete(pendingConnections.keys().next().value!);
       const lines = modelLines(result, `${label} · ${shown}`, locale);

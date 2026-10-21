@@ -12,6 +12,8 @@ export interface SecretGrantCardPort {
   offer(): Promise<boolean>;
   question(name: string, project: string): SecretGrantQuestion;
   grant(name: string): Promise<void>;
+  /** PRE-8 v2 (`/provider`): the typed `SECRET_GRANT_REQUIRED` when this project may not use main-vault key NAME yet; resolves otherwise (no value read). */
+  check?(name: string): Promise<void>;
 }
 /** Shows the card until it is answered; `true` only for an explicit yes (no, Enter, Esc, Ctrl+C and a cancelled turn are not). */
 export type SecretGrantAsk = (question: SecretGrantQuestion, signal: AbortSignal) => Promise<boolean>;

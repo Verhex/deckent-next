@@ -6,7 +6,8 @@ import { LinesWindow, QuestionWindow, panelWindowLines } from './lines.js';
 import { PickerWindow } from './picker-window.js';
 import { BudgetWindow, budgetEntry } from './budget-panel.js';
 import { CacheWindow, cacheEntry } from './cache-panel.js';
-import type { BudgetPanelView, CachePanelView, PanelLabels, PanelNotice, ProviderConnectOutcome, ProviderModelOutcome, ProviderPanelKind, ProviderPanelLabels, ProviderPanelPort, ProviderPanelView } from './contract.js';
+import type { BudgetPanelView, CachePanelView, PanelLabels, PanelNotice, ProviderConnectOutcome, ProviderModelOutcome, ProviderPanelKind, ProviderPanelLabels, ProviderPanelPort, ProviderPanelView,
+  ProviderSecretGrantPort } from './contract.js';
 
 /** `/provider` as a list (T4 PROVIDER-CONNECT): each kind with its state and stored key name; connect (or replace the key) and disconnect. */
 export function providerPanelTree(view: ProviderPanelView, labels: ProviderPanelLabels, models = false): PickerTree {
@@ -34,7 +35,13 @@ export function providerEndpointTree(kind: ProviderPanelKind, labels: ProviderPa
 type Step = Readonly<{ kind: 'list' } | { kind: 'endpoint'; target: ProviderPanelKind; forModel?: true } | { kind: 'address'; target: ProviderPanelKind; text: string; problem: string | null; forModel?: true }
   | { kind: 'preview'; target: ProviderPanelKind; text: string; base: string; check: string; forModel?: true } | { kind: 'key'; target: ProviderPanelKind; endpoint: string | null }
   | { kind: 'busy' } | { kind: 'result'; outcome: ProviderConnectOutcome } | { kind: 'confirm'; target: ProviderPanelKind }
-  | { kind: 'model'; target: ProviderPanelKind; endpoint: string | null } | { kind: 'connected'; outcome: ProviderModelOutcome } | { kind: 'budget' } | { kind: 'cache' }>;
+  | { kind: 'model'; target: ProviderPanelKind; endpoint: string | null } | { kind: 'connected'; outcome: ProviderModelOutcome } | { kind: 'budget' } | { kind: 'cache' }
+  | { kind: 'grant'; question: ReturnType<ProviderSecretGrantPort['question']>; answer: (yes: boolean) => void }>;
+/** The typed refusal that opens the first-use card: a main-vault key without a grant in this project (name and project only, never a value). */
+const grantRefusal = (error: unknown): Readonly<{ name: string; project: string }> | null => {
+  const { code, params } = (error ?? {}) as { code?: unknown; params?: Record<string, unknown> };
+  return code === 'SECRET_GRANT_REQUIRED' && typeof params?.['name'] === 'string' && typeof params['project'] === 'string' ? { name: params['name'], project: params['project'] } : null;
+};
 const BUDGET = ':budget', CACHE = ':cache';
 
 /**
@@ -61,11 +68,25 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   exits.current = { onError, onClose };
   useEffect(() => { reload().catch(error => { exits.current.onError(error); exits.current.onClose(); }); }, [reload]);
   const back = () => { setGeneration(value => value + 1); setStep({ kind: 'list' }); reload().catch(error => onError(error)); };
+  /**
+   * PRE-8 v2: runs one step; a typed `SECRET_GRANT_REQUIRED` opens the SAME first-use card (only where the composition offers it: solo, attested
+   * terminal). Yes records the governed grant and runs the step once more; no, a refused offer, a failed grant or a second refusal end at `refused`.
+   */
+  const granting = <T,>(work: () => Promise<T>, done: (value: T) => void, refused: (error: unknown) => void = error => { onError(error); back(); }) => {
+    work().then(done, async (error: unknown) => {
+      const asked = grantRefusal(error), card = port.secretGrant;
+      if (!asked || !card || !await card.offer().catch(() => false)) { refused(error); return; }
+      setStep({ kind: 'grant', question: card.question(asked.name, asked.project), answer: yes => {
+        if (!yes) { refused(error); return; }
+        setStep({ kind: 'busy' });
+        card.grant(asked.name).then(() => work().then(done, refused), refused);
+      } });
+    });
+  };
   const chooseModels = (target: ProviderPanelKind, endpoint: string | null) => {
     if (!target.discoversModels || !port.listModels) { setStep({ kind: 'model', target, endpoint }); return; }
     setStep({ kind: 'busy' });
-    port.listModels(target.id, endpoint).then(models => setStep({ kind: 'model', target: { ...target, models }, endpoint }),
-      error => { onError(error); back(); });
+    granting(() => port.listModels!(target.id, endpoint), models => setStep({ kind: 'model', target: { ...target, models }, endpoint }));
   };
   const title = (text: string) => [span(text, { bold: true })];
   if (!view || step.kind === 'busy') return <PickerWindow title={title(words.title)} body={[{ spans: [span(view ? words.checking : labels.loading)] }]} bodyRows={BODY_ROWS} tree={null}
@@ -73,6 +94,8 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
   if (step.kind === 'budget' && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={back} />;
   if (step.kind === 'cache' && cache && port.cache) return <CacheWindow port={port.cache} view={cache} labels={labels} push={push} onError={onError} onDone={back}
     {...(openApproval ? { openApproval: (approvalId: string) => { openApproval(approvalId); onClose(); } } : {})} />;
+  if (step.kind === 'grant') return <QuestionWindow title={step.question.title} lines={step.question.lines} hints={step.question.prompt} position={labels.position}
+    onAnswer={value => step.answer(value === true)} />;
   if (step.kind === 'result') return <LinesWindow title={step.outcome.title} lines={step.outcome.lines} hints={words.resultHints} position={labels.position} onClose={back} />;
   // T4-B: a model connection's result; closing it leaves its one system summary line (and opens the approval card policy asked for).
   if (step.kind === 'connected') return <LinesWindow title={step.outcome.title} lines={step.outcome.lines} hints={words.resultHints} position={labels.position} onClose={() => {
@@ -87,7 +110,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
       tree={providerModelTree(target, words)} onResult={result => {
         if (result.kind !== 'selected' || !connectModel) { back(); return; }
         setStep({ kind: 'busy' });
-        connectModel({ kind: target.id, endpoint, model: result.id }).then(outcome => setStep({ kind: 'connected', outcome }), error => { onError(error); back(); });
+        granting(() => connectModel({ kind: target.id, endpoint, model: result.id }), outcome => setStep({ kind: 'connected', outcome }));
       }} />;
   }
   if (step.kind === 'confirm') return <QuestionWindow title={fillTemplate(words.disconnectTitle, { kind: step.target.label })} lines={[]} hints={words.disconnectKeys} position={labels.position}
@@ -136,7 +159,12 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
       onSubmit={text => {
         if (target.keyRequired && !text) return words.keyRequired;
         setStep({ kind: 'busy' });
-        port.connect({ kind: target.id, endpoint, key: text === '' ? null : text }).then(outcome => setStep({ kind: 'result', outcome }), error => { onError(error); back(); });
+        port.connect({ kind: target.id, endpoint, key: text === '' ? null : text }).then(outcome => {
+          // PRE-8 v2: a key just stored in the main vault is offered to this project right away (the same card); declining keeps the stored key.
+          const name = outcome.stored ? outcome.keyName ?? null : null, check = port.secretGrant?.check;
+          if (!name || !check) { setStep({ kind: 'result', outcome }); return; }
+          granting(() => check(name), () => setStep({ kind: 'result', outcome }), error => { onError(error); setStep({ kind: 'result', outcome }); });
+        }, error => { onError(error); back(); });
         return null;
       }} />;
   }

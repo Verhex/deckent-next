@@ -213,7 +213,18 @@ export type ProviderPanelView = Readonly<{ title: string; kinds: readonly Provid
   invocableModels?: readonly import('#engine/index.js').InvocableModel[] }>;
 export type ProviderConnectRequest = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
 /** A connect's typed result as labelled rows (no key, no answer body); `stored`: the key went to the secret store. */
-export type ProviderConnectOutcome = Readonly<{ stored: boolean; title: string; lines: readonly PanelLine[] }>;
+/** `keyName` (PRE-8 v2): the main-vault name a successful connect stored, so the window can ask the first-use card for this project right away. */
+export type ProviderConnectOutcome = Readonly<{ stored: boolean; title: string; lines: readonly PanelLine[]; keyName?: string | null }>;
+/**
+ * PRE-8 v2 first-use card in `/provider` (lead 2026-10-21): the SAME card as the chat turn (composition offer: solo + attested terminal; governed
+ * `secret grant`, source card). `check` refuses with the typed `SECRET_GRANT_REQUIRED` when this project may not use a main-vault key yet.
+ */
+export interface ProviderSecretGrantPort {
+  offer(): Promise<boolean>;
+  question(name: string, project: string): Readonly<{ title: string; lines: readonly PanelLine[]; prompt: string }>;
+  grant(name: string): Promise<void>;
+  check?(name: string): Promise<void>;
+}
 /** T4-B `models.connect` from the window: the model chosen from the kind's list (and the address, where the kind takes one). */
 export type ProviderModelRequest = Readonly<{ kind: string; endpoint: string | null; model: string }>;
 /** Its typed result as labelled rows, the one system summary line it leaves, and the approval to answer when policy asked for one. */
@@ -238,6 +249,8 @@ export interface ProviderPanelPort {
   readonly budget?: BudgetPanelPort;
   /** CACHE-SLICE1: the same cache migration as `/model` (absent: not offered). */
   readonly cache?: CachePanelPort;
+  /** PRE-8 v2: the first-use card when a model list, a model connection or a just-stored key needs a grant in this project (absent: the refusal shows). */
+  readonly secretGrant?: ProviderSecretGrantPort;
 }
 export interface ProviderPanelLabels {
   readonly title: string; readonly hints: string;
