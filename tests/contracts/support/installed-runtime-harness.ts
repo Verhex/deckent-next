@@ -305,10 +305,29 @@ export function settleScenario(primary: { error: unknown } | undefined, cleanupE
 
 export type DockerCommand = (args: readonly string[]) => Promise<{ stdout: string }>;
 export const dockerCommand: DockerCommand = args => exec('/usr/bin/docker', [...args]);
+/** Ids per batched `docker inspect` (bounded argv). CI-108 follow-up: one inspect per container made the `ps -a` oracle linear in every container
+ * on the host (247 stopped ones here: ~0.15 s each, ~37 s, past the 60 s test bound on base 9c766a50 too); the batch answers all at once. */
+const INSPECT_BATCH = 100;
+/** The mounts of every id in one call per batch, or null when the answer does not account for each id exactly once (a vanished or unreadable
+ * container fails the whole call): the caller then falls back to the per-container path, whose failure rules stay the oracle. */
+async function batchMounts(ids: readonly string[], docker: DockerCommand): Promise<Map<string, string> | null> {
+  const mounts = new Map<string, string>();
+  for (let at = 0; at < ids.length; at += INSPECT_BATCH) {
+    const batch = ids.slice(at, at + INSPECT_BATCH);
+    const answer = await docker(['inspect', '-f', '{{.Id}} {{range .Mounts}}{{.Source}} {{end}}', ...batch]).catch(() => null);
+    if (!answer) return null;
+    const lines = answer.stdout.split('\n').filter(Boolean);
+    for (const line of lines) { const id = line.split(' ', 1)[0]!; if (!batch.includes(id) || mounts.has(id)) return null; mounts.set(id, line.slice(id.length)); }
+    if (lines.length !== batch.length) return null;
+  }
+  return mounts;
+}
 /** Running containers (docker ps), or every container with `all` (ps -a). An inspect failure counts as absence only when the container verifiably vanished. */
 export async function fixtureContainers(root: string, docker: DockerCommand = dockerCommand, all = false): Promise<string[]> {
   const list = all ? ['ps', '-a', '-q', '--no-trunc'] : ['ps', '-q', '--no-trunc'];
   const ids = (await docker(list)).stdout.split('\n').filter(Boolean);
+  const batched = ids.length ? await batchMounts(ids, docker) : null;
+  if (batched) return ids.filter(id => batched.get(id)!.includes(root));
   const owned: string[] = [];
   for (const id of ids) {
     let mounts: string;
