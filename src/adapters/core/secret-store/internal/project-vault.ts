@@ -94,13 +94,20 @@ async function writeRecord(path: string, value: unknown): Promise<void> {
 }
 
 const recordPath = (directory: string) => join(directory, PROJECT_VAULT.projectFile);
-async function loadOwnership(directory: string): Promise<ProjectVaultRecord | null> {
-  const read = await readRecord(recordPath(directory), PROJECT_VAULT.projectMaxBytes);
-  if (!read.ok) throw read.reason === 'invalid' ? ErrorRegistry.createError('SECRET_STORE_CORRUPT', { params: { backend: PROJECT_VAULT.projectFile } }) : unsafe(directory);
-  if (read.value === null) return null;
+const ownershipLost = (anchor: Pick<ProjectVaultAnchor, 'projectRoot'>) => ErrorRegistry.createError('SECRET_PROJECT_VAULT_OWNERSHIP_LOST', { params: { project: anchor.projectRoot } });
+/** The ownership record: `absent` (no file), the parsed record, or `lost` — present but JSON null, unparsable or not a v1 record (never trusted). */
+async function loadOwnership(directory: string): Promise<ProjectVaultRecord | 'absent' | 'lost'> {
+  const path = recordPath(directory);
+  if (!await lstat(path).then(() => true, (error: unknown) => { if (missing(error)) return false; throw unsafe(directory); })) return 'absent';
+  const read = await readRecord(path, PROJECT_VAULT.projectMaxBytes);
+  if (!read.ok) { if (read.reason === 'invalid') return 'lost'; throw unsafe(directory); }
   const parsed = projectVaultRecordSchema.safeParse(read.value);
-  if (!parsed.success) throw ErrorRegistry.createError('SECRET_STORE_CORRUPT', { params: { backend: PROJECT_VAULT.projectFile } });
-  return parsed.data;
+  return parsed.success ? parsed.data : 'lost';
+}
+/** Whether the vault directory holds anything besides an ownership record being written (its lock and temporary): a key, a grant, any file. */
+async function vaultHasContent(directory: string): Promise<boolean> {
+  const own = PROJECT_VAULT.projectFile;
+  return (await readdir(directory)).some(entry => entry !== own && entry !== `${own}.write-lock` && !entry.startsWith(`.${own}.`));
 }
 /**
  * The ownership check of a vault for the anchor that asks now (law audit BLOCKER). A reader of an existing vault (`claim: false`) only checks;
@@ -108,10 +115,17 @@ async function loadOwnership(directory: string): Promise<ProjectVaultRecord | nu
  * `SECRET_PROJECT_VAULT_CLAIMED`: a copy never opens the original's vault.
  */
 export async function admitProjectVault(directory: string, anchor: ProjectVaultAnchor, claim: boolean, nowMs: number, lockTimeoutMs: number): Promise<void> {
-  const check = (record: ProjectVaultRecord | null) => { if (record && assessProjectVaultOwnership(record, anchor) === 'claimed') throw projectVaultClaimed(anchor); return record; };
-  if (check(await loadOwnership(directory)) || !claim) return;
+  // Astra REVISE 2702 P1-B: only a truly new EMPTY vault is claimed automatically; a vault with content whose record is missing, null or invalid
+  // (a partial restore, a hand edit) is refused for readers and writers alike until an explicit handover — never read, never re-claimed.
+  const owned = async () => {
+    const record = await loadOwnership(directory);
+    if (record === 'lost' || (record === 'absent' && await vaultHasContent(directory))) throw ownershipLost(anchor);
+    if (record !== 'absent' && assessProjectVaultOwnership(record, anchor) === 'claimed') throw projectVaultClaimed(anchor);
+    return record !== 'absent';
+  };
+  if (await owned() || !claim) return;
   await withConfigWriteLock(recordPath(directory), async () => {
-    if (check(await loadOwnership(directory))) return;
+    if (await owned()) return;
     await writeRecord(recordPath(directory), projectVaultRecordSchema.parse({ schemaVersion: 1, anchor, firstSeenAtMs: nowMs, handedOverAtMs: null }));
   }, lockTimeoutMs);
 }
@@ -119,7 +133,13 @@ export async function admitProjectVault(directory: string, anchor: ProjectVaultA
 export async function handOverProjectVault(directory: string, anchor: ProjectVaultAnchor, nowMs: number, lockTimeoutMs: number): Promise<ProjectVaultRecord> {
   return withConfigWriteLock(recordPath(directory), async () => {
     const record = await loadOwnership(directory);
-    if (!record) throw projectVaultClaimed(anchor);
+    // A lost ownership record: the person at the terminal states this project owns the vault (explicit, witnessed, recorded as a handover).
+    if (record === 'lost' || record === 'absent') {
+      if (record === 'absent' && !await vaultHasContent(directory)) throw projectVaultClaimed(anchor);
+      const next = projectVaultRecordSchema.parse({ schemaVersion: 1, anchor, firstSeenAtMs: nowMs, handedOverAtMs: nowMs });
+      await writeRecord(recordPath(directory), next);
+      return next;
+    }
     if (assessProjectVaultOwnership(record, anchor) === 'match') return record;
     const next = projectVaultHandover(record, anchor, await locationPresent(record.anchor.binding), nowMs);
     await writeRecord(recordPath(directory), next);
@@ -133,7 +153,8 @@ export async function listProjectVaults(globalRoot: string): Promise<readonly { 
   const rows = [];
   for (const entry of entries.filter(name => /^[a-f0-9]{64}$/u.test(name)).sort()) {
     const directory = join(parent, entry);
-    rows.push({ directory, record: await loadOwnership(directory).catch(() => null) });
+    const record = await loadOwnership(directory).catch(() => 'lost' as const);
+    rows.push({ directory, record: typeof record === 'string' ? null : record });
   }
   return rows;
 }

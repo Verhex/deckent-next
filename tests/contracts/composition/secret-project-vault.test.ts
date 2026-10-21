@@ -156,3 +156,43 @@ describe.skipIf(process.platform !== 'linux')('PRE-8 v2 project vault, .deck and
     expect(await code((await resolverOf(copied, env)).check('DECKENT_ANTHROPIC_KEY'))).toBe('SECRET_PROJECT_VAULT_CLAIMED');
   });
 });
+
+// Astra REVISE 2702 P1-B: only a truly new EMPTY vault is claimed automatically. A vault with any content (a key, a grant) whose ownership record is
+// missing, JSON null or invalid is refused — never read, never re-claimed — until an explicit handover at the person's terminal.
+describe.skipIf(process.platform !== 'linux')('REVISE 2702 P1-B: a vault whose ownership record is lost is refused, never read or re-claimed', () => {
+  const vaultOf = async (root: string, env: Record<string, string>) => {
+    const anchor = (await resolveProjectVaultAnchor(await loadConfiguredScopeContext(root, 'scope', { env }, 'read'), { env }))!;
+    return join(installationSecretRoot(env)!, PROJECT_VAULT.directory, projectVaultKey(anchor));
+  };
+  for (const [label, damage] of [['missing', async (file: string) => rm(file)], ['JSON null', async (file: string) => writeFile(file, 'null\n', { mode: 0o600 })],
+    ['invalid', async (file: string) => writeFile(file, '{"schemaVersion":1}\n', { mode: 0o600 })]] as const) {
+    it(`${label} project.json beside a surviving grant and key: reads and writes are refused; the explicit handover restores it`, async () => {
+      const { base, env } = await home(), root = await project(base, 'p');
+      await changeProjectSecretGrant(root, 'scope', 'DECKENT_ANTHROPIC_KEY', 'grant', 'admin', { env }, human);
+      await setProjectSecret(root, 'scope', 'OWN_KEY', OWN_VALUE, { env }, human);
+      await writeFile(join(root, '.deck'), 'DECK_FORMAT=1\nOWN_KEY=project\n');
+      const directory = await vaultOf(root, env);
+      await damage(join(directory, PROJECT_VAULT.projectFile));
+      expect(await code((await resolverOf(root, env)).check('DECKENT_ANTHROPIC_KEY'))).toBe('SECRET_PROJECT_VAULT_OWNERSHIP_LOST');
+      expect(await code((await resolverOf(root, env)).resolve('OWN_KEY'))).toBe('SECRET_PROJECT_VAULT_OWNERSHIP_LOST');
+      clearConfigCache();
+      expect(await code(changeProjectSecretGrant(root, 'scope', 'OTHER_KEY', 'grant', 'admin', { env }, human))).toBe('SECRET_PROJECT_VAULT_OWNERSHIP_LOST');
+      expect(await code(setProjectSecret(root, 'scope', 'OWN_KEY', 'x', { env }, human))).toBe('SECRET_PROJECT_VAULT_OWNERSHIP_LOST');
+      // Never re-claimed silently: still no ownership record.
+      await expect(readFile(join(directory, PROJECT_VAULT.projectFile), 'utf8').then(text => JSON.parse(text)?.anchor ?? null).catch(() => null)).resolves.toBeNull();
+      expect(await code(handOverProjectSecrets(root, 'scope', { env }, noTerminal))).toBe('AUTHORITY_WITNESS_REQUIRED');
+      await handOverProjectSecrets(root, 'scope', { env }, human);
+      expect(await (await resolverOf(root, env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
+      expect(await (await resolverOf(root, env)).resolve('OWN_KEY')).toBe(OWN_VALUE);
+    });
+  }
+  it('a truly new empty vault is claimed by its first write; a reader of a never-written project creates nothing', async () => {
+    const { base, env } = await home(), root = await project(base, 'fresh');
+    expect(await (await resolverOf(root, env)).check('DECKENT_ANTHROPIC_KEY')).toMatchObject({ code: 'SECRET_GRANT_REQUIRED' });
+    await expect(readFile(join(installationSecretRoot(env)!, PROJECT_VAULT.directory, 'x'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    await changeProjectSecretGrant(root, 'scope', 'DECKENT_ANTHROPIC_KEY', 'grant', 'admin', { env }, human);
+    const record = JSON.parse(await readFile(join(await vaultOf(root, env), PROJECT_VAULT.projectFile), 'utf8'));
+    expect(record).toMatchObject({ schemaVersion: 1, anchor: { projectRoot: root }, handedOverAtMs: null });
+    expect(await (await resolverOf(root, env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
+  });
+});

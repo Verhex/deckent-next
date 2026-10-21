@@ -764,6 +764,8 @@
   "error.SECRET_PROJECT_MISSING": "The project vault of {project} has no key [{name}], which .deck declares as a project key; the main vault was not used and nothing was sent.",
   "remedy.SECRET_PROJECT_MISSING": "Store it at your terminal in that project: deckent secret set {name} --project --scope {scope}, or change .deck to {name}=main.",
   "error.SECRET_PROJECT_IDENTITY_REQUIRED": "This project has no installation identity yet, so its keys cannot be resolved; nothing was read or sent. Run deckent init in the project first.",
+  "error.SECRET_PROJECT_VAULT_OWNERSHIP_LOST": "The project vault of {project} holds keys or grants but its ownership record is missing or unreadable (a partial restore or a hand edit). It was not opened; nothing was read or sent.",
+  "remedy.SECRET_PROJECT_VAULT_OWNERSHIP_LOST": "If this folder is the project that owns the vault, run at your terminal in it: deckent secret handover --scope <scope>. Otherwise give this folder its own identity: deckent init identity --new.",
   "error.SECRET_PROJECT_VAULT_CLAIMED": "The project vault for {project} belongs to another folder with the same identity (a copy, or a move that was not handed over). It was not opened and nothing was read or sent.",
   "remedy.SECRET_PROJECT_VAULT_CLAIMED": "For a copy, give it its own identity: deckent init identity --new. For a moved project whose old folder is gone, run deckent secret handover at your terminal in the new folder.",
   "error.SECRET_GRANT_STORE_UNSAFE": "The grant record of this project could not be used ({reason}): it must be a private file of yours (0600, one link, not a link). No grant was used and nothing was written.",

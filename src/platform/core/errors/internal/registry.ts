@@ -608,6 +608,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   SECRET_GRANT_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_GRANT_REQUIRED', p, l), suggestion: t('remedy.SECRET_GRANT_REQUIRED', p, l) }) },
   SECRET_PROJECT_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_MISSING', p, l), suggestion: t('remedy.SECRET_PROJECT_MISSING', p, l) }) },
   SECRET_PROJECT_IDENTITY_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_IDENTITY_REQUIRED', p, l) }) },
+  SECRET_PROJECT_VAULT_OWNERSHIP_LOST: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_VAULT_OWNERSHIP_LOST', p, l), suggestion: t('remedy.SECRET_PROJECT_VAULT_OWNERSHIP_LOST', p, l) }) },
   SECRET_PROJECT_VAULT_CLAIMED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_PROJECT_VAULT_CLAIMED', p, l), suggestion: t('remedy.SECRET_PROJECT_VAULT_CLAIMED', p, l) }) },
   SECRET_GRANT_STORE_UNSAFE: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_GRANT_STORE_UNSAFE', p, l) }) },
   SECRET_GRANT_STORE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_GRANT_STORE_INVALID', p, l) }) },
