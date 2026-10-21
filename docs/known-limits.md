@@ -395,6 +395,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **Restart fingerprint.** `restart-exempt.json` lists members of restart sections that every request re-reads (`admission.registry`); changing them never reports a stale service. A member is added only after proving no start-time capture.
 - **`runtime restart` refuses a service that systemd runs only when systemd confirms it** (Linux): the service process's control group names a candidate `.service` unit, and the restart is refused, naming `systemctl [--user] restart <unit>`, only when systemd reports that process as the unit's MainPID (`systemctl show -p MainPID`, 2 s bound; the environment is never read). Without a reachable systemd bus, or with no answer, the check is off and the restart proceeds; a unit whose ExecStart wrapper does not `exec` the runtime is not detected. Other service managers and non-Linux hosts are not detected. *Workaround:* restart a systemd-run service with `systemctl [--user] restart <unit>`.
 - **The local runtime socket's peer liveness witness** observes HUP/ERR/NVAL with one zero-duration `ppoll` that blocks catchable signals for the call: a handled signal such as SIGCHLD no longer reads as a disconnected client. A tool call that finished before a genuine turn cancellation is still reported `cancelled`; its result text carries the applied write set (the owner decision on a completeness flag or a new status is open).
+- **MCP and terminal processes started before a switch to a new release keep running the previous build.** A switch replaces the
+  installed build, but an MCP server or a `deckent` terminal that a client started earlier keeps the code it loaded until that client
+  restarts it. *Workaround:* after a switch, restart the client (the Claude Code session, or close and reopen the terminal);
+  `deckent runtime describe` shows which build the service runs.
 
 ## Desktop and other surfaces
 
