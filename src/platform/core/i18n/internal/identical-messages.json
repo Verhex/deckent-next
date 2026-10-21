@@ -54,7 +54,6 @@
   "image.dry_run_dockerfile",
   "inspect.column.run_id",
   "inspect.field.agent",
-  "inspect.field.heartbeat",
   "inspect.field.lineage",
   "inspect.field.model",
   "kpi.header_kpi",

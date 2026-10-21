@@ -43,7 +43,7 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED
     { root: f.project, env: f.options.env, stdout: { write: (value: string) => { out.push(value); } }, inspectWorkerTranscript: inspectConfiguredWorkerTranscript });
   expect(code).toBe(0);
   const text = out.join('');
-  expect(text).toContain('Worker claude · claude-haiku-4-5-20251001 · 4 tur');
+  expect(text).toContain('İşçi claude · claude-haiku-4-5-20251001 · 4 tur');
   expect(text).toContain('önbellek okuma 65832');
   expect(text).toMatch(/düzenliyor\s+hello\.txt/); expect(text).toMatch(/okuyor\s+hello\.txt/); expect(text).toContain('çalıştırıyor');
   expect(text).toContain('Sonuç ve kabul için otorite süreç çıkışı');
