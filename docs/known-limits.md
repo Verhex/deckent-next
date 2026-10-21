@@ -124,7 +124,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   the secret store is refused with `AUTHORITY_WITNESS_REQUIRED` unless the requesting process has its input and output on an
   interactive terminal; the MCP actor is always refused, and nothing is decided, audited or written. *Impact:*
   `echo KEY | deckent secret set NAME`, scripts, the SDK called from a script and AI tools can no longer make these changes,
-  and there is no approval-request path for them yet. *Workaround:* run `deckent secret set NAME` (hidden prompt),
+  and there is no approval-request path for them yet. *Workaround:* run `deckent secret set NAME --main` (or `--project`; hidden prompt),
   `deckent secret store` or the terminal's `/provider` and mode switch in an interactive terminal.
 - **The runtime socket refuses sandboxed processes, not other processes of your account.** The runtime service refuses a
   peer outside its own PID, mount and user namespaces, the full-access bubblewrap view hides the runtime socket directories,
@@ -140,6 +140,13 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   or wiped audit trail; undoing both local histories together on your own account is only caught by a checkpoint export
   kept on a separate device. A separate approval channel, a fixed audit floor and the design for remote decisions are worked on during the beta process; hardware-key signed policy and approvals follow after beta. *Workaround:* run other AI agents under a
   separate account without Docker or sudo, and keep Deckent's workers in their sandbox.
+- **Opening full-auto or full-access is a person's act at their own terminal.** `deckent init policy --scope <id> --modes <list>|none`
+  opens or closes the modes for the installation owner; AI tools, pipes and CI cannot. After an apply the policy has a new `a-…`
+  revision, so `deckent doctor` no longer names it `first-run-template-v13` and a later `init policy --upgrade` takes the add-only path.
+  The terminal witness is the controlling terminal: a same-UID process can manufacture a pseudo-terminal (the SEC-1 limit; an
+  Enterprise composition can pass a stronger witness); an AI agent's shell is refused by the agent marker and the CLI card gate, not by
+  the witness alone. Closing a mode keeps the stored full-auto entry in the person's bindings but not in effect: every call re-checks
+  the grant.
 
 ## Providers and subscriptions
 
@@ -196,6 +203,18 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   not offered yet. Imported servers stay untrusted. *Workaround:* `deckent mcp remove <name>` after the import.
 - **MCP servers over OAuth are not supported.** Streamable HTTP servers work without OAuth. *Workaround:* use a local stdio server or an
   HTTP server that does not need OAuth.
+- **Provider keys live in a main vault (installation) or a project vault, and a main key is used in a project only after a grant.**
+  Non-terminal `deckent secret set` needs `--main` or `--project`; project keys need a `.deck` file (references only); a main key needs
+  a grant per project (a card on a solo terminal, or `deckent secret grant NAME --scope S`). *Limits:* rolling back to alpha.50 lifts
+  the grant floor (the old binary uses main-vault keys as before and does not see project-vault keys). Native macOS and Windows have
+  no terminal witness: no first-use card, and `secret grant` is refused there (a Linux terminal or an admin grants). The first-use key
+  card appears only in the streamed terminal on Linux, at the person's own terminal on a solo installation; a pty wrapper started
+  from a host-realm agent shell is attested like a human terminal (same evidence as `approval decide`). An agent's own authority
+  commands ask a person's card in every mode, full access included, but a script file the agent writes and then runs in a full-access
+  host realm cannot be read by the classifier (the same-user limit, like reading the key files). Worktrees of a bare repository each
+  get their own project vault (no main working tree to share). `.deck` is closed to agent tools but does not stop a worker.
+- **A customer config key whose name contains secret, token or password and whose value looks like a literal is still refused**, even
+  when the value is a secret NAME reference (for example `"secretName": "DB_PASS"`). *Workaround:* rename the key or acknowledge the path.
 
 ## Budgets and spend
 
@@ -237,7 +256,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   or resumed (`RUN_DECISION_NOT_READY`); cancel and the park deadline do not free it. A probe that can never be proven gone holds the
   slot indefinitely; the service journal names it at every start, and after `docker rm --force <name>` the next service start
   releases the slot once (a progression turn of that Run does so only when one runs; ordinary progression skips Runs parked for the
-  environment or cancelled). The slot is held from before the first probe container starts: cancelling a Run while its probe runs frees
+  environment or cancelled). If a probe is proven removed but the ledger write that releases its slot fails, the start journal says so with the error code (not "not proven removed"); the slot stays held until the next start. The slot is held from before the first probe container starts: cancelling a Run while its probe runs frees
   nothing until the probe ends, and if the service dies mid-probe the slot stays held until the next service start proves the probes removed. `deckent coding template` declares defaults (node, the Node heap ceiling; the typescript path only for a template
   with a `/node_modules` dependency mount); an existing task kind keeps its template (re-running the command for it is refused with
   `CODING_TEMPLATE_KIND_CONFLICT`), so adding a requirement to it today means editing `admission.registry` with `deckent config set`.
@@ -371,6 +390,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   approval rule, does not continue after the upgrade:** resubmitting it parks it (`APPROVAL_CONFLICT`). *Workaround:* start a new
   /do; the task approval is then asked once, just before the task runs. Installations without a `task` rule in their policy are not
   affected.
+- **Restart fingerprint.** `restart-exempt.json` lists members of restart sections that every request re-reads (`admission.registry`); changing them never reports a stale service. A member is added only after proving no start-time capture.
+- **`runtime restart` refuses a service that systemd runs** (Linux; detected from the service process's unit control group) and names `systemctl [--user] restart <unit>`. Other service managers and non-Linux hosts are not detected.
+- **The local runtime socket's peer liveness witness** observes HUP/ERR/NVAL with one zero-duration `ppoll` that blocks catchable signals for the call: a handled signal such as SIGCHLD no longer reads as a disconnected client. A tool call that finished before a genuine turn cancellation is still reported `cancelled`; its result text carries the applied write set (the owner decision on a completeness flag or a new status is open).
 
 ## Desktop and other surfaces
 

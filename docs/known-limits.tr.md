@@ -124,8 +124,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   secret deposunu değiştirmek, isteği yapan sürecin girişi ve çıkışı etkileşimli bir terminalde değilse
   `AUTHORITY_WITNESS_REQUIRED` ile reddedilir; MCP aktörü her zaman reddedilir ve hiçbir şey karara bağlanmaz, denetime
   yazılmaz ya da değişmez. *Etki:* `echo ANAHTAR | deckent secret set AD`, betikler, bir betikten çağrılan SDK ve yapay zekâ
-  araçları bu değişiklikleri artık yapamaz; bunlar için henüz bir onay isteği yolu yok. *Geçici çözüm:* `deckent secret set AD`
-  (gizli istem), `deckent secret store` ya da terminalin `/provider` ve mod değiştirmesini etkileşimli bir terminalde kullanın.
+  araçları bu değişiklikleri artık yapamaz; bunlar için henüz bir onay isteği yolu yok. *Geçici çözüm:* `deckent secret set AD --main`
+  (ya da `--project`; gizli istem), `deckent secret store` ya da terminalin `/provider` ve mod değiştirmesini etkileşimli bir terminalde kullanın.
 - **Runtime soketi sandbox'taki süreçleri reddeder, hesabınızın diğer süreçlerini değil.** Runtime servisi kendi PID, mount ve
   user namespace'i dışındaki bir eşi reddeder, tam erişimli bubblewrap görünümü runtime soket dizinlerini gizler ve Landlock
   realm'i hiç unix soketi açamaz. Hesabınızın sandbox dışında çalıştırdığı bir süreç (tam erişimli bir turda onaylanan host
@@ -142,6 +142,12 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   imzalı policy ve onaylar beta sonrası gelir.
   *Çözüm:* başka yapay zekâ ajanlarını Docker ya da sudo yetkisi olmayan ayrı bir hesapta çalıştırın, Deckent işçilerini
   kum havuzunda tutun.
+- **Tam otomatik ya da tam erişimi açmak kişinin kendi terminalindeki eylemidir.** `deckent init policy --scope <id> --modes <liste>|none`
+  kurulum sahibi için kipleri açar ya da kapatır; yapay zekâ araçları, borular ve CI yapamaz. Uygulamadan sonra policy yeni bir `a-…`
+  revizyonu alır; bu yüzden `deckent doctor` artık ona `first-run-template-v13` demez ve sonraki `init policy --upgrade` yalnız ekleyen
+  yolu izler. Terminal tanığı kontrol eden terminaldir: aynı UID'li bir süreç sahte pty üretebilir (SEC-1 sınırı; bir Enterprise
+  bileşimi daha güçlü tanık verebilir); yapay zekâ ajanının kabuğunu yalnız tanık değil, ajan işareti ve CLI kart kapısı reddeder.
+  Bir kipi kapatmak kişinin kayıtlı tam otomatik seçimini bağlarda tutar ama geçerli kılmaz: her çağrı izni yeniden denetler.
 
 ## Sağlayıcılar ve abonelikler
 
@@ -196,6 +202,18 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   henüz yok. İçe aktarılanlar güvenilmeden kalır. *Yol:* içe aktarmadan sonra `deckent mcp remove <ad>`.
 - **OAuth ile MCP sunucuları desteklenmiyor.** Streamable HTTP sunucuları OAuth olmadan çalışır. *Yol:* yerel bir stdio sunucusu ya da
   OAuth gerektirmeyen bir HTTP sunucusu kullanın.
+- **Sağlayıcı anahtarları ana kasada (kurulum) ya da proje kasasındadır; ana kasa anahtarı bir projede yalnız izinle kullanılır.**
+  Terminal dışı `deckent secret set` için `--main` ya da `--project` gerekir; proje anahtarları `.deck` dosyası ister (yalnız
+  referans); ana kasa anahtarı proje başına izin ister (solo terminalde kart ya da `deckent secret grant AD --scope S`). *Sınırlar:*
+  alpha.50'ye dönüşte izin tabanı kalkar (eski sürüm ana kasa anahtarlarını eskisi gibi kullanır, proje kasasını görmez). Native
+  macOS'ta ve Windows'ta terminal tanığı yok: ilk kullanım kartı çıkmaz, `secret grant` orada reddedilir (Linux terminali ya da yönetici
+  izin verir). İlk kullanım anahtar kartı yalnız Linux'ta, solo kurulumda, kişinin kendi terminalindeki akışlı sohbette görünür; host
+  alanındaki bir ajan kabuğunun başlattığı pty sarmalayıcısı insan terminali gibi tanınır (`approval decide` ile aynı kanıt). Ajanın
+  kendi yetki komutları tam erişim dahil her modda kişinin kartını sorar; ama tam erişimli host alanında ajanın yazıp çalıştırdığı
+  betik dosyasını sınıflandırıcı okuyamaz (aynı kullanıcı sınırı, anahtar dosyalarını okumak gibi). Çıplak (bare) bir deponun
+  worktree'leri ayrı proje kasası alır (paylaşılacak ana çalışma ağacı yok). `.deck` ajan araçlarına kapalıdır ama işçiyi durdurmaz.
+- **Adında secret, token ya da password geçen ve değeri düz metin gibi görünen müşteri yapılandırma anahtarı yine reddedilir**; değer
+  bir sır AD referansı olsa bile (örneğin `"secretName": "DB_PASS"`). *Yol:* anahtarı yeniden adlandırın ya da yolu onaylayın.
 
 ## Bütçe ve harcama
 
@@ -237,7 +255,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   devam ettirilemez (`RUN_DECISION_NOT_READY`); iptal ve park süresi bu yeri açmaz. Silindiği hiç kanıtlanamayan denetim yeri süresiz
   tutar; hizmet günlüğü her açılışta onu adlandırır ve `docker rm --force <ad>` sonrası bir sonraki hizmet açılışı yeri bir kez açar
   (o Run'ın ilerleme turu bunu yalnız böyle bir tur koştuğunda yapar; olağan ilerleme ortam yüzünden park edilmiş ya da iptal edilmiş
-  Run'ları atlar). Yer, ilk denetim kabı başlamadan önce tutulur: denetim sürerken Run'ı iptal etmek denetim bitene kadar hiçbir şeyi
+  Run'ları atlar). Bir denetimin kaldırıldığı doğrulanır ama yerini açan defter yazımı başarısız olursa, açılış günlüğü bunu hata koduyla söyler ("kaldırıldığı doğrulanamadı" demez); yer bir sonraki açılışa kadar tutulur. Yer, ilk denetim kabı başlamadan önce tutulur: denetim sürerken Run'ı iptal etmek denetim bitene kadar hiçbir şeyi
   açmaz; hizmet denetimin ortasında ölürse yer, bir sonraki hizmet açılışı denetimlerin kaldırıldığını kanıtlayana kadar tutulur. `deckent coding template` varsayılanları bildirir (node, Node heap tavanı; typescript yolu yalnız `/node_modules`
   bağımlılık bağlaması olan şablonda); mevcut görev türü şablonunu korur (komutu o tür için yeniden çalıştırmak
   `CODING_TEMPLATE_KIND_CONFLICT` ile reddedilir), bu yüzden ona bugün gereksinim eklemek `deckent config set` ile `admission.registry`
@@ -372,6 +390,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Bu sürümden önce onay bekleyen ve yalnız görev düzeyindeki bir onay kuralı yüzünden bekleyen bir /do planı yükseltmeden sonra
   devam etmez:** yeniden gönderilince park edilir (`APPROVAL_CONFLICT`). *Yol:* yeni bir /do başlatın; görev onayı bu kez görev
   çalışmadan hemen önce bir kez sorulur. Politikasında `task` kuralı olmayan kurulumlar etkilenmez.
+- **Yeniden başlatma parmak izi.** `restart-exempt.json`, her istekte yeniden okunan yeniden başlatma bölümü üyelerini listeler (`admission.registry`); bunları değiştirmek hizmeti asla eski göstermez. Üye ancak başlangıçta yakalanmadığı kanıtlandıktan sonra eklenir.
+- **`runtime restart`, systemd'nin çalıştırdığı hizmeti yeniden başlatmayı reddeder** (Linux; hizmet sürecinin unit control group'undan anlaşılır) ve `systemctl [--user] restart <unit>` komutunu söyler. Diğer hizmet yöneticileri ve Linux dışı hostlar algılanmaz.
+- **Yerel runtime soketinin eş canlılık tanığı** HUP/ERR/NVAL'i, çağrı süresince yakalanabilir sinyalleri bloklayan sıfır süreli tek bir `ppoll` ile gözler: SIGCHLD gibi ele alınmış bir sinyal artık kopmuş istemci gibi okunmaz. Gerçek bir tur iptalinden önce biten araç çağrısı yine `cancelled` bildirilir; sonuç metni uygulanan yazım kümesini taşır (tamlık bayrağı ya da yeni durum kararı owner'da açık).
 
 ## Masaüstü ve diğer yüzeyler
 

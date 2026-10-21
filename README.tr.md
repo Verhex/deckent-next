@@ -29,7 +29,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> **Ön sürüm `1.0.0-alpha.50`** (sürüm adayı; yayımlanmış son sürüm [CHANGELOG.md](CHANGELOG.md) içindeki ilk tarihli satırdır). Deckent henüz npm'de yok; [Başlarken](#başlarken)
+> **Ön sürüm `1.0.0-alpha.51`** (sürüm adayı; yayımlanmış son sürüm [CHANGELOG.md](CHANGELOG.md) içindeki ilk tarihli satırdır). Deckent henüz npm'de yok; [Başlarken](#başlarken)
 > bölümündeki gibi kaynaktan kurun. Her sürümün içeriği [CHANGELOG.md](CHANGELOG.md) içinde.
 
 ## Deckent nedir
@@ -183,7 +183,7 @@ Başlamadan önce: Docker çalışıyor; proje en az bir commit'i olan bir Git d
 (Claude Code ya da Codex) bu makinede kendi girişiyle açık; kurulumunuzda güncel ilk kurulum policy'si var (yeni bir
 `deckent init policy --scope <id> --apply` bunu kurar; eski kurulum `deckent init policy --scope <id> --upgrade --preview`,
 ardından önizlemenin bastığı değerle `--apply --expect <değer>` ile yükseltilir; değer politika revizyonunu ve runtime servis kimliğini
-bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
+bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister). Kurulum sahibi tam otomatik ya da tam erişimi `deckent init policy --scope <id> --modes full-auto,full-access --preview`, ardından kendi terminalinde `--apply` ile açar; `--modes none` izni kaldırır (bir sonraki çağrıda kip artık geçerli olmaz; kayıtlı seçim kalır ve terminal verilmediğini söyler). Yapay zekâ araçları, borular ve CI yapamaz.
 
 1. **İşçi imajını bir kez derleyin**, Deckent kaynak dizininde (Docker ister ve yeni bir makbuz dosyası yazar):
 
@@ -232,12 +232,12 @@ bağlar, arada biri değişirse uygulama reddedilir ve yeni önizleme ister).
    kendi girişi olmalıdır:
 
    ```sh
-   deckent secret set DECKENT_ANTHROPIC_KEY
+   deckent secret set DECKENT_ANTHROPIC_KEY --main
    deckent models create-budget --scope my-project --usd 10
    deckent models connect --scope my-project --connection anthropic-api --command-id connect-1 --model claude-sonnet-5-5
    ```
 
-   `secret set` anahtarı gizli bir istemde sorar. Her bağlantı türünün kendi gizli adı vardır: `DECKENT_ANTHROPIC_KEY`,
+   `secret set` anahtarı gizli bir istemde sorar; `--main` kurulum kasasına, `--project` projenin kendi kasasına yazar (adlar yalnız referans tutan `.deck` dosyasında). Ana kasa anahtarı bir projede ancak izinle kullanılır: solo kurulumda terminal sohbeti bir kez sorar ya da `deckent secret grant AD --scope <id>` çalıştırın; `deckent secret list --all` her kasayı gösterir. Her bağlantı türünün kendi gizli adı vardır: `DECKENT_ANTHROPIC_KEY`,
    `DECKENT_OPENAI_KEY`, `DECKENT_DEEPSEEK_KEY`, `DECKENT_GLM_KEY`, `DECKENT_GLM_CN_KEY` ya da `DECKENT_OPENROUTER_KEY`
    (`/provider` aynı adla saklar). Yerel sunucu (vLLM, Ollama ya da LM Studio) isteğe bağlı `DECKENT_LOCAL_ENDPOINT_KEY`
    adını, OpenAI uyumlu bir uç nokta ise host'undan türetilen `DECKENT_OAICOMPAT_<HOST>` adını kullanır. `--model` birebir API model kimliğini alır; paketlenmiş katalogların kimlikleri kaynak
@@ -411,7 +411,7 @@ Tam otomatik, `find -delete`, dosya kısaltma (`>`, `>|`) ve taşıma (`mv`) iç
 
 ### API anahtarları
 
-Sağlayıcı anahtarını bir kez, `/provider`'ın gizlenen alanına ya da `deckent secret set AD` ile kaydedersiniz (etkileşimli
+Sağlayıcı anahtarını bir kez, `/provider`'ın gizlenen alanına ya da `deckent secret set AD --main|--project` ile kaydedersiniz (etkileşimli
 terminalde gizli istem; asla komut argümanı değil, stdin'den verilen anahtar reddedilir); model profili ona adıyla başvurur. Anahtarı `ANTHROPIC_API_KEY`, shell
 profili ya da `.env` dosyasına koymayın: başka araçlar oraları okur.
 

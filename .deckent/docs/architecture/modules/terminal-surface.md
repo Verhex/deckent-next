@@ -427,3 +427,8 @@ Older ports without push snapshots poll only admitted identities. Completed reco
 can make room at the configured limit; when all records are open, a new admitted Run
 gets a visible tracking-limit notice and remains inspectable with `/run`. Tracking
 ends with the terminal process and is not durable notification, acceptance or delivery.
+
+## Session model pin (PRE-10, alpha.51)
+
+A session pin (`/model` -> this session only) is sufficient for a turn: readiness checks the pin as itself and refuses typed (naming it) when it is
+undeclared; the persistent model is never substituted.

@@ -113,3 +113,13 @@ alpha.47, evidence `deckent-refactor-work/proof/ALPHA47-2026-10-18/HANDOFF-S0-S1
   `companionReobservations` times, `companionReobservationDelayMs` apart (`managed-files/internal/companion-limits.json`). A present unsafe companion fails closed at
   once with its diagnostic (reason, mode, links, companion, stage); one still zero-link after the bound fails closed as before.
 - Without a running service (CLI clients only) companions still churn; the bounded re-observation covers that case.
+
+## Runtime service liveness and restart (alpha.51)
+
+- **LIVENESS-EINTR:** the peer liveness witness observes HUP/ERR/NVAL with one zero-duration `ppoll` that blocks catchable signals for the call, so a handled
+  signal such as SIGCHLD no longer reads as a disconnected client. A tool call that finished before a genuine turn cancellation is still reported
+  `cancelled`; its result text carries the applied write set (owner decision on a completeness flag or new status open: PLAN IPTAL-ETKI-DOGRULUGU).
+- **Restart fingerprint:** `restart-exempt.json` lists members of restart sections that every request re-reads (`admission.registry`); a member is added only
+  after proving no start-time capture.
+- **Service manager:** terminal/`runtime restart` refuses a service that systemd runs (detected from `/proc/<pid>/cgroup` only; `<name>.service` leaf counts,
+  `user@N.service` and `.scope` leaves do not) and names `systemctl [--user] restart <unit>`.

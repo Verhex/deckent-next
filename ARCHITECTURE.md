@@ -926,14 +926,14 @@ Layers: `platform` (config, errors/i18n, identity, paths), `domain` (pure versio
 | Module note | Scope |
 |---|---|
 | [resource-quality](.deckent/docs/architecture/modules/resource-quality.md) | Supervisor resource observation, separate bounded asynchronous trace, cost/quality projections and advisory comparisons; inspect authority applies before aggregation. Evaluation replay excludes read-time `pool`/`costReport`; observer reads/writes are cancellable and timers never keep shutdown alive. |
-| [platform-and-layers](.deckent/docs/architecture/modules/platform-and-layers.md) | Layer map (`src/platform … composition`), startup cost, compiled entries, CI preparation, hardcode ratchet (HARDCODE-P1-B). |
+| [platform-and-layers](.deckent/docs/architecture/modules/platform-and-layers.md) | Layer map (`src/platform … composition`), startup cost, compiled entries, CI preparation, hardcode ratchet (HARDCODE-P1-B), runtime liveness and restart (alpha.51). |
 | [config-and-cli-help](.deckent/docs/architecture/modules/config-and-cli-help.md) | Typed `ConfigApplication`, CONFIG-SURFACE write/overlay contract, CLI config view, CLI help catalog. |
-| [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md) | Operator terminal contract v1, turn phases, tool lines/read limits, `@` index, `/resume`, `/context`, TC-M harness. |
+| [terminal-surface](.deckent/docs/architecture/modules/terminal-surface.md) | Operator terminal contract v1, turn phases, tool lines/read limits, `@` index, `/resume`, `/context`, TC-M harness, session model pin (PRE-10). |
 | [agent-turn-engine](.deckent/docs/architecture/modules/agent-turn-engine.md) | Agent turn loop, durable turns, `chatTurn` runtime (protocol v12+), context measurement, compaction, history lifecycle, system prompt, reasoning control. |
 | [agent-tools](.deckent/docs/architecture/modules/agent-tools.md) | Composer `@file`, file edits as C11 effects, scratch area, `run_shell`, `terminal.fetch`/`network.fetch@1`, tool calls over openai-chat, terminal direction. |
 | [shell-realms](.deckent/docs/architecture/modules/shell-realms.md) | Shell realm, bubblewrap and Landlock providers, doctor realm report, sandbox scan speed. |
 | [ci-and-verification](.deckent/docs/architecture/modules/ci-and-verification.md) | CI-FULL, CI-FIX, CI-SPEED (one build/Node, complete shard collection), SOCKET-PUBLICATION, platform verification tooling. |
-| [permission-modes](.deckent/docs/architecture/modules/permission-modes.md) | MODES-3 (standart/full-auto/full-access), decision and audit, write postures, FA-TRACKED-WARN, `/mode`. |
+| [permission-modes](.deckent/docs/architecture/modules/permission-modes.md) | MODES-3 (standart/full-auto/full-access), decision and audit, write postures, FA-TRACKED-WARN, `/mode`, PRE-9 owner-opened modes, PRE-8 project key vault and grants. |
 | [record-redaction-and-safe-approval](.deckent/docs/architecture/modules/record-redaction-and-safe-approval.md) | Canonical record redactor, terminal S06, SAFE-APPROVAL-A1 custody (former "Current closure"). |
 | [host-qwen-decision-pilot](.deckent/docs/architecture/modules/host-qwen-decision-pilot.md) | Canceled development-host Qwen decision research (owner2026-10-06; historical host tool outside customer src/native). |
 

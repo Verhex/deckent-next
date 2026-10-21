@@ -307,3 +307,20 @@ the stop as mark and catalog word (`⏸ standart`, `⏸ dikkatli`, `⏵⏵ tam o
 non-droppable in the error role. While a card or picker owns the keyboard, Shift+Tab is theirs and the mode does not change; while a turn runs the step is not taken (the
 turn keeps the mode it was admitted with, as a queued `/mode` does). The `--full-access` launch flag still works.
 
+
+## PRE-9 SOLO-MOD-IZNI (alpha.51)
+
+The installation owner opens or closes full-auto/full-access with `deckent init policy --scope <id> --modes <list>|none` under the installer's custody
+(file owner, terminal witness, y/N card on the previewed revision, conditional archived write, `authority-change` audit with `commandId` prefix
+`installer-permission-modes-v1-`). Managed rules `installer-permission-mode-<mode>` name one person in one scope; the plan and result are the effective
+decision per mode, so a rule it does not manage stays and is named. The first-run template stays v13 (no mode open by default). Closing a mode keeps the
+person's stored full-auto entry in bindings, but every call re-checks the grant, so it is not in effect.
+
+## PRE-8 project key vault (alpha.51)
+
+Main vault = the installation store. Project vault = encrypted-file store under `<global>/project-secrets/<sha256(salt, installationId, projectId)>` of the
+project's anchor (a linked worktree's main working tree), bound to the anchor's data root and git common dir. `.deck` (references only) selects `project`
+per name; a main key is used in a project only with a grant decided on `secret`/`set` and sealed as `authority-decision` before `grants.json`. One resolver
+serves every provider read; one inventory serves `secret list [--all]`. The terminal turn checks the provider credential locally before binding;
+`SECRET_GRANT_REQUIRED` on a solo attested terminal opens one approval-priority card; yes = `secret grant` (source card); the turn restarts once. An agent
+shell's authority commands are the edit-authority floor in every mode. Non-terminal `secret set` needs `--main|--project` (`SECRET_VAULT_REQUIRED`).
