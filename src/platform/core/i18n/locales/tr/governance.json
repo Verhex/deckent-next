@@ -765,7 +765,7 @@
   "remedy.SECRET_PROJECT_MISSING": "O projede terminalinizde saklayın: deckent secret set {name} --project --scope {scope}, ya da .deck'i {name}=main yapın.",
   "error.SECRET_PROJECT_IDENTITY_REQUIRED": "Bu projenin henüz kurulum kimliği yok, bu yüzden anahtarları çözülemez; hiçbir şey okunmadı ya da gönderilmedi. Önce projede deckent init çalıştırın.",
   "error.SECRET_PROJECT_VAULT_OWNERSHIP_LOST": "{project} proje kasasında anahtar ya da izin var ama sahiplik kaydı eksik ya da okunamıyor (kısmi geri yükleme ya da elle düzenleme). Açılmadı; hiçbir şey okunmadı ya da gönderilmedi.",
-  "remedy.SECRET_PROJECT_VAULT_OWNERSHIP_LOST": "Kasanın sahibi bu klasördeki projeyse, orada terminalinizde çalıştırın: deckent secret handover --scope <kapsam>. Değilse bu klasöre kendi kimliğini verin: deckent init identity --new.",
+  "remedy.SECRET_PROJECT_VAULT_OWNERSHIP_LOST": "Bu kasa buradan kurtarılamaz (yönetilen kurtarma betada gelir). Bu klasöre yeni bir kimlik ve boş bir kasa verin: deckent init identity --new, sonra anahtarlarını yeniden saklayın ya da izin verin.",
   "error.SECRET_PROJECT_VAULT_CLAIMED": "{project} için proje kasası aynı kimliği taşıyan başka bir klasöre ait (bir kopya ya da devredilmemiş bir taşıma). Açılmadı; hiçbir şey okunmadı ya da gönderilmedi.",
   "remedy.SECRET_PROJECT_VAULT_CLAIMED": "Kopyaya kendi kimliğini verin: deckent init identity --new. Eski klasörü artık olmayan taşınmış bir projede yeni klasörde terminalinizde deckent secret handover çalıştırın.",
   "error.SECRET_GRANT_STORE_UNSAFE": "Bu projenin izin kaydı kullanılamadı ({reason}): size ait özel bir dosya olmalı (0600, tek bağlantı, bağlantı değil). Hiçbir izin kullanılmadı, hiçbir şey yazılmadı.",

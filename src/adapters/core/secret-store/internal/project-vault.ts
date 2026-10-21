@@ -129,19 +129,19 @@ export async function admitProjectVault(directory: string, anchor: ProjectVaultA
     await writeRecord(recordPath(directory), projectVaultRecordSchema.parse({ schemaVersion: 1, anchor, firstSeenAtMs: nowMs, handedOverAtMs: null }));
   }, lockTimeoutMs);
 }
-/** Explicit handover after a move (the recorded owner's data root is gone); refused while the original still holds its identity. */
-export async function handOverProjectVault(directory: string, anchor: ProjectVaultAnchor, nowMs: number, lockTimeoutMs: number): Promise<ProjectVaultRecord> {
+/**
+ * Explicit handover after a move: only an INTACT ownership record whose owner's data root is gone (Astra REVISE 2704 A). A lost, absent, null or
+ * invalid record is never recovered here (`SECRET_PROJECT_VAULT_OWNERSHIP_LOST`; governed recovery is a beta item). `authorize` decides and seals
+ * the handover under the record's write lock BEFORE the new binding is written; when it throws, nothing changes.
+ */
+export async function handOverProjectVault(directory: string, anchor: ProjectVaultAnchor, nowMs: number, lockTimeoutMs: number,
+  authorize: (recorded: ProjectVaultRecord) => Promise<void> | void): Promise<ProjectVaultRecord> {
   return withConfigWriteLock(recordPath(directory), async () => {
     const record = await loadOwnership(directory);
-    // A lost ownership record: the person at the terminal states this project owns the vault (explicit, witnessed, recorded as a handover).
-    if (record === 'lost' || record === 'absent') {
-      if (record === 'absent' && !await vaultHasContent(directory)) throw projectVaultClaimed(anchor);
-      const next = projectVaultRecordSchema.parse({ schemaVersion: 1, anchor, firstSeenAtMs: nowMs, handedOverAtMs: nowMs });
-      await writeRecord(recordPath(directory), next);
-      return next;
-    }
+    if (record === 'lost' || record === 'absent') throw ownershipLost(anchor);
     if (assessProjectVaultOwnership(record, anchor) === 'match') return record;
     const next = projectVaultHandover(record, anchor, await locationPresent(record.anchor.binding), nowMs);
+    await authorize(record);
     await writeRecord(recordPath(directory), next);
     return next;
   }, lockTimeoutMs);

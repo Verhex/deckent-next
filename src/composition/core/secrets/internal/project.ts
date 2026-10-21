@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { configuredSecretResolver, ErrorRegistry, SystemTrustedClock, withConfigWriteLock, type ConfigLoadOptions } from '#platform/index.js';
 import { admitProjectVault, attestLocalInteractiveTerminal, directoryLocation, FileInstallationIdentityStore, FileProjectIdentityStore, handOverProjectVault, installationSecretRoot,
   localPrincipalChannel, localPrincipalPeer, openLocalIntegrityAuthority, openProjectVaultStore, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readProjectDeck } from '#adapters/index.js';
-import { assertAuthorityWitness, AuditApplication, AuthorityDecisionRecords, SecretStoreAdministration, credentialSourceError, decideCredentialSource, decideSecretGrant,
+import { assertAuthorityWitness, AuditApplication, AuthorityDecisionRecords, SecretStoreAdministration, credentialSourceError, decideCredentialSource, decideProjectVaultHandover, decideSecretGrant,
   deckDeclaration, findSecretGrant, parseDeckDeclarations, policySecretChangeAuthorization, projectVaultAnchorSchema, projectVaultClaimed, type AuthorityWitness,
   type CredentialSource, type ProjectCredentialResolver, type ProjectVaultAnchor } from '#engine/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -98,18 +98,18 @@ async function witnessed(write: string, witness: AuthorityWitness) {
   await assertAuthorityWitness(write, localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined), witness);
 }
 /** Opens the project's vault for a writer: anchor required, directory created, ownership recorded (a copy is refused). */
+/** The project's ledger for one sealed decision; its integrity key is created on first sealed use (as `init policy --upgrade --apply` does). */
+const ledgerOf = (context: ScopeContext) => async () => {
+  const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
+  try { return { store, audit: new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)) }; }
+  catch (error) { store.close(); throw error; }
+};
 async function writerContext(projectRoot: string, scopeId: string, options: ConfigLoadOptions) {
   const context = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write'), anchor = await resolveProjectVaultAnchor(context, options);
   if (!anchor) throw ErrorRegistry.createError('SECRET_PROJECT_IDENTITY_REQUIRED');
   const clock = new SystemTrustedClock(), root = globalRoot(options), directory = (await projectVaultDirectory(root, anchor, true))!;
   await admitProjectVault(directory, anchor, true, clock.sample().wallMs, lockMs(context));
-  // The ledger's integrity key is created on first sealed use (as `init policy --upgrade --apply` does), so a grant works before the service ever ran.
-  const open = async () => {
-    const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
-    try { return { store, audit: new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)) }; }
-    catch (error) { store.close(); throw error; }
-  };
-  return { context, anchor, root, directory, clock, open };
+  return { context, anchor, root, directory, clock, open: ledgerOf(context) };
 }
 
 /** `deckent secret grant|revoke NAME --scope S`: lend (or take back) main-vault key NAME to this project, decided on `secret`/`set` and sealed first. */
@@ -140,13 +140,22 @@ export async function setProjectSecret(projectRoot: string, scopeId: string, nam
   } finally { ledger.store.close(); }
 }
 
-/** `deckent secret handover`: a moved project takes its vault along (only when the recorded owner's data root is gone). */
+/** `deckent secret handover`: a moved project takes its vault along — an intact record whose owner's data root is gone, authorized on `secret`/`set`
+ * (resource `project-vault`) and sealed before the binding changes (Astra REVISE 2704 A). A lost record is refused, never recovered here. */
 export async function handOverProjectSecrets(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}, witness: AuthorityWitness = defaultWitness) {
   await witnessed('secretHandover', witness);
   const context = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write'), anchor = await resolveProjectVaultAnchor(context, options);
   if (!anchor) throw ErrorRegistry.createError('SECRET_PROJECT_IDENTITY_REQUIRED');
   const directory = await projectVaultDirectory(globalRoot(options), anchor, false);
   if (!directory) throw projectVaultClaimed(anchor);
-  const record = await handOverProjectVault(directory, anchor, new SystemTrustedClock().sample().wallMs, lockMs(context));
+  const clock = new SystemTrustedClock(), now = () => clock.sample().wallMs;
+  const record = await handOverProjectVault(directory, anchor, now(), lockMs(context), async recorded => {
+    const ledger = await ledgerOf(context)();
+    try {
+      const records = new AuthorityDecisionRecords(ledger.audit);
+      decideProjectVaultHandover({ principal: context.principal, scopeId, commandId: randomUUID() },
+        { from: recorded.anchor, to: anchor, policy: context.document, record: (subject, atMs) => records.record(subject, atMs), now });
+    } finally { ledger.store.close(); }
+  });
   return Object.freeze({ project: record.anchor.projectRoot, handedOverAtMs: record.handedOverAtMs });
 }

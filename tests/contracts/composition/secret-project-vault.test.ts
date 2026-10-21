@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { installationSecretRoot, openLocalIntegrityAuthority, openSqliteAuditStore, projectRepository, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
 import { changeProjectSecretGrant, handOverProjectSecrets, projectCredentialResolver, resolveProjectVaultAnchor, setProjectSecret } from '#composition/core/secrets/index.js';
@@ -166,7 +166,7 @@ describe.skipIf(process.platform !== 'linux')('REVISE 2702 P1-B: a vault whose o
   };
   for (const [label, damage] of [['missing', async (file: string) => rm(file)], ['JSON null', async (file: string) => writeFile(file, 'null\n', { mode: 0o600 })],
     ['invalid', async (file: string) => writeFile(file, '{"schemaVersion":1}\n', { mode: 0o600 })]] as const) {
-    it(`${label} project.json beside a surviving grant and key: reads and writes are refused; the explicit handover restores it`, async () => {
+    it(`${label} project.json beside a surviving grant and key: reads, writes and handover are all refused (REVISE 2704: no witness-only recovery)`, async () => {
       const { base, env } = await home(), root = await project(base, 'p');
       await changeProjectSecretGrant(root, 'scope', 'DECKENT_ANTHROPIC_KEY', 'grant', 'admin', { env }, human);
       await setProjectSecret(root, 'scope', 'OWN_KEY', OWN_VALUE, { env }, human);
@@ -181,9 +181,11 @@ describe.skipIf(process.platform !== 'linux')('REVISE 2702 P1-B: a vault whose o
       // Never re-claimed silently: still no ownership record.
       await expect(readFile(join(directory, PROJECT_VAULT.projectFile), 'utf8').then(text => JSON.parse(text)?.anchor ?? null).catch(() => null)).resolves.toBeNull();
       expect(await code(handOverProjectSecrets(root, 'scope', { env }, noTerminal))).toBe('AUTHORITY_WITNESS_REQUIRED');
-      await handOverProjectSecrets(root, 'scope', { env }, human);
-      expect(await (await resolverOf(root, env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
-      expect(await (await resolverOf(root, env)).resolve('OWN_KEY')).toBe(OWN_VALUE);
+      // Astra REVISE 2704 A: a lost ownership record is never recovered by a handover (governed recovery is beta); the next step is a fresh identity.
+      const refused = await handOverProjectSecrets(root, 'scope', { env }, human).catch((error: { code?: string; suggestion?: string }) => error);
+      expect(refused).toMatchObject({ code: 'SECRET_PROJECT_VAULT_OWNERSHIP_LOST' });
+      expect((refused as { suggestion?: string }).suggestion).toContain('deckent init identity --new');
+      expect(await code((await resolverOf(root, env)).check('DECKENT_ANTHROPIC_KEY'))).toBe('SECRET_PROJECT_VAULT_OWNERSHIP_LOST');
     });
   }
   it('a truly new empty vault is claimed by its first write; a reader of a never-written project creates nothing', async () => {
@@ -194,5 +196,51 @@ describe.skipIf(process.platform !== 'linux')('REVISE 2702 P1-B: a vault whose o
     const record = JSON.parse(await readFile(join(await vaultOf(root, env), PROJECT_VAULT.projectFile), 'utf8'));
     expect(record).toMatchObject({ schemaVersion: 1, anchor: { projectRoot: root }, handedOverAtMs: null });
     expect(await (await resolverOf(root, env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
+  });
+});
+
+// Astra REVISE 2704 A: a normal handover (intact record, original root gone) is authorized on the existing `secret`/`set` cell and sealed as an
+// `authority-decision` BEFORE the binding changes; refused or unrecorded, nothing changes.
+describe.skipIf(process.platform !== 'linux')('REVISE 2704 A: the handover is authorized and sealed before the binding changes', () => {
+  const moved = async () => {
+    const { base, env } = await home(), root = await project(base, 'orig');
+    await changeProjectSecretGrant(root, 'scope', 'DECKENT_ANTHROPIC_KEY', 'grant', 'admin', { env }, human);
+    const copy = join(base, 'moved');
+    await cp(root, copy, { recursive: true });
+    clearConfigCache(); await resolveConfiguredInstallationIdentity(copy, 'keep', { env });
+    const anchor = (await resolveProjectVaultAnchor(await loadConfiguredScopeContext(copy, 'scope', { env }, 'read'), { env }))!;
+    const record = join(installationSecretRoot(env)!, PROJECT_VAULT.directory, projectVaultKey(anchor), PROJECT_VAULT.projectFile);
+    return { base, env, root, copy, record, grants: join(dirname(record), PROJECT_VAULT.grantsFile) };
+  };
+  it('an authorized move: the sealed secret-vault-handover decision precedes the new binding', async () => {
+    const m = await moved();
+    await rm(m.root, { recursive: true, force: true });
+    await handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human);
+    expect(JSON.parse(await readFile(m.record, 'utf8'))).toMatchObject({ anchor: { projectRoot: m.copy }, handedOverAtMs: expect.any(Number) });
+    const audit = await openSqliteAuditStore(join(m.copy, '.deckent/state/ledger.db'), SQLITE, 'forbid');
+    try {
+      expect(audit.page('scope', 0, 1_000).map(record => record.event.subject)).toContainEqual(expect.objectContaining({ kind: 'authority-decision', action: 'secret-vault-handover',
+        resource: { kind: 'secret', id: 'project-vault' }, verdict: expect.objectContaining({ decision: 'allow' }) }));
+    } finally { audit.close(); }
+    expect(await (await resolverOf(m.copy, m.env)).resolve('DECKENT_ANTHROPIC_KEY')).toBe(MAIN_VALUE);
+  });
+  it('a member without secret/set is refused; the refusal is sealed and the binding is unchanged', async () => {
+    const m = await moved(), before = await readFile(m.record, 'utf8');
+    await rm(m.root, { recursive: true, force: true });
+    await writeFile(join(m.copy, '.deckent/policy.json'), policy(false), { mode: 0o600 }); clearConfigCache();
+    expect(await code(handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human))).toBe('SECRET_CHANGE_DENIED');
+    expect(await readFile(m.record, 'utf8')).toBe(before);
+  });
+  it('the original still present: refused, unchanged', async () => {
+    const m = await moved(), before = await readFile(m.record, 'utf8');
+    expect(await code(handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human))).toBe('SECRET_PROJECT_VAULT_CLAIMED');
+    expect(await readFile(m.record, 'utf8')).toBe(before);
+  });
+  it('the decision cannot be written: nothing changes (binding and grants)', async () => {
+    const m = await moved(), before = await readFile(m.record, 'utf8'), grants = await readFile(m.grants, 'utf8');
+    await rm(m.root, { recursive: true, force: true });
+    await rm(join(m.copy, '.deckent/state/ledger.db'));
+    expect(await code(handOverProjectSecrets(m.copy, 'scope', { env: m.env }, human))).not.toBeNull();
+    expect(await readFile(m.record, 'utf8')).toBe(before); expect(await readFile(m.grants, 'utf8')).toBe(grants);
   });
 });

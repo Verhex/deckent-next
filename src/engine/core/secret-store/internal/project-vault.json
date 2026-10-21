@@ -14,7 +14,8 @@
     "projectMaxBytes": 16384,
     "grantsFile": "grants.json",
     "grantsMaxBytes": 262144,
-    "grantsMaxEntries": 512
+    "grantsMaxEntries": 512,
+    "handoverResourceId": "project-vault"
   },
   "grantStore": {
     "core": "core.secret-grant.file@1"

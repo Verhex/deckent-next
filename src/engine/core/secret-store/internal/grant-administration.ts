@@ -4,7 +4,7 @@ import { ErrorRegistry } from '#platform/index.js';
 import type { SecretGrantStore } from './grant.js';
 import { isSecretName } from './port.js';
 import { SECRET_STORE_SWITCH_RESOURCE_ID } from './switch.js';
-import type { ProjectVaultAnchor, SecretGrantFile } from './project.js';
+import { PROJECT_VAULT, type ProjectVaultAnchor, type SecretGrantFile } from './project.js';
 
 export interface SecretGrantRequest {
   /** The verified caller (the CLI's own OS identity at a witnessed terminal), never an input field. */
@@ -57,4 +57,29 @@ export async function decideSecretGrant(request: SecretGrantRequest, ports: Secr
 export function authorizeSecretInventoryAll(policy: unknown, principal: VerifiedPrincipal, scopeId: string): void {
   const verdict = evaluatePolicy(policy, { principal, scopeId, action: 'switch', resource: { kind: policyResources.secret.kind, id: SECRET_STORE_SWITCH_RESOURCE_ID } });
   if (verdict.decision !== 'allow') throw ErrorRegistry.createError('SECRET_CHANGE_DENIED', { params: { action: 'switch', name: SECRET_STORE_SWITCH_RESOURCE_ID } });
+}
+
+export interface ProjectVaultHandoverPorts {
+  /** The vault's recorded owner and the anchor that takes it over. */
+  readonly from: ProjectVaultAnchor; readonly to: ProjectVaultAnchor;
+  readonly policy: unknown;
+  record(subject: AuthorityDecisionSubject, atMs: number): { readonly event: { readonly eventId: string } };
+  now(): number;
+}
+/**
+ * Astra REVISE 2704 A: moving a project vault to a moved project is decided on the EXISTING `secret`/`set` cell for the vault resource
+ * (`project-vault`, registry data) in the scope and sealed as an `authority-decision` (`secret-vault-handover`) BEFORE the binding changes — a refusal is
+ * sealed too, and an unrecordable decision changes nothing. The caller has passed the terminal witness and the adapter's move check (original gone).
+ */
+export function decideProjectVaultHandover(request: Omit<SecretGrantRequest, 'name' | 'action' | 'source'>, ports: ProjectVaultHandoverPorts): void {
+  const { principal, scopeId } = request, resource = { kind: policyResources.secret.kind, id: PROJECT_VAULT.handoverResourceId };
+  const verdict = evaluatePolicy(ports.policy, { principal, scopeId, action: 'set', resource });
+  const envelope = commandEnvelopeSchema.parse({ schemaVersion: 1, commandId: request.commandId, scopeId,
+    principalRef: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, idempotencyKeyHash: hash('secret-vault-handover-command:1', request.commandId) });
+  ports.record({ kind: 'authority-decision', schemaVersion: 1, envelope, action: 'secret-vault-handover', resource,
+    inputDigest: hash('secret-vault-handover:1', { installationId: ports.to.installationId, projectId: ports.to.projectId, from: ports.from.binding, to: ports.to.binding }),
+    basisDigest: null, policyDigest: hash('policy:1', ports.policy),
+    verdict: { decision: verdict.decision, revision: verdict.revision, reason: verdict.reason, ...(verdict.ruleId === undefined ? {} : { ruleId: verdict.ruleId }) } }, ports.now());
+  if (verdict.decision === 'require-approval') throw ErrorRegistry.createError('POLICY_APPROVAL_UNSUPPORTED');
+  if (verdict.decision !== 'allow') throw ErrorRegistry.createError('SECRET_CHANGE_DENIED', { params: { action: 'set', name: PROJECT_VAULT.handoverResourceId } });
 }
