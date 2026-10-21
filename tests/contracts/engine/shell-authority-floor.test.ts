@@ -92,3 +92,25 @@ describe.skipIf(process.platform !== 'linux')('REVISE 2704 B: transparent prefix
     expect(await decide(command, ai)).toBe('deny');
   });
 });
+
+// Astra REVISE 2706 P2-1 (lead decision): an interpreter's inline program keeps its interpreter context. Not decodable as a shell argv, it is
+// normalised (alphanumerics, lower case) and keeps the floor when it names the product (`deckent`, `deckent-mcp`) or an authority word pair.
+const INLINE = [`python3 -c 'import pty; pty.spawn(["deckent","secret","grant","K","--scope","s","--json"])'`,
+  `env python3 -c 'import pty; pty.spawn(["deckent","secret","grant","K","--scope","s","--json"])'`,
+  `node -e 'require("child_process").execFileSync("deckent",["secret","grant","K"])'`,
+  `node -e 'require("child_process").execFileSync("dec"+"kent",["sec"+"ret","grant","K"])'`,
+  `perl -e 'system("deckent","approval","decide","x","approve")'`, `ruby -e 'system("deckent", "init", "policy", "--modes")'`,
+  `python3 -c 'import subprocess; subprocess.run(["deckent-mcp"])'`, `node --eval 'x("secret" + "set")'`, `php -r 'passthru("deckent secret delete K");'`,
+  `awk 'BEGIN { system("deckent secret grant K") }'`];
+const INLINE_ORDINARY = [`python3 -c 'print(1)'`, `node -e 'console.log(1)'`, `perl -e 'print 1'`, `ruby -e 'puts 1'`, `awk '{ print $1 }' README`];
+describe.skipIf(process.platform !== 'linux')('REVISE 2706: an inline interpreter program naming the product keeps the floor; ordinary inline programs do not', () => {
+  it.each(INLINE)('%s → edit-authority', async command => {
+    expect(classify(command), command).toBe(true);
+    expect(await decide(command)).toBe('require-approval');
+    expect(await decide(command, ai)).toBe('deny');
+  });
+  it.each(INLINE_ORDINARY)('%s stays card-free in full access', async command => {
+    expect(classify(command)).toBe(false);
+    expect(await decide(command)).toBe('allow');
+  });
+});

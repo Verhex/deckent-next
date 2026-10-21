@@ -209,7 +209,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   macOS'ta ve Windows'ta terminal tanığı yok: ilk kullanım kartı çıkmaz, `secret grant` orada reddedilir (Linux terminali ya da yönetici
   izin verir). İlk kullanım anahtar kartı yalnız Linux'ta, solo kurulumda, kişinin kendi terminalindeki akışlı sohbette görünür. Ajan
   turları bunun dışına çıkamaz: tam erişimli bir ajan turu yalnız gerçek açık sandbox'ta çalışır (host alanı orada reddedilir) ve kasalar
-  oradan erişilemez; ajanın kendi yetki komutları her modda kişinin kartını sorar. Kalan sınır ajan turlarının dışındadır: kişinin kendi
+  oradan erişilemez; ajanın kendi yetki komutları her modda kişinin kartını sorar (bir yorumlayıcının satır içi programı metni ürünü
+  adlandırdığında sayılır; karakter kodlarından ya da kodlamalardan kurulan program metni tanınmaz — sınır açık sandbox ve kasa
+  tabanıdır). Kalan sınır ajan turlarının dışındadır: kişinin kendi
   hesabında terminali olan aynı kullanıcılı her süreç (`script` gibi bir pty sarmalayıcısı dahil) `approval decide` ile aynı terminal
   tanığını geçer. Çıplak (bare) bir deponun worktree'leri ayrı proje kasası alır (paylaşılacak ana çalışma ağacı yok). `.deck` ajan araçlarına kapalıdır ama işçiyi durdurmaz.
 - **Adında secret, token ya da password geçen ve değeri düz metin gibi görünen müşteri yapılandırma anahtarı yine reddedilir**; değer

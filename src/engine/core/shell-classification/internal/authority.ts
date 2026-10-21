@@ -1,5 +1,6 @@
 import { scanPosixCommand } from './scanner.js';
-import { EVAL_PROGRAMS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PRODUCT_AUTHORITY_COMMANDS, PROGRAM_ALIASES, PTY_WRAPPER_PROGRAMS, TRANSPARENT_PROGRAMS, XARGS_PROGRAMS } from './programs.js';
+import { AWK_PROGRAMS, EVAL_PROGRAMS, INLINE_PROGRAM_FLAGS, INTERPRETER_PROGRAMS, PRIVILEGE_PROGRAMS, PRODUCT_AUTHORITY_COMMANDS, PRODUCT_PROGRAM_NAMES, PROGRAM_ALIASES, PTY_WRAPPER_PROGRAMS,
+  SHELL_PROGRAMS, TRANSPARENT_PROGRAMS, XARGS_PROGRAMS } from './programs.js';
 import { PACKAGE_PROGRAMS } from './mutation.js';
 
 /** The product's authority subcommands as they appear in any command text (the program may be `deckent`, a path to it, `node …/entry.js` or `npx`). */
@@ -25,6 +26,31 @@ const names = (text: string) => AUTHORITY_TEXT.some(pattern => pattern.test(text
 export function classifyShellAuthority(command: string): boolean {
   return typeof command === 'string' && command.length > 0 && runsAuthority(command, 0);
 }
+/**
+ * Astra REVISE 2706 (lead decision): an interpreter's inline program is not a shell argv. It keeps the floor when, normalised to lower-case
+ * alphanumerics, it names the product (`deckent`, `deckent-mcp`) or an authority word pair (`secretgrant`, `approvaldecide`, `initpolicy`, …);
+ * otherwise the normal mode rules apply. Program text built from character codes or encodings is not recognised (known limit; the open sandbox and
+ * the vault floor remain the boundary).
+ */
+const normalised = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/gu, '');
+const PRODUCT_MARKS: readonly string[] = Object.freeze([...PRODUCT_PROGRAM_NAMES.map(normalised),
+  ...Object.values(PRODUCT_AUTHORITY_COMMANDS).flatMap(groups => Object.entries(groups).flatMap(([group, actions]) => actions.map(action => normalised(`${group}${action}`)))),
+  normalised('approval decide'), normalised('init policy')]);
+const INLINE_INTERPRETER = (name: string) => (INTERPRETER_PROGRAMS.has(name) && !SHELL_PROGRAMS.has(name)) || AWK_PROGRAMS.has(name);
+/** The inline programs of an interpreter word at `at` (its flag's operand, an attached `-e…`, awk's first operand); none for a program file. */
+function inlinePrograms(words: readonly string[], at: number): readonly string[] {
+  const name = programName(words[at]!), args = words.slice(at + 1), out: string[] = [];
+  if (AWK_PROGRAMS.has(name)) { const program = args.find((arg, index) => !arg.startsWith('-') && !['-F', '-v', '-f'].includes(args[index - 1] ?? '')); return program ? [program] : []; }
+  args.forEach((arg, index) => {
+    if (INLINE_PROGRAM_FLAGS.has(arg) && args[index + 1] !== undefined) out.push(args[index + 1]!);
+    else if (/^-[ecrEpx]./u.test(arg) && !arg.startsWith('--')) out.push(arg.slice(2));
+  });
+  return out;
+}
+/** Whether any interpreter in the stage (at the head, or after transparent prefixes) runs an inline program that names the product. */
+const inlineNamesProduct = (words: readonly string[]) => words.some((word, at) => (at === 0 || LAUNCHERS.has(programName(words[0]!))) && INLINE_INTERPRETER(programName(word))
+  && inlinePrograms(words, at).some(program => PRODUCT_MARKS.some(mark => normalised(program).includes(mark))));
+
 /** Nested shell strings decoded at most this deep; deeper is not decoded: the card stays. */
 const PAYLOAD_DEPTH = 4;
 /** Decoding the shell would do but the strict scanner does not: ANSI-C/locale quoting (`$'…'`, `$"…"`), brace expansion, globbing. */
@@ -67,7 +93,9 @@ function runsAuthority(command: string, depth: number): boolean {
   if (!scan.ok) return launchesProgram(command) || names(command) || PTY_WORD.test(command);
   for (const [index, stage] of scan.pipelines.flatMap(pipeline => pipeline.map((each, at) => [at, each] as const))) {
     const head = stage.words[0];
-    if (!head || !LAUNCHERS.has(programName(head.text))) continue;
+    if (!head) continue;
+    if (inlineNamesProduct(stage.words.map(word => word.text))) return true;
+    if (!LAUNCHERS.has(programName(head.text))) continue;
     const rest = stage.words.slice(1);
     // A shell fed by a pipe runs whatever the pipe carries: never decoded here, the card stays.
     // An input redirection (`<`, `0<`, a here-document) feeds the program the same way.

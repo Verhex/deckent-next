@@ -216,3 +216,10 @@ export const PRODUCT_AUTHORITY_COMMANDS: Readonly<Record<string, Readonly<Record
 export const PTY_WRAPPER_PROGRAMS: ReadonlySet<string> = new Set(['script', 'unbuffer', 'expect']);
 /** Astra REVISE 2704 B: prefixes that run the next word as the program with the same argv and stdin (options and assignments before it). */
 export const TRANSPARENT_PROGRAMS: ReadonlySet<string> = new Set(['env', 'command', 'exec', 'builtin', 'nice', 'nohup', 'time', 'timeout', 'stdbuf', 'ionice', 'setsid', 'taskset', 'chrt']);
+/** Astra REVISE 2706: the product's program names (package `bin`) and the inline-program flags of interpreters (`-c`, `-e`, `--eval`, …). */
+export const PRODUCT_PROGRAM_NAMES: readonly string[] = Object.freeze(['deckent', 'deckent-mcp']);
+export const INLINE_PROGRAM_FLAGS: ReadonlySet<string> = new Set(['-c', '-e', '-E', '-r', '-p', '-x', '--eval', '--print', '--command', 'eval']);
+/** awk runs commands (`system()`, pipes): its program text is the first operand. */
+export const AWK_PROGRAMS: ReadonlySet<string> = new Set(['awk', 'gawk', 'mawk', 'nawk', 'busybox-awk']);
+/** Shells: their inline program is a shell string (decoded by the scanner, not normalised). */
+export const SHELL_PROGRAMS: ReadonlySet<string> = new Set(['bash', 'sh', 'zsh', 'fish', 'dash', 'ksh', 'csh', 'tcsh', 'pwsh', 'powershell', 'cmd']);

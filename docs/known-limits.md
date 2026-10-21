@@ -210,7 +210,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   no terminal witness: no first-use card, and `secret grant` is refused there (a Linux terminal or an admin grants). The first-use key
   card appears only in the streamed terminal on Linux, at the person's own terminal on a solo installation. Agent turns never escape
   this: a full-access agent turn runs only in a real open sandbox (the host realm is refused there) where the vaults are out of reach,
-  and an agent's own authority commands ask a person's card in every mode. The remaining limit is outside agent turns: on the person's
+  and an agent's own authority commands ask a person's card in every mode (an interpreter's inline program counts when its text names
+  the product; program text built from character codes or encodings is not recognised — the open sandbox and the vault floor remain the
+  boundary). The remaining limit is outside agent turns: on the person's
   own account, any same-user process with a terminal (a pty wrapper such as `script` included) passes the same terminal witness as
   `approval decide`. Worktrees of a bare repository each get their own project vault (no main working tree to share). `.deck` is closed to agent tools but does not stop a worker.
 - **A customer config key whose name contains secret, token or password and whose value looks like a literal is still refused**, even
