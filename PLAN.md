@@ -22,7 +22,7 @@ Ayrıntılı sıra, dilimler, bağımlılıklar ve açık sorular [2026-10-15 yo
 | Owner terminal denemesi (Windows Terminal fare kopyalama dahil) | Kapı 1; /runs tuşları, /deliver, kuyruk benimseme, TERM-KOPYA-2 | Owner denemesini bekliyor | Hedefli kanıt → owner denemesi; Windows Terminal'de gerçek kopya testi |
 | Test-ERP / N1 devir canlı gözlemi | Kapı 7; fixture gerçek iş kabulü değil | Açık; canlı gözlem | Gerçek devir gözlemi ve sonuç kaydı |
 | K1–K8 komut sadeleştirme (beta işi, paralel) | Betayla birlikte açılan komut birleştirme | Ayrı dalda başladı; betaya kadar canlı değil | Dal ilerler; canlıya yalnız beta kararından sonra |
-| Betaya taşındı (owner 2026-10-18) | Beta öncesi kod paketinde değil | SIWC (ChatGPT ile giriş) görünürlüğü, Y3 onay kanalı, Y4 taban, D3 uzak karar tasarımı | Beta sürecinde; bilinen sınırlarda "beta sürecinde" yazılıdır |
+| Betaya taşındı (owner 2026-10-18, 2026-10-22) | Beta öncesi kod paketinde değil | SIWC (ChatGPT ile giriş) görünürlüğü, Y3 onay kanalı, Y4 taban, D3 uzak karar tasarımı, OTONOM-TESLIM D0–D4 + teslim kartı insan özeti | Beta sürecinde; bilinen sınırlarda "beta sürecinde" yazılıdır |
 
 Yeni sabit lane/worker sayısı yok. Ayrıntılar [beta öncesi](.deckent/docs/plan/roadmap-2026-10-15.md#beta-oncesi) ve [güvence](.deckent/docs/plan/roadmap-2026-10-15.md#guvence) bölümlerinde.
 
@@ -34,7 +34,7 @@ Yeni sabit lane/worker sayısı yok. Ayrıntılar [beta öncesi](.deckent/docs/p
 2. **NPM-PUBLISH:** hazırlık beta öncesi, yayın beta geçişinde `beta`, kararlıda `latest`; isim/scope/paket sayısının açık kalan kararı korunur.
 3. **Masaüstü + ajan organizasyonu:** beta sonrası, tanıtım kapısı. §8'deki 17 dilim; ilk karne/havuz/olay akışı, desktop 4'ten itibaren bağımlılıkla; altı owner sorusu **açık**. **POST-BETA-PRODUCTIZATION-COMPARISON** (owner 2026-10-15): Paperclip/Hermes karşılaştırmasıyla Desktop yönetimi, hızlı onboarding, entegrasyon ömrü, çıktı inceleme ve insan yükü A0–A7 aşamaları; ilk adım güncel kaynak/boşluk matrisi → AL/UYARLA/ALMA → kabul kanıtlı dilimler ([brief](.deckent/docs/plan/post-beta-productization-paperclip-hermes.md)).
 4. **ATAMA + HEADLESS-BRAIN:** sistem WorkClass→model/effort atar, Brain frontier; agent/skill tier, başarı defteri. Headless abonelik Brain **zorunlu**; N2-0, tier, kimlik ve H5 ölçüm tavanı bağımlılıkları.
-5. **TEST-AZALTMA + OTONOM-TESLIM:** ölçüm→ortak fixture→gölge makbuz/seçim; güvenlik/negatifler korunur. Teslim önce gölge; owner'ın dar dogfood kuralı dışında y/N, adopt/rollback hep y/N.
+5. **TEST-AZALTMA + OTONOM-TESLIM:** ölçüm→ortak fixture→gölge makbuz/seçim; güvenlik/negatifler korunur. **OTONOM-TESLIM beta içinde** (owner 2026-10-22, [karar](.deckent/docs/decisions/owner-decisions.md#otonom-teslim-beta-2026-10-22)); teslim kartı insan özeti onunla aynı iş. Kural açılana kadar teslim y/N, adopt/rollback hep y/N; gölge süresi ve dar kuralın kapsamı beta-süreci kararlarında.
 6. **Eşzamanlılık:** 1–2 ölçüm/kayıt, S6 (kapı kodu alpha.39'da indi; bağımlılık sınıfı alpha.46'da); ardından 4→{5,6}→7→8→9→ölçüm gerektirirse 10. Veri maskeleme yöntemi Enterprise tamamlandıktan sonra ayrı süreç.
 7. **POLITIKA-MODULU P1–P5 + güvence** (Y3 onay kanalı, Y4 taban, D3 uzak karar tasarımı betaya taşındı, owner 2026-10-18): iki gerçek kişiyle devir, rol/signed bundle/Enterprise merkez; D4 FIDO2, D5 imzalı paket (OG7), OG5 önce host hijyeni ölçümü sonra tam ayrım. Varsayılan zorunlu dokunuş yok; kurtarma+backup anahtar önkoşulu korunur.
 8. **ABONELIK-LIMIT L1–L9:** L0=N2-0 ortak ödeme ekseni; kişi/limit/zamanlı başlangıç/kota; API geçişi kart+varsayılan kapalı kişisel tercih+bildirim. L3 kişi yalıtım tasarımı owner'la konuşulur.
@@ -95,6 +95,7 @@ Kural: bulgu triyajda sıraya ya da arşive gider; yalnız güvenlik/canlıyı b
     - Dalga 8 yeniden koşusu alpha.51'den sonra (kaynak: alpha.50 takipleri). Tur iptali etkisi için bkz. IPTAL-ETKI-DOGRULUGU.
     - known-limits `runtime restart` satırında 'environment never read' yerine 'target service process environment is not read' ifadesi tercih edilsin (Astra 2714, engelleyici değil).
     - `secret handover` yalnız terminal tanığıyla korunuyor; mühürlü `secret-handover` kararı (politika hücresi + audit) beta adayı (Astra 2702 açık sorusu; HANDOFF-PRE8 REVISE 2702).
+    - TESLIM-KARTI-OZET (owner 2026-10-22, OTONOM-TESLIM ile betada): teslim/benimseme kartı bilet kimliği ve dosya yolu gösteriyor; insan karar veremiyor. Her iş için tek satır sonuç (ne çözdü), kabul kanıtı ve risk sınıfı; ERP onayında da aynı kart.
     - MONITOR-ETKILESIM (owner 2026-10-22, beta monitor düzenlemesine girdi): `deckent monitor` gelen kutusu ve onaylar etkileşimli değil; owner N1 w8a işçi sorusunu monitorden cevaplayamadı ve işçinin içine giremedi (cevap yalnız terminal/CLI `run resume`; işçiye girme = Sıradaki 16 AGENT-TAKEOVER).
 - **Açık P1/P0 listesi:** aşağıda.
 

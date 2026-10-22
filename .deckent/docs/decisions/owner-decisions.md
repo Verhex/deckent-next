@@ -636,3 +636,12 @@ Kaynak: ana oturum (lead 4d4830b2); tasarım `proof/ALPHA51-2026-10-21/DESIGN-PR
 8. beta.1 tarihi 2026-10-28 korunur.
 Denetim düzeltmeleri (BLOCKER + MAJOR) uygulama brief'ine girer.
 
+<a id="otonom-teslim-beta-2026-10-22"></a>
+
+## Owner kararı — 2026-10-22: OTONOM-TESLIM beta içinde
+
+Kaynak: ana oturum (lead 4d4830b2). N1 dalga 9 onayından sonra owner teslim kartını bir insanın anlayıp karar vermesi için gerçekçi bulmadı ("sana güvendiğim için onaylıyorum") ve her teslimi kendisinin yaptığını sordu. Lead yanıtı: neden depo değil, 2026-10-14 O1/O5 kararı ve otonom teslimin henüz yazılmamış olması.
+
+- **Karar:** owner "Agent işlerde insanlar artık otonomluğa çok alıştı bu iş beta sonrası değil direkt beta içinde halledilecek" dedi. OTONOM-TESLIM (roadmap D0–D4) beta sonrası kuyruktan beta kapsamına alınır; D5 Enterprise ERP zorunlulukları Enterprise sırasında kalır.
+- **Aynı iş:** teslim kartı insan özeti (tek satır sonuç, kabul kanıtı, risk sınıfı) OTONOM-TESLIM'in D3 penceresiyle birlikte gelir.
+- **Değişmeyen (owner aksini söyleyene kadar):** main'e otomatik benimseme yok; adopt/rollback y/N; kural açılmadan teslim y/N. Gölge kıyasın süresi ve dar kuralın kapsamı beta-süreci kararlarında owner'a sorulur.
