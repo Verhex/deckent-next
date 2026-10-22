@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi, type TestContext } from 'vitest';
@@ -57,7 +57,7 @@ async function fixture(context: TestContext, environment: object, slots = 1) {
   const graph = { schemaVersion: 4 as const, revision: 1, tasks: [{ id: 'a', kind: 'fixture', dependencies: [], acceptanceCriteria: ['exit'] }],
     criterionDefinitions: [{ id: 'exit', version: 1, description: 'zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
   await createConfiguredRun(project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'create', graph }, options);
-  return { project, options, store, workspaces: productResourcePath(opened.layout, 'workspaces') };
+  return { project, options, store, workspaces: productResourcePath(opened.layout, 'workspaces'), policy: productResourcePath(opened.layout, 'policy') };
 }
 const reserve = async (f: Awaited<ReturnType<typeof fixture>>, revision: number, commandId = 'reserve') =>
   (await reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId, expectedRevision: revision }, f.options)).reservation.identities[0]!;
@@ -159,6 +159,11 @@ it('E1: a probe stopped by its deadline holds the Run (no answer, not an install
     // No automatic retry: turns while held start nothing.
     for (let turn = 0; turn < 2; turn++) expect((await advanceConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, new AbortController().signal, f.options)).attempted).toBe(0);
     expect(probe).toHaveBeenCalledTimes(1);
+    // Measured fact (not changed here): the held task keeps its pool slot (capacity 1) until the re-run, like the existing progression park.
+    const graph = { schemaVersion: 4 as const, revision: 1, tasks: [{ id: 'b', kind: 'fixture', dependencies: [], acceptanceCriteria: ['exit'] }],
+      criterionDefinitions: [{ id: 'exit', version: 1, description: 'zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
+    await createConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r2', commandId: 'create-r2', graph }, f.options);
+    await expect(reserveConfiguredRunTasks(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r2', commandId: 'reserve-r2', expectedRevision: 0 }, f.options)).rejects.toMatchObject({ code: 'RUN_POOL_FULL' });
     for (const [locale, words, not] of [['en', 'Environment check timed out', 'installation defect'], ['tr', 'Ortam sınaması zaman aşımına uğradı', 'kurulum kusuru']] as const) {
       const output: string[] = [];
       await runCommand(['run', 'inspect', '--scope', 's', '--id', 'r', '--lang', locale], { root: f.project, env: f.options.env, stdout: { write(text: string) { output.push(text); } }, inspectRun: inspectConfiguredRun });
@@ -171,6 +176,21 @@ it('E1: a probe stopped by its deadline holds the Run (no answer, not an install
     const result = await executeConfiguredTask(f.project, identity, f.options);
     expect(result.execution).toMatchObject({ terminal: { exitCode: 0 } }); expect(probe).toHaveBeenCalledTimes(3); expect(execute).toHaveBeenCalledTimes(1);
     expect(await preflightContainers(probe)).toBe('');
+  } finally { f.store.close(); }
+}, 120_000);
+
+it('E1 negative: a hold whose park is denied is not claimed: the park failure is the error, the Run stays running and nothing is recorded', async context => {
+  const f = await fixture(context, REQUIREMENTS);
+  try {
+    const identity = await reserve(f, 0);
+    const policy = JSON.parse(await readFile(f.policy, 'utf8')) as { revision: string; grants: { id: string; actions: string[] }[] };
+    await writeFile(f.policy, JSON.stringify({ ...policy, revision: 'fixture-no-cancel', grants: policy.grants.map(grant => grant.id === 'run' ? { ...grant, actions: grant.actions.filter(action => action !== 'cancel') } : grant) }), { mode: 0o600 });
+    vi.spyOn(DockerSupervisor.prototype, 'probe').mockResolvedValueOnce('timed-out');
+    const failure = await executeConfiguredTask(f.project, identity, f.options).catch((error: unknown) => error) as { code: string };
+    expect(failure.code).not.toBe('EXECUTION_ENVIRONMENT_TIMED_OUT'); expect(failure.code).toMatch(/DENIED|FORBIDDEN|POLICY/);
+    const run = (await f.store.loadRun('s', 'r'))!;
+    expect(run.state).toEqual({ kind: 'running' }); expect(run.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: false });
+    expect((await f.store.load('s', identity.attemptId))!.lastObservation).toBeNull();
   } finally { f.store.close(); }
 }, 120_000);
 

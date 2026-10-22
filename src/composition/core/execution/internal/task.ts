@@ -16,6 +16,8 @@ import { configuredResourceCollector } from '#composition/core/resource-observat
 /** Execute a reserved identity using its pinned task template. The trusted project root is the
  * Git source; the command cannot supply argv, image, workspace, base commit or host paths.
  */
+/** E1: park refusals meaning another transition already holds, ended or changed the Run (the timed-out refusal then stays the error). */
+const HELD_PARK_SUPERSEDED: ReadonlySet<string> = new Set(['RUN_PARKED', 'RUN_TERMINAL', 'RUN_STORE_CONFLICT']);
 export async function executeConfiguredTask(projectRoot: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
@@ -129,11 +131,13 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
         // A permanent refusal before any dispatch claim closes the attempt once (no launch, no effect); transient ones keep the turn's backoff.
         const refusal = classifyLaunchRefusal(error);
         if (refusal.disposition === 'permanent' && !await store.loadBoundDispatch(identity)) await recordAttemptClosure(store, identity, { kind: 'launch-refused', code: refusal.code, ...(refusal.requirement ? { requirement: refusal.requirement } : {}), ...(refusal.probe ? { probe: refusal.probe } : {}) }, actor);
-        // E1: a held refusal (no answer) holds a running Run through the existing progression park; a park that does not commit (already
-        // parked, cancelled, contended) leaves the typed refusal to the runtime's bounded failure path, which parks with the same code.
+        // E1: a held refusal (no answer) holds a running Run through the existing progression park. Only a Run another transition already
+        // parked, ended or changed keeps the typed refusal (the runtime's bounded failure path then parks it with the same code); any other
+        // park failure (denied, store) replaces it, so no surface claims a hold that was not written.
         const run = refusal.disposition === 'held' ? await store.loadRun(identity.scopeId, identity.runId) : null;
         if (refusal.disposition === 'held' && run?.state.kind === 'running' && !run.cancelRequested) await parkConfiguredRunProgression(projectRoot, { schemaVersion: 1,
-          scopeId: identity.scopeId, runId: identity.runId, commandId: randomUUID(), expectedRevision: run.revision, failureCode: refusal.code }, options).catch(() => undefined);
+          scopeId: identity.scopeId, runId: identity.runId, commandId: randomUUID(), expectedRevision: run.revision, failureCode: refusal.code }, options)
+          .catch((failure: unknown) => { if (!HELD_PARK_SUPERSEDED.has(queryFailure(failure).code)) throw failure; });
       }
       throw error;
     } finally { await preparation.settle(); store.close(); }
