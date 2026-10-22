@@ -645,3 +645,15 @@ Kaynak: ana oturum (lead 4d4830b2). N1 dalga 9 onayından sonra owner teslim kar
 - **Karar:** owner "Agent işlerde insanlar artık otonomluğa çok alıştı bu iş beta sonrası değil direkt beta içinde halledilecek" dedi. OTONOM-TESLIM (roadmap D0–D4) beta sonrası kuyruktan beta kapsamına alınır; D5 Enterprise ERP zorunlulukları Enterprise sırasında kalır.
 - **Aynı iş:** teslim kartı insan özeti (tek satır sonuç, kabul kanıtı, risk sınıfı) OTONOM-TESLIM'in D3 penceresiyle birlikte gelir.
 - **Değişmeyen (owner aksini söyleyene kadar):** main'e otomatik benimseme yok; adopt/rollback y/N; kural açılmadan teslim y/N. Gölge kıyasın süresi ve dar kuralın kapsamı beta-süreci kararlarında owner'a sorulur.
+
+<a id="paketleme-test-2026-10-22"></a>
+
+## Owner kararı — 2026-10-22: paketleme, test ayrımı ve beta geçişi
+
+Kaynak: ana oturum (lead 4d4830b2). Lead toplu 2026-10-22'yi ayrı alpha.52 sürümü yapıp yerel tam suite başlattı (21 Ekim'de 11 tam suite koşmuştu). Owner: bu işlerin alpha.51'e gireceğini söylemişti; "herşey paketleme olarak inemez küçük özellikler aynı paket içinde bulunabilir herşeye tam test koşamaz bunun ayrımını doğru yapmalısın ve skill kullanarak projeleri yönet işçilere kullandırt."
+
+- **Paketleme:** işler owner'ın söylediği pakete girer; doküman/test/küçük düzeltme ayrı sürüm açmaz. alpha.52 adayı geri alındı; toplu 2026-10-22 sürümsüz PR olarak iner, canlıya sonraki sürümle gider.
+- **Test ayrımı:** kanun 7 güncellendi (yerel tam suite yalnız canlıya gidecek, davranış değiştiren aday için ve bir kez; geri kalanı hedefli + hosted CI).
+- **Yönetim:** lead projeyi skill'lerle yönetir, işçilere de skill kullandırır.
+- **Sıradaki owner adımı:** owner test senaryosunu yapıp Deckent'in kontrolünü yeniden ele alır.
+- **Beta geçişi:** npm paketi yayını (owner ifadesi `npm install -g Verhex/deckent`), tüm dokümantasyonun güncellenmesi (kurulumu yapan AI/insan ne gerekir, ne yapabilir), deckent.ai sitesi ve docs sayfası; ardından beta iş maddelerinin yeniden sıralanması, dogfood ile geliştirme ve tam ürünleşme. Owner: ilk push 2026-09-16; ilk hedef tarihin gerisindeyiz.
