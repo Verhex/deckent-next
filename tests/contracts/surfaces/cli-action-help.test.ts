@@ -149,3 +149,11 @@ it.each(['en', 'tr'] as const)('shows the required arguments in action help (%s)
     expect(item, spec.name).not.toContain('--scope');
   }
 });
+
+it.each(['en', 'tr'] as const)('run inspect with a scope and no --id off a terminal names --id (%s)', async language => {
+  const f = offTerminal(language);
+  const context = { ...f.context, async inspectRun() { throw new Error('handler reached the read'); } };
+  expect(await main(['run', 'inspect', '--scope', 's'], context)).toBe(2);
+  const text = f.err.join('') + f.out.join('');
+  expect(text).toContain(`${language === 'en' ? 'Missing argument' : 'Eksik argüman'}: --id <id>.`); expect(text).toContain('[CLI_ARGUMENT_MISSING]');
+});
