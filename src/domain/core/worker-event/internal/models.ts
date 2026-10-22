@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { workerEffortSchema, type WorkerEffort, modelUsageEvidenceSchema, readLegacyModelUsageEvidence, type ModelUsageEvidence } from '#domain/core/provider-catalog/index.js';
-import { workerProviderSchema, type WorkerEventSummary } from './contract.js';
+import { workerEffortSchema, type WorkerEffort, modelUsageEvidenceSchema, readLegacyModelUsageEvidence, type ModelUsageEvidence,
+  workerModelPinEvidenceShape } from '#domain/core/provider-catalog/index.js';
+import { workerProviderSchema, type WorkerEventSummary, type WorkerModelVerificationStatus } from './contract.js';
 
 /**
  * Which models a worker was asked to use and which it reported using (WORKER-CURRENCY-2, owner 2026-09-30). One typed row for every
@@ -9,8 +10,9 @@ import { workerProviderSchema, type WorkerEventSummary } from './contract.js';
  * worker-REPORTED usage with the pin; it is not provider attestation. Before the log is sealed the verdict is `pending`.
  */
 const modelText = z.string().min(1).max(256);
+/** The frozen pin may carry the catalog's session-start evidence (`workerModelPinEvidenceShape`, owner K1/K2 2026-10-22). */
 export const workerModelPinSchema = z.object({ channelId: modelText, modelId: modelText,
-  auxiliaryModelIds: z.array(modelText).max(16).readonly() }).strict().readonly();
+  auxiliaryModelIds: z.array(modelText).max(16).readonly(), ...workerModelPinEvidenceShape }).strict().readonly();
 export type WorkerModelPin = z.infer<typeof workerModelPinSchema>;
 export type WorkerProvider = z.infer<typeof workerProviderSchema>;
 const pinnedSubscriptionSchema = z.object({ provider: workerProviderSchema, model: workerModelPinSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(), reasoningEffort: workerEffortSchema.optional() }).passthrough();
@@ -27,7 +29,7 @@ export function readWorkerModelPin(profileParameters: unknown): Readonly<{ provi
 /** `sealed`: the host-sealed event log; `invalid`: a sealed log that is not a valid event stream; `live`: the running worker's projected
  * events; `none`: no events; `denied`: not readable by the caller. */
 export type WorkerModelEvidence = 'sealed' | 'invalid' | 'live' | 'none' | 'denied';
-export type WorkerModelVerdict = 'verified' | 'substituted' | 'unverified' | 'pending';
+export type WorkerModelVerdict = WorkerModelVerificationStatus | 'pending';
 export interface WorkerModelView {
   readonly reasoningEffort?: WorkerEffort;
   readonly provider: WorkerProvider; readonly evidenceCapability: ModelUsageEvidence; readonly requested: WorkerModelPin; readonly init: string | null; readonly usage: readonly string[] | null;

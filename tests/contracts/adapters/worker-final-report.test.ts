@@ -56,12 +56,17 @@ describe.skipIf(!imageId)('real Docker final report custody', () => {
   it.each([
     ['claude', 'valid', 'reported'], ['codex', 'valid', 'reported'], ['claude', 'typed', 'reported'], ['codex', 'typed', 'reported'],
     ['claude', 'invalid', 'invalid'], ['claude', 'oversized', 'oversized'], ['claude', 'missing', 'missing'],
-    ['cursor', 'valid', 'unsupported'], ['claude', 'unsupported', 'unsupported'],
+    ['cursor', 'valid', 'reported'], ['cursor', 'fenced', 'reported'], ['cursor', 'invalid', 'invalid'], ['cursor', 'oversized', 'oversized'], ['cursor', 'missing', 'missing'],
+    ['claude', 'unsupported', 'unsupported'],
   ])('%s %s reaches the sealed transcript as %s', async (provider, variant, expected) => {
     const root = await mkdtemp(join(tmpdir(), 'dn-report-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
     const workspace = join(root, 'work'); await mkdir(workspace);
-    const value = variant === 'invalid' ? { ...valid, accepted: true } : variant === 'oversized' ? { ...valid, summary: 'x'.repeat(40000) }
-      : variant === 'typed' ? { ...valid, checks: [{ command: 'lint', outcome: 'failed', checkId: 'lint', role: 'acceptance' }, { command: 'npm test', outcome: 'passed', ...(provider === 'codex' ? { checkId: null, role: null } : {}) }] } : valid;
+    const jwt = 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.fixture-signature';
+    // Known-secret redaction masks the values of the credential the worker was given; Cursor's credential is only the access token,
+    // so its report carries that token where the other providers carry their fixture secret.
+    const secret = provider === 'cursor' ? jwt : fixtureSecret, base = { ...valid, summary: `Completed ${secret}` };
+    const value = variant === 'invalid' ? { ...base, accepted: true } : variant === 'oversized' ? { ...base, summary: 'x'.repeat(40000) }
+      : variant === 'typed' ? { ...base, checks: [{ command: 'lint', outcome: 'failed', checkId: 'lint', role: 'acceptance' }, { command: 'npm test', outcome: 'passed', ...(provider === 'codex' ? { checkId: null, role: null } : {}) }] } : base;
     const compiled = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template, { schemaVersion: 3, provider, cliVersion: 'fixture-1',
       discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended', model: 'fixture-model', prompt: 'Work',
       ...(provider === 'claude' ? { maxTurns: 7 } : {}) }));
@@ -79,12 +84,14 @@ if (${JSON.stringify(provider !== 'cursor' && variant !== 'unsupported')}) {
   if (!schema.required.includes('checks') || schema.additionalProperties !== false) process.exit(43);
 }
 if (${JSON.stringify(provider === 'claude')} && args[args.indexOf('--max-turns')+1] !== '7') process.exit(44);
+// The flagless final-text-json channel (cursor) receives the instruction and schema in the prompt and answers in the final result text.
+if (${JSON.stringify(provider === 'cursor')} && !args.at(-1).includes('### report:final-text-json@1')) process.exit(45);
 const report = ${JSON.stringify(value)};
-if (${JSON.stringify(variant !== 'missing')}) console.log(JSON.stringify(${provider === 'claude' ? "{type:'result', subtype:'success', structured_output: report}" : "{type:'item.completed', item:{type:'agent_message', text:JSON.stringify(report)}}"}));
+const text = ${JSON.stringify(variant === 'fenced')} ? '\`\`\`json\\n' + JSON.stringify(report) + '\\n\`\`\`' : JSON.stringify(report);
+if (${JSON.stringify(variant !== 'missing')}) console.log(JSON.stringify(${provider === 'claude' ? "{type:'result', subtype:'success', structured_output: report}" : provider === 'cursor' ? "{type:'result', subtype:'success', is_error:false, result:text}" : "{type:'item.completed', item:{type:'agent_message', text:JSON.stringify(report)}}"}));
 `;
     await writeFile(join(workspace, 'native.mjs'), native, { mode: 0o755 });
     const received: WorkerEvent[] = [];
-    const jwt = 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.fixture-signature';
     const credential = provider === 'claude' ? { claudeAiOauth: { accessToken: fixtureSecret, expiresAt: Date.now() + 3600000 } }
       : provider === 'codex' ? { tokens: { access_token: jwt, id_token: fixtureSecret } } : { accessToken: jwt };
     const connection = await openNativeConnection({ binding: compiled.nativeSubscription!,
@@ -101,7 +108,7 @@ if (${JSON.stringify(variant !== 'missing')}) console.log(JSON.stringify(${provi
     const final = readWorkerFinalReport(result.stdout);
     if (expected === 'reported') {
       expect(final).toMatchObject({ status: 'reported', report: { changedFiles: ['note.txt'], summary: 'Completed [REDACTED]', openIssues: ['Bearer [REDACTED]'] } });
-      expect(result.stdout).not.toContain(fixtureSecret); expect(result.stdout).not.toContain('abc.def.ghi');
+      expect(result.stdout).not.toContain(secret); expect(result.stdout).not.toContain('abc.def.ghi');
       // PRE-1: a typed failed acceptance check leaves the real bridge intact, so the domain refuses the task (owner D5a).
       if (variant === 'typed' && final.status === 'reported') {
         expect(final.report.checks).toEqual([{ command: 'lint', outcome: 'failed', checkId: 'lint', role: 'acceptance' }, { command: 'npm test', outcome: 'passed' }]);
@@ -186,7 +193,7 @@ it('offers checkId and role in both report schemas and turns a strict-schema nul
   expect(strict.properties.checks.items.required).toEqual(['command', 'outcome', 'checkId', 'role']);
   const collect = (checks: unknown[]) => {
     const collector = finalReportCollector('codex', [], workerReportLimits);
-    const observer = createNativeLineObserver('codex', createNormalizerState([]), createCodexState(), () => {}, collector);
+    const observer = createNativeLineObserver('codex-exec-json', createNormalizerState([]), createCodexState(), () => {}, collector);
     observer.observe(Buffer.from(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ ...report, checks, handoff: null, exit: null }) } }) + '\n'));
     return collector.finish();
   };

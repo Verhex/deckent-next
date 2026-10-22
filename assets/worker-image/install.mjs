@@ -22,6 +22,9 @@ run('bash', [installer], { ...process.env, HOME: cursorHome });
 run('chmod', ['-R', 'a+rX', cursorHome]);
 for (const name of ['cursor-agent', 'agent']) symlinkSync(`${cursorHome}/.local/bin/${name}`, `/usr/local/bin/${name}`);
 rmSync(installer);
+// The installed Cursor version is read from the binary after install, so the receipt records what the image really contains.
+const cursorVersion = run('cursor-agent', ['--version']).trim();
+if (!/^[\w.+-]{1,64}$/.test(cursorVersion)) throw new Error('WORKER_VERSION_INVALID');
 writeFileSync(`${root}/installed.json`, JSON.stringify({ schemaVersion: 1, builtAt: new Date().toISOString(),
-  resolved, cursorInstallerSha256: installerSha256 }, null, 2) + '\n');
+  resolved, cursorInstallerSha256: installerSha256, cursor: { version: cursorVersion, installerSha256 } }, null, 2) + '\n');
 run('node', [`${root}/inspect.mjs`]);

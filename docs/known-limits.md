@@ -173,14 +173,26 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   (`127.0.0.1` or `[::1]`), and a remote OpenAI-compatible server needs a published price row; today those exist only for
   the OpenAI, DeepSeek and Z.ai APIs, and there is no way to declare your own price. *Impact:* a company model server on
   your network cannot be used. *Workaround:* run the model server on this machine.
-- **The model a Codex or Cursor worker used cannot be verified.** Only Claude Code reports per-model usage; Codex and Cursor
-  results are recorded as unverified and accepted by their criteria. *Impact:* if such a worker ran another model, the work
+- **A Codex worker's model cannot be verified, and a Cursor worker's model is checked by name only.** Only Claude Code reports
+  per-model usage (`verified`). Codex results are recorded as unverified and accepted by their criteria. Cursor reports only the
+  model's display-style name at session start: a name the catalog records for the chosen model reads `start-name-matched` and is
+  accepted by its criteria; a name the catalog records for another model reads `substituted` and fails; no name or an unknown
+  name reads `unverified` and the attempt is held for a human, never accepted silently. A Cursor catalog entry with
+  `selection: provider` (`auto`) leaves the model choice to Cursor and reads `provider-chosen`; it never claims a model match.
+  *Impact:* a matched name is weaker evidence than Claude's per-model usage, and if a Codex worker ran another model the work
   is still accepted.
-- **Codex and Cursor workers report little about their run.** A Codex attempt shows one turn and no token use; a Cursor attempt
-  shows no turns, tokens or cost. *Impact:* their effort and cost are not comparable with Claude Code's. *Workaround:* judge them by
-  the delivered result.
-- **Cursor has no packaged worker model catalog.** A worker is admitted only on an active `native-cli` catalog channel;
-  Claude Code and Codex have packaged catalogs, Cursor does not. *Workaround:* write a catalog and register it with
+- **Cursor renames can hold every Cursor attempt on that model.** The packaged names were measured from Cursor
+  2026.10.19-6bbf2c4, and the worker image records the installed Cursor version but does not pin it. If an update renames a
+  model, each Cursor attempt on it is held as `unverified` until the catalog names are measured again. *Workaround:* re-measure
+  with `cursor-agent -p --output-format stream-json` and register an updated catalog.
+- **Codex and Cursor workers report little about their run.** A Codex attempt shows one turn and no token use. A Cursor attempt
+  shows derived turns (the number of assistant messages, not a provider count), tokens, duration and tool calls, but no cost
+  because it runs on a subscription. *Impact:* their effort and cost are not comparable with Claude Code's. *Workaround:* judge
+  them by the delivered result.
+- **Cursor's packaged catalog is a measured seed you register yourself.** `deckent models catalog register --seed
+  cursor-cli-subscription`, then activate it, admits `composer-2.5`, `claude-opus-5-thinking-high`,
+  `claude-sonnet-5-thinking-high` and `-xhigh`, `gpt-5.6-sol-high` and `-xhigh`, and `auto`. A worker is admitted only on an
+  active `native-cli` catalog channel. *Workaround for other models:* write a catalog and register it with
   `deckent models catalog register --file`.
 - **Deckent cannot see provider-side settings.** For OpenRouter it cannot see the "Prevent overrides" plugin setting or your
   OpenRouter credit limit. *Workaround:* check both yourself before the first paid call.
@@ -234,8 +246,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 ## Delivery and adoption
 
 - **A work task needs a valid result report, but a worker CLI without one is not checked.** Since 1.0.0-alpha.47 a work task that
-  exits 0 without a valid report fails as `report-missing` or `report-invalid`. A CLI that has no structured result channel (today
-  Cursor) or whose installed version no longer offers it reads `unsupported` and is not gated. Since 1.0.0-alpha.50 a worker
+  exits 0 without a valid report fails as `report-missing` or `report-invalid`. Since 1.0.0-alpha.52 this includes Cursor workers, which end with the report JSON as their final answer (`final-text-json`). A CLI whose installed
+  version no longer offers its result channel reads `unsupported` and is not gated. Since 1.0.0-alpha.50 a worker
   can mark a report check with `checkId` and `role: acceptance`, and the worker instructions ask it to; an acceptance check whose last
   result is not `passed` refuses the task (`declared-check-not-passed`). A worker that does not type its checks is not caught:
   untyped and exploratory checks remain claims and do not block acceptance. *Workaround:* prefer Claude or Codex workers for tasks

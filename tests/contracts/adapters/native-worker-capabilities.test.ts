@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as worker from '#adapters/core/native-connection/index.js';
 
-const base = { maxTurns: null, settings: null, promptChannel: 'inline' as const, structuredReport: null, modelUsageEvidence: 'none' as const };
+const base = { maxTurns: null, settings: null, promptChannel: 'inline' as const, structuredReport: null, modelUsageEvidence: 'none' as const, eventStream: 'cursor-agent-stream-json' as const };
 const preflight = { schemaVersion: 1, cliVersion: 'fixture-1', helpArgs: ['exec', '--help'], requiredFlags: ['--print'] };
 
 describe('registry capability routing in the mounted worker, without a provider identity input', () => {
@@ -39,5 +39,20 @@ describe('registry capability routing in the mounted worker, without a provider 
     expect(worker.nativeReportArguments({ ...inline, structuredReport: { flag: '--fixture-output', channel: 'schema-file' } }, '{}'))
       .toEqual(['--fixture-output', '/tmp/deckent-report-schema.json']);
     expect(worker.nativeReportArguments(base, '{}')).toEqual([]);
+  });
+
+  it('treats the flagless final-text-json channel as supported without a help flag and delivers its schema only in the prompt', () => {
+    const text = { ...base, structuredReport: { flag: null, channel: 'final-text-json' as const } };
+    const calls: string[][] = [];
+    expect(worker.nativePreflightCapabilities(text, preflight, args => { calls.push([...args]); return args[0] === '--version' ? 'fixture-1' : '--print'; })).toBe(true);
+    expect(calls).toEqual([['--version'], ['exec', '--help']]);
+    // The flagless channel never weakens version or required-flag custody.
+    expect(() => worker.nativePreflightCapabilities(text, preflight, () => 'wrong-version')).toThrow();
+    expect(() => worker.nativePreflightCapabilities(text, preflight, args => args[0] === '--version' ? 'fixture-1' : '')).toThrow();
+    expect(worker.nativeReportArguments(text, '{"type":"object"}')).toEqual([]);
+    const instruction = worker.nativeReportInstruction(text, '{"type":"object"}');
+    expect(instruction).toMatch(/^### report:final-text-json@1\n.*exactly one JSON object.*no code fence\.\n\{"type":"object"\}$/s);
+    expect(worker.nativeReportInstruction(base, '{}')).toBeNull();
+    expect(worker.nativeReportInstruction({ ...base, structuredReport: { flag: '--fixture-schema', channel: 'inline-json' as const } }, '{}')).toBeNull();
   });
 });

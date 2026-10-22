@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
-import { executionProfileDefinitionSchema, immutableJsonObjectSchema, workInputSchema, type WorkerEffort, type ExecutionProfileDefinition } from '#domain/index.js';
+import { executionProfileDefinitionSchema, immutableJsonObjectSchema, workInputSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { compileNativeCodingDockerProfile, nativeCodingInvocationFields, NativeCodingProfileError } from './command.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
@@ -70,7 +70,7 @@ export const renderWorkScope = (paths: readonly string[]) => paths.join('\n');
 
 /** Pure admission compilation of template + typed work input: invocation v4 with the exact pinned model, the work input's turn limit
  * (else the template's) and the template's prompt parts plus task/scope/acceptance. Keeps the template id/version as provenance. */
-export function compileNativeCodingWorkInput(template: ExecutionProfileDefinition, input: unknown, effort?: WorkerEffort): ExecutionProfileDefinition {
+export function compileNativeCodingWorkInput(template: ExecutionProfileDefinition, input: unknown, effort?: WorkerEffort, evidence?: CatalogPinModelEvidence): ExecutionProfileDefinition {
   const workInput = workInputSchema.safeParse(input);
   if (!workInput.success) throw new NativeCodingProfileError('NATIVE_CODING_INVOCATION_INVALID');
   const { docker, invocation: { composition, maxTurns, ...invocation } } = parseTemplate(template);
@@ -79,7 +79,7 @@ export function compileNativeCodingWorkInput(template: ExecutionProfileDefinitio
   return compileNativeCodingDockerProfile(docker, { ...invocation, schemaVersion: 4, ...(turns === undefined ? {} : { maxTurns: turns }),
     ...(workInput.data.effort === undefined ? {} : { effort: workInput.data.effort }),
     model: { channelId: model.channelId, modelId: model.modelId, auxiliaryModelIds: [...model.auxiliaryModelIds] },
-    composition: { schemaVersion: 1, ...composition, task, scope: renderWorkScope(scope.paths), acceptance } }, effort);
+    composition: { schemaVersion: 1, ...composition, task, scope: renderWorkScope(scope.paths), acceptance } }, effort, evidence);
 }
 
 /** Registry code for a refused compilation: exact-model and turn-limit refusals stay typed; anything else is an invalid profile. */

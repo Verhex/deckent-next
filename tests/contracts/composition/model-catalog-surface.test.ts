@@ -58,8 +58,16 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
       expect(listed.stdout).toContain(lang === 'en' ? 'not active' : 'etkin değil');
       expect(listed.stdout).not.toContain('"schemaVersion"');
       const help = await f.cli('--help', '--lang', lang);
-      expect(help.stdout).toContain('--seed'); expect(help.stdout).toContain('codex-cli-subscription');
+      expect(help.stdout).toContain('--seed'); expect(help.stdout).toContain('codex-cli-subscription'); expect(help.stdout).toContain('cursor-cli-subscription');
     }
+  });
+  it('registers the packaged Cursor seed through CLI without activating anything', async () => {
+    const f = await fixture();
+    expect((await f.cli('register', '--scope', 's', '--command-id', 'cursor-seed', '--seed', 'cursor-cli-subscription')).code).toBe(0);
+    expect(f.tables()[2]).toEqual([]);
+    const listed = await f.cli('list', '--scope', 's');
+    expect(listed.code).toBe(0);
+    for (const text of ['cursor-cli-subscription', 'composer-2.5', 'gpt-5.6-sol-xhigh', 'auto']) expect(listed.stdout).toContain(text);
   });
   it('seeds the packaged document idempotently: same command id replays, a new command id changes nothing', async () => {
     const f = await fixture();

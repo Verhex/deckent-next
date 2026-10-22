@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { workerEffortSchema, type ExecutionProfileDefinition } from '#domain/index.js';
+import { workerEffortSchema, modelUsageEvidenceSchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { nativeEffortArgs, nativeCliCommand, nativeCliIdSchema } from '#adapters/core/native-cli-registry/index.js';
 
 export class NativeWorkerBindingError extends Error {
   constructor() { super('WORKER_MODEL_BINDING_MISMATCH'); this.name = 'NativeWorkerBindingError'; }
 }
-const pinnedSchema = z.object({ schemaVersion: z.literal(2), provider: nativeCliIdSchema, modelUsageEvidence: z.enum(['session-events', 'none']).optional(),
+const pinnedSchema = z.object({ schemaVersion: z.literal(2), provider: nativeCliIdSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(),
   reasoningEffort: workerEffortSchema.optional(), effortMode: z.enum(['arguments', 'model-id']).nullable().optional(),
   model: z.object({ modelId: z.string() }).passthrough() }).passthrough();
 const argvSchema = z.array(z.string()).min(1);

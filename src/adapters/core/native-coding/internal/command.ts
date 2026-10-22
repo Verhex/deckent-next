@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { executionProfileDefinitionSchema, REASONING_EFFORTS, workerEffortSchema, type WorkerEffort, type ExecutionProfileDefinition } from '#domain/index.js';
+import { executionProfileDefinitionSchema, REASONING_EFFORTS, workerEffortSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { nativeEffortArgs, nativeCliCommand, nativeCliIdSchema } from '#adapters/core/native-cli-registry/index.js';
 import { nativePromptCompositionSchema, composeNativePrompt, promptHash } from './composition.js';
@@ -40,8 +40,9 @@ export class NativeCodingProfileError extends Error {
 /** Pure pre-admission compilation. No execution, login, policy grant or model substitution.
  * Prompts are ordinary task data persisted in argv; never put credentials in this field.
  * Structured composition carries explicit selected content; it never discovers repository instructions.
+ * `evidence` (owner K1/K2 2026-10-22): the catalog's session-start names / provider-choice flag, frozen into a pinned model only when present.
  */
-export function compileNativeCodingDockerProfile(template: ExecutionProfileDefinition, input: unknown, selectedEffort?: WorkerEffort): ExecutionProfileDefinition {
+export function compileNativeCodingDockerProfile(template: ExecutionProfileDefinition, input: unknown, selectedEffort?: WorkerEffort, evidence?: CatalogPinModelEvidence): ExecutionProfileDefinition {
   const parsed = nativeCodingInvocationSchema.safeParse(input);
   if (!parsed.success) throw new NativeCodingProfileError('NATIVE_CODING_INVOCATION_INVALID');
   try { validateDockerTaskProfile(template); }
@@ -76,7 +77,7 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
     command.modelFlag, modelId, '--', delivery ? '__DECKENT_TASK_PROMPT__' : invocation.prompt!];
   const profile = executionProfileDefinitionSchema.parse({ ...template, parameters: { ...template.parameters, argv,
     nativeSubscription: { schemaVersion: pinned ? 2 : 1, provider: invocation.provider, modelUsageEvidence: command.capabilities.modelUsageEvidence, reasoningEffort, effortMode: command.capabilities.reasoningEffort?.mode ?? null,
-      ...(pinned ? { model: { channelId: pinned.channelId, modelId: pinned.modelId, auxiliaryModelIds: [...pinned.auxiliaryModelIds] } } : {}),
+      ...(pinned ? { model: { channelId: pinned.channelId, modelId: pinned.modelId, auxiliaryModelIds: [...pinned.auxiliaryModelIds], ...evidence } } : {}),
       ...(invocation.schemaVersion >= 3 ? { finalReport: { schemaVersion: 1 } } : {}),
       ...(delivery ? { promptDelivery: { ...delivery, argvSha256: promptHash(JSON.stringify(argv)) } } : {}), preflight: {
       schemaVersion: 1, cliVersion: invocation.cliVersion, discovery: mode, helpArgs: command.helpArgs,

@@ -28,8 +28,8 @@ export async function withConfiguredRunAdmission<T>(projectRoot: string, context
         if (config.execution?.docker) assertDockerResourceCeiling(resolveDockerTaskProfile(value).options, config.execution.docker); return undefined;
       }, criterion(evaluator, criterion) { try { return validateInstalledCriterion(evaluator, criterion); } catch { throw ErrorRegistry.createError('TASK_EVALUATOR_INVALID'); } }, isTemplate: isNativeCodingTemplate },
       compiler: { capability(value) { try { return nativeWorkerEffortCapability(value); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } },
-        bind(value, selection) { try { return bindNativeWorkerEffort(value, selection); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); } },
-        compile(template, input, selection) { try { return compileNativeCodingWorkInput(template, input, selection); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } } } }));
+        bind(value, selection, evidence) { try { return bindNativeWorkerEffort(value, selection, evidence); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); } },
+        compile(template, input, selection, evidence) { try { return compileNativeCodingWorkInput(template, input, selection, evidence); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } } } }));
   return work(app, authority, () => warnings);
   });
 }

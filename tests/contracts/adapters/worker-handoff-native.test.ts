@@ -19,7 +19,7 @@ const note = { toTask: 'next', summary: `Continue ${secret}`, artifacts: [{ name
 const nativeReport = { schemaVersion: 1, summary: 'Done', changedFiles: [], checks: [], openIssues: [], handoff: note, sharedNotes: [secret] };
 
 describe('current standalone producer and retained handoff custody', () => {
-  it.for([['claude', 'valid'], ['codex', 'missing'], ['codex', 'no-handoff'], ['codex', 'codex-handoff'], ['cursor', 'unsupported'], ['cursor', 'no-report'], ['claude', 'wrong-context'], ['claude', 'oversized-context']])(
+  it.for([['claude', 'valid'], ['codex', 'missing'], ['codex', 'no-handoff'], ['codex', 'codex-handoff'], ['cursor', 'final-text-missing'], ['cursor', 'no-report'], ['claude', 'wrong-context'], ['claude', 'oversized-context']])(
     '%s %s uses fresh source without a repository build', async ([provider, mode], context) => {
       // This fixture binds a host POSIX socket into a Linux Docker worker; report rules stay portable in worker-handoff-report.
       const capability: { code: SupervisorError['code']; reason: string } | null = process.platform === 'linux' ? null
@@ -91,7 +91,7 @@ if (${JSON.stringify(mode === 'no-handoff' || mode === 'codex-handoff')}) consol
       } else if (mode === 'no-handoff') {
         expect(final).toMatchObject({ status: 'reported', report: { sharedNotes: [] } });
         if (final.status === 'reported') expect(final.report).not.toHaveProperty('handoff');
-      } else expect(final).toMatchObject({ status: 'unavailable', reason: mode === 'no-report' ? 'missing' : mode });
+      } else expect(final).toMatchObject({ status: 'unavailable', reason: mode === 'no-report' || mode === 'final-text-missing' ? 'missing' : mode });
       const artifactRoot = join(root, 'artifacts'); await mkdir(artifactRoot, { mode: 0o700 });
       const artifacts = new FileArtifactStore({ root: artifactRoot, maxBytes: 1048576 });
       const output = await artifacts.put('test', Buffer.from(JSON.stringify({ schemaVersion: 1, identity: sandbox.identity, completeness: result.outputCompleteness, stdout: result.stdout, stderr: result.stderr })));

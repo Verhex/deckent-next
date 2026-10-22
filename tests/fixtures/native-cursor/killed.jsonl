@@ -1,0 +1,9 @@
+{"type":"system","subtype":"init","apiKeySource":"login","cwd":"/workspace","session_id":"1e64d453-1bc0-4301-b6e8-d1d8bd1f3843","model":"Composer 2.5","permissionMode":"default"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Count slowly from 1 to 400, one number per line, and explain each number in one sentence."}]},"session_id":"1e64d453-1bc0-4301-b6e8-d1d8bd1f3843"}
+{"type":"thinking","subtype":"delta","text":"I","session_id":"1e64d453-1bc0-4301-b6e8-d1d8bd1f3843","timestamp_ms":1792689921599}
+{"type":"thinking","subtype":"delta","text":"'ll count from 1 to ","session_id":"1e64d453-1bc0-4301-b6e8-d1d8bd1f3843","timestamp_ms":1792689921624}
+{"type":"thinking","subtype":"delta","text":"4","session_id":"1e64d453-1bc0-4301-b6e8-d1d8bd1f3843","timestamp_ms":1792689921625}
+{"type":"thinking","subtype":"delta","text":"00, one number per line","session_id":"1e64d453-1bc0-4301-b6e8-d1d8bd1f3843","timestamp_ms":1792689921648}
+{"type":"thinking","subtype":"delta","text":", with a one-sentence","session_id":"1e64d453-1bc0-4301-b6e8-d1d8bd1f3843","timestamp_ms":1792689921675}
+{"type":"thinking","subtype":"delta","text":" explanation for each","session_id":"1e64d453-1bc0-4301-b6e8-d1d8bd1f3843","timestamp_ms":1792689921698}
+{"type":"thinking","subtype":"delta","text":".","session_id":"1e64d453-1bc0-4301-b6e8-d1d8bd1f3843","timestamp_ms":1792689921725}

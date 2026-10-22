@@ -33,7 +33,8 @@ const access = 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify({ exp: Math.f
 it.for([
   ['claude', { claudeAiOauth: { accessToken: access, expiresAt: Date.now() + 3_600_000, scopes: ['user:inference'] } }, 'session-events', 'verified'],
   ['codex', { auth_mode: 'chatgpt', tokens: { access_token: access, refresh_token: 'fixture-refresh', id_token: 'fixture-id' }, last_refresh: new Date().toISOString() }, 'none', 'unverified'],
-  ['cursor', { accessToken: access }, 'none', 'unverified'],
+  // Cursor reports only a start name; this pin carries no catalog names, so the reported name is unrecorded: unverified (owner K1 2026-10-22).
+  ['cursor', { accessToken: access }, 'session-start-name', 'unverified'],
 ] as const)('projects bound %s registry capabilities and host model-evidence custody through the real UNIX gateway', async ([provider, credential, evidenceCapability, status], context) => {
   const root = await mkdtemp(join(tmpdir(), 'dn-cap-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
   const input = { binding: { schemaVersion: 2 as const, provider,
@@ -50,6 +51,20 @@ it.for([
   expect((bootstrap.capabilities as Record<string, unknown>).modelUsageEvidence).toBe(evidenceCapability);
   await post(connection.descriptor.socketPath, provider);
   expect(connection.modelVerification()).toEqual({ status, admitted: 'fixture-model', observed: ['fixture-model'], unexpected: [], evidenceCapability });
+});
+it.for([
+  [{ reportedNames: ['fixture-model'] }, 'start-name-matched', []],
+  [{ otherReportedNames: ['fixture-model'] }, 'substituted', ['fixture-model']],
+  [{ reportedNames: ['Auto'], providerChosen: true }, 'provider-chosen', []],
+] as const)('seals the frozen pin catalog start-name evidence %j through the real UNIX gateway (owner K1/K2 2026-10-22)', async ([evidence, status, unexpected], context) => {
+  if (process.platform === 'win32') context.skip('NATIVE_CONNECTION_UNAVAILABLE: private UNIX gateway requires POSIX ownership and socket permissions');
+  const root = await mkdtemp(join(tmpdir(), 'dn-cap-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const connection = await openNativeConnection({ binding: { schemaVersion: 2 as const, provider: 'cursor',
+    model: { channelId: 'cursor-cli-subscription', modelId: 'fixture-model', auxiliaryModelIds: [], ...evidence } }, directory: root, credential: { accessToken: access }, deadlineMs: 10000 });
+  cleanups.push(connection.close);
+  await fetchBootstrap(connection.descriptor.socketPath);
+  await post(connection.descriptor.socketPath, 'cursor');
+  expect(connection.modelVerification()).toEqual({ status, admitted: 'fixture-model', observed: ['fixture-model'], unexpected, evidenceCapability: 'session-start-name' });
 });
 
 
@@ -72,7 +87,7 @@ describe('candidate standalone bootstrap through the real pinned Docker worker',
     const command = nativeCliCommand(provider), capabilities = command.capabilities;
     const requiredFlags = [...command.args.filter(flag => flag.startsWith('--')), ...command.coreArgs.filter(flag => flag.startsWith('--')), command.modelFlag,
       ...(capabilities.maxTurns ? [capabilities.maxTurns.flag] : [])];
-    const help = [...requiredFlags.filter(flag => flag !== capabilities.maxTurns?.flag), ...(capabilities.structuredReport ? [capabilities.structuredReport.flag] : [])].join(' ');
+    const help = [...requiredFlags.filter(flag => flag !== capabilities.maxTurns?.flag), ...(capabilities.structuredReport?.flag ? [capabilities.structuredReport.flag] : [])].join(' ');
     const fake = `#!/usr/bin/env node
 import { readFileSync, writeFileSync } from 'node:fs';
 const argv = process.argv.slice(2);
@@ -101,13 +116,20 @@ else writeFileSync('/workspace/capture.json', JSON.stringify({ argv, core: readF
     expect(result.result).toEqual({ kind: 'exited', exitCode: 0 });
     const capture = JSON.parse(await readFile(join(workspace, 'capture.json'), 'utf8')) as { argv: string[]; core: string; reportFile: string | null };
     expect(capture.core).toBe(body.core);
-    expect(capture.argv.at(-1)).toBe(capabilities.promptChannel === 'inline' ? body.core + '\n\n' + body.task : body.task);
+    const prompt = capabilities.promptChannel === 'inline' ? body.core + '\n\n' + body.task : body.task;
+    // The flagless final-text-json channel appends its instruction and one-line schema to the prompt; flag channels leave it exact.
+    const instruction = capabilities.structuredReport?.channel === 'final-text-json' ? capture.argv.at(-1)!.slice(prompt.length) : '';
+    expect(capture.argv.at(-1)).toBe(prompt + instruction);
+    if (instruction) {
+      expect(instruction.startsWith('\n\n### report:final-text-json@1\n')).toBe(true);
+      expect(JSON.parse(instruction.split('\n').at(-1)!)).toMatchObject({ type: 'object', properties: { schemaVersion: { const: 1 } } });
+    }
     if (capabilities.promptChannel === 'claude-system-prompt') expect(capture.argv[capture.argv.indexOf('--system-prompt') + 1]).toBe(body.core);
-    if (capabilities.structuredReport) {
+    if (capabilities.structuredReport?.flag) {
       const value = capture.argv[capture.argv.indexOf(capabilities.structuredReport.flag) + 1];
       expect(value).toEqual(capabilities.structuredReport.channel === 'schema-file' ? '/tmp/deckent-report-schema.json' : expect.any(String));
       expect(JSON.parse(capture.reportFile ?? value!)).toMatchObject({ type: 'object', properties: { schemaVersion: { const: 1 } } });
-    } else expect(capture.argv).toEqual([...argv.slice(1, -1), body.core + '\n\n' + body.task]);
+    } else expect(capture.argv).toEqual([...argv.slice(1, -1), body.core + '\n\n' + body.task + instruction]);
     expect(result.stdout).toContain('native-prompt-delivery');
   });
 });

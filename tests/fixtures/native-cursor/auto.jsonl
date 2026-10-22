@@ -1,0 +1,8 @@
+{"type":"system","subtype":"init","apiKeySource":"login","cwd":"/workspace","session_id":"61c992e1-524a-4a10-bcea-aac2634d9a4b","model":"Auto","permissionMode":"default"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Reply: ok"}]},"session_id":"61c992e1-524a-4a10-bcea-aac2634d9a4b"}
+{"type":"thinking","subtype":"delta","text":"The","session_id":"61c992e1-524a-4a10-bcea-aac2634d9a4b","timestamp_ms":1792689929002}
+{"type":"thinking","subtype":"delta","text":" user wants a simple","session_id":"61c992e1-524a-4a10-bcea-aac2634d9a4b","timestamp_ms":1792689929116}
+{"type":"thinking","subtype":"delta","text":" confirmation reply.","session_id":"61c992e1-524a-4a10-bcea-aac2634d9a4b","timestamp_ms":1792689929116}
+{"type":"thinking","subtype":"completed","session_id":"61c992e1-524a-4a10-bcea-aac2634d9a4b","timestamp_ms":1792689929300}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]},"session_id":"61c992e1-524a-4a10-bcea-aac2634d9a4b"}
+{"type":"result","subtype":"success","duration_ms":2487,"duration_api_ms":2487,"is_error":false,"result":"ok","session_id":"61c992e1-524a-4a10-bcea-aac2634d9a4b","request_id":"fa731a26-1fe5-4639-ad63-89882db3c34e","usage":{"inputTokens":15737,"outputTokens":150,"cacheReadTokens":0,"cacheWriteTokens":0}}

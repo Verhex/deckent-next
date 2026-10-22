@@ -172,15 +172,25 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   edilir; uzak bir OpenAI uyumlu sunucu yayımlanmış bir fiyat satırı ister. Bugün bu satırlar yalnız OpenAI, DeepSeek ve Z.ai
   API'leri için var ve kendi fiyatınızı bildirmenin yolu yok. *Etki:* ağınızdaki bir şirket model sunucusu kullanılamaz.
   *Yol:* model sunucusunu bu makinede çalıştırın.
-- **Codex ya da Cursor işçisinin kullandığı model doğrulanamaz.** Model başına kullanımı yalnız Claude Code bildirir; Codex ve
-  Cursor sonuçları doğrulanmamış olarak kaydedilir ve ölçütlerine göre kabul edilir. *Etki:* böyle bir işçi başka bir modelle
-  çalıştıysa iş yine kabul edilir.
-- **Codex ve Cursor işçileri çalışmaları hakkında az şey bildirir.** Codex denemesi tek tur ve token kullanımı yok gösterir; Cursor
-  denemesi tur, token ya da maliyet göstermez. *Etki:* emek ve maliyetleri Claude Code ile karşılaştırılamaz. *Yol:* teslim edilen
-  sonuca göre değerlendirin.
-- **Cursor için paketli işçi model kataloğu yok.** İşçi yalnız etkin bir `native-cli` katalog kanalıyla kabul edilir; Claude Code
-  ve Codex'in paketli katalogları var, Cursor'ın yok. *Yol:* bir katalog yazıp `deckent models catalog register --file` ile
-  kaydedin.
+- **Codex işçisinin kullandığı model doğrulanamaz, Cursor işçisinin modeli yalnız adla denetlenir.** Model başına kullanımı yalnız
+  Claude Code bildirir (`verified`). Codex sonuçları doğrulanmamış olarak kaydedilir ve ölçütlerine göre kabul edilir. Cursor
+  yalnızca oturum başında modelin görünen adını bildirir: katalogun seçilen model için kaydettiği ad `start-name-matched` okunur ve
+  ölçütlerine göre kabul edilir; katalogun başka bir model için kaydettiği ad `substituted` okunur ve başarısız olur; ad yoksa ya
+  da bilinmiyorsa `unverified` okunur ve deneme bir insan için tutulur, sessizce kabul edilmez. `selection: provider` taşıyan Cursor
+  katalog girdisi (`auto`) model seçimini Cursor'a bırakır ve `provider-chosen` okunur; model eşleşmesi iddia etmez. *Etki:*
+  eşleşen ad, Claude'un model başına kullanımından zayıf kanıttır; Codex işçisi başka bir modelle çalıştıysa iş yine kabul edilir.
+- **Cursor model yeniden adlandırması o modeldeki tüm Cursor denemelerini tutabilir.** Paketli adlar Cursor 2026.10.19-6bbf2c4
+  sürümünden ölçüldü; işçi imajı kurulu Cursor sürümünü kaydeder ama sabitlemez. Bir güncelleme modeli yeniden adlandırırsa, katalog
+  adları yeniden ölçülene kadar o modeldeki her Cursor denemesi `unverified` diye tutulur. *Yol:* `cursor-agent -p --output-format
+  stream-json` ile yeniden ölçün ve güncel bir katalog kaydedin.
+- **Codex ve Cursor işçileri çalışmaları hakkında az şey bildirir.** Codex denemesi tek tur ve token kullanımı yok gösterir. Cursor
+  denemesi türetilmiş tur (asistan mesajı sayısı; sağlayıcı sayısı değil), token, süre ve araç çağrılarını gösterir; abonelikle
+  çalıştığı için maliyet göstermez. *Etki:* emek ve maliyetleri Claude Code ile karşılaştırılamaz. *Yol:* teslim edilen sonuca göre
+  değerlendirin.
+- **Cursor'ın paketli kataloğu kendi kaydettiğiniz ölçülmüş bir tohumdur.** `deckent models catalog register --seed
+  cursor-cli-subscription` ve ardından etkinleştirme; `composer-2.5`, `claude-opus-5-thinking-high`, `claude-sonnet-5-thinking-high`
+  ve `-xhigh`, `gpt-5.6-sol-high` ve `-xhigh` ile `auto` modellerini kabul eder. İşçi yalnız etkin bir `native-cli` katalog
+  kanalıyla kabul edilir. *Diğer modeller için yol:* bir katalog yazıp `deckent models catalog register --file` ile kaydedin.
 - **Deckent sağlayıcı tarafındaki ayarları göremez.** OpenRouter için "Prevent overrides" eklenti ayarını ya da OpenRouter kredi
   sınırınızı göremez. *Yol:* ilk ücretli çağrıdan önce ikisine de kendiniz bakın.
 - **alpha.48'den önceki MCP güveni bir kez yeniden sorulur.** Proje ve yerel MCP sunucularının güveni proje klasöründen
@@ -233,8 +243,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 ## Teslim ve dala alma
 
 - **Bir iş görevi geçerli bir sonuç raporu ister, ama raporu olmayan bir işçi CLI'ı denetlenmez.** 1.0.0-alpha.47'den beri 0 ile
-  çıkan ve geçerli rapor bırakmayan bir iş görevi `report-missing` ya da `report-invalid` ile başarısız olur. Yapılandırılmış sonuç
-  kanalı olmayan (bugün Cursor) ya da kurulu sürümü bunu artık sunmayan bir CLI `unsupported` okunur ve bu kapıdan geçmez. 1.0.0-alpha.50'den
+  çıkan ve geçerli rapor bırakmayan bir iş görevi `report-missing` ya da `report-invalid` ile başarısız olur. 1.0.0-alpha.52'den beri bu, raporu JSON olarak son yanıt biçiminde bırakan (`final-text-json`) Cursor işçilerini de kapsar. Kurulu sürümü sonuç
+  kanalını artık sunmayan bir CLI `unsupported` okunur ve bu kapıdan geçmez. 1.0.0-alpha.50'den
   beri işçi rapor kontrolünü `checkId` ve `role: acceptance` ile işaretleyebilir ve işçi talimatı bunu ister; son sonucu `passed`
   olmayan kabul kontrolü görevi reddeder (`declared-check-not-passed`). Kontrollerini tiplemeyen işçi yakalanmaz: tipsiz ve keşif
   amaçlı kontroller iddia olarak kalır ve kabulü engellemez. *Geçici çözüm:* tamamlanması kanıtlanması gereken işlerde Claude ya da

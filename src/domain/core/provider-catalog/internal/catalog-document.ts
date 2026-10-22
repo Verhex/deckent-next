@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema, sanitizeIssues, type ValidationIssue } from '#domain/core/primitives/index.js';
 import { CATALOG_CHANNEL_KINDS, NATIVE_CLI_CHANNELS, MODEL_LIFECYCLE_STATES, REASONING_EFFORTS, exactModelIdSchema, daySchema, cliVersionSchema, aliasesSchema } from './catalog-values.js';
-import { channelMetadataSchema, modelMetadataSchema } from './catalog-metadata.js';
+import { channelMetadataSchema, modelMetadataSchema, reportedModelNameSchema, channelReportedNamesSchema } from './catalog-metadata.js';
 import { PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, providerProtocolSchema } from './catalog.js';
 
 /**
@@ -50,6 +50,39 @@ export type CatalogChannel = z.infer<typeof catalogChannelSchema>;
 export type CatalogModel = z.infer<typeof catalogModelSchema>;
 export type ModelLifecycle = z.infer<typeof modelLifecycleSchema>;
 
+/** Session-start reported names (owner K1 2026-10-22) of a channel's FINAL model set: only on a native CLI channel, no name repeats within
+ * a model or is claimed by two models — one reported name maps to exactly one exact id — and the channel total stays within its bound.
+ * Shared by document parsing and the partial ledger merge. */
+export function reportedNameConflict(channel: CatalogChannel, models: readonly CatalogModel[]): boolean {
+  const seen = new Set<string>();
+  for (const model of models) {
+    const names = 'reportedNames' in model ? model.reportedNames ?? [] : [];
+    if ((names.length > 0 || ('selection' in model && model.selection !== undefined)) && channel.kind !== 'native-cli') return true;
+    for (const { name } of names) { if (seen.has(name)) return true; seen.add(name); }
+  }
+  return !channelReportedNamesSchema.safeParse([...seen]).success;
+}
+/**
+ * Catalog-derived model evidence a FROZEN worker pin may carry (owner K1/K2 2026-10-22), stamped at admission from the channel's catalog rows
+ * and present only when the catalog records it, so pins without it keep their exact bytes. `reportedNames`: the session-start names of the
+ * admitted model; `otherReportedNames`: names the channel's other models claim; `providerChosen`: the admitted entry leaves the model choice
+ * to the provider. Only the frozen execution-profile pin carries these fields; a Run graph request pin never does. One shape for every copy.
+ */
+export const workerModelPinEvidenceShape = {
+  reportedNames: z.array(reportedModelNameSchema).min(1).max(16).readonly().optional(),
+  otherReportedNames: channelReportedNamesSchema.refine(names => names.length > 0).optional(),
+  providerChosen: z.literal(true).optional(),
+} as const;
+/** The evidence of one admitted model, derived from its channel's catalog rows (bounded by the channel check); sorted for stable bytes. */
+export type CatalogPinModelEvidence = Readonly<{ reportedNames?: readonly string[]; otherReportedNames?: readonly string[]; providerChosen?: true }>;
+export function catalogPinModelEvidence(models: readonly CatalogModel[], modelId: string): CatalogPinModelEvidence {
+  const names = (model: CatalogModel) => 'reportedNames' in model ? (model.reportedNames ?? []).map(entry => entry.name) : [];
+  const admitted = models.find(model => model.nativeId === modelId);
+  const own = admitted ? [...new Set(names(admitted))].sort() : [];
+  const others = [...new Set(models.filter(model => model.nativeId !== modelId).flatMap(names))].filter(name => !own.includes(name)).sort();
+  return Object.freeze({ ...(own.length ? { reportedNames: Object.freeze(own) } : {}), ...(others.length ? { otherReportedNames: Object.freeze(others) } : {}),
+    ...(admitted && 'selection' in admitted && admitted.selection === 'provider' ? { providerChosen: true as const } : {}) });
+}
 /** Channel invariants: one version per channel id, one entry per exact id, no alias shadowing an exact id, CLI data only on CLI channels. */
 function channelIssues(catalog: ProviderCatalogDocument): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
@@ -71,6 +104,7 @@ function channelIssues(catalog: ProviderCatalogDocument): ValidationIssue[] {
     [...provider.channel.aliases, ...provider.models.flatMap(model => model.aliases)].forEach((alias, a) => {
       if (exact.has(alias) || aliases.has(alias)) issue('providers', p, 'aliases', a); aliases.add(alias);
     });
+    if (reportedNameConflict(provider.channel, provider.models)) issue('providers', p, 'reportedNames');
   });
   if (catalog.schemaVersion === 3) {
     const seen = new Set<string>();
