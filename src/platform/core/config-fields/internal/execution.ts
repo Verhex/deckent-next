@@ -67,8 +67,9 @@ export const EXECUTION_SECRET_GATE_SETTINGS = z.object({ schemaVersion: z.litera
   admissionTimeoutMs: z.number().int().positive().max(2_147_483_647).default(scanAdmission.admissionTimeoutMs),
   maxTimeRefusals: z.number().int().nonnegative().max(100).default(scanAdmission.maxTimeRefusals) }).strict();
 /** DECKENT-MD-WORKERS (owner Q3 2026-10-23): the project's worker instruction source, read at Run admission into one digest-bound prompt part.
- * Absent = `deckent-md` when DECKENT.md exists, else none. CLAUDE.md is never a source. An older build refuses the key (fails closed). */
-export const WORKER_INSTRUCTION_SETTINGS = z.object({ schemaVersion: z.literal(1), source: z.enum(['deckent-md', 'agents-md', 'none']).optional() }).strict();
+ * Absent = `worker-md` (.deckent/worker-instructions.md, which the human terminal never reads) when it exists, else none. CLAUDE.md is never a
+ * source. An older build refuses the key (fails closed). */
+export const WORKER_INSTRUCTION_SETTINGS = z.object({ schemaVersion: z.literal(1), source: z.enum(['worker-md', 'agents-md', 'none']).optional() }).strict();
 export const ARTIFACT_STORAGE_LIMITS = z.object({ maxBytes: z.number().int().positive().safe() }).strict();
 /** A1/A3: shared parked Run/task deadline policy. 24 hours is a conservative, lead-adjustable default,
  * not a measured optimum. Explicit version and strict keys make unsupported policy fail closed. */

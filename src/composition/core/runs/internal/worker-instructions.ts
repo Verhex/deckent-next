@@ -1,9 +1,9 @@
 import { openHostProjectInstructionReader, selectWorkTarget, workerInstructionFile, workerInstructionSelection } from '#adapters/index.js';
 import { getConfigKnownSecrets, type ConfigLoadOptions, type CoreConfig } from '#platform/index.js';
 /** DECKENT-MD-WORKERS (owner Q3): one bounded read of the project's selected worker instruction file at the Git work target root, once per
- * admission. No Git execution configured = explicit no-op; absent selection = `deckent-md` when that file exists, else nothing. */
+ * admission. No Git execution configured = explicit no-op; absent selection = `worker-md` when that file exists, else nothing. */
 export async function readWorkerInstructions(projectRoot: string, config: CoreConfig, options: ConfigLoadOptions) {
-  const selected = config.execution?.workerInstructions?.source, source = selected ?? 'deckent-md';
+  const selected = config.execution?.workerInstructions?.source, source = selected ?? 'worker-md';
   if (!config.execution || source === 'none') return { parts: [], withheld: null, oversize: false };
   // A missing or unreadable target root is a visible reason, never an unexpected admission failure (the target's own checks still apply).
   const reader = await openHostProjectInstructionReader(selectWorkTarget(config.execution)?.path ?? projectRoot, options.env ?? process.env,

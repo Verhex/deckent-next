@@ -432,7 +432,7 @@ describe.skipIf(process.platform === 'win32')('worker instruction snapshot throu
   // Persisted consent lives in the owner-private user state directory outside the project, as on a real host (inside it the reader refuses it).
   const home = async () => { const path = await mkdtemp(join(tmpdir(), 'dn-worker-home-')); roots.push(path); await chmod(path, 0o700); return path; };
   const trust = async (f: Awaited<ReturnType<typeof seeded>>, file?: string) => {
-    const reader = await openHostProjectInstructionReader(f.project, f.options.env, undefined, file ? [file] : undefined), view = await reader.inspect();
+    const reader = await openHostProjectInstructionReader(f.project, f.options.env, undefined, [file ?? '.deckent/worker-instructions.md']), view = await reader.inspect();
     if (view.status !== 'trust-required') throw new Error(view.status);
     await reader.trust(view.source.digest); return view.source.digest;
   };
@@ -443,18 +443,18 @@ describe.skipIf(process.platform === 'win32')('worker instruction snapshot throu
 
   it('includes only a trusted, digest-bound snapshot; replays stay exact; a changed file is left out with a visible reason', async () => {
     const f = await seeded(registry, undefined, execution(), await home());
-    expect((await createRun(f.project, run('absent', 'coding', workInput()), f.options)).warnings).toEqual([]); // default, no DECKENT.md: silent no-op
+    expect((await createRun(f.project, run('absent', 'coding', workInput()), f.options)).warnings).toEqual([]); // default, no worker file: silent no-op
     expect(contextIds(f, 'absent')).toEqual(['repo-tooling']);
-    await writeFile(join(f.project, 'DECKENT.md'), 'Run npm test before reporting.');
+    await writeFile(join(f.project, '.deckent/worker-instructions.md'), 'Run npm test before reporting.');
     const untrusted = await createRun(f.project, run('untrusted', 'coding', workInput()), f.options);
-    expect(untrusted.warnings).toEqual([expect.objectContaining({ code: 'WORKER_INSTRUCTIONS_WITHHELD', source: 'deckent-md', reason: 'untrusted', digest: expect.stringMatching(/^[a-f0-9]{64}$/u) })]);
+    expect(untrusted.warnings).toEqual([expect.objectContaining({ code: 'WORKER_INSTRUCTIONS_WITHHELD', source: 'worker-md', reason: 'untrusted', digest: expect.stringMatching(/^[a-f0-9]{64}$/u) })]);
     expect(contextIds(f, 'untrusted')).toEqual(['repo-tooling']);
     const digest = await trust(f);
     expect((await createRun(f.project, run('trusted', 'coding', workInput()), f.options)).warnings).toEqual([]);
-    expect(contextIds(f, 'trusted')).toEqual(['repo-tooling', `deckent-md-${digest.slice(0, 16)}`]);
+    expect(contextIds(f, 'trusted')).toEqual(['repo-tooling', `worker-md-${digest.slice(0, 16)}`]);
     expect(promptTask(f, 'trusted')).toContain(`sha256 ${digest}`); expect(promptTask(f, 'trusted')).toContain('Run npm test before reporting.');
     const frozen = JSON.stringify(f.snapshotProfile('trusted'));
-    await writeFile(join(f.project, 'DECKENT.md'), 'Changed after admission.');
+    await writeFile(join(f.project, '.deckent/worker-instructions.md'), 'Changed after admission.');
     const replay = await createRun(f.project, run('trusted', 'coding', workInput()), f.options); // same command: answered from the receipt
     expect(replay.admission.run.runId).toBe('trusted'); expect(replay.warnings).toEqual([]); expect(JSON.stringify(f.snapshotProfile('trusted'))).toBe(frozen);
     const changed = await createRun(f.project, run('changed', 'coding', workInput()), f.options);
@@ -467,28 +467,28 @@ describe.skipIf(process.platform === 'win32')('worker instruction snapshot throu
       let out = '';
       await runCommand(['run', 'create', '--scope', 's', '--id', `cli-${lang}`, '--command-id', `create-cli-${lang}`, '--graph', graphPath, '--lang', lang],
         { createRun, root: f.project, env: f.options.env, stdout: { write: (chunk: string) => { out += chunk; return true; } } } as never);
-      expect(out).toContain(text); expect(out).toContain('deckent-md');
+      expect(out).toContain(text); expect(out).toContain('worker-md');
     }
   });
 
   it('honours the per-project source (agents-md, none, explicit absent), is a no-op without Git execution and refuses an overflow at planning and creation', async () => {
     const plain = await seeded(registry, undefined, {}, await home()); // no `execution`: non-Git installation, explicit no-op even with a trusted file
-    await writeFile(join(plain.project, 'DECKENT.md'), 'Conventions.'); await trust(plain);
+    await writeFile(join(plain.project, '.deckent/worker-instructions.md'), 'Conventions.'); await trust(plain);
     expect((await createRun(plain.project, run('no-git', 'coding', workInput()), plain.options)).warnings).toEqual([]);
     expect(contextIds(plain, 'no-git')).toEqual(['repo-tooling']);
     const f = await seeded(registry, undefined, execution({ schemaVersion: 1, source: 'agents-md' }), await home());
-    await writeFile(join(f.project, 'DECKENT.md'), 'deckent text'); await writeFile(join(f.project, 'AGENTS.md'), 'agents text'); await trust(f, 'AGENTS.md');
+    await writeFile(join(f.project, '.deckent/worker-instructions.md'), 'deckent text'); await writeFile(join(f.project, 'AGENTS.md'), 'agents text'); await trust(f, 'AGENTS.md');
     await createRun(f.project, run('agents', 'coding', workInput()), f.options);
     expect(promptTask(f, 'agents')).toContain('agents text'); expect(promptTask(f, 'agents')).not.toContain('deckent text');
     await reconfigure(f, { schemaVersion: 1, source: 'none' });
     expect((await createRun(f.project, run('none', 'coding', workInput()), f.options)).warnings).toEqual([]); expect(contextIds(f, 'none')).toEqual(['repo-tooling']);
-    await reconfigure(f, { schemaVersion: 1, source: 'deckent-md' }); await rm(join(f.project, 'DECKENT.md'));
-    expect((await createRun(f.project, run('explicit-absent', 'coding', workInput()), f.options)).warnings).toEqual([{ code: 'WORKER_INSTRUCTIONS_WITHHELD', source: 'deckent-md', reason: 'absent', digest: null }]);
+    await reconfigure(f, { schemaVersion: 1, source: 'worker-md' }); await rm(join(f.project, '.deckent/worker-instructions.md'));
+    expect((await createRun(f.project, run('explicit-absent', 'coding', workInput()), f.options)).warnings).toEqual([{ code: 'WORKER_INSTRUCTIONS_WITHHELD', source: 'worker-md', reason: 'absent', digest: null }]);
     const before = f.runs();
-    await writeFile(join(f.project, 'DECKENT.md'), 'x'.repeat(17_000)); await trust(f);
+    await writeFile(join(f.project, '.deckent/worker-instructions.md'), 'x'.repeat(17_000)); await trust(f);
     await expect(createRun(f.project, run('overflow', 'coding', workInput()), f.options)).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_TOO_LARGE' });
     await expect(classifyConfiguredRunSpending(f.project, { graph: graph('coding', workInput()) } as never, f.options)).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_TOO_LARGE' });
-    await writeFile(join(f.project, 'DECKENT.md'), 'x'.repeat(40_000)); // above the reader bound: the same refusal, never a silent omission
+    await writeFile(join(f.project, '.deckent/worker-instructions.md'), 'x'.repeat(40_000)); // above the reader bound: the same refusal, never a silent omission
     await expect(createRun(f.project, run('oversize', 'coding', workInput()), f.options)).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_TOO_LARGE' });
     expect(f.runs()).toBe(before);
   });

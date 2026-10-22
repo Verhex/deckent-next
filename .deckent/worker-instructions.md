@@ -8,7 +8,7 @@ acceptance criteria are the work; this file only states the repository conventio
 - Change only the files the task needs, inside its scope paths. Keep the change small, complete and
   cohesive: one responsibility, no speculative abstraction, no unrelated cleanup.
 - Never edit `CLAUDE.md`, `AGENTS.md`, `DECKENT.md`, `.agents/`, `.claude/`, `.codex/`, `.cursor/`
-  or `.deckent/docs/core-memory/`. Do not create report or summary files.
+  or `.deckent/` (this file and core memory included). Do not create report or summary files.
 - No hardcoded provider, model, path or policy lists in shared code: use the existing registry,
   rule data or configuration. Protocol and security invariants stay in versioned code.
 - User-facing text goes through the shared `t()` renderer with matching English and Turkish keys
