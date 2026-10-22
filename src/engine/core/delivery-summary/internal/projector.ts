@@ -100,6 +100,7 @@ export function projectDeliverySummary(facts: DeliverySummaryFacts): DeliverySum
   if (change.state === 'available' && change.outOfScopeCount > 0) flags.push('out-of-scope');
   if (change.state === 'available' && change.scope === 'unscoped') flags.push('scope-undeclared');
   if (facts.target?.protected === true) flags.push('protected-target');
+  if (changed && changed !== 'withheld' && changed.instructionSurface?.length) flags.push('instruction-surface');
 
   return Object.freeze(deliverySummarySchema.parse({ schemaVersion: 1, operation: facts.operation, subject: identity,
     target: facts.target ? { state: 'available', id: safe(facts.target.id, LIMITS.targetChars, known).text, protected: facts.target.protected } : { state: 'unavailable' },

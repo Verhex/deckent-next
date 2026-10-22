@@ -120,8 +120,8 @@ backup/publication. A global registry contribution or changed effective resource
 write. This command does not launch, build, grant policy or prove image/worker readiness.
 
 Checkout shaping (alpha.53 C2): a CLI without a suppression flag (Cursor) realises `disabled` by its worker
-checkout. The native CLI registry holds the default hidden paths (`name` at any depth or `/root/path`;
-Cursor: `AGENTS.md`, `CLAUDE.md`, `.agents`, `.claude`, `.codex`, `.cursor`, `/DECKENT.md`,
+checkout. The native CLI registry's one `instructionSurface` list holds the default hidden paths (`name` at
+any depth or `/root/path`; also the delivery floor for every provider, alpha.53 G1): `AGENTS.md`, `CLAUDE.md`, `.agents`, `.claude`, `.codex`, `.cursor`, `/DECKENT.md`,
 `/.deckent/worker-instructions.md`); a template's `invocation.discovery.hiddenPaths` replaces them for that
 project (new template content id). Compilation freezes the set into the pinned profile
 (`nativeSubscription.checkout`); the Git broker clones sparse (non-cone, skip-worktree, clean `git status`);

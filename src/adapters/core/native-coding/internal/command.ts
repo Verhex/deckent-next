@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { executionProfileDefinitionSchema, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
+import { executionProfileDefinitionSchema, INSTRUCTION_SURFACE_PATHS, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { nativeEffortArgs, nativeCliCommand, nativeCliIdSchema } from '#adapters/core/native-cli-registry/index.js';
 import { nativePromptCompositionSchema, composeNativePrompt, promptHash } from './composition.js';
@@ -77,7 +77,7 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
   if (!nativeDiscoverySupported(command, invocation.discovery)) throw new NativeCodingProfileError('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
   const discoveryArgs = mode === 'disabled' ? command.disabledArgs! : [];
   const shaping = mode === 'disabled' ? command.capabilities.discovery!.checkout : null;
-  const checkout = shaping ? { schemaVersion: 1, hiddenPaths: [...(invocation.discovery.hiddenPaths ?? shaping.hiddenPaths)] } : undefined;
+  const checkout = shaping ? { schemaVersion: 1, hiddenPaths: [...(invocation.discovery.hiddenPaths ?? INSTRUCTION_SURFACE_PATHS)] } : undefined;
   const settingsArgs = settings ? [command.capabilities.settings!.flag, JSON.stringify(settings)] : [];
   const delivery = invocation.composition ? composeNativePrompt(invocation.composition, command.capabilities.promptChannel) : undefined;
   const coreArgs = delivery ? command.coreArgs : [];

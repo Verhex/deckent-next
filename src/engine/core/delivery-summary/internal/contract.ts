@@ -35,13 +35,15 @@ export const deliveryEvidenceKindSchema = z.enum(['exit-code', 'operation-record
 const evidenceSchema = z.object({ evaluator: z.object({ id: identitySchema, version: z.number().int().positive().safe() }).strict(),
   kind: deliveryEvidenceKindSchema, independent: z.boolean().nullable() }).strict();
 export const DELIVERY_RISK_FLAGS = ['acceptance-unverified', 'evidence-not-independent', 'model-not-verified', 'worker-checks-failed',
-  'verification-missing', 'verification-not-accepted', 'out-of-scope', 'scope-undeclared', 'protected-target'] as const;
+  'verification-missing', 'verification-not-accepted', 'out-of-scope', 'scope-undeclared', 'protected-target', 'instruction-surface'] as const;
 export const deliveryRiskFlagSchema = z.enum(DELIVERY_RISK_FLAGS);
 export type DeliveryRiskFlag = z.infer<typeof deliveryRiskFlagSchema>;
 
 /** Adapter-filled change facts, bounded by the projector. `adapter` names the filler (e.g. `workspace-patch`), never a vendor. */
 export const deliveryChangeFactsSchema = z.object({ adapter: identitySchema, paths: z.array(z.string()).readonly(), added: count, removed: count,
-  scope: z.enum(['in-scope', 'out-of-scope', 'unscoped']), outOfScope: z.array(z.string()).readonly() }).strict().readonly();
+  scope: z.enum(['in-scope', 'out-of-scope', 'unscoped']), outOfScope: z.array(z.string()).readonly(),
+  /** G1: changed paths inside the target's agent instruction surface that the task scope does not name (delivery refuses them). */
+  instructionSurface: z.array(z.string()).readonly().optional() }).strict().readonly();
 export type DeliveryChangeFacts = z.infer<typeof deliveryChangeFactsSchema>;
 
 export const deliverySummarySchema = z.object({ schemaVersion: z.literal(1), operation: deliverySummaryOperationSchema,

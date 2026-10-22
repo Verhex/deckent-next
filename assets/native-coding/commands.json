@@ -1,5 +1,17 @@
 {
   "schemaVersion": 3,
+  "instructionSurface": {
+    "hiddenPaths": [
+      "AGENTS.md",
+      "CLAUDE.md",
+      ".agents",
+      ".claude",
+      ".codex",
+      ".cursor",
+      "/DECKENT.md",
+      "/.deckent/worker-instructions.md"
+    ]
+  },
   "adapters": {
     "codex": {
       "executable": "codex",
@@ -191,18 +203,7 @@
         "discovery": {
           "requiredFlags": [],
           "hiddenProbes": [],
-          "checkout": {
-            "hiddenPaths": [
-              "AGENTS.md",
-              "CLAUDE.md",
-              ".agents",
-              ".claude",
-              ".codex",
-              ".cursor",
-              "/DECKENT.md",
-              "/.deckent/worker-instructions.md"
-            ]
-          }
+          "checkout": {}
         },
         "promptChannel": "inline",
         "eventStream": "cursor-agent-stream-json",

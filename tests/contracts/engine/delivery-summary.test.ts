@@ -3,7 +3,7 @@ import { AUTONOMY_HOLD_REASONS, AUTONOMY_RULE, DELIVERY_MODEL_VERDICTS, DELIVERY
   deliverySummarySchema, evaluateAutonomy, planQueueCommit, projectDeliverySummary, queueCommitMetadata, workspacePatchChangeFacts, classifyPatchScope,
   type AutonomyFacts, type DeliverySummaryFacts, type DeliveryChangeFacts } from '#engine/index.js';
 import { snapshotKnownSecrets } from '#platform/index.js';
-import type { RunSnapshot, TargetQueueRecord, VerifiedPrincipal, WorkerFinalReportResult, WorkerModelView } from '#domain/index.js';
+import { INSTRUCTION_SURFACE_PATHS, type RunSnapshot, TargetQueueRecord, VerifiedPrincipal, WorkerFinalReportResult, WorkerModelView } from '#domain/index.js';
 
 /** TESLIM-KARTI-OZET + OTONOM-TESLIM shadow rule (alpha.53 A1): one generic envelope, typed withheld/unavailable sections, rule as data. */
 const identity = { scopeId: 'scope', runId: 'run', layoutRevision: 'layout', taskId: 'task', attemptId: 'attempt', generation: 1 };
@@ -106,9 +106,19 @@ describe('DeliverySummary projector', () => {
   it('fills the workspace change section from the patch and its K6 scope classification', () => {
     const file = (text: string) => ({ mode: '100644' as const, text, digest: 'd'.repeat(64) });
     const patch = { changes: [{ path: 'src/a.ts', before: file('a\nb\n'), after: file('a\nc\nd\n') }, { path: 'docs/x.md', before: null, after: file('x\n') }] };
-    expect(workspacePatchChangeFacts(patch, classifyPatchScope(patch, ['src/**'], 'warn'))).toEqual({ adapter: 'workspace-patch', paths: ['src/a.ts', 'docs/x.md'],
+    expect(workspacePatchChangeFacts(patch, classifyPatchScope(patch, ['src/**'], 'warn', INSTRUCTION_SURFACE_PATHS))).toEqual({ adapter: 'workspace-patch', paths: ['src/a.ts', 'docs/x.md'],
       added: 4, removed: 2, scope: 'out-of-scope', outOfScope: ['docs/x.md'] });
-    expect(workspacePatchChangeFacts(patch, classifyPatchScope(patch, null, 'warn'))).toMatchObject({ scope: 'unscoped', outOfScope: [] });
+    expect(workspacePatchChangeFacts(patch, classifyPatchScope(patch, null, 'warn', INSTRUCTION_SURFACE_PATHS))).toMatchObject({ scope: 'unscoped', outOfScope: [] });
+  });
+  it('G1: carries instruction-surface writes from the scope classification into the change facts and flags them on the risk line', () => {
+    const file = (text: string) => ({ mode: '100644' as const, text, digest: 'd'.repeat(64) });
+    const patch = { changes: [{ path: 'AGENTS.md', before: file('a\n'), after: file('b\n') }, { path: 'src/a.ts', before: null, after: file('x\n') }] };
+    const facts_ = workspacePatchChangeFacts(patch, classifyPatchScope(patch, ['src/**'], 'warn', INSTRUCTION_SURFACE_PATHS));
+    expect(facts_).toMatchObject({ scope: 'out-of-scope', outOfScope: ['AGENTS.md'], instructionSurface: ['AGENTS.md'] });
+    expect(projectDeliverySummary(facts({ change: facts_ })).risk.flags).toContain('instruction-surface');
+    const named = workspacePatchChangeFacts(patch, classifyPatchScope(patch, ['src/**', 'AGENTS.md'], 'warn', INSTRUCTION_SURFACE_PATHS));
+    expect(named).not.toHaveProperty('instructionSurface');
+    expect(projectDeliverySummary(facts({ change: named })).risk.flags).not.toContain('instruction-surface');
   });
 });
 

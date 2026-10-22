@@ -1,4 +1,4 @@
-import { attemptIdentitySchema, sameAttemptIdentity, type AttemptIdentity, type TaskDefinition } from '#domain/index.js';
+import { attemptIdentitySchema, instructionSurfacePaths, sameAttemptIdentity, type AttemptIdentity, type RunSnapshot, type TaskDefinition } from '#domain/index.js';
 import type { ArtifactReceipt, ArtifactStore } from '#capabilities/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { DispatchClaim, DispatchRecord, RunBoundDispatchStore, DispatchIdentityAuthorization } from '#engine/core/dispatch/index.js';
@@ -6,7 +6,9 @@ import { workspacePatchSchema, WorkspacePatchError, type WorkspacePatch } from '
 import { assertPatchScope, classifyPatchScope, type PatchScope, type PatchScopeMode } from './scope.js';
 import type { AttemptCustodyReleaseApplication } from './custody.js';
 /** Trusted lookup of the Run-bound task definition (the Run snapshot frozen at admission) after authorization; full identity binds. */
-export interface RunBoundTaskStore { loadBoundTask(identity: AttemptIdentity): Promise<TaskDefinition> }
+export interface RunBoundTaskStore { loadBoundTask(identity: AttemptIdentity): Promise<TaskDefinition>;
+  /** G1: the bound Run, read for its task's frozen execution profile (the instruction-surface set; immutable since admission). */
+  loadRun(scopeId: string, runId: string): Promise<RunSnapshot | null> }
 export interface WorkspacePatchStore extends RunBoundDispatchStore {
   retainDispatchPatch(claim: DispatchClaim, receipt: ArtifactReceipt): Promise<DispatchRecord>;
 }
@@ -38,10 +40,12 @@ export class WorkspacePatchApplication {
     return patch.data;
   }
   private async scope(identity: AttemptIdentity, patch: WorkspacePatch): Promise<PatchScope> {
-    const task = await this.store.loadBoundTask(identity);
-    return classifyPatchScope(patch, task.workInput?.scope.paths ?? null, this.scopeMode);
+    const task = await this.store.loadBoundTask(identity), run = await this.store.loadRun(identity.scopeId, identity.runId);
+    // A Run without the entry falls back to the registry list: the floor is never lifted by a missing read.
+    const surface = instructionSurfacePaths(run?.execution.tasks.find(entry => entry.taskId === identity.taskId)?.profile.parameters);
+    return classifyPatchScope(patch, task.workInput?.scope.paths ?? null, this.scopeMode, surface);
   }
-  /** K6 enforce gate: callers run it before their first durable delivery write (integration claim, delivery claim). */
+  /** K6 enforce gate and the G1 instruction-surface floor: callers run it before their first durable delivery write (integration claim, delivery claim). */
   assertScope(scope: PatchScope) { assertPatchScope(scope); }
   async prepare(input: unknown, source: WorkspacePatchSource, writer: WorkspacePatchStore, credential?: unknown) {
     const { identity, record } = await this.admit(input, true, credential);

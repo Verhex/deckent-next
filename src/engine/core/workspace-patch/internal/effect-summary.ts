@@ -14,10 +14,12 @@ function patchLineCounts(patch?: Pick<WorkspacePatch, 'changes'>) {
   }
   return { added, removed };
 }
-/** The workspace target's fill of the DeliverySummary `change` section: every changed path, +/− and the K6 scope classification. */
+/** The workspace target's fill of the DeliverySummary `change` section: every changed path, +/− and the K6 scope classification (with G1's
+ * instruction-surface writes). */
 export function workspacePatchChangeFacts(patch: Pick<WorkspacePatch, 'changes'>, scope: PatchScope): DeliveryChangeFacts {
   return Object.freeze({ adapter: 'workspace-patch', paths: Object.freeze(patch.changes.map(change => change.path)), ...patchLineCounts(patch),
-    scope: scope.status, outOfScope: scope.status === 'unscoped' ? Object.freeze([]) : scope.outOfScope });
+    scope: scope.status, outOfScope: scope.status === 'unscoped' ? Object.freeze([]) : scope.outOfScope,
+    ...(scope.instructionSurface ? { instructionSurface: scope.instructionSurface } : {}) });
 }
 export function deliverySummary(run: RunSnapshot, identity: AttemptIdentity, patch?: WorkspacePatch, known: KnownSecretSnapshot = EMPTY_KNOWN_SECRETS) {
   const task = run.graph.tasks.find(task => task.id === identity.taskId);

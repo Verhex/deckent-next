@@ -49,6 +49,7 @@
   "delivery.flag.out-of-scope": "changes outside scope",
   "delivery.flag.scope-undeclared": "scope not declared",
   "delivery.flag.protected-target": "protected target",
+  "delivery.flag.instruction-surface": "agent instruction files changed outside scope",
   "delivery.action.publish-candidate": "the result is published",
   "delivery.action.nothing-published": "nothing is published",
   "delivery.action.move-target": "the target moves to this result",

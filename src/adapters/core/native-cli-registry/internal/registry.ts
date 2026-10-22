@@ -13,11 +13,11 @@ export const nativeCliCapabilitiesSchema = z.object({
   settings: z.object({ flag }).strict().readonly().nullable(),
   /** How `disabled` discovery is realised. Argv: non-empty `disabledArgs`, the help flags they need and hidden probes whose invalid value must
    * draw the exact parser refusal (a CLI that silently ignores an unknown key would otherwise leave repository instructions on). Checkout
-   * (C2, owner Q4 2026-10-23): a CLI without a suppression flag gets a worker checkout without `hiddenPaths` (empty `disabledArgs`, no flags,
-   * no probes). Null = no `disabled` mode. */
+   * (C2, owner Q4 2026-10-23): a CLI without a suppression flag gets a worker checkout without the registry's `instructionSurface` (G1: one
+   * list for checkout shaping and the delivery floor; empty `disabledArgs`, no flags, no probes). Null = no `disabled` mode. */
   discovery: z.object({ requiredFlags: z.array(flag).readonly(),
     hiddenProbes: z.array(z.object({ args: argumentsSchema, refusal: argument }).strict().readonly()).max(4).readonly(),
-    checkout: z.object({ hiddenPaths: workspaceHiddenPathsSchema }).strict().readonly().nullable() }).strict()
+    checkout: z.object({}).strict().readonly().nullable() }).strict()
     .refine(value => value.checkout === null ? value.requiredFlags.length > 0 : value.requiredFlags.length === 0 && value.hiddenProbes.length === 0).readonly().nullable(),
   promptChannel: z.enum(['claude-system-prompt', 'codex-instructions-file', 'inline']),
   // A flag channel passes the report schema through a CLI flag; `final-text-json` has no flag: the schema rides in the prompt and the
@@ -34,7 +34,7 @@ const commandSchema = z.object({ executable: argument, args: argumentsSchema, mo
   capabilities: nativeCliCapabilitiesSchema }).strict().refine(value => (value.disabledArgs === null) === (value.capabilities.discovery === null)
     && (value.capabilities.discovery === null || (value.disabledArgs!.length === 0) === (value.capabilities.discovery.checkout !== null))).readonly();
 const registrySchema = z.object({ schemaVersion: z.literal(3), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), commandSchema)
-  .refine(value => Object.keys(value).length > 0).readonly() }).strict().readonly();
+  .refine(value => Object.keys(value).length > 0).readonly(), instructionSurface: z.object({ hiddenPaths: workspaceHiddenPathsSchema }).strict().readonly() }).strict().readonly();
 export { NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, type WorkerEffort };
 /** Strict versioned asset loading. Missing capabilities and old assets are errors, never inferred defaults. */
 export function parseNativeCliRegistry(input: unknown) {
