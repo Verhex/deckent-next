@@ -61,8 +61,12 @@ describe.skipIf(!imageId)('real Docker final report custody', () => {
   ])('%s %s reaches the sealed transcript as %s', async (provider, variant, expected) => {
     const root = await mkdtemp(join(tmpdir(), 'dn-report-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
     const workspace = join(root, 'work'); await mkdir(workspace);
-    const value = variant === 'invalid' ? { ...valid, accepted: true } : variant === 'oversized' ? { ...valid, summary: 'x'.repeat(40000) }
-      : variant === 'typed' ? { ...valid, checks: [{ command: 'lint', outcome: 'failed', checkId: 'lint', role: 'acceptance' }, { command: 'npm test', outcome: 'passed', ...(provider === 'codex' ? { checkId: null, role: null } : {}) }] } : valid;
+    const jwt = 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.fixture-signature';
+    // Known-secret redaction masks the values of the credential the worker was given; Cursor's credential is only the access token,
+    // so its report carries that token where the other providers carry their fixture secret.
+    const secret = provider === 'cursor' ? jwt : fixtureSecret, base = { ...valid, summary: `Completed ${secret}` };
+    const value = variant === 'invalid' ? { ...base, accepted: true } : variant === 'oversized' ? { ...base, summary: 'x'.repeat(40000) }
+      : variant === 'typed' ? { ...base, checks: [{ command: 'lint', outcome: 'failed', checkId: 'lint', role: 'acceptance' }, { command: 'npm test', outcome: 'passed', ...(provider === 'codex' ? { checkId: null, role: null } : {}) }] } : base;
     const compiled = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template, { schemaVersion: 3, provider, cliVersion: 'fixture-1',
       discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended', model: 'fixture-model', prompt: 'Work',
       ...(provider === 'claude' ? { maxTurns: 7 } : {}) }));
@@ -88,7 +92,6 @@ if (${JSON.stringify(variant !== 'missing')}) console.log(JSON.stringify(${provi
 `;
     await writeFile(join(workspace, 'native.mjs'), native, { mode: 0o755 });
     const received: WorkerEvent[] = [];
-    const jwt = 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.fixture-signature';
     const credential = provider === 'claude' ? { claudeAiOauth: { accessToken: fixtureSecret, expiresAt: Date.now() + 3600000 } }
       : provider === 'codex' ? { tokens: { access_token: jwt, id_token: fixtureSecret } } : { accessToken: jwt };
     const connection = await openNativeConnection({ binding: compiled.nativeSubscription!,
@@ -105,7 +108,7 @@ if (${JSON.stringify(variant !== 'missing')}) console.log(JSON.stringify(${provi
     const final = readWorkerFinalReport(result.stdout);
     if (expected === 'reported') {
       expect(final).toMatchObject({ status: 'reported', report: { changedFiles: ['note.txt'], summary: 'Completed [REDACTED]', openIssues: ['Bearer [REDACTED]'] } });
-      expect(result.stdout).not.toContain(fixtureSecret); expect(result.stdout).not.toContain('abc.def.ghi');
+      expect(result.stdout).not.toContain(secret); expect(result.stdout).not.toContain('abc.def.ghi');
       // PRE-1: a typed failed acceptance check leaves the real bridge intact, so the domain refuses the task (owner D5a).
       if (variant === 'typed' && final.status === 'reported') {
         expect(final.report.checks).toEqual([{ command: 'lint', outcome: 'failed', checkId: 'lint', role: 'acceptance' }, { command: 'npm test', outcome: 'passed' }]);
