@@ -13,7 +13,9 @@ const modelText = z.string().min(1).max(256);
  * with the pin (not provider attestation); `absent` evidence means no sealed log. Tasks without a pin carry no field (bytes unchanged).
  */
 const legacyTaskEvaluationModelSchema = z.object({ provider: workerProviderSchema, requested: workerModelPinSchema,
-  init: modelText.nullable(), usage: z.array(modelText).max(16).readonly().nullable(), verdict: z.enum(['verified', 'substituted', 'unverified']),
+  init: modelText.nullable(), usage: z.array(modelText).max(16).readonly().nullable(),
+  // The two session-start-name verdicts (owner K1/K2 2026-10-22) appear only on records of a `session-start-name` provider.
+  verdict: z.enum(['verified', 'substituted', 'unverified', 'start-name-matched', 'provider-chosen']),
   unexpected: z.array(modelText).max(17).readonly(), evidence: z.enum(['sealed', 'absent']) }).strict();
 /** Additive evidence contract. Missing capability is migrated only while reading pre-stamping records. */
 export const taskEvaluationModelSchema = legacyTaskEvaluationModelSchema.extend({ evidenceCapability: modelUsageEvidenceSchema.optional() }).transform(model =>
@@ -36,10 +38,14 @@ export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), eval
   returnEvidence: z.object({ kind: z.enum(['output', 'model-seal', 'workspace-patch', 'criterion-evidence']), digest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
 }).strict().readonly();
 /** Acceptance consequence: an undeclared model fails the attempt; an attempt with session-event model usage without a sealed
- * 'verified' verdict is held; attempts without per-model evidence stay accepted by their criteria, visibly unverified. */
+ * 'verified' verdict is held; attempts without per-model evidence stay accepted by their criteria, visibly unverified.
+ * Session-start-name evidence (owner K1/K2 2026-10-22): a matched start name or a provider-chosen entry is accepted by its criteria with the
+ * verdict visible (neither claims per-model usage); a start name that maps to another model fails like any substitution; a missing or
+ * unrecorded start name is held — the CLI reported evidence the catalog cannot place, so it is never silently accepted. */
 export function taskModelConclusion(model: TaskEvaluationModel | undefined): 'fail' | 'unknown' | null {
   if (!model) return null;
   if (model.verdict === 'substituted') return 'fail';
+  if (model.evidenceCapability === 'session-start-name') return model.verdict === 'unverified' ? 'unknown' : null;
   return model.evidenceCapability === 'session-events' && model.verdict !== 'verified' ? 'unknown' : null;
 }
 export type TaskEvaluation = z.infer<typeof taskEvaluationSchema>;

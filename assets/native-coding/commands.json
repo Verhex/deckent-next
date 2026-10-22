@@ -148,7 +148,7 @@
         "settings": null,
         "promptChannel": "inline",
         "structuredReport": null,
-        "modelUsageEvidence": "none",
+        "modelUsageEvidence": "session-start-name",
         "reasoningEffort": {
           "mode": "model-id",
           "levels": [

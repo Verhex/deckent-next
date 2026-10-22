@@ -2,7 +2,7 @@ import { SystemTrustedClock } from '#platform/index.js';
 import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { WorkerEvent, WorkerModelVerification, SealedWorkerModelVerification } from '#domain/index.js';
+import { modelVerificationSchemaVersion, type WorkerEvent, type WorkerModelVerification, type SealedWorkerModelVerification } from '#domain/index.js';
 import { observationDirectory } from './files.js';
 
 /** Live, append-only projection of validated worker events next to the attempt's other sidecars (`worker.events`, NDJSON, 0600).
@@ -56,7 +56,7 @@ export function sealWorkerEventLog(events: readonly WorkerEvent[], verification:
   const suffix = (sequence: number, atMs: number, dropped: number): string[] => {
     const lines: string[] = [];
     if (dropped > 0) lines.push(serialize({ schemaVersion: 1, sequence: ++sequence, atMs, kind: 'dropped', reason: 'byte-cap', count: dropped }));
-    if (verification) lines.push(serialize({ schemaVersion: 'evidenceCapability' in verification ? 2 : 1, sequence: ++sequence, atMs, kind: 'model.verification', ...verification }));
+    if (verification) lines.push(serialize({ schemaVersion: modelVerificationSchemaVersion(verification), sequence: ++sequence, atMs, kind: 'model.verification', ...verification }));
     if (unreported > 0) lines.push(serialize({ schemaVersion: 1, sequence: sequence + 1, atMs, kind: 'dropped', reason: 'event-cap', count: unreported }));
     return lines;
   };
