@@ -48,7 +48,9 @@ it('reports contextual usage parameters without leaking supplied values', async 
   expect(await (await import('#surfaces/index.js')).main(['run', 'reserve', '--scope', 'secret-scope'], {
     env: f.context.env, stderr: { write(value: string) { text += value; } }, async reserveRunTasks() { throw new Error('handler called'); },
   })).toBe(2);
-  expect(text).toContain('deckent run reserve'); expect(text).toContain('--command-id'); expect(text).toContain('Usage:'); expect(text).not.toContain('secret-scope');
+  // S2 (alpha.53): a missing argument is named (CLI_ARGUMENT_MISSING) with the help pointer instead of the family usage.
+  expect(text).toContain('deckent run reserve'); expect(text).toContain('Missing argument: --id <id>, --command-id <id>'); expect(text).toContain('Details: deckent run reserve --help');
+  expect(text).not.toContain('secret-scope');
 });
 
 it('reports missing criterion definitions with a safe graph path and reason before admission', async () => {

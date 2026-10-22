@@ -108,7 +108,8 @@ it('negative: the AI and pipe control path still requires --command-id and --exp
   for (const [argv, env] of [[['run', 'cancel', '--scope', 's', '--id', LONG, '--command-id', 'c-1'], {}], [['run', 'hold', '--scope', 's', '--id', LONG, '--reason', 'r'], {}],
     [['run', 'close', '--scope', 's', '--id', LONG], { CLAUDECODE: '1' }]] as const) {
     const result = await run([...argv], s.context, root, env);
-    expect(result.code).toBe(2); expect(result.err).toContain('CLI_USAGE');
+    // S2 (alpha.53): the refusal names what is missing (CLI_ARGUMENT_MISSING, still exit 2) instead of "invalid".
+    expect(result.code).toBe(2); expect(result.err).toContain('CLI_ARGUMENT_MISSING'); expect(result.err).toContain('--expected-revision <n>');
   }
   // An agent on a real terminal is never asked: the same refusal.
   const tty = sinks();

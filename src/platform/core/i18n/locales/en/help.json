@@ -205,6 +205,8 @@
   "cli.help.bare.missing": "Missing argument: {argument}.",
   "cli.help.bare.actions": "Actions: {actions}",
   "cli.help.bare.details": "Details: deckent {command} --help",
+  "cli.help.action.requires": "Required: {arguments}",
+  "cli.help.action.requiresOffTerminal": "Required without a terminal: {arguments}",
   "cli.help.family.withoutAction": "Without an action: {command}",
   "cli.help.placeholder.action": "action",
   "cli.help.placeholder.text": "text",
