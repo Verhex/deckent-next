@@ -148,6 +148,19 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   the witness alone. Closing a mode keeps the stored full-auto entry in the person's bindings but not in effect: every call re-checks
   the grant.
 
+- **A worker sees the project's instruction snapshot only after a person trusts it.** A Run snapshots one project instruction file
+  (`.deckent/worker-instructions.md` by default, or `AGENTS.md`, or none; `execution.workerInstructions.source`) at the Git work target
+  root. Until `deckent coding instructions trust` is confirmed at the person's own terminal for that exact content, workers get the task
+  text only and `run create`, MCP and `--json` carry the warning `WORKER_INSTRUCTIONS_WITHHELD`; `/do` and queue admissions show no such
+  warning. Any change to the file makes it untrusted again. A non-Git target has no snapshot (explicit no-op).
+- **Hiding instruction files from a worker is not confidentiality.** Codex discovery is `disabled` by strict-config keys that are
+  proven at preflight by hidden probes; the keys were verified on Codex 0.163.0 only, so re-probe after a Codex update (an unknown key
+  that is silently ignored fails the probe, not the Run). Cursor has no suppression flag, so its checkout is sparse: `AGENTS.md`,
+  `CLAUDE.md`, `.agents`, `.claude`, `.codex`, `.cursor`, `DECKENT.md` and the worker file are absent from the worker's clone, with the
+  same retained patch as a full checkout. The objects stay in the clone (`git show HEAD:AGENTS.md` works). The hidden-path list can be
+  replaced per project only in a template's `invocation.discovery.hiddenPaths`; there is no CLI for it yet. `.claude`, `.codex`,
+  `.cursor` and `.deckent` were already excluded from patches. Queue verification keeps the full tree.
+
 ## Providers and subscriptions
 
 - **Claude subscription:** a Claude Code worker runs with your own Claude login. A subscription-backed Brain (the planner
@@ -332,6 +345,17 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **A worker that asks you a question cannot be answered from the terminal yet.** *Workaround:* `deckent run resume --scope <id>
   --id <run> --command-id <id> --expected-revision <n> --task <id> --answer <text>`.
 - **Autonomous delivery is designed but off.** Every delivery and adoption needs your `y` in a verified terminal.
+- **A held environment probe keeps its pool slot until you resume.** A probe stopped by its own deadline gives no answer: the Run is held
+  with `EXECUTION_ENVIRONMENT_TIMED_OUT` (not parked as an installation defect, never retried automatically) and `deckent run resume`
+  probes again. Until then the slot stays held, and `run list` and terminal jobs show the hold only as "ilerleme başarısız" /
+  "progression failed", not by its own name. Image probe failures keep a bounded cause (deadline, exit, signal, parse).
+- **The delivery card summary is a projection, not evidence.** Queue, delivery and adoption cards show title, what changed, why it was
+  accepted, model verdict, risk and what yes/no does. The worker's own report is shown as a claim; the Git change facts (files, +/−,
+  out-of-scope) are filled by the Git workspace adapter. Queue ordering is unchanged (in flight first, parked last).
+- **The autonomy shadow is advice only.** Rule `autonomy@1` records `would-deliver` or `would-hold` with reasons per queue ticket at
+  awaiting-confirmation (`state/autonomy-shadow`, outside the audit chain). Nothing acts on it; every delivery, adoption and rollback
+  still needs your `y`, and it is not shown on the `y/N` prompt. A crash between the ticket transition and the append leaves no
+  record for that revision. Comparing it with your decisions is a later owner decision.
 
 ## ERP and operations
 
@@ -411,6 +435,11 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   installed build, but an MCP server or a `deckent` terminal that a client started earlier keeps the code it loaded until that client
   restarts it. *Workaround:* after a switch, restart the client (the Claude Code session, or close and reopen the terminal);
   `deckent runtime describe` shows which build the service runs.
+
+- **Rolling back from alpha.53 to alpha.52 needs care.** Unset `execution.workerInstructions`; finish or release Cursor attempts (their
+  clones are sparse); Codex and Cursor `disabled` kinds are refused by alpha.52; have an empty delivery queue at the switch (tickets
+  are titled differently); the alpha.52 audit verify does not see the shadow store (it is outside the chain). If the Cursor catalog was
+  registered for alpha.53 profiles, restore the backup. Ledger v59 and runtime protocol v29 did not change.
 
 ## Desktop and other surfaces
 
