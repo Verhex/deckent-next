@@ -1011,7 +1011,7 @@ Layers: `platform` (config, errors/i18n, identity, paths), `domain` (pure versio
   a literal `.md` path in a write call, not a path that arrives as data; no README/CHANGELOG/vision/sprint-log writers exist.
 - Platform order (owner 2026-09-29): Linux and Windows WSL2 today; macOS next (Seatbelt + getpeereid), then
   native Windows (owner 2026-10-21: native Windows and macOS are beta scope; beta.1 ships Linux/WSL, beta exit = native on three platforms, see [native-platforms plan](.deckent/docs/plan/native-platforms-2026-10-21.md)). Docker stays a worker execution target, not a host platform. A platform without proof reports
-  a typed `UNSUPPORTED`/`DEGRADED`, never a silent fallback. Node.js: `engines >=24.22.1` (2026-10-21 security release) (24.15 was the first 24.x bundling
+  a typed `UNSUPPORTED`/`DEGRADED`, never a silent fallback. Node.js: `engines >=24.22.1 <25 || >=26.12.1` (one patched floor per major, 2026-10-21 security release) (24.15 was the first 24.x bundling
   SQLite 3.51.3, the WAL-reset corruption fix; 24.22.0 fixes the unaligned UTF-16LE decoding heap overrun, owner 2026-10-17; doctor and `init` name an older Node and ask for an update); 24 and 26 are supported (CI matrix [24, 26]; owner 2026-10-06 requires Ubuntu 24/26 for merging; macOS/Windows remain separately visible platform verification;
   Node 26 is the planned default after LTS on 2026-10-28). Every `node:sqlite` open (the ledger connection, the read-only readers, the scope
   registry reader and the upgrade backup: 10 sites) first refuses an engine below 3.51.3 with the typed

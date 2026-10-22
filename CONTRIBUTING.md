@@ -13,7 +13,7 @@ branch and submit a pull request against `main`.
 | Requirement | Why it is needed |
 |---|---|
 | Linux or Windows WSL2 | Current execution and sandbox development path. macOS and native Windows have platform verification but are not equivalent execution targets yet. |
-| Node.js ≥ 24.22.1 and its npm | See [package.json](package.json). Use Node 24 or 26 for the supported CI versions. |
+| Node.js 24.22.1+ or 26.12.1+ and its npm | See [package.json](package.json). Use Node 24 or 26 for the supported CI versions. |
 | Git and a C compiler/build toolchain | Git-backed fixtures and the native Linux sandbox helper built by `npm run build`. On Debian/Ubuntu, the toolchain is provided by `build-essential`. |
 | A running Docker daemon, accessible to your user | Builds the pinned bubblewrap binary; also required by Docker worker tests. Access to the daemon is privileged: use a development machine. |
 | Internet access for setup | Downloads locked npm dependencies, bubblewrap sources and the pinned build image. No provider API key is needed for the quickstart test. |

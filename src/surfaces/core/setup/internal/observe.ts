@@ -54,7 +54,7 @@ export async function observeCoreSetup(context: SetupCommandContext, root: strin
   const instructions = context.openProjectInstructions && !pending ? await context.openProjectInstructions(root, options)
     .then(port => port.preview([], projectSkeleton('en'))).catch(() => null) : null;
   const observation: SetupObservation = { schemaVersion: SETUP_PLAN_SCHEMA_VERSION,
-    environment: { platform, node: assessNodeSupport(process.version, NODE_ENGINE_RANGE).status === 'unsupported' ? 'below-floor' : 'supported' },
+    environment: { platform, node: assessNodeSupport(process.version, NODE_ENGINE_RANGE).status === 'supported' ? 'supported' : 'below-floor' },
     language: { configured: locale(await loadConfigLanguage(root, options).catch(() => undefined)),
       requested: locale(flagLanguage) ?? locale(envValue(env, 'DECKENT_LANGUAGE')) ?? locale(envValue(env, 'DECKENT_LANG')),
       system: [envValue(env, 'LC_ALL'), envValue(env, 'LC_MESSAGES'), envValue(env, 'LANG')].map(locale).find(value => value !== null) ?? null },

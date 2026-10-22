@@ -79,7 +79,9 @@ describe('K2 catalog registry contract', () => {
   });
   it('registers floor defaults from the package manifest without altering the source templates', async () => {
     const manifest = JSON.parse(await readFile(new URL('../../../package.json', import.meta.url), 'utf8')) as { engines: { node: string } };
-    for (const key of ['error.node_version_low', 'desktop.error.node_not_found']) expect(MESSAGE_REGISTRY.defaultParams[key]).toEqual({ floor: manifest.engines.node });
+    const floors = manifest.engines.node.match(/(?<=>=\s*)\d+\.\d+\.\d+/g)!.join(' / ');
+    expect(floors).toBe('24.22.1 / 26.12.1');
+    for (const key of ['error.node_version_low', 'desktop.error.node_not_found']) expect(MESSAGE_REGISTRY.defaultParams[key]).toEqual({ floor: floors });
   });
   it('contains no top-level await or Node imports in the renderer-facing translation unit', async () => {
     for (const name of await readdir(new URL('internal/', unit))) {

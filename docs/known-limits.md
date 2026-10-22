@@ -13,7 +13,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 ## Platforms: tried and not tried
 
 - **Tried:** Linux and Windows through WSL2 (the supported execution path). Hosted checks run on Ubuntu with Node 24 and
-  Node 26. Node.js 24.22.1 or newer is required (24.21 and older 24.x have a heap overrun in UTF-16LE decoding; 24.22.1 carries the 2026-10-21 security fixes). On Node 26 use 26.12.1 or newer: the floor check reads one `>=` bound and still accepts an older 26.x.
+  Node 26. Node.js 24.22.1 or newer is required (24.21 and older 24.x have a heap overrun in UTF-16LE decoding; 24.22.1 carries the 2026-10-21 security fixes). On Node 26, 26.12.1 or newer is required; Node 25 is not supported.
   *Impact:* these are the only places where behavior has been observed.
 - **Not supported: native Windows runtime.** The service transport does not run there, and the file-based secret stores are
   not available there. The OS-user identity cannot be read and the private ledger files cannot be opened, so backup, the

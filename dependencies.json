@@ -615,7 +615,7 @@
           "package": "@types/node",
           "version": "26.6.3",
           "date": "2026-09-29",
-          "note": "Not taken: major must match the engines floor (DEPS-P0: engines.node >=24.22.1); 25.x is an EOL Node line's types. Typecheck stayed green after the 25.9.7 -> 24.19.0 downgrade; no API typechecked only under @types/node 25 was found in src/scripts/tests. Move to the 26.x line's types when Node 26 becomes the primary target (LTS 2026-10-28, owner 2026-09-29 decision)."
+          "note": "Not taken: major must match the engines floor (DEPS-P0: engines.node >=24.22.1 <25 || >=26.12.1); 25.x is an EOL Node line's types. Typecheck stayed green after the 25.9.7 -> 24.19.0 downgrade; no API typechecked only under @types/node 25 was found in src/scripts/tests. Move to the 26.x line's types when Node 26 becomes the primary target (LTS 2026-10-28, owner 2026-09-29 decision)."
         }
       ],
       "ownSolution": "None.",
@@ -649,7 +649,7 @@
   },
   "platform": {
     "node": {
-      "requirement": "engines >=24.22.1 (24.15.0 bundled the SQLite 3.51.3 WAL-reset fix, DEPS-P0 2026-09-29; 24.22.0 fixes the UTF-16LE decoding heap overrun, owner 2026-10-17) with 24 and 26 supported, 26 primary after its LTS on 2026-10-28",
+      "requirement": "engines >=24.22.1 <25 || >=26.12.1 (24.15.0 bundled the SQLite 3.51.3 WAL-reset fix, DEPS-P0 2026-09-29; 24.22.0 fixes the UTF-16LE decoding heap overrun, owner 2026-10-17) with 24 and 26 supported, 26 primary after its LTS on 2026-10-28",
       "owners": [
         "src/platform",
         "src/adapters",
