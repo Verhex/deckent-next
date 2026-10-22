@@ -6,17 +6,20 @@ import { configServiceState, shutdownCommandSchema, type CancellationRecoveryCom
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { formatDuration as humanDuration } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
-import type { ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_UNCERTAIN_CODE } from '#domain/index.js';
+import type { ENVIRONMENT_NOT_READY_CODE, ENVIRONMENT_TIMED_OUT_CODE, ENVIRONMENT_UNCERTAIN_CODE } from '#domain/index.js';
 import { adminInteractive, adminSinks, askAdminCard, confirmOptions, reportCancelled } from './io.js';
 
 /** The service journal line of a progression turn that stopped. PRE-7: an environment refusal parked the Run for its environment (an
  * installation defect, not a task failure); it is named so, with the requirement, never as "could not continue". JSON is unchanged. */
-const ENVIRONMENT_NOT_READY: typeof ENVIRONMENT_NOT_READY_CODE = 'EXECUTION_ENVIRONMENT_NOT_READY', ENVIRONMENT_UNCERTAIN: typeof ENVIRONMENT_UNCERTAIN_CODE = 'EXECUTION_ENVIRONMENT_UNCERTAIN';
+const ENVIRONMENT_NOT_READY: typeof ENVIRONMENT_NOT_READY_CODE = 'EXECUTION_ENVIRONMENT_NOT_READY', ENVIRONMENT_UNCERTAIN: typeof ENVIRONMENT_UNCERTAIN_CODE = 'EXECUTION_ENVIRONMENT_UNCERTAIN',
+  ENVIRONMENT_TIMED_OUT: typeof ENVIRONMENT_TIMED_OUT_CODE = 'EXECUTION_ENVIRONMENT_TIMED_OUT';
 export function runProgressionErrorText(query: Readonly<{ scopeId: string; runId: string }> | null | undefined,
   error: Pick<DeckentError, 'code'> & Partial<Pick<DeckentError, 'params' | 'localize' | 'message'>>, locale: Locale): string {
   const prefix = query ? `${query.scopeId}/${query.runId}: ` : '', requirement = error.params?.['requirement'];
   if (error.code === ENVIRONMENT_NOT_READY && typeof requirement === 'string') return prefix + t('cli.runtime.runParkedEnvironment', { requirement }, locale);
   if (error.code === ENVIRONMENT_UNCERTAIN && typeof requirement === 'string') return prefix + t('cli.runtime.runParkedEnvironmentUncertain', { requirement, probe: String(error.params?.['probe'] ?? '—') }, locale);
+  // E1: a timed-out probe held the Run for an explicit re-run (no answer, not an installation defect).
+  if (error.code === ENVIRONMENT_TIMED_OUT && typeof requirement === 'string') return prefix + t('cli.runtime.runHeldEnvironmentTimedOut', { requirement }, locale);
   return `${prefix}${t('cli.runtime.runProgressionFailed', { code: error.code }, locale)}: ${error.localize?.(locale).message ?? error.message ?? error.code}`;
 }
 export type PreflightSweep = Readonly<{ removed: number; unsettled: readonly string[]; unlisted?: true; released?: number; held?: readonly string[]; settlementFailed?: readonly Readonly<{ probes: readonly string[]; code?: string }>[] }>;

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it } from 'vitest';
 import { DockerSupervisor, DockerCommandFailure, nativeCodingEnvironmentProbes } from '#adapters/index.js';
-import { assertTaskEnvironment } from '#engine/index.js';
+import { assertTaskEnvironment, classifyLaunchRefusal } from '#engine/index.js';
 
 // PRE-7 ORTAM-HAZIR: an environment probe runs on the worker's floor (same image, user, no network, sandbox flags, heap env, read-only
 // dependency binds), never with the connection or a credential, with argv only from the adapter's probe-kind registry.
@@ -25,7 +25,7 @@ async function roots2() {
 /** A fake daemon with state: containers by id (name, labels), and switchable failures of `run` and `rm` (REVISE 2691 F1). */
 function fakeDaemon() {
   const containers = new Map<string, { name: string; labels: Record<string, string> }>(), calls: (readonly string[])[] = [];
-  const state = { exit: 0 as number | null, deadline: false, rmFails: false, rmLeaves: false, inspectFails: false };
+  const state = { exit: 0 as number | null, deadline: false, signal: false, rmFails: false, rmLeaves: false, inspectFails: false };
   const find = (ref: string) => [...containers.entries()].find(([id, value]) => id === ref || value.name === ref);
   const runner = async ({ args }: { args: readonly string[] }) => {
     const at = args[0] === '--host' ? 2 : 0, a = args.slice(at), ok = (stdout = '') => ({ stdout, stderr: '' });
@@ -41,6 +41,7 @@ function fakeDaemon() {
       const labels = Object.fromEntries(a.flatMap((value, index) => a[index - 1] === '--label' ? [value.split('=') as [string, string]] : []));
       containers.set(randomUUID().replaceAll('-', '').padEnd(64, '0'), { name, labels });
       if (state.deadline) throw new DockerCommandFailure('', '', null, true, 'deadline');
+      if (state.signal) throw new DockerCommandFailure('', '', null, true, 'signal', 'aborted');
       if (state.exit !== 0) throw new DockerCommandFailure('', '', state.exit, false);
       return ok();
     }
@@ -65,8 +66,11 @@ it('runs a registry probe with the worker floor and without the workspace or the
   expect(after).toEqual([['rm', '--force', name], ['inspect', '--format', '{{.Id}}', name]]); expect(d.containers.size).toBe(0);
   d.state.exit = 127; expect(await supervisor.probe(request(r.workspace), ['missing-tool', '--version'], 5000)).toBe('unmet');
   d.state.exit = 1; expect(await supervisor.probe(request(r.workspace), ['node', '-e', 'process.exit(1)'], 5000)).toBe('unmet');
-  d.state.exit = 0; d.state.deadline = true; expect(await supervisor.probe(request(r.workspace), ['node', '--version'], 5000)).toBe('unmet'); expect(d.containers.size).toBe(0);
-  d.state.deadline = false; d.state.exit = 125; await expect(supervisor.probe(request(r.workspace), ['node', '--version'], 5000)).rejects.toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED' });
+  // E1 (Jev 8e791e09): a probe its deadline stopped gave no answer; with its container proven gone it is `timed-out`, never `unmet`.
+  d.state.exit = 0; d.state.deadline = true; expect(await supervisor.probe(request(r.workspace), ['node', '--version'], 5000)).toBe('timed-out'); expect(d.containers.size).toBe(0);
+  // A caller's abort is not the probe's own deadline: it stays a control failure.
+  d.state.deadline = false; d.state.signal = true; await expect(supervisor.probe(request(r.workspace), ['node', '--version'], 5000)).rejects.toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED' }); expect(d.containers.size).toBe(0);
+  d.state.signal = false; d.state.exit = 125; await expect(supervisor.probe(request(r.workspace), ['node', '--version'], 5000)).rejects.toMatchObject({ code: 'SUPERVISOR_CONTROL_FAILED' });
 });
 
 it('REVISE 2691: cleanup that cannot be proven is uncertain, never met/unmet: deadline + rm error, met + rm error, rm that leaves it, unknown inspect', async () => {
@@ -108,6 +112,18 @@ it('REVISE 2691: the startup sweep removes only this installation’s labelled p
   expect(await supervisor.releasePreflightProbes()).toEqual({ removed: 0, unsettled: ['d'.repeat(64)] });
 });
 
+it('E1: a timed-out probe refuses the launch as EXECUTION_ENVIRONMENT_TIMED_OUT naming the requirement; it is a hold, not an installation-defect park', async () => {
+  const probes = new Map([['executable', async () => 'met' as const], ['path-readable', async () => 'timed-out' as const]]);
+  const failure = await assertTaskEnvironment({ schemaVersion: 1, requirements: [{ id: 'node', kind: 'executable', target: 'node' }, { id: 'marker', kind: 'path-readable', target: '/deps/marker.txt' }] }, probes).catch((error: unknown) => error);
+  expect(failure).toMatchObject({ code: 'EXECUTION_ENVIRONMENT_TIMED_OUT', params: { requirement: 'marker', kind: 'path-readable' } });
+  expect(classifyLaunchRefusal(failure)).toEqual({ disposition: 'held', code: 'EXECUTION_ENVIRONMENT_TIMED_OUT', requirement: 'marker' });
+  // An unmet answer stays the permanent environment refusal (the Run parks before any worker).
+  const unmet = await assertTaskEnvironment({ schemaVersion: 1, requirements: [{ id: 'node', kind: 'executable', target: 'node' }] }, new Map([['executable', async () => 'unmet' as const]])).catch((error: unknown) => error);
+  expect(classifyLaunchRefusal(unmet)).toEqual({ disposition: 'permanent', code: 'EXECUTION_ENVIRONMENT_NOT_READY', requirement: 'node' });
+  // A held refusal without its requirement is not recordable as one: it stays transient.
+  expect(classifyLaunchRefusal({ code: 'EXECUTION_ENVIRONMENT_TIMED_OUT', params: {} })).toEqual({ disposition: 'transient' });
+});
+
 it('coding probe kinds come from the registry; the declared requirement supplies whole argv elements only, an empty placeholder is unmet without a container', async () => {
   const seen: (readonly string[])[] = [];
   const probes = nativeCodingEnvironmentProbes(async argv => { seen.push(argv); return 'met'; });
@@ -128,8 +144,8 @@ it.skipIf(process.platform !== 'linux' || !dockerImage)('real Docker on the pinn
   expect(await check('path-readable', '/deps/marker.txt')).toBe('met'); expect(await check('path-readable', '/deps/absent.txt')).toBe('unmet');
   // node-heap.json: 75 % of 2 GiB = 1536 MiB, so 1.5 GiB holds and 2 GiB does not.
   expect(await check('node-heap', 'node', String(1536 * MiB))).toBe('met'); expect(await check('node-heap', 'node', String(2048 * MiB))).toBe('unmet');
-  // A probe that outlives its bound is killed and counts as unmet.
-  expect(await supervisor.probe(req, ['node', '-e', 'setTimeout(() => {}, 60000)'], 1500)).toBe('unmet');
+  // A probe that outlives its bound is killed and removed; it gave no answer, so it is `timed-out`, never `unmet` (E1).
+  expect(await supervisor.probe(req, ['node', '-e', 'setTimeout(() => {}, 60000)'], 1500)).toBe('timed-out');
   const { root } = supervisor.probeIdentity(req, ['node', '--version']);
   expect((await exec('/usr/bin/docker', ['ps', '-aq', '--filter', `label=deckent.preflight.root=${root}`])).stdout.trim()).toBe('');
 }, 120_000);

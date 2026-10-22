@@ -96,6 +96,8 @@ export function renderRunInspect(data: InspectData, locale: Locale, verbose: boo
       : t('cli.run.lifecycle.failure', { code: run.state.failureCode }, locale)] : []),
     // Crash-loop breaker: the typed park reason in words (the per-attempt count and phase are in the audit event and the service journal).
     ...(run.state.kind === 'parked' && run.state.failureCode === 'DISPATCH_PREPARATION_ABORTED' ? [t('error.DISPATCH_PREPARATION_ABORTED.summary', {}, locale)] : []),
+    // E1: a timed-out environment check holds the Run (no answer, not an installation defect); its next step is an explicit re-run.
+    ...(run.state.kind === 'parked' && run.state.failureCode === 'EXECUTION_ENVIRONMENT_TIMED_OUT' ? [t('cli.run.lifecycle.environmentTimedOut', { run: runShown }, locale)] : []),
     ...(run.state.kind === 'parked' && run.state.note ? [t('cli.run.lifecycle.note', { note: run.state.note }, locale)] : []),
     ...(run.pool ? [...run.pool.drift.map(drift => poolDriftLine(drift, locale)), ...run.pool.waiting.map(wait => poolWaitLine(wait.taskId, wait.reason, locale))] : []),
     !run.cancellationRequested ? t('cli.run.inspect.cancelAbsent', {}, locale) : cancelledBeforeLaunch(run) ? t('cli.run.inspect.cancelNoWorker', {}, locale) : t('cli.run.inspect.cancelRequested', {}, locale),

@@ -7,10 +7,10 @@ export function nativeCodingTemplateEnvironment(docker: Readonly<{ memoryBytes?:
   const mounted = new Set((Array.isArray(docker.readOnlyMounts) ? docker.readOnlyMounts : []).map(mount => (mount as { target?: unknown })?.target));
   return { schemaVersion: 1, requirements: [...requirements, ...whenMounted.filter(row => mounted.has(row.target)).map(row => row.requirement), ...(heap ? [{ ...nodeHeap, expect: String(heap) }] : [])] };
 }
-export type ContainerProbeRunner = (argv: readonly string[], timeoutMs: number, signal?: AbortSignal) => Promise<'met' | 'unmet' | Readonly<{ uncertain: string }>>;
+export type ContainerProbeRunner = (argv: readonly string[], timeoutMs: number, signal?: AbortSignal) => Promise<'met' | 'unmet' | 'timed-out' | Readonly<{ uncertain: string }>>;
 /** PRE-7: this adapter's probe kinds (environment-probes.json) over a container probe runner. Commands come only from the registry; the
  * declared requirement supplies whole argv elements, never a command. A kind whose placeholder the requirement leaves empty is unmet. */
-export function nativeCodingEnvironmentProbes(run: ContainerProbeRunner): ReadonlyMap<string, (requirement: EnvironmentRequirement, signal?: AbortSignal) => Promise<'met' | 'unmet' | Readonly<{ uncertain: string }>>> {
+export function nativeCodingEnvironmentProbes(run: ContainerProbeRunner): ReadonlyMap<string, (requirement: EnvironmentRequirement, signal?: AbortSignal) => Promise<'met' | 'unmet' | 'timed-out' | Readonly<{ uncertain: string }>>> {
   return new Map(Object.entries(registry.kinds).map(([kind, { argv }]) => [kind, async (requirement, signal) => {
     const values: Readonly<Record<string, string | undefined>> = { '{target}': requirement.target, '{expect}': requirement.expect };
     const resolved = argv.map(part => Object.hasOwn(values, part) ? values[part] : part);
