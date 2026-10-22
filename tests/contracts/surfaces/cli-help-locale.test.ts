@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { main } from '#surfaces/core/cli/index.js';
+import { PACKAGE_VERSION, t } from '#platform/index.js';
 
 let temporary: string, root: string, globalRoot: string, env: NodeJS.ProcessEnv;
 beforeEach(async () => {
@@ -91,4 +92,23 @@ it('L-KIT: an error before a command reports its locale renders in the host-reso
       stdout: { write: () => {} }, stderr: { write: text => { errors += text; } } })).not.toBe(0);
     expect(errors).toContain(said); expect(errors).not.toContain(never);
   }
+});
+
+// alpha.53 D3: language residue - these paths resolved the locale from LANG/--lang only and ignored the configured language.
+async function run(argv: readonly string[], locale?: 'tr') {
+  let output = '', errors = '';
+  const code = await main(argv, { root, env, ...(locale ? { locale } : {}), stdout: { write: text => { output += text; } }, stderr: { write: text => { errors += text; } } });
+  return { code, output, errors };
+}
+it('an unknown command and --version follow the configured language', async () => {
+  // The host resolves config language once into context.locale (hostLocale); the dispatcher must render with it.
+  await config('tr');
+  const unknown = await run(['frobnicate'], 'tr');
+  expect(unknown.code).toBe(2); expect(unknown.errors + unknown.output).toContain(t('cli.unknownCommand', { name: 'deckent', version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}`, command: 'frobnicate' }, 'tr'));
+  expect((await run(['--version'], 'tr')).output).toContain(t('cli.version', { name: 'deckent', version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}` }, 'tr').split('\n')[0]);
+});
+it('run propose without its argument follows the configured language', async () => {
+  await config('tr');
+  const configured = await run(['run', 'propose'], 'tr'), flagged = await run(['run', 'propose', '--lang', 'tr']);
+  expect(configured.code).not.toBe(0); expect(configured.errors).toBe(flagged.errors);
 });
