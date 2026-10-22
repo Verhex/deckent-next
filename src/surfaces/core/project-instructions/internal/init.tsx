@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { render, useApp } from 'ink';
-import { ErrorRegistry, emit, resolveLocale, colorCapability, type ConfigLoadOptions, type OutputSink } from '#platform/index.js';
+import { ErrorRegistry, emit, resolveLocale, colorCapability, type ConfigLoadOptions, type Locale, type OutputSink } from '#platform/index.js';
 import type { ProjectInstructionPort, InstructionInitPreview } from '#engine/index.js';
 import { WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
 import { humanRecordText } from '#surfaces/core/terminal-render/index.js';
@@ -35,7 +35,7 @@ export function InstructionInitWindow(props: { readonly port: ProjectInstruction
 }
 
 export async function instructionInitCommand(argv: readonly string[], context: { readonly root?: string; readonly env?: NodeJS.ProcessEnv; readonly stdout?: OutputSink;
-  readonly stderr?: OutputSink; readonly openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort> }) {
+  readonly stderr?: OutputSink; readonly locale?: Locale; readonly onLocale?: (locale: Locale) => void; readonly openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort> }) {
   let previewOnly = false, language: string | undefined;
   for (let index = 1; index < argv.length; index++) {
     if (argv[index] === '--preview' && !previewOnly) previewOnly = true;
@@ -43,7 +43,7 @@ export async function instructionInitCommand(argv: readonly string[], context: {
     else if (argv[index] !== '--no-color') throw ErrorRegistry.createError('CLI_USAGE');
   }
   if (!context.openProjectInstructions) throw ErrorRegistry.createError('CLI_USAGE');
-  const locale = resolveLocale(language, context.env), labels = projectInstructionLabels(locale);
+  const locale = resolveLocale(language, context.env, context.locale), labels = projectInstructionLabels(locale); context.onLocale?.(locale);
   const port = await context.openProjectInstructions(context.root ?? process.cwd(), { env: context.env ?? process.env });
   const skeleton = projectSkeleton(locale), preview = await port.preview([], skeleton);
   const stdout = (context.stdout ?? process.stdout) as NodeJS.WriteStream;

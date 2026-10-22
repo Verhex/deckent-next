@@ -30,22 +30,23 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
 });
 
 /** Pure CLI dispatcher: returns the text to print and the exit code; no process side effects (testable). */
-export function dispatch(argv: readonly string[]): { readonly output: string; readonly code: ExitCode } {
+export function dispatch(argv: readonly string[], locale?: Locale): { readonly output: string; readonly code: ExitCode } {
   const [command] = argv;
+  const l = locale ?? resolveLocale();
   const common = { name: PACKAGE_NAME, version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}` };
-  if (command === undefined || command === '--help' || command === '-h') return { output: renderTopHelp(resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined)), code: 0 };
+  if (command === undefined || command === '--help' || command === '-h') return { output: renderTopHelp(l ?? resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined)), code: 0 };
   if (command === '--version' || command === '-v') {
     const build = readBuildIdentity();
     const line = build ? '\n' + t('cli.version.build', { tree: build.sourceTreeSha256.slice(0, 12), commit: build.sourceCommit?.slice(0, 12) ?? '-',
-      dirty: build.sourceDirty ? t('cli.version.dirty') : '', source: build.sourceCommonDir ? ` · sourceCommonDir ${build.sourceCommonDir}` : '' }) : '';
-    return { output: t('cli.version', common) + line, code: 0 };
+      dirty: build.sourceDirty ? t('cli.version.dirty', {}, l) : '', source: build.sourceCommonDir ? ` · sourceCommonDir ${build.sourceCommonDir}` : '' }, l) : '';
+    return { output: t('cli.version', common, l) + line, code: 0 };
   }
-  return { output: t('cli.unknownCommand', { ...common, command }), code: 2 };
+  return { output: t('cli.unknownCommand', { ...common, command }, l), code: 2 };
 }
 
 /** Bare piped `deckent` prints the top help; anything else that is not a command is `--version` or an unknown command. */
 function emitDispatch(argv: readonly string[], locale: Locale, context: CommandContext): ExitCode {
-  const result = argv.length === 0 ? { output: renderTopHelp(locale), code: 0 as const } : dispatch(argv);
+  const result = argv.length === 0 ? { output: renderTopHelp(locale), code: 0 as const } : dispatch(argv, locale);
   emit(result.output, { level: result.code === 0 ? 'info' : 'error', ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) });
   return result.code;
 }

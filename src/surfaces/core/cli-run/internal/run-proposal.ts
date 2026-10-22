@@ -1,9 +1,9 @@
 import { planningSpendingLines } from '#surfaces/core/run-planning/index.js';
 import { resolve } from 'node:path';
-import { currencyAmountText, t, emit, loadConfig, resolveLocale, ErrorRegistry, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { currencyAmountText, t, emit, loadConfig, ErrorRegistry, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { parseRunProposal, runProposalQuerySchema, type RunProposalQuery, type RunProposalResult } from '#engine/index.js';
 import type { RunProposal } from '#domain/index.js';
-import { cliUsage } from '#surfaces/core/cli-kit/index.js';
+import { cliUsage, commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { readGraphInput } from './graph-input.js';
 import type { RunCommandContext } from './context.js';
 export type RunProposalHandler = (root: string, command: RunProposal, options: ConfigLoadOptions) => Promise<RunProposalResult>;
@@ -37,7 +37,7 @@ export async function runProposalCommand(argv: readonly string[], context: RunCo
     values.set(arg, value);
   }
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
-  const locale = resolveLocale(values.get('--lang'), context.env); context.onLocale?.(locale);
+  const locale = commandLocale(context, values.get('--lang'));
   let data: RunProposalResult | null;
   if (action === 'propose') {
     const source = values.get('--proposal'); if (!source) throw cliUsage('run', action, locale, '--proposal');

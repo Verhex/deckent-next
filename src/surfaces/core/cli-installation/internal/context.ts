@@ -11,6 +11,8 @@ export interface InstallationCommandContext {
   openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;
   onLocale?: (locale: Locale) => void;
+  /** The locale the host resolved once for this call (config language included). */
+  locale?: Locale;
   resolveInstallationIdentity?: (root: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions) => Promise<InstallationIdentityResolution>;
   previewInstallation?: InstallationPreviewHandler;
   inspectInstallation?: InstallationInspectionHandler;
