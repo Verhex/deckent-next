@@ -29,7 +29,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> **Ön sürüm `1.0.0-alpha.51`** (sürüm adayı; yayımlanmış son sürüm [CHANGELOG.md](CHANGELOG.md) içindeki ilk tarihli satırdır). Deckent henüz npm'de yok; [Başlarken](#başlarken)
+> **Ön sürüm `1.0.0-alpha.52`** (sürüm adayı; yayımlanmış son sürüm [CHANGELOG.md](CHANGELOG.md) içindeki ilk tarihli satırdır). Deckent henüz npm'de yok; [Başlarken](#başlarken)
 > bölümündeki gibi kaynaktan kurun. Her sürümün içeriği [CHANGELOG.md](CHANGELOG.md) içinde.
 
 ## Deckent nedir
