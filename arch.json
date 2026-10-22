@@ -2940,6 +2940,16 @@
       ],
       "plan": "SURFACES"
     },
+    "src/surfaces/core/delivery-summary": {
+      "dependencies": [
+        "src/engine/core/delivery-summary",
+        "src/platform/core/i18n",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/surfaces/core/cli-human"
+      ],
+      "plan": "SURFACES"
+    },
     "src/engine/core/backup": {
       "dependencies": [
         "src/domain/core/audit",
@@ -3574,7 +3584,8 @@
       "setup",
       "security",
       "terminal",
-      "termrun"
+      "termrun",
+      "delivery"
     ]
   },
   "literals": {
