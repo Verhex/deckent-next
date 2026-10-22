@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "evaluators": {
+    "process-exit": { "evidence": "exit-code", "independent": false },
+    "operation-evidence": { "evidence": "operation-record", "independent": true }
+  }
+}

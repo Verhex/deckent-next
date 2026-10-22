@@ -13,7 +13,7 @@ import type { WorkspacePatchApplication } from './application.js';
 import type { WorkspaceIntegrationInspection, IntegrationReader } from './inspection.js';
 import type { IntegrationTarget } from './integration.js';
 import type { AdoptionVerificationRequirement } from './verification.js';
-import { readQueueCandidate, queueCommitMetadata } from './queue-custody.js';
+import { readQueueCandidate, planQueueCommit } from './queue-custody.js';
 import { queueCommandIds, type GitQueueFence } from './queue-git.js';
 interface QueueEffectContext {
   readonly principal: VerifiedPrincipal; readonly document: unknown; readonly artifacts: ArtifactStore; readonly maxBytes: number;
@@ -36,7 +36,7 @@ export function createWorkspaceQueueEffects(c: QueueEffectContext, ports: QueueE
     const { manifest, patch } = await readQueueCandidate(record, store, c.artifacts, c.maxBytes), ids = queueCommandIds(record);
     const run = await store.loadRun(record.request.identity.scopeId, record.request.identity.runId);
     if (!run) throw new TargetQueueError('QUEUE_CORRUPT');
-    const plan = await ports.delivery().plan({ schemaVersion: 1, commandId: ids.delivery, identity: record.request.identity, integrationCommandId: ids.candidate }, manifest, patch, queueCommitMetadata(record, run));
+    const plan = await planQueueCommit(record, run, metadata => ports.delivery().plan({ schemaVersion: 1, commandId: ids.delivery, identity: record.request.identity, integrationCommandId: ids.candidate }, manifest, patch, metadata));
     if (plan.commit !== record.candidate?.candidateVersion) throw new TargetQueueError('QUEUE_CONFLICT');
     return { manifest, patch, plan, ids };
   };

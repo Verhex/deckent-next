@@ -28,7 +28,7 @@ export { bindIntegrationCandidate } from './internal/candidate-binding.js';
 export { queueCommandIds, queueGenerationRef, queueGenerationSchema, assertQueueGitTarget } from './internal/queue-git.js';
 export type { GitQueueFence } from './internal/queue-git.js';
 export { queueVerificationGraph, assertQueueVerification } from './internal/queue-verification.js';
-export { readQueueCandidate, queueCommitMetadata, describeWorkspaceQueueCandidate } from './internal/queue-custody.js';
+export { readQueueCandidate, queueCommitMetadata, planQueueCommit, describeWorkspaceQueueCandidate } from './internal/queue-custody.js';
 
 export { SnapshotBudget, parseBaseListing, baseIdentical, gitBlobOid, hashAlgorithmOf, diffAgainstBase, snapshotDigest } from './internal/snapshot.js';
 export type { Snapshot, BaseEntry, BaseListing } from './internal/snapshot.js';
@@ -50,3 +50,4 @@ export { reattemptCommandIds, reattemptEligibility, reattemptGraph, stepDelivery
 export type { DeliveryReattemptPorts, ReattemptEffects, WorkspaceReattemptContext } from './internal/reattempt.js';
 export { assertRunDeliveryIntent, stepRunDelivery, stepWorkspaceRunDelivery } from './internal/run-intent.js';
 export type { RunDeliveryPorts, RunDeliveryStep, WorkspaceRunDeliveryContext } from './internal/run-intent.js';
+export { workspacePatchChangeFacts } from './internal/effect-summary.js';

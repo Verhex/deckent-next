@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "revision": "delivery-risk-2026-10-23",
+  "smallWorkClasses": ["small"],
+  "sizeBuckets": [
+    { "id": "tiny", "maxFiles": 3, "maxLines": 40 },
+    { "id": "small", "maxFiles": 10, "maxLines": 300 },
+    { "id": "medium", "maxFiles": 50, "maxLines": 2000 }
+  ],
+  "overflowBucket": "large"
+}

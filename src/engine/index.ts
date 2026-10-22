@@ -61,6 +61,7 @@ export { outputFileNameSchema, outputFileFailureSchema, collectedOutputFileSchem
 export type { CollectedOutputFile } from '#engine/core/supervisor/index.js';
 
 export * from '#engine/core/workspace-patch/index.js';
+export * from '#engine/core/delivery-summary/index.js';
 export * from '#engine/core/effect/index.js';
 export * from '#engine/core/adapter-registry/index.js';
 
