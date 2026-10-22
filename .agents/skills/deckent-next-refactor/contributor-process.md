@@ -108,7 +108,8 @@ behavior changes. Test green is author evidence, not independent acceptance or p
 
 Verification cadence and resource limits follow law 7
 ([law_local_verification.md](../../../.deckent/docs/core-memory/law_local_verification.md)): targeted checks per
-slice, a full suite on each release candidate, 16 GB, `VITEST_MAX_FORKS=2`, no build during an active suite.
+slice; a local full suite only once, before the first review, on a live-bound candidate that changes runtime, contract,
+security, authority, migration or worker execution (docs/tests/small work: targeted + hosted CI); 16 GB, `VITEST_MAX_FORKS=2`, no build during an active suite.
 
 Open a PR from the admitted branch, filling card id, scope, checks, independent review status,
 risks/limits and whether DOGFOOD/live remained untouched. Lead the body with the smallest summary that makes the
@@ -121,8 +122,8 @@ two-way door (revert is enough), plus the blast radius (which surfaces, workers 
 The implementer cannot award their own work independent PASS. In the host review arrangement the
 channel address `astra` is model-independent and the board review row names the current reviewer model.
 
-The lead owns landing: independent review of the exact candidate, a full suite on the release
-candidate (law 7), resolved blocking findings, green hosted PR CI on the exact head and owner approval
+The lead owns landing: independent review of the exact candidate, the law 7 local full suite when the candidate
+requires one, resolved blocking findings, green hosted PR CI on the exact head and owner approval
 of the merge. Refresh affected docs and preserve proof before landing. No direct push to `main`.
 CODEOWNERS names the default owner; automatic review requests and enforcement depend on GitHub
 permissions, the base branch and repository protection settings. These files do not enable settings.
