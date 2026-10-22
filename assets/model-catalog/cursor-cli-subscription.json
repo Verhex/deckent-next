@@ -1,0 +1,481 @@
+{
+  "schemaVersion": 3,
+  "revision": "cursor-cli-subscription-2026-10-22",
+  "providers": [
+    {
+      "id": "cursor-cli-subscription",
+      "version": 1,
+      "channel": {
+        "kind": "native-cli",
+        "cli": "cursor",
+        "aliases": [],
+        "client": "cursor",
+        "billing": "subscription",
+        "protocolFamily": "cursor-stream-json",
+        "aliasesRefused": [],
+        "provenance": {
+          "localPath": "cursor-agent --list-models",
+          "fetchedOn": "2026-10-22"
+        }
+      },
+      "models": [
+        {
+          "id": "auto",
+          "version": 1,
+          "nativeId": "auto",
+          "protocols": [
+            {
+              "family": "cursor-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "auto",
+          "vendorId": "cursor",
+          "canonicalModelId": "auto",
+          "displayName": "Auto",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": null,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "cursor-agent --list-models",
+              "fetchedOn": "2026-10-22"
+            },
+            "asOf": "2026-10-22"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "localPath": "cursor-agent --list-models",
+            "fetchedOn": "2026-10-22"
+          },
+          "reportedNames": [
+            {
+              "name": "Auto",
+              "cliVersion": "2026.10.19-6bbf2c4",
+              "source": "cursor-agent stream-json system/init",
+              "observedAt": "2026-10-22"
+            }
+          ],
+          "selection": "provider"
+        },
+        {
+          "id": "composer-2.5",
+          "version": 1,
+          "nativeId": "composer-2.5",
+          "protocols": [
+            {
+              "family": "cursor-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": null,
+          "efforts": [],
+          "aliases": [],
+          "channelModelId": "composer-2.5",
+          "vendorId": "cursor",
+          "canonicalModelId": "composer-2.5",
+          "displayName": "Composer 2.5",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": null,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "cursor-agent --list-models",
+              "fetchedOn": "2026-10-22"
+            },
+            "asOf": "2026-10-22"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "localPath": "cursor-agent --list-models",
+            "fetchedOn": "2026-10-22"
+          },
+          "reportedNames": [
+            {
+              "name": "Composer 2.5",
+              "cliVersion": "2026.10.19-6bbf2c4",
+              "source": "cursor-agent stream-json system/init",
+              "observedAt": "2026-10-22"
+            }
+          ]
+        },
+        {
+          "id": "claude-opus-5-thinking-high",
+          "version": 1,
+          "nativeId": "claude-opus-5-thinking-high",
+          "protocols": [
+            {
+              "family": "cursor-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": null,
+          "efforts": [
+            "high"
+          ],
+          "aliases": [],
+          "channelModelId": "claude-opus-5-thinking-high",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-opus-5-thinking-high",
+          "displayName": "Claude Opus 5 1M Thinking",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": null,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "high"
+            ],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "cursor-agent --list-models",
+              "fetchedOn": "2026-10-22"
+            },
+            "asOf": "2026-10-22"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "localPath": "cursor-agent --list-models",
+            "fetchedOn": "2026-10-22"
+          },
+          "effortBinding": {
+            "mode": "fixed-model",
+            "level": "high"
+          }
+        },
+        {
+          "id": "claude-sonnet-5-thinking-high",
+          "version": 1,
+          "nativeId": "claude-sonnet-5-thinking-high",
+          "protocols": [
+            {
+              "family": "cursor-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": null,
+          "efforts": [
+            "high"
+          ],
+          "aliases": [],
+          "channelModelId": "claude-sonnet-5-thinking-high",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-sonnet-5-thinking-high",
+          "displayName": "Claude Sonnet 5 1M Thinking",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": null,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "high"
+            ],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "cursor-agent --list-models",
+              "fetchedOn": "2026-10-22"
+            },
+            "asOf": "2026-10-22"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "localPath": "cursor-agent --list-models",
+            "fetchedOn": "2026-10-22"
+          },
+          "effortBinding": {
+            "mode": "fixed-model",
+            "level": "high"
+          }
+        },
+        {
+          "id": "claude-sonnet-5-thinking-xhigh",
+          "version": 1,
+          "nativeId": "claude-sonnet-5-thinking-xhigh",
+          "protocols": [
+            {
+              "family": "cursor-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": null,
+          "efforts": [
+            "xhigh"
+          ],
+          "aliases": [],
+          "channelModelId": "claude-sonnet-5-thinking-xhigh",
+          "vendorId": "anthropic",
+          "canonicalModelId": "claude-sonnet-5-thinking-xhigh",
+          "displayName": "Claude Sonnet 5 1M Extra High Thinking",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": null,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "xhigh"
+            ],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "cursor-agent --list-models",
+              "fetchedOn": "2026-10-22"
+            },
+            "asOf": "2026-10-22"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "localPath": "cursor-agent --list-models",
+            "fetchedOn": "2026-10-22"
+          },
+          "effortBinding": {
+            "mode": "fixed-model",
+            "level": "xhigh"
+          }
+        },
+        {
+          "id": "gpt-5.6-sol-high",
+          "version": 1,
+          "nativeId": "gpt-5.6-sol-high",
+          "protocols": [
+            {
+              "family": "cursor-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": null,
+          "efforts": [
+            "high"
+          ],
+          "aliases": [],
+          "channelModelId": "gpt-5.6-sol-high",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-5.6-sol-high",
+          "displayName": "GPT-5.6 Sol 1M High",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": null,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "high"
+            ],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "cursor-agent --list-models",
+              "fetchedOn": "2026-10-22"
+            },
+            "asOf": "2026-10-22"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "localPath": "cursor-agent --list-models",
+            "fetchedOn": "2026-10-22"
+          },
+          "effortBinding": {
+            "mode": "fixed-model",
+            "level": "high"
+          }
+        },
+        {
+          "id": "gpt-5.6-sol-xhigh",
+          "version": 1,
+          "nativeId": "gpt-5.6-sol-xhigh",
+          "protocols": [
+            {
+              "family": "cursor-stream-json",
+              "version": "v1",
+              "capabilities": []
+            }
+          ],
+          "lifecycle": {
+            "state": "active",
+            "deprecatedOn": null,
+            "retireNotBefore": null,
+            "retiredOn": null,
+            "source": null
+          },
+          "minCliVersion": null,
+          "efforts": [
+            "xhigh"
+          ],
+          "aliases": [],
+          "channelModelId": "gpt-5.6-sol-xhigh",
+          "vendorId": "openai",
+          "canonicalModelId": "gpt-5.6-sol-xhigh",
+          "displayName": "GPT-5.6 Sol 1M Extra High",
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "contextWindow": null,
+          "maxOutputTokens": null,
+          "reasoning": {
+            "supportedEfforts": [
+              "xhigh"
+            ],
+            "defaultEffort": null
+          },
+          "capabilities": {
+            "tools": "unknown",
+            "vision": "unknown",
+            "pdf": "unknown",
+            "structuredOutput": "unknown",
+            "promptCaching": "unknown",
+            "streaming": "unknown"
+          },
+          "pricing": {
+            "kind": "subscription",
+            "source": {
+              "localPath": "cursor-agent --list-models",
+              "fetchedOn": "2026-10-22"
+            },
+            "asOf": "2026-10-22"
+          },
+          "minClientVersion": null,
+          "provenance": {
+            "localPath": "cursor-agent --list-models",
+            "fetchedOn": "2026-10-22"
+          },
+          "effortBinding": {
+            "mode": "fixed-model",
+            "level": "xhigh"
+          }
+        }
+      ]
+    }
+  ]
+}
