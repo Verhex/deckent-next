@@ -130,3 +130,17 @@ blobs, so sparse and full checkouts give the same patch and a hidden path the wo
 change. Queue verification and integration checkouts stay full; a non-Git workspace has no checkout to shape.
 This hides files from automatic discovery only; objects stay in the clone (`git show HEAD:AGENTS.md`).
 Claude and Codex stay argv-only, so their compiled profiles are unchanged.
+
+Worker instructions (alpha.53 F1): `deckent coding instructions [status] | trust | revoke [--target <id>] [--scope <id>]`.
+Config `execution.workerInstructions.source` is `worker-md` (`.deckent/worker-instructions.md`, default when the file exists),
+`agents-md` (`AGENTS.md`) or `none`; the file is read at the Git work target root, once per admission, bounded. `status` is read-only
+(`--json` allowed). `trust` and `revoke` are decided on `config`/`write` for `project:execution.workerInstructions`, sealed before the
+record changes, and need the person's terminal witness: a card shows path, size, sha256 and the first lines; AI actors, MCP, pipes and
+`--json` are refused. Trust holds for exactly that folder and digest; a change makes it untrusted. Untrusted: workers get the task text
+only and run create, MCP and `--json` carry `WORKER_INSTRUCTIONS_WITHHELD`.
+
+Action arguments (alpha.53 D2): a catalog action may list `requires`; help prints "Required: …" (and "Required without a terminal: …" when a
+terminal picker fills them). A handler's usage refusal of an action called without a required argument becomes `CLI_ARGUMENT_MISSING`
+naming it (exit 2); a present but invalid value stays `CLI_USAGE`. Scope rules (D1/D4, `resolveCommandScope`): a read uses `--scope`, else the configured `terminal.scopeId`, and prints which scope answered; a
+change never takes a silent default. Without a scope a person on a terminal picks from the valid scopes; a pipe, agent or CI gets
+`CLI_SCOPE_REQUIRED` (exit 2) naming them. Queue and task refusals are typed errors, not raw schema output.
