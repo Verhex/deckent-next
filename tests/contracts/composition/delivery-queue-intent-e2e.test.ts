@@ -139,7 +139,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     } finally { db.close(); opened.store.close(); }
 
     const adopt = await cliInPty(f.project, f.env, ['task', 'integration-queue-confirm', '--scope', SCOPE, '--command-id', queued!.commandId],
-      [['y/N: ', 'y\r'], ['Adopt the verified prefix', 'y\r', 'fresh'], ['Queue result', '']]);
+      [['y/N: ', 'y\r'], ['Adopt the verified prefix', 'y\r', 'fresh'], ['Confirmed batch', '']]);
     expect(adopt.status).toBe(0); expect(adopt.output).toContain('"settledPrefix":1');
     const head = await git(f.target, 'rev-parse', TARGET);
     expect(await git(f.target, 'show', `${head}:shared.txt`)).toBe('base\nfirst');

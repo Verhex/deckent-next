@@ -283,3 +283,18 @@ it('deliver: the same /deliver port; every write waits for its own exact card; a
   expect(queued.printed.join('\n')).toContain('Awaiting human confirmation');
   expect(queued.cards[2]!.body).toContain('Write refs/heads/main?');
 });
+
+it('alpha.53 D1: a task read without --scope uses the configured scope and says so; without one it is CLI_SCOPE_REQUIRED (exit 2), a change never defaults', async () => {
+  const root = await project({ terminal: { scopeId: 's' } });
+  const seen: string[] = [];
+  const handlers = { async previewWorkspacePatch(_root: string, identity: { scopeId: string }) { seen.push(identity.scopeId); return patchResult('ok();\nnew();\n'); }, renderUnifiedDiff: unifiedDiff };
+  const noScope = patchArgs.filter((_, index) => index !== 2 && index !== 3);
+  const { code, text } = await run(noScope, handlers, root);
+  expect(code).toBe(0); expect(text).toMatch(/^scope: s \(default\)\n/); expect(seen).toEqual(['s']);
+  const json = await run([...noScope, '--json'], handlers, root);
+  expect(json.code).toBe(0); expect(json.text).not.toContain('scope: s');
+  const bare = await project();
+  const refused = await run(noScope, handlers, bare);
+  expect(refused.code).toBe(2); expect(refused.err).toContain('--scope');
+  expect(seen).toEqual(['s', 's']);
+});
