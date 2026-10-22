@@ -259,6 +259,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   WORK_INPUT_TEMPLATE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TEMPLATE_REQUIRED', p, l) }) },
   WORK_INPUT_TURN_LIMIT_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TURN_LIMIT_UNSUPPORTED', p, l) }) },
   WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE', p, l) }) },
+  WORKER_INSTRUCTIONS_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_INSTRUCTIONS_TOO_LARGE', p, l) }) },
   WORK_CLASS_NOT_REGISTERED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_NOT_REGISTERED', p, l) }) },
   WORK_CLASS_OVERRIDE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_OVERRIDE_DENIED', p, l) }) },
   WORK_CLASS_PARENT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_PARENT_INVALID', p, l) }) },

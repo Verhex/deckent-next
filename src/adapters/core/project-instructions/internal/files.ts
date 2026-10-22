@@ -10,10 +10,15 @@ export const PROJECT_INSTRUCTION_REGISTRY = REGISTRY;
 export const instructionDigest = (text: string | Buffer) => createHash('sha256').update(text).digest('hex');
 const missing = (error: unknown) => (error as NodeJS.ErrnoException)?.code === 'ENOENT';
 
-/** No symlink, hardlink, FIFO or device. Reads allocate only the registry bound plus one byte. */
+/** No symlink, hardlink, FIFO or device, also for any directory of a nested name. Reads allocate only the registry bound plus one byte. */
 export async function readInstructionFile(root: string, name: string, maxBytes: number): Promise<Buffer | null> {
   const path = join(root, name);
-  let info;
+  let info, directory = root;
+  for (const part of name.split('/').slice(0, -1)) {
+    directory = join(directory, part);
+    try { info = await lstat(directory); } catch (error) { if (missing(error)) return null; throw error; }
+    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('unsafe');
+  }
   try { info = await lstat(path); } catch (error) { if (missing(error)) return null; throw error; }
   if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) throw new Error('unsafe');
   if (info.size > maxBytes) throw new Error('size');
@@ -35,7 +40,8 @@ export async function readInstructionFile(root: string, name: string, maxBytes: 
 }
 
 /** Trust lives in a private user-global managed directory, never a workspace-controlled record. */
-export async function openProjectInstructionReader(rootInput: string, trustDirectory: string | null, known?: KnownSecretSnapshot) {
+/** `files` narrows the candidates (a worker selection reads exactly one file); the default keeps the terminal's DECKENT.md → AGENTS.md order. */
+export async function openProjectInstructionReader(rootInput: string, trustDirectory: string | null, known?: KnownSecretSnapshot, files: readonly string[] = REGISTRY.files) {
   const root = await realpath(rootInput), identity = await stat(root);
   const rootDigest = instructionDigest(`${root}\0${identity.dev}\0${identity.ino}`);
   const sessionTrusted = new Set<string>();
@@ -50,7 +56,7 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
     try {
       const currentRoot = await stat(root);
       if (currentRoot.dev !== identity.dev || currentRoot.ino !== identity.ino) throw new Error('unsafe');
-      for (const name of REGISTRY.files) {
+      for (const name of files) {
         const bytes = await readInstructionFile(root, name, REGISTRY.maxBytes);
         if (bytes === null) continue;
         const source: ProjectInstructionSource = { path: join(root, name), bytes: bytes.length, digest: instructionDigest(bytes), content: redactForRecord(bytes.toString('utf8'), known) };

@@ -93,6 +93,8 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'execution.adoption.verification.criteria': { kind: 'document' },
   'execution.workTargets.schemaVersion': { kind: 'schema' },
   'execution.workTargets.targets': { kind: 'document' },
+  'execution.workerInstructions.schemaVersion': { kind: 'schema' },
+  'execution.workerInstructions.source': { kind: 'schema' },
   'execution.retention.schemaVersion': { kind: 'schema' },
   'execution.retention.release': { kind: 'schema' },
   'execution.retention.sweepLimit': { kind: 'numeric', unit: 'count', step: 1, presets: [1, 2, 4, 8, 16, 32, 64, 100, 256, 1024] },
