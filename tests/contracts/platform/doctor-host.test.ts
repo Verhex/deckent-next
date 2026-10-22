@@ -8,12 +8,13 @@ const base = { platform: 'linux', host: { cpuCores: 1, totalMemMB: 1, recommende
   secretStore: null, imageRefresh: null, installationBinding: null, shellRealm: null } as const;
 
 describe('Node.js engine floor', () => {
-  it('reads the floor from the manifest range and refuses 24.21 while accepting 24.22 and Node 26', () => {
+  it('reads the floor from the manifest range and refuses 24.22.0 while accepting 24.22.1 and Node 26', () => {
     expect(NODE_ENGINE_RANGE).toBe(manifest.engines.node);
-    expect(NODE_ENGINE_RANGE).toBe('>=24.22.0');
-    expect(assessNodeSupport('v24.21.0', NODE_ENGINE_RANGE)).toEqual({ version: 'v24.21.0', floor: '24.22.0', status: 'unsupported' });
+    expect(NODE_ENGINE_RANGE).toBe('>=24.22.1');
+    expect(assessNodeSupport('v24.21.0', NODE_ENGINE_RANGE)).toEqual({ version: 'v24.21.0', floor: '24.22.1', status: 'unsupported' });
     expect(assessNodeSupport('v24.15.0', NODE_ENGINE_RANGE).status).toBe('unsupported');
-    expect(assessNodeSupport('v24.22.0', NODE_ENGINE_RANGE).status).toBe('supported');
+    expect(assessNodeSupport('v24.22.0', NODE_ENGINE_RANGE).status).toBe('unsupported');
+    expect(assessNodeSupport('v24.22.1', NODE_ENGINE_RANGE).status).toBe('supported');
     expect(assessNodeSupport('v24.30.1', NODE_ENGINE_RANGE).status).toBe('supported');
     expect(assessNodeSupport('v26.10.0', NODE_ENGINE_RANGE).status).toBe('supported');
     expect(assessNodeSupport('v22.99.0', NODE_ENGINE_RANGE).status).toBe('unsupported');

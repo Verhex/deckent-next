@@ -1,5 +1,6 @@
 /** Whether a Node.js version satisfies the package's `>=X.Y.Z` engine floor (the manifest range, never a source literal).
- * Node 24.21 and older 24.x carry a heap overrun in unaligned UTF-16LE decoding (fixed upstream in 24.22.0). */
+ * Node 24.21 and older 24.x carry a heap overrun in unaligned UTF-16LE decoding (fixed upstream in 24.22.0); 24.22.1 is the
+ * 2026-10-21 security release (Brotli out-of-bounds write, TLS hostname checks), the current floor. */
 export interface NodeSupport { readonly version: string; readonly floor: string | null; readonly status: 'supported' | 'unsupported' | 'unknown' }
 const TRIPLE = /(\d+)\.(\d+)\.(\d+)/;
 const triple = (value: string): readonly [number, number, number] | null => {

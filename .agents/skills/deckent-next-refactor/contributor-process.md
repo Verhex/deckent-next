@@ -62,7 +62,7 @@ Co-Authored-By: Codex (gpt-6.1-sol) <noreply@openai.com>
 
 ## Style and machine gates
 
-Core uses TypeScript with ESM/native subpath imports, Node.js **≥ 24.22.0** (see
+Core uses TypeScript with ESM/native subpath imports, Node.js **≥ 24.22.1** (see
 [package.json](../../../package.json)), Zod for typed validation and Vitest for contract/e2e tests.
 Use the lockfile and `npm ci`; do not silently upgrade dependencies. Domain stays pure,
 adapters sit behind ports, composition is explicit, and each transition has one application owner.

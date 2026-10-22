@@ -11,7 +11,7 @@ import { homedir, tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const DOCKER_IMAGE = 'node@sha256:8ec5d7557396cfe32d21c3f9c13072355ceab22b584578ca4bb28af31120cffe';
+const DOCKER_IMAGE = 'node@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea';
 
 /** Parses a GITHUB_ENV style file (KEY=VALUE lines) the way the runner merges it between steps. */
 export function parseEnvFile(text) {
