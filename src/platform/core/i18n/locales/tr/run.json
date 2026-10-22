@@ -451,5 +451,16 @@
   "cli.run.lifecycle.environmentNotReady": "Ortam hazır değil: {requirement}. Bu bir kurulum kusurudur, görevin başarısızlığı değil: işçi ya da model başlatılmadı. İşçi ortamını düzeltin, sonra Run'ı devam ettirin: deckent run resume --id {run}. Deckent işçiyi başlatmadan önce gereksinimi yeniden denetler; aksi halde park süresi dolunca biter.",
   "error.EXECUTION_ENVIRONMENT_UNCERTAIN": "Deckent bu işçiyi başlatmadı: {requirement} gereksiniminin ortam denetimi ({kind}) durdurulup kaldırıldığı doğrulanamadı (kap {probe}). Yanıtına güvenilmez ve o hâlâ çalışıyor olabilirken ikinci bir denetim başlamaz.",
   "error.EXECUTION_ENVIRONMENT_UNCERTAIN.summary": "Deckent bu işçiyi başlatmadı: bir ortam denetiminin durdurulup kaldırıldığı doğrulanamadı. İşçi ya da model başlatılmadı.",
-  "remedy.EXECUTION_ENVIRONMENT_UNCERTAIN": "Docker'ı denetleyin (docker ps -a --filter label=deckent.preflight), kap hâlâ duruyorsa kaldırın (docker rm --force <kap>); bir sonraki hizmet açılışı kaldırıldığını doğrular ve yeri açar, sonra Run'ı devam ettirin: deckent run resume --id <run>. Deckent yeniden denetlemeden önce aynı denetimden kalanı kaldırır."
+  "remedy.EXECUTION_ENVIRONMENT_UNCERTAIN": "Docker'ı denetleyin (docker ps -a --filter label=deckent.preflight), kap hâlâ duruyorsa kaldırın (docker rm --force <kap>); bir sonraki hizmet açılışı kaldırıldığını doğrular ve yeri açar, sonra Run'ı devam ettirin: deckent run resume --id <run>. Deckent yeniden denetlemeden önce aynı denetimden kalanı kaldırır.",
+  "error.EXECUTION_ENVIRONMENT_TIMED_OUT": "Deckent bu işçiyi başlatmadı: {requirement} gereksiniminin ortam sınaması ({kind}) yanıt vermeden süre sınırıyla durduruldu ve kabı kaldırıldı. Yanıt alınamaması gereksinimin eksik olduğu anlamına gelmez; işçi ya da model başlatılmadı ve Run sizin için bekletiliyor.",
+  "error.EXECUTION_ENVIRONMENT_TIMED_OUT.summary": "Deckent bu işçiyi başlatmadı: bir ortam sınaması yanıt vermeden süre sınırıyla durduruldu. Yanıt alınamaması gereksinimin eksik olduğu anlamına gelmez; işçi ya da model başlatılmadı.",
+  "remedy.EXECUTION_ENVIRONMENT_TIMED_OUT": "Tercihen makine daha az yüklüyken yeniden çalıştırın: deckent run resume --id <run>. Deckent işçiyi başlatmadan önce gereksinimi yeniden sınar ve kendiliğinden yeniden denemez. Zaman aşımı sürerse bu makinede Docker'ı denetleyin (docker info).",
+  "cli.runtime.runHeldEnvironmentTimedOut": "Run bekletildi: {requirement} gereksiniminin ortam sınaması zaman aşımına uğradı, yanıt alınamadı. Yanıt alınamaması gereksinimin eksik olduğu anlamına gelmez ve hiçbir şey başlatılmadı; Deckent kendiliğinden yeniden denemez. Yeniden çalıştırın: deckent run resume --id <run>.",
+  "cli.run.lifecycle.environmentTimedOut": "Ortam sınaması zaman aşımına uğradı, yanıt alınamadı. Yanıt alınamaması gereksinimin eksik olduğu anlamına gelmez: işçi ya da model başlatılmadı ve Deckent kendiliğinden yeniden denemez. Yeniden çalıştırın: deckent run resume --id {run}.",
+  "monitor.blocker.environmentTimedOut": "ortam sınaması zaman aşımına uğradı (yanıt yok, eksik gereksinim değil); resume ile yeniden çalıştırın",
+  "error.DOCKER_IMAGE_PROBE_UNAVAILABLE.cause": "Tam imaj kimliği seçilen yerel Docker servisinde doğrulanamadı: {cause}.",
+  "docker.imageProbe.cause.deadline": "Docker komutu süre sınırına ulaştı",
+  "docker.imageProbe.cause.exit": "Docker komutu hatayla çıktı",
+  "docker.imageProbe.cause.signal": "Docker komutu durduruldu",
+  "docker.imageProbe.cause.parse": "Docker yanıtı okunamadı"
 }

@@ -118,3 +118,15 @@ kind bindings refuse a different profile and return unchanged for the same gener
 uses project ConfigApplication.set: config/write allow-only policy, digest CAS, sealed audit and atomic
 backup/publication. A global registry contribution or changed effective resource source refuses the
 write. This command does not launch, build, grant policy or prove image/worker readiness.
+
+Checkout shaping (alpha.53 C2): a CLI without a suppression flag (Cursor) realises `disabled` by its worker
+checkout. The native CLI registry holds the default hidden paths (`name` at any depth or `/root/path`;
+Cursor: `AGENTS.md`, `CLAUDE.md`, `.agents`, `.claude`, `.codex`, `.cursor`, `/DECKENT.md`,
+`/.deckent/worker-instructions.md`); a template's `invocation.discovery.hiddenPaths` replaces them for that
+project (new template content id). Compilation freezes the set into the pinned profile
+(`nativeSubscription.checkout`); the Git broker clones sparse (non-cone, skip-worktree, clean `git status`);
+patch capture reads the set from the Run's frozen profile and completes absent hidden paths from their base
+blobs, so sparse and full checkouts give the same patch and a hidden path the worker writes stays a visible
+change. Queue verification and integration checkouts stay full; a non-Git workspace has no checkout to shape.
+This hides files from automatic discovery only; objects stay in the clone (`git show HEAD:AGENTS.md`).
+Claude and Codex stay argv-only, so their compiled profiles are unchanged.

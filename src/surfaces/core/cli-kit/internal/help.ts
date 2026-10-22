@@ -176,8 +176,12 @@ export function renderTopHelp(locale: Locale = resolveLocale(), catalog: readonl
 export function renderCommandHelp(command: CliHelpSpec, locale: Locale): string {
   const examples = MESSAGE_REGISTRY.catalogs[locale][`${command.detail}.examples`];
   const family = command.parent, children = live(command);
-  const needed = { arguments: (command.requires ?? []).map(item => placeholders(item, locale)).join(', ') };
-  const required = !command.requires?.length ? [] : [command.picks ? t('cli.help.action.requiresOffTerminal', needed, locale) : t('cli.help.action.requires', needed, locale)];
+  // `picks: true` = a person on a terminal picks everything listed; a list = only those (the rest is required on a terminal too).
+  const picked = command.picks === true ? command.requires ?? [] : command.picks ?? [];
+  const list = (items: readonly string[]) => ({ arguments: items.map(item => placeholders(item, locale)).join(', ') });
+  const always = (command.requires ?? []).filter(item => !picked.includes(item)), off = (command.requires ?? []).filter(item => picked.includes(item));
+  const required = [...(always.length ? [t('cli.help.action.requires', list(always), locale)] : []),
+    ...(off.length ? [t('cli.help.action.requiresOffTerminal', list(off), locale)] : [])];
   const overview = family ? [`deckent ${command.path!.join(' ')}`, message(command.summary, locale), ...required, '',
     t('cli.help.familySynopsis', { command: family.path!.join(' ') }, locale), message(family.summary, locale), ''] : [];
   const bare = !family && command.bare && command.bare !== 'handler' && command.bare.read

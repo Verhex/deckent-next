@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { expect, it } from 'vitest';
+import { queryFailure } from '#composition/core/query-errors/index.js';
 import { DockerCommandFailure, DockerImageProbeError, probeDockerImageAvailability, probeDockerImageSetAvailability, runNodeDockerCommand, type DockerCommand } from '#adapters/core/docker-supervisor/index.js';
 
 const imageId = `sha256:${'a'.repeat(64)}`;
@@ -44,6 +45,35 @@ it('returns typed errors for invalid controls and unavailable or nonexact image 
     if (command.args[2] === 'image') return { stdout: `sha256:${'b'.repeat(64)}`, stderr: '' };
     return { stdout: 'daemon-a', stderr: '' };
   })).rejects.toMatchObject({ code: 'DOCKER_IMAGE_PROBE_UNAVAILABLE' });
+});
+
+it('E1: an UNAVAILABLE image probe keeps a bounded cause of its failed Docker step (deadline|exit|signal|parse), never Docker text', async () => {
+  const ok = (stdout: string) => ({ stdout, stderr: '' });
+  const failing = (step: 'context' | 'info' | 'image', failure: () => never | { stdout: string; stderr: string }) => async (command: DockerCommand) => {
+    const name = command.args[0] === 'context' ? 'context' : command.args[2] === 'image' ? 'image' : 'info';
+    if (name === step) return failure();
+    return name === 'context' ? ok(JSON.stringify({ Host: endpoint })) : name === 'image' ? ok(imageId) : ok('daemon-a');
+  };
+  const cases = [
+    ['deadline', failing('info', () => { throw new DockerCommandFailure('', 'secret stderr', null, true, 'deadline'); })],
+    ['exit', failing('image', () => { throw new DockerCommandFailure('', 'Error: No such image', 1, false); })],
+    ['signal', failing('context', () => { throw new DockerCommandFailure('', '', null, true, 'signal', 'aborted'); })],
+    ['parse', failing('context', () => ok('not json'))],
+    ['parse', failing('context', () => ok(JSON.stringify({ Host: 'tcp://remote:2375' })))],
+    ['parse', failing('info', () => ok('  \n'))],
+    ['parse', failing('image', () => ok(`sha256:${'b'.repeat(64)}`))],
+  ] as const;
+  for (const [cause, runner] of cases) {
+    const failure = await probeDockerImageAvailability(control, runner).catch((error: unknown) => error) as DockerImageProbeError;
+    expect(failure).toBeInstanceOf(DockerImageProbeError); expect(failure).toMatchObject({ code: 'DOCKER_IMAGE_PROBE_UNAVAILABLE', probeCause: cause });
+    expect(JSON.stringify(failure)).not.toContain('secret stderr'); expect(failure.message).toBe('DOCKER_IMAGE_PROBE_UNAVAILABLE');
+  }
+  // An unclassified runner failure keeps no cause (never a guess); the cause reaches the typed query error and its words (EN/TR).
+  expect(await probeDockerImageAvailability(control, async () => { throw new Error('credential=not-exposed'); }).catch((error: unknown) => error)).not.toHaveProperty('probeCause', expect.anything());
+  const mapped = queryFailure(new DockerImageProbeError('DOCKER_IMAGE_PROBE_UNAVAILABLE', 'deadline'));
+  expect(mapped).toMatchObject({ code: 'DOCKER_IMAGE_PROBE_UNAVAILABLE', params: { cause: 'deadline' } });
+  expect(mapped.localize('en').message).toContain('the Docker command reached its time limit'); expect(mapped.localize('tr').message).toContain('Docker komutu süre sınırına ulaştı');
+  expect(queryFailure(new DockerImageProbeError('DOCKER_IMAGE_PROBE_UNAVAILABLE')).localize('en').message).toBe('The exact image could not be verified on the selected local Docker daemon.');
 });
 
 it('J3-IMAGES: proves a list with one endpoint pin, one daemon id read before and after and chunked exact-id inspects; typed refusals', async () => {

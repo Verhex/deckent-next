@@ -29,7 +29,8 @@
     "approvalPreviews": "state/approval-previews",
     "scratch": "state/scratch",
     "instructionTrust": "state/instruction-trust",
-    "treeScanCache": "state/tree-scan-cache"
+    "treeScanCache": "state/tree-scan-cache",
+    "autonomyShadow": "state/autonomy-shadow"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal", "projectIdentity"],

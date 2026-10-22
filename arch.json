@@ -191,6 +191,7 @@
     },
     "src/adapters/core/git-workspace": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/attempt",
         "src/engine/core/workspaces",
         "src/platform/core/config-fields"
@@ -626,7 +627,8 @@
         "src/adapters/core/file-artifacts",
         "src/adapters/core/git-patch",
         "src/adapters/core/target-queue-store",
-        "src/engine/core/workspace-patch"
+        "src/engine/core/workspace-patch",
+        "src/adapters/core/autonomy-shadow"
       ],
       "plan": "EXECUTION"
     },
@@ -1918,6 +1920,7 @@
     },
     "src/adapters/core/native-connection": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/worker-event",
         "src/domain/core/provider-catalog",
         "src/adapters/core/native-cli-registry"
@@ -1951,6 +1954,7 @@
     },
     "src/adapters/core/git-patch": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/attempt",
         "src/engine/core/dispatch",
         "src/engine/core/workspaces",
@@ -2796,6 +2800,7 @@
     },
     "src/adapters/core/native-cli-registry": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/provider-catalog"
       ],
       "plan": "HARDCODE-P1"
@@ -3111,6 +3116,13 @@
         "src/platform/core/config-fields"
       ],
       "plan": "KAYNAK-KALITE"
+    },
+    "src/adapters/core/autonomy-shadow": {
+      "dependencies": [
+        "src/engine/core/delivery-summary",
+        "src/platform/core/config"
+      ],
+      "plan": "CONTRACT"
     },
     "src/composition/core/resource-observation": {
       "dependencies": [
@@ -3523,7 +3535,7 @@
       "domain": 10000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 29650,
+      "adapters": 29900,
       "surfaces": 45000,
       "composition": 7950
     },

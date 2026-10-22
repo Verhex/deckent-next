@@ -626,7 +626,8 @@ function eventChannel(socketPath: string, maxQueued = 4000, batch = 64) {
 export interface NativeWorkerCapabilities {
   readonly maxTurns: { readonly flag: string; readonly hiddenHelpProbe: { readonly args: readonly string[]; readonly refusal: string } | null } | null;
   readonly settings: { readonly flag: string } | null;
-  readonly discovery: { readonly requiredFlags: readonly string[]; readonly hiddenProbes: readonly { readonly args: readonly string[]; readonly refusal: string }[] } | null;
+  readonly discovery: { readonly requiredFlags: readonly string[]; readonly hiddenProbes: readonly { readonly args: readonly string[]; readonly refusal: string }[];
+    readonly checkout: { readonly hiddenPaths: readonly string[] } | null } | null;
   readonly promptChannel: 'claude-system-prompt' | 'codex-instructions-file' | 'inline';
   readonly structuredReport: { readonly flag: string; readonly channel: 'inline-json' | 'schema-file' } | { readonly flag: null; readonly channel: 'final-text-json' } | null;
   readonly modelUsageEvidence: 'session-events' | 'session-start-name' | 'none';

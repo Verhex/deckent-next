@@ -6,7 +6,7 @@ export type { SqliteAttemptStore, SqliteInventoryReader, SqliteInventoryOptions 
 export { readMonitorLedger, readMonitorInstall, prepareMonitorInstall, indexMonitorInstall, stampMonitorInstall, readMonitorRunResults, listSurfaceRunIds, followLedgerSurface, type MonitorLedgerOptions } from '#adapters/core/monitor-ledger/index.js';
 export type { SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 export { readScopeCompanies, registerLedgerScopes, type ScopeRegistration } from '#adapters/core/sqlite-ledger/index.js';
-export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
+export { DockerSupervisor, recordedDockerSupervisor, validateDockerSupervisorProfile, validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, dockerTaskHiddenPaths, DockerTaskProfileError, identifyDockerRequest, runNodeDockerCommand, DockerCommandFailure,
   resolveDockerReadOnlyMounts, dockerProfileObservesWorker } from '#adapters/core/docker-supervisor/index.js';
 export type { DockerSupervisorOptions } from '#adapters/core/docker-supervisor/index.js';
 export { LOCAL_AUTHENTICATOR_INVENTORY, LocalOsPrincipalVerifier, readLocalOsIdentity, withMcpPrincipal, withLocalPrincipalChannel, localPrincipalChannel, localPrincipalPeer, attestLocalInteractiveTerminal, captureLocalInteractiveTerminal } from '#adapters/core/local-principal/index.js';
@@ -97,6 +97,7 @@ export { inspectInstallationStartabilityFiles, type InstallationStartability } f
 export { firstSessionTargets, firstSessionPublication } from '#adapters/core/installation-files/index.js';
 export { openSqliteRunProposalStore, openSqliteRunProposalReader } from '#adapters/core/run-proposal-store/index.js';
 export * from '#adapters/core/resource-trace/index.js';
+export * from '#adapters/core/autonomy-shadow/index.js';
 export { sampleDockerResources } from '#adapters/core/docker-supervisor/index.js';
 
 export { openInstallationPoolStore } from '#adapters/core/installation-pool-store/index.js';

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
 import { prepareProductDirectory, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, type ConfigLoadOptions } from '#platform/index.js';
@@ -15,6 +16,8 @@ import { configuredResourceCollector } from '#composition/core/resource-observat
 /** Execute a reserved identity using its pinned task template. The trusted project root is the
  * Git source; the command cannot supply argv, image, workspace, base commit or host paths.
  */
+/** E1: park refusals meaning another transition already holds, ended or changed the Run (the timed-out refusal then stays the error). */
+const HELD_PARK_SUPERSEDED: ReadonlySet<string> = new Set(['RUN_PARKED', 'RUN_TERMINAL', 'RUN_STORE_CONFLICT']);
 export async function executeConfiguredTask(projectRoot: string, input: AttemptIdentity, options: ConfigLoadOptions = {}) {
   try {
     const identity = attemptIdentitySchema.parse(input);
@@ -50,8 +53,10 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
       if (queue) await authorization.authorizeIdentity('read-output', queue.request.identity, principal);
       const privateSource = queue ? await gitQueueCandidateSource(queue, store, artifacts, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }) : undefined;
       const broker = new GitWorkspaceBroker(git, privateSource); await preparation.enter('workspace');
-      const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker)).acquire(identity);
-      const applied = await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches); await preparation.enter('secret-gate');
+      // C2: the pinned checkout shaping hides the instruction surface from a worker's clone; a queue verification Run keeps the full tree.
+      const hidden = queue ? undefined : profile.nativeSubscription?.checkout?.hiddenPaths;
+      const lease = await new RunWorkspaceAcquisitionApplication(store, new GitRunWorkspaceProvider(broker, hidden)).acquire(identity);
+      const applied = await applyAcceptedPredecessorPatches(lease, git, { ...config.artifacts.patchPreview, maxBytes: config.artifacts.maxBytes }, start.patches, hidden); await preparation.enter('secret-gate');
       // S6: everything the worker receives (checkout, binds, inputs, prompt context) is scanned before any container, connection or claim, in an admitted slot (R2: identical dependency binds share the scan in flight); a refusal is audited (paths, rules) and its checkout released.
       const gate = config.execution.secretGate, lockfile = (path: string) => open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).then(async file => { try { const info = await file.stat(); return info.isFile() && info.size <= gate.maxFileBytes ? await file.readFile() : null; } finally { await file.close(); } }); await enforceAdmittedWorkerTreeGate({ views: workerTreeViews(lease.workspace, readOnlyMounts, start, profile.argv), settings: gate, fingerprint: [config, git.sourceRoot], lockfile, sharesTree: pathsShareTree,
         refusals: jsonRecordDirectory(join(await prepareProductDirectory(layout, 'crashes'), 'secret-gate-time')), scan: async views => scanWorkerTree(views, { ...gate, cacheDirectory: await prepareProductDirectory(layout, 'treeScanCache'), checkoutRoot: git.sourceRoot }, getConfigKnownSecrets(config)) }, { identity, principal, policyRevision: document.revision, now: Date.now, journal: store }, audit, () => broker.release({ schemaVersion: 1, identity, baseCommit: lease.baseCommit }));
@@ -128,6 +133,13 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
         // A permanent refusal before any dispatch claim closes the attempt once (no launch, no effect); transient ones keep the turn's backoff.
         const refusal = classifyLaunchRefusal(error);
         if (refusal.disposition === 'permanent' && !await store.loadBoundDispatch(identity)) await recordAttemptClosure(store, identity, { kind: 'launch-refused', code: refusal.code, ...(refusal.requirement ? { requirement: refusal.requirement } : {}), ...(refusal.probe ? { probe: refusal.probe } : {}) }, actor);
+        // E1: a held refusal (no answer) holds a running Run through the existing progression park. Only a Run another transition already
+        // parked, ended or changed keeps the typed refusal (the runtime's bounded failure path then parks it with the same code); any other
+        // park failure (denied, store) replaces it, so no surface claims a hold that was not written.
+        const run = refusal.disposition === 'held' ? await store.loadRun(identity.scopeId, identity.runId) : null;
+        if (refusal.disposition === 'held' && run?.state.kind === 'running' && !run.cancelRequested) await parkConfiguredRunProgression(projectRoot, { schemaVersion: 1,
+          scopeId: identity.scopeId, runId: identity.runId, commandId: randomUUID(), expectedRevision: run.revision, failureCode: refusal.code }, options)
+          .catch((failure: unknown) => { if (!HELD_PARK_SUPERSEDED.has(queryFailure(failure).code)) throw failure; });
       }
       throw error;
     } finally { await preparation.settle(); store.close(); }

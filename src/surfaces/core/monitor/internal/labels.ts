@@ -1,5 +1,5 @@
 import { t, type Locale } from '#platform/index.js';
-import type { WorkerPhase } from '#domain/index.js';
+import type { ENVIRONMENT_TIMED_OUT_CODE, WorkerPhase } from '#domain/index.js';
 import type { MONITOR_ENVIRONMENT_DETAIL, WorkerProcessState } from '#engine/index.js';
 import type { MonitorDeliveryState, MonitorDeliveryOutlook, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState, MonitorTask, StopCause } from '#engine/index.js';
 import { phaseLabel } from './transcript.js';
@@ -91,10 +91,12 @@ export function notAcceptedLabel(reason: NonNullable<MonitorTask['evaluation']['
   return labels[reason];
 }
 /** The engine's environment-park detail prefix, tied to its constant by type (a value import would load the host graph at CLI startup). */
-const ENVIRONMENT_DETAIL: typeof MONITOR_ENVIRONMENT_DETAIL = 'environment-not-ready:';
+const ENVIRONMENT_DETAIL: typeof MONITOR_ENVIRONMENT_DETAIL = 'environment-not-ready:', ENVIRONMENT_TIMED_OUT: typeof ENVIRONMENT_TIMED_OUT_CODE = 'EXECUTION_ENVIRONMENT_TIMED_OUT';
 /** A blocker's detail in words where one is known (a missing patch; PRE-7: an environment park names its requirement); else the recorded detail. */
 export function blockerDetailText(detail: string, locale: Locale): string {
   if (detail === 'patch-missing') return t('monitor.blocker.patchMissing', {}, locale);
+  // E1: a timed-out environment check held the Run (progression park with this code): no answer, re-run it; never an installation problem.
+  if (detail === ENVIRONMENT_TIMED_OUT) return t('monitor.blocker.environmentTimedOut', {}, locale);
   return detail.startsWith(ENVIRONMENT_DETAIL) ? t('monitor.blocker.environmentNotReady', { requirement: detail.slice(ENVIRONMENT_DETAIL.length) }, locale) : detail;
 }
 /** PRE-7: the next step after an acceptance check the worker could not run. Deckent's preflight checks only declared requirements, so an

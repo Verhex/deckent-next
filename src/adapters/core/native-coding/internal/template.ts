@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { executionProfileDefinitionSchema, immutableJsonObjectSchema, workInputSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
-import { compileNativeCodingDockerProfile, nativeCodingInvocationFields, NativeCodingProfileError } from './command.js';
+import { compileNativeCodingDockerProfile, nativeCodingInvocationFields, nativeDiscoverySupported, NativeCodingProfileError } from './command.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { nativePromptCompositionSchema, promptPartSchema } from './composition.js';
 import { nativeCodingTemplateEnvironment } from './environment.js';
@@ -29,8 +29,7 @@ function parseTemplate(profile: ExecutionProfileDefinition) {
   if (profile.adapter.version !== NATIVE_CODING_TEMPLATE_ADAPTER.version || !parameters.success
     || 'argv' in parameters.data.docker || 'nativeSubscription' in parameters.data.docker) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
   const { provider, discovery, maxTurns } = parameters.data.invocation, command = nativeCliCommand(provider);
-  if ((discovery.mode === 'disabled' && (!command.disabledArgs || !command.capabilities.discovery))
-    || (discovery.settings && (!command.capabilities.settings || discovery.mode !== 'repository'))) throw new NativeCodingProfileError('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
+  if (!nativeDiscoverySupported(command, discovery)) throw new NativeCodingProfileError('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
   if (maxTurns !== undefined && !command.capabilities.maxTurns) throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_UNSUPPORTED');
   if (Number(parameters.data.docker['outputBytes']) < 65536) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
   // The compiler replaces argv; the placeholder only lets the Docker validator check every other parameter now.

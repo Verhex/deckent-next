@@ -88,6 +88,8 @@ function reattemptScheduler<C extends QueueServiceContext, Peer extends QueueSer
     },
   };
 }
+/** OTONOM-TESLIM shadow: a failed advice record is reported after every queue step of the turn ran; it never blocked or altered a ticket. */
+const shadowDiagnosis = (cause: unknown) => cause ? ErrorRegistry.createError('AUTONOMY_SHADOW_NOT_RECORDED', { cause }) : null;
 /** Service lifecycle, admission and batch authority; native custody, persistence and effect owners remain explicit ports. */
 export function createTargetQueueService<C extends QueueServiceContext, Peer extends QueueServicePeer>(ports: QueueServicePorts<C, Peer>) {
   const { config, instanceId } = ports;
@@ -127,7 +129,7 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
     async tick() {
       const grouped = new Map<string, TargetQueueRecord[]>();
       for (const record of await ports.snapshot()) { const rows = grouped.get(record.key) ?? []; rows.push(record); grouped.set(record.key, rows); }
-      const targets = [...grouped.entries()]; let failure: unknown = null;
+      const targets = [...grouped.entries()]; let failure: unknown = null, shadowFailure: unknown = null;
       for (let offset = 0; offset < targets.length; offset += config.targetQueue.candidateSlots) { const results = await Promise.allSettled(targets.slice(offset, offset + config.targetQueue.candidateSlots).map(async ([key, records]) => {
         if (held.has(key)) return;
         if (records[0]?.state === 'reconciling') {
@@ -143,11 +145,11 @@ export function createTargetQueueService<C extends QueueServiceContext, Peer ext
         }
         await lock(key, () => ports.withActor(records[0]!, () => ports.withScope(records[0]!.request.identity.scopeId, undefined, false, async c => {
           if (records[0]?.request.operation === 'rollback' && records[0].state === 'queued') { await initializeRollback(c, records[0]); return; }
-          await new TargetQueueDriver(c.app, c.bounds, await ports.preparation(c), instanceId, Date.now).advance(records);
+          const driver = new TargetQueueDriver(c.app, c.bounds, await ports.preparation(c), instanceId, Date.now); try { await driver.advance(records); } finally { shadowFailure ??= driver.shadowFailure; }
         })));
       })); const failed = results.find(result => result.status === 'rejected'); if (failed?.status === 'rejected') failure = failed.reason; }
       // The scan runs every turn, even when a target's turn failed: one failing key never pauses every re-attempt.
-      const scanFailure = await reattempts.turn(); failure ??= scanFailure;
+      const scanFailure = await reattempts.turn(); failure ??= scanFailure ?? shadowDiagnosis(shadowFailure);
       if (failure) throw failure;
     },
     async execute(request: RuntimeServiceRequest, peer: Peer, responseMaxBytes: number) {

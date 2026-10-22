@@ -51,3 +51,7 @@ export function classifyDockerTaskEffects(profile: ExecutionProfileDefinition): 
 export function dockerTaskSilenceDeadline(profile: ExecutionProfileDefinition): number | null {
   try { const resolved = resolveDockerTaskProfile(profile); return resolved.nativeSubscription ? resolved.options.deadlineMs : null; } catch { return null; }
 }
+/** C2: a frozen profile's pinned checkout shaping (instruction-surface paths its worker checkout leaves out); null when it has none. */
+export function dockerTaskHiddenPaths(profile: ExecutionProfileDefinition): readonly string[] | null {
+  try { return resolveDockerTaskProfile(profile).nativeSubscription?.checkout?.hiddenPaths ?? null; } catch { return null; }
+}

@@ -298,3 +298,13 @@ it('alpha.53 D1: a task read without --scope uses the configured scope and says 
   expect(refused.code).toBe(2); expect(refused.err).toContain('--scope');
   expect(seen).toEqual(['s', 's']);
 });
+
+it('D4: task changes without --scope name the valid scopes (CLI_SCOPE_REQUIRED), and a missing --command-id is named by accept/reject, not the last flag', async () => {
+  const root = await project(), calls: string[] = [];
+  const context = { applyRunLifecycle: async () => { calls.push('write'); return null; }, configChoiceSources: () => ({ async list() { return [{ value: 's' }]; } }) };
+  const noScope = await run(['task', 'accept', '--run', 'r', '--task', 't', '--command-id', 'c', '--expected-revision', '1', '--json'], context, root);
+  expect(noScope.code).toBe(2); expect(JSON.parse(noScope.err)).toMatchObject({ code: 'CLI_SCOPE_REQUIRED', params: { scopes: 's' } });
+  const noCommand = await run(['task', 'reject', '--scope', 's', '--run', 'r', '--task', 't', '--expected-revision', '1', '--json'], context, root);
+  expect(noCommand.code).toBe(2); expect(JSON.parse(noCommand.err)).toMatchObject({ code: 'CLI_ARGUMENT_MISSING' }); expect(noCommand.err).toContain('--command-id');
+  expect(calls).toEqual([]);
+});

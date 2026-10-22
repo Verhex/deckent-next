@@ -6,5 +6,7 @@ export { projectDeliverySummary, deliveryRiskDataSchema, DELIVERY_RISK_DATA } fr
 export type { DeliverySummaryFacts, DeliveryRiskData } from './internal/projector.js';
 export { evaluateAutonomy, autonomyFacts, autonomyRuleDigest, autonomyRuleDataSchema, AUTONOMY_RULE, AUTONOMY_HOLD_REASONS } from './internal/rule.js';
 export type { AutonomyFacts, AutonomyEvaluation, AutonomyHoldReason, AutonomyRuleData } from './internal/rule.js';
-export { DeliverySummaryApplication, deliverySummaryRequestSchema } from './internal/application.js';
-export type { DeliverySummaryRequest, DeliverySummaryPorts, DeliveryChangeSource } from './internal/application.js';
+export { DeliverySummaryApplication, deliverySummaryRequestSchema, readSystemDeliverySummary } from './internal/application.js';
+export type { DeliverySummaryRequest, DeliverySummaryPorts, DeliveryChangeSource, SystemDeliverySummaryRequest } from './internal/application.js';
+export { autonomyShadowId, autonomyShadowRecordSchema, autonomyShadowRecord, autonomyShadowDigest, deliverySummaryDigest } from './internal/shadow.js';
+export type { AutonomyShadowRecord, AutonomyShadowStore } from './internal/shadow.js';

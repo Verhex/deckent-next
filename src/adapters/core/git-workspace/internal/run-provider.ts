@@ -1,4 +1,4 @@
-import type { AttemptIdentity } from '#domain/index.js';
+import type { AttemptIdentity, WorkspaceHiddenPaths } from '#domain/index.js';
 import { workspaceCustodyConflict, type RunWorkspaceCustody, type RunWorkspaceProvider, type WorkspaceSource } from '#engine/index.js';
 import { GitWorkspaceBroker } from './broker.js';
 import type { GitSourceBase } from './source-base.js';
@@ -7,7 +7,8 @@ function source(value: GitSourceBase): WorkspaceSource {
   return Object.freeze({ schemaVersion: 1, adapter: value.adapter, sourceFingerprint: value.sourceFingerprint });
 }
 export class GitRunWorkspaceProvider implements RunWorkspaceProvider {
-  constructor(private readonly broker: GitWorkspaceBroker) {}
+  /** `hiddenPaths`: the attempt's pinned checkout shaping (C2), applied only when this provider allocates a fresh clone. */
+  constructor(private readonly broker: GitWorkspaceBroker, private readonly hiddenPaths?: WorkspaceHiddenPaths) {}
   async openRecorded(identity: AttemptIdentity) {
     const lease = await this.broker.openRecorded(identity); return lease ? Object.freeze({ lease, source: source(lease.sourceBase) }) : null;
   }
@@ -18,6 +19,6 @@ export class GitRunWorkspaceProvider implements RunWorkspaceProvider {
   async allocate(identity: AttemptIdentity, custody: RunWorkspaceCustody) {
     const captured = await this.broker.captureSourceBase(custody.baseRevision);
     if (JSON.stringify(source(captured)) !== JSON.stringify(custody.source)) throw workspaceCustodyConflict(custody.source, source(captured));
-    return this.broker.allocate({ schemaVersion: 1, identity, baseCommit: custody.baseRevision });
+    return this.broker.allocate({ schemaVersion: 1, identity, baseCommit: custody.baseRevision }, this.hiddenPaths);
   }
 }

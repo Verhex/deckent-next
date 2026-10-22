@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { evaluateTask, prepareConfiguredWorkspacePatch } from '../../../src/index.js';
-import { configuredTargetQueueTerminal } from '../../../src/composition/core/runtime-service/index.js';
+import { configuredTargetQueueTerminal, readAutonomyShadow } from '../../../src/composition/core/runtime-service/index.js';
 import { executeConfiguredTask } from '../../../src/composition/core/execution/index.js';
 import { createConfiguredRun, reserveConfiguredRunTasks } from '../../../src/composition/core/runs/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
@@ -82,7 +82,7 @@ async function fixture() {
     return identity;
   };
   const ledger = productResourcePath(layout, 'ledger');
-  return { root, project, target, data, base, options, ledger, coding, execute, evaluate, runRevision };
+  return { root, project, target, data, base, options, layout, ledger, coding, execute, evaluate, runRevision };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 const actor = { id: `local-os:${userInfo().uid}`, issuer: 'local-os', subject: String(userInfo().uid) };
@@ -179,6 +179,12 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     }
     // Admission, real re-preparation and the verification Runs wrote nothing to the target before the human answered (Astra 2607 F2).
     expect(await git(f.target, 'rev-parse', TARGET)).toBe(f.base); expect(await written()).toEqual(quiet);
+    // OTONOM-TESLIM shadow (alpha.53 B1): one system advice record per ticket that reached awaiting-confirmation, read from the real stores, outside
+    // the audit chain; the target is untouched by it (checked just above).
+    const shadows = await Promise.all(tickets.map(ticket => readAutonomyShadow(f.layout, SCOPE, ticket)));
+    expect(shadows.map(row => row && [row.commandId, row.actor, row.rule.id, /^would-(deliver|hold)$/u.test(row.verdict)])).toEqual(tickets.map(ticket => [ticket, 'system', 'autonomy', true]));
+    expect((await readFile(join(productResourcePath(f.layout, 'autonomyShadow'), 'autonomy-shadow.jsonl'), 'utf8')).trim().split('\n')).toHaveLength(3);
+    console.log('autonomy-shadow e2e', JSON.stringify(shadows.map(row => [row?.verdict, row?.reasons])));
 
     // The human declines the publication card on the real terminal: no consent, no write, the tickets keep waiting for a fresh card.
     const declined = await cliInPty(f.project, f.options.env, ['task', 'integration-queue-confirm', '--scope', SCOPE, '--command-id', 'q1'],
