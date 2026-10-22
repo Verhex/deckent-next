@@ -1,0 +1,7 @@
+{
+  "fileName": "autonomy-shadow.jsonl",
+  "maxLineBytes": 4096,
+  "maxFileBytes": 1048576,
+  "maxFileEntries": 4096,
+  "lockTimeoutMs": 5000
+}

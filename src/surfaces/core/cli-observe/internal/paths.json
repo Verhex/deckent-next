@@ -3,7 +3,7 @@
   "note": "C-ADMIN `deckent paths` groups (owner CLI review 2026-10-19): each product layout resource in one group; a resource added later and not listed here shows under `other`.",
   "groups": {
     "configuration": ["config", "installationJournal", "policy", "bindings"],
-    "records": ["ledger", "runs", "tasks", "artifacts", "workspaces", "integrations", "brain", "memory", "fileEffects", "treeScanCache", "scratch"],
+    "records": ["ledger", "runs", "tasks", "artifacts", "workspaces", "integrations", "brain", "memory", "fileEffects", "treeScanCache", "scratch", "autonomyShadow"],
     "security": ["audit", "approvals", "approvalPreviews", "instructionTrust", "installationIdentity", "projectIdentity", "ledgerBackups"],
     "runtime": ["runtimeSocket", "runtimeLog", "locks", "crashes"],
     "terminal": ["terminalHistory", "terminalSessions"]

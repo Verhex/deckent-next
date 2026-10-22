@@ -7,11 +7,16 @@ export interface TargetQueuePreparation {
   admitVerification(record: TargetQueueRecord): Promise<void>;
   evidence(record: TargetQueueRecord): Promise<CandidateEvidence>;
   effectIds(record: TargetQueueRecord): readonly string[];
+  /** OTONOM-TESLIM shadow: advice-only evaluation of the revision that just reached awaiting-confirmation (actor `system`). Never an authority
+   * input; a failure never blocks or alters the queue and is kept on the driver for diagnosis. */
+  shadow?(record: TargetQueueRecord): Promise<void>;
 }
 /** One target's bounded service turn. Waiting on verification/human input never holds a worker or request slot. */
 export class TargetQueueDriver {
   constructor(private readonly app: TargetQueueApplication, private readonly bounds: TargetQueueBounds,
     private readonly preparation: TargetQueuePreparation, private readonly owner: string, private readonly now: () => number) {}
+  /** The first shadow failure of this turn (diagnosis only; the queue already moved on). */
+  shadowFailure: unknown = null;
   async advance(input: readonly TargetQueueRecord[]): Promise<void> {
     const first = input[0]; if (!first) return;
     let records = input;
@@ -61,6 +66,7 @@ export class TargetQueueDriver {
           this.parkSuffix(records, record.ordinal + 1); return;
         }
         record = this.app.transition(record, { state: 'awaiting-confirmation', verification: proof });
+        try { await this.preparation.shadow?.(record); } catch (error) { this.shadowFailure ??= error; }
       }
       if (record.state !== 'awaiting-confirmation') return;
       previous = record;

@@ -373,6 +373,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   QUEUE_EXPIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_EXPIRED', p, l) }) },
   QUEUE_VERIFICATION_NOT_ADMITTED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_VERIFICATION_NOT_ADMITTED', p, l) }) },
   QUEUE_PREPARATION_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_PREPARATION_REFUSED', p, l) }) },
+  // OTONOM-TESLIM shadow (alpha.53): the advice record of a ticket could not be written; diagnosis only, the queue is unaffected.
+  AUTONOMY_SHADOW_NOT_RECORDED: { category: 'error', render: (p, l) => ({ message: t('error.AUTONOMY_SHADOW_NOT_RECORDED', p, l) }) },
   // D1a (owner 2026-10-18): typed reasons of the service's bounded delivery re-attempt (queue view `reattempt.reason`, ticket `reason`).
   DELIVERY_INTENT_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_INTENT_MISSING', p, l) }) },
   DELIVERY_REATTEMPT_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_REATTEMPT_EXHAUSTED', p, l) }) },

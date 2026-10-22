@@ -42,7 +42,8 @@ export function autonomyFacts(summary: DeliverySummary): AutonomyFacts {
     scope: change.state === 'available' ? change.scope : change.state === 'withheld' ? 'withheld' : null,
     outOfScopeCount: change.state === 'available' ? change.outOfScopeCount : null });
 }
-const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
+/** Sorted-key JSON: digests over it do not depend on property order. */
+export const canonical = (value: unknown): string => Array.isArray(value) ? `[${value.map(canonical).join(',')}]` : value && typeof value === 'object'
   ? `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(',')}}` : JSON.stringify(value);
 /** Digest of the exact rule and risk data an evaluation used: a shadow record binds it, so a later data change is visible. */
 export function autonomyRuleDigest(rule: AutonomyRuleData = AUTONOMY_RULE, risk: DeliveryRiskData = DELIVERY_RISK_DATA): string {

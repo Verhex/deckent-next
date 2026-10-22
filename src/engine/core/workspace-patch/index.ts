@@ -42,6 +42,8 @@ export { capturedWorkspacePatch } from './internal/snapshot.js';
 export { prepareIntegrationSnapshot } from './internal/snapshot.js';
 
 export { createWorkspaceQueuePreparation } from './internal/queue-preparation.js';
+export { workspaceQueueShadow } from './internal/queue-shadow.js';
+export type { WorkspaceQueueShadowPorts } from './internal/queue-shadow.js';
 export { assertIntegrationBase } from './internal/git-integration-base.js';
 export { GitQueueTargetApplication, GIT_QUEUE_DISPLAY } from './internal/git-queue-target.js';
 export { createWorkspaceQueueEffects } from './internal/queue-effects.js';
