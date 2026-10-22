@@ -5,7 +5,7 @@ export { identifyDockerRequest } from './internal/identity.js';
 export { runNodeDockerCommand, DockerCommandFailure, dockerCommandEnvironment } from './internal/command.js';
 export type { DockerCommand, DockerCommandOutput, DockerCommandRunner } from './internal/command.js';
 export { validateDockerSupervisorProfile, dockerProfileObservesWorker } from './internal/profile.js';
-export { validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, DockerTaskProfileError } from './internal/task-profile.js';
+export { validateDockerTaskProfile, resolveDockerTaskProfile, classifyDockerTaskEffects, dockerTaskSilenceDeadline, dockerTaskHiddenPaths, DockerTaskProfileError } from './internal/task-profile.js';
 export { probeDockerImageAvailability, probeDockerImageSetAvailability, DockerImageProbeError } from './internal/image.js';
 export type { DockerImageAvailabilityProbeInput, DockerImageSetProbeInput, DockerImageSet, DockerImageAvailability, DockerImageProbeErrorCode, DockerImageProbeCause } from './internal/image.js';
 export { collectDockerOutputFiles, dockerOutputFilesSchema } from './internal/output-files.js';

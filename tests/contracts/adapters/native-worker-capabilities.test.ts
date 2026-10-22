@@ -29,7 +29,7 @@ describe('registry capability routing in the mounted worker, without a provider 
 
   it('runs every discovery probe only for disabled discovery and refuses a CLI that accepts or differently refuses a probe value', () => {
     const probes = [{ args: ['exec', '-c', 'key.one=probe'], refusal: 'expected a boolean\nin `key.one`' }, { args: ['exec', '-c', 'key.two=probe'], refusal: 'expected a boolean\nin `key.two`' }];
-    const capabilities = { ...base, discovery: { requiredFlags: ['--strict-config'], hiddenProbes: probes } };
+    const capabilities = { ...base, discovery: { requiredFlags: ['--strict-config'], hiddenProbes: probes, checkout: null } };
     const disabled = { ...preflight, requiredFlags: ['--strict-config'], discovery: 'disabled' };
     const cli = (refusals: Record<string, string | null>) => { const calls: string[][] = []; return { calls, run: (args: readonly string[]) => {
       calls.push([...args]);
@@ -53,6 +53,14 @@ describe('registry capability routing in the mounted worker, without a provider 
       const plain = cli({}); expect(worker.nativePreflightCapabilities(capabilities, { ...preflight, requiredFlags: ['--strict-config'], ...mode }, plain.run)).toBe(false);
       expect(plain.calls).toEqual([['--version'], ['exec', '--help']]);
     }
+  });
+
+  it('accepts a checkout-realised disabled discovery with no probe to run (C2: the hiding is the checkout, not a flag)', () => {
+    const capabilities = { ...base, discovery: { requiredFlags: [], hiddenProbes: [], checkout: { hiddenPaths: ['AGENTS.md'] } } };
+    const calls: string[][] = [];
+    const run = (args: readonly string[]) => { calls.push([...args]); return args[0] === '--version' ? 'fixture-1' : '--print'; };
+    expect(worker.nativePreflightCapabilities(capabilities, { ...preflight, discovery: 'disabled' }, run)).toBe(false);
+    expect(calls).toEqual([['--version'], ['exec', '--help']]);
   });
 
   it('uses the configured report flag and encoding, and rejects version or required flag drift', () => {

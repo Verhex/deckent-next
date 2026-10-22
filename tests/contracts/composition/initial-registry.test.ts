@@ -122,13 +122,13 @@ it.each([{ scopeId: 'other' }, { executionSlots: 0 }, { provider: 'unknown' }, {
   expect(await readFile(f.path, 'utf8')).toBe(before);
 });
 
-it('refuses a missing execution image and an unsupported discovery mode without publication', async () => {
-  const f = await setup();
-  // C1: a CLI without verified suppression (no registry disabledArgs) is named, explicit or by default; nothing is written.
-  for (const discovery of [{ discovery: 'disabled' }, { discovery: undefined }]) {
-    await expect(initializeNativeCodingRegistry(f.root, { ...request, provider: 'cursor', ...discovery, apply: true }, f.options, detected))
-      .rejects.toMatchObject({ code: 'CODING_DISCOVERY_UNSUPPORTED' });
-  }
+it('refuses a missing execution image without publication; Cursor now defaults to disabled by checkout shaping (C2)', async () => {
+  const f = await setup(), cursor = { detect: async () => '2026.10.01-fixture' };
+  const { discovery: _omitted, ...omitted } = request; void _omitted;
+  // C1 refused Cursor here (no suppression flag); C2 realises `disabled` by the worker checkout, so the default and the explicit mode agree.
+  const preview = await initializeNativeCodingRegistry(f.root, { ...omitted, provider: 'cursor' }, f.options, cursor);
+  expect(preview.profile).toMatchObject({ parameters: { invocation: { provider: 'cursor', discovery: { mode: 'disabled' } } } });
+  expect((await initializeNativeCodingRegistry(f.root, { ...omitted, provider: 'cursor', discovery: 'disabled' }, f.options, cursor)).profile).toEqual(preview.profile);
   await f.mutate(config => { delete config.execution; });
   await expect(initializeNativeCodingRegistry(f.root, request, f.options, detected)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_IMAGE_REQUIRED' });
   expect((await loadConfig(f.root, f.options)).admission).toBeNull();

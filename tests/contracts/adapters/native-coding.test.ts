@@ -102,9 +102,28 @@ it('defaults Claude to discovery disabled without silently changing an old autho
   expect(() => compileNativeCodingDockerProfile(template(), { ...request, schemaVersion: 1 })).toThrow('NATIVE_CODING_INVOCATION_INVALID');
 });
 
-it('rejects unverified cursor discovery suppression instead of falling back to repository discovery', () => {
-  expect(() => compileNativeCodingDockerProfile(template(), { ...invocation('cursor'), discovery: undefined }))
-    .toThrow('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
+it('defaults Cursor to discovery disabled by checkout shaping: same argv as repository, the registry hidden set frozen in the profile (C2, owner Q4)', () => {
+  const disabled = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), { ...invocation('cursor'), discovery: undefined }));
+  const repository = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), invocation('cursor')));
+  expect(disabled.argv).toEqual(repository.argv);
+  expect(disabled.nativeSubscription?.preflight).toMatchObject({ discovery: 'disabled', requiredFlags: repository.nativeSubscription?.preflight?.requiredFlags });
+  expect(disabled.nativeSubscription?.checkout).toEqual({ schemaVersion: 1, hiddenPaths: ['AGENTS.md', 'CLAUDE.md', '.agents', '.claude', '.codex', '.cursor', '/DECKENT.md', '/.deckent/worker-instructions.md'] });
+  expect(repository.nativeSubscription?.checkout).toBeUndefined();
+  // A project's own set replaces the default; it exists only for a checkout-realised `disabled`.
+  const own = { schemaVersion: 1, mode: 'disabled', hiddenPaths: ['AGENTS.md', '/docs/agents'] };
+  expect(resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), { ...invocation('cursor'), discovery: own })).nativeSubscription?.checkout?.hiddenPaths).toEqual(own.hiddenPaths);
+  for (const [provider, discovery] of [['cursor', { ...own, mode: 'repository' }], ['codex', own], ['claude', own]] as const) {
+    expect(() => compileNativeCodingDockerProfile(template(), { ...invocation(provider), discovery })).toThrow('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
+  }
+  for (const hiddenPaths of [['*.md'], ['a/b'], ['/a/../b'], ['!AGENTS.md'], ['..'], [], ['AGENTS.md', 'AGENTS.md'], ['/x/']]) {
+    expect(() => compileNativeCodingDockerProfile(template(), { ...invocation('cursor'), discovery: { ...own, hiddenPaths } })).toThrow('NATIVE_CODING_INVOCATION_INVALID');
+  }
+});
+
+it('keeps Claude and Codex argv-only: no checkout part, so their compiled profiles do not change (C2)', () => {
+  for (const provider of ['claude', 'codex']) {
+    expect(resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), { ...invocation(provider), discovery: undefined })).nativeSubscription?.checkout).toBeUndefined();
+  }
 });
 
 it('defaults Codex to discovery disabled: strict config plus both skills keys, preflight needs only help flags (owner 2026-10-23 Q2)', () => {

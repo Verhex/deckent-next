@@ -191,6 +191,7 @@
     },
     "src/adapters/core/git-workspace": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/attempt",
         "src/engine/core/workspaces",
         "src/platform/core/config-fields"
@@ -1914,6 +1915,7 @@
     },
     "src/adapters/core/native-connection": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/worker-event",
         "src/domain/core/provider-catalog",
         "src/adapters/core/native-cli-registry"
@@ -1947,6 +1949,7 @@
     },
     "src/adapters/core/git-patch": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/attempt",
         "src/engine/core/dispatch",
         "src/engine/core/workspaces",
@@ -2791,6 +2794,7 @@
     },
     "src/adapters/core/native-cli-registry": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/provider-catalog"
       ],
       "plan": "HARDCODE-P1"
