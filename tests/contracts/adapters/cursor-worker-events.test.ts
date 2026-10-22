@@ -95,6 +95,37 @@ describe('Cursor normalizer edge shapes (synthetic-shape: no real capture of the
     expect(flagged.find(event => event.kind === 'unmapped')).toMatchObject({ nativeType: 'usage-invalid', count: 1 });
   });
 
+  // REVISE 2730 R1: a usage object is a measurement only when all four counters are safe non-negative integers; anything else stays unknown.
+  const counters = { inputTokens: 3, outputTokens: 4, cacheReadTokens: 5, cacheWriteTokens: 6 };
+  it.each([['empty', {}], ['missing cacheWriteTokens', { inputTokens: 3, outputTokens: 4, cacheReadTokens: 5 }], ['partial with a string', { inputTokens: 'bad', outputTokens: 5 }],
+    ['string counter', { ...counters, outputTokens: '4' }], ['negative', { ...counters, cacheReadTokens: -1 }], ['fractional', { ...counters, inputTokens: 1.5 }],
+    ['unsafe', { ...counters, cacheWriteTokens: Number.MAX_SAFE_INTEGER + 1 }], ['null counter', { ...counters, inputTokens: null }]])(
+    'synthetic-shape: %s usage stays unknown (tokens null) with a usage-invalid diagnostic, never a measured zero', (_name, usage) => {
+      const events = normalize([resultLine('done', { usage })]);
+      expect(events.find(event => event.kind === 'session.ended')).toMatchObject({ outcome: 'success', tokens: null });
+      expect(events.filter(event => event.kind === 'unmapped').map(event => event.kind === 'unmapped' && [event.nativeType, event.count])).toEqual([['usage-invalid', 1]]);
+      expect(summarizeWorkerEvents(events).tokenUsageRecorded).toBe(false);
+    });
+
+  it('synthetic-shape: valid all-zero usage is a measured zero; valid counters are kept exactly', () => {
+    const zero = normalize([resultLine('done', { usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 } })]);
+    expect(zero.find(event => event.kind === 'session.ended')).toMatchObject({ tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: null } });
+    expect(zero.some(event => event.kind === 'unmapped')).toBe(false);
+    expect(summarizeWorkerEvents(zero)).toMatchObject({ tokenUsageRecorded: true, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } });
+    expect(normalize([resultLine('done', { usage: counters })]).find(event => event.kind === 'session.ended')).toMatchObject({ tokens: { input: 3, output: 4, cacheRead: 5, cacheWrite: 6, thinking: null } });
+  });
+
+  // REVISE 2730 R2: one terminal result per session; a later result never produces a second end that would override the first.
+  it('synthetic-shape: a second result keeps the first end (error stays error) and is counted as result:duplicate', () => {
+    const failed = JSON.stringify({ type: 'result', subtype: 'error', is_error: true, duration_ms: 7, result: 'boom' });
+    const events = normalize([failed, resultLine(JSON.stringify(report))]);
+    expect(events.filter(event => event.kind === 'session.ended')).toEqual([expect.objectContaining({ outcome: 'error', durationMs: 7, tokens: null })]);
+    expect(events.filter(event => event.kind === 'unmapped').map(event => event.kind === 'unmapped' && [event.nativeType, event.count])).toEqual([['result:duplicate', 1]]);
+    expect(summarizeWorkerEvents(events)).toMatchObject({ outcome: 'error', unmapped: 1 });
+    const success = normalize([resultLine('done'), failed]);
+    expect(success.filter(event => event.kind === 'session.ended')).toEqual([expect.objectContaining({ outcome: 'success' })]);
+  });
+
   it('synthetic-shape: unknown tool keys stay visible as other and are counted; a result without success is an error', () => {
     const events = normalize([started('grepToolCall', { args: { pattern: 'x' } }), completed('grepToolCall', { args: { pattern: 'x' }, result: { error: { message: 'denied' } } }),
       completed('function', { name: 'mcp_lookup', arguments: '{}', result: { success: {} } }).replaceAll('call-1', 'call-2'),
@@ -149,6 +180,35 @@ describe('final-text-json report channel (selected by the capability channel, no
     expect(collect([resultLine(JSON.stringify(report), { is_error: true })])).toEqual({ status: 'unavailable', reason: 'missing' });
     expect(collect([resultLine(JSON.stringify({ ...report, summary: 'x'.repeat(40000) }))])).toEqual({ status: 'unavailable', reason: 'oversized' });
     expect(collect([resultLine('x'.repeat(1_048_577))])).toEqual({ status: 'unavailable', reason: 'oversized' });
+  });
+
+  // REVISE 2730 R2: exactly one terminal `result`, and it is the last record. Permitted after it: no record of any type (every real capture —
+  // probe, probe2, auto — ends with its single `result` line; killed and err-model have none). Blank lines are not records.
+  const valid = resultLine(JSON.stringify(report)), failed = resultLine('boom', { subtype: 'error', is_error: true });
+  it('reads exactly one terminal result that is the last record (blank lines are not records)', () => {
+    expect(collect([valid])).toEqual({ status: 'reported', report });
+    expect(collect([valid, '', '  '])).toEqual({ status: 'reported', report });
+    expect(collect([failed])).toEqual({ status: 'unavailable', reason: 'missing' });
+  });
+
+  const assistant = JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'one more thing' }] }, session_id: 's' });
+  const tool = JSON.stringify({ type: 'tool_call', subtype: 'started', call_id: 'call-9', tool_call: { editToolCall: { args: { path: '/workspace/x' } } }, session_id: 's' });
+  const thinking = JSON.stringify({ type: 'thinking', subtype: 'delta', text: 'hmm', session_id: 's' });
+  it.each([['assistant', [assistant]], ['tool_call', [tool]], ['thinking', [thinking]], ['tool_call then assistant', [tool, assistant]],
+    ['system', [JSON.stringify({ type: 'system', subtype: 'init' })]], ['unknown type', [JSON.stringify({ type: 'mystery' })]], ['non-JSON text', ['not json']],
+    ['an over-bound line', ['x'.repeat(1_048_577)]]])('refuses a valid terminal result followed by %s before EOF (no stale report)', (_name, after) => {
+    expect(collect([valid, ...after])).toEqual({ status: 'unavailable', reason: 'invalid' });
+  });
+
+  it.each([['error then success (the failure is never erased)', [failed, valid]], ['success then error', [valid, failed]], ['duplicate success', [valid, valid]],
+    ['contradictory success', [valid, resultLine(JSON.stringify({ ...report, summary: 'Other' }))]]])('refuses a second result: %s', (_name, input) => {
+    expect(collect(input)).toEqual({ status: 'unavailable', reason: 'invalid' });
+  });
+
+  it('reads one valid terminal report at the end of a real captured stream', () => {
+    // probe2 (real tool-using stream) with only its final answer text replaced by a valid report: one terminal result, last record.
+    const real = lines('probe2'), last = JSON.parse(real.at(-1)!) as Record<string, unknown>;
+    expect(collect([...real.slice(0, -1), JSON.stringify({ ...last, result: JSON.stringify(report) })])).toEqual({ status: 'reported', report });
   });
 
   it('keeps the flag channels on their native readers when no final-text channel is declared', () => {
