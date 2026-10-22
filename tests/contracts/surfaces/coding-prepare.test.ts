@@ -44,7 +44,8 @@ it('rejects invalid transport, duplicated flags, unsupported providers and unkno
     [[], '{'],
     [[], JSON.stringify({ ...input(), invocation: { ...input().invocation, provider: 'other' } })],
     [[], JSON.stringify({ ...input(), invocation: { ...input().invocation, schemaVersion: 1 } })],
-    [[], JSON.stringify({ ...input(), invocation: { ...input().invocation, discovery: { schemaVersion: 1, mode: 'disabled' } } })],
+    // Codex has verified suppression since C1 (owner 2026-10-23 Q2); Cursor still has none, so `disabled` is refused for it.
+    [[], JSON.stringify({ ...input('cursor'), invocation: { ...input('cursor').invocation, discovery: { schemaVersion: 1, mode: 'disabled' } } })],
     [['--input', '-'], JSON.stringify(input())],
   ] as const) {
     const result = spawnSync(process.execPath, [cli, 'coding', 'prepare', '--input', '-', '--json', ...args],

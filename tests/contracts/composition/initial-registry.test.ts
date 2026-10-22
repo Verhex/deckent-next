@@ -124,10 +124,25 @@ it.each([{ scopeId: 'other' }, { executionSlots: 0 }, { provider: 'unknown' }, {
 
 it('refuses a missing execution image and an unsupported discovery mode without publication', async () => {
   const f = await setup();
-  await expect(initializeNativeCodingRegistry(f.root, { ...request, provider: 'codex', discovery: 'disabled', apply: true }, f.options, detected)).rejects.toMatchObject({ code: 'INITIAL_REGISTRY_CLI_UNAVAILABLE' });
+  // C1: a CLI without verified suppression (no registry disabledArgs) is named, explicit or by default; nothing is written.
+  for (const discovery of [{ discovery: 'disabled' }, { discovery: undefined }]) {
+    await expect(initializeNativeCodingRegistry(f.root, { ...request, provider: 'cursor', ...discovery, apply: true }, f.options, detected))
+      .rejects.toMatchObject({ code: 'CODING_DISCOVERY_UNSUPPORTED' });
+  }
   await f.mutate(config => { delete config.execution; });
   await expect(initializeNativeCodingRegistry(f.root, request, f.options, detected)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_IMAGE_REQUIRED' });
   expect((await loadConfig(f.root, f.options)).admission).toBeNull();
+});
+
+it('defaults a new Codex registry to disabled discovery when --discovery is omitted (owner 2026-10-23 Q2)', async () => {
+  const f = await setup(), codex = { detect: async () => 'codex-cli 0.163.0' };
+  const { discovery: _omitted, ...omitted } = request; void _omitted;
+  const preview = await initializeNativeCodingRegistry(f.root, { ...omitted, provider: 'codex' }, f.options, codex);
+  expect(preview.profile).toMatchObject({ parameters: { invocation: { provider: 'codex', discovery: { mode: 'disabled' } } } });
+  const explicit = await initializeNativeCodingRegistry(f.root, { ...omitted, provider: 'codex', discovery: 'disabled' }, f.options, codex);
+  expect(explicit.profile).toEqual(preview.profile);
+  const repository = await initializeNativeCodingRegistry(f.root, { ...omitted, provider: 'codex', discovery: 'repository' }, f.options, codex);
+  expect(repository.profile.id).not.toBe(preview.profile.id);
 });
 
 it.each(['deny', 'require-approval'])('honors config %s without backup or audit writes', async effect => {

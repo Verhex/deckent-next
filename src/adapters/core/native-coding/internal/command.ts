@@ -64,7 +64,7 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
   const effortArgs = nativeEffortArgs(command.capabilities.reasoningEffort, reasoningEffort);
   const turnArgs = invocation.maxTurns === undefined ? [] : [command.capabilities.maxTurns!.flag, String(invocation.maxTurns)];
   const { mode, settings } = invocation.discovery;
-  if ((mode === 'disabled' && !command.disabledArgs)
+  if ((mode === 'disabled' && (!command.disabledArgs || !command.capabilities.discovery))
     || (settings && (!command.capabilities.settings || mode !== 'repository'))) {
     throw new NativeCodingProfileError('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
   }
@@ -81,7 +81,8 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
       ...(invocation.schemaVersion >= 3 ? { finalReport: { schemaVersion: 1 } } : {}),
       ...(delivery ? { promptDelivery: { ...delivery, argvSha256: promptHash(JSON.stringify(argv)) } } : {}), preflight: {
       schemaVersion: 1, cliVersion: invocation.cliVersion, discovery: mode, helpArgs: command.helpArgs,
-      requiredFlags: [...command.args.filter(arg => arg.startsWith('--')), ...turnArgs.filter(arg => arg.startsWith('--')), ...(reasoningEffort.level === null ? [] : command.capabilities.reasoningEffort!.requiredFlags), ...discoveryArgs,
+      requiredFlags: [...command.args.filter(arg => arg.startsWith('--')), ...turnArgs.filter(arg => arg.startsWith('--')), ...(reasoningEffort.level === null ? [] : command.capabilities.reasoningEffort!.requiredFlags),
+        ...(mode === 'disabled' ? command.capabilities.discovery!.requiredFlags : []),
         ...(settings ? [command.capabilities.settings!.flag] : []), ...coreArgs.filter(arg => arg.startsWith('--')), command.modelFlag],
     } } } });
   validateDockerTaskProfile(profile);

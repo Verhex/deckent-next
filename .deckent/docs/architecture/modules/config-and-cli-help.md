@@ -91,7 +91,7 @@ packaged-binary or cross-platform acceptance; the lane excluded build and full v
 
 ## Coding template authoring
 
-`deckent coding template --provider <id> --kind <kind> [--image <sha256>] --preview|--apply`
+`deckent coding template --provider <id> --kind <kind> [--image <sha256>] [--discovery disabled|repository] --preview|--apply`
 adds a reusable native coding template through the existing project config writer. `--json` returns
 profile, kind, proposed registry revision, preimage digest and (on apply) config write receipt.
 `--lang en|tr` selects human output. Preview writes nothing; apply retains old rows, creates a registry
@@ -101,7 +101,8 @@ binding is refused rather than overwritten. No model, task prompt or effort is a
 Configure `admission` (registry, poolId, executionSlots, inFlightSlots) through `deckent config set
 admission` or `/config` first. The command does not invent pool capacity or evaluator policy. Configure
 `execution.docker` limits and an immutable image; an optional image must have an admitted provider
-pin. The CLI version and discovery selection come from that pin; absent or ambiguous pins refuse.
+pin. The CLI version and discovery selection come from that pin (an explicit `--discovery` overrides the
+mode as a new template content id); absent or ambiguous pins refuse.
 Apply requires the configured service/terminal scope and local config/write authority. Approval-required
 policy returns POLICY_APPROVAL_UNSUPPORTED via the existing allow-only set contract. A stale project
 digest, global registry contribution or changed effective Docker settings refuses publication.

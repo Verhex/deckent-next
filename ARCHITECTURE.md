@@ -347,8 +347,8 @@ contain paths and bootstrap digest, never credential values. Expired/unavailable
 explicitly; subscription refresh and fleet-wide account lifecycle remain open.
 
 Native coding authoring v2 pins the observed CLI version and discovery; [template authoring](.deckent/docs/architecture/modules/config-and-cli-help.md#coding-template-authoring) reuses governed config.
-Disabled discovery is the default: Claude uses subscription-compatible safe-mode; unverified
-Codex/Cursor suppression requests fail instead of silently enabling repository discovery.
+Disabled discovery is the default: Claude uses safe-mode; Codex strict-config skills keys, each proven by a
+registry hidden probe at preflight; unverified (Cursor) suppression fails instead of enabling repository discovery.
 Repository discovery is an explicit profile exception for all three providers. Only Claude's
 repository mode accepts typed `disableAllHooks` settings; arbitrary settings/env/helper/path
 injection and disabled-mode/settings combinations are rejected. This is not a general tool gate.

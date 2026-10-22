@@ -11,6 +11,9 @@ export const clisetupErrors: ErrorDefinitions = Object.freeze({
   // C-SETUP root cause of CODING_TEMPLATE_TOOLCHAIN_REQUIRED on a working installation: the configured image is not the image the admitted
   // profiles run on; names both and the command with an admitted image. Same category as the engine code (configuration, 78).
   CLI_CODING_TEMPLATE_IMAGE_UNADMITTED: { category: 'config', render: (p, l) => ({ message: t('error.CLI_CODING_TEMPLATE_IMAGE_UNADMITTED', p, l) }) },
+  // C1 (owner 2026-10-23 Q2): `init registry` / `coding template` asked for `disabled` discovery on a CLI the registry has no verified
+  // suppression for (no `disabledArgs`); names the CLI and the explicit `--discovery repository` choice. Configuration, 78; nothing written.
+  CODING_DISCOVERY_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.CODING_DISCOVERY_UNSUPPORTED', p, l) }) },
   // C-SETUP: `coding prepare` input that is not the preparation document; names the first field that does not fit, exit 2.
   CLI_CODING_PREPARE_FIELD_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CODING_PREPARE_FIELD_INVALID', p, l) }) },
   // C-SETUP: `operation inspect` of a command this scope has no record of: exit 1, like `run` (review §operation).

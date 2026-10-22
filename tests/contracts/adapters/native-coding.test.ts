@@ -102,9 +102,27 @@ it('defaults Claude to discovery disabled without silently changing an old autho
   expect(() => compileNativeCodingDockerProfile(template(), { ...request, schemaVersion: 1 })).toThrow('NATIVE_CODING_INVOCATION_INVALID');
 });
 
-it.each(['codex', 'cursor'])('rejects unverified %s discovery suppression instead of falling back to repository discovery', provider => {
-  expect(() => compileNativeCodingDockerProfile(template(), { ...invocation(provider), discovery: undefined }))
+it('rejects unverified cursor discovery suppression instead of falling back to repository discovery', () => {
+  expect(() => compileNativeCodingDockerProfile(template(), { ...invocation('cursor'), discovery: undefined }))
     .toThrow('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
+});
+
+it('defaults Codex to discovery disabled: strict config plus both skills keys, preflight needs only help flags (owner 2026-10-23 Q2)', () => {
+  const request = { ...invocation('codex'), discovery: undefined };
+  const profile = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), request));
+  const suppression = ['--strict-config', '-c', 'skills.include_instructions=false', '-c', 'skills.bundled.enabled=false'];
+  const at = profile.argv.indexOf('--strict-config');
+  expect(profile.argv.slice(at, at + suppression.length)).toEqual(suppression);
+  expect(profile.argv.indexOf('--model')).toBeGreaterThan(at + suppression.length - 1);
+  const preflight = profile.nativeSubscription?.preflight;
+  expect(preflight).toMatchObject({ cliVersion: 'fixture-1', discovery: 'disabled' });
+  expect(preflight?.requiredFlags).toEqual(expect.arrayContaining(['--strict-config', '--config']));
+  // A config key is no help token: requiring it would fail every preflight; the hidden probes prove the keys instead.
+  expect(preflight?.requiredFlags.some(flag => flag.startsWith('skills.') || flag === '-c')).toBe(false);
+  const repository = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), invocation('codex')));
+  expect(repository.argv).not.toContain('--strict-config');
+  expect(repository.argv.some(arg => arg.startsWith('skills.'))).toBe(false);
+  expect(repository.nativeSubscription?.preflight?.requiredFlags).not.toContain('--strict-config');
 });
 
 it('pins only typed non-secret explicit settings and refuses unsupported settings semantics', () => {

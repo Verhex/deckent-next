@@ -18,7 +18,13 @@
         "exec",
         "--help"
       ],
-      "disabledArgs": null,
+      "disabledArgs": [
+        "--strict-config",
+        "-c",
+        "skills.include_instructions=false",
+        "-c",
+        "skills.bundled.enabled=false"
+      ],
       "coreArgs": [
         "-c",
         "model_instructions_file=\"/tmp/deckent-prompt/core.txt\"",
@@ -29,6 +35,32 @@
       "capabilities": {
         "maxTurns": null,
         "settings": null,
+        "discovery": {
+          "requiredFlags": [
+            "--strict-config",
+            "--config"
+          ],
+          "hiddenProbes": [
+            {
+              "args": [
+                "exec",
+                "--strict-config",
+                "-c",
+                "skills.include_instructions=deckent-probe"
+              ],
+              "refusal": "expected a boolean\nin `skills.include_instructions`"
+            },
+            {
+              "args": [
+                "exec",
+                "--strict-config",
+                "-c",
+                "skills.bundled.enabled=deckent-probe"
+              ],
+              "refusal": "expected a boolean\nin `skills.bundled.enabled`"
+            }
+          ]
+        },
         "promptChannel": "codex-instructions-file",
         "eventStream": "codex-exec-json",
         "structuredReport": {
@@ -103,6 +135,12 @@
         "settings": {
           "flag": "--settings"
         },
+        "discovery": {
+          "requiredFlags": [
+            "--safe-mode"
+          ],
+          "hiddenProbes": []
+        },
         "promptChannel": "claude-system-prompt",
         "eventStream": "claude-code-stream-json",
         "structuredReport": {
@@ -148,6 +186,7 @@
       "capabilities": {
         "maxTurns": null,
         "settings": null,
+        "discovery": null,
         "promptChannel": "inline",
         "eventStream": "cursor-agent-stream-json",
         "structuredReport": {
