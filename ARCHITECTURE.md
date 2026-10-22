@@ -375,7 +375,7 @@ migrate an absent legacy capability from the shipped registry snapshot; explicit
 refused. Model projection, evaluation producer and transition carry/bind it. Task evaluation's optional
 model evidence gains the additive field without a ledger or outer protocol migration. Future registry
 changes must retain those historical read semantics. The shipped session-events adapter holds missing
-verified evidence; the two none-evidence adapters remain visibly unverified and criteria-driven (rule A).
+verified evidence; Codex remains visibly unverified and criteria-driven (rule A). Cursor declares `session-start-name` evidence (alpha.52, owner K1/K2): verdicts `start-name-matched` and `provider-chosen` (catalog `selection: provider`) are accepted by criteria and shown, another model's recorded name is `substituted`, and a missing or unknown name is `unverified` and held for a human; `verified` still means per-model usage evidence only.
 Author targeted proof and remaining limits: external `proof/HARDCODE-P1-A-2026-10-03/review.md`.
 
 Worker image versioning (owner 2026-09-22) is an explicit operator build operation shipped in `assets/worker-image`:
@@ -403,8 +403,8 @@ not provider acknowledgement, model compliance or acceptance. Persona grants no 
 Gateway shutdown/deadline closes sockets; a lost host gateway cannot be reconstructed from a receipt
 to grant new access. Existing Docker custody still supports observation, cancellation and output
 recovery without credentials; replay never reauthenticates a recorded dispatch. Native raw output
-is suppressed in favor of a bounded exit/error summary; Claude and Codex events are normalized
-(B09-1/B09-3, "Local worker observation" below; Codex not yet against a recorded live run); Cursor normalization remains open. Full-access worker code can read its own access material and use the allowed provider channel;
+is suppressed in favor of a bounded exit/error summary; Claude and Codex events are normalized,
+and so are Cursor streams (alpha.52 CURSOR-ISCI: derived turns, tokens, duration, tool calls, real `session.ended`, `final-text-json` report; cost null) (B09-1/B09-3, "Local worker observation" below; Codex not yet against a recorded live run). Full-access worker code can read its own access material and use the allowed provider channel;
 this is not within-worker secret isolation or comprehensive external-effect interception.
 
 Phase 1 integrates supported Codex/Claude/Cursor headless coding executors inside Docker using
