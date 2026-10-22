@@ -1,5 +1,5 @@
 import type { ArtifactStore } from '#capabilities/index.js';
-import type { TargetQueueRecord } from '#domain/index.js';
+import { instructionSurfacePaths, type TargetQueueRecord } from '#domain/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import { autonomyShadowRecord, readSystemDeliverySummary, type AutonomyShadowStore, type DeliverySummaryPorts } from '#engine/core/delivery-summary/index.js';
 import type { IntegrationReader } from './inspection.js';
@@ -24,8 +24,9 @@ export function workspaceQueueShadow(store: IntegrationReader & DeliverySummaryP
     const identity = record.request.identity, run = await store.loadRun(identity.scopeId, identity.runId);
     const { patch } = await readQueueCandidate(record, store, ports.artifacts, ports.maxBytes);
     const declared = run?.graph.tasks.find(task => task.id === identity.taskId)?.workInput?.scope.paths ?? null;
+    const surface = instructionSurfacePaths(run?.execution.tasks.find(task => task.taskId === identity.taskId)?.profile.parameters);
     const summary = await readSystemDeliverySummary({ identity, operation: 'deliver', target: { id: record.request.target.target.id, protected: false },
-      verificationRunId: queueCommandIds(record).verificationRun, change: workspacePatchChangeFacts(patch, classifyPatchScope(patch, declared, ports.scopeMode)) },
+      verificationRunId: queueCommandIds(record).verificationRun, change: workspacePatchChangeFacts(patch, classifyPatchScope(patch, declared, ports.scopeMode, surface)) },
     { store, artifacts: ports.artifacts, ...(ports.known ? { known: ports.known } : {}) });
     if (!summary) throw new Error('AUTONOMY_SHADOW_RUN_MISSING'); // re-validated in this turn; a vanished Run is diagnosed, never a silent gap
     await ports.shadow.append(autonomyShadowRecord({ scopeId: identity.scopeId, commandId: record.request.commandId, revision: record.revision }, summary, ports.now()));

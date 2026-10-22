@@ -40,14 +40,30 @@ it.each([
   // A flag channel needs its flag and the flagless final-text channel may not carry one; the event stream format is a closed set.
   ['discovery', { requiredFlags: [], hiddenProbes: [], checkout: null }], ['discovery', { requiredFlags: ['--safe-mode'], checkout: null }], ['discovery', { requiredFlags: ['-s'], hiddenProbes: [], checkout: null }],
   ['discovery', { requiredFlags: ['--safe-mode'], hiddenProbes: [{ args: ['x'] }], checkout: null }], ['discovery', { requiredFlags: ['--safe-mode'], hiddenProbes: [] }],
-  // C2: a checkout realisation carries no flags or probes and only literal hidden paths (no globs, no unanchored nested path).
-  ['discovery', { requiredFlags: ['--safe-mode'], hiddenProbes: [], checkout: { hiddenPaths: ['AGENTS.md'] } }],
-  ['discovery', { requiredFlags: [], hiddenProbes: [], checkout: { hiddenPaths: ['**/AGENTS.md'] } }], ['discovery', { requiredFlags: [], hiddenProbes: [], checkout: { hiddenPaths: [] } }],
+  // C2: a checkout realisation carries no flags or probes; G1: it names no paths of its own (the registry's instruction surface is the one list).
+  ['discovery', { requiredFlags: ['--safe-mode'], hiddenProbes: [], checkout: {} }],
+  ['discovery', { requiredFlags: [], hiddenProbes: [], checkout: { hiddenPaths: ['AGENTS.md'] } }],
   ['structuredReport', { flag: null, channel: 'inline-json' }], ['structuredReport', { flag: '--schema', channel: 'final-text-json' }], ['structuredReport', { channel: 'final-text-json' }], ['eventStream', 'guess'],
 ])('validates the capability %s shape', (field, value) => {
   const asset = structuredClone(registry);
   (asset.adapters.claude.capabilities as Record<string, unknown>)[field] = value;
   expect(() => parseNativeCliRegistry(asset)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+});
+it.each([[[]], [['**/AGENTS.md']], [['sub/AGENTS.md']], [['AGENTS.md', 'AGENTS.md']], [undefined]])('G1: the registry instruction surface is required and literal (%j refused)', hiddenPaths => {
+  const asset = structuredClone(registry) as unknown as Record<string, unknown>;
+  if (hiddenPaths === undefined) delete asset['instructionSurface']; else asset['instructionSurface'] = { hiddenPaths };
+  expect(() => parseNativeCliRegistry(asset)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+});
+it('G1: one instruction-surface list feeds the domain floor and the compiled Cursor checkout, with the exact C2 bytes', () => {
+  expect(domain.INSTRUCTION_SURFACE_PATHS).toEqual(parseNativeCliRegistry(registry).instructionSurface.hiddenPaths);
+  const compiled = compileNativeCodingDockerProfile(template, { ...invocation('cursor'), discovery: { schemaVersion: 1, mode: 'disabled' } });
+  expect((compiled.parameters.nativeSubscription as Record<string, unknown>).checkout).toEqual({ schemaVersion: 1,
+    hiddenPaths: ['AGENTS.md', 'CLAUDE.md', '.agents', '.claude', '.codex', '.cursor', '/DECKENT.md', '/.deckent/worker-instructions.md'] });
+  // Claude/Codex profiles carry no checkout part; the floor still applies to them through the registry list.
+  for (const provider of ['claude', 'codex']) expect(compileNativeCodingDockerProfile(template, { ...invocation(provider), discovery: { schemaVersion: 1, mode: 'disabled' } }).parameters.nativeSubscription).not.toHaveProperty('checkout');
+  expect(domain.instructionSurfacePaths(compiled.parameters)).toEqual(domain.INSTRUCTION_SURFACE_PATHS);
+  expect(domain.instructionSurfacePaths({ nativeSubscription: { checkout: { schemaVersion: 1, hiddenPaths: ['/docs/x.md'] } } })).toEqual(['/docs/x.md']);
+  expect(domain.instructionSurfacePaths(undefined)).toEqual(domain.INSTRUCTION_SURFACE_PATHS);
 });
 it('pairs disabledArgs with a discovery preflight capability: one without the other is refused', () => {
   const noProof = structuredClone(registry) as unknown as { adapters: Record<string, { disabledArgs: unknown; capabilities: Record<string, unknown> }> };
@@ -61,7 +77,8 @@ it('pairs a checkout realisation with empty disabledArgs and an argv realisation
   type Asset = { adapters: Record<string, { disabledArgs: unknown; capabilities: Record<string, unknown> }> };
   const parsed = parseNativeCliRegistry(registry);
   expect(parsed.adapters['cursor']).toMatchObject({ disabledArgs: [], capabilities: { discovery: { requiredFlags: [], hiddenProbes: [] } } });
-  expect(parsed.adapters['cursor']!.capabilities.discovery?.checkout?.hiddenPaths).toEqual(expect.arrayContaining(['AGENTS.md', 'CLAUDE.md', '.cursor', '/DECKENT.md', '/.deckent/worker-instructions.md']));
+  expect(parsed.adapters['cursor']!.capabilities.discovery?.checkout).toEqual({});
+  expect(parsed.instructionSurface.hiddenPaths).toEqual(expect.arrayContaining(['AGENTS.md', 'CLAUDE.md', '.cursor', '/DECKENT.md', '/.deckent/worker-instructions.md']));
   for (const provider of ['claude', 'codex']) expect(parsed.adapters[provider]!.capabilities.discovery?.checkout).toBeNull();
   const argsWithCheckout = structuredClone(registry) as unknown as Asset;
   argsWithCheckout.adapters['cursor']!.disabledArgs = ['--no-rules'];

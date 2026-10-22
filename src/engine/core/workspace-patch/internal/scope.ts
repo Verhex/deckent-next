@@ -1,4 +1,5 @@
 import { createGlobMatcher, hasGlobWildcard } from '#platform/index.js';
+import { instructionSurfaceWrites } from '#domain/index.js';
 import { WorkspacePatchError, type WorkspacePatch } from './contract.js';
 /**
  * K6 = A (owner 2026-09-30; lane Jev c93ceea4): every changed path of a host-produced patch is classified against the task's declared
@@ -12,14 +13,19 @@ export const PATCH_SCOPE_MATCHER = 1 as const;
 /** Paths an error carries (the result lists every out-of-scope path; the patch itself is bounded by the snapshot limits). */
 export const PATCH_SCOPE_ERROR_PATHS = 16;
 export type PatchScopeMode = 'warn' | 'enforce';
-interface PatchScopeBase { readonly schemaVersion: 1; readonly matcher: typeof PATCH_SCOPE_MATCHER; readonly mode: PatchScopeMode }
+interface PatchScopeBase { readonly schemaVersion: 1; readonly matcher: typeof PATCH_SCOPE_MATCHER; readonly mode: PatchScopeMode;
+  /** G1 floor (present only when non-empty): changed instruction-surface paths the declared scope does not name explicitly. */
+  readonly instructionSurface?: readonly string[] }
 export type PatchScope = Readonly<PatchScopeBase & ({ status: 'unscoped' }
   | { status: 'in-scope' | 'out-of-scope'; declared: readonly string[]; outOfScope: readonly string[];
     /** Derived advice only (owner D9 C): never changes the declared scope, matcher or enforce gate. */
     directoryHints?: readonly Readonly<{ declared: string; suggested: string }>[] })>;
 
-export function classifyPatchScope(patch: Pick<WorkspacePatch, 'changes'>, declared: readonly string[] | null, mode: PatchScopeMode): PatchScope {
-  const base = { schemaVersion: 1 as const, matcher: PATCH_SCOPE_MATCHER, mode };
+/** `instructionSurface`: the Run's resolved instruction-surface set (`instructionSurfacePaths` of its frozen profile). */
+export function classifyPatchScope(patch: Pick<WorkspacePatch, 'changes'>, declared: readonly string[] | null, mode: PatchScopeMode,
+  instructionSurface: readonly string[]): PatchScope {
+  const surface = instructionSurfaceWrites(patch.changes.map(change => change.path), instructionSurface, declared);
+  const base = { schemaVersion: 1 as const, matcher: PATCH_SCOPE_MATCHER, mode, ...(surface.length ? { instructionSurface: surface } : {}) };
   if (declared === null) return Object.freeze({ ...base, status: 'unscoped' as const });
   const matchers = declared.map(createGlobMatcher);
   const outOfScope = Object.freeze(patch.changes.map(change => change.path).filter(path => !matchers.some(match => match(path))));
@@ -31,13 +37,15 @@ export function classifyPatchScope(patch: Pick<WorkspacePatch, 'changes'>, decla
   return Object.freeze({ ...base, status: outOfScope.length ? 'out-of-scope' as const : 'in-scope' as const,
     declared: Object.freeze([...declared]), outOfScope, ...(directoryHints.length ? { directoryHints } : {}) });
 }
-/** The enforce gate before any delivery write (integration claim, delivery claim). Warn never refuses. */
+const bounded = (paths: readonly string[]) => {
+  const shown = paths.slice(0, PATCH_SCOPE_ERROR_PATHS);
+  return { count: paths.length, paths: shown.join(', '), omitted: paths.length - shown.length };
+};
+/** The gate before any delivery write (integration claim, delivery claim). The G1 instruction-surface floor refuses in every mode; otherwise
+ * warn never refuses. */
 export function assertPatchScope(scope: PatchScope): void {
+  if (scope.instructionSurface?.length) throw new WorkspacePatchError('PATCH_INSTRUCTION_SURFACE_WRITE', undefined, bounded(scope.instructionSurface));
   if (scope.mode !== 'enforce') return;
   if (scope.status === 'unscoped') throw new WorkspacePatchError('PATCH_SCOPE_UNDECLARED');
-  if (scope.status === 'out-of-scope') {
-    const shown = scope.outOfScope.slice(0, PATCH_SCOPE_ERROR_PATHS);
-    throw new WorkspacePatchError('PATCH_SCOPE_VIOLATION', undefined,
-      { count: scope.outOfScope.length, paths: shown.join(', '), omitted: scope.outOfScope.length - shown.length });
-  }
+  if (scope.status === 'out-of-scope') throw new WorkspacePatchError('PATCH_SCOPE_VIOLATION', undefined, bounded(scope.outOfScope));
 }

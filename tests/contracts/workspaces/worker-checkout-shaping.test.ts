@@ -6,13 +6,13 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { GitWorkspaceBroker, applyAcceptedPredecessorPatches, completeHiddenBase, diffAgainstBase, hashAlgorithmOf, listBase, readBaseBlobs, readWorkspace,
   SnapshotBudget, type GitWorkspaceLease } from '#adapters/index.js';
-import { capturedWorkspacePatch, patchDigest, patchExclusions, patchFile, type WorkspacePatch } from '#engine/index.js';
+import { assertPatchScope, capturedWorkspacePatch, classifyPatchScope, patchDigest, patchExclusions, patchFile, type WorkspacePatch } from '#engine/index.js';
 import { workspacePathHidden } from '#domain/index.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
 
 /** C2 (owner Q4 2026-10-23, law-audit fold 5): a Cursor worker's checkout without the instruction surface yields the same patch as a full one. */
 const exec = promisify(execFile), roots: string[] = [], limits = { maxBytes: 1_048_576, maxEntries: 1000, maxDepth: 16, maxPathBytes: 512 };
-const HIDDEN = registry.adapters.cursor.capabilities.discovery!.checkout!.hiddenPaths;
+const HIDDEN = registry.instructionSurface.hiddenPaths;
 const BASE: Record<string, string> = { 'AGENTS.md': 'root agents\n', 'CLAUDE.md': '@DECKENT.md\n', 'DECKENT.md': 'terminal instructions\n',
   'lib/DECKENT.md': 'nested, not root: stays\n', 'lib/a.ts': 'export const a = 1;\n', 'sub/AGENTS.md': 'nested agents\n',
   '.agents/skills/x/SKILL.md': 'skill\n', '.cursor/rules/r.mdc': 'rule\n', '.claude/s.md': 'claude\n', '.deckent/worker-instructions.md': 'admitted snapshot source\n',
@@ -83,6 +83,17 @@ describe.skipIf(process.platform !== 'linux')('worker checkout shaping (C2): spa
     // A worker restoring hidden files with their base content (e.g. `git sparse-checkout disable`) is no change at all.
     for (const path of ['AGENTS.md', 'CLAUDE.md']) await writeFile(join(lease.workspace, path), BASE[path]!);
     expect((await capture(f, lease, HIDDEN)).changes.map(change => change.path)).toEqual(['.agents/added.md']);
+  });
+
+  it('G1: a sparse worker overwriting an instruction file it never saw is refused at delivery unless the task scope names it', async () => {
+    const f = await fixture(), lease = await f.allocate('sparse', HIDDEN);
+    await writeFile(join(lease.workspace, 'CLAUDE.md'), 'overwritten blind\n'); await writeFile(join(lease.workspace, 'src/code.ts'), 'export const code = 3;\n');
+    const patch = await capture(f, lease, HIDDEN);
+    expect(patch.changes.map(change => change.path)).toEqual(['CLAUDE.md', 'src/code.ts']);
+    const blind = classifyPatchScope(patch, ['src/**'], 'warn', HIDDEN);
+    expect(blind.instructionSurface).toEqual(['CLAUDE.md']);
+    expect(() => assertPatchScope(blind)).toThrow(expect.objectContaining({ code: 'PATCH_INSTRUCTION_SURFACE_WRITE' }));
+    expect(() => assertPatchScope(classifyPatchScope(patch, ['src/**', 'CLAUDE.md'], 'warn', HIDDEN))).not.toThrow();
   });
 
   it('starts a shaped attempt from predecessor patches, including one that changes a hidden path', async () => {

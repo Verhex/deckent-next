@@ -919,6 +919,8 @@ lead real-Docker rerun are tracked in `proof/BATCH32-2026-10-03/accept-r.md`; in
 - **Gates.** Patch prepare/preview and integration check always succeed and show the classification. In enforce, integration prepare refuses
   before the intent claim and delivery before the delivery claim: `PATCH_SCOPE_VIOLATION` (count, first 16 paths, omitted) or
   `PATCH_SCOPE_UNDECLARED`. No bypass flag; override = a new Run whose work input declares the paths. Published deliveries still settle.
+  Instruction-surface floor (alpha.53 G1, every mode and provider): a changed path in the Run's instruction surface (frozen checkout set, else
+  the registry `instructionSurface`) that the scope does not name exactly or by a literal `dir/**` inside it refuses first: `PATCH_INSTRUCTION_SURFACE_WRITE`.
 - **Versions.** Patch artifact v1, ledger 43, protocol 18, Run snapshot, task graph 3 unchanged; SDK/CLI results gain an additive `scope`;
   `execution.workTargets` schemaVersion 1 → 2 (v2 = v1 + optional `scope`; an older build refuses v2); error registry +2.
 - **Decided (owner 2026-10-01).** O1 (D9 C, Jev abee3e49): exact matching stays (`matcher 1` unchanged, a directory is `dir/**`); an

@@ -21,3 +21,13 @@ export function workspacePathHidden(path: string, hidden: readonly string[]): bo
   const parts = path.split('/');
   return hidden.some(entry => entry.startsWith('/') ? path === entry.slice(1) || path.startsWith(`${entry.slice(1)}/`) : parts.includes(entry));
 }
+
+/**
+ * G1: the changed paths inside the instruction surface `hidden` that `declared` (a task's K6 scope) does not name explicitly. Explicit is the
+ * exact path, or a wildcard-free `dir/**` whose `dir` is itself inside the surface (`.agents/**` names `.agents/x`); a glob or a parent
+ * directory that merely contains it (`**`, `src/**` for `src/AGENTS.md`) is never a grant. No declared scope grants nothing.
+ */
+export function instructionSurfaceWrites(paths: readonly string[], hidden: readonly string[], declared: readonly string[] | null): readonly string[] {
+  const directories = (declared ?? []).flatMap(entry => entry.endsWith('/**') && !/[*?]/u.test(entry.slice(0, -3)) && workspacePathHidden(entry.slice(0, -3), hidden) ? [`${entry.slice(0, -3)}/`] : []);
+  return Object.freeze(paths.filter(path => workspacePathHidden(path, hidden) && !declared?.includes(path) && !directories.some(dir => path.startsWith(dir))));
+}

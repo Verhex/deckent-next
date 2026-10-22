@@ -1949,7 +1949,8 @@
         "src/engine/core/policy",
         "src/capabilities/core/evaluation-evidence",
         "src/engine/core/audit",
-        "src/engine/core/delivery-summary"
+        "src/engine/core/delivery-summary",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "ISOLATION"
     },

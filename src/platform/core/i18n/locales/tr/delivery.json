@@ -49,6 +49,7 @@
   "delivery.flag.out-of-scope": "kapsam dışı değişiklik",
   "delivery.flag.scope-undeclared": "kapsam belirtilmemiş",
   "delivery.flag.protected-target": "korumalı hedef",
+  "delivery.flag.instruction-surface": "ajan talimat dosyaları kapsam dışında değişti",
   "delivery.action.publish-candidate": "sonuç yayımlanır",
   "delivery.action.nothing-published": "hiçbir şey yayımlanmaz",
   "delivery.action.move-target": "hedef bu sonuca taşınır",

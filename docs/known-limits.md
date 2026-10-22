@@ -159,7 +159,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   `CLAUDE.md`, `.agents`, `.claude`, `.codex`, `.cursor`, `DECKENT.md` and the worker file are absent from the worker's clone, with the
   same retained patch as a full checkout. The objects stay in the clone (`git show HEAD:AGENTS.md` works). The hidden-path list can be
   replaced per project only in a template's `invocation.discovery.hiddenPaths`; there is no CLI for it yet. `.claude`, `.codex`,
-  `.cursor` and `.deckent` were already excluded from patches. Queue verification keeps the full tree.
+  `.cursor` and `.deckent` were already excluded from patches. Queue verification keeps the full tree. A change to one of these
+  instruction paths by any worker is refused at delivery (`PATCH_INSTRUCTION_SURFACE_WRITE`) unless the task scope names the file, or
+  its directory as `dir/**`; the task itself still reads as accepted, and only the delivery or queue ticket is refused.
 
 ## Providers and subscriptions
 

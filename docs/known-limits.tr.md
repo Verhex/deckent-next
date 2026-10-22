@@ -160,7 +160,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   `AGENTS.md`, `CLAUDE.md`, `.agents`, `.claude`, `.codex`, `.cursor`, `DECKENT.md` ve işçi dosyası işçinin klonunda yoktur; tutulan yama
   tam checkout'la aynıdır. Nesneler klonda durur (`git show HEAD:AGENTS.md` çalışır). Gizlenen yol listesi proje başına yalnız şablonun
   `invocation.discovery.hiddenPaths` alanıyla değiştirilir; bunun için henüz CLI yoktur. `.claude`, `.codex`, `.cursor` ve `.deckent`
-  zaten yamalardan dışlanıyordu. Kuyruk doğrulaması tam ağacı korur.
+  zaten yamalardan dışlanıyordu. Kuyruk doğrulaması tam ağacı korur. Herhangi bir işçinin bu talimat yollarından birini değiştirmesi,
+  görev kapsamı dosyayı ya da klasörünü `dir/**` biçiminde adlandırmıyorsa teslimde reddedilir (`PATCH_INSTRUCTION_SURFACE_WRITE`);
+  görevin kendisi kabul edilmiş görünür, yalnız teslim ya da kuyruk bileti reddedilir.
 
 ## Sağlayıcılar ve abonelikler
 
