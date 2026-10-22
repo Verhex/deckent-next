@@ -16,7 +16,7 @@ Ayrıntılı sıra, dilimler, bağımlılıklar ve açık sorular [2026-10-15 yo
 
 | İş grubu | Neden / beta bağı | Durum | Sıradaki adım |
 |---|---|---|---|
-| Owner tam Deckent kullanımı (alpha.51 sonrası) | Kapı 1 ve dış proje kanıtı; owner komple Deckent ile çalışmaya geçiyor | alpha.51 canlı (2026-10-21 22:02Z); proje-wsl alpha.51'de; N1 dalga 8 ve 9 (10 iş, Deckent tek başına) benimsendi; toplu 2026-10-22 ile main'e | Owner test kontrol listesi; proje-wsl gözlemi; beta-süreci kararları |
+| Owner tam Deckent kullanımı (alpha.52 sonrası) | Kapı 1 ve dış proje kanıtı; owner komple Deckent ile çalışmaya geçiyor | alpha.52 canlı + N1 + proje-wsl (2026-10-22 20:21Z, CURSOR-ISCI); N1 dalga 8 ve 9 benimsendi ve main'de; Cursor kataloğu kaydı geçiş kalıcı olunca (owner kartı), sonra C7 | Owner test kontrol listesi; proje-wsl gözlemi; beta-süreci kararları |
 | Node 26 geçişi + beta adayı | Kapı 5; LTS 2026-10-28 sonrası tam doğrulama ve Astra + hosted CI | Planlandı (2026-10-28) | Node 26'da tam doğrulama → exact aday → owner'ın sekiz koşul kararı |
 | N1 50 görev + temiz kurulum provası | Kapı 4; lead yardımı/elle JSON olmadan init→/do→teslim | Açık; son sayım 2026-10-18: 20/50 Deckent tek başına | N1'de 50 gerçek görev; temiz WSL/Docker tam yolculuk + geri alma |
 | Owner terminal denemesi (Windows Terminal fare kopyalama dahil) | Kapı 1; /runs tuşları, /deliver, kuyruk benimseme, TERM-KOPYA-2 | Owner denemesini bekliyor | Hedefli kanıt → owner denemesi; Windows Terminal'de gerçek kopya testi |
@@ -91,13 +91,14 @@ Kural: bulgu triyajda sıraya ya da arşive gider; yalnız güvenlik/canlıyı b
     - Yedek sır adı üç yerde yazılı; tek kaynağa indirilsin (kaynak: S6FP HANDOFF).
     - Çalıştırma görünümü, kota yüzünden iptal edilen görevi "başlamadan önlendi" diye etiketlesin (kaynak: PRE7FU HANDOFF).
     - DOGFOOD-50-PORT: 41 benimseme main'e, alpha.51'den sonra ayrı PR (owner 2026-10-21).
-    - `n1-switch.sh` N1 teslim klonunu eşitlesin (RUNBOOK §6b; kaynak: alpha.51 geçiş notu).
+    - `n1-switch.sh` N1 teslim klonunu eşitler (yapıldı 2026-10-22; alpha.52 geçişinde c6c4c020 → 4166bfbd hızlı ileri aldı; kuyruk açıksa ya da ata değilse çıkış 6).
     - Dalga 8 yeniden koşusu alpha.51'den sonra (kaynak: alpha.50 takipleri). Tur iptali etkisi için bkz. IPTAL-ETKI-DOGRULUGU.
     - known-limits `runtime restart` satırında 'environment never read' yerine 'target service process environment is not read' ifadesi tercih edilsin (Astra 2714, engelleyici değil).
     - `secret handover` yalnız terminal tanığıyla korunuyor; mühürlü `secret-handover` kararı (politika hücresi + audit) beta adayı (Astra 2702 açık sorusu; HANDOFF-PRE8 REVISE 2702).
     - TESLIM-KARTI-OZET (owner 2026-10-22, OTONOM-TESLIM ile betada): teslim/benimseme kartı bilet kimliği ve dosya yolu gösteriyor; insan karar veremiyor. Her iş için tek satır sonuç (ne çözdü), kabul kanıtı ve risk sınıfı; ERP onayında da aynı kart.
     - MONITOR-ETKILESIM (owner 2026-10-22, beta monitor düzenlemesine girdi): `deckent monitor` gelen kutusu ve onaylar etkileşimli değil; owner N1 w8a işçi sorusunu monitorden cevaplayamadı ve işçinin içine giremedi (cevap yalnız terminal/CLI `run resume`; işçiye girme = Sıradaki 16 AGENT-TAKEOVER).
 - **CURSOR-ISCI sonrası (2026-10-22, alpha.52):** PRE-3'ün Cursor kısmı (deneme "devam ediyor"da takılmaz) ve BETA-SAGLAYICI-GOZLEM'in Cursor kısmı CURSOR-ISCI ile alpha.52'de kodda ve testte; kapanış canlı kabule bağlı: C7 = N1'de konteynerde gerçek bir Cursor kartı uçtan uca (tur/token/model sonucu/rapor/benimseme), katalog kaydı geçiş kalıcı olduktan sonra.
+- **alpha.52 sonrası bulgular (2026-10-22):** (1) Docker kontrol hatası bir konteyneri `created` durumunda bırakabilir: `cancel()` yalnız running/paused olanı durdurur (`docker-supervisor/internal/docker.ts:97-100`), `release()` `SUPERVISOR_NOT_TERMINAL` verir (`:282`) — sızıntı mı, çözülmemiş sahiplik mi; (2) DOCKER-PROBE-CI-FLAKE: barındırılan CI'da Docker sınaması iki ayrı testte geçici düştü (main run 39847787975 deneme 1–2), kök neden aranıyor; (3) alpha.52 → alpha.51 dönüşü Cursor kaydından sonra yalnız yedekten; geçiş aracının veri biçimine bakan bir dönüş kontrolü gerekir mi (owner notu).
     - Cursor yeniden adlandırması → tutulan denemeler: erken tespit (araç zinciri yeniden ölçümü ya da monitor ipucu); aksi halde güncellemeden sonra o modeldeki her Cursor denemesi `unverified` tutulur (known-limits).
     - Araç zinciri otomatik güncellemesi taban imajdaki Node güvenlik sürümlerini izlemiyor.
     - proje-wsl monitor "başlamadan önce yapılandırma değişti" ile kendi `describe` güncel çıktısı çelişiyor.
