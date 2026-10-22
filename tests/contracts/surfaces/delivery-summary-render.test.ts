@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AUTONOMY_HOLD_REASONS, DELIVERY_MODEL_VERDICTS, DELIVERY_RISK_FLAGS, DELIVERY_SUMMARY_ACTIONS, deliverySummarySchema, queueCommandIds, targetQueueViewSchema,
+import { AUTONOMY_HOLD_REASONS, DELIVERY_MODEL_VERDICTS, DELIVERY_RISK_FLAGS, DELIVERY_SUMMARY_ACTIONS, deliverySummarySchema, targetQueueViewSchema,
   type DeliverySummary } from '#engine/index.js';
 import { MESSAGE_KEYS } from '#platform/index.js';
 import { consentSummaryLines, consentSummaryOperation, queueSummaryRequest, readConsentSummaries, renderAutonomyShadow, renderDeliverySummary, summaryListCells,
@@ -101,7 +101,7 @@ describe('delivery card helpers (alpha.53 A3)', () => {
     basis: { observed: 'o', effective: 'e', candidate: 'c' }, verification: null, evidenceRefs: [], reason: null, ...over });
   it('a queue ticket asks for its own verification Run and the git verdict the ticket already carries (protected / passed preparation / unknown)', () => {
     expect(queueSummaryRequest(view(), 8)).toEqual({ schemaVersion: 1, identity, operation: 'adopt', target: { id: 'refs/heads/integration', protected: false },
-      verificationRunId: queueCommandIds({ request: { identity, commandId: 'q1' } } as never).verificationRun, topPaths: 8 });
+      verificationRunId: null, ticketCommandId: 'q1', topPaths: 8 });
     expect(queueSummaryRequest(view({ basis: null }), 8).target).toEqual({ id: 'refs/heads/integration', protected: null });
     expect(queueSummaryRequest(view({ basis: null, state: 'settled', outcome: 'target-protected', nextAction: 'select-target' }), 8).target?.protected).toBe(true);
     expect(queueSummaryRequest(view({ operation: 'rollback' }), 8).operation).toBe('rollback');
@@ -111,9 +111,8 @@ describe('delivery card helpers (alpha.53 A3)', () => {
   it('consent summaries keep item order; an unreadable ticket is null; a failed reader degrades to nulls; no paths are asked for', async () => {
     const consent = { operation: 'publish' as const, items: ['q1', 'gone', 'q3'].map(commandId => ({ commandId, from: 'a', to: 'b', candidateDigest: 'c'.repeat(64), verificationReceipt: 'd'.repeat(64), changes: [] })) };
     const asked: unknown[] = [], inspect = async (id: string) => id === 'gone' ? null : view({ commandId: id });
-    const read = await readConsentSummaries(consent, inspect, async requests => { asked.push(...requests); return requests.map(request => summary({ title: { source: 'work-input', text: request.verificationRunId! } })); });
-    expect(read.map(row => row?.title)).toEqual([{ source: 'work-input', text: queueCommandIds({ request: { identity, commandId: 'q1' } } as never).verificationRun }, undefined,
-      { source: 'work-input', text: queueCommandIds({ request: { identity, commandId: 'q3' } } as never).verificationRun }]);
+    const read = await readConsentSummaries(consent, inspect, async requests => { asked.push(...requests); return requests.map(request => summary({ title: { source: 'work-input', text: request.ticketCommandId! } })); });
+    expect(read.map(row => row?.title)).toEqual([{ source: 'work-input', text: 'q1' }, undefined, { source: 'work-input', text: 'q3' }]);
     expect(read[1]).toBeNull(); expect(asked).toMatchObject([{ operation: 'deliver', topPaths: 0 }, { operation: 'deliver', topPaths: 0 }]);
     expect(await readConsentSummaries(consent, inspect, async () => { throw new Error('ledger-gone'); })).toEqual([null, null, null]);
     expect(await readConsentSummaries(consent, async () => { throw new Error('socket'); }, async () => { throw new Error('not-called'); })).toEqual([null, null, null]);
