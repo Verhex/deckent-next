@@ -239,22 +239,22 @@ export class DockerSupervisor implements ExecutionSupervisor {
   }
   /** PRE-7: one environment probe on the worker's floor (same image, user, `--network none`, sandbox flags, tmpfs, Node heap environment and
    * re-checked read-only dependency binds), without the workspace and never the connection: no credential, no model. `argv` comes only from
-   * an adapter's probe-kind registry. Exit 0 = met, any other exit = unmet, past `timeoutMs` unmet — but only once the container is removed
-   * and observed absent (a deadline stops the CLI, not the container). REVISE 2691: a leftover of the same identity (crashed controller) is
+   * an adapter's probe-kind registry. Exit 0 = met, any other exit = unmet, stopped by its own `timeoutMs` = `timed-out` (no answer: E1,
+   * never unmet) — each only once the container is removed and observed absent (a deadline stops the CLI, not the container). REVISE 2691: a leftover of the same identity (crashed controller) is
    * removed first; whenever removal cannot be proven the answer is `uncertain` with the container name and no new container is started.
    * A daemon refusal (exit 125) or an unclassified failure with the container proven gone stays a control failure (transient). */
-  async probe(input: SandboxRequest, argv: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<'met' | 'unmet' | Readonly<{ uncertain: string }>> {
+  async probe(input: SandboxRequest, argv: readonly string[], timeoutMs: number, signal?: AbortSignal): Promise<'met' | 'unmet' | 'timed-out' | Readonly<{ uncertain: string }>> {
     const { digest } = this.identity(input), o = this.options, { name, root } = this.probeIdentity(input, argv), mounts: string[] = [];
     for (const mount of o.readOnlyMounts ?? []) { await assertReadOnlyMountSource(mount.source, [resolve(o.workspaceRoot)]); mounts.push('--mount', `type=bind,src=${mount.source},dst=${mount.target},readonly`); }
     const leftover = await this.command(['inspect', '--format', '{{.Id}}', name], o.controlTimeoutMs).then(() => true, (error: unknown) => !(error instanceof DockerCommandFailure && error.stderr.toLowerCase().includes('no such object: ' + name)));
     if (leftover && !await this.gone(name)) return Object.freeze({ uncertain: name });
-    let answer: 'met' | 'unmet' | null = null;
+    let answer: 'met' | 'unmet' | 'timed-out' | null = null;
     try {
       await this.command(['run', '--name', name, '--label', 'deckent.preflight=' + digest, '--label', 'deckent.preflight.root=' + root, '--network', 'none', ...this.floor(), '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
         ...mounts, ...dockerNodeHeapEnvironment(o.memoryBytes), '--workdir', '/tmp', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], timeoutMs, signal);
       answer = 'met';
     } catch (error) {
-      if (error instanceof DockerCommandFailure && (error.stop === 'deadline' || (typeof error.code === 'number' && error.code !== DOCKER_RUN_DAEMON_FAILURE))) answer = 'unmet';
+      if (error instanceof DockerCommandFailure) answer = error.stop === 'deadline' ? 'timed-out' : typeof error.code === 'number' && error.code !== DOCKER_RUN_DAEMON_FAILURE ? 'unmet' : null;
     }
     if (!await this.gone(name)) return Object.freeze({ uncertain: name });
     if (answer === null) throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');

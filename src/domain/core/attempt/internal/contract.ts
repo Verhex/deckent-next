@@ -15,6 +15,9 @@ export const ATTEMPT_PROTOCOL_VERSION = 1;
 export const ENVIRONMENT_NOT_READY_CODE = 'EXECUTION_ENVIRONMENT_NOT_READY';
 /** REVISE 2691: the preflight could not prove its probe container gone; nothing launched, the requirement's probe stays the owner. */
 export const ENVIRONMENT_UNCERTAIN_CODE = 'EXECUTION_ENVIRONMENT_UNCERTAIN';
+/** E1: a probe its own deadline stopped (container proven gone) gave no answer. Never recorded on an attempt: the Run is held through the
+ * existing progression park with this code, and the operator re-runs it explicitly; an exit or missing answer stays ENVIRONMENT_NOT_READY. */
+export const ENVIRONMENT_TIMED_OUT_CODE = 'EXECUTION_ENVIRONMENT_TIMED_OUT';
 export const attemptIdentitySchema = z.object({
   runId: identity, taskId: identity, attemptId: identity,
   scopeId: identity, layoutRevision: identity, generation: counter.positive(),

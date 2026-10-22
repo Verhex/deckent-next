@@ -12,6 +12,12 @@ it('an environment refusal reads as a Run parked for its environment, naming the
   const uncertain = ErrorRegistry.createError('EXECUTION_ENVIRONMENT_UNCERTAIN', { params: { requirement: 'tsc', kind: 'executable', probe: 'deckent-env-abc' } });
   expect(runProgressionErrorText(query, uncertain, 'en')).toContain('demo/r1: Run parked for its environment: the probe for requirement tsc could not be proven removed (deckent-env-abc)');
   expect(runProgressionErrorText(query, uncertain, 'tr')).toContain('deckent-env-abc'); expect(runProgressionErrorText(query, uncertain, 'tr')).not.toContain('could not continue');
+  // E1: a probe stopped by its deadline holds the Run for an explicit re-run; it is named so, never as an installation defect.
+  const timedOut = ErrorRegistry.createError('EXECUTION_ENVIRONMENT_TIMED_OUT', { params: { requirement: 'tsc', kind: 'executable' } });
+  expect(runProgressionErrorText(query, timedOut, 'en')).toContain('demo/r1: Run held: the environment check for requirement tsc timed out');
+  expect(runProgressionErrorText(query, timedOut, 'en')).toContain('deckent run resume'); expect(runProgressionErrorText(query, timedOut, 'en')).not.toContain('installation defect');
+  expect(runProgressionErrorText(query, timedOut, 'tr')).toContain('demo/r1: Run bekletildi: tsc gereksiniminin ortam sınaması zaman aşımına uğradı');
+  expect(runProgressionErrorText(query, timedOut, 'tr')).not.toContain('kurulum kusuru');
   const other = ErrorRegistry.createError('EXECUTION_NOT_CONFIGURED');
   expect(runProgressionErrorText(query, other, 'en')).toContain('Run progression could not continue: EXECUTION_NOT_CONFIGURED');
 });

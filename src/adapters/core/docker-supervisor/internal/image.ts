@@ -7,9 +7,14 @@ const imageDigest = /^sha256:[a-f0-9]{64}$/;
 const boundedPositive = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value > 0 && value <= 0x7fffffff;
 
 export type DockerImageProbeErrorCode = 'DOCKER_IMAGE_PROBE_INVALID' | 'DOCKER_IMAGE_PROBE_UNAVAILABLE' | 'DOCKER_IMAGE_PROBE_CHANGED';
+/** E1: the bounded kind of the failed step behind UNAVAILABLE — its own deadline, a non-zero exit, a caller's stop, or an answer that could
+ * not be read as the exact expected value. Absent when the failure is unclassified (never a guess); Docker's own text never leaves. */
+export type DockerImageProbeCause = 'deadline' | 'exit' | 'signal' | 'parse';
 export class DockerImageProbeError extends Error {
-  constructor(readonly code: DockerImageProbeErrorCode) { super(code); this.name = 'DockerImageProbeError'; }
+  constructor(readonly code: DockerImageProbeErrorCode, readonly probeCause?: DockerImageProbeCause) { super(code); this.name = 'DockerImageProbeError'; }
 }
+const commandCause = (error: unknown): DockerImageProbeCause | undefined =>
+  error instanceof DockerCommandFailure ? error.stop ?? (typeof error.code === 'number' ? 'exit' : undefined) : undefined;
 export interface DockerImageAvailabilityProbeInput {
   readonly executable: string;
   readonly timeoutMs: number;
@@ -31,15 +36,15 @@ function validInput(input: unknown, rest: (value: Record<string, unknown>) => bo
 }
 function daemonId(output: string): string {
   const value = output.trim();
-  if (!identitySchema.safeParse(value).success) throw new DockerImageProbeError('DOCKER_IMAGE_PROBE_UNAVAILABLE');
+  if (!identitySchema.safeParse(value).success) throw new DockerImageProbeError('DOCKER_IMAGE_PROBE_UNAVAILABLE', 'parse');
   return value;
 }
 type DockerArgs = (args: readonly string[], signal?: AbortSignal) => Promise<DockerCommandOutput>;
-/** Endpoint pin and daemon-id reads shared by the single and the list probe; every failure is UNAVAILABLE (no raw Docker text leaves). */
+/** Endpoint pin and daemon-id reads shared by the single and the list probe; every failure is UNAVAILABLE with its bounded cause (no raw Docker text leaves). */
 function pinned(run: DockerArgs) {
-  const command: DockerArgs = async (args, signal) => { try { return await run(args, signal); } catch { throw new DockerImageProbeError('DOCKER_IMAGE_PROBE_UNAVAILABLE'); } };
+  const command: DockerArgs = async (args, signal) => { try { return await run(args, signal); } catch (error) { throw new DockerImageProbeError('DOCKER_IMAGE_PROBE_UNAVAILABLE', commandCause(error)); } };
   const endpoint = command(['context', 'inspect', '--format', '{{json .Endpoints.docker}}']).then(output => dockerEndpointSchema.parse(JSON.parse(output.stdout).Host))
-    .catch((error: unknown) => { throw error instanceof DockerImageProbeError ? error : new DockerImageProbeError('DOCKER_IMAGE_PROBE_UNAVAILABLE'); });
+    .catch((error: unknown) => { throw error instanceof DockerImageProbeError ? error : new DockerImageProbeError('DOCKER_IMAGE_PROBE_UNAVAILABLE', 'parse'); });
   return { command, endpoint, daemon: async (host: string) => daemonId((await command(['--host', host, 'info', '--format', '{{.ID}}'])).stdout) };
 }
 
@@ -50,7 +55,7 @@ export async function probeDockerImageAvailability(input: unknown,
   const { command, endpoint: pin, daemon } = pinned(args => runner({ executable: input.executable, args, timeoutMs: input.timeoutMs, outputBytes: input.outputBytes }));
   const endpoint = await pin, before = await daemon(endpoint);
   const inspected = (await command(['--host', endpoint, 'image', 'inspect', input.imageId, '--format', '{{.Id}}'])).stdout.trim();
-  if (inspected !== input.imageId) throw new DockerImageProbeError('DOCKER_IMAGE_PROBE_UNAVAILABLE');
+  if (inspected !== input.imageId) throw new DockerImageProbeError('DOCKER_IMAGE_PROBE_UNAVAILABLE', 'parse');
   if (before !== await daemon(endpoint)) throw new DockerImageProbeError('DOCKER_IMAGE_PROBE_CHANGED');
   return Object.freeze({ endpoint, daemonId: before, imageId: input.imageId, status: 'locally-available' });
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path'; import { constants } from 'node:fs'; import { open } from 'node:fs/promises';
 import { prepareProductDirectory, ErrorRegistry, getConfigKnownSecrets, jsonRecordDirectory, pathsShareTree, type ConfigLoadOptions } from '#platform/index.js';
@@ -128,6 +129,11 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
         // A permanent refusal before any dispatch claim closes the attempt once (no launch, no effect); transient ones keep the turn's backoff.
         const refusal = classifyLaunchRefusal(error);
         if (refusal.disposition === 'permanent' && !await store.loadBoundDispatch(identity)) await recordAttemptClosure(store, identity, { kind: 'launch-refused', code: refusal.code, ...(refusal.requirement ? { requirement: refusal.requirement } : {}), ...(refusal.probe ? { probe: refusal.probe } : {}) }, actor);
+        // E1: a held refusal (no answer) holds a running Run through the existing progression park; a park that does not commit (already
+        // parked, cancelled, contended) leaves the typed refusal to the runtime's bounded failure path, which parks with the same code.
+        const run = refusal.disposition === 'held' ? await store.loadRun(identity.scopeId, identity.runId) : null;
+        if (refusal.disposition === 'held' && run?.state.kind === 'running' && !run.cancelRequested) await parkConfiguredRunProgression(projectRoot, { schemaVersion: 1,
+          scopeId: identity.scopeId, runId: identity.runId, commandId: randomUUID(), expectedRevision: run.revision, failureCode: refusal.code }, options).catch(() => undefined);
       }
       throw error;
     } finally { await preparation.settle(); store.close(); }

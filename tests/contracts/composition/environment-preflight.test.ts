@@ -143,6 +143,37 @@ it('REVISE 2691: a probe whose end cannot be proven is uncertain: nothing launch
   } finally { f.store.close(); }
 }, 120_000);
 
+it('E1: a probe stopped by its deadline holds the Run (no answer, not an installation defect): nothing launches or closes, no automatic re-probe, an explicit resume probes again and launches', async context => {
+  const f = await fixture(context, REQUIREMENTS);
+  try {
+    await writeFile(join(f.project, 'deps/marker.txt'), 'present\n');
+    const execute = vi.spyOn(DockerSupervisor.prototype, 'execute'), probe = vi.spyOn(DockerSupervisor.prototype, 'probe').mockResolvedValueOnce('timed-out');
+    const identity = await reserve(f, 0);
+    await expect(executeConfiguredTask(f.project, identity, f.options)).rejects.toMatchObject({ code: 'EXECUTION_ENVIRONMENT_TIMED_OUT', params: { requirement: 'node', kind: 'executable' } });
+    expect(probe).toHaveBeenCalledTimes(1); expect(execute).not.toHaveBeenCalled(); expect(await f.store.loadBoundDispatch(identity)).toBeNull();
+    // Nothing is recorded on the attempt (its record shape is the previous release's); the Run is held through the existing progression park.
+    expect((await f.store.load('s', identity.attemptId))!.lastObservation).toBeNull();
+    const held = (await f.store.loadRun('s', 'r'))!;
+    expect(held.state).toMatchObject({ kind: 'parked', reason: 'progression-failed', failureCode: 'EXECUTION_ENVIRONMENT_TIMED_OUT' });
+    expect(held.progress[0]).toMatchObject({ phase: 'active', unresolvedEffects: false }); expect(held.bindings[0]).not.toHaveProperty('probes');
+    // No automatic retry: turns while held start nothing.
+    for (let turn = 0; turn < 2; turn++) expect((await advanceConfiguredRun(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, new AbortController().signal, f.options)).attempted).toBe(0);
+    expect(probe).toHaveBeenCalledTimes(1);
+    for (const [locale, words, not] of [['en', 'Environment check timed out', 'installation defect'], ['tr', 'Ortam sınaması zaman aşımına uğradı', 'kurulum kusuru']] as const) {
+      const output: string[] = [];
+      await runCommand(['run', 'inspect', '--scope', 's', '--id', 'r', '--lang', locale], { root: f.project, env: f.options.env, stdout: { write(text: string) { output.push(text); } }, inspectRun: inspectConfiguredRun });
+      expect(output.join('')).toContain(words); expect(output.join('')).toContain('deckent run resume'); expect(output.join('')).not.toContain(not);
+      const once = (await loadMonitorSurface()).renderMonitorText(await inspectMonitor(f.project, f.options), { locale, width: 240, ascii: true });
+      expect(once).toContain(locale === 'en' ? 'environment check timed out' : 'ortam sınaması zaman aşımına uğradı'); expect(once).not.toContain('EXECUTION_ENVIRONMENT_TIMED_OUT');
+    }
+    // The explicit re-run: the same reserved attempt is prepared again and its preflight runs again (real probes now), then the worker launches.
+    await applyConfiguredRunLifecycle(f.project, { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'resume', action: 'resume', expectedRevision: held.revision }, f.options);
+    const result = await executeConfiguredTask(f.project, identity, f.options);
+    expect(result.execution).toMatchObject({ terminal: { exitCode: 0 } }); expect(probe).toHaveBeenCalledTimes(3); expect(execute).toHaveBeenCalledTimes(1);
+    expect(await preflightContainers(probe)).toBe('');
+  } finally { f.store.close(); }
+}, 120_000);
+
 it('REVISE 2693: an uncertain probe keeps its pool slot (capacity 1): another Run cannot reserve, cancel and restart-time unproven checks release nothing, the proven removal releases it exactly once', async context => {
   const f = await fixture(context, REQUIREMENTS);
   try {
