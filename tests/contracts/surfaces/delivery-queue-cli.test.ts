@@ -7,7 +7,7 @@ import { queueCommand, renderQueueList } from '#surfaces/core/delivery-queue/ind
 import { DELIVERY_RENDER_LIMITS } from '#surfaces/core/delivery-summary/index.js';
 import { renderQueueConsent } from '#surfaces/core/effect-confirmation/index.js';
 import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
-import { queueTicketCommandIds, targetQueueViewSchema } from '#engine/index.js';
+import { targetQueueViewSchema } from '#engine/index.js';
 import { deliverySummaryFixture } from '../support/delivery-summary-fixture.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { homeEnv } from '../support/host-platform.js';
@@ -240,7 +240,7 @@ describe('delivery queue CLI card summaries (alpha.53 A3)', () => {
     expect(lines).toContain('Rule off · would have held: target unknown');
     expect(lines.indexOf('Rule off · would have held: target unknown')).toBeLessThan(lines.findIndex(line => line.startsWith('Target — ')));
     expect(p.requests).toEqual([{ schemaVersion: 1, identity: sampleView('q1').identity, operation: 'adopt', target: { id: 'refs/heads/main', protected: null },
-      verificationRunId: queueTicketCommandIds('s', 'q1').verificationRun, topPaths: DELIVERY_RENDER_LIMITS.cardTopPaths }]);
+      verificationRunId: null, ticketCommandId: 'q1', topPaths: DELIVERY_RENDER_LIMITS.cardTopPaths }]);
     expect(p.shadows).toEqual(['s/q1']);
   });
   it('enqueue and rollback results show the summary but never the shadow line', async () => {

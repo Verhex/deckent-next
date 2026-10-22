@@ -11,7 +11,9 @@ import { projectDeliverySummary } from './projector.js';
 /** What the caller already knows about the card: operation, the target as its adapter registered it, and the system verification Run if any. */
 export const deliverySummaryRequestSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema, operation: deliverySummaryOperationSchema,
   target: z.object({ id: z.string().min(1).max(4096), protected: z.boolean().nullable() }).strict().nullable(),
-  verificationRunId: identitySchema.nullable(), topPaths: z.number().int().nonnegative().safe().optional() }).strict().readonly();
+  verificationRunId: identitySchema.nullable(), topPaths: z.number().int().nonnegative().safe().optional(),
+  /** A queue ticket's command id: the host derives its verification Run id (surfaces never load the queue naming code). */
+  ticketCommandId: identitySchema.optional() }).strict().readonly();
 export type DeliverySummaryRequest = z.infer<typeof deliverySummaryRequestSchema>;
 /** The target adapter's change filler; null = no change evidence. A policy refusal it throws becomes `withheld`. */
 export type DeliveryChangeSource = (identity: AttemptIdentity, principal: VerifiedPrincipal) => Promise<DeliveryChangeFacts | null>;

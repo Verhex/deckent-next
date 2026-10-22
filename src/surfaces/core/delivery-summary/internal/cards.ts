@@ -1,6 +1,6 @@
 import { t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { queueTicketCommandIds, type AutonomyEvaluation, type DeliverySummary, type DeliverySummaryOperation, type DeliverySummaryRequest, type QueueConsent,
-  type TargetQueueView } from '#engine/index.js';
+import type { AutonomyEvaluation, DeliverySummary, DeliverySummaryOperation, DeliverySummaryRequest, QueueConsent,
+  TargetQueueView } from '#engine/index.js';
 import { renderAutonomyShadow, renderDeliverySummary, type DeliveryRenderOptions } from './render.js';
 import limits from './limits.json' with { type: 'json' };
 
@@ -22,7 +22,7 @@ export type AutonomyShadowReader = (root: string, scopeId: string, commandId: st
 export function queueSummaryRequest(view: TargetQueueView, topPaths: number, operation?: DeliverySummaryOperation): DeliverySummaryRequest {
   return { schemaVersion: 1, identity: view.identity, operation: operation ?? (view.operation === 'rollback' ? 'rollback' : 'adopt'),
     target: { id: view.target.id, protected: view.outcome === 'target-protected' ? true : view.basis !== null ? false : null },
-    verificationRunId: queueTicketCommandIds(view.identity.scopeId, view.commandId).verificationRun, topPaths };
+    verificationRunId: null, ticketCommandId: view.commandId, topPaths };
 }
 export const consentSummaryOperation = (operation: QueueConsent['operation']): DeliverySummaryOperation => operation === 'publish' ? 'deliver' : operation;
 /**

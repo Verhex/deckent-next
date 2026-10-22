@@ -1,7 +1,7 @@
 import { ArtifactError } from '#capabilities/index.js';
 import { inspectProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { FileArtifactStore, openSqliteInventoryReader, selectWorkTarget } from '#adapters/index.js';
-import { DeliverySummaryApplication, RunPolicyAuthorization, WorkspacePatchApplication, WorkspacePatchError, deliverySummaryRequestSchema, workspacePatchChangeFacts,
+import { DeliverySummaryApplication, RunPolicyAuthorization, queueTicketCommandIds, WorkspacePatchApplication, WorkspacePatchError, deliverySummaryRequestSchema, workspacePatchChangeFacts,
   type DeliverySummary, type DeliverySummaryRequest } from '#engine/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -15,7 +15,8 @@ const DENIED = new Set(['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'APPROVA
  */
 export async function describeConfiguredDeliverySummaries(root: string, input: readonly DeliverySummaryRequest[], options: ConfigLoadOptions = {}): Promise<readonly (DeliverySummary | null)[]> {
   try {
-    const requests = input.map(request => deliverySummaryRequestSchema.parse(request)), out: (DeliverySummary | null)[] = requests.map(() => null);
+    const requests = input.map(request => deliverySummaryRequestSchema.parse(request)).map(({ ticketCommandId, ...request }) => ticketCommandId === undefined
+      || request.verificationRunId !== null ? request : { ...request, verificationRunId: queueTicketCommandIds(request.identity.scopeId, ticketCommandId).verificationRun }), out: (DeliverySummary | null)[] = requests.map(() => null);
     for (const scopeId of new Set(requests.map(request => request.identity.scopeId))) {
       const c = await loadConfiguredScopeContext(root, scopeId, options, 'read');
       const reader = await openSqliteInventoryReader(await c.path(), { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });

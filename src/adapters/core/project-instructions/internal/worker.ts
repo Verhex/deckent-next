@@ -1,4 +1,4 @@
-import { normalizeGlobalScopePlatform, prepareProductDirectory, resolveGlobalScopePaths, resolveProductLayout, type KnownSecretSnapshot } from '#platform/index.js';
+import { normalizeGlobalScopePlatform, prepareProductDirectory, resolveGlobalScopePaths, resolveProductLayout, type CoreConfig, type KnownSecretSnapshot } from '#platform/index.js';
 import type { ProjectInstructionView } from '#engine/index.js';
 import { openProjectInstructionReader } from './files.js';
 import REGISTRY from './registry.json' with { type: 'json' };
@@ -19,7 +19,8 @@ export async function openWorkerInstructionTrust(root: string, env: NodeJS.Proce
   return openProjectInstructionReader(root, await trustDirectory(env), known, [file]);
 }
 
-export type WorkerInstructionSource = keyof typeof REGISTRY.workerSources;
+/** The file-backed sources of the config enum (published declarations must not reference the JSON module; `none` has no file). */
+export type WorkerInstructionSource = Exclude<NonNullable<NonNullable<NonNullable<CoreConfig['execution']>['workerInstructions']>['source']>, 'none'>;
 export type WorkerInstructionWithheld = Readonly<{ source: WorkerInstructionSource; reason: 'absent' | 'untrusted' | 'size' | 'unsafe' | 'unreadable'; digest: string | null }>;
 /** Registry data maps a per-project selection to exactly one workspace-root file; CLAUDE.md is never a worker source. */
 export const workerInstructionFile = (source: WorkerInstructionSource) => REGISTRY.workerSources[source];

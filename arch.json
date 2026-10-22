@@ -2914,7 +2914,8 @@
         "src/engine/core/project-instructions",
         "src/platform/core/redaction",
         "src/platform/core/host",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/platform/core/config"
       ],
       "plan": "SURFACES"
     },
@@ -2965,7 +2966,6 @@
         "src/platform/core/output",
         "src/surfaces/core/cli-human",
         "src/platform/core/config",
-        "src/engine/core/workspace-patch",
         "src/engine/core/effect"
       ],
       "plan": "SURFACES"
