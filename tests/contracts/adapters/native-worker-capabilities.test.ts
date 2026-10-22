@@ -46,6 +46,8 @@ describe('registry capability routing in the mounted worker, without a provider 
     // An unknown key under strict config draws a different refusal; a CLI that accepts the value never refuses: both stop before credentials.
     expect(() => worker.nativePreflightCapabilities(capabilities, disabled, cli({ ...known, 'key.two=probe': 'unknown configuration field `key.two`' }).run)).toThrow();
     expect(() => worker.nativePreflightCapabilities(capabilities, disabled, cli({ ...known, 'key.one=probe': null }).run)).toThrow();
+    // Disabled discovery on a CLI without a discovery capability fails closed.
+    expect(() => worker.nativePreflightCapabilities(base, disabled, cli(known).run)).toThrow();
     // Repository discovery (and a preflight recorded before the mode was carried) runs no discovery probe.
     for (const mode of [{ discovery: 'repository' }, {}]) {
       const plain = cli({}); expect(worker.nativePreflightCapabilities(capabilities, { ...preflight, requiredFlags: ['--strict-config'], ...mode }, plain.run)).toBe(false);

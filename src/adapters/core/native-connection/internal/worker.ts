@@ -660,7 +660,7 @@ export function nativePreflightCapabilities(capabilities: NativeWorkerCapabiliti
     if (help.includes(flag)) return false;
     const probe = capabilities.maxTurns?.hiddenHelpProbe;
     return !(flag === capabilities.maxTurns?.flag && probe && refuses(run, probe));
-  }) || (preflight.discovery === 'disabled' && capabilities.discovery?.hiddenProbes.some(probe => !refuses(run, probe)))) throw new Error();
+  }) || (preflight.discovery === 'disabled' && (!capabilities.discovery || capabilities.discovery.hiddenProbes.some(probe => !refuses(run, probe))))) throw new Error();
   // A flagless channel (`final-text-json`) needs no help flag: the schema rides in the prompt.
   const report = capabilities.structuredReport;
   return report !== null && (report.flag === null || help.includes(report.flag));
