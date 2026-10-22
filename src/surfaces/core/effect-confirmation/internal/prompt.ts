@@ -17,9 +17,11 @@ export async function askDeliveryConfirmation(view: EffectConfirmationView, loca
     files: view.files.slice(0, preview.maxFiles).map(text).join('\n'), omitted: Math.max(0, view.files.length - preview.maxFiles) }, locale) + '\n');
   return askLine(locale, input, output, control);
 }
+/** `summary`: TESLIM-KARTI-OZET lines written ABOVE the exact card (the card and its digest stay unchanged); a consent card never carries a shadow line. */
 export async function askQueueConfirmation(view: Omit<QueueConsent, 'capability'>, locale: Locale,
-  input: Readable = process.stdin, output: Writable = process.stderr, control: { readonly timeoutMs?: number; readonly signal?: AbortSignal } = {}): Promise<boolean> {
+  input: Readable = process.stdin, output: Writable = process.stderr, control: { readonly timeoutMs?: number; readonly signal?: AbortSignal; readonly summary?: readonly string[] } = {}): Promise<boolean> {
   if (!(input as { isTTY?: boolean }).isTTY) throw ErrorRegistry.createError('DELIVERY_INTERACTIVE_REQUIRED');
+  if (control.summary?.length) output.write(control.summary.map(text).join('\n') + '\n');
   output.write(renderQueueConsent(view, locale) + '\n');
   // The adoption card moves a branch: its question says so; publication keeps the reference-write question.
   return askLine(locale, input, output, control, view.operation === 'adopt' ? t('queue.confirm.adoptPrompt', { branch: text(view.target.id) }, locale) : undefined);

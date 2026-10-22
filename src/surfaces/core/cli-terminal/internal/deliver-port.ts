@@ -1,8 +1,10 @@
 import { loadConfig, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import type { AttemptIdentity } from '#domain/index.js';
-import type { WorkspacePatch } from '#engine/index.js';
+import type { DeliverySummaryRequest, WorkspacePatch } from '#engine/index.js';
+import { queueSummaryRequest, readConsentSummaries, DELIVERY_RENDER_LIMITS } from '#surfaces/core/delivery-summary/index.js';
 import type { InventoryQueryHandler } from '#surfaces/core/monitor/index.js';
 import type { DeliveryFileDiff, DeliveryFileStat, TerminalDeliveryPort, VerificationCandidate } from '#surfaces/core/terminal-delivery/index.js';
+import type { TargetQueueView } from '#engine/index.js';
 import type { TerminalLaunchContext } from './context.js';
 import PORT from './deliver-port.json' with { type: 'json' };
 
@@ -63,6 +65,9 @@ export function patchDiffs(changes: WorkspacePatch['changes'], render: (path: st
 export function terminalDeliveryPort(root: string, context: TerminalLaunchContext, options: ConfigLoadOptions): TerminalDeliveryPort | undefined {
   const { inspectInventory, previewWorkspacePatch, checkWorkspaceIntegration, prepareWorkspaceIntegration, renderUnifiedDiff, interactiveDelivery, inspectRun } = context;
   if (!inspectInventory || !previewWorkspacePatch || !checkWorkspaceIntegration || !prepareWorkspaceIntegration || !renderUnifiedDiff || !interactiveDelivery) return undefined;
+  // TESLIM-KARTI-OZET: summaries are a view under the person's grants; a failed read shows as "not available" and never blocks a card.
+  const describe = context.describeDeliverySummaries, summaries = async (requests: readonly DeliverySummaryRequest[]) =>
+    describe ? await describe(root, requests, options).catch(() => requests.map(() => null)) : [];
   const queue = context.deliveryQueue && context.confirmDeliveryQueue ? {
     async reattempt() { const config = await loadConfig(root, options); return Boolean(config.execution?.workTargets?.targets[0]) && config.targetQueue.reattempts > 0; },
     async prepareCurrent(target: Parameters<TerminalDeliveryPort['preview']>[0], commandId: string) {
@@ -74,7 +79,11 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
         ...(config.targetQueue.reattempts > 0 ? { deliveryIntent: 'service-reattempt' as const } : {}) });
     },
     async inspect(scopeId: string, commandId: string) { return (await context.deliveryQueue!.inspectTargetQueue({ schemaVersion: 1, scopeId, commandId })).record; },
-    confirm(scopeId: string, commandId: string, ask: Parameters<NonNullable<TerminalLaunchContext['confirmDeliveryQueue']>>[1]) { return context.confirmDeliveryQueue!({ schemaVersion: 1, scopeId, commandId }, ask); },
+    confirm(scopeId: string, commandId: string, ask: Parameters<NonNullable<TerminalDeliveryPort['queue']>['confirm']>[2]) {
+      return context.confirmDeliveryQueue!({ schemaVersion: 1, scopeId, commandId }, async view => ask(view, describe ? await readConsentSummaries(view,
+        async id => (await context.deliveryQueue!.inspectTargetQueue({ schemaVersion: 1, scopeId, commandId: id })).record, summaries) : []));
+    },
+    ...(describe ? { async summary(view: TargetQueueView) { return (await summaries([queueSummaryRequest(view, DELIVERY_RENDER_LIMITS.cardTopPaths)]))[0] ?? null; } } : {}),
   } : undefined;
   return { ...(queue ? { queue } : {}),
     async preview(target) {
@@ -83,7 +92,9 @@ export function terminalDeliveryPort(root: string, context: TerminalLaunchContex
       // Read-only: the integration check observes the affected files of the current source; a changed base is its typed refusal.
       const checked = await checkWorkspaceIntegration(root, identity, options);
       const config = await loadConfig(root, options), stat = patchStat(preview.patch.changes, renderUnifiedDiff), diffs = patchDiffs(preview.patch.changes, renderUnifiedDiff), verification = config.execution?.adoption.verification;
-      return Object.freeze({ target, identity, ...stat, diffs, source: checked.observation.source, base: checked.observation.head, proposal: checked.proposal,
+      // The direct path writes a dedicated delivery ref (no target branch yet, no system verification Run); the window lists the files itself.
+      const summary = describe ? (await summaries([{ schemaVersion: 1, identity, operation: 'deliver', target: null, verificationRunId: null, topPaths: 0 }]))[0] ?? null : undefined;
+      return Object.freeze({ target, identity, ...stat, diffs, ...(summary !== undefined ? { summary } : {}), source: checked.observation.source, base: checked.observation.head, proposal: checked.proposal,
         outOfScope: checked.scope.status === 'out-of-scope' ? checked.scope.outOfScope : [], adoptionTargets: Object.freeze([...config.execution?.adoption.targets ?? []]),
         verification: verification ? Object.freeze({ kind: verification.kind, required: verification.required }) : null,
         ...(queue && config.execution?.workTargets?.targets[0] ? { queueTarget: config.execution.workTargets.targets[0].baseRef,

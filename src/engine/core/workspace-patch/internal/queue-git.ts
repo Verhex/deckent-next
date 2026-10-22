@@ -7,8 +7,10 @@ export const queueGenerationSchema = z.object({ schemaVersion: z.literal(1), key
   owner: identitySchema, epoch: z.number().int().positive().safe() }).strict();
 export interface GitQueueFence { readonly ref: string; readonly value: string }
 /** Versioned names, derived from durable ticket identity. No clock/random input on replay. */
-export function queueCommandIds(record: Pick<TargetQueueRecord, 'request'>) {
-  const key = digest({ scopeId: record.request.identity.scopeId, commandId: record.request.commandId });
+export function queueCommandIds(record: Pick<TargetQueueRecord, 'request'>) { return queueTicketCommandIds(record.request.identity.scopeId, record.request.commandId); }
+/** The same names from a ticket's scope and command id alone (a read-only caller holding only the queue view, e.g. its verification Run). */
+export function queueTicketCommandIds(scopeId: string, commandId: string) {
+  const key = digest({ scopeId, commandId });
   return { candidate: `queue-candidate-${key}`, delivery: `queue-delivery-${key}`, adoption: `queue-adopt-${key}`,
     verificationRun: `queue-verify-${key}`, verificationCreate: `queue-create-${key}` };
 }

@@ -3,3 +3,4 @@ export { inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegrat
 export { deliverConfiguredWorkspaceIntegration, deliverWorkspaceIntegrationWithConfirmation } from './internal/delivery.js';
 export { adoptConfiguredWorkspaceIntegration, rollbackConfiguredWorkspaceIntegration, adoptWorkspaceIntegrationWithConfirmation, rollbackWorkspaceIntegrationWithConfirmation } from './internal/adoption.js';
 export { interactiveDeliveryHandlers, verifiedDeliveryConfirmation } from './internal/terminal.js';
+export { describeConfiguredDeliverySummaries } from './internal/summary.js';
