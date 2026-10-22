@@ -20,6 +20,6 @@ docker run --rm --pull never --network none --read-only --cap-drop ALL \
   --security-opt no-new-privileges --user "$(id -u):$(id -g)" \
   --pids-limit 64 --memory 256m --cpus 1 --tmpfs /tmp:rw,nosuid,nodev,size=16777216 \
   --entrypoint /bin/sh "$image_id" -ec \
-  'test "$(node --version)" = v24.21.0; node -e '\''const fs=require("node:fs");fs.writeFileSync("/tmp/preflight","ok");if(fs.readFileSync("/tmp/preflight","utf8")!=="ok")process.exit(1)'\'''
+  'test "$(node --version)" = v24.22.1; node -e '\''const fs=require("node:fs");fs.writeFileSync("/tmp/preflight","ok");if(fs.readFileSync("/tmp/preflight","utf8")!=="ok")process.exit(1)'\'''
 printf 'DECKENT_TEST_DOCKER_IMAGE=%s\n' "$image_id" >> "$GITHUB_ENV"
 printf 'Docker fixture ready: %s (%s)\n' "$image_id" "$image"
