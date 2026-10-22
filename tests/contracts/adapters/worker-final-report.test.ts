@@ -56,7 +56,8 @@ describe.skipIf(!imageId)('real Docker final report custody', () => {
   it.each([
     ['claude', 'valid', 'reported'], ['codex', 'valid', 'reported'], ['claude', 'typed', 'reported'], ['codex', 'typed', 'reported'],
     ['claude', 'invalid', 'invalid'], ['claude', 'oversized', 'oversized'], ['claude', 'missing', 'missing'],
-    ['cursor', 'valid', 'unsupported'], ['claude', 'unsupported', 'unsupported'],
+    ['cursor', 'valid', 'reported'], ['cursor', 'fenced', 'reported'], ['cursor', 'invalid', 'invalid'], ['cursor', 'oversized', 'oversized'], ['cursor', 'missing', 'missing'],
+    ['claude', 'unsupported', 'unsupported'],
   ])('%s %s reaches the sealed transcript as %s', async (provider, variant, expected) => {
     const root = await mkdtemp(join(tmpdir(), 'dn-report-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
     const workspace = join(root, 'work'); await mkdir(workspace);
@@ -79,8 +80,11 @@ if (${JSON.stringify(provider !== 'cursor' && variant !== 'unsupported')}) {
   if (!schema.required.includes('checks') || schema.additionalProperties !== false) process.exit(43);
 }
 if (${JSON.stringify(provider === 'claude')} && args[args.indexOf('--max-turns')+1] !== '7') process.exit(44);
+// The flagless final-text-json channel (cursor) receives the instruction and schema in the prompt and answers in the final result text.
+if (${JSON.stringify(provider === 'cursor')} && !args.at(-1).includes('### report:final-text-json@1')) process.exit(45);
 const report = ${JSON.stringify(value)};
-if (${JSON.stringify(variant !== 'missing')}) console.log(JSON.stringify(${provider === 'claude' ? "{type:'result', subtype:'success', structured_output: report}" : "{type:'item.completed', item:{type:'agent_message', text:JSON.stringify(report)}}"}));
+const text = ${JSON.stringify(variant === 'fenced')} ? '\`\`\`json\\n' + JSON.stringify(report) + '\\n\`\`\`' : JSON.stringify(report);
+if (${JSON.stringify(variant !== 'missing')}) console.log(JSON.stringify(${provider === 'claude' ? "{type:'result', subtype:'success', structured_output: report}" : provider === 'cursor' ? "{type:'result', subtype:'success', is_error:false, result:text}" : "{type:'item.completed', item:{type:'agent_message', text:JSON.stringify(report)}}"}));
 `;
     await writeFile(join(workspace, 'native.mjs'), native, { mode: 0o755 });
     const received: WorkerEvent[] = [];
@@ -186,7 +190,7 @@ it('offers checkId and role in both report schemas and turns a strict-schema nul
   expect(strict.properties.checks.items.required).toEqual(['command', 'outcome', 'checkId', 'role']);
   const collect = (checks: unknown[]) => {
     const collector = finalReportCollector('codex', [], workerReportLimits);
-    const observer = createNativeLineObserver('codex', createNormalizerState([]), createCodexState(), () => {}, collector);
+    const observer = createNativeLineObserver('codex-exec-json', createNormalizerState([]), createCodexState(), () => {}, collector);
     observer.observe(Buffer.from(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ ...report, checks, handoff: null, exit: null }) } }) + '\n'));
     return collector.finish();
   };

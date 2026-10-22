@@ -155,7 +155,7 @@ it('attributes every file of a large patch up to the cap and counts the rest; lo
 it('never lets a normalizer or delivery fault escape the bridge line observer, and keeps observing afterwards', () => {
   const state = createNormalizerState([], 0), delivered: unknown[] = [];
   let fail = true;
-  const observer = createNativeLineObserver('codex', state, createCodexState(), events => { if (fail) { fail = false; throw new Error('channel down'); } delivered.push(...events); });
+  const observer = createNativeLineObserver('codex-exec-json', state, createCodexState(), events => { if (fail) { fail = false; throw new Error('channel down'); } delivered.push(...events); });
   const lines = [JSON.stringify({ type: 'item.completed', item: { id: 'm', type: 'agent_message', text: 'first' } }),
     JSON.stringify({ type: 'item.completed', item: { id: 'b', type: 'file_change', status: 'completed', changes: [null] } }),
     JSON.stringify({ type: 'item.completed', item: { id: 'n', type: 'agent_message', text: 'after' } })];
