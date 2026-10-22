@@ -2,7 +2,7 @@ import { IDENTITY_PROFILE_LIMITS } from '#domain/index.js';
 import { EXIT_CODES, ErrorRegistry, emit, getConfigFieldDefault, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
 import type { IdentityDistributionPreview, IdentityProfileDistributionApplication } from '#engine/index.js';
 import { commandLocale, readJsonInput, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
-import { askCliCard, cliMode, cliTableStyle, renderCliTable, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
+import { askCliCard, cliMode, cliTableStyle, renderCliTable, resolveCommandScope, scopeLister, scopeNotice, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import { profileLabel, renderIdentityPreview } from './render.js';
 
 type Choices = Awaited<ReturnType<IdentityProfileDistributionApplication['choices']>>;
@@ -44,9 +44,17 @@ export async function identityDistributionCommand(argv: readonly string[], conte
   const env = context.env ?? process.env, locale = commandLocale(context, values.get('--lang'));
   const root = context.root ?? process.cwd(), options = { env }, stdin = context.stdin ?? process.stdin;
   const sinks = { json, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
-  const scope = values.get('--scope'), path = values.get('--input'), expect = values.get('--expect');
+  let scope = values.get('--scope'); const path = values.get('--input'), expect = values.get('--expect');
   if (argv[1] === 'choices') {
-    if (!scope || apply || path || expect || !context.listIdentityDistributionChoices) throw usage();
+    if (apply || path || expect || !context.listIdentityDistributionChoices) throw usage();
+    // A read: --scope, else the configured default (named), else a person on a terminal picks; anyone else gets CLI_SCOPE_REQUIRED naming the valid scopes.
+    const configured = await loadConfig(root, { ...options, heal: false }).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
+    const interactive = cliMode(context, json).mode === 'interactive';
+    const resolved = await resolveCommandScope({ command: 'deckent identity choices', locale, explicit: scope, configured: typeof configured === 'string' ? configured : undefined,
+      mutating: false, interactive, listScopes: () => scopeLister(context as never, root, options)().catch(() => []), ...(interactive ? { pick: request => ask(context, locale, request) } : {}) });
+    if (!resolved) return;
+    scope = resolved.scopeId;
+    if (!json && resolved.source !== 'flag') emit(scopeNotice(resolved, locale), { ...sinks, json: false });
     const choices = await context.listIdentityDistributionChoices(root, scope, options);
     emit(choices, { ...sinks, render: value => renderChoices(value, locale, context) }); return;
   }

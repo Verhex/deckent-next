@@ -57,8 +57,12 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
     await runControlFlow(action, context, await runHumanIo(context, locale), { scopeId: values.get('--scope'), runId: values.get('--id'), reason: values.get('--reason'), taskId, answer });
     return;
   }
-  const scopeId = values.get('--scope'); const typedRunId = values.get('--id');
-  if (!scopeId || !typedRunId) throw usage(!scopeId ? '--scope' : '--id');
+  // A change never takes a silent default: no --scope names the valid scopes (CLI_SCOPE_REQUIRED) instead of blaming another flag.
+  const io = interactive && !values.get('--scope') ? await runHumanIo(context, locale) : undefined;
+  const scope = await familyScope(context, { command: `deckent run ${action}`, locale, explicit: values.get('--scope'), mutating: true, interactive, ...(io ? { ask: io.ask } : {}) });
+  if (!scope) return;
+  const scopeId = scope.scopeId; const typedRunId = values.get('--id');
+  if (!typedRunId) throw usage('--id');
   // A short id resolves on every action that names an existing Run; never on `create`, whose --id names the new Run.
   const runId = action === 'create' ? typedRunId : await resolveRunId(context, scopeId, typedRunId);
   if (action === 'create') {
