@@ -99,7 +99,7 @@ Geliştirici:
   runtime     Yerel çalışma servisini yönet (eylemsiz: describe)
       serve | describe | shutdown | restart
   coding      Yerel kodlama profillerini hazırla
-      prepare | template
+      prepare | template | instructions status|trust|revoke
       --input <dosya|-> | --provider <id> --kind <id>
   inference   Yerel çıkarım kapasitesini incele
       plan | budget | metrics

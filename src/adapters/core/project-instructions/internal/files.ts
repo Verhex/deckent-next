@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, open, realpath, stat } from 'node:fs/promises';
+import { lstat, open, realpath, stat, unlink } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import type { ProjectInstructionSource, ProjectInstructionView } from '#engine/index.js';
@@ -94,5 +94,17 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
     // Accept the exact already-masked snapshot; later disk changes never mutate this context.
     sessionTrusted.add(digest);
     return { status: 'ready', source: current.source };
+  },
+  /** Takes back consent for exactly this folder and digest (true: a persisted record was removed). An absent record is already untrusted. */
+  async revoke(digest: string): Promise<boolean> {
+    if (!/^[a-f0-9]{64}$/u.test(digest)) throw new Error('unsafe');
+    sessionTrusted.delete(digest);
+    if (!trustDirectory) return false;
+    try {
+      const info = await lstat(trustPath(digest));
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error('unsafe');
+      await unlink(trustPath(digest));
+      return true;
+    } catch (error) { if (missing(error)) return false; throw error; }
   } };
 }

@@ -9,7 +9,7 @@ import { applyModelCatalog, createConfiguredRuntimeClient, createRun, inspectRun
 import { inspectMonitor } from '#composition/index.js';
 import { runCommand } from '../../../src/surfaces/core/cli/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { classifyConfiguredRunSpending } from '../../../src/composition/core/runs/index.js';
+import { changeConfiguredWorkerInstructionTrust, classifyConfiguredRunSpending, inspectConfiguredWorkerInstructions } from '../../../src/composition/core/runs/index.js';
 import { admittedToolchains } from '../../../src/engine/core/toolchain-currency/index.js';
 import { assertNativeWorkerBinding, compileNativeCodingDockerProfile, FileArtifactStore, nativeCodingTemplateBase, openHostProjectInstructionReader, openSqliteAttemptStore } from '#adapters/index.js';
 import { encodeExecutionProfileDefinition, readWorkerModelPin, validateTaskGraph, TASK_GRAPH_SCHEMA_VERSION, type AttemptIdentity } from '#domain/index.js';
@@ -469,6 +469,60 @@ describe.skipIf(process.platform === 'win32')('worker instruction snapshot throu
         { createRun, root: f.project, env: f.options.env, stdout: { write: (chunk: string) => { out += chunk; return true; } } } as never);
       expect(out).toContain(text); expect(out).toContain('worker-md');
     }
+  });
+
+  /** alpha.53 F1: the CLI trust path grants what admission consumes — same folder, same digest, a sealed decision first, never for an AI or MCP caller. */
+  it('the governed trust path makes admission include the snapshot; refusals, a changed digest and revoke leave workers without it', async () => {
+    const f = await seeded(registry, undefined, execution(), await home()), file = join(f.project, '.deckent/worker-instructions.md');
+    const witness = { attest: async () => true }, status = async () => (await inspectConfiguredWorkerInstructions(f.project, f.options)).targets[0]!;
+    const change = (action: 'trust' | 'revoke', digest: string, extra: object = {}, attest = witness) =>
+      changeConfiguredWorkerInstructionTrust(f.project, { scopeId: 's', action, digest, ...extra }, f.options, attest);
+    const decisions = () => { const db = new DatabaseSync(f.path, { readOnly: true }); try {
+      return (db.prepare("SELECT record FROM audit_events WHERE kind = 'authority-decision' ORDER BY sequence").all() as { record: string }[])
+        .map(row => (JSON.parse(row.record) as { event: { subject: { action: string; resource: object; basisDigest: string; verdict: { decision: string } } } }).event.subject)
+        .filter(subject => subject.action.startsWith('worker-instructions-')); } finally { db.close(); } };
+    expect(await status()).toMatchObject({ target: null, source: 'worker-md', state: 'absent', off: null });
+    await expect(change('trust', 'ab'.repeat(32))).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_UNAVAILABLE', params: { reason: 'absent' } });
+    await writeFile(file, 'Run npm test before reporting.\nKeep changes small.');
+    const shown = await status();
+    expect(shown).toMatchObject({ state: 'untrusted', bytes: 50, preview: ['Run npm test before reporting.', 'Keep changes small.'] });
+    const digest = shown.digest!;
+    // No terminal witness (an AI tool's shell, MCP, a peer): refused before anything is read or sealed.
+    await expect(change('trust', digest, {}, { attest: async () => false })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    // The person lacks `config`/`write` on execution.workerInstructions: the refusal is sealed, nothing is trusted.
+    await expect(change('trust', digest)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(decisions()).toEqual([expect.objectContaining({ action: 'worker-instructions-trust', basisDigest: digest, verdict: expect.objectContaining({ decision: 'deny' }),
+      resource: { kind: 'config', id: 'project:execution.workerInstructions' } })]);
+    expect((await status()).state).toBe('untrusted');
+    const policy = join(f.project, 'd', 'policy.json'), document = JSON.parse(await readFile(policy, 'utf8'));
+    await writeFile(policy, JSON.stringify({ ...document, grants: [...document.grants, { id: 'config', effect: 'allow', actions: ['write'], scopes: ['s'],
+      principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'config', ids: 'all' } }] }), { mode: 0o600 });
+    await expect(change('trust', 'cd'.repeat(32))).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_CHANGED' }); // not the content the card showed
+    await expect(change('trust', digest, { target: 'n1' })).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_UNAVAILABLE', params: { reason: 'target' } });
+    const granted = await change('trust', digest);
+    expect(granted).toMatchObject({ action: 'trust', target: null, digest, trusted: true, changed: true, decisionEventId: expect.stringMatching(/^decision:/u) });
+    expect(decisions().at(-1)).toMatchObject({ action: 'worker-instructions-trust', verdict: { decision: 'allow' } });
+    expect((await status()).state).toBe('trusted');
+    expect(await change('trust', digest)).toMatchObject({ changed: false, decisionEventId: null }); // nothing to change, nothing sealed
+    expect(decisions()).toHaveLength(2);
+    // Admission (C3) now includes exactly that snapshot.
+    expect((await createRun(f.project, run('after-trust', 'coding', workInput()), f.options)).warnings).toEqual([]);
+    expect(contextIds(f, 'after-trust')).toEqual(['repo-tooling', `worker-md-${digest.slice(0, 16)}`]);
+    // A changed file is untrusted again (digest-bound); the original content is still the trusted one.
+    await writeFile(file, 'Changed instructions.');
+    expect((await status()).state).toBe('untrusted');
+    expect((await createRun(f.project, run('changed-file', 'coding', workInput()), f.options)).warnings).toEqual([expect.objectContaining({ reason: 'untrusted' })]);
+    await writeFile(file, 'Run npm test before reporting.\nKeep changes small.');
+    expect((await status()).state).toBe('trusted');
+    expect(await change('revoke', digest)).toMatchObject({ action: 'revoke', trusted: false, changed: true });
+    expect(decisions().at(-1)).toMatchObject({ action: 'worker-instructions-revoke', verdict: { decision: 'allow' } });
+    expect((await status()).state).toBe('untrusted');
+    expect((await createRun(f.project, run('after-revoke', 'coding', workInput()), f.options)).warnings).toEqual([expect.objectContaining({ reason: 'untrusted', digest })]);
+    expect(contextIds(f, 'after-revoke')).toEqual(['repo-tooling']);
+    // Off for this project: status says so and there is nothing to trust.
+    await reconfigure(f, { schemaVersion: 1, source: 'none' });
+    expect(await status()).toMatchObject({ state: 'off', off: 'source-none', file: null, digest: null });
+    await expect(change('trust', digest)).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_UNAVAILABLE', params: { reason: 'source-none' } });
   });
 
   it('honours the per-project source (agents-md, none, explicit absent), is a no-op without Git execution and refuses an overflow at planning and creation', async () => {

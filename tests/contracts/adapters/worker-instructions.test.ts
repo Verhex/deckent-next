@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { compileNativeCodingWorkInput, nativeCodingRefusalCode, openProjectInstructionReader, workerInstructionFile, workerInstructionSelection } from '#adapters/index.js';
+import { compileNativeCodingWorkInput, nativeCodingRefusalCode, openProjectInstructionReader, openWorkerInstructionTrust, workerInstructionFile, workerInstructionSelection } from '#adapters/index.js';
 
 /** DECKENT-MD-WORKERS (owner Q3 2026-10-23): per-project worker instruction source, digest-bound, consent consumed never granted. */
 const roots: string[] = [];
@@ -49,6 +49,23 @@ describe('worker instruction source selection', () => {
     await writeFile(join(root, 'DECKENT.md'), 'deckent');
     expect(await terminal.inspect()).toMatchObject({ source: { content: 'deckent' } });
     expect(await worker.inspect()).toMatchObject({ source: { content: 'worker' } }); // the worker selection never falls back
+  });
+
+  it('alpha.53 F1: a CLI trust persists or is refused (no session-only fallback); revoke removes exactly that folder+digest record', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'worker-instructions-')), home = await mkdtemp(join(tmpdir(), 'worker-home-')); roots.push(root, home);
+    await chmod(home, 0o700); await mkdir(join(root, '.deckent')); await writeFile(join(root, '.deckent/worker-instructions.md'), 'conventions');
+    const env = { HOME: home }, file = workerInstructionFile('worker-md');
+    const first = await openWorkerInstructionTrust(root, env, undefined, file), view = await first.inspect();
+    if (view.status !== 'trust-required') throw new Error(view.status);
+    expect((await first.trust(view.source.digest)).status).toBe('ready');
+    const second = await openWorkerInstructionTrust(root, env, undefined, file); // a fresh process sees the persisted record
+    expect((await second.inspect()).status).toBe('ready');
+    expect(await second.revoke(view.source.digest)).toBe(true);
+    expect((await (await openWorkerInstructionTrust(root, env, undefined, file)).inspect()).status).toBe('trust-required');
+    expect(await second.revoke(view.source.digest)).toBe(false); // already untrusted
+    await expect(second.revoke('not-a-digest')).rejects.toThrow('unsafe');
+    // A trust folder inside the workspace (here: HOME is the project) is never used for a CLI trust: refused, not session-only.
+    await expect(openWorkerInstructionTrust(root, { HOME: root }, undefined, file)).rejects.toThrow();
   });
 
   it('refuses a worker file reached through a symlinked directory', async () => {

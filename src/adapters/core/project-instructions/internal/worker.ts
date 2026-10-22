@@ -6,10 +6,17 @@ import REGISTRY from './registry.json' with { type: 'json' };
 /** Consent lives in the user-global private trust directory (shared by the terminal and Run admission); an unsupported platform keeps
  * consent in the session only, so a fresh process asks again and never reads an unverified cache. */
 export async function openHostProjectInstructionReader(root: string, env: NodeJS.ProcessEnv, known?: KnownSecretSnapshot, files?: readonly string[]) {
-  const global = resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, env), env, { ignoreProjectOverride: true });
-  const layout = resolveProductLayout({ projectRoot: global.stateDir, root: global.stateDir });
-  const directory = await prepareProductDirectory(layout, 'instructionTrust').catch(() => null);
+  const directory = await trustDirectory(env).catch(() => null);
   return openProjectInstructionReader(root, directory, known, files).catch(() => openProjectInstructionReader(root, null, known, files));
+}
+async function trustDirectory(env: NodeJS.ProcessEnv) {
+  const global = resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, env), env, { ignoreProjectOverride: true });
+  return prepareProductDirectory(resolveProductLayout({ projectRoot: global.stateDir, root: global.stateDir }), 'instructionTrust');
+}
+/** A trust change from the CLI (F1) must persist: no session-only fallback, so an unavailable or unsafe trust directory is a refusal, never a
+ * "trusted" that a one-shot process forgets. Reads exactly the one selected worker file. */
+export async function openWorkerInstructionTrust(root: string, env: NodeJS.ProcessEnv, known: KnownSecretSnapshot | undefined, file: string) {
+  return openProjectInstructionReader(root, await trustDirectory(env), known, [file]);
 }
 
 export type WorkerInstructionSource = keyof typeof REGISTRY.workerSources;

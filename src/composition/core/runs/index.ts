@@ -14,3 +14,4 @@ export { sweepConfiguredAttemptCustody } from './internal/custody-sweep.js';
 export { applyConfiguredRunLifecycle, advanceConfiguredRunLifecycle, parkConfiguredRunProgression } from './internal/lifecycle.js';
 export { proposeConfiguredRun, inspectConfiguredRunProposal } from './internal/proposals.js';
 export { releaseConfiguredQuota } from './internal/pool-hold.js';
+export { inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust } from './internal/worker-instructions.js';

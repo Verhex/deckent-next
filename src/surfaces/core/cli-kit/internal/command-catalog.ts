@@ -224,6 +224,11 @@ export const CLI_CATALOG = [
   { name: 'coding', group: 'developer', summary: 'cli.help.summary.coding', detail: 'cli.coding.help', args: '--input <file|-> | --provider <id> --kind <id>', bare: 'handler', children: [
     action('prepare', 'developer', 'cli.help.action.prepare', 'cli.coding.help', { requires: ['--input <file|->'] }),
     action('template', 'developer', 'cli.help.action.codingTemplate', 'cli.coding.template.help'),
+    { name: 'instructions', group: 'developer', summary: 'cli.help.action.coding.instructions', detail: 'cli.coding.instructions.help', children: [
+      action('status', 'developer', 'cli.help.action.coding.instructions.status', 'cli.coding.instructions.help'),
+      action('trust', 'developer', 'cli.help.action.coding.instructions.trust', 'cli.coding.instructions.help'),
+      action('revoke', 'developer', 'cli.help.action.coding.instructions.revoke', 'cli.coding.instructions.help'),
+    ] },
   ] },
   { name: 'inference', group: 'developer', summary: 'cli.help.summary.inference', detail: 'cli.help.inference', args: '[--profile <id>]', bare: 'handler', children: [
     action('plan', 'developer', 'cli.help.action.plan', 'cli.help.inference'),

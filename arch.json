@@ -546,7 +546,8 @@
         "src/adapters/core/sqlite-ledger",
         "src/engine/core/effect",
         "src/engine/core/run-proposal",
-        "src/adapters/core/project-instructions"
+        "src/adapters/core/project-instructions",
+        "src/engine/core/project-instructions"
       ],
       "plan": "EXECUTION"
     },
@@ -2894,7 +2895,13 @@
       "plan": "SURFACES"
     },
     "src/engine/core/project-instructions": {
-      "dependencies": [],
+      "dependencies": [
+        "src/domain/core/command",
+        "src/domain/core/policy",
+        "src/domain/core/audit",
+        "src/domain/core/principal",
+        "src/platform/core/errors"
+      ],
       "plan": "SURFACES"
     },
     "src/adapters/core/project-instructions": {
@@ -3293,7 +3300,8 @@
         "src/engine/core/secret-store",
         "src/surfaces/core/cli-human",
         "src/platform/core/config-fields",
-        "src/engine/core/config"
+        "src/engine/core/config",
+        "src/engine/core/project-instructions"
       ],
       "plan": "SURFACES"
     },
