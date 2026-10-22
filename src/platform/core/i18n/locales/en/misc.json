@@ -599,7 +599,7 @@
   "cli.runtime.toolchainRefreshUpdated": "Worker image updated to {version}; {count} profile revision(s) apply to new Runs only.",
   "cli.runtime.toolchainRefreshUnverified": "Worker image currency could not be verified ({code}); the current image stays in use and the next check retries.",
   "cli.runtime.toolchainRefreshCurrent": "Worker image is current.",
-  "doctor.nodeUnsupported": "Node.js: {version} is older than the supported {floor}; update Node.js (older 24.x has a heap overrun in UTF-16LE decoding)",
+  "doctor.nodeUnsupported": "Node.js: {version} is older than the supported {floor}; update Node.js (older releases carry fixed security defects)",
   "doctor.nodeUnsupported.init": "Node.js {version} is older than the supported {floor}: update Node.js before relying on this installation.",
   "doctor.workerBasis": " (CPU allows {cpu}, free memory allows {memory} at {estimate} MB per worker)",
   "doctor.status.degraded": "Status: degraded (see the findings below)",

@@ -587,6 +587,18 @@ Kaynak: ana oturumdaki owner kararları (lead 4d4830b2). Kayıt yalnız owner'ı
 - Takipler: [PLAN Gelen kutusu, alpha.50 takipleri](../../../PLAN.md) (a–e).
 - **İptal-etki doğruluğu (2026-10-21, alpha.51 hazırlığı):** onaylanmış ve bitmiş bir araç çağrısı tur iptalinde `cancelled` bildirilebiliyor, iptalle duran yazma kümesi kısmen uygulanmış kalabiliyor. Owner: "betadda düzelteceğiz diye not alalım bilinen sınırlara ekleyelim." alpha.51 bilinen sınırlara (EN/TR) yazıldı; düzeltme beta işi (PLAN Gelen kutusu IPTAL-ETKI-DOGRULUGU).
 
+<a id="alpha51-release-2026-10-21"></a>
+
+## Owner kararları — 2026-10-21/22: alpha.51 merge, canlı geçiş, sonraki plan, Docker temizliği
+
+Kaynak: ana oturum (lead 4d4830b2) owner kararları. Kayıt yalnız owner'ın seçimlerini tutar; bir kabul veya beta kararı değildir.
+
+- **Merge ve geçiş:** owner "merge et ayrıca canlı ve n1i alpha51e taşıyalım" dedi; PR #108, merge `1e74dd23`; canlı ve N1 22:02Z (switch `1e74dd23ab2d-f603d7564e1a`, defter v59).
+- **Denetim noktası:** checkpoint seq 58, head 2618; owner "kopyalamadım sen masaüstüme kopyala" dedi (lead Windows masaüstüne kopyaladı), sonra "Aldım, geç" dedi.
+- **Sonraki plan:** owner, alpha 51 canlıya alınınca "ben komple bir deckentle çalışmaya geçeceğim" dedi; Deckent ile diğer projeleri yürütecek, ardından beta-süreci kararları gelecek.
+- **Docker temizliği:** owner "temizleyelim tabi" ve "silebilirsin" dedi; 240 çıkmış test/eski worker konteyneri kaldırıldı; owner yığınları ve çalışan yerel model dokunulmadan kaldı. N1 teslim klonu `1e74dd23`'e ileri alındı ve dalga 8 yeniden koşusu (d50-w8-r2) başlatıldı.
+- **Açık takipler:** PLAN Gelen kutusu "alpha.51 sonrası beta takipleri".
+
 <a id="pre8-secret-model-2026-10-21"></a>
 
 ## Owner kararı — 2026-10-21: PRE-8 secret modeli (kapsam etiketli ad tasarımı reddedildi)
@@ -624,3 +636,24 @@ Kaynak: ana oturum (lead 4d4830b2); tasarım `proof/ALPHA51-2026-10-21/DESIGN-PR
 8. beta.1 tarihi 2026-10-28 korunur.
 Denetim düzeltmeleri (BLOCKER + MAJOR) uygulama brief'ine girer.
 
+<a id="otonom-teslim-beta-2026-10-22"></a>
+
+## Owner kararı — 2026-10-22: OTONOM-TESLIM beta içinde
+
+Kaynak: ana oturum (lead 4d4830b2). N1 dalga 9 onayından sonra owner teslim kartını bir insanın anlayıp karar vermesi için gerçekçi bulmadı ("sana güvendiğim için onaylıyorum") ve her teslimi kendisinin yaptığını sordu. Lead yanıtı: neden depo değil, 2026-10-14 O1/O5 kararı ve otonom teslimin henüz yazılmamış olması.
+
+- **Karar:** owner "Agent işlerde insanlar artık otonomluğa çok alıştı bu iş beta sonrası değil direkt beta içinde halledilecek" dedi. OTONOM-TESLIM (roadmap D0–D4) beta sonrası kuyruktan beta kapsamına alınır; D5 Enterprise ERP zorunlulukları Enterprise sırasında kalır.
+- **Aynı iş:** teslim kartı insan özeti (tek satır sonuç, kabul kanıtı, risk sınıfı) OTONOM-TESLIM'in D3 penceresiyle birlikte gelir.
+- **Değişmeyen (owner aksini söyleyene kadar):** main'e otomatik benimseme yok; adopt/rollback y/N; kural açılmadan teslim y/N. Gölge kıyasın süresi ve dar kuralın kapsamı beta-süreci kararlarında owner'a sorulur.
+
+<a id="paketleme-test-2026-10-22"></a>
+
+## Owner kararı — 2026-10-22: paketleme, test ayrımı ve beta geçişi
+
+Kaynak: ana oturum (lead 4d4830b2). Lead toplu 2026-10-22'yi ayrı alpha.52 sürümü yapıp yerel tam suite başlattı (21 Ekim'de 11 tam suite koşmuştu). Owner: bu işlerin alpha.51'e gireceğini söylemişti; "herşey paketleme olarak inemez küçük özellikler aynı paket içinde bulunabilir herşeye tam test koşamaz bunun ayrımını doğru yapmalısın ve skill kullanarak projeleri yönet işçilere kullandırt."
+
+- **Paketleme:** işler owner'ın söylediği pakete girer; doküman/test/küçük düzeltme ayrı sürüm açmaz. alpha.52 adayı geri alındı; toplu 2026-10-22 sürümsüz PR olarak iner, canlıya sonraki sürümle gider.
+- **Test ayrımı:** kanun 7 güncellendi (yerel tam suite yalnız canlıya gidecek, davranış değiştiren aday için ve bir kez; geri kalanı hedefli + hosted CI).
+- **Yönetim:** lead projeyi skill'lerle yönetir, işçilere de skill kullandırır.
+- **Sıradaki owner adımı:** owner test senaryosunu yapıp Deckent'in kontrolünü yeniden ele alır.
+- **Beta geçişi:** npm paketi yayını; owner: scope'suz `deckent` adı npm'de `dedent` benzerlik uyarısına takılıyor, "muhtemelen verhex/deckent alacağız" → scope'lu `@verhex/deckent` (`npm install -g @verhex/deckent`; @'siz `Verhex/deckent` GitHub kısayoludur), ad yayından önce kesinleşir; tüm dokümantasyonun güncellenmesi (kurulumu yapan AI/insan ne gerekir, ne yapabilir), deckent.ai sitesi ve docs sayfası; ardından beta iş maddelerinin yeniden sıralanması, dogfood ile geliştirme ve tam ürünleşme. Owner: ilk push 2026-09-16; ilk hedef tarihin gerisindeyiz.

@@ -3,7 +3,7 @@ export { resolveLocale, t, currencyAmountText } from '#platform/core/i18n/index.
 export type { Locale, MessageKey } from '#platform/core/i18n/index.js';
 export { PRODUCT_LAYOUT_REGISTRY, DECKENT_DIR, CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
 export type { OutputMode } from '#platform/core/common/index.js';
-export { DECKENT_VERSION, NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
+export { DECKENT_VERSION, NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
 export { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';
 export type { Params } from '#platform/core/i18n/index.js';
 export { DeckentError } from '#platform/core/errors/index.js';
@@ -26,7 +26,7 @@ export type { Environment } from '#platform/core/host/index.js';
 export { globalStateRoot, detectWslLinux, isWslHost, type KernelIdentityReader, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
 export type { GlobalScopePlatform, GlobalScopePaths } from '#platform/core/host/index.js';
 export { resolveProductPaths } from '#platform/core/host/index.js';
-export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, describeWorkerRecommendation, type WorkerRecommendation, suggestMaxWorkersFromCapacity, getSystemProfile, assessNodeSupport, type NodeSupport } from '#platform/core/host/index.js';
+export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, describeWorkerRecommendation, type WorkerRecommendation, suggestMaxWorkersFromCapacity, getSystemProfile, assessNodeSupport, nodeEngineFloors, type NodeSupport } from '#platform/core/host/index.js';
 export { detectEnvironment } from '#platform/core/host/index.js';
 export { detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery } from '#platform/core/host/index.js';
 export { readBuildIdentity, type BuildIdentity } from '#platform/core/host/index.js';

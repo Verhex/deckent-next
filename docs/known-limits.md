@@ -13,7 +13,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 ## Platforms: tried and not tried
 
 - **Tried:** Linux and Windows through WSL2 (the supported execution path). Hosted checks run on Ubuntu with Node 24 and
-  Node 26. Node.js 24.22.0 or newer is required (24.21 and older 24.x have a heap overrun in UTF-16LE decoding).
+  Node 26. Node.js 24.22.1 or newer is required (24.21 and older 24.x have a heap overrun in UTF-16LE decoding; 24.22.1 carries the 2026-10-21 security fixes). On Node 26, 26.12.1 or newer is required; Node 25 is not supported.
   *Impact:* these are the only places where behavior has been observed.
 - **Not supported: native Windows runtime.** The service transport does not run there, and the file-based secret stores are
   not available there. The OS-user identity cannot be read and the private ledger files cannot be opened, so backup, the
@@ -393,8 +393,12 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   /do; the task approval is then asked once, just before the task runs. Installations without a `task` rule in their policy are not
   affected.
 - **Restart fingerprint.** `restart-exempt.json` lists members of restart sections that every request re-reads (`admission.registry`); changing them never reports a stale service. A member is added only after proving no start-time capture.
-- **`runtime restart` refuses a service that systemd runs only when systemd confirms it** (Linux): the service process's control group names a candidate `.service` unit, and the restart is refused, naming `systemctl [--user] restart <unit>`, only when systemd reports that process as the unit's MainPID (`systemctl show -p MainPID`, 2 s bound; the environment is never read). Without a reachable systemd bus, or with no answer, the check is off and the restart proceeds; a unit whose ExecStart wrapper does not `exec` the runtime is not detected. Other service managers and non-Linux hosts are not detected. *Workaround:* restart a systemd-run service with `systemctl [--user] restart <unit>`.
+- **`runtime restart` refuses a service that systemd runs only when systemd confirms it** (Linux): the service process's control group names a candidate `.service` unit, and the restart is refused, naming `systemctl [--user] restart <unit>`, only when systemd reports that process as the unit's MainPID (`systemctl show -p MainPID`, 2 s bound; the target service process's environment is never read). Without a reachable systemd bus, or with no answer, the check is off and the restart proceeds; a unit whose ExecStart wrapper does not `exec` the runtime is not detected. Other service managers and non-Linux hosts are not detected. *Workaround:* restart a systemd-run service with `systemctl [--user] restart <unit>`.
 - **The local runtime socket's peer liveness witness** observes HUP/ERR/NVAL with one zero-duration `ppoll` that blocks catchable signals for the call: a handled signal such as SIGCHLD no longer reads as a disconnected client. A tool call that finished before a genuine turn cancellation is still reported `cancelled`; its result text carries the applied write set (the owner decision on a completeness flag or a new status is open).
+- **MCP and terminal processes started before a switch to a new release keep running the previous build.** A switch replaces the
+  installed build, but an MCP server or a `deckent` terminal that a client started earlier keeps the code it loaded until that client
+  restarts it. *Workaround:* after a switch, restart the client (the Claude Code session, or close and reopen the terminal);
+  `deckent runtime describe` shows which build the service runs.
 
 ## Desktop and other surfaces
 

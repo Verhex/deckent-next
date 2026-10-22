@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assessNodeSupport, NODE_ENGINE_RANGE, normalizeGlobalScopePlatform, isWslHost, detectWslLinux, describeWorkerRecommendation, calcRecommendedMaxWorkers } from '../../../src/platform/index.js';
+import { assessNodeSupport, nodeEngineFloors, NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE, normalizeGlobalScopePlatform, isWslHost, detectWslLinux, describeWorkerRecommendation, calcRecommendedMaxWorkers } from '../../../src/platform/index.js';
 import { HOST_LIMITS_REGISTRY } from '../../../src/platform/core/common/index.js';
 import { renderDoctorReport } from '../../../src/surfaces/core/doctor/index.js';
 import manifest from '../../../package.json' with { type: 'json' };
@@ -8,25 +8,33 @@ const base = { platform: 'linux', host: { cpuCores: 1, totalMemMB: 1, recommende
   secretStore: null, imageRefresh: null, installationBinding: null, shellRealm: null } as const;
 
 describe('Node.js engine floor', () => {
-  it('reads the floor from the manifest range and refuses 24.21 while accepting 24.22 and Node 26', () => {
+  it('reads one patched floor per supported major from the manifest range', () => {
     expect(NODE_ENGINE_RANGE).toBe(manifest.engines.node);
-    expect(NODE_ENGINE_RANGE).toBe('>=24.22.0');
-    expect(assessNodeSupport('v24.21.0', NODE_ENGINE_RANGE)).toEqual({ version: 'v24.21.0', floor: '24.22.0', status: 'unsupported' });
-    expect(assessNodeSupport('v24.15.0', NODE_ENGINE_RANGE).status).toBe('unsupported');
-    expect(assessNodeSupport('v24.22.0', NODE_ENGINE_RANGE).status).toBe('supported');
-    expect(assessNodeSupport('v24.30.1', NODE_ENGINE_RANGE).status).toBe('supported');
-    expect(assessNodeSupport('v26.10.0', NODE_ENGINE_RANGE).status).toBe('supported');
-    expect(assessNodeSupport('v22.99.0', NODE_ENGINE_RANGE).status).toBe('unsupported');
+    expect(NODE_ENGINE_RANGE).toBe('>=24.22.1 <25 || >=26.12.1');
+    expect(nodeEngineFloors(NODE_ENGINE_RANGE)).toEqual(['24.22.1', '26.12.1']);
+    expect(NODE_ENGINE_FLOOR_TEXT).toBe('24.22.1 / 26.12.1');
+    for (const version of ['v24.21.0', 'v24.22.0', 'v26.10.0', 'v26.12.0', 'v25.9.0', 'v22.99.0', 'v24.15.0'])
+      expect(assessNodeSupport(version, NODE_ENGINE_RANGE).status, version).toBe('unsupported');
+    for (const version of ['v24.22.1', 'v24.30.1', 'v26.12.1', 'v26.20.0', 'v27.0.0'])
+      expect(assessNodeSupport(version, NODE_ENGINE_RANGE).status, version).toBe('supported');
+    expect(assessNodeSupport('v24.21.0', NODE_ENGINE_RANGE)).toEqual({ version: 'v24.21.0', floor: '24.22.1', status: 'unsupported' });
+    expect(assessNodeSupport('v26.10.0', NODE_ENGINE_RANGE)).toEqual({ version: 'v26.10.0', floor: '26.12.1', status: 'unsupported' });
+    expect(assessNodeSupport('v25.9.0', NODE_ENGINE_RANGE).floor).toBe('26.12.1');
+    expect(assessNodeSupport('v22.99.0', NODE_ENGINE_RANGE).floor).toBe('24.22.1');
   });
   it('is unknown, never supported, for an unparsable version or range', () => {
     expect(assessNodeSupport('banana', NODE_ENGINE_RANGE).status).toBe('unknown');
     expect(assessNodeSupport('v26.0.0', '^24').status).toBe('unknown');
+    expect(assessNodeSupport('v26.12.1', '>=24.22.1 <25 || ~26').status).toBe('unknown');
+    expect(assessNodeSupport('v26.12.1', '').status).toBe('unknown');
+    expect(nodeEngineFloors('^24')).toEqual([]);
   });
   it('tells the human to update Node.js in English and Turkish only when the version is unsupported', () => {
     const node = assessNodeSupport('v24.21.0', NODE_ENGINE_RANGE);
     expect(renderDoctorReport({ ...base, node }, [], 'en')).toContain('update Node.js');
     expect(renderDoctorReport({ ...base, node }, [], 'tr')).toContain('Node.js sürümünü güncelleyin');
-    expect(renderDoctorReport({ ...base, node: assessNodeSupport('v26.10.0', NODE_ENGINE_RANGE) }, [], 'en')).not.toContain('update Node.js');
+    expect(renderDoctorReport({ ...base, node: assessNodeSupport('v26.10.0', NODE_ENGINE_RANGE) }, [], 'en')).toContain('update Node.js');
+    expect(renderDoctorReport({ ...base, node: assessNodeSupport('v26.12.1', NODE_ENGINE_RANGE) }, [], 'en')).not.toContain('update Node.js');
   });
 });
 

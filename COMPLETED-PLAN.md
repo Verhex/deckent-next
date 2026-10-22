@@ -1,5 +1,12 @@
 # Deckent Next — tamamlanan plan
 
+## alpha.51 — 2026-10-21 (PR #108, merge `1e74dd23`; canlı 22:02Z, N1 22:02Z; defter v59, runtime protocol v29)
+
+- **Paket:** PRE-8 PROJE-ANAHTAR v2, PRE-9 SOLO-MOD-IZNI, PRE-10 OTURUM-MODEL-PIN, gelen kutusu düzeltmeleri ve alpha.50 takipleri; ayrıntı CHANGELOG alpha.51 satırı.
+- **Sürüm kanıtı:** yerel tam test `02bf3545` 1090 dosya / 10031 geçti / 0 başarısız / 8 atlandı; Astra REVISE 2702/2704/2706/2708/2712 düzeltildi, PASS 2710 ve PASS 2714 (sınırlı kaynak/kanıt incelemesi; canlı, macOS veya Windows kabulü iddiası yok); hosted CI ilk denemede `9c766a50` üzerinde yalnız CI'a özgü kırmızılar verdi (systemd koruması ile runner'ın `hosted-compute-agent.service`'i; PRE-8 PTY fikstürlerinde Ink `CI=true`), düzeltildi; hosted CI `02bf3545` üzerinde ilk denemede yeşil.
+- **Canlı geçiş:** switch `1e74dd23ab2d-f603d7564e1a`; proje-wsl systemd ile alpha.51'de yeniden başlatıldı. Geri alma: alpha.50 (`71bb7b81e155-5dee8d096a56`) işaretçi geçişi; grant tabanı kalkar (bilinen sınır).
+- **Açık takipler:** PLAN Gelen kutusu "alpha.51 sonrası beta takipleri".
+
 ## alpha.50 — 2026-10-21 (PR #107, merge `71bb7b81`; canlı 08:47Z, N1 08:48Z; defter v59, runtime protocol v29)
 
 - **Paket:** PRE-1…PRE-7 (kabul dürüstlüğü, verify-crash, gözlem tutarlılığı, doctor-docker, çıktı okunurluğu, bilinen sınırlar, ortam hazır), PB-COLDSTART faz A, TERM-POLISH (fare seçimiyle kopya), CONFIG-PARTIAL-CLI; ayrıntı CHANGELOG alpha.50 satırı.

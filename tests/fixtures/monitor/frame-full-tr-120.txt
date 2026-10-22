@@ -18,22 +18,22 @@ Sizi bekleyen (2)
   └───────────────────────────────────────────────┴────────────┴─────────────────────┴─────────┘
 
 Takılı ya da bekleyen, en eskisi önce (12)
-  ┌───────────────────────────────┬───────┬─────────────────────────────────┬─────────────┬─────────┬─────────┐
-  │ İş kimliği                    │ Görev │ Neden                           │ Ne zamandır │ Kapsam  │ Kurulum │
-  ├───────────────────────────────┼───────┼─────────────────────────────────┼─────────────┼─────────┼─────────┤
-  │ run-blocked-approval          │ build │ ~ onay bekliyor (appr-0001)     │ 3 sa 12 dk  │ scope-a │ current │
-  │ run-not-admitted              │ build │ ~ henüz kabul edilmedi          │ 1 sa 33 dk  │ scope-a │ current │
-  │ run-cancellation-pending      │ build │ ! iptal bekleniyor              │ 1 sa 26 dk  │ scope-a │ current │
-  │ run-unresolved-effect         │ build │ ! etki sonucu belirsiz          │ 1 sa 19 dk  │ scope-a │ current │
-  │ run-evaluation-unknown        │ build │ ! değerlendirme sonucu belirsiz │ 1 sa 11 dk  │ scope-a │ current │
-  │ run-evaluation-not-ready      │ build │ ! değerlendirme hazır değil     │ 1 sa 4 dk   │ scope-a │ current │
-  │ run-worker-exited-unevaluated │ build │ ! işçi bitti, değerlendirilmedi │ 57 dk       │ scope-a │ current │
-  │ run-worker-stale-heartbeat    │ build │ ! işçi sessiz (heartbeat eski)  │ 50 dk       │ scope-a │ current │
-  │ run-waiting-dependency        │ build │ ~ bağımlılığını bekliyor        │ 28 dk       │ scope-a │ current │
-  │ run-pool-held                 │ build │ ~ havuz bekletiliyor            │ 21 dk       │ scope-a │ current │
-  │ run-waiting-pool-slot         │ build │ ~ havuzda yer bekliyor          │ 14 dk       │ scope-a │ current │
-  │ run-unknown                   │ build │ ! neden bilinmiyor              │ bilinmiyor  │ scope-a │ current │
-  └───────────────────────────────┴───────┴─────────────────────────────────┴─────────────┴─────────┴─────────┘
+  ┌───────────────────────────────┬───────┬───────────────────────────────────────┬─────────────┬─────────┬─────────┐
+  │ İş kimliği                    │ Görev │ Neden                                 │ Ne zamandır │ Kapsam  │ Kurulum │
+  ├───────────────────────────────┼───────┼───────────────────────────────────────┼─────────────┼─────────┼─────────┤
+  │ run-blocked-approval          │ build │ ~ onay bekliyor (appr-0001)           │ 3 sa 12 dk  │ scope-a │ current │
+  │ run-not-admitted              │ build │ ~ henüz kabul edilmedi                │ 1 sa 33 dk  │ scope-a │ current │
+  │ run-cancellation-pending      │ build │ ! iptal bekleniyor                    │ 1 sa 26 dk  │ scope-a │ current │
+  │ run-unresolved-effect         │ build │ ! etki sonucu belirsiz                │ 1 sa 19 dk  │ scope-a │ current │
+  │ run-evaluation-unknown        │ build │ ! değerlendirme sonucu belirsiz       │ 1 sa 11 dk  │ scope-a │ current │
+  │ run-evaluation-not-ready      │ build │ ! değerlendirme hazır değil           │ 1 sa 4 dk   │ scope-a │ current │
+  │ run-worker-exited-unevaluated │ build │ ! işçi bitti, değerlendirilmedi       │ 57 dk       │ scope-a │ current │
+  │ run-worker-stale-heartbeat    │ build │ ! işçi sessiz (canlılık sinyali eski) │ 50 dk       │ scope-a │ current │
+  │ run-waiting-dependency        │ build │ ~ bağımlılığını bekliyor              │ 28 dk       │ scope-a │ current │
+  │ run-pool-held                 │ build │ ~ havuz bekletiliyor                  │ 21 dk       │ scope-a │ current │
+  │ run-waiting-pool-slot         │ build │ ~ havuzda yer bekliyor                │ 14 dk       │ scope-a │ current │
+  │ run-unknown                   │ build │ ! neden bilinmiyor                    │ bilinmiyor  │ scope-a │ current │
+  └───────────────────────────────┴───────┴───────────────────────────────────────┴─────────────┴─────────┴─────────┘
 ↓ 20 satır daha
 2 sn aralıkla yenilenir · görüntü 2026-10-02 09:30:00Z
 Tab/←→ sekme · ↑↓ seç · Enter ayrıntı · / süz · s sırala · g grupla · r yenile · p duraklat · ? yardım · q çık

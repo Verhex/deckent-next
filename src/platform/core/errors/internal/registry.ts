@@ -1,5 +1,5 @@
 import { t, resolveLocale, currencyAmountText, type Locale, type Params } from '#platform/core/i18n/index.js';
-import { NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
+import { NODE_ENGINE_FLOOR_TEXT, NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
 import { DeckentError } from './error.js';
 import type { ErrorDefinitions, ErrorEntry } from './definition.js';
 import { mergeErrorDefinitions } from './merge.js';
@@ -804,7 +804,7 @@ export const ErrorRegistry = Object.freeze({
   has(code: string): boolean { return Object.hasOwn(definitions, code); },
   get(code: string, locale: Locale = resolveLocale(), params: Params = {}): Readonly<ErrorEntry> | undefined {
     const definition = Object.hasOwn(definitions, code) ? definitions[code] : undefined;
-    return definition ? Object.freeze(definition.render({ floor: NODE_ENGINE_RANGE, major: NODE_ENGINE_RANGE.match(/\d+/)?.[0] ?? NODE_ENGINE_RANGE, ...params }, locale)) : undefined;
+    return definition ? Object.freeze(definition.render({ floor: NODE_ENGINE_FLOOR_TEXT, major: NODE_ENGINE_RANGE.match(/\d+/)?.[0] ?? NODE_ENGINE_RANGE, ...params }, locale)) : undefined;
   },
   getAll(locale: Locale = resolveLocale()): Map<string, Readonly<ErrorEntry>> {
     return new Map(ERROR_CODES.map(code => [code, this.get(code, locale)!]));

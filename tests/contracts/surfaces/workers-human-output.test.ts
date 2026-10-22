@@ -47,7 +47,7 @@ it('workers list --verbose keeps the per-source detail lines, JSON is unchanged'
   expect(tr).toContain('  Kullanım: 6 tur · süre 24,7 sn · token 8 giriş / 1066 çıkış · maliyet 0,1075 USD · başarılı bildirdi');
   // PRE-5: one language per output — engine words (missing, unknown, available) reach a Turkish reader in Turkish.
   expect(tr).toContain('Kaynak a (/p/a): erişilebilir · daha fazla kayıt var; sonraki sayfa: deckent workers --scope s --source a --after cursor9 --verbose');
-  expect(tr[tr.findIndex(l => l.includes('run1/t5 '))]).toBe('  run1/t5 · deneme released · nesil 3 · kayıp, çıkış 0 · heartbeat serbest bırakıldı · bilinmiyor');
+  expect(tr[tr.findIndex(l => l.includes('run1/t5 '))]).toBe('  run1/t5 · deneme released · nesil 3 · kayıp, çıkış 0 · sinyal serbest bırakıldı · bilinmiyor');
   for (const line of tr) expect(line, line).not.toMatch(/\b(missing|exited|unknown|available)\b/u);
   expect(lines[at('t3')]).toBe('  run1/t3 · attempt qrstuvwx · gen 3 · exit 1 · heartbeat missing · docker');
   expect(lines).toContain('  -/t4 · attempt - · gen - · unknown · heartbeat unavailable (unknown) · unknown');

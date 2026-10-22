@@ -30,6 +30,13 @@ describe('K2 catalog registry contract', () => {
     for (const key of MESSAGE_KEYS) if (MESSAGE_REGISTRY.catalogs.en[key] === MESSAGE_REGISTRY.catalogs.tr[key]) expect(allowed.has(key)).toBe(true);
     expect(() => createMessageRegistry([{ en: { new: 'unchanged' }, tr: { new: 'unchanged' } }])).toThrow('I18N_TRANSLATION_REQUIRED');
   });
+  it('lists only keys whose English and Turkish text is still identical, once each (a translated key leaves the list)', async () => {
+    const listed = JSON.parse(await readFile(new URL('internal/identical-messages.json', unit), 'utf8')) as string[];
+    const stale = listed.filter(key => !(MESSAGE_KEYS as readonly string[]).includes(key)
+      || MESSAGE_REGISTRY.catalogs.en[key as MessageKey] !== MESSAGE_REGISTRY.catalogs.tr[key as MessageKey]);
+    expect(stale).toEqual([]);
+    expect(new Set(listed).size).toBe(listed.length);
+  });
   it('rejects duplicate family keys and asymmetric locales before exposing a registry', () => {
     const family = { en: { label: 'Label' }, tr: { label: 'Etiket' } };
     expect(() => createMessageRegistry([family, family])).toThrow('I18N_DUPLICATE');
@@ -72,7 +79,9 @@ describe('K2 catalog registry contract', () => {
   });
   it('registers floor defaults from the package manifest without altering the source templates', async () => {
     const manifest = JSON.parse(await readFile(new URL('../../../package.json', import.meta.url), 'utf8')) as { engines: { node: string } };
-    for (const key of ['error.node_version_low', 'desktop.error.node_not_found']) expect(MESSAGE_REGISTRY.defaultParams[key]).toEqual({ floor: manifest.engines.node });
+    const floors = manifest.engines.node.match(/(?<=>=\s*)\d+\.\d+\.\d+/g)!.join(' / ');
+    expect(floors).toBe('24.22.1 / 26.12.1');
+    for (const key of ['error.node_version_low', 'desktop.error.node_not_found']) expect(MESSAGE_REGISTRY.defaultParams[key]).toEqual({ floor: floors });
   });
   it('contains no top-level await or Node imports in the renderer-facing translation unit', async () => {
     for (const name of await readdir(new URL('internal/', unit))) {

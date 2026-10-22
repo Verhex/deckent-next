@@ -530,7 +530,7 @@ flowchart LR
 
 ## Başlarken
 
-Deckent Linux veya Windows üzerinde WSL2 ile, Node.js ≥ 24.22.0 kullanarak çalışır (Node 24 ve 26 desteklenir).
+Deckent Linux veya Windows üzerinde WSL2 ile, Node.js 24.22.1+ ya da 26.12.1+ kullanarak çalışır (Node 24 ve 26 desteklenir).
 Native Windows runtime taşıması desteklenmez. Yeni kaynak derlemesi, kilitli bubblewrap’ı (şu an 0.13.0)
 derleyip yerleştirmek için Docker ister; kilitli kaynağı indirir, kaynak ve binary özetlerini doğrular.
 Doğrulanmış hazır paket çevrimdışı yeniden kullanılabilir. Sistem bubblewrap seçilirse sürümü en az 0.12.0

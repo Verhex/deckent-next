@@ -1,4 +1,4 @@
-import { NODE_ENGINE_RANGE } from '#platform/core/common/index.js';
+import { NODE_ENGINE_FLOOR_TEXT } from '#platform/core/common/index.js';
 import { families } from './families.js';
 import identicalMessages from './identical-messages.json' with { type: 'json' };
 import { LOCALES, type Catalog, type MessageFamily, type MessageRegistry, type Params } from './types.js';
@@ -27,7 +27,7 @@ export function createMessageRegistry(input: readonly MessageFamily[], defaults:
     keys: Object.freeze(Object.keys(catalogs['en']!).sort()), defaultParams: Object.freeze(parameters) });
 }
 export const MESSAGE_REGISTRY = createMessageRegistry(families, {
-  'error.node_version_low': { floor: NODE_ENGINE_RANGE },
-  'desktop.error.node_not_found': { floor: NODE_ENGINE_RANGE },
+  'error.node_version_low': { floor: NODE_ENGINE_FLOOR_TEXT },
+  'desktop.error.node_not_found': { floor: NODE_ENGINE_FLOOR_TEXT },
 }, [...identicalMessages, 'cli.version']); // Existing K0 machine identity format is intentionally identical.
 export const MESSAGE_KEYS = MESSAGE_REGISTRY.keys;

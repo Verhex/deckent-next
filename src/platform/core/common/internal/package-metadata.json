@@ -1,5 +1,5 @@
 {
   "name": "deckent",
   "version": "1.0.0-alpha.51",
-  "nodeEngine": ">=24.22.0"
+  "nodeEngine": ">=24.22.1 <25 || >=26.12.1"
 }

@@ -241,6 +241,34 @@ describe('lint-arch unit contract', () => {
     expect(undeclared.out).toContain('[unit-plan]');
   });
 
+  it('records string-literal dynamic imports as unit dependencies, never type-position imports', async () => {
+    const root = await fixture({
+      'src/platform/core/a/index.ts': "export async function a() { return (await import('#platform/core/b/index.js')).b; }\nexport type C = import('#platform/core/c/index.js').C;",
+      'src/platform/core/b/index.ts': 'export const b = 1;',
+      'src/platform/core/c/index.ts': 'export type C = number;',
+    }, true, true);
+    const archPath = join(root, 'arch.json');
+    const arch = JSON.parse(await (await import('node:fs/promises')).readFile(archPath, 'utf8')) as { units: Record<string, { dependencies: string[]; plan: string }> };
+    arch.units['src/platform/core/a']!.dependencies = [];
+    await writeFile(archPath, JSON.stringify(arch));
+    const undeclared = await lint(root);
+    expect(undeclared.out).toContain('[unit-dependency] src/platform/core/a — undeclared dependency src/platform/core/b');
+    expect(undeclared.out).not.toContain('undeclared dependency src/platform/core/c');
+    arch.units['src/platform/core/a']!.dependencies = ['src/platform/core/b'];
+    await writeFile(archPath, JSON.stringify(arch));
+    const declared = await lint(root);
+    expect(declared.out).not.toContain('[unit-dependency]');
+    expect(declared.code).toBe(0);
+  });
+
+  it('rejects a dependency cycle closed by a dynamic import', async () => {
+    const root = await fixture({
+      'src/platform/core/a/index.ts': "import { b } from '#platform/core/b/index.js'; export const a = () => b;",
+      'src/platform/core/b/index.ts': "export const b = 1; export async function lazy() { return (await import('#platform/core/a/index.js')).a; }",
+    }, true, true);
+    expect((await lint(root)).out).toContain('[unit-cycle]');
+  });
+
   it('rejects a source unit missing from the declaration graph', async () => {
     const root = await fixture({ 'src/platform/core/a/index.ts': 'export const a = 1;' });
     const arch = JSON.parse(await (await import('node:fs/promises')).readFile(join(root, 'arch.json'), 'utf8')) as { units: Record<string, { dependencies: string[]; plan: string }> };

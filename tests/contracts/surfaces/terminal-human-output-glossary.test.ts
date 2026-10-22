@@ -12,5 +12,13 @@ describe('Turkish glossary in terminal and monitor catalogs', () => {
     const offenders = swept.filter(([, text]) => /\b(worker|Run|Koşu)\b/iu.test(prose(text))).map(([key]) => key);
     expect(offenders).toEqual([]);
   });
+  // CIKTI-OKUNUR-2: worker, transcript, monitor and inspect output use işçi and (canlılık) sinyali, never the raw English words.
+  it('uses işçi and sinyal instead of worker and heartbeat in worker, transcript, monitor and inspect output', () => {
+    const observed = Object.entries(catalog).filter(([key]) => /^(cli\.workers\.|cli\.task\.transcript\.|cli\.worker\.|monitor\.|inspect\.follow\.)/u.test(key)
+      ? key !== 'cli.workers.help' : key === 'inspect.field.heartbeat');
+    const offenders = observed.filter(([, text]) => /\b(worker|heartbeat)\b/iu.test(prose(text))).map(([key]) => key);
+    expect(offenders).toEqual([]);
+    expect(observed.length).toBeGreaterThan(500);
+  });
   it('keeps the sweep non-trivial', () => { expect(swept.length).toBeGreaterThan(300); });
 });

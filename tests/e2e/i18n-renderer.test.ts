@@ -41,6 +41,6 @@ describe('K2 renderer import proof', () => {
     `;
     const result = await exec(process.execPath, ['--experimental-vm-modules', '--input-type=module', '-e', script], { timeout: 10_000 });
     const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8')) as { engines: { node: string } };
-    expect(JSON.parse(result.stdout)).toMatchObject({ locale: 'en', unknown: 'absent', tr: expect.stringContaining('Bilinmeyen komut'), floor: manifest.engines.node });
+    expect(JSON.parse(result.stdout)).toMatchObject({ locale: 'en', unknown: 'absent', tr: expect.stringContaining('Bilinmeyen komut'), floor: manifest.engines.node.match(/(?<=>=\s*)\d+\.\d+\.\d+/g)!.join(' / ') });
   });
 });
