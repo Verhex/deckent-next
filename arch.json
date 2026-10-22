@@ -544,7 +544,8 @@
         "src/adapters/core/target-queue-store",
         "src/adapters/core/sqlite-ledger",
         "src/engine/core/effect",
-        "src/engine/core/run-proposal"
+        "src/engine/core/run-proposal",
+        "src/adapters/core/project-instructions"
       ],
       "plan": "EXECUTION"
     },
@@ -2892,14 +2893,15 @@
     "src/adapters/core/project-instructions": {
       "dependencies": [
         "src/engine/core/project-instructions",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/platform/core/host",
+        "src/platform/core/managed-files"
       ],
       "plan": "SURFACES"
     },
     "src/composition/core/project-instructions": {
       "dependencies": [
         "src/platform/core/config",
-        "src/platform/core/host",
         "src/platform/core/managed-files",
         "src/platform/core/clock",
         "src/composition/core/root",
@@ -3178,6 +3180,7 @@
     },
     "src/surfaces/core/cli-run": {
       "dependencies": [
+        "src/engine/core/model-activation",
         "src/surfaces/core/cli-terminal",
         "src/surfaces/core/cli-kit",
         "src/domain/core/run",
@@ -3596,7 +3599,8 @@
       "CHANGELOG.md",
       "docs/policy-and-ai.md",
       "docs/policy-and-ai.tr.md",
-      "docs/reports/ai-floor-compliance.md"
+      "docs/reports/ai-floor-compliance.md",
+      "DECKENT.md"
     ],
     "pointerFiles": {
       "CLAUDE.md": 70,
