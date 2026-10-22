@@ -205,6 +205,8 @@
   "cli.help.bare.missing": "Eksik argüman: {argument}.",
   "cli.help.bare.actions": "Eylemler: {actions}",
   "cli.help.bare.details": "Ayrıntı: deckent {command} --help",
+  "cli.help.action.requires": "Gerekli: {arguments}",
+  "cli.help.action.requiresOffTerminal": "Terminal dışında gerekli: {arguments}",
   "cli.help.family.withoutAction": "Eylemsiz çağrı: {command}",
   "cli.help.placeholder.action": "eylem",
   "cli.help.placeholder.text": "metin",

@@ -131,7 +131,7 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED
   expect(humanEn).toContain('persisted active activation'); expect(humanEn).toContain('availability');
   expect(humanTr).toContain('kayıtlı aktif aktivasyonu'); expect(humanTr).toContain('kullanılabilirliği');
   await expect(execute(process.execPath, [cli, 'models', 'activation', '--scope', 'scope-a', '--provider', 'provider'],
-    { cwd: project, env, timeout: 10_000 })).rejects.toMatchObject({ code: 2, stderr: expect.stringContaining('CLI_USAGE') });
+    { cwd: project, env, timeout: 10_000 })).rejects.toMatchObject({ code: 2, stderr: expect.stringContaining('CLI_ARGUMENT_MISSING') });
   await expect(execute(process.execPath, [cli, 'models', 'activation', ...flags.slice(0, -1).map(value => value === 'scope-a' ? 'wrong-scope' : value)],
     { cwd: project, env, timeout: 10_000 })).rejects.toMatchObject({ code: 1, stderr: expect.stringContaining('POLICY_DENIED') });
 

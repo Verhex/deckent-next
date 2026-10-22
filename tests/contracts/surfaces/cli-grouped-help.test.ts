@@ -135,7 +135,9 @@ it.each(['en', 'tr'] as const)('keeps %s syntax whole and creates no short wrapp
       expect(line, label).not.toMatch(/\[[^\]]*$|<[^>]*$/);
       // Complete syntax-only continuations (e.g. [--reason <text>]) are not prose orphans.
       const syntaxOnly = /^(?:\[[^\]]+\]|--[\w-]+|<[^>]+>)(?:\s+(?:\[[^\]]+\]|--[\w-]+|<[^>]+>))*$/.test(line.trim());
-      if (!syntaxOnly && line.trim() && line.trim().split(/[\s|]+/).length <= 3) expect(sourceLines.has(line.trim().replace(/\s+/g, ' ')), label).toBe(true);
+      // S2: an action's "Required: …" line is an intentional heading of its own, however short.
+      const required = ['cli.help.action.requires', 'cli.help.action.requiresOffTerminal'].some(key => line.startsWith(catalog[key]!.split('{')[0]!));
+      if (!syntaxOnly && !required && line.trim() && line.trim().split(/[\s|]+/).length <= 3) expect(sourceLines.has(line.trim().replace(/\s+/g, ' ')), label).toBe(true);
     }
   }
 });
