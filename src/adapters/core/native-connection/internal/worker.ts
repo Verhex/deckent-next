@@ -241,14 +241,22 @@ function finalTextReport(data: Record<string, unknown>, secrets: readonly string
   dropTransportNulls(value);
   return validateFinalReport(value, secrets, limits);
 }
-/** The report channel (registry capability) decides how the report is read; flag channels keep their native stream readers. */
+/**
+ * The report channel (registry capability) decides how the report is read; flag channels keep their native stream readers.
+ * `final-text-json` terminal rule (REVISE 2730 R2): exactly one terminal `result` record, and it is the last record of the stream. No record of
+ * any type is permitted after it (every real capture in tests/fixtures/native-cursor ends with its single `result`); blank lines are not records.
+ * A second `result` (duplicate or contradictory, either order) or any later record makes the report `invalid`, sticky to EOF: an earlier
+ * failure is never erased and an earlier report is never kept across later activity.
+ */
 export function finalReportCollector(provider: string, secrets: readonly string[], limits: ReportLimits, channel?: string) {
   let result: FinalReportResult = { status: 'unavailable', reason: 'missing' };
+  const finalText = channel === 'final-text-json'; let terminal = false;
   return {
     observe(line: string) {
+      if (finalText && terminal) { if (line.trim()) result = { status: 'unavailable', reason: 'invalid' }; return; }
       let data; try { data = JSON.parse(line) as Record<string, unknown>; } catch { return; }
       if (!data || typeof data !== 'object') return;
-      if (channel === 'final-text-json') { if (data.type === 'result') result = finalTextReport(data, secrets, limits); return; }
+      if (finalText) { if (data.type === 'result') { terminal = true; result = finalTextReport(data, secrets, limits); } return; }
       if (provider === 'claude' && data.type === 'result') result = data.structured_output === undefined
         ? { status: 'unavailable', reason: 'missing' } : validateFinalReport(data.structured_output, secrets, limits);
       if (provider === 'codex' && data.type === 'item.completed') {
@@ -262,7 +270,7 @@ export function finalReportCollector(provider: string, secrets: readonly string[
         catch { result = { status: 'unavailable', reason: 'invalid' }; }
       }
     },
-    oversized() { result = { status: 'unavailable', reason: 'oversized' }; },
+    oversized() { result = { status: 'unavailable', reason: finalText && terminal ? 'invalid' : 'oversized' }; },
     finish: () => result,
   };
 }
@@ -472,9 +480,11 @@ function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormaliz
 /** Cursor `tool_call` keys (cursor-agent stream-json: documented readToolCall/writeToolCall/function, observed editToolCall). Unknown keys stay
  * visible as `other` calls and are also counted as unmapped, so a new native tool is never silently misclassified. */
 const CURSOR_TOOLS: Readonly<Record<string, string>> = { readToolCall: 'read', editToolCall: 'edit', writeToolCall: 'write', function: 'other' };
-/** Cursor state beyond the shared normalizer state: seen tool calls, derived turns and the byte size of the thinking segment in progress. */
-export interface CursorNormalizerState { readonly calls: Set<string>; turns: number; thinkingBytes: number }
-export function createCursorState(): CursorNormalizerState { return { calls: new Set(), turns: 0, thinkingBytes: 0 }; }
+/** Cursor state beyond the shared normalizer state: seen tool calls, derived turns, the byte size of the thinking segment in progress and whether the terminal `result` was seen. */
+export interface CursorNormalizerState { readonly calls: Set<string>; turns: number; thinkingBytes: number; ended: boolean }
+export function createCursorState(): CursorNormalizerState { return { calls: new Set(), turns: 0, thinkingBytes: 0, ended: false }; }
+/** A Cursor usage counter is measured only as a safe non-negative integer (strict, Cursor-only: the shared `num` keeps Claude/Codex bytes unchanged). */
+const cursorCounter = (value: unknown): number | null => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 /**
  * Maps one line of `cursor-agent --print --output-format stream-json` onto contract events. Shapes follow the real cursor-agent
  * 2026.10.19-6bbf2c4 streams (tests/fixtures/native-cursor): system/init, user, thinking delta|completed, tool_call started|completed,
@@ -535,12 +545,18 @@ function mapCursorLine(line: string, state: NormalizerState, cursor: CursorNorma
       else emit('tool.result', { toolId, status: Object.hasOwn(result, 'success') ? 'ok' : 'error', bytes: Buffer.byteLength(JSON.stringify(result)) });
     }
   } else if (type === 'result') {
-    // A missing or malformed usage record is unknown, never a measured zero.
+    // One terminal result per session (REVISE 2730 R2): a later one is counted, never a second end that would override the first.
+    if (cursor.ended) { miss('result:duplicate'); return; }
+    cursor.ended = true;
+    // A missing, malformed or incomplete usage record is unknown, never a measured zero (REVISE 2730 R1): all four counters or none.
     const usage = record(data.usage);
-    if (!usage && data.usage !== undefined) miss('usage-invalid');
+    const counts = usage ? [usage.inputTokens, usage.outputTokens, usage.cacheReadTokens, usage.cacheWriteTokens].map(cursorCounter) : null;
+    const [input, output, cacheRead, cacheWrite] = counts ?? [];
+    const measured = input != null && output != null && cacheRead != null && cacheWrite != null;
+    if (!measured && data.usage !== undefined) miss('usage-invalid');
     emit('session.ended', { outcome: subtype === 'success' && data.is_error !== true ? 'success' : 'error', turns: cursor.turns,
       durationMs: num(data.duration_ms), apiDurationMs: typeof data.duration_api_ms === 'number' ? num(data.duration_api_ms) : null, costUsd: null, costBasis: null,
-      tokens: usage ? { input: num(usage.inputTokens), output: num(usage.outputTokens), cacheRead: num(usage.cacheReadTokens), cacheWrite: num(usage.cacheWriteTokens), thinking: null } : null,
+      tokens: measured ? { input, output, cacheRead, cacheWrite, thinking: null } : null,
       permissionDenials: 0 });
   } else miss(type);
 }
