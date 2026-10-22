@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { randomUUID } from 'node:crypto';
-import type { EffectConfirmationView, RunView, TargetQueueView, QueueConsent } from '#engine/index.js';
+import type { DeliverySummary, EffectConfirmationView, RunView, TargetQueueView, QueueConsent } from '#engine/index.js';
 import { shortId, type KnownSecretSnapshot } from '#platform/index.js';
 import { fillTemplate, humanRecordText, span, type SpanStyle } from '#surfaces/core/terminal-render/index.js';
 import { decisionKey } from '#surfaces/core/terminal-kit/index.js';
@@ -13,6 +13,9 @@ import WINDOW from './window.json' with { type: 'json' };
 export interface DeliveryWindowLabels {
   readonly queue?: { readonly reprepare: string; readonly hints: string; readonly waiting: string;
     status(view: TargetQueueView): string; card(view: Omit<QueueConsent, 'capability'>): string };
+  /** TESLIM-KARTI-OZET (shared renderer): a ticket's or Attempt's summary lines (`brief` leaves out what the window shows itself: title, operation,
+   * files) and the block placed ABOVE an exact consent card. No shadow line exists here. */
+  readonly cardSummary?: { lines(summary: DeliverySummary | null, brief: boolean): readonly string[]; consent(summaries: readonly (DeliverySummary | null)[]): readonly string[] };
   readonly title: string; readonly ids: string; readonly loading: string; readonly check: string; readonly outOfScope: string; readonly summary: string;
   readonly file: string; readonly moreFiles: string; readonly where: string; readonly adoptionLater: string; readonly reattempt: string; readonly hints: string;
   readonly working: string; readonly confirmBody: string; readonly confirmRef: string; readonly confirmHints: string;
@@ -31,7 +34,7 @@ export interface DeliveryWindowLabels {
 export type DeliveryOpening = 'foreground' | 'background';
 type Waiting = Readonly<{ view: EffectConfirmationView; resolve: (yes: boolean) => void }>;
 type Stage = Readonly<{ kind: 'loading' | 'ready' | 'working' | 'adopting' }> | Readonly<{ kind: 'confirm'; waiting: Waiting }>
-  | Readonly<{ kind: 'queue' | 'queue-working' }> | Readonly<{ kind: 'queue-confirm'; view: Omit<QueueConsent, 'capability'>; resolve: (yes: boolean) => void }>
+  | Readonly<{ kind: 'queue' | 'queue-working' }> | Readonly<{ kind: 'queue-confirm'; view: Omit<QueueConsent, 'capability'>; summaries?: readonly (DeliverySummary | null)[]; resolve: (yes: boolean) => void }>
   | Readonly<{ kind: 'delivered' }> | Readonly<{ kind: 'verify' }> | Readonly<{ kind: 'done' }> | Readonly<{ kind: 'failed'; error: string; code: string | null }>;
 /** The verification choice of the selected branch: the candidates (null while read), the selected row and the last refusal or read failure. */
 type Verify = { runs: readonly VerificationCandidate[] | null; selected: number; status: string };
@@ -48,7 +51,7 @@ interface Entry {
   opening: DeliveryOpening; generation: number; stage: Stage; preview: DeliveryPreview | null; consent: DeliveryConsent | null;
   ids: { candidate: string; delivery: string; adopt: string }; delivered: DeliveryOutcome | null; adopted: AdoptionOutcome | null;
   /** Whether the window showed the re-attempt line: from the preview, or read from the queue port when a refused preview offers `r`. */
-  reattempt?: boolean; queue?: TargetQueueView; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
+  reattempt?: boolean; queue?: TargetQueueView; queueSummary?: DeliverySummary | null; selected: number; fileSel?: number; diffScroll?: number | null; closed: boolean; settled: boolean; verify: Verify | null;
 }
 const ids = () => ({ candidate: `terminal-candidate-${randomUUID()}`, delivery: `terminal-delivery-${randomUUID()}`, adopt: `terminal-adopt-${randomUUID()}` });
 const codeOf = (error: unknown) => { const code = (error as { code?: unknown } | null)?.code; return typeof code === 'string' ? code : null; };
@@ -75,9 +78,14 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
   const [, rerender] = useState(0);
   const changed = useCallback(() => rerender(value => value + 1), []);
   const latest = useRef(input); latest.current = input;
+  // TESLIM-KARTI-OZET: the ticket's summary follows its last view (read-only; a failed read leaves the status card alone).
+  const summarize = useCallback((entry: Entry) => {
+    const view = entry.queue, read = latest.current.port?.queue?.summary;
+    if (view && read) read(view).then(summary => { if (entry.queue === view) { entry.queueSummary = summary; changed(); } }, () => undefined);
+  }, [changed]);
   const load = useCallback((entry: Entry) => {
     const current = latest.current.port; if (!current) return;
-    if (entry.queue && current.queue) { current.queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => { if (view) entry.queue = view; entry.stage = { kind: 'queue' }; changed(); }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
+    if (entry.queue && current.queue) { current.queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => { if (view) entry.queue = view; entry.stage = { kind: 'queue' }; summarize(entry); changed(); }, error => { entry.stage = { kind: 'failed', error: latest.current.errorText(error), code: codeOf(error) }; changed(); }); return; }
     entry.stage = { kind: 'loading' }; entry.preview = null; entry.consent = null; entry.ids = ids(); entry.selected = 0; entry.fileSel = 0; entry.diffScroll = null; entry.reattempt = false;
     current.preview(entry.target).then(preview => { if (entry.stage.kind === 'loading') { entry.preview = preview; entry.reattempt = preview.reattempt === true; entry.stage = { kind: 'ready' }; changed(); } },
       error => {
@@ -85,7 +93,7 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
         // A refused preview that offers `r` (queue preparation on the current base) shows the re-attempt line first when that enqueue carries the intent.
         if (current.queue && QUEUE_REPREPARE.has(codeOf(error) ?? '')) current.queue.reattempt().then(yes => { entry.reattempt = yes; show(); }, show); else show();
       });
-  }, [changed]);
+  }, [changed, summarize]);
   const open = useCallback((target: DeliveryTarget, opening: DeliveryOpening) => {
     if (!latest.current.port || !latest.current.labels) return;
     seen.current.add(target.key);
@@ -124,22 +132,22 @@ export function useDeliveryWindows(input: DeliveryWindowsInput) {
     const queue = latest.current.port?.queue;
     if (!queue || !entry.queue) return;
     queue.inspect(entry.target.scopeId, entry.queue.commandId).then(view => {
-      if (view) { entry.queue = view; entry.stage = { kind: 'queue' }; entry.settled = view.state === 'settled'; changed(); }
+      if (view) { entry.queue = view; entry.stage = { kind: 'queue' }; entry.settled = view.state === 'settled'; summarize(entry); changed(); }
     }, error => fail(entry, error));
-  }, [changed, fail]);
+  }, [changed, fail, summarize]);
   const prepareCurrent = useCallback((entry: Entry) => {
     const queue = latest.current.port?.queue; if (!queue) return;
     entry.stage = { kind: 'queue-working' }; changed();
-    queue.prepareCurrent(entry.target, `terminal-queue-${randomUUID()}`).then(view => { entry.queue = view; entry.stage = { kind: 'queue' }; changed(); }, error => fail(entry, error));
-  }, [changed, fail]);
+    queue.prepareCurrent(entry.target, `terminal-queue-${randomUUID()}`).then(view => { entry.queue = view; entry.stage = { kind: 'queue' }; summarize(entry); changed(); }, error => fail(entry, error));
+  }, [changed, fail, summarize]);
   const confirmQueue = useCallback((entry: Entry) => {
     const queue = latest.current.port?.queue;
     if (!queue || entry.queue?.state !== 'awaiting-confirmation') return;
     entry.stage = { kind: 'queue-working' }; changed();
-    const ask = (view: Omit<QueueConsent, 'capability'>) => new Promise<boolean>(resolve => {
+    const ask = (view: Omit<QueueConsent, 'capability'>, summaries: readonly (DeliverySummary | null)[]) => new Promise<boolean>(resolve => {
       const timer = setTimeout(() => finish(false), latest.current.confirmTimeoutMs);
       const finish = (yes: boolean) => { clearTimeout(timer); entry.stage = { kind: 'queue-working' }; changed(); resolve(yes); };
-      entry.stage = { kind: 'queue-confirm', view, resolve: finish }; changed();
+      entry.stage = { kind: 'queue-confirm', view, summaries, resolve: finish }; changed();
     });
     queue.confirm(entry.target.scopeId, entry.queue.commandId, ask).then(() => refreshQueue(entry), error => fail(entry, error));
   }, [changed, fail, refreshQueue]);
@@ -297,13 +305,16 @@ function hintsOf(entry: Entry, labels: DeliveryWindowLabels, queueAvailable: boo
 }
 
 /** Body rows: ids, the check of the current source, the changed files with their stat, where it writes, and the stage's own lines. */
-export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify' | 'queue' | 'fileSel' | 'diffScroll' | 'reattempt'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
+export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' | 'delivered' | 'adopted' | 'selected'> & Partial<Pick<Entry, 'verify' | 'queue' | 'queueSummary' | 'fileSel' | 'diffScroll' | 'reattempt'>>, labels: DeliveryWindowLabels, known?: KnownSecretSnapshot): WindowLine[] {
   const text = (value: string) => humanRecordText(value, known), line = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)] });
   const exact = (value: string, extra: SpanStyle = {}): WindowLine => ({ spans: [span(text(value), extra)], exact: true });
   const { target, stage, preview, delivered, adopted } = entry;
   const rows: WindowLine[] = [line(fillTemplate(labels.ids, { run: shortId(target.runId), task: target.taskId }), { role: 'muted' })];
-  if (stage.kind === 'queue-confirm' && labels.queue) return [...rows, ...labels.queue.card(stage.view).split('\n').map(value => exact(value))];
-  if (entry.queue && labels.queue && stage.kind === 'queue') return [...rows, ...labels.queue.status(entry.queue).split('\n').map(value => exact(value))];
+  // The summary stands ABOVE the exact card or status, never inside it (the consent stays bound to the card's digest).
+  if (stage.kind === 'queue-confirm' && labels.queue) return [...rows, ...(labels.cardSummary?.consent(stage.summaries ?? []) ?? []).map(value => line(value)),
+    ...labels.queue.card(stage.view).split('\n').map(value => exact(value))];
+  if (entry.queue && labels.queue && stage.kind === 'queue') return [...rows, ...(entry.queueSummary !== undefined && labels.cardSummary ? labels.cardSummary.lines(entry.queueSummary, false) : []).map(value => line(value)),
+    ...labels.queue.status(entry.queue).split('\n').map(value => exact(value))];
   if (stage.kind === 'queue-working' && labels.queue) return [...rows, line(labels.queue.waiting)];
   if (stage.kind === 'confirm') {
     const view = stage.waiting.view;
@@ -324,6 +335,7 @@ export function deliveryLines(entry: Pick<Entry, 'target' | 'stage' | 'preview' 
         preview.diffs?.length && index === (entry.fileSel ?? 0) ? { role: 'accent', bold: true } : {})));
     if (preview.files.length > WINDOW.maxFiles) rows.push(line(fillTemplate(labels.moreFiles, { count: preview.files.length - WINDOW.maxFiles }), { role: 'muted' }));
     if (!delivered) {
+      if (preview.summary !== undefined && labels.cardSummary) rows.push(...labels.cardSummary.lines(preview.summary, true).map(value => line(value)));
       rows.push(line(labels.where, { role: 'muted' }));
       if (preview.adoptionTargets.length) rows.push(line(fillTemplate(labels.adoptionLater, { targets: preview.adoptionTargets.join(', ') }), { role: 'muted' }));
       if (preview.queueTarget && preview.reattempt) rows.push(line(labels.reattempt, { role: 'muted' }));

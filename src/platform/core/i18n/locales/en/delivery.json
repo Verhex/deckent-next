@@ -71,5 +71,14 @@
   "delivery.shadow.reason.size-over-bound": "change too large",
   "delivery.shadow.reason.scope-undeclared": "scope not declared",
   "delivery.shadow.reason.out-of-scope-changes": "changes outside scope",
-  "delivery.shadow.reason.evidence-withheld": "evidence not readable"
+  "delivery.shadow.reason.evidence-withheld": "evidence not readable",
+  "delivery.card.above": "Summary (your yes approves the exact card below, nothing else):",
+  "delivery.summary.unavailable": "Summary: not available (no permission or no record)",
+  "delivery.list.column.title": "Title",
+  "delivery.list.column.risk": "Risk",
+  "delivery.list.column.shadow": "Rule (off)",
+  "delivery.list.risk.small": "small",
+  "delivery.list.risk.other": "other",
+  "delivery.list.shadow.deliver": "would deliver",
+  "delivery.list.shadow.hold": "would hold"
 }

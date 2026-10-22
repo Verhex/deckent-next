@@ -203,7 +203,12 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     expect(confirmed.output.match(/Exact batch: [a-f0-9]{64}/gu)).toHaveLength(2);
     expect(confirmed.output.match(/Items: 3/gu)).toHaveLength(2);
     for (const ticket of tickets) expect(confirmed.output).toContain(`Ticket ${ticket}`);
-    expect(confirmed.output).toContain('"settledPrefix":3');
+    expect(confirmed.output).toContain('Confirmed batch: 3 of');
+    // alpha.53 A3 (TESLIM-KARTI-OZET): each asked ticket's summary, read through the shipped composition, stands above the exact card; never a shadow line there.
+    expect(confirmed.output).toContain('Summary (your yes approves the exact card below, nothing else):');
+    expect(confirmed.output.indexOf('Summary (your yes approves')).toBeLessThan(confirmed.output.indexOf('Exact batch:'));
+    expect(confirmed.output).toMatch(/System verification \(queue-verify-[a-f0-9]{64}\): accepted/u);
+    expect(confirmed.output).not.toContain('Summary: not available'); expect(confirmed.output).not.toMatch(/Rule off|would have/u);
 
     // Outcomes: the first candidate sat on H0; the second and third were prepared on the head the prefix advanced to.
     const settled = await Promise.all(tickets.map(view)) as TargetQueueView[];
@@ -270,7 +275,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     await s.toConfirmation('q1', attempt);
     const confirmed = await s.confirm('q1');
     const ids = queueCommandIds({ request: { identity: { scopeId: SCOPE }, commandId: 'q1' } } as never);
-    expect({ settled: confirmed.output.includes('"settledPrefix":1'), ticket: (await s.view('q1'))?.state, row: journal(f, ids.adoption) })
+    expect({ settled: confirmed.output.includes('Confirmed batch: 1 of'), ticket: (await s.view('q1'))?.state, row: journal(f, ids.adoption) })
       .toMatchObject({ settled: true, ticket: 'settled', row: { sequence: 1, settled: 1 } });
     expect(confirmed.status).toBe(0);
     const adopted = await git(f.target, 'rev-parse', TARGET);
@@ -312,18 +317,19 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     const parked = await s.view('q1');
     expect({ ticket: parked?.state, next: parked?.nextAction, row: journal(f, ids.adoption) })
       .toMatchObject({ ticket: 'parked', next: 'new-attempt', row: { sequence: 1, settled: 2 } });
-    expect(failed.output).toContain('"state":"refused"');
+    expect(failed.output).toContain('q1: refused (published)');
     expect(parked?.reason).toBe('ADOPTION_NOT_APPLIED');
     // C-PRIO: the parked delivery is visible in the human list with its typed reason and next step; no raw JSON reaches the human.
     const listed = await s.list();
     expect(listed.status).toBe(0);
-    expect(listed.output).toMatch(/refs\/heads\/\S+\s+Parked\s+Create a new attempt\s+q1/u);
+    // alpha.53 A3: the risk word and the rule-off column (B1 shadow record of the ticket) stand between the next step and the ticket.
+    expect(listed.output).toMatch(/refs\/heads\/\S+\s+Parked\s+Create a new attempt\s+(?:small|other)\s{2,}(?:would deliver|would hold)\s{2,}q1/u);
     expect(listed.output).toContain(`Reason: ${ErrorRegistry.createError('ADOPTION_NOT_APPLIED', { locale: 'en' }).message}`);
     expect(listed.output).not.toContain('schemaVersion');
     expect(await git(f.target, 'rev-parse', TARGET)).toBe(f.base); expect(await fenceOf(f.target)).toBeNull();
     // The released row no longer blocks the target: the next ticket adopts as sequence 1 of this repository.
     await s.toConfirmation('q2', second);
-    expect((await s.confirm('q2')).output).toContain('"settledPrefix":1');
+    expect((await s.confirm('q2')).output).toContain('Confirmed batch: 1 of');
     const q2 = queueCommandIds({ request: { identity: { scopeId: SCOPE }, commandId: 'q2' } } as never);
     expect(journal(f, q2.adoption)).toMatchObject({ sequence: 1, settled: 1 });
     expect(await fenceOf(f.target)).toMatchObject({ sequence: 1, commandId: q2.adoption });
@@ -394,7 +400,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
     await git(f.target, 'update-ref', '-d', queueGenerationRef(TARGET));
     // The target is no longer frozen: the next ticket adopts as sequence 1 of the clone.
     await s.toConfirmation('q2', second);
-    expect((await s.confirm('q2')).output).toContain('"settledPrefix":1');
+    expect((await s.confirm('q2')).output).toContain('Confirmed batch: 1 of');
     const q2 = queueCommandIds({ request: { identity: { scopeId: SCOPE }, commandId: 'q2' } } as never);
     expect(journal(f, q2.adoption)).toMatchObject({ sequence: 1, settled: 1 });
     expect(await fenceOf(f.target)).toMatchObject({ sequence: 1, commandId: q2.adoption });

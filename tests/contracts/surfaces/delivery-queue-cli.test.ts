@@ -1,10 +1,14 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { PassThrough } from 'node:stream';
+import { describe, expect, it, vi } from 'vitest';
 import { queueCommand, renderQueueList } from '#surfaces/core/delivery-queue/index.js';
+import { DELIVERY_RENDER_LIMITS } from '#surfaces/core/delivery-summary/index.js';
+import { renderQueueConsent } from '#surfaces/core/effect-confirmation/index.js';
 import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
-import { targetQueueViewSchema } from '#engine/index.js';
+import { queueTicketCommandIds, targetQueueViewSchema } from '#engine/index.js';
+import { deliverySummaryFixture } from '../support/delivery-summary-fixture.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { homeEnv } from '../support/host-platform.js';
 
@@ -213,5 +217,69 @@ describe('delivery queue list table (C-PRIO)', () => {
     const hostile = { ...page.records[0]!, identity: { ...page.records[0]!.identity, taskId: 'task\u001b[2Jx' }, target: { kind: 'git-ref', id: 'refs/heads/\u009b31mred' } };
     const text = renderQueueList({ records: [hostile] }, 's', 10, 'en');
     expect([...text].filter(char => char === '\u001b' || char === '\u009b')).toEqual([]);
+  });
+});
+
+/** alpha.53 A3 (TESLIM-KARTI-OZET): every human queue view carries the ticket's summary; the shadow is list/inspect only; --json is untouched. */
+describe('delivery queue CLI card summaries (alpha.53 A3)', () => {
+  const shadow = { verdict: 'would-hold', reasons: ['target-unknown'] } as const;
+  function summarized(language?: string, fail = false) {
+    const p = project(language), requests: unknown[] = [], shadows: string[] = [];
+    (p.context as { deliveryQueue: { listTargetQueue: () => Promise<unknown> } }).deliveryQueue.listTargetQueue = async () => ({ schemaVersion: 1, records: [sampleView('q1')] });
+    Object.assign(p.context as object, {
+      describeDeliverySummaries: async (_root: string, input: readonly unknown[]) => { requests.push(...input); if (fail) throw new Error('ledger-gone'); return input.map(() => deliverySummaryFixture()); },
+      readAutonomyShadow: async (_root: string, scopeId: string, commandId: string) => { shadows.push(`${scopeId}/${commandId}`); return shadow; } });
+    return { ...p, requests, shadows };
+  }
+  it('inspect shows the summary under the ticket title and the rule-off line; the request names the ticket, its verification Run and the git verdict', async () => {
+    const p = summarized();
+    await queueCommand(['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'q1'], p.context);
+    const lines = p.output.join('').split('\n');
+    expect(lines[0]).toBe('Delivery ticket q1 · task task-1 · delivery');
+    expect(lines.slice(1, 4)).toEqual(['Work: Login banner fix', 'Move refs/heads/integration to this result', "Worker's own report (a claim, not checked): Banner fixed."]);
+    expect(lines).toContain('Rule off · would have held: target unknown');
+    expect(lines.indexOf('Rule off · would have held: target unknown')).toBeLessThan(lines.findIndex(line => line.startsWith('Target — ')));
+    expect(p.requests).toEqual([{ schemaVersion: 1, identity: sampleView('q1').identity, operation: 'adopt', target: { id: 'refs/heads/main', protected: null },
+      verificationRunId: queueTicketCommandIds('s', 'q1').verificationRun, topPaths: DELIVERY_RENDER_LIMITS.cardTopPaths }]);
+    expect(p.shadows).toEqual(['s/q1']);
+  });
+  it('enqueue and rollback results show the summary but never the shadow line', async () => {
+    const p = summarized('tr');
+    await queueCommand(['task', 'integration-queue-rollback', '--scope', 's', '--source-command-id', 'q0', '--command-id', 'q1'], p.context);
+    const text = p.output.join('');
+    expect(text).toContain('İş: Login banner fix'); expect(text).not.toContain('Kural kapalı'); expect(p.shadows).toEqual([]);
+  });
+  it('the list gains a title, a one-word risk and the rule-off column; --json is the client page and reads no summary', async () => {
+    const p = summarized();
+    await queueCommand(['task', 'integration-queue-list', '--scope', 's'], p.context);
+    const [, header, row] = p.output.join('').split('\n');
+    expect(header!.split(/\s{2,}/u)).toEqual(['Task', 'Title', 'Target', 'State', 'Next step', 'Risk', 'Rule (off)', 'Ticket']);
+    expect(row!.split(/\s{2,}/u)).toEqual(['task-1', 'Login banner fix', 'refs/heads/main', 'Awaiting human confirmation', 'Confirm exact batch', 'small', 'would hold', 'q1']);
+    const json = summarized();
+    await queueCommand(['task', 'integration-queue-list', '--scope', 's', '--json'], json.context);
+    expect(JSON.parse(json.output.join(''))).toEqual({ schemaVersion: 1, records: [sampleView('q1')] }); expect(json.requests).toEqual([]); expect(json.shadows).toEqual([]);
+  });
+  it('a failed summary read never fails the command: the ticket says the summary is not available', async () => {
+    const p = summarized('en', true);
+    await queueCommand(['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'q1'], p.context);
+    expect(p.output.join('')).toContain('Summary: not available (no permission or no record)');
+    expect(p.output.join('')).toContain('Next step: Confirm exact batch');
+  });
+  it('confirm puts each asked ticket\'s summary ABOVE the exact card and no shadow line on it (law-audit fold 3)', async () => {
+    const p = summarized(); let written = '';
+    const input = Object.assign(new PassThrough(), { isTTY: true }), consent = { schemaVersion: 1, digest: 'd'.repeat(64), operation: 'publish', expiresAt: Date.now() + 60_000,
+      target: { kind: 'git-ref', id: 'refs/heads/integration' }, display: sampleView('q1').display,
+      items: [{ commandId: 'q1', from: 'a'.repeat(40), to: 'b'.repeat(40), candidateDigest: 'c'.repeat(64), verificationReceipt: 'e'.repeat(64), changes: ['note.txt'] }] };
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(chunk => { written += String(chunk); return true; });
+    try {
+      Object.assign(p.context as object, { stdin: input, confirmDeliveryQueue: async (_query: unknown, ask: (view: unknown) => Promise<boolean>) => {
+        setTimeout(() => input.write('n\r'), 20); expect(await ask(consent)).toBe(false); return { settledPrefix: 0, items: [] }; } });
+      await queueCommand(['task', 'integration-queue-confirm', '--scope', 's', '--command-id', 'q1'], p.context);
+    } finally { stderr.mockRestore(); }
+    const above = written.indexOf('Summary (your yes approves the exact card below, nothing else):'), card = written.indexOf(renderQueueConsent(consent as never, 'en').split('\n')[0]!);
+    expect(above).toBeGreaterThanOrEqual(0); expect(card).toBeGreaterThan(above);
+    expect(written).toContain('Work: Login banner fix'); expect(written).toContain(renderQueueConsent(consent as never, 'en').split('\n').slice(0, 4).join('\n'));
+    expect(written).not.toMatch(/Rule off|would have/u); expect(p.shadows).toEqual([]);
+    expect(p.requests).toMatchObject([{ operation: 'deliver', topPaths: 0 }]);
   });
 });

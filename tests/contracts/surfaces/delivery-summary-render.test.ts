@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { AUTONOMY_HOLD_REASONS, DELIVERY_MODEL_VERDICTS, DELIVERY_RISK_FLAGS, DELIVERY_SUMMARY_ACTIONS, deliverySummarySchema, type DeliverySummary } from '#engine/index.js';
+import { AUTONOMY_HOLD_REASONS, DELIVERY_MODEL_VERDICTS, DELIVERY_RISK_FLAGS, DELIVERY_SUMMARY_ACTIONS, deliverySummarySchema, queueCommandIds, targetQueueViewSchema,
+  type DeliverySummary } from '#engine/index.js';
 import { MESSAGE_KEYS } from '#platform/index.js';
-import { renderAutonomyShadow, renderDeliverySummary } from '#surfaces/core/delivery-summary/index.js';
+import { consentSummaryLines, consentSummaryOperation, queueSummaryRequest, readConsentSummaries, renderAutonomyShadow, renderDeliverySummary, summaryListCells,
+  DELIVERY_RENDER_LIMITS } from '#surfaces/core/delivery-summary/index.js';
 
 /** TESLIM-KARTI-OZET renderer (alpha.53 A2): bounded human lines in EN/TR, claims vs system, honest withheld/unavailable, no shadow on the card. */
 const identity = { scopeId: 'scope', runId: 'run', layoutRevision: 'layout', taskId: 'task', attemptId: 'attempt', generation: 1 };
@@ -88,5 +90,50 @@ describe('renderAutonomyShadow', () => {
   it('is never part of the card lines (the consent prompt shows the card only)', () => {
     expect(renderDeliverySummary(summary(), 'en').join('\n')).not.toMatch(/Rule off/);
     expect(MESSAGE_KEYS.filter(key => key.startsWith('delivery.shadow.')).length).toBeGreaterThan(0);
+  });
+});
+
+/** alpha.53 A3: the card helpers every surface shares (request facts, consent block, list cells, brief window lines). */
+describe('delivery card helpers (alpha.53 A3)', () => {
+  const view = (over: Record<string, unknown> = {}) => targetQueueViewSchema.parse({ schemaVersion: 1, commandId: 'q1', identity, operation: 'delivery',
+    target: { kind: 'git-ref', id: 'refs/heads/integration' }, display: { schemaVersion: 1, labelKey: 'queue.git.target', basisKey: 'queue.git.basis', versionKey: 'queue.git.version', prepareActionKey: 'queue.git.prepare' },
+    state: 'awaiting-confirmation', outcome: null, revision: 1, observedAt: 1, freshness: 'last-known', position: 1, nextAction: 'confirm-batch', responsibility: 'human',
+    basis: { observed: 'o', effective: 'e', candidate: 'c' }, verification: null, evidenceRefs: [], reason: null, ...over });
+  it('a queue ticket asks for its own verification Run and the git verdict the ticket already carries (protected / passed preparation / unknown)', () => {
+    expect(queueSummaryRequest(view(), 8)).toEqual({ schemaVersion: 1, identity, operation: 'adopt', target: { id: 'refs/heads/integration', protected: false },
+      verificationRunId: queueCommandIds({ request: { identity, commandId: 'q1' } } as never).verificationRun, topPaths: 8 });
+    expect(queueSummaryRequest(view({ basis: null }), 8).target).toEqual({ id: 'refs/heads/integration', protected: null });
+    expect(queueSummaryRequest(view({ basis: null, state: 'settled', outcome: 'target-protected', nextAction: 'select-target' }), 8).target?.protected).toBe(true);
+    expect(queueSummaryRequest(view({ operation: 'rollback' }), 8).operation).toBe('rollback');
+    expect(queueSummaryRequest(view(), 0, consentSummaryOperation('publish')).operation).toBe('deliver');
+    expect(consentSummaryOperation('adopt')).toBe('adopt'); expect(consentSummaryOperation('rollback')).toBe('rollback');
+  });
+  it('consent summaries keep item order; an unreadable ticket is null; a failed reader degrades to nulls; no paths are asked for', async () => {
+    const consent = { operation: 'publish' as const, items: ['q1', 'gone', 'q3'].map(commandId => ({ commandId, from: 'a', to: 'b', candidateDigest: 'c'.repeat(64), verificationReceipt: 'd'.repeat(64), changes: [] })) };
+    const asked: unknown[] = [], inspect = async (id: string) => id === 'gone' ? null : view({ commandId: id });
+    const read = await readConsentSummaries(consent, inspect, async requests => { asked.push(...requests); return requests.map(request => summary({ title: { source: 'work-input', text: request.verificationRunId! } })); });
+    expect(read.map(row => row?.title)).toEqual([{ source: 'work-input', text: queueCommandIds({ request: { identity, commandId: 'q1' } } as never).verificationRun }, undefined,
+      { source: 'work-input', text: queueCommandIds({ request: { identity, commandId: 'q3' } } as never).verificationRun }]);
+    expect(read[1]).toBeNull(); expect(asked).toMatchObject([{ operation: 'deliver', topPaths: 0 }, { operation: 'deliver', topPaths: 0 }]);
+    expect(await readConsentSummaries(consent, inspect, async () => { throw new Error('ledger-gone'); })).toEqual([null, null, null]);
+    expect(await readConsentSummaries(consent, async () => { throw new Error('socket'); }, async () => { throw new Error('not-called'); })).toEqual([null, null, null]);
+  });
+  it('the consent block names what the yes approves, one block per ticket, and has no shadow words', () => {
+    expect(consentSummaryLines([], 'en')).toEqual([]);
+    const lines = consentSummaryLines([summary(), null], 'tr');
+    expect(lines[0]).toBe('Özet (evetiniz yalnızca aşağıdaki kesin kartı onaylar):'); expect(lines[1]).toBe('İş: Login banner fix');
+    expect(lines.at(-1)).toBe('Özet: gösterilemez (yetki ya da kayıt yok)'); expect(lines.join('\n')).not.toMatch(/Kural kapalı/u);
+  });
+  it('a brief block leaves out title, operation and files (the window shows them) but never acceptance, risk or actions', () => {
+    const brief = renderDeliverySummary(summary(), 'en', { omit: ['title', 'operation', 'change'] });
+    expect(brief.join('\n')).not.toMatch(/Work:|Deliver this result|Changed:|Main paths/u);
+    expect(brief[0]).toContain("Worker's own report"); expect(brief.at(-2)).toMatch(/^Risk: /u); expect(brief.at(-1)).toMatch(/^Yes: /u);
+  });
+  it('list cells: a bounded title, one risk word and the shadow word; a missing summary or shadow is a dash', () => {
+    const long = summary({ title: { source: 'work-input', text: 'x'.repeat(80) } }), cells = summaryListCells(long, { verdict: 'would-deliver', reasons: [] }, 'tr');
+    expect([...cells.title]).toHaveLength(DELIVERY_RENDER_LIMITS.listTitleChars); expect(cells.title.endsWith('…')).toBe(true);
+    expect(cells).toMatchObject({ risk: 'küçük', shadow: 'teslim ederdi' });
+    expect(summaryListCells(summary({ risk: { ...summary().risk, class: 'other' } }), { verdict: 'would-hold', reasons: ['size-unknown'] }, 'en')).toMatchObject({ risk: 'other', shadow: 'would hold' });
+    expect(summaryListCells(null, null, 'en')).toEqual({ title: '—', risk: '—', shadow: '—' });
   });
 });

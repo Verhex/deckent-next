@@ -14,6 +14,8 @@ import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/w
 import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
 import { homeEnv } from '../support/host-platform.js';
 import { ErrorRegistry, type DeckentError } from '#platform/index.js';
+import { DELIVERY_RENDER_LIMITS } from '#surfaces/core/delivery-summary/index.js';
+import { deliverySummaryFixture } from '../support/delivery-summary-fixture.js';
 
 // TESLIM-PENCERESI (owner 2026-10-14): "bu teslimleri neden CLI'dan yapıyorum; … bana sorulması gerekiyorsa terminalden bana sorsun".
 // The real Workline on an in-memory TTY with a recording port that calls the window's answer exactly where the production confirmation port
@@ -707,5 +709,64 @@ describe('read-only diff view in the delivery window', () => {
     await admit(denied); denied.set(awaiting()); await until(() => frame(denied).includes('access denied'), 'typed denial');
     expect(frame(denied)).toContain(WORDS.next['POLICY_DENIED']!.slice(0, 40)); expect(frame(denied)).not.toContain('old-one');
     await press(denied, CTRL_O); await press(denied, '\r'); expect(frame(denied)).not.toContain('old-one');
+  });
+});
+
+// alpha.53 A3 (TESLIM-KARTI-OZET): the window and its port carry the shared summary ABOVE every exact card; no shadow line ever reaches a consent card.
+describe('delivery card summaries in the window and its port (alpha.53 A3)', () => {
+  const target = { key: 'k', scopeId: 's', runId: 'r', taskId: 'task', title: 't' }, identity = { scopeId: 's', runId: 'r', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 1 };
+  const preview: DeliveryPreview = { target, identity, files: [{ path: 'note.txt', added: 1, removed: 1 }], added: 1, removed: 1, source: 'SRC', base: BASE, proposal: 'PROP',
+    outOfScope: [], adoptionTargets: [], verification: null };
+  const ticket = targetQueueViewSchema.parse({ schemaVersion: 1, commandId: 'q1', identity, operation: 'delivery', target: { kind: 'git-ref', id: 'refs/heads/integration' },
+    display: { schemaVersion: 1, labelKey: 'queue.git.target', basisKey: 'queue.git.basis', versionKey: 'queue.git.version', prepareActionKey: 'queue.git.prepare' },
+    state: 'awaiting-confirmation', outcome: null, revision: 1, observedAt: 1, freshness: 'last-known', position: 1, nextAction: 'confirm-batch', responsibility: 'human',
+    basis: { observed: 'o', effective: 'e', candidate: 'c' }, verification: null, evidenceRefs: [], reason: null });
+  const consent: Omit<QueueConsent, 'capability'> = { schemaVersion: 1, digest: 'd'.repeat(64), operation: 'publish', expiresAt: 2_000_000_000_000, target: ticket.target, display: ticket.display,
+    items: [{ commandId: 'q1', from: BASE, to: COMMIT, candidateDigest: 'c'.repeat(64), verificationReceipt: 'e'.repeat(64), changes: ['note.txt'] }] };
+  const texts = (entry: Parameters<typeof deliveryLines>[0], locale: 'en' | 'tr' = 'en') => deliveryLines(entry, deliveryWindowLabels(locale)).map(row => row.spans.map(part => part.text).join(''));
+  const base = { target, delivered: null, adopted: null, selected: 0 };
+  it('ready: the brief summary (claim, acceptance, checks, model, risk, yes/no) stands above "where"; title and files are the window\'s own rows', () => {
+    const rows = texts({ ...base, stage: { kind: 'ready' }, preview: { ...preview, summary: deliverySummaryFixture() } });
+    const claim = rows.findIndex(row => row.startsWith("Worker's own report")), where = rows.indexOf(WORDS.where);
+    expect(claim).toBeGreaterThan(rows.findIndex(row => row.includes('note.txt'))); expect(where).toBeGreaterThan(claim);
+    expect(rows.slice(claim, where).at(-1)).toBe('Yes: the target moves to this result · No: the target stays as it is');
+    expect(rows.join('\n')).not.toMatch(/Work: |Changed: |Main paths/u);
+    expect(texts({ ...base, stage: { kind: 'ready' }, preview: { ...preview, summary: null } })).toContain('Summary: not available (no permission or no record)');
+    expect(texts({ ...base, stage: { kind: 'ready' }, preview })).toEqual(texts({ ...base, stage: { kind: 'ready' }, preview: { ...preview } }));
+  });
+  it('queue consent: the summary block is above the exact card, the card rows are unchanged and exact, and no shadow words appear', () => {
+    const stage = { kind: 'queue-confirm' as const, view: consent, resolve: () => undefined };
+    const plain = deliveryLines({ ...base, stage, preview: null }, WORDS), withSummary = deliveryLines({ ...base, stage: { ...stage, summaries: [deliverySummaryFixture()] }, preview: null }, WORDS);
+    const card = WORDS.queue!.card(consent).split('\n');
+    expect(withSummary.slice(-card.length).map(row => row.spans.map(part => part.text).join(''))).toEqual(plain.slice(-card.length).map(row => row.spans.map(part => part.text).join('')));
+    expect(withSummary.slice(-card.length).every(row => row.exact)).toBe(true);
+    const shown = withSummary.map(row => row.spans.map(part => part.text).join(''));
+    expect(shown[1]).toBe('Summary (your yes approves the exact card below, nothing else):'); expect(shown[2]).toBe('Work: Login banner fix');
+    expect(shown.join('\n')).not.toMatch(/Rule off|would have/u);
+  });
+  it('queue status: the ticket summary stands above the status card once read', () => {
+    const rows = texts({ ...base, stage: { kind: 'queue' }, preview: null, queue: ticket, queueSummary: deliverySummaryFixture() }, 'tr');
+    expect(rows[1]).toBe('İş: Login banner fix'); expect(rows.indexOf(deliveryWindowLabels('tr').queue!.status(ticket).split('\n')[0]!)).toBeGreaterThan(1);
+    expect(texts({ ...base, stage: { kind: 'queue' }, preview: null, queue: ticket }, 'tr')[1]).not.toBe('İş: Login banner fix');
+  });
+  it('the port reads summaries only with a reader bound: the preview asks for the direct delivery facts, consent asks per ticket, status per ticket', async () => {
+    const asked: unknown[] = [];
+    const reader = async (_root: string, requests: readonly { verificationRunId: string | null }[]) => { asked.push(...requests); return requests.map(() => deliverySummaryFixture()); };
+    const root = mkdtempSync(join(tmpdir(), 'deckent-summary-port-')); mkdirSync(join(root, '.deckent')); writeFileSync(join(root, '.deckent', 'config.json'), '{}');
+    const handlers = (describe?: typeof reader) => ({ inspectInventory: async () => ({ schemaVersion: 1, layout: {}, page: { entries: [{ identity }], nextAfter: null } }),
+      previewWorkspacePatch: async () => ({ patch: { changes: [] } }), checkWorkspaceIntegration: async () => ({ observation: { source: 'SRC', head: BASE }, proposal: 'PROP', scope: { status: 'in-scope' } }),
+      prepareWorkspaceIntegration: async () => ({}), renderUnifiedDiff: () => '', interactiveDelivery: () => ({}),
+      deliveryQueue: { inspectTargetQueue: async () => ({ schemaVersion: 1, record: ticket }) },
+      confirmDeliveryQueue: async (_query: unknown, ask: (view: unknown) => Promise<boolean>) => { await ask(consent); return { settledPrefix: 0, items: [] }; },
+      ...(describe ? { describeDeliverySummaries: describe } : {}) });
+    const options = { env: homeEnv(join(root, 'home')) }, bound = terminalDeliveryPort(root, handlers(reader) as never, options)!, unbound = terminalDeliveryPort(root, handlers() as never, options)!;
+    expect((await bound.preview(target)).summary).toMatchObject({ title: { text: 'Login banner fix' } });
+    expect(asked.shift()).toEqual({ schemaVersion: 1, identity, operation: 'deliver', target: null, verificationRunId: null, topPaths: 0 });
+    let seen: readonly unknown[] = ['unset'];
+    await bound.queue!.confirm('s', 'q1', async (_view, summaries) => { seen = summaries; return false; });
+    expect(seen).toHaveLength(1); expect(asked.shift()).toMatchObject({ operation: 'deliver', topPaths: 0, target: { id: 'refs/heads/integration', protected: false } });
+    expect(await bound.queue!.summary!(ticket)).toMatchObject({ schemaVersion: 1 }); expect(asked.shift()).toMatchObject({ operation: 'adopt', topPaths: DELIVERY_RENDER_LIMITS.cardTopPaths });
+    expect(await unbound.preview(target)).not.toHaveProperty('summary'); expect(unbound.queue!.summary).toBeUndefined();
+    await unbound.queue!.confirm('s', 'q1', async (_view, summaries) => { seen = summaries; return false; }); expect(seen).toEqual([]);
   });
 });

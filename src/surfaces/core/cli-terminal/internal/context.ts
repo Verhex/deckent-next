@@ -12,6 +12,7 @@ import type { DescribeService, IdentityRead, InstallationIdentityRead, RunComman
   TaskWorkerModel } from '#engine/index.js';
 import type { ConfigLoadOptions, Locale, OutputSink, ProductLayout } from '#platform/index.js';
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
+import type { AutonomyShadowReader, DeliverySummaryReader } from '#surfaces/core/delivery-summary/index.js';
 import type { MonitorCommandContext, WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { TerminalAdminContext } from '#surfaces/core/terminal-admin/index.js';
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
@@ -90,6 +91,10 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
   deliveryQueue?: QueueSubmitClient;
   confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution>;
+  /** TESLIM-KARTI-OZET: each delivery card's summary, read under the person's grants; absent = cards show no summary. */
+  describeDeliverySummaries?: DeliverySummaryReader;
+  /** OTONOM-TESLIM shadow (lane B1 store): list and inspect only, never a consent card; absent = no shadow column or line. */
+  readAutonomyShadow?: AutonomyShadowReader;
 
   readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<RunProposalResult>;
   mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;

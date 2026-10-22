@@ -1,5 +1,5 @@
 import type { AttemptIdentity } from '#domain/index.js';
-import type { EffectConfirmationView, RunView, TargetQueueView, QueueConsent, TargetBatchExecution } from '#engine/index.js';
+import type { DeliverySummary, EffectConfirmationView, RunView, TargetQueueView, QueueConsent, TargetBatchExecution } from '#engine/index.js';
 
 /**
  * TESLIM-PENCERESI (owner 2026-10-14): the terminal delivery window's port. The surface never writes Git, refs or the ledger itself:
@@ -17,9 +17,10 @@ export type DeliveryFileDiff = Readonly<{ path: string; lines: readonly string[]
 /** What the window shows before the person's `y`; `base`/`source`/`proposal` come from the integration check of the current source. */
 /** `verification`: the installation's adoption bar (`execution.adoption.verification`): the verifying task kind and whether adoption requires it. */
 /** `reattempt`: with a queue target, the enqueue carries the bounded service re-attempt intent (`targetQueue.reattempts` > 0). */
+/** `summary`: TESLIM-KARTI-OZET, what the Attempt claims, what acceptance rests on, model and risk (null: not readable; absent: no reader bound). */
 export type DeliveryPreview = Readonly<{ target: DeliveryTarget; identity: AttemptIdentity; files: readonly DeliveryFileStat[]; diffs?: readonly DeliveryFileDiff[]; added: number; removed: number;
   source: string; base: string; proposal: string; outOfScope: readonly string[]; adoptionTargets: readonly string[];
-  verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string; reattempt?: true }>;
+  verification: Readonly<{ kind: string; required: boolean }> | null; queueTarget?: string; reattempt?: true; summary?: DeliverySummary | null }>;
 export type DeliveryOutcome = Readonly<{ ref: string; commit: string; commandId: string }>;
 /** `commandId`: the adoption's own command (what `deckent task integration-rollback --adoption-command-id` names); `verifiedBy`: the verification Run, if any. */
 export type AdoptionOutcome = Readonly<{ targetRef: string; fromCommit: string; toCommit: string; commandId: string; verifiedBy: string | null }>;
@@ -34,7 +35,10 @@ export interface TerminalDeliveryPort {
     /** Read-only: whether `prepareCurrent` would carry the bounded re-attempt intent now (a work target and `targetQueue.reattempts` > 0). */
     reattempt(): Promise<boolean>;
     inspect(scopeId: string, commandId: string): Promise<TargetQueueView | null>;
-    confirm(scopeId: string, commandId: string, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>): Promise<TargetBatchExecution>;
+    /** `ask` also receives each asked ticket's summary, read when the card is asked: shown ABOVE the exact card, never in its place. */
+    confirm(scopeId: string, commandId: string, ask: (view: Omit<QueueConsent, 'capability'>, summaries: readonly (DeliverySummary | null)[]) => Promise<boolean>): Promise<TargetBatchExecution>;
+    /** The summary of one ticket for its status card; absent when no summary reader is bound. */
+    summary?(view: TargetQueueView): Promise<DeliverySummary | null>;
   };
   preview(target: DeliveryTarget): Promise<DeliveryPreview>;
   /** One flow after the person's `y`: verified-terminal check, candidate preparation, then delivery to a dedicated ref. */

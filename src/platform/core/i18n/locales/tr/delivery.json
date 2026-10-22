@@ -71,5 +71,14 @@
   "delivery.shadow.reason.size-over-bound": "değişiklik çok büyük",
   "delivery.shadow.reason.scope-undeclared": "kapsam belirtilmemiş",
   "delivery.shadow.reason.out-of-scope-changes": "kapsam dışı değişiklik",
-  "delivery.shadow.reason.evidence-withheld": "kanıt okunamıyor"
+  "delivery.shadow.reason.evidence-withheld": "kanıt okunamıyor",
+  "delivery.card.above": "Özet (evetiniz yalnızca aşağıdaki kesin kartı onaylar):",
+  "delivery.summary.unavailable": "Özet: gösterilemez (yetki ya da kayıt yok)",
+  "delivery.list.column.title": "Başlık",
+  "delivery.list.column.risk": "Risk sınıfı",
+  "delivery.list.column.shadow": "Kural (kapalı)",
+  "delivery.list.risk.small": "küçük",
+  "delivery.list.risk.other": "diğer",
+  "delivery.list.shadow.deliver": "teslim ederdi",
+  "delivery.list.shadow.hold": "bekletirdi"
 }

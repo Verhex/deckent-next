@@ -25,7 +25,7 @@ export type { AdoptionVerification, AdoptionVerificationPolicy, AdoptionVerifica
 export type { IntegrationCommitMetadata } from './internal/commit-metadata.js';
 
 export { bindIntegrationCandidate } from './internal/candidate-binding.js';
-export { queueCommandIds, queueGenerationRef, queueGenerationSchema, assertQueueGitTarget } from './internal/queue-git.js';
+export { queueCommandIds, queueTicketCommandIds, queueGenerationRef, queueGenerationSchema, assertQueueGitTarget } from './internal/queue-git.js';
 export type { GitQueueFence } from './internal/queue-git.js';
 export { queueVerificationGraph, assertQueueVerification } from './internal/queue-verification.js';
 export { readQueueCandidate, queueCommitMetadata, planQueueCommit, describeWorkspaceQueueCandidate } from './internal/queue-custody.js';

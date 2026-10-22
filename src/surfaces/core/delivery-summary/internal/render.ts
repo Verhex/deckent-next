@@ -11,7 +11,8 @@ import limits from './limits.json' with { type: 'json' };
  * function on purpose: it never belongs on the y/N consent prompt (alpha.53 law-audit fold 3).
  */
 export const DELIVERY_RENDER_LIMITS = Object.freeze(limits);
-export type DeliveryRenderOptions = Readonly<{ maxLineChars?: number }>;
+/** `omit`: sections a card already shows in its own exact words (the delivery window's title and file stats); never acceptance, risk or actions. */
+export type DeliveryRenderOptions = Readonly<{ maxLineChars?: number; omit?: readonly ('title' | 'operation' | 'change')[] }>;
 
 const safe = (value: string) => redactSensitive(terminalSafeText(value));
 function bound(line: string, max: number): string {
@@ -26,12 +27,14 @@ type DeliverySummaryEvidence = DeliverySummary['acceptance']['evidence'];
 export function renderDeliverySummary(summary: DeliverySummary, locale: Locale, options: DeliveryRenderOptions = {}): readonly string[] {
   const max = Math.max(limits.minLineChars, options.maxLineChars ?? limits.lineChars), lines: string[] = [];
   const target = summary.target.state === 'available' ? safe(summary.target.id) : t('delivery.target.unavailable', {}, locale);
-  lines.push(summary.title.source === 'untitled' ? t('delivery.title.untitled', {}, locale) : t('delivery.title', { title: safe(summary.title.text) }, locale),
-    operationLabels(locale, target)[summary.operation]);
+  const omit = new Set(options.omit ?? []);
+  if (!omit.has('title')) lines.push(summary.title.source === 'untitled' ? t('delivery.title.untitled', {}, locale) : t('delivery.title', { title: safe(summary.title.text) }, locale));
+  if (!omit.has('operation')) lines.push(operationLabels(locale, target)[summary.operation]);
   const { outcome, change, tests, model, risk, acceptance } = summary;
   lines.push(outcome.state === 'available' ? t('delivery.outcome', { summary: outcome.truncated ? `${safe(outcome.summary)} …` : safe(outcome.summary) }, locale)
     : outcome.state === 'withheld' ? t('delivery.outcome.withheld', {}, locale) : t('delivery.outcome.unavailable', {}, locale));
-  if (change.state !== 'available') lines.push(change.state === 'withheld' ? t('delivery.change.withheld', {}, locale) : t('delivery.change.unavailable', {}, locale));
+  if (omit.has('change')) { /* the card lists its own exact changes */ }
+  else if (change.state !== 'available') lines.push(change.state === 'withheld' ? t('delivery.change.withheld', {}, locale) : t('delivery.change.unavailable', {}, locale));
   else {
     lines.push(t('delivery.change', { files: change.files, added: change.added, removed: change.removed }, locale));
     const shown = change.topPaths.map(safe).join(', ');

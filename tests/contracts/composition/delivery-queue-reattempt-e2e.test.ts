@@ -157,7 +157,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
 
     const adoptFirst = await cliInPty(f.project, f.options.env, ['task', 'integration-queue-confirm', '--scope', SCOPE, '--command-id', 'q1'],
       [['y/N: ', 'y\r'], ['Adopt the verified prefix', 'y\r', 'fresh'], ['Confirmed batch', '']]);
-    expect(adoptFirst.status).toBe(0); expect(adoptFirst.output).toContain('"settledPrefix":1');
+    expect(adoptFirst.status).toBe(0); expect(adoptFirst.output).toContain('Confirmed batch: 1 of');
     const h1 = await git(f.target, 'rev-parse', TARGET);
     expect(await git(f.target, 'show', `${h1}:shared.txt`)).toBe('base\nfirst');
 
@@ -177,7 +177,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
 
     const adoptSecond = await cliInPty(f.project, f.options.env, ['task', 'integration-queue-confirm', '--scope', SCOPE, '--command-id', reattempt.ticket],
       [['y/N: ', 'y\r'], ['Adopt the verified prefix', 'y\r', 'fresh'], ['Confirmed batch', '']]);
-    expect(adoptSecond.status).toBe(0); expect(adoptSecond.output).toContain('"settledPrefix":1');
+    expect(adoptSecond.status).toBe(0); expect(adoptSecond.output).toContain('Confirmed batch: 1 of');
     expect(await view(reattempt.ticket)).toMatchObject({ state: 'settled', outcome: 'adopted' });
     const h2 = await git(f.target, 'rev-parse', TARGET);
     expect(await git(f.target, 'rev-parse', `${h2}^`)).toBe(h1);
