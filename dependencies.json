@@ -419,7 +419,7 @@
     },
     "vitest": {
       "kind": "dev",
-      "reviewedVersion": "5.0.1",
+      "reviewedVersion": "5.0.5",
       "owners": [
         "vitest.config.ts",
         "tests"
@@ -448,7 +448,7 @@
       "watch": [
         "5.0.2 (2026-09-25) available; vitest 5 excludes Node 25 (engines ^22.12 || ^24 || >=26)."
       ],
-      "lastReview": "2026-09-29",
+      "lastReview": "2026-10-22",
       "nextReview": "2026-11-28"
     },
     "esbuild": {
@@ -510,7 +510,7 @@
     },
     "eslint": {
       "kind": "dev",
-      "reviewedVersion": "10.10.0",
+      "reviewedVersion": "10.13.0",
       "owners": [
         "eslint.config.js"
       ],
@@ -536,7 +536,7 @@
         }
       ],
       "ownSolution": "Architecture rules already live in lint-arch; eslint keeps only generic JS/TS rules.",
-      "lastReview": "2026-09-29",
+      "lastReview": "2026-10-22",
       "nextReview": "2026-12-28"
     },
     "@eslint/js": {
@@ -557,7 +557,7 @@
     },
     "typescript-eslint": {
       "kind": "dev",
-      "reviewedVersion": "8.70.0",
+      "reviewedVersion": "8.72.0",
       "owners": [
         "eslint.config.js"
       ],
@@ -579,12 +579,12 @@
       "watch": [
         "peer typescript >=4.8.4 <6.1.0 (8.71.0 too) blocks TS 7 as the main compiler."
       ],
-      "lastReview": "2026-09-29",
+      "lastReview": "2026-10-22",
       "nextReview": "2026-12-28"
     },
     "globals": {
       "kind": "dev",
-      "reviewedVersion": "17.12.0",
+      "reviewedVersion": "17.13.0",
       "owners": [
         "eslint.config.js"
       ],
@@ -595,12 +595,12 @@
       "criticality": "P2",
       "alternatives": [],
       "ownSolution": "A static list in eslint.config.js would do; not worth the churn.",
-      "lastReview": "2026-09-29",
+      "lastReview": "2026-10-22",
       "nextReview": "2026-12-28"
     },
     "@types/node": {
       "kind": "dev",
-      "reviewedVersion": "24.19.0",
+      "reviewedVersion": "24.19.2",
       "owners": [
         "tsconfig.json"
       ],
@@ -619,7 +619,7 @@
         }
       ],
       "ownSolution": "None.",
-      "lastReview": "2026-09-29",
+      "lastReview": "2026-10-22",
       "nextReview": "2026-11-28"
     },
     "@types/react": {
