@@ -804,7 +804,7 @@
         "GHSA-v39h-62p7-jpjc"
       ],
       "severity": "HIGH",
-      "mitigation": "Not shipped (FASTURI-OUT, owner 2026-09-29): the published package's build replaces the SDK's ajvProvider with a throwing stub and fails if ajv/fast-uri reach the bundle; its SBOM names neither, and deps-watch --sbom stops accepting this entry if it ever does (shipped: false). Accepted only for the installed dev/test tree, where the SDK still carries the code: Deckent passes its own validator to every SDK Client and Server (static + runtime contract test; MCP-SCHEMA-VALIDATOR), the client compiles a server's outputSchema only on it (MCP-VALIDATOR) and every tools/call carries the pinned tool definition (MCP-PIN-DEF). Remove when the SDK ships a rebuilt bundle (typescript-sdk#2042/#2036). 2026-10-15: SDK 2.3.1 still embeds fast-uri 3.1.0 (tarball grep); GHSA-hrr3-gc8f-f4qj (MEDIUM, host case normalization of scheme-relative references) is the same host-confusion class and is covered by the same not-shipped + own-validator mitigation.",
+      "mitigation": "Not shipped (FASTURI-OUT, owner 2026-09-29): the published package's build replaces the SDK's ajvProvider with a throwing stub and fails if ajv/fast-uri reach the bundle; its SBOM names neither, and deps-watch --sbom stops accepting this entry if it ever does (shipped: false). Accepted only for the installed dev/test tree, where the SDK still carries the code: Deckent passes its own validator to every SDK Client and Server (static + runtime contract test; MCP-SCHEMA-VALIDATOR), the client compiles a server's outputSchema only on it (MCP-VALIDATOR) and every tools/call carries the pinned tool definition (MCP-PIN-DEF). Remove when the SDK ships a rebuilt bundle (typescript-sdk#2042/#2036). 2026-10-15: SDK 2.3.1 still embeds fast-uri 3.1.0 (tarball grep); GHSA-hrr3-gc8f-f4qj (MEDIUM, host case normalization of scheme-relative references) is the same host-confusion class and is covered by the same not-shipped + own-validator mitigation. 2026-10-22: no SDK release since 2.3.1 (2026-10-05); owner extended the acceptance 30 days on the same not-shipped + own-validator conditions.",
       "evidence": [
         "proof/FASTURI-OUT-2026-09-29/review.md (tarball grep, SBOM, pack-smoke Node 24.21/26.10, guard mutation)",
         "tests/contracts/surfaces/mcp-json-schema-validator.test.ts",
@@ -815,9 +815,9 @@
         "proof/MCP-SCHEMA-VALIDATOR-2026-09-29/astra-2180-adaptation.md (Astra 2180 R2: $dynamicRef refused before send; red on 0a69a70, green on the merge)",
         "merged 5330cb7e (lane/mcp-schema-validator f00b6f77) + tests/contracts/platform/json-schema-validator.test.ts"
       ],
-      "decidedBy": "lead (re-signed after MCP-SCHEMA-VALIDATOR, eleventh batch integration, 2026-09-29; carriers moved to SDK 2.3.1 and GHSA-hrr3 added after owner chose the 2.3.1 upgrade, 2026-10-15)",
-      "decided": "2026-10-15",
-      "expires": "2026-10-29"
+      "decidedBy": "lead (re-signed after MCP-SCHEMA-VALIDATOR, eleventh batch integration, 2026-09-29; carriers moved to SDK 2.3.1 and GHSA-hrr3 added after owner chose the 2.3.1 upgrade, 2026-10-15; owner extended 30 days on 2026-10-22: SDK still 2.3.1, last release 2026-10-05)",
+      "decided": "2026-10-22",
+      "expires": "2026-11-21"
     }
   ]
 }
