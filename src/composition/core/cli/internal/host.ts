@@ -20,7 +20,8 @@ import { interactiveDeliveryHandlers, inspectConfiguredWorkspaceIntegration, che
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { connectConfiguredModel, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
-import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
+import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold,
+  inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { openConfigWindow, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
 import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
@@ -97,6 +98,9 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     handOverSecrets: (projectRoot, input, options) => handOverProjectSecrets(projectRoot, input.scopeId, options).catch(error => { throw queryFailure(error); }),
     listSecretStores: listConfiguredSecretStores,
     switchSecretStore: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).switchSecretStore(input),
+    // alpha.53 F1: the worker instruction file's trust, in this process at the person's witnessed terminal (no protocol op).
+    inspectWorkerInstructions: (projectRoot, options) => inspectConfiguredWorkerInstructions(projectRoot, options).catch(error => { throw queryFailure(error); }),
+    changeWorkerInstructionTrust: (projectRoot, input, options) => changeConfiguredWorkerInstructionTrust(projectRoot, input, options).catch(error => { throw queryFailure(error); }),
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, initializeNativeCodingRegistry,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,

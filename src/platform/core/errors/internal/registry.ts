@@ -20,6 +20,19 @@ function patchLimit(p: Params, l: Locale): string {
     default: return t('error.PATCH_LIMIT', p, l);
   }
 }
+/** WORKER_INSTRUCTIONS_UNAVAILABLE (alpha.53 F1) names why there is nothing to trust or revoke; an unknown reason keeps the generic sentence. */
+function workerInstructionsUnavailable(p: Params, l: Locale): string {
+  switch (p['reason']) {
+    case 'target': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.target', p, l);
+    case 'no-execution': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.noExecution', p, l);
+    case 'source-none': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.sourceNone', p, l);
+    case 'absent': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.absent', p, l);
+    case 'store': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.store', p, l);
+    case 'size': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.size', p, l);
+    case 'unsafe': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.unsafe', p, l);
+    default: return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE', p, l);
+  }
+}
 /** TASK_GRAPH_LIMIT (PARALLEL-S3) names the exceeded admission bound; an unknown detail keeps the generic sentence. */
 function taskGraphLimit(p: Params, l: Locale): string {
   switch (p['detail']) {
@@ -260,6 +273,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   WORK_INPUT_TURN_LIMIT_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TURN_LIMIT_UNSUPPORTED', p, l) }) },
   WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE', p, l) }) },
   WORKER_INSTRUCTIONS_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_INSTRUCTIONS_TOO_LARGE', p, l) }) },
+  WORKER_INSTRUCTIONS_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: workerInstructionsUnavailable(p, l) }) },
+  WORKER_INSTRUCTIONS_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_INSTRUCTIONS_CHANGED', p, l) }) },
   WORK_CLASS_NOT_REGISTERED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_NOT_REGISTERED', p, l) }) },
   WORK_CLASS_OVERRIDE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_OVERRIDE_DENIED', p, l) }) },
   WORK_CLASS_PARENT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_PARENT_INVALID', p, l) }) },

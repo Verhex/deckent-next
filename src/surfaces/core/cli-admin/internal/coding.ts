@@ -1,10 +1,11 @@
 import { resolve } from 'node:path';
-import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type DeckentConfig, type Locale } from '#platform/index.js';
+import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type DeckentConfig, type ExitCode, type Locale } from '#platform/index.js';
 import { executionProfileDefinitionSchema, executionRegistrySchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { affectedToolchainProfiles } from '#engine/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle, renderCliTable, type CliCardOption } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
+import { codingInstructionsCommand } from './worker-instructions.js';
 
 export type CodingProfilePreparationHandler = (input: unknown) => Readonly<{
   schemaVersion: 1; profile: ExecutionProfileDefinition; activation: 'not-activated';
@@ -27,8 +28,9 @@ const sinksOf = (context: AdminCommandContext) => ({ ...(context.stdout ? { stdo
 const shortImage = (image: string | null | undefined) => image ? image.replace(/^sha256:/u, '').slice(0, 12) : '-';
 type Pins = ReturnType<typeof affectedToolchainProfiles>;
 
-export async function codingCommand(argv: readonly string[], context: AdminCommandContext): Promise<void> {
+export async function codingCommand(argv: readonly string[], context: AdminCommandContext): Promise<void | ExitCode> {
   if (argv[1] === 'template') return codingTemplateCommand(argv, context);
+  if (argv[1] === 'instructions') return codingInstructionsCommand(argv, context);
   const help = argv.length === 2 && (argv[1] === '--help' || argv[1] === '-h');
   // C-SETUP (review §coding): bare `deckent coding` reads this installation's coding profiles; it is never a usage error.
   if (!help && (argv[1] === undefined || argv[1].startsWith('--'))) return codingList(argv, context);

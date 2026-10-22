@@ -221,5 +221,10 @@
   "cli.help.action.policy.mcp.grant": "Bir scope’ta MCP yetenek grubuna izin ver",
   "cli.help.action.policy.mcp.revoke": "Bir scope’ta MCP yetenek grubu iznini geri al",
   "cli.help.action.run.list": "Son Run’ları listele, bekleyenler önce",
-  "cli.help.action.policy.scopes": "Okuyabildiğiniz scope'ları listeler"
+  "cli.help.action.policy.scopes": "Okuyabildiğiniz scope'ları listeler",
+  "cli.help.action.coding.instructions": "Worker talimat dosyasını göster ya da ona güven",
+  "cli.help.action.coding.instructions.status": "Worker'ların talimat dosyasını alıp almadığını göster",
+  "cli.help.action.coding.instructions.trust": "Worker talimat dosyasına güven (kendi terminaliniz)",
+  "cli.help.action.coding.instructions.revoke": "Worker talimat dosyasına güveni geri al",
+  "cli.coding.instructions.help": "deckent coding instructions [status] [--json] [--lang en|tr]\nÇalışma hedefinin worker talimat dosyasını gösterir (execution.workerInstructions; çalışma hedefi tanımlı değilse proje kökü): yol, boyut, SHA-256 ve worker'ların dosyayı şu an alıp almadığı.\ndeckent coding instructions trust|revoke [--target <id>] --scope <id> [--lang en|tr]\nDosyanın yalnızca şu anki içeriğine o klasör için güvenir (ya da güveni geri alır). Kendi terminalinizdeki kart yolu, boyutu, SHA-256 değerini ve ilk satırları gösterir; yapay zekâ araçları, MCP, boru (pipe) ve --json reddedilir. Karar execution.workerInstructions için config yazma iznine göre verilir ve denetim kaydına yazılır. Değişen dosya yeniden güvenilmez olur."
 }

@@ -221,5 +221,10 @@
   "cli.help.action.policy.mcp.grant": "Grant an MCP capability group in a scope",
   "cli.help.action.policy.mcp.revoke": "Revoke an MCP capability group in a scope",
   "cli.help.action.run.list": "List recent Runs, waiting first",
-  "cli.help.action.policy.scopes": "List the scopes you can read"
+  "cli.help.action.policy.scopes": "List the scopes you can read",
+  "cli.help.action.coding.instructions": "Show or trust the worker instruction file",
+  "cli.help.action.coding.instructions.status": "Show whether workers get the instruction file",
+  "cli.help.action.coding.instructions.trust": "Trust the worker instruction file (your terminal)",
+  "cli.help.action.coding.instructions.revoke": "Stop trusting the worker instruction file",
+  "cli.coding.instructions.help": "deckent coding instructions [status] [--json] [--lang en|tr]\nShows the worker instruction file of the work target (execution.workerInstructions; the project root when no work target is configured): path, size, SHA-256 and whether workers get it now.\ndeckent coding instructions trust|revoke [--target <id>] --scope <id> [--lang en|tr]\nTrusts (or takes back) exactly the file's current content for that folder. A card on your own terminal shows the path, size, SHA-256 and first lines; AI tools, MCP, pipes and --json are refused. Decided on the config write permission for execution.workerInstructions and recorded in the audit log. A changed file is untrusted again."
 }
