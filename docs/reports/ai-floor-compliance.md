@@ -1662,9 +1662,9 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/scope.ts`: `7515bab07e7ee92d03be12c0a8710f72d6973419ca53a79fdeff61a84a496da4`
 - `src/domain/core/policy/internal/standing.ts`: `bb3b4f7c301474d2df1f690d85f3b1ea7219fbfe6f90af8b8d680017bb50d5db`
 - `src/domain/core/policy/internal/vocabulary.ts`: `188637ad5d40fcbcc7eccbc4b13bb7e31a08355751b1c563cea0258b5bff61b2`
-- `src/domain/core/primitives/index.ts`: `4208c3b937cda4d0a49e4540dcfb532f36b64ce53dd464755badb726879c08af`
+- `src/domain/core/primitives/index.ts`: `afa5a6e9acc3b73c157054ae1607652478b464a9da45b3ce27a46a6ec86e72a0`
 - `src/domain/core/primitives/internal/command-id.ts`: `69a16b34a9225fe7c8bb1047e9b9e99d03fd71573baf2281bfa8e870e1a219c9`
-- `src/domain/core/primitives/internal/hidden-paths.ts`: `990ec9029682c38c0ddab2ace87755ee54066c26a4e0be2275e817d30dc367d2`
+- `src/domain/core/primitives/internal/hidden-paths.ts`: `0f7e83b0231ee7deaf9487bb1bdc8e6f7f27fd6cb914bae341a59462596f2916`
 - `src/domain/core/primitives/internal/installation-identity.ts`: `28612d8f2f00382172bb96cdfa8e5d35d4d2175620ab49dd702c3e4184db8ab7`
 - `src/domain/core/primitives/internal/json.ts`: `51c0ef2cee02728e7cf4a51bd26c6b472c7c3b54a9c49b65ad55221c6aae171f`
 - `src/domain/core/primitives/internal/project-identity.ts`: `9064bacf688c1269071d7d0bbb87bee94863e9ab663b74bd80e764eb948c137b`
