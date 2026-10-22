@@ -8,6 +8,7 @@ import { registerProviderConfig } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { CLI_CATALOG } from '#surfaces/core/cli-kit/index.js';
 import { TASK_ACTION_GROUPS, pickTaskTarget, taskActions, taskCommand, taskMenu } from '#surfaces/core/cli-task/index.js';
+import { deliverySummaryFixture } from '../support/delivery-summary-fixture.js';
 
 /**
  * C-TASK (alpha.48, CLI review §task): the `task` family for a person — config language, the control-character marker (J1b D1),
@@ -227,11 +228,12 @@ it('accept: the revision is read before the card; declining writes nothing; a st
   expect(printed.some(line => /not independently verified|unverified/i.test(line))).toBe(true);
 });
 
-function fakePort(log: string[], options: { queue?: boolean; targets?: string[] } = {}) {
+function fakePort(log: string[], options: { queue?: boolean; targets?: string[]; summary?: boolean } = {}) {
   const deliverView = { operation: 'deliver-integration', scopeId: 's', runId: LONG, taskId: 't', commandId: 'd', title: 'Add the file', resource: 'refs/deckent/delivery/x',
     from: 'base', to: 'cand', files: ['src/a.ts'], added: 1, removed: 0 };
   const preview = { target: { key: 'k', scopeId: 's', runId: LONG, taskId: 't', title: 'Add the file' }, identity: {}, files: [{ path: 'src/a.ts', added: 1, removed: 0 }], added: 1, removed: 0,
-    source: 'src', base: 'base', proposal: 'p', outOfScope: [], adoptionTargets: options.targets ?? [], verification: null, ...(options.queue ? { queueTarget: 'refs/heads/main' } : {}) };
+    source: 'src', base: 'base', proposal: 'p', outOfScope: [], adoptionTargets: options.targets ?? [], verification: null, ...(options.queue ? { queueTarget: 'refs/heads/main' } : {}),
+    ...(options.summary ? { summary: deliverySummaryFixture() } : {}) };
   const refuse = () => Object.assign(new Error('declined'), { code: 'DELIVERY_CONFIRMATION_DECLINED' });
   return {
     async preview() { log.push('preview'); return preview; },
@@ -249,8 +251,9 @@ function fakePort(log: string[], options: { queue?: boolean; targets?: string[] 
         display: { labelKey: 'queue.git.target', basisKey: 'queue.git.basis', versionKey: 'queue.git.version', prepareActionKey: 'queue.next.prepare-current' }, basis: null,
         position: 1, outcome: null, reason: null, responsibility: 'human', nextAction: 'confirm-batch' }; },
       async reattempt() { return false; }, async inspect() { return null; },
-      async confirm(_s: string, _c: string, ask: (view: unknown) => Promise<boolean>) { if (!await ask({ operation: 'publish', target: { kind: 'git-ref', id: 'refs/heads/main' }, display: { labelKey: 'queue.git.target' }, digest: 'd'.repeat(64),
-        expiresAt: 0, items: [] })) throw refuse(); log.push('confirmed'); return {}; },
+      async confirm(_s: string, _c: string, ask: (view: unknown, summaries: readonly unknown[]) => Promise<boolean>) { if (!await ask({ operation: 'publish', target: { kind: 'git-ref', id: 'refs/heads/main' }, display: { labelKey: 'queue.git.target' }, digest: 'd'.repeat(64),
+        expiresAt: 0, items: [] }, options.summary ? [deliverySummaryFixture()] : [])) throw refuse(); log.push('confirmed'); return {}; },
+      ...(options.summary ? { async summary() { return deliverySummaryFixture(); } } : {}),
     } } : {}),
   };
 }
@@ -282,6 +285,16 @@ it('deliver: the same /deliver port; every write waits for its own exact card; a
   expect(queued.log).toEqual(['preview', 'enqueued', 'error:DELIVERY_CONFIRMATION_DECLINED']);
   expect(queued.printed.join('\n')).toContain('Awaiting human confirmation');
   expect(queued.cards[2]!.body).toContain('Write refs/heads/main?');
+  // alpha.53 A3: the same flow with summaries: the preview card names claim/acceptance/risk (files stay its own), the status carries the ticket summary,
+  // and the exact batch card keeps its title with the summary block first in its body (no shadow line).
+  const summarized = await run(['deliver', 'deliver', 'no'], { queue: true, summary: true });
+  const previewBody = summarized.cards[1]!.body.join('\n');
+  expect(previewBody).toContain("Worker's own report (a claim, not checked): Banner fixed."); expect(previewBody).not.toContain('Work: Login banner fix');
+  expect(summarized.printed.join('\n')).toMatch(/Work: Login banner fix[\s\S]*Awaiting human confirmation/u);
+  expect(summarized.cards[2]!.title).toBe(queued.cards[2]!.title);
+  expect(summarized.cards[2]!.body.slice(0, 2)).toEqual(['Summary (your yes approves the exact card below, nothing else):', 'Work: Login banner fix']);
+  expect(summarized.cards[2]!.body.slice(-queued.cards[2]!.body.length)).toEqual(queued.cards[2]!.body);
+  expect(summarized.cards[2]!.body.join('\n')).not.toMatch(/Rule off|would have/u);
 });
 
 it('alpha.53 D1: a task read without --scope uses the configured scope and says so; without one it is CLI_SCOPE_REQUIRED (exit 2), a change never defaults', async () => {
