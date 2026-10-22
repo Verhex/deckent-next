@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import type { RunView } from '#engine/index.js';
 import { fillTemplate, type WorkLedgerEntry, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
+import { acceptanceEvidenceQualifier } from '#surfaces/core/cli-human/index.js';
 import { useSingleFlightPoll } from '#surfaces/core/terminal-kit/index.js';
 import { runStateText, type JobWindowLabels } from './job-windows.js';
 import { systemSummaryEntry } from './system-summary.js';
@@ -19,8 +20,11 @@ export function runCompletionText(run: RunView, labels: JobWindowLabels): string
     else if (outlook === 'awaiting-delivery') counts.awaiting++;
     else counts.unknown++;
   }
+  // Same words as the CLI/monitor: what an accepted verdict rests on (law 1). Only tasks whose accepted verdict has criteria qualify.
+  const evaluators = run.tasks.filter(task => task.resultBrief?.evaluation.verdict === 'accepted').flatMap(task => task.taskBrief?.criteria.map(row => row.evaluator) ?? []);
   const details = run.tasks.some(task => !task.resultBrief);
   return [fillTemplate(labels.completed, { run: run.runId, state: runStateText(run, labels), ...counts, rejected: details ? labels.unknown : counts.rejected }),
+    ...(evaluators.length ? [fillTemplate(labels.acceptanceEvidence, { evidence: acceptanceEvidenceQualifier(evaluators, labels.locale) })] : []),
     ...(counts.patch + counts.awaiting > 0 ? [fillTemplate(labels.deliveryCounts, { ...counts, patch: counts.patch > 0 ? fillTemplate(labels.deliveryPatch, { patch: counts.patch }) : '' })] : counts.unknown > 0 ? [fillTemplate(labels.deliveryCounts, { ...counts, none: labels.unknown, patch: '', awaiting: labels.unknown })] : []),
     ...(counts.patch + counts.awaiting > 0 ? [fillTemplate(labels.deliveryNext, { run: run.runId })] : [])].join('\n');
 }

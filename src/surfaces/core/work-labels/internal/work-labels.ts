@@ -63,7 +63,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
       gone: t('terminal.runControl.gone', {}, locale), reason: { label: t('terminal.runControl.reason.label', {}, locale), hint: t('terminal.runControl.reason.hint', {}, locale), empty: t('terminal.runControl.reason.empty', {}, locale) } },
     jobs: {
       locale, completed: t('terminal.jobs.completed', {}, locale), deliveryCounts: t('terminal.jobs.deliveryCounts', {}, locale), deliveryPatch: t('terminal.jobs.deliveryPatch', {}, locale), deliveryNext: t('terminal.jobs.deliveryNext', {}, locale),
-      detailsUnavailable: t('terminal.jobs.detailsUnavailable', {}, locale), trackingFull: t('terminal.jobs.trackingFull', {}, locale),
+      detailsUnavailable: t('terminal.jobs.detailsUnavailable', {}, locale), acceptanceEvidence: t('terminal.jobs.acceptanceEvidence', {}, locale), trackingFull: t('terminal.jobs.trackingFull', {}, locale),
       hints: t('terminal.jobs.hints', {}, locale), watchStatus: t('terminal.jobs.watchStatus', {}, locale), push: t('terminal.jobs.push', {}, locale), poll: t('terminal.jobs.poll', {}, locale),
       system: t('terminal.info.systemLabel', {}, locale), cancelPickerTitle: t('terminal.jobs.cancelPickerTitle', {}, locale), runTitle: t('terminal.jobs.runTitle', {}, locale), runFallback: t('terminal.jobs.runFallback', {}, locale),
       transcriptTitle: t('terminal.jobs.transcriptTitle', {}, locale), state: t('terminal.jobs.state', {}, locale), tasks: t('terminal.jobs.tasks', {}, locale),
