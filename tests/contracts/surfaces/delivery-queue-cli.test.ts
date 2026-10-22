@@ -5,14 +5,23 @@ import { describe, expect, it } from 'vitest';
 import { queueCommand, renderQueueList } from '#surfaces/core/delivery-queue/index.js';
 import { clearConfigCache, ErrorRegistry } from '#platform/index.js';
 import { targetQueueViewSchema } from '#engine/index.js';
+import { registerProviderConfig } from '#adapters/index.js';
 import { homeEnv } from '../support/host-platform.js';
 
+const sampleView = (commandId: string, over: Record<string, unknown> = {}) => targetQueueViewSchema.parse({
+  schemaVersion: 1, commandId, identity: { runId: 'run-1', taskId: 'task-1', attemptId: 'attempt-1', scopeId: 's', layoutRevision: 'layout-1', generation: 1 },
+  operation: 'delivery', target: { kind: 'git-ref', id: 'refs/heads/main' },
+  display: { schemaVersion: 1, labelKey: 'queue.git.target', basisKey: 'queue.git.basis', versionKey: 'queue.git.version', prepareActionKey: 'queue.git.prepare' },
+  state: 'awaiting-confirmation', outcome: null, revision: 3, observedAt: 1_760_000_000_000, freshness: 'last-known', position: 1, nextAction: 'confirm-batch',
+  responsibility: 'human', basis: null, verification: { phase: 'accepted', receipt: 'b'.repeat(64) }, evidenceRefs: [], reason: null, ...over });
+registerProviderConfig(); // the `terminal` section (terminal.scopeId) is registered by the composed entry
 /** A project root with an optional `language` and a stand-in queue client recording each call. */
 function project(language?: string) {
   const root = mkdtempSync(join(tmpdir(), 'deckent-queue-cli-')); mkdirSync(join(root, '.deckent'));
   writeFileSync(join(root, '.deckent', 'config.json'), JSON.stringify(language ? { language } : {})); clearConfigCache();
   const calls: string[] = [], output: string[] = [], locales: string[] = [];
-  const record = (name: string) => async (input: unknown) => { calls.push(`${name} ${JSON.stringify(input)}`); return { schemaVersion: 1, record: null }; };
+  const record = (name: string) => async (input: unknown) => { calls.push(`${name} ${JSON.stringify(input)}`);
+    return name === 'inspect' ? { schemaVersion: 1, record: sampleView('q1') } : sampleView('q1'); };
   const context = { root, env: { ...homeEnv(join(root, 'home')), LANG: 'C.UTF-8' }, stdout: { write: (text: string) => { output.push(text); } }, stderr: { write: () => {} },
     onLocale: (locale: string) => { locales.push(locale); },
     deliveryQueue: { inspectTargetQueue: record('inspect'), enqueueTargetQueueRollback: record('rollback'), enqueueTargetQueue: record('enqueue'), listTargetQueue: record('list') },
@@ -40,13 +49,75 @@ describe('delivery queue CLI language (QUEUE-SMALL 7)', () => {
   it('the configured language wins over LANG=C.UTF-8 (the N1 wrapper); --lang still wins over the configuration', async () => {
     const turkish = project('tr');
     await queueCommand(['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'q1'], turkish.context);
-    expect(turkish.locales.at(-1)).toBe('tr'); expect(turkish.output.join('')).toContain('Kuyruk sonucu:');
+    expect(turkish.locales.at(-1)).toBe('tr'); expect(turkish.output.join('')).toContain('Teslim bileti q1');
     const explicit = project('tr');
     await queueCommand(['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'q1', '--lang', 'en'], explicit.context);
-    expect(explicit.locales.at(-1)).toBe('en'); expect(explicit.output.join('')).toContain('Queue result:');
+    expect(explicit.locales.at(-1)).toBe('en'); expect(explicit.output.join('')).toContain('Delivery ticket q1');
     const unset = project();
     await queueCommand(['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'q1'], unset.context);
     expect(unset.locales.at(-1)).toBe('en');
+  });
+});
+
+/** alpha.53 D1: scope defaults, typed errors and human ticket views (MAP-CLI-INSAN S1). */
+describe('delivery queue CLI scope and typed errors (alpha.53 D1)', () => {
+  function configured(scope?: string) {
+    const p = project(); const root = (p.context as { root: string }).root;
+    writeFileSync(join(root, '.deckent', 'config.json'), JSON.stringify(scope ? { terminal: { scopeId: scope } } : {})); clearConfigCache();
+    return p;
+  }
+  it('a read without --scope uses the configured scope and says so; --json stays the client page', async () => {
+    const p = configured('live');
+    await queueCommand(['task', 'integration-queue-inspect', '--command-id', 'q1'], p.context);
+    expect(p.calls).toEqual(['inspect {"schemaVersion":1,"scopeId":"live","commandId":"q1"}']);
+    expect(p.output.join('')).toMatch(/^scope: live \(default\)\n/);
+    p.output.length = 0; await queueCommand(['task', 'integration-queue-list', '--json'], p.context);
+    expect(p.output.join('')).not.toContain('scope: live'); expect(p.calls.at(-1)).toContain('"scopeId":"live"');
+  });
+  it('without --scope and no configured scope a read and a change get CLI_SCOPE_REQUIRED, never a raw validation array', async () => {
+    const p = configured();
+    for (const argv of [['task', 'integration-queue-list'], ['task', 'integration-queue-inspect', '--command-id', 'q1'],
+      ['task', 'integration-queue-rollback', '--source-command-id', 'q0', '--command-id', 'r1'], ['task', 'integration-queue-confirm', '--command-id', 'q1']])
+      await expect(queueCommand(argv, p.context), argv.join(' ')).rejects.toMatchObject({ code: 'CLI_SCOPE_REQUIRED' });
+    expect(p.calls).toEqual([]);
+  });
+  it('a change never takes the configured default scope', async () => {
+    const p = configured('live');
+    await expect(queueCommand(['task', 'integration-queue-rollback', '--source-command-id', 'q0', '--command-id', 'r1'], p.context)).rejects.toMatchObject({ code: 'CLI_SCOPE_REQUIRED' });
+    expect(p.calls).toEqual([]);
+  });
+  it('a missing argument is CLI_ARGUMENT_MISSING naming it; an invalid value is CLI_USAGE naming the flag', async () => {
+    const p = project();
+    await expect(queueCommand(['task', 'integration-queue-inspect', '--scope', 's'], p.context)).rejects.toMatchObject({ code: 'CLI_ARGUMENT_MISSING', message: expect.stringContaining('--command-id') });
+    await expect(queueCommand(['task', 'integration-queue-rollback', '--scope', 's', '--command-id', 'r1'], p.context)).rejects.toMatchObject({ code: 'CLI_ARGUMENT_MISSING', message: expect.stringContaining('--source-command-id') });
+    await expect(queueCommand(['task', 'integration-queue-enqueue'], p.context)).rejects.toMatchObject({ code: 'CLI_ARGUMENT_MISSING', message: expect.stringContaining('--input') });
+    await expect(queueCommand(['task', 'integration-queue-list', '--scope', 's', '--limit', 'many'], p.context)).rejects.toMatchObject({ code: 'CLI_USAGE', message: expect.stringContaining('--limit') });
+    await expect(queueCommand(['task', 'integration-queue-inspect', '--scope', ' bad', '--command-id', 'q1'], p.context)).rejects.toMatchObject({ code: 'CLI_USAGE', message: expect.stringContaining('--scope') });
+    expect(p.calls).toEqual([]);
+  });
+  for (const [language, expected] of [['en', ['Delivery ticket q1 · task task-1 · delivery', 'Target — Integration target: refs/heads/main', 'State: Awaiting human confirmation', 'Position in the queue: 1',
+    'Verification: passed', 'Next step: Confirm exact batch', 'Confirm in this terminal: deckent task integration-queue-confirm --scope s --command-id q1']],
+  ['tr', ['Teslim bileti q1 · görev task-1 · teslim', 'Hedef — Entegrasyon hedefi: refs/heads/main']]] as const) {
+    it(`inspect, enqueue and rollback print a human ${language} ticket view, not JSON; --json is unchanged`, async () => {
+      const p = project(language);
+      for (const argv of [['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'q1'], ['task', 'integration-queue-rollback', '--scope', 's', '--source-command-id', 'q0', '--command-id', 'q1']]) {
+        p.output.length = 0; await queueCommand(argv, p.context);
+        const text = p.output.join(''); for (const line of expected) expect(text).toContain(line);
+        for (const raw of ['{', 'schemaVersion', 'labelKey', 'queue.state.', 'nextAction']) expect(text).not.toContain(raw);
+      }
+      p.output.length = 0; await queueCommand(['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'q1', '--json'], p.context);
+      expect(JSON.parse(p.output.join('')).record.commandId).toBe('q1');
+    });
+  }
+  it('confirm prints the settled prefix and one line per ticket with its typed reason', async () => {
+    const p = project();
+    (p.context as { confirmDeliveryQueue: unknown }).confirmDeliveryQueue = async () => ({ settledPrefix: 1, items: [
+      { commandId: 'q1', published: true, state: 'settled' }, { commandId: 'q2', published: false, state: 'refused', reason: 'QUEUE_VERIFICATION_NOT_ADMITTED' }] });
+    await queueCommand(['task', 'integration-queue-confirm', '--scope', 's', '--command-id', 'q1'], p.context);
+    const text = p.output.join('');
+    expect(text).toContain('Confirmed batch: 1 of 2 ticket(s) settled'); expect(text).toContain('q1: settled (published)');
+    expect(text).toContain(`q2: refused (not published). ${ErrorRegistry.createError('QUEUE_VERIFICATION_NOT_ADMITTED', { locale: 'en' }).message}`);
+    expect(text).not.toContain('{');
   });
 });
 

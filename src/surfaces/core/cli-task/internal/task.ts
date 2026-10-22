@@ -2,7 +2,7 @@ import { queueCommand } from '#surfaces/core/delivery-queue/index.js';
 import { inspectTask, phaseWord } from './task-inspect.js';
 import { groupedTaskActions, pickTaskTarget, taskMenu, type TaskMenuIo } from './task-menu.js';
 import { cliUsage, commandLocale, hasCliAction } from '#surfaces/core/cli-kit/index.js';
-import { askCliCard, cliMode, listRunIds, matchIdPrefix, requireIdPrefix } from '#surfaces/core/cli-human/index.js';
+import { askCliCard, cliMode, listRunIds, matchIdPrefix, requireIdPrefix, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
 import { attemptIdentitySchema, type AttemptIdentity } from '#domain/index.js';
 import { runLifecycleCommandSchema, taskEvaluationCommandSchema, type DispatchTerminal, type RunView, type TaskEvaluationCommand } from '#engine/index.js';
@@ -134,6 +134,22 @@ async function pickMissing(values: Map<string, string>, context: TaskCommandCont
   return picked !== null;
 }
 
+/**
+ * A task read without `--scope` uses the configured `terminal.scopeId` and says so (CLI review "Scope"); with none configured a person on a
+ * terminal still picks it (`pickMissing`), anyone else gets `CLI_SCOPE_REQUIRED` naming the valid scopes. Reads only: a change never defaults.
+ */
+async function defaultReadScope(values: Map<string, string>, context: TaskCommandContext, json: boolean, locale: Locale, action: string): Promise<void> {
+  if (values.has('--scope')) return;
+  const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
+  const configured = ((await loadConfig(root, { ...options, heal: false }).catch(() => undefined)) as { terminal?: { scopeId?: unknown } } | undefined)?.terminal?.scopeId;
+  const interactive = cliMode(context, json).mode === 'interactive';
+  if (interactive && typeof configured !== 'string') return;
+  const resolved = await resolveCommandScope({ command: `deckent task ${action}`, locale, explicit: undefined, configured: typeof configured === 'string' ? configured : undefined,
+    mutating: false, interactive: false, listScopes: () => scopeLister(context, root, options)().catch(() => []) });
+  if (!resolved) return;
+  values.set('--scope', resolved.scopeId);
+  if (!json) (context.stdout ?? process.stdout).write(`${scopeNotice(resolved, locale)}\n`);
+}
 const identityFlags = ['--scope', '--run', '--task', '--attempt', '--generation', '--layout-revision', '--lang'];
 export async function taskCommand(argv: readonly string[], context: TaskCommandContext): Promise<void> {
   const action = argv[1];
@@ -158,13 +174,13 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   if ((stat && diff) || (json && (stat || diff))) throw usage(stat ? '--stat' : '--diff');
   const attemptId = values.get('--attempt'), layoutRevision = values.get('--layout-revision'), generation = values.get('--generation');
   // A typed short id resolves first, so a TTY pick that keeps it reads the full id (a picked id is already full).
+  if (['inspect', 'transcript', 'patch-preview', 'integration-inspect'].includes(action)) await defaultReadScope(values, context, json, earlyLocale, action);
   if (values.has('--scope') && values.has('--run')) values.set('--run', await resolveRun(context, values.get('--scope')!, values.get('--run')!));
   if (['inspect', 'transcript', 'patch-preview'].includes(action) && !attemptId && !layoutRevision && !generation && !await pickMissing(values, context, json, earlyLocale)) return;
   const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task');
   if (action === 'accept' || action === 'reject') { await decideTask(action, values, context, json, usage); return; }
   const resolveLatest = ['patch-preview', 'transcript', 'integration-inspect'].includes(action) && !attemptId && !layoutRevision && !generation;
-  let identity: AttemptIdentity;
-  let resolvedNotice: Readonly<{ attempt: string; generation: number; layout: string; run: string; task: string }> | undefined;
+  let identity: AttemptIdentity, resolvedNotice: Readonly<{ attempt: string; generation: number; layout: string; run: string; task: string }> | undefined;
   if (action === 'inspect') {
     if (!scopeId || !runId || !taskId || attemptId || layoutRevision || generation) throw usage('--task');
     await inspectTask({ scopeId, runId, taskId }, context, json, earlyLocale, switches.has('--verbose')); return;
