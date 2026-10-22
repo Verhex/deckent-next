@@ -38,8 +38,11 @@ it.each(['maxTurns', 'settings', 'discovery', 'promptChannel', 'structuredReport
 it.each([
   ['maxTurns', true], ['settings', 'yes'], ['promptChannel', 'unknown'], ['structuredReport', { flag: '--schema', channel: 'guess' }], ['modelUsageEvidence', 'guess'],
   // A flag channel needs its flag and the flagless final-text channel may not carry one; the event stream format is a closed set.
-  ['discovery', { requiredFlags: [], hiddenProbes: [] }], ['discovery', { requiredFlags: ['--safe-mode'] }], ['discovery', { requiredFlags: ['-s'], hiddenProbes: [] }],
-  ['discovery', { requiredFlags: ['--safe-mode'], hiddenProbes: [{ args: ['x'] }] }],
+  ['discovery', { requiredFlags: [], hiddenProbes: [], checkout: null }], ['discovery', { requiredFlags: ['--safe-mode'], checkout: null }], ['discovery', { requiredFlags: ['-s'], hiddenProbes: [], checkout: null }],
+  ['discovery', { requiredFlags: ['--safe-mode'], hiddenProbes: [{ args: ['x'] }], checkout: null }], ['discovery', { requiredFlags: ['--safe-mode'], hiddenProbes: [] }],
+  // C2: a checkout realisation carries no flags or probes and only literal hidden paths (no globs, no unanchored nested path).
+  ['discovery', { requiredFlags: ['--safe-mode'], hiddenProbes: [], checkout: { hiddenPaths: ['AGENTS.md'] } }],
+  ['discovery', { requiredFlags: [], hiddenProbes: [], checkout: { hiddenPaths: ['**/AGENTS.md'] } }], ['discovery', { requiredFlags: [], hiddenProbes: [], checkout: { hiddenPaths: [] } }],
   ['structuredReport', { flag: null, channel: 'inline-json' }], ['structuredReport', { flag: '--schema', channel: 'final-text-json' }], ['structuredReport', { channel: 'final-text-json' }], ['eventStream', 'guess'],
 ])('validates the capability %s shape', (field, value) => {
   const asset = structuredClone(registry);
@@ -53,6 +56,29 @@ it('pairs disabledArgs with a discovery preflight capability: one without the ot
   const noArgs = structuredClone(registry) as unknown as typeof noProof;
   noArgs.adapters['codex']!.disabledArgs = null;
   expect(() => parseNativeCliRegistry(noArgs)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+});
+it('pairs a checkout realisation with empty disabledArgs and an argv realisation with non-empty ones (C2)', () => {
+  type Asset = { adapters: Record<string, { disabledArgs: unknown; capabilities: Record<string, unknown> }> };
+  const parsed = parseNativeCliRegistry(registry);
+  expect(parsed.adapters['cursor']).toMatchObject({ disabledArgs: [], capabilities: { discovery: { requiredFlags: [], hiddenProbes: [] } } });
+  expect(parsed.adapters['cursor']!.capabilities.discovery?.checkout?.hiddenPaths).toEqual(expect.arrayContaining(['AGENTS.md', 'CLAUDE.md', '.cursor', '/DECKENT.md', '/.deckent/worker-instructions.md']));
+  for (const provider of ['claude', 'codex']) expect(parsed.adapters[provider]!.capabilities.discovery?.checkout).toBeNull();
+  const argsWithCheckout = structuredClone(registry) as unknown as Asset;
+  argsWithCheckout.adapters['cursor']!.disabledArgs = ['--no-rules'];
+  expect(() => parseNativeCliRegistry(argsWithCheckout)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+  const emptyArgv = structuredClone(registry) as unknown as Asset;
+  emptyArgv.adapters['claude']!.disabledArgs = [];
+  expect(() => parseNativeCliRegistry(emptyArgv)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+});
+it('binds a pinned Cursor profile only with its frozen checkout part (C2)', () => {
+  vi.mocked(nativeCliCommand).mockImplementation(provider => parseNativeCliRegistry(registry).adapters[provider]!);
+  const compiled = compileNativeCodingDockerProfile(template, { ...invocation('cursor'), discovery: { schemaVersion: 1, mode: 'disabled' } });
+  expect(() => assertNativeWorkerBinding(compiled)).not.toThrow();
+  const binding = compiled.parameters.nativeSubscription as Record<string, unknown>, { checkout, ...stripped } = binding;
+  expect(checkout).toBeDefined();
+  expect(() => assertNativeWorkerBinding({ ...compiled, parameters: { ...compiled.parameters, nativeSubscription: stripped } })).toThrow('WORKER_MODEL_BINDING_MISMATCH');
+  const repository = compileNativeCodingDockerProfile(template, invocation('cursor'));
+  expect(() => assertNativeWorkerBinding({ ...repository, parameters: { ...repository.parameters, nativeSubscription: { ...(repository.parameters.nativeSubscription as object), checkout } } })).toThrow('WORKER_MODEL_BINDING_MISMATCH');
 });
 it('binds a pinned Codex profile with disabled discovery and refuses a reordered suppression segment', () => {
   vi.mocked(nativeCliCommand).mockImplementation(provider => parseNativeCliRegistry(registry).adapters[provider]!);

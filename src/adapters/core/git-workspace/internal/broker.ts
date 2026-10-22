@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { chmod, lstat, mkdir, open, readdir, readFile, realpath, rename, rm, rmdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
-import type { AttemptIdentity } from '#domain/index.js';
+import { workspaceHiddenPathsSchema, type AttemptIdentity, type WorkspaceHiddenPaths } from '#domain/index.js';
 import { WorkspaceError, type WorkspaceBroker, type WorkspaceLease, type WorkspaceRequest } from '#engine/index.js';
 import format from './format.json' with { type: 'json' };
 import { fingerprintGitSource, gitSourceBaseSchema, gitSourcePreimageSchema, type GitSourceBase } from './source-base.js';
@@ -122,7 +122,12 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
     if (JSON.stringify(current) !== JSON.stringify(recorded)) throw new WorkspaceError('WORKSPACE_IDENTITY_CONFLICT');
     return recorded;
   }
-  async allocate(input: WorkspaceRequest): Promise<GitWorkspaceLease> {
+  /** `hiddenPaths` (C2): the ledger-pinned instruction surface this attempt's worker must not receive. A fresh clone is checked out sparse
+   * (non-cone, `/*` then one exclusion per entry; Git keeps the entries in the index as skip-worktree, so the tree's `git status` is clean).
+   * The set is never recorded here: patch capture reads it from the same pinned profile, and a hidden path that is still absent is
+   * unchanged, never a deletion. Verification and integration checkouts never pass it (full tree). */
+  async allocate(input: WorkspaceRequest, hiddenPaths?: WorkspaceHiddenPaths): Promise<GitWorkspaceLease> {
+    const hidden = hiddenPaths === undefined ? undefined : workspaceHiddenPathsSchema.parse(hiddenPaths);
     const target = this.identify(input); const o = this.options;
     await this.checkedDirectory(o.sourceRoot); await this.checkedDirectory(o.workspaceRoot);
     let fresh = true;
@@ -143,9 +148,15 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
       const commit = await this.git(target.directory, ['-C', objectSource, 'rev-parse', '--verify', `${target.request.baseCommit}^{commit}`], true);
       if (commit !== target.request.baseCommit) throw new WorkspaceError('WORKSPACE_REQUEST_INVALID');
       await this.git(target.directory, ['clone', '--local', '--no-hardlinks', '--dissociate', '--no-checkout', `--template=${join(target.directory, format.hooks)}`, '--', objectSource, target.workspace]);
+      const gitDirectory = await this.git(target.directory, ['-C', target.workspace, 'rev-parse', '--absolute-git-dir']);
+      if (hidden) {
+        // Persisted in the clone's own config, so the worker's Git keeps the same tree shape (checkout, reset) inside the container.
+        for (const [key, value] of [['core.sparseCheckout', 'true'], ['core.sparseCheckoutCone', 'false']] as const) await this.git(target.directory, ['-C', target.workspace, 'config', key, value]);
+        await mkdir(join(gitDirectory, 'info'), { recursive: true, mode: 0o700 });
+        await writeFile(join(gitDirectory, 'info', 'sparse-checkout'), ['/*', ...hidden.map(entry => `!${entry}`)].join('\n') + '\n', { flag: 'wx', mode: 0o600 });
+      }
       await this.git(target.directory, ['-C', target.workspace, 'checkout', '--detach', target.request.baseCommit]);
       // Git's directory modes inherit the process umask; secure only this fresh clone before publishing its lease.
-      const gitDirectory = await this.git(target.directory, ['-C', target.workspace, 'rev-parse', '--absolute-git-dir']);
       for (const path of [target.workspace, gitDirectory]) {
         const stat = await lstat(path);
         if (!stat.isDirectory() || stat.isSymbolicLink() || await realpath(path) !== resolve(path) ||

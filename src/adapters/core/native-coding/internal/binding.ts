@@ -7,7 +7,8 @@ export class NativeWorkerBindingError extends Error {
 }
 const pinnedSchema = z.object({ schemaVersion: z.literal(2), provider: nativeCliIdSchema, modelUsageEvidence: modelUsageEvidenceSchema.optional(),
   reasoningEffort: workerEffortSchema.optional(), effortMode: z.enum(['arguments', 'model-id']).nullable().optional(),
-  model: z.object({ modelId: z.string() }).passthrough() }).passthrough();
+  model: z.object({ modelId: z.string() }).passthrough(), preflight: z.object({ discovery: z.string() }).passthrough().optional(),
+  checkout: z.unknown().optional() }).passthrough();
 const argvSchema = z.array(z.string()).min(1);
 const same = (left: readonly string[], right: readonly string[]) => left.length === right.length && left.every((value, index) => value === right[index]);
 
@@ -26,6 +27,9 @@ export function assertNativeWorkerBinding(profile: ExecutionProfileDefinition): 
   const command = nativeCliCommand(binding.data.provider), values = argv.data, n = values.length;
   if (binding.data.modelUsageEvidence !== undefined && binding.data.modelUsageEvidence !== command.capabilities.modelUsageEvidence) throw new NativeWorkerBindingError();
   if (binding.data.reasoningEffort && binding.data.effortMode !== (command.capabilities.reasoningEffort?.mode ?? null)) throw new NativeWorkerBindingError();
+  // C2: a checkout-realised `disabled` must carry its frozen hidden set (else the worker would read the instruction surface it claims is off);
+  // argv-realised and `repository` profiles never carry one.
+  if ((binding.data.checkout !== undefined) !== (binding.data.preflight?.discovery === 'disabled' && !!command.capabilities.discovery?.checkout)) throw new NativeWorkerBindingError();
   const head = [command.executable, ...command.args];
   if (n < head.length + 4 || !same(values.slice(0, head.length), head) || values[n - 4] !== command.modelFlag
     || values[n - 3] !== binding.data.model.modelId || values[n - 2] !== '--') throw new NativeWorkerBindingError();

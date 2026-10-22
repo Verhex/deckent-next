@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { executionProfileDefinitionSchema, REASONING_EFFORTS, workerEffortSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
+import { executionProfileDefinitionSchema, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
 import { nativeEffortArgs, nativeCliCommand, nativeCliIdSchema } from '#adapters/core/native-cli-registry/index.js';
 import { nativePromptCompositionSchema, composeNativePrompt, promptHash } from './composition.js';
@@ -20,6 +20,8 @@ export const nativeCodingInvocationFields = z.object({
   cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
   discovery: z.object({ schemaVersion: z.literal(1), mode: z.enum(['disabled', 'repository']),
     settings: z.object({ disableAllHooks: z.boolean() }).strict().readonly().optional(),
+    /** C2: the project's own hidden set for a checkout-realised `disabled` (replaces the registry default; part of the template content id). */
+    hiddenPaths: workspaceHiddenPathsSchema.optional(),
   }).strict().readonly().default({ schemaVersion: 1, mode: 'disabled' }),
   permissionMode: z.literal('unattended'),
   model: z.union([modelArgument, pinnedModelSchema]),
@@ -30,6 +32,14 @@ export const nativeCodingInvocationSchema = nativeCodingInvocationFields.refine(
   .refine(value => (value.schemaVersion === 4) === (typeof value.model === 'object')).readonly();
 export type NativeCodingInvocation = z.infer<typeof nativeCodingInvocationSchema>;
 
+/** One rule for templates and compilation: `disabled` needs a registered realisation (argv or checkout), hook settings need `repository`,
+ * and a project hidden set only exists for a checkout-realised `disabled`. */
+export function nativeDiscoverySupported(command: ReturnType<typeof nativeCliCommand>, discovery: NativeCodingInvocation['discovery']): boolean {
+  const realisation = command.capabilities.discovery, { mode, settings, hiddenPaths } = discovery;
+  return !((mode === 'disabled' && (!command.disabledArgs || !realisation))
+    || (settings && (!command.capabilities.settings || mode !== 'repository'))
+    || (hiddenPaths && (mode !== 'disabled' || !realisation?.checkout)));
+}
 export class NativeCodingProfileError extends Error {
   constructor(readonly code: 'NATIVE_CODING_INVOCATION_INVALID' | 'NATIVE_CODING_TEMPLATE_INVALID' | 'NATIVE_CODING_DISCOVERY_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' | 'NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE'
     | 'WORKER_EFFORT_UNSUPPORTED' | 'WORKER_MODEL_ALIAS_REFUSED') {
@@ -64,11 +74,10 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
   const effortArgs = nativeEffortArgs(command.capabilities.reasoningEffort, reasoningEffort);
   const turnArgs = invocation.maxTurns === undefined ? [] : [command.capabilities.maxTurns!.flag, String(invocation.maxTurns)];
   const { mode, settings } = invocation.discovery;
-  if ((mode === 'disabled' && (!command.disabledArgs || !command.capabilities.discovery))
-    || (settings && (!command.capabilities.settings || mode !== 'repository'))) {
-    throw new NativeCodingProfileError('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
-  }
+  if (!nativeDiscoverySupported(command, invocation.discovery)) throw new NativeCodingProfileError('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
   const discoveryArgs = mode === 'disabled' ? command.disabledArgs! : [];
+  const shaping = mode === 'disabled' ? command.capabilities.discovery!.checkout : null;
+  const checkout = shaping ? { schemaVersion: 1, hiddenPaths: [...(invocation.discovery.hiddenPaths ?? shaping.hiddenPaths)] } : undefined;
   const settingsArgs = settings ? [command.capabilities.settings!.flag, JSON.stringify(settings)] : [];
   const delivery = invocation.composition ? composeNativePrompt(invocation.composition, command.capabilities.promptChannel) : undefined;
   const coreArgs = delivery ? command.coreArgs : [];
@@ -78,7 +87,7 @@ export function compileNativeCodingDockerProfile(template: ExecutionProfileDefin
   const profile = executionProfileDefinitionSchema.parse({ ...template, parameters: { ...template.parameters, argv,
     nativeSubscription: { schemaVersion: pinned ? 2 : 1, provider: invocation.provider, modelUsageEvidence: command.capabilities.modelUsageEvidence, reasoningEffort, effortMode: command.capabilities.reasoningEffort?.mode ?? null,
       ...(pinned ? { model: { channelId: pinned.channelId, modelId: pinned.modelId, auxiliaryModelIds: [...pinned.auxiliaryModelIds], ...evidence } } : {}),
-      ...(invocation.schemaVersion >= 3 ? { finalReport: { schemaVersion: 1 } } : {}),
+      ...(invocation.schemaVersion >= 3 ? { finalReport: { schemaVersion: 1 } } : {}), ...(checkout ? { checkout } : {}),
       ...(delivery ? { promptDelivery: { ...delivery, argvSha256: promptHash(JSON.stringify(argv)) } } : {}), preflight: {
       schemaVersion: 1, cliVersion: invocation.cliVersion, discovery: mode, helpArgs: command.helpArgs,
       requiredFlags: [...command.args.filter(arg => arg.startsWith('--')), ...turnArgs.filter(arg => arg.startsWith('--')), ...(reasoningEffort.level === null ? [] : command.capabilities.reasoningEffort!.requiredFlags),

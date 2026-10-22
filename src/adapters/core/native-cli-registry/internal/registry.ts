@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import asset from '../../../../../assets/native-coding/commands.json' with { type: 'json' };
-import { nativeCliIds, nativeCliIdSchema, modelUsageEvidenceSchema, NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, type WorkerEffort } from '#domain/index.js';
+import { nativeCliIds, nativeCliIdSchema, modelUsageEvidenceSchema, NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, workspaceHiddenPathsSchema, type WorkerEffort } from '#domain/index.js';
 
 const argument = z.string().min(1).refine(value => !value.includes('\0'));
 const flag = z.string().regex(/^--[a-z][a-z-]*$/);
@@ -11,10 +11,14 @@ export const nativeCliCapabilitiesSchema = z.object({
       && (value.mode === 'model-id' ? value.args.length === 0 : value.args.some(arg => arg.includes('{effort}')))).readonly().nullable(),
   maxTurns: z.object({ flag, hiddenHelpProbe: z.object({ args: argumentsSchema, refusal: argument }).strict().readonly().nullable() }).strict().readonly().nullable(),
   settings: z.object({ flag }).strict().readonly().nullable(),
-  /** How the preflight proves `disabledArgs` take effect: the help flags they need, and hidden probes whose invalid value must draw the exact
-   * parser refusal (a CLI that silently ignores an unknown key would otherwise leave repository instructions on). Null = no `disabled` mode. */
-  discovery: z.object({ requiredFlags: z.array(flag).min(1).readonly(),
-    hiddenProbes: z.array(z.object({ args: argumentsSchema, refusal: argument }).strict().readonly()).max(4).readonly() }).strict().readonly().nullable(),
+  /** How `disabled` discovery is realised. Argv: non-empty `disabledArgs`, the help flags they need and hidden probes whose invalid value must
+   * draw the exact parser refusal (a CLI that silently ignores an unknown key would otherwise leave repository instructions on). Checkout
+   * (C2, owner Q4 2026-10-23): a CLI without a suppression flag gets a worker checkout without `hiddenPaths` (empty `disabledArgs`, no flags,
+   * no probes). Null = no `disabled` mode. */
+  discovery: z.object({ requiredFlags: z.array(flag).readonly(),
+    hiddenProbes: z.array(z.object({ args: argumentsSchema, refusal: argument }).strict().readonly()).max(4).readonly(),
+    checkout: z.object({ hiddenPaths: workspaceHiddenPathsSchema }).strict().readonly().nullable() }).strict()
+    .refine(value => value.checkout === null ? value.requiredFlags.length > 0 : value.requiredFlags.length === 0 && value.hiddenProbes.length === 0).readonly().nullable(),
   promptChannel: z.enum(['claude-system-prompt', 'codex-instructions-file', 'inline']),
   // A flag channel passes the report schema through a CLI flag; `final-text-json` has no flag: the schema rides in the prompt and the
   // report is the worker's final answer text (CLIs without a structured-output flag).
@@ -27,7 +31,8 @@ export const nativeCliCapabilitiesSchema = z.object({
 export type NativeCliCapabilities = z.infer<typeof nativeCliCapabilitiesSchema>;
 const commandSchema = z.object({ executable: argument, args: argumentsSchema, modelFlag: flag, helpArgs: argumentsSchema,
   disabledArgs: argumentsSchema.nullable(), coreArgs: argumentsSchema, modelAliases: argumentsSchema,
-  capabilities: nativeCliCapabilitiesSchema }).strict().refine(value => (value.disabledArgs === null) === (value.capabilities.discovery === null)).readonly();
+  capabilities: nativeCliCapabilitiesSchema }).strict().refine(value => (value.disabledArgs === null) === (value.capabilities.discovery === null)
+    && (value.capabilities.discovery === null || (value.disabledArgs!.length === 0) === (value.capabilities.discovery.checkout !== null))).readonly();
 const registrySchema = z.object({ schemaVersion: z.literal(3), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), commandSchema)
   .refine(value => Object.keys(value).length > 0).readonly() }).strict().readonly();
 export { NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, type WorkerEffort };

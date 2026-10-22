@@ -59,7 +59,8 @@
               ],
               "refusal": "expected a boolean\nin `skills.bundled.enabled`"
             }
-          ]
+          ],
+          "checkout": null
         },
         "promptChannel": "codex-instructions-file",
         "eventStream": "codex-exec-json",
@@ -139,7 +140,8 @@
           "requiredFlags": [
             "--safe-mode"
           ],
-          "hiddenProbes": []
+          "hiddenProbes": [],
+          "checkout": null
         },
         "promptChannel": "claude-system-prompt",
         "eventStream": "claude-code-stream-json",
@@ -180,13 +182,28 @@
       "helpArgs": [
         "--help"
       ],
-      "disabledArgs": null,
+      "disabledArgs": [],
       "coreArgs": [],
       "modelAliases": [],
       "capabilities": {
         "maxTurns": null,
         "settings": null,
-        "discovery": null,
+        "discovery": {
+          "requiredFlags": [],
+          "hiddenProbes": [],
+          "checkout": {
+            "hiddenPaths": [
+              "AGENTS.md",
+              "CLAUDE.md",
+              ".agents",
+              ".claude",
+              ".codex",
+              ".cursor",
+              "/DECKENT.md",
+              "/.deckent/worker-instructions.md"
+            ]
+          }
+        },
         "promptChannel": "inline",
         "eventStream": "cursor-agent-stream-json",
         "structuredReport": {

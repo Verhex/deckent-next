@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { workerEffortSchema } from '#domain/index.js';
 import { z } from 'zod';
-import { nativeCliIdSchema, modelUsageEvidenceSchema, workerModelPinEvidenceShape } from '#domain/index.js';
+import { nativeCliIdSchema, modelUsageEvidenceSchema, workerModelPinEvidenceShape, workspaceHiddenPathsSchema } from '#domain/index.js';
 import catalog from './providers.json' with { type: 'json' };
 import { nativePromptDeliverySchema } from './prompt.js';
 
@@ -24,7 +24,11 @@ export const nativeSubscriptionSchema = z.object({ schemaVersion: z.union([z.lit
     helpArgs: z.array(z.enum(['exec', '--help'])).min(1).max(2).readonly(),
     requiredFlags: z.array(z.string().regex(/^--[a-z][a-z-]*$/).max(64)).min(1).max(20).readonly(),
   }).strict().readonly().optional(),
-}).strict().refine(value => (value.schemaVersion === 2) === (value.model !== undefined)).readonly();
+  /** C2: `disabled` discovery realised by checkout shaping — the worker's Git checkout leaves these paths out. Frozen at compilation, so the
+   * ledger-pinned profile (never a file beside the checkout) is what allocation and patch capture read. Absent = full checkout. */
+  checkout: z.object({ schemaVersion: z.literal(1), hiddenPaths: workspaceHiddenPathsSchema }).strict().readonly().optional(),
+}).strict().refine(value => (value.schemaVersion === 2) === (value.model !== undefined))
+  .refine(value => value.checkout === undefined || value.preflight?.discovery === 'disabled').readonly();
 export type NativeSubscription = z.infer<typeof nativeSubscriptionSchema>;
 export class NativeConnectionError extends Error {
   constructor(readonly code: 'NATIVE_CREDENTIAL_UNAVAILABLE' | 'NATIVE_CONNECTION_UNAVAILABLE') { super(code); this.name = 'NativeConnectionError'; }
