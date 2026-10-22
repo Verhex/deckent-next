@@ -1127,6 +1127,7 @@
         "src/engine/core/runs",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-window",
+        "src/surfaces/core/cli-human",
         "src/surfaces/core/terminal-picker",
         "src/platform/core/common",
         "src/domain/core/agent-turn",
@@ -3551,7 +3552,8 @@
       "monitor",
       "setup",
       "security",
-      "terminal"
+      "terminal",
+      "termrun"
     ]
   },
   "literals": {

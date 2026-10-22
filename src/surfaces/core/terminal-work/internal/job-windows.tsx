@@ -11,7 +11,7 @@ import type { LocalExecution, WorklinePanel } from './workline-panel.js';
 import type { WorkSurfaceLabels } from './workline-actions.js';
 
 export interface JobWindowLabels {
-  readonly locale: Locale; readonly completed: string; readonly deliveryCounts: string; readonly deliveryPatch: string; readonly deliveryNext: string; readonly detailsUnavailable: string; readonly trackingFull: string;
+  readonly locale: Locale; readonly completed: string; readonly deliveryCounts: string; readonly deliveryPatch: string; readonly deliveryNext: string; readonly detailsUnavailable: string; readonly acceptanceEvidence: string; readonly trackingFull: string;
   readonly hints: string; readonly watchStatus: string; readonly push: string; readonly poll: string;
   readonly cancelPickerTitle: string; readonly system: string; readonly runTitle: string; readonly runFallback: string; readonly transcriptTitle: string;
   readonly state: string; readonly tasks: string; readonly attempts: string; readonly delivery: string; readonly unknown: string;
