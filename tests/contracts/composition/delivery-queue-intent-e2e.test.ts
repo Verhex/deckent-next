@@ -2,8 +2,8 @@ import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
-import { join, resolve } from 'node:path';
-import { promisify, stripVTControlCharacters } from 'node:util';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { proposeRun } from '../../../src/index.js';
 import { configuredTargetQueueTerminal, startConfiguredRuntimeService } from '../../../src/composition/core/runtime-service/index.js';
@@ -13,7 +13,7 @@ import { createProviderSpendAccount, createProviderSpendCheckpoint, queueCommand
 import { queueServiceActor, type RunProposal } from '#domain/index.js';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
-import { DRIVER, type Step } from '../support/pty-steps.js';
+import { cliInPty } from '../support/delivery-queue-fixture.js';
 import { terminalApplication } from '../support/approval-terminal.js';
 
 // alpha.47 S6 R4-b (owner D2b, 2026-10-18), real boundary: the owner proposes a coding Run whose proposal carries a delivery intent for one
@@ -97,18 +97,6 @@ async function until<T>(read: () => Promise<T>, done: (value: T) => boolean, lab
     if (Date.now() > deadline) throw new Error(`timed out waiting for ${label}: ${JSON.stringify(value)}; service notes ${JSON.stringify(notes())}`);
     await new Promise(resolve => setTimeout(resolve, 250));
   }
-}
-
-/** The shared PTY driver, except that a step whose text arrived together with the program's exit is met (the CLI prints its result and ends). */
-const CLI_DRIVER = DRIVER.replace('if time.time() > deadline or not read_for(0.1):', 'if time.time() > deadline or (not read_for(0.1) and wait.encode() not in out[since:]):');
-async function cliInPty(project: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: readonly Step[]) {
-  const argv = [process.execPath, resolve('dist/composition/core/cli/internal/entry.js'), ...args];
-  const { stdout } = await exec('python3', ['-c', CLI_DRIVER, JSON.stringify(argv), JSON.stringify(steps), 'tty'],
-    { cwd: project, env: { ...process.env, ...env }, timeout: 180_000, maxBuffer: 32 * 1024 * 1024 });
-  const result = JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string };
-  if (result.timeout) throw new Error(`waited for ${JSON.stringify(result.timeout)}\n${result.output.slice(-6000)}`);
-  expect(CLI_DRIVER).not.toBe(DRIVER);
-  return { ...result, output: stripVTControlCharacters(result.output) };
 }
 
 describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKER_IMAGE'])('Run delivery intent (alpha.47 S6 R4-b)', () => {
