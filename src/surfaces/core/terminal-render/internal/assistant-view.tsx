@@ -11,6 +11,7 @@ import type { LiveTail } from './stream-segmenter.js';
 import { fillTemplate } from './status-row.js';
 import { cells, truncateEnd } from './text-width.js';
 import { formatContextTokens } from './token-count.js';
+import TIMING from './assistant-timing.json' with { type: 'json' };
 
 /** Catalog strings (terminal.render.*) resolved by the surface; placeholders are filled here. */
 /** The human sentence for the provider refusal token in a failed round's note (the engine's `classifyProviderRejection` names), or null. */
@@ -178,7 +179,7 @@ export function AssistantUnitRow({ unit, labels }: { readonly unit: AssistantUni
 export function ReasoningNarration({ narration, labels, clock, preview = [] }: { readonly narration: Narration; readonly labels: AssistantRenderLabels;
   readonly clock: TrustedClock; readonly preview?: readonly string[] }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
-  const { frame } = useAnimation({ interval: 120 });
+  const { frame } = useAnimation({ interval: TIMING.spinnerIntervalMs });
   const text = fillTemplate(labels.thinking, { tokens: tokenText(narration.tokens, narration.approximate), seconds: seconds(clock.sample().wallMs - narration.startedAtMs, 0) });
   return (
     <Box flexDirection="column" paddingLeft={INDENT}>
@@ -191,9 +192,9 @@ export function ReasoningNarration({ narration, labels, clock, preview = [] }: {
 /** A silent wait with its live seconds (TL-A D1): the model preparing its answer, or the service summarizing older messages. */
 function WaitingLine({ waiting, labels, clock }: { readonly waiting: WaitingView; readonly labels: AssistantRenderLabels; readonly clock: TrustedClock }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
-  const { frame } = useAnimation({ interval: 120 });
+  const { frame } = useAnimation({ interval: TIMING.spinnerIntervalMs });
   // Whole seconds waited so far (as the status row counts), never rounded up.
-  const text = fillTemplate((labels.waiting ?? NEUTRAL_WAITING)[waiting.kind], { seconds: Math.floor(Math.max(0, clock.sample().wallMs - waiting.sinceMs) / 1000) });
+  const text = fillTemplate((labels.waiting ?? NEUTRAL_WAITING)[waiting.kind], { seconds: Math.floor(Math.max(0, clock.sample().wallMs - waiting.sinceMs) / TIMING.msPerSecond) });
   return <Box paddingLeft={INDENT}><Text {...palette.muted} wrap="truncate-end">{glyphs.spinner[frame % glyphs.spinner.length]} {text}</Text></Box>;
 }
 
@@ -234,7 +235,7 @@ const TOOL_OUTPUT_LINES = 3;
 /** The one tool call running now, with a spinner, its live seconds and the last lines of its output. */
 function ToolRunning({ tool, labels, clock }: { readonly tool: ActiveTool; readonly labels: AssistantRenderLabels; readonly clock: TrustedClock }) {
   const palette = useWorklinePalette(), glyphs = useRenderGlyphs();
-  const { frame } = useAnimation({ interval: 120 });
+  const { frame } = useAnimation({ interval: TIMING.spinnerIntervalMs });
   const text = fillTemplate(labels.toolRunning, { tool: toolText(tool, labels), seconds: seconds(clock.sample().wallMs - tool.startedAtMs) });
   const tail = tool.output.replace(/\n+$/u, '').split('\n').filter(line => line.length > 0).slice(-TOOL_OUTPUT_LINES);
   return (

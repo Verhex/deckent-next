@@ -1,0 +1,5 @@
+{
+  "maxDepth": 16,
+  "maxNodes": 262144,
+  "maxCodeUnits": 8388608
+}

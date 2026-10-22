@@ -1,12 +1,13 @@
 import { z } from 'zod';
+import wireLimits from './catalog-wire-limits.json' with { type: 'json' };
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema, sanitizeIssues,
   type ValidationIssue } from '#domain/core/primitives/index.js';
 
 export const PROVIDER_CATALOG_SCHEMA_VERSION = 1;
 export const PROVIDER_CATALOG_WIRE_LIMITS = Object.freeze({
-  maxDepth: 16,
-  maxNodes: 262_144,
-  maxCodeUnits: 8 * 1024 * 1024,
+  maxDepth: wireLimits.maxDepth,
+  maxNodes: wireLimits.maxNodes,
+  maxCodeUnits: wireLimits.maxCodeUnits,
 });
 export const NATIVE_MODEL_ID_MAX_LENGTH = 1024;
 
