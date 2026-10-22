@@ -109,7 +109,7 @@ function offTerminal(language: 'en' | 'tr') {
     stdout: { write(value: string) { out.push(value); } }, stderr: { write(value: string) { err.push(value); } }, initialize() {} } };
 }
 const MISSING = [
-  [['models', 'catalog', 'activate'], { en: '--channel <id>, --command-id <id>, --expected-revision <n>', tr: '--channel <id>, --command-id <id>, --expected-revision <n>' }],
+  [['models', 'catalog', 'activate', '--scope', 's'], { en: '--channel <id>, --command-id <id>, --expected-revision <n>', tr: '--channel <id>, --command-id <id>, --expected-revision <n>' }],
   [['models', 'binding', '--provider', 'p'], { en: '--provider-version <n>, --model <id>, --model-version <n>', tr: '--provider-version <n>, --model <id>, --model-version <n>' }],
   [['decide', 'inspect'], { en: '--input <file|-> | --schema', tr: '--input <dosya|-> | --schema' }],
   [['task', 'inspect', '--scope', 's'], { en: '--run <id>, --task <id>', tr: '--run <id>, --task <id>' }],
@@ -127,10 +127,10 @@ it.each((['en', 'tr'] as const).flatMap(language => MISSING.map(([argv, missing]
     expect(text).toContain('[CLI_ARGUMENT_MISSING]'); expect(text).not.toContain('CLI_USAGE');
   });
 
-it('keeps CLI_USAGE for a present but invalid value, a strict help call and a missing --scope (the scope rule owns it)', async () => {
+it('keeps CLI_USAGE for a present but invalid value, and a strict help call', async () => {
   for (const argv of [['models', 'binding', '--provider', 'p', '--provider-version', 'x', '--model', 'm', '--model-version', '1'],
     ['run', 'hold', '--scope', 's', '--id', 'r', '--command-id', 'c', '--expected-revision', 'zz', '--reason', 'r'],
-    ['models', 'invoke', '--help', '--json'], ['run', 'cancel', '--id', 'r', '--command-id', 'c', '--expected-revision', '1']]) {
+    ['models', 'invoke', '--help', '--json']]) {
     const f = offTerminal('en');
     expect(await main(argv, f.context), argv.join(' ')).toBe(2);
     const text = f.err.join('') + f.out.join('');
@@ -156,4 +156,11 @@ it.each(['en', 'tr'] as const)('run inspect with a scope and no --id off a termi
   expect(await main(['run', 'inspect', '--scope', 's'], context)).toBe(2);
   const text = f.err.join('') + f.out.join('');
   expect(text).toContain(`${language === 'en' ? 'Missing argument' : 'Eksik argüman'}: --id <id>.`); expect(text).toContain('[CLI_ARGUMENT_MISSING]');
+});
+
+it('a missing --scope on a change is the scope rule\'s refusal (CLI_SCOPE_REQUIRED, exit 2), not a usage error or a missing-argument error', async () => {
+  const f = offTerminal('en');
+  expect(await main(['run', 'cancel', '--id', 'r', '--command-id', 'c', '--expected-revision', '1'], f.context)).toBe(2);
+  const text = f.err.join('') + f.out.join('');
+  expect(text).toContain('CLI_SCOPE_REQUIRED'); expect(text).not.toContain('CLI_USAGE'); expect(text).not.toContain('CLI_ARGUMENT_MISSING');
 });

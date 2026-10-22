@@ -30,14 +30,14 @@ export interface CliCommandSpec { readonly name: string; readonly group: HelpGro
    */
   readonly requires?: readonly string[];
   /** A person on a real terminal picks or fills what `requires` lists (the handler's picker or form); help says the list holds off a terminal. */
-  readonly picks?: true }
+  readonly picks?: true | readonly string[] }
 
 function action(name: string, group: HelpGroup, summary: MessageKey, detail: MessageKey,
   more: Pick<CliCommandSpec, 'installation' | 'requires' | 'picks'> = {}): CliCommandSpec {
   return { name, group, summary, detail, ...more };
 }
 const INPUT = ['--input <file|-> | --schema'], RUN_CHANGE = ['--id <id>', '--command-id <id>', '--expected-revision <n>'];
-const MODEL = ['--provider <id>', '--provider-version <n>', '--model <id>', '--model-version <n>'], TASK = ['--run <id>', '--task <id>'];
+const MODEL = ['--provider <id>', '--provider-version <n>', '--model <id>', '--model-version <n>'], TASK = ['--run <id>', '--task <id>'], ATTEMPT = ['--attempt <id>', '--layout-revision <id>', '--generation <n>'];
 const MODEL_CHANGE = [...MODEL, '--command-id <id>', '--expected-revision <n>', '--binding-digest <sha256>'];
 const CATALOG_CHANGE = ['--channel <id>', '--command-id <id>', '--expected-revision <n>'];
 // J2e: no reserved (planned) name is left after `run list` (C-RUN) and `policy scopes` (C-APPROVE); a later reservation adds
@@ -98,23 +98,23 @@ export const CLI_CATALOG = [
   ] },
   { name: 'task', group: 'work', summary: 'cli.help.summary.task', detail: 'cli.help.task', args: '--scope <id> --run <id> --task <id>', bare: 'handler', children: [
     action('inspect', 'observe', 'cli.help.action.task.inspect', 'cli.help.task', { requires: TASK, picks: true }),
-    action('execute', 'work', 'cli.help.action.task.execute', 'cli.help.task', { requires: [...TASK, '--attempt <id>', '--layout-revision <id>', '--generation <n>'] }),
-    action('evaluate', 'work', 'cli.help.action.evaluate', 'cli.help.task'),
-    action('accept', 'work', 'cli.help.action.accept', 'cli.help.task'),
-    action('reject', 'work', 'cli.help.action.reject', 'cli.help.task'),
-    action('patch-prepare', 'work', 'cli.help.action.patch-prepare', 'cli.help.task'),
+    action('execute', 'work', 'cli.help.action.task.execute', 'cli.help.task', { requires: [...TASK, ...ATTEMPT] }),
+    action('evaluate', 'work', 'cli.help.action.evaluate', 'cli.help.task', { requires: [...TASK, ...ATTEMPT, '--command-id <id>', '--expected-revision <n>'] }),
+    action('accept', 'work', 'cli.help.action.accept', 'cli.help.task', { requires: [...TASK, '--command-id <id>', '--expected-revision <n>'] }),
+    action('reject', 'work', 'cli.help.action.reject', 'cli.help.task', { requires: [...TASK, '--command-id <id>', '--expected-revision <n>'] }),
+    action('patch-prepare', 'work', 'cli.help.action.patch-prepare', 'cli.help.task', { requires: [...TASK, ...ATTEMPT] }),
     action('patch-preview', 'work', 'cli.help.action.patch-preview', 'cli.help.task', { requires: TASK, picks: true }),
-    action('integration-check', 'work', 'cli.help.action.integration-check', 'cli.help.task'),
-    action('integration-prepare', 'work', 'cli.help.action.integration-prepare', 'cli.help.task'),
+    action('integration-check', 'work', 'cli.help.action.integration-check', 'cli.help.task', { requires: [...TASK, ...ATTEMPT] }),
+    action('integration-prepare', 'work', 'cli.help.action.integration-prepare', 'cli.help.task', { requires: [...TASK, ...ATTEMPT, '--command-id <id>', '--proposal <code>'] }),
     action('integration-inspect', 'work', 'cli.help.action.integration-inspect', 'cli.help.task'),
     action('integration-queue-enqueue', 'work', 'queue.cli.summary.enqueue', 'queue.cli.help'),
     action('integration-queue-list', 'observe', 'queue.cli.summary.list', 'queue.cli.help'),
     action('integration-queue-inspect', 'observe', 'queue.cli.summary.inspect', 'queue.cli.help'),
     action('integration-queue-confirm', 'work', 'queue.cli.summary.confirm', 'queue.cli.help'),
     action('integration-queue-rollback', 'work', 'queue.cli.summary.rollback', 'queue.cli.help'),
-    action('integration-deliver', 'work', 'cli.help.action.integration-deliver', 'cli.help.task'),
-    action('integration-adopt', 'work', 'cli.help.action.integration-adopt', 'cli.help.task'),
-    action('integration-rollback', 'work', 'cli.help.action.integration-rollback', 'cli.help.task'),
+    action('integration-deliver', 'work', 'cli.help.action.integration-deliver', 'cli.help.task', { requires: [...TASK, ...ATTEMPT, '--command-id <id>', '--candidate-command-id <id>'] }),
+    action('integration-adopt', 'work', 'cli.help.action.integration-adopt', 'cli.help.task', { requires: [...TASK, ...ATTEMPT, '--command-id <id>', '--delivery-command-id <id>', '--target <ref>'] }),
+    action('integration-rollback', 'work', 'cli.help.action.integration-rollback', 'cli.help.task', { requires: [...TASK, ...ATTEMPT, '--command-id <id>', '--adoption-command-id <id>'] }),
     action('transcript', 'work', 'cli.help.action.transcript', 'cli.help.task', { requires: TASK, picks: true }),
   ] },
   { name: 'pool', group: 'work', summary: 'cli.help.summary.pool', detail: 'cli.help.pool', args: '[--scope <id>] [--pool <id>]', bare: { read: 'status' }, children: [
@@ -186,7 +186,7 @@ export const CLI_CATALOG = [
     action('get', 'setup', 'cli.help.action.config.get', 'config.surface.help'),
     action('explain', 'setup', 'cli.help.action.explain', 'config.surface.help'),
     action('validate', 'setup', 'cli.help.action.validate', 'config.surface.help'),
-    action('set', 'setup', 'cli.help.action.config.set', 'config.surface.help', { requires: ['<key>', '<value>'], picks: true }),
+    action('set', 'setup', 'cli.help.action.config.set', 'config.surface.help', { requires: ['<key>', '<value>'], picks: ['<value>'] }),
     action('unset', 'setup', 'cli.help.action.unset', 'config.surface.help', { requires: ['<key>'] }),
   ] },
   { name: 'mcp', group: 'setup', summary: 'cli.help.summary.mcp', detail: 'cli.help.mcp', args: '[<name>] [--check] [--scope local|project|user]', bare: 'handler', children: [

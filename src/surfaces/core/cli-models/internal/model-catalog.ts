@@ -22,7 +22,7 @@ const FLAGS: Readonly<Record<Action, readonly string[]>> = {
   activate: ['--scope', '--channel', '--model', '--command-id', '--expected-revision'],
   deactivate: ['--scope', '--channel', '--model', '--command-id', '--expected-revision'],
 };
-function parse(argv: readonly string[]) {
+function parseFlags(argv: readonly string[]) {
   const action = argv[2] as Action, help = argv[2] === '--help' || argv[2] === '-h';
   if (!help && !(action in FLAGS)) throw ErrorRegistry.createError('CLI_USAGE');
   const values = new Map<string, string>(); let json = false, language: string | undefined;
@@ -34,16 +34,17 @@ function parse(argv: readonly string[]) {
     const value = argv[++index]; if (!value || (value.startsWith('-') && value !== '-')) throw ErrorRegistry.createError('CLI_USAGE');
     if (flag === '--lang') language = value; else values.set(flag, value);
   }
-  if (help) return { help, action, values, json, language };
+  return { help, action, values, json, language };
+}
+/** The remaining required flags; `--scope` is resolved before this by the scope rule (a read may default, a change never does). */
+function requireFlags(action: Action, values: ReadonlyMap<string, string>): void {
   const need = (flag: string) => { if (!values.has(flag)) throw ErrorRegistry.createError('CLI_USAGE'); };
-  need('--scope');
   if (action !== 'list') need('--command-id');
   if (action === 'register' && values.has('--seed') === values.has('--file')) throw ErrorRegistry.createError('CLI_USAGE');
   if (action === 'activate' || action === 'deactivate') {
     need('--channel'); need('--expected-revision');
     if (!/^(0|[1-9][0-9]*)$/.test(values.get('--expected-revision')!) || !Number.isSafeInteger(Number(values.get('--expected-revision')))) throw ErrorRegistry.createError('CLI_USAGE');
   }
-  return { help, action, values, json, language };
 }
 const activation = (value: { state: string } | null, locale: Locale) => value?.state === 'active' ? t('models.catalog.active', {}, locale) : t('models.catalog.inactive', {}, locale);
 function renderList(value: ModelCatalogInspection, locale: Locale): string {
@@ -76,10 +77,19 @@ function renderResult(value: ModelCatalogResult, locale: Locale): string {
 export async function modelCatalogCommand(argv: readonly string[], context: ModelCommandContext): Promise<void | ExitCode> {
   const choosing = (argv[2] === 'activate' || argv[2] === 'deactivate') ? scopeOnly(argv) : null;
   if (choosing && modelsInteractive(context)) return catalogByChoice(argv[2] as 'activate' | 'deactivate', choosing, context);
-  const parsed = parse(argv), env = context.env ?? process.env, locale = commandLocale(context, parsed.language);
+  const parsed = parseFlags(argv), env = context.env ?? process.env, locale = commandLocale(context, parsed.language);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (parsed.help) { emit(t('cli.help.modelsCatalog', {}, locale), sinks); return; }
   const root = context.root ?? process.cwd(), options: ConfigLoadOptions = { env }, value = (flag: string) => parsed.values.get(flag);
+  if (!parsed.values.has('--scope')) {
+    const configured = await loadConfig(root, { ...options, heal: false }).then(config => (config['terminal'] as { scopeId?: unknown } | undefined)?.scopeId, () => undefined);
+    const resolved = await resolveCommandScope({ command: `deckent models catalog ${parsed.action}`, locale, explicit: undefined, configured: typeof configured === 'string' ? configured : undefined,
+      mutating: parsed.action !== 'list', interactive: false, listScopes: () => scopeLister(context as never, root, options)().catch(() => []) });
+    if (!resolved) return;
+    parsed.values.set('--scope', resolved.scopeId);
+    if (!parsed.json) emit(scopeNotice(resolved, locale), sinks);
+  }
+  requireFlags(parsed.action, parsed.values);
   if (parsed.action === 'list') {
     if (!context.inspectModelCatalog) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const query = modelCatalogQuerySchema.safeParse({ schemaVersion: 1, scopeId: value('--scope'), ...(value('--channel') ? { channelId: value('--channel') } : {}) });

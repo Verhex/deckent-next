@@ -53,7 +53,9 @@ async function latestAttempt(context: TaskCommandContext, scopeId: string, runId
 async function decideTask(action: 'accept' | 'reject', values: ReadonlyMap<string, string>, context: TaskCommandContext, json: boolean, usage: (flag?: string) => Error) {
   const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task');
   const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
-  if (!scopeId || !runId || !taskId || !commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage('--expected-revision');
+  if (!scopeId || !runId || !taskId || !commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) {
+    throw usage(!runId ? '--run' : !taskId ? '--task' : !commandId ? '--command-id' : '--expected-revision'); // the flag that is wrong, not the last one
+  }
   if (values.has('--attempt') || values.has('--layout-revision') || values.has('--generation')) throw usage('--attempt');
   if (!context.applyRunLifecycle) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const locale = commandLocale(context, values.get('--lang'));
@@ -150,6 +152,13 @@ async function defaultReadScope(values: Map<string, string>, context: TaskComman
   values.set('--scope', resolved.scopeId);
   if (!json) (context.stdout ?? process.stdout).write(`${scopeNotice(resolved, locale)}\n`);
 }
+const READS = ['inspect', 'transcript', 'patch-preview', 'integration-inspect'];
+/** A change never takes a silent default: no `--scope` names the valid scopes (CLI_SCOPE_REQUIRED) instead of blaming another flag. */
+async function requireChangeScope(context: TaskCommandContext, locale: Locale, action: string): Promise<void> {
+  const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
+  await resolveCommandScope({ command: `deckent task ${action}`, locale, explicit: undefined, mutating: true, interactive: false,
+    listScopes: () => scopeLister(context, root, options)().catch(() => []) });
+}
 const identityFlags = ['--scope', '--run', '--task', '--attempt', '--generation', '--layout-revision', '--lang'];
 export async function taskCommand(argv: readonly string[], context: TaskCommandContext): Promise<void> {
   const action = argv[1];
@@ -174,7 +183,7 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   if ((stat && diff) || (json && (stat || diff))) throw usage(stat ? '--stat' : '--diff');
   const attemptId = values.get('--attempt'), layoutRevision = values.get('--layout-revision'), generation = values.get('--generation');
   // A typed short id resolves first, so a TTY pick that keeps it reads the full id (a picked id is already full).
-  if (['inspect', 'transcript', 'patch-preview', 'integration-inspect'].includes(action)) await defaultReadScope(values, context, json, earlyLocale, action);
+  if (READS.includes(action)) await defaultReadScope(values, context, json, earlyLocale, action); else if (!values.has('--scope')) await requireChangeScope(context, earlyLocale, action);
   if (values.has('--scope') && values.has('--run')) values.set('--run', await resolveRun(context, values.get('--scope')!, values.get('--run')!));
   if (['inspect', 'transcript', 'patch-preview'].includes(action) && !attemptId && !layoutRevision && !generation && !await pickMissing(values, context, json, earlyLocale)) return;
   const scopeId = values.get('--scope'), runId = values.get('--run'), taskId = values.get('--task');
