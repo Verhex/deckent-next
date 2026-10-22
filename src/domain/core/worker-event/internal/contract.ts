@@ -37,10 +37,17 @@ const recordedWorkerEventSchema = z.discriminatedUnion('kind', [
 ]);
 /** Only the host model-verification evidence advances; worker-reported protocol events remain v1. Recorded v1 verdicts stay readable. */
 export const WORKER_MODEL_VERIFICATION_SCHEMA_VERSION = 2;
-export const workerEventSchema = z.union([recordedWorkerEventSchema, z.object({ ...base, schemaVersion: z.literal(WORKER_MODEL_VERIFICATION_SCHEMA_VERSION),
-  kind: z.literal('model.verification'), evidenceCapability: modelUsageEvidenceSchema, status: z.enum(['verified', 'substituted', 'unverified']),
-  admitted: text(256).nullable(), observed: z.array(text(128)).max(MAX_MODELS + 1).readonly(), unexpected: z.array(text(128)).max(MAX_MODELS + 1).readonly(),
-}).strict()]);
+/** v3 (owner K1/K2 2026-10-22) carries only the two session-start-name verdicts, so every verdict a v2 reader knows is still written as v2. */
+export const WORKER_MODEL_VERIFICATION_START_NAME_SCHEMA_VERSION = 3;
+const LEGACY_VERIFICATION_STATUSES = ['verified', 'substituted', 'unverified'] as const;
+const START_NAME_VERIFICATION_STATUSES = ['start-name-matched', 'provider-chosen'] as const;
+export type WorkerModelVerificationStatus = typeof LEGACY_VERIFICATION_STATUSES[number] | typeof START_NAME_VERIFICATION_STATUSES[number];
+const verificationFields = { ...base, kind: z.literal('model.verification'), evidenceCapability: modelUsageEvidenceSchema,
+  admitted: text(256).nullable(), observed: z.array(text(128)).max(MAX_MODELS + 1).readonly(), unexpected: z.array(text(128)).max(MAX_MODELS + 1).readonly() };
+export const workerEventSchema = z.union([recordedWorkerEventSchema,
+  z.object({ ...verificationFields, schemaVersion: z.literal(WORKER_MODEL_VERIFICATION_SCHEMA_VERSION), status: z.enum(LEGACY_VERIFICATION_STATUSES) }).strict(),
+  z.object({ ...verificationFields, schemaVersion: z.literal(WORKER_MODEL_VERIFICATION_START_NAME_SCHEMA_VERSION),
+    evidenceCapability: z.literal('session-start-name'), status: z.enum(START_NAME_VERIFICATION_STATUSES) }).strict()]);
 export type WorkerEvent = z.infer<typeof workerEventSchema>;
 
 /** Deterministic, human-readable phase of a worker from its latest meaningful event (no model call, no scoring). */
@@ -70,7 +77,7 @@ export interface WorkerEventSummary {
   readonly unmapped: number; readonly dropped: number; readonly events: number;
   /** Models the provider reported for the session (session model-usage keys) and the host verdict, when present. */
   readonly models: readonly string[] | null;
-  readonly modelVerification: Readonly<{ status: 'verified' | 'substituted' | 'unverified'; unexpected: readonly string[] }> | null;
+  readonly modelVerification: Readonly<{ status: WorkerModelVerificationStatus; unexpected: readonly string[] }> | null;
 }
 const MAX_FILES = 100;
 /** Pure summary for interpretation: what the worker did, how long, how many tokens and how well the cache served it. */
@@ -107,19 +114,32 @@ export function summarizeWorkerEvents(events: readonly WorkerEvent[]): WorkerEve
     unmapped, dropped, events: events.length, models: ended?.models ?? null, modelVerification: verification });
 }
 
-export type WorkerModelVerification = Readonly<{ status: 'verified' | 'substituted' | 'unverified'; admitted: string | null;
+export type WorkerModelVerification = Readonly<{ status: WorkerModelVerificationStatus; admitted: string | null;
   observed: readonly string[]; unexpected: readonly string[] }>;
+/** Recorded schema version of a host verdict: v1 without capability (legacy), v3 for the two session-start-name verdicts, v2 otherwise. */
+export function modelVerificationSchemaVersion(verification: WorkerModelVerification | SealedWorkerModelVerification): 1 | 2 | 3 {
+  if (!('evidenceCapability' in verification)) return 1;
+  return (START_NAME_VERIFICATION_STATUSES as readonly string[]).includes(verification.status) ? WORKER_MODEL_VERIFICATION_START_NAME_SCHEMA_VERSION
+    : WORKER_MODEL_VERIFICATION_SCHEMA_VERSION;
+}
 /**
  * Pure host verdict (WORKER-CURRENCY-1, Jev f49cb4f6): a session with per-model evidence is `verified` only when it started on the admitted exact model,
  * reported usage for it, and every other reported model is one the profile declared as auxiliary. Anything else the worker used is
  * `substituted` (listed). Providers without per-model evidence, profiles without an admitted model, or a session without usage are `unverified`.
+ *
+ * `session-start-name` (owner K1/K2 2026-10-22; the CLI reports only a model name at session start, no per-model usage) never yields `verified`:
+ * a pin whose catalog entry leaves the choice to the provider is `provider-chosen` (the reported name is information, never compared); a name
+ * the catalog records for the admitted model is `start-name-matched`; a name the catalog records for another model of the channel is
+ * `substituted` (the name listed); no start name, or a name the catalog does not record, is `unverified`.
  */
 export type SealedWorkerModelVerification = WorkerModelVerification & Readonly<{ evidenceCapability: ModelUsageEvidence }>;
 export function verifyWorkerModels(input: Readonly<{ provider?: z.infer<typeof workerProviderSchema>; evidenceCapability: ModelUsageEvidence;
-  admitted: Readonly<{ modelId: string; auxiliaryModelIds: readonly string[] }> | null; startedModel: string | null; usedModels: readonly string[] | null }>): WorkerModelVerification {
+  admitted: Readonly<{ modelId: string; auxiliaryModelIds: readonly string[]; reportedNames?: readonly string[] | undefined; otherReportedNames?: readonly string[] | undefined;
+    providerChosen?: true | undefined }> | null; startedModel: string | null; usedModels: readonly string[] | null }>): WorkerModelVerification {
   const observed = Object.freeze([...new Set([...(input.startedModel === null ? [] : [input.startedModel]), ...(input.usedModels ?? [])])].sort());
-  const admitted = input.admitted?.modelId ?? null;
-  if (input.evidenceCapability !== 'session-events' || input.admitted === null) return Object.freeze({ status: 'unverified', admitted, observed, unexpected: Object.freeze([]) });
+  const admitted = input.admitted?.modelId ?? null, none = Object.freeze([]) as readonly string[];
+  if (input.evidenceCapability === 'session-start-name' && input.admitted !== null) return verifyStartName(input.admitted, input.startedModel, admitted, observed);
+  if (input.evidenceCapability !== 'session-events' || input.admitted === null) return Object.freeze({ status: 'unverified', admitted, observed, unexpected: none });
   const allowed = new Set([input.admitted.modelId, ...input.admitted.auxiliaryModelIds]);
   const unexpected = new Set(observed.filter(model => !allowed.has(model)));
   if (input.startedModel !== null && input.startedModel !== input.admitted.modelId) unexpected.add(input.startedModel);
@@ -127,4 +147,11 @@ export function verifyWorkerModels(input: Readonly<{ provider?: z.infer<typeof w
   if (list.length > 0) return Object.freeze({ status: 'substituted', admitted, observed, unexpected: list });
   const complete = input.startedModel === input.admitted.modelId && (input.usedModels ?? []).includes(input.admitted.modelId);
   return Object.freeze({ status: complete ? 'verified' : 'unverified', admitted, observed, unexpected: list });
+}
+function verifyStartName(pin: Readonly<{ reportedNames?: readonly string[] | undefined; otherReportedNames?: readonly string[] | undefined; providerChosen?: true | undefined }>,
+  name: string | null, admitted: string | null, observed: readonly string[]): WorkerModelVerification {
+  const none = Object.freeze([]) as readonly string[];
+  const status: WorkerModelVerificationStatus = pin.providerChosen ? 'provider-chosen' : name === null ? 'unverified'
+    : pin.reportedNames?.includes(name) ? 'start-name-matched' : pin.otherReportedNames?.includes(name) ? 'substituted' : 'unverified';
+  return Object.freeze({ status, admitted, observed, unexpected: status === 'substituted' ? Object.freeze([name!]) : none });
 }

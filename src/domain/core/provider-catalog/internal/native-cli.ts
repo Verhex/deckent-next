@@ -23,13 +23,19 @@ export function nativeCliVocabulary(input: unknown): readonly string[] {
 export type NativeCliId = string;
 export const nativeCliIds: readonly [NativeCliId, ...NativeCliId[]] = nativeCliVocabulary(registry) as readonly [NativeCliId, ...NativeCliId[]];
 export const nativeCliIdSchema = providerIdSchema(nativeCliIds);
-export const modelUsageEvidenceSchema = z.enum(['session-events', 'none']);
+/** How a native CLI reports the model it ran: `session-events` = start model plus per-model usage (verifiable); `session-start-name` = only the
+ * model's display name at session start, compared with the catalog's recorded reported names (never `verified`); `none` = no model evidence. */
+export const modelUsageEvidenceSchema = z.enum(['session-events', 'session-start-name', 'none']);
 export type ModelUsageEvidence = z.infer<typeof modelUsageEvidenceSchema>;
+/** Capabilities that existed before capability stamping; unstamped records were written under one of these. */
+const LEGACY_MODEL_USAGE_EVIDENCE: readonly ModelUsageEvidence[] = Object.freeze(['session-events', 'none']);
 
-/** Read migration only: profiles/records written before capability stamping retain the shipped registry behavior. */
+/** Read migration only: profiles/records written before capability stamping retain the shipped registry behavior of that time. A capability
+ * added after stamping (e.g. `session-start-name`) never applies to such a record: it was produced without that evidence, so it reads as `none`. */
 export function readLegacyModelUsageEvidence(provider: NativeCliId): ModelUsageEvidence {
   const adapters: Record<string, { readonly capabilities?: { readonly modelUsageEvidence?: unknown } } | undefined> = registry.adapters;
   const entry = adapters[provider];
   if (!entry) throw new NativeCliRegistryError();
-  return modelUsageEvidenceSchema.parse(entry.capabilities?.modelUsageEvidence);
+  const current = modelUsageEvidenceSchema.parse(entry.capabilities?.modelUsageEvidence);
+  return LEGACY_MODEL_USAGE_EVIDENCE.includes(current) ? current : 'none';
 }

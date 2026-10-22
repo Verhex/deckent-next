@@ -33,7 +33,8 @@ const access = 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify({ exp: Math.f
 it.for([
   ['claude', { claudeAiOauth: { accessToken: access, expiresAt: Date.now() + 3_600_000, scopes: ['user:inference'] } }, 'session-events', 'verified'],
   ['codex', { auth_mode: 'chatgpt', tokens: { access_token: access, refresh_token: 'fixture-refresh', id_token: 'fixture-id' }, last_refresh: new Date().toISOString() }, 'none', 'unverified'],
-  ['cursor', { accessToken: access }, 'none', 'unverified'],
+  // Cursor reports only a start name; this pin carries no catalog names, so the reported name is unrecorded: unverified (owner K1 2026-10-22).
+  ['cursor', { accessToken: access }, 'session-start-name', 'unverified'],
 ] as const)('projects bound %s registry capabilities and host model-evidence custody through the real UNIX gateway', async ([provider, credential, evidenceCapability, status], context) => {
   const root = await mkdtemp(join(tmpdir(), 'dn-cap-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
   const input = { binding: { schemaVersion: 2 as const, provider,
@@ -50,6 +51,20 @@ it.for([
   expect((bootstrap.capabilities as Record<string, unknown>).modelUsageEvidence).toBe(evidenceCapability);
   await post(connection.descriptor.socketPath, provider);
   expect(connection.modelVerification()).toEqual({ status, admitted: 'fixture-model', observed: ['fixture-model'], unexpected: [], evidenceCapability });
+});
+it.for([
+  [{ reportedNames: ['fixture-model'] }, 'start-name-matched', []],
+  [{ otherReportedNames: ['fixture-model'] }, 'substituted', ['fixture-model']],
+  [{ reportedNames: ['Auto'], providerChosen: true }, 'provider-chosen', []],
+] as const)('seals the frozen pin catalog start-name evidence %j through the real UNIX gateway (owner K1/K2 2026-10-22)', async ([evidence, status, unexpected], context) => {
+  if (process.platform === 'win32') context.skip('NATIVE_CONNECTION_UNAVAILABLE: private UNIX gateway requires POSIX ownership and socket permissions');
+  const root = await mkdtemp(join(tmpdir(), 'dn-cap-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const connection = await openNativeConnection({ binding: { schemaVersion: 2 as const, provider: 'cursor',
+    model: { channelId: 'cursor-cli-subscription', modelId: 'fixture-model', auxiliaryModelIds: [], ...evidence } }, directory: root, credential: { accessToken: access }, deadlineMs: 10000 });
+  cleanups.push(connection.close);
+  await fetchBootstrap(connection.descriptor.socketPath);
+  await post(connection.descriptor.socketPath, 'cursor');
+  expect(connection.modelVerification()).toEqual({ status, admitted: 'fixture-model', observed: ['fixture-model'], unexpected, evidenceCapability: 'session-start-name' });
 });
 
 

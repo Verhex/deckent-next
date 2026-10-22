@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { workerEffortSchema, type ModelCatalogModelRecord } from '#domain/index.js';
+import { workerEffortSchema, workerModelPinEvidenceShape, catalogPinModelEvidence, type ModelCatalogModelRecord } from '#domain/index.js';
 import { compareToolchainVersions, extractToolchainVersion } from '#engine/core/toolchain-currency/index.js';
 import type { ModelCatalogReader } from './catalog.js';
 
@@ -26,7 +26,7 @@ export type WorkerAdmissionOptions = Readonly<{ imageRefreshInProgress?: boolean
 export class WorkerModelAdmissionError extends Error {
   constructor(readonly code: WorkerModelAdmissionCode, readonly detail: WorkerModelAdmissionDetail) { super(code); this.name = 'WorkerModelAdmissionError'; }
 }
-const pinned = z.object({ channelId: z.string(), modelId: z.string(), auxiliaryModelIds: z.array(z.string()).readonly() }).strict();
+const pinned = z.object({ channelId: z.string(), modelId: z.string(), auxiliaryModelIds: z.array(z.string()).readonly(), ...workerModelPinEvidenceShape }).strict();
 const subscriptionSchema = z.object({ schemaVersion: z.number(), provider: z.enum(['claude', 'codex', 'cursor']),
   reasoningEffort: workerEffortSchema.optional(), effortMode: z.enum(['arguments', 'model-id']).nullable().optional(),
   preflight: z.object({ cliVersion: z.string() }).passthrough().optional(), model: pinned.optional() }).passthrough();
@@ -117,6 +117,11 @@ export async function admitWorkerModels(tasksInput: readonly unknown[], scopeId:
         throw new WorkerModelAdmissionError('WORKER_EFFORT_UNSUPPORTED', detail);
       }
     }
+    // Owner K1/K2 2026-10-22: the frozen pin's session-start names and provider-choice flag are exactly what the catalog records now; a
+    // profile can neither invent a name match nor drop the provider-choice label. Pins of models without such catalog data carry none.
+    const evidence = catalogPinModelEvidence((await reader.models(model.channelId)).map(row => row.model), model.modelId);
+    if (JSON.stringify([model.reportedNames, model.otherReportedNames, model.providerChosen])
+      !== JSON.stringify([evidence.reportedNames, evidence.otherReportedNames, evidence.providerChosen])) throw new WorkerModelAdmissionError('WORKER_MODEL_BINDING_MISMATCH', detail);
   }
   return warnings;
 }

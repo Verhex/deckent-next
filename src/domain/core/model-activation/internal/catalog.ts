@@ -2,7 +2,7 @@ import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, catalogChannelSchema, catalogModelSchema, exactModelIdSchema,
-  parseProviderCatalogDocument, type ProviderCatalogDocument } from '#domain/core/provider-catalog/index.js';
+  parseProviderCatalogDocument, reportedNameConflict, type ProviderCatalogDocument } from '#domain/core/provider-catalog/index.js';
 import { modelActivationActorSchema, modelActivationAuthorizationSchema } from './contract.js';
 
 /**
@@ -90,7 +90,7 @@ export function modelCatalogTargets(command: ModelCatalogCommand): readonly Mode
 /**
  * Invariants of one channel's FINAL state (Astra 2197 WC-R3): a register is partial — models it omits are preserved — so the document's own
  * checks are not enough. Across the channel alias list and every model's aliases: no alias repeats and none equals an exact id of any
- * model (preserved or written); CLI minimums only on a CLI channel. Refusal is typed; the caller's transaction then writes nothing.
+ * model (preserved or written); CLI minimums only on a CLI channel; no session-start reported name is claimed by two models. Refusal is typed; the caller's transaction then writes nothing.
  */
 function assertMergedChannel(channel: ModelCatalogChannelRecord['channel'], models: readonly ModelCatalogModelRecord['model'][]): void {
   const exact = new Set(models.map(model => model.nativeId)), aliases = new Set<string>();
@@ -99,6 +99,8 @@ function assertMergedChannel(channel: ModelCatalogChannelRecord['channel'], mode
     aliases.add(alias);
   }
   if (channel.kind !== 'native-cli' && models.some(model => model.minCliVersion !== null)) throw new ModelCatalogError('MODEL_CATALOG_INVALID');
+  // A session-start name preserved on one model and newly written on another would make the start-name verdict ambiguous.
+  if (reportedNameConflict(channel, models)) throw new ModelCatalogError('MODEL_CATALOG_ALIAS_CONFLICT');
 }
 /** Catalog rows a register command writes: only new or changed facts get a new revision; absent rows are never deleted (retire instead). */
 export function planModelCatalogRegistration(command: ModelCatalogCommand, current: {

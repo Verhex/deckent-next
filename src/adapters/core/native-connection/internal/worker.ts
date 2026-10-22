@@ -512,7 +512,7 @@ export interface NativeWorkerCapabilities {
   readonly settings: { readonly flag: string } | null;
   readonly promptChannel: 'claude-system-prompt' | 'codex-instructions-file' | 'inline';
   readonly structuredReport: { readonly flag: string; readonly channel: 'inline-json' | 'schema-file' } | null;
-  readonly modelUsageEvidence: 'session-events' | 'none';
+  readonly modelUsageEvidence: 'session-events' | 'session-start-name' | 'none';
 }
 /** Validates native prompt custody and returns the argv delivered to the CLI, selected only by capability. */
 export function nativePromptArguments(input: readonly string[], core: string, task: string, capabilities: NativeWorkerCapabilities): string[] {
