@@ -3,7 +3,8 @@ import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
 /**
- * python3 `pty` driver: each step waits for a text in the output so far, then types its keys 10 ms apart; the view is stopped after the last step.
+ * python3 `pty` driver: each step waits for a text in the output so far, then types its keys 10 ms apart; the view is stopped after the last step
+ * (a fifth argument `until-exit` waits for a one-shot program's own exit instead).
  * A step marked `fresh` waits for its text in the output after the previous step's keys only (a focus label shown earlier does not count);
  * `next` waits for it after the previous step's matched text (a decision window shows its keys only once they count, TERMINAL-SABIT-DUZEN).
  * Ctrl+O and the decision key are separate steps: written back to back, a loaded host can read both bytes in one chunk, which Ink 7.1.1 parses
@@ -48,11 +49,18 @@ for step in steps:
         os.write(fd, char.encode()); time.sleep(0.01)
     sent_at = len(out)
 status = None
-deadline = time.time() + 2
+# 'until-exit' (a one-shot CLI that ends by itself): its own exit is the end condition, bounded like a step; past it the result is a
+# 'timeout', never a killed 'stopped' status read as the command's exit (CI run 39778067228: a step-less list on a loaded shard took over
+# the 2 s a view gets). A view (the default) is stopped 2 s after the last step.
+until_exit = len(sys.argv) > 4 and sys.argv[4] == 'until-exit'
+deadline = time.time() + (40 if until_exit else 2)
 while status is None and time.time() < deadline:
     read_for(0.1)
     finished, code = os.waitpid(pid, os.WNOHANG)
     if finished: status = os.waitstatus_to_exitcode(code)
+if status is None and until_exit:
+    os.kill(pid, 9); os.waitpid(pid, 0)
+    sys.stdout.write(json.dumps({'timeout': 'exit', 'output': out.decode('utf8', 'replace')})); sys.exit(0)
 if status is None:
     os.kill(pid, signal.SIGTERM); time.sleep(0.3)
     finished, code = os.waitpid(pid, os.WNOHANG)

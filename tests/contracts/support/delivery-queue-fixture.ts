@@ -66,10 +66,11 @@ export async function queueProject(input: {
 
 /** The shared PTY driver, except that a step whose text arrived together with the program's exit is met (the CLI prints its result and ends). */
 export const CLI_DRIVER = DRIVER.replace('if time.time() > deadline or not read_for(0.1):', 'if time.time() > deadline or (not read_for(0.1) and wait.encode() not in out[since:]):');
-/** The shipped CLI on its own controlling PTY (python `pty`), typing each step's keys once its text is shown. */
+/** The shipped CLI on its own controlling PTY (python `pty`), typing each step's keys once its text is shown. A CLI command ends by itself, so
+ * `status` is its own exit code: the driver waits for that exit (`until-exit`), never stopping it after a fixed window. */
 export async function cliInPty(project: string, env: NodeJS.ProcessEnv, args: readonly string[], steps: readonly Step[]) {
   const argv = [process.execPath, resolve('dist/composition/core/cli/internal/entry.js'), ...args];
-  const { stdout } = await exec('python3', ['-c', CLI_DRIVER, JSON.stringify(argv), JSON.stringify(steps), 'tty'],
+  const { stdout } = await exec('python3', ['-c', CLI_DRIVER, JSON.stringify(argv), JSON.stringify(steps), 'tty', 'until-exit'],
     { cwd: project, env: { ...process.env, ...env }, timeout: 180_000, maxBuffer: 32 * 1024 * 1024 });
   const result = JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string };
   if (result.timeout) throw new Error(`waited for ${JSON.stringify(result.timeout)}\n${result.output.slice(-6000)}`);
