@@ -16,14 +16,22 @@ export interface NativeTemplatePorts {
   beforeWrite?: () => void | Promise<void>;
 }
 
+const discoveryModeSchema = z.enum(['disabled', 'repository']);
+/** `discovery` omitted: `coding template` keeps the mode of the admitted profiles it derives from, `init registry` takes the adapter default
+ * (`disabled`, owner 2026-10-23 Q2). Explicit `--discovery` selects a new template content id; bound kinds are never edited in place. */
 const requestSchema = z.object({ provider: nativeCliIdSchema, kind: identitySchema,
-  image: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(), apply: z.boolean() }).strict();
+  image: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(), discovery: discoveryModeSchema.optional(), apply: z.boolean() }).strict();
 export type CodingTemplateRequest = z.infer<typeof requestSchema>;
 /** `current` is returned by the first-registry bootstrap only (an equal registry already exists); the template returns the other three. */
 export type CodingTemplateResult = Readonly<{ schemaVersion: 1; status: 'preview' | 'applied' | 'unchanged' | 'current';
   profile: ExecutionRegistry['profiles'][number]; kind: ExecutionRegistry['kinds'][number]; registry: ExecutionRegistry;
   expect: string | null; write: ConfigWriteResult | null }>;
 function refuse(code: string): never { throw ErrorRegistry.createError(code); }
+/** The adapter's typed refusal for a discovery mode the selected CLI cannot honour, named instead of a generic template failure. */
+function discoveryRefusal(error: unknown, provider: string, fallback: string): never {
+  if ((error as { code?: unknown } | null)?.code === 'NATIVE_CODING_DISCOVERY_UNSUPPORTED') throw ErrorRegistry.createError('CODING_DISCOVERY_UNSUPPORTED', { params: { provider } });
+  refuse(fallback);
+}
 
 /** Pure proposal from the authored project registry and the effective, validated resource limits. */
 function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, template: NativeTemplatePorts['template']) {
@@ -42,10 +50,11 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
     const source = registry.data.profiles.find(profile => profile.id === pin.profile.id && profile.version === pin.profile.version)!;
     const invocation = source.parameters['invocation'] as { discovery?: JsonValue } | undefined;
     const preflight = (source.parameters['nativeSubscription'] as { preflight?: { discovery?: string } } | undefined)?.preflight;
-    const discovery = invocation?.discovery ?? (preflight?.discovery ? { schemaVersion: 1, mode: preflight.discovery } : null);
+    const discovery = request.discovery ? { schemaVersion: 1, mode: request.discovery }
+      : invocation?.discovery ?? (preflight?.discovery ? { schemaVersion: 1, mode: preflight.discovery } : null);
     if (!discovery) refuse('CODING_TEMPLATE_TOOLCHAIN_REQUIRED');
     try { return template({ ...resourceLimits, imageId }, { provider: request.provider, cliVersion: pin.cliVersion, discovery, permissionMode: 'unattended' }); }
-    catch { refuse('EXECUTION_PROFILE_INVALID'); }
+    catch (error) { discoveryRefusal(error, request.provider, 'EXECUTION_PROFILE_INVALID'); }
   });
   if (new Set(candidates.map(candidate => JSON.stringify(candidate))).size !== 1) refuse('CODING_TEMPLATE_TOOLCHAIN_REQUIRED');
   const candidate = candidates[0]!;
@@ -92,7 +101,7 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
 
 const initializeSchema = requestSchema.omit({ image: true }).extend({ schemaVersion: z.literal(1), scopeId: identitySchema,
   poolId: identitySchema, executionSlots: z.number().int().positive().safe(), inFlightSlots: z.number().int().positive().safe(),
-  discovery: z.enum(['disabled', 'repository']) }).strict();
+  discovery: discoveryModeSchema.optional() }).strict();
 export type InitialRegistryRequest = z.infer<typeof initializeSchema>;
 const authoredRegistry = (document: Record<string, unknown>) => {
   // Authored presence, including malformed/empty/null values, must never be mistaken for an absent registry.
@@ -115,8 +124,8 @@ function initialRegistry(request: InitialRegistryRequest, settings: DockerSettin
   const { executable, ...resources } = settings; void executable;
   let profile: ExecutionProfileDefinition;
   try { profile = template(resources, { provider: request.provider, cliVersion,
-    discovery: { schemaVersion: 1, mode: request.discovery }, permissionMode: 'unattended' }); }
-  catch { refuse('INITIAL_REGISTRY_CLI_UNAVAILABLE'); }
+    ...(request.discovery ? { discovery: { schemaVersion: 1, mode: request.discovery } } : {}), permissionMode: 'unattended' }); }
+  catch (error) { discoveryRefusal(error, request.provider, 'INITIAL_REGISTRY_CLI_UNAVAILABLE'); }
   const kind = { kind: request.kind, profile: { id: profile.id, version: profile.version } };
   const content = { schemaVersion: 1, profiles: [profile], kinds: [kind], evaluators: initialRegistryDefaults.evaluators };
   return { profile, kind, registry: executionRegistrySchema.parse({ ...content, revision: `initial-registry-${sha256(JSON.stringify(content))}` }) };

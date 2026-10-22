@@ -29,7 +29,7 @@ it('uses one registry-fed accepted set on every schema and refuses unknown ids',
   expect(workerProviderSchema.safeParse('unknown-cli').success).toBe(false);
   expect(() => compileNativeCodingDockerProfile(template, invocation('unknown-cli'))).toThrow('NATIVE_CODING_INVOCATION_INVALID');
 });
-it.each(['maxTurns', 'settings', 'promptChannel', 'structuredReport', 'modelUsageEvidence', 'reasoningEffort', 'eventStream'])('refuses missing capability %s without defaults', field => {
+it.each(['maxTurns', 'settings', 'discovery', 'promptChannel', 'structuredReport', 'modelUsageEvidence', 'reasoningEffort', 'eventStream'])('refuses missing capability %s without defaults', field => {
   const asset = structuredClone(registry);
   delete (asset.adapters.claude.capabilities as Record<string, unknown>)[field];
   expect(() => parseNativeCliRegistry(asset)).toThrow(NativeCliRegistryError);
@@ -38,11 +38,31 @@ it.each(['maxTurns', 'settings', 'promptChannel', 'structuredReport', 'modelUsag
 it.each([
   ['maxTurns', true], ['settings', 'yes'], ['promptChannel', 'unknown'], ['structuredReport', { flag: '--schema', channel: 'guess' }], ['modelUsageEvidence', 'guess'],
   // A flag channel needs its flag and the flagless final-text channel may not carry one; the event stream format is a closed set.
+  ['discovery', { requiredFlags: [], hiddenProbes: [] }], ['discovery', { requiredFlags: ['--safe-mode'] }], ['discovery', { requiredFlags: ['-s'], hiddenProbes: [] }],
+  ['discovery', { requiredFlags: ['--safe-mode'], hiddenProbes: [{ args: ['x'] }] }],
   ['structuredReport', { flag: null, channel: 'inline-json' }], ['structuredReport', { flag: '--schema', channel: 'final-text-json' }], ['structuredReport', { channel: 'final-text-json' }], ['eventStream', 'guess'],
 ])('validates the capability %s shape', (field, value) => {
   const asset = structuredClone(registry);
   (asset.adapters.claude.capabilities as Record<string, unknown>)[field] = value;
   expect(() => parseNativeCliRegistry(asset)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+});
+it('pairs disabledArgs with a discovery preflight capability: one without the other is refused', () => {
+  const noProof = structuredClone(registry) as unknown as { adapters: Record<string, { disabledArgs: unknown; capabilities: Record<string, unknown> }> };
+  noProof.adapters['codex']!.capabilities['discovery'] = null;
+  expect(() => parseNativeCliRegistry(noProof)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+  const noArgs = structuredClone(registry) as unknown as typeof noProof;
+  noArgs.adapters['codex']!.disabledArgs = null;
+  expect(() => parseNativeCliRegistry(noArgs)).toThrow('NATIVE_CLI_REGISTRY_INVALID');
+});
+it('binds a pinned Codex profile with disabled discovery and refuses a reordered suppression segment', () => {
+  vi.mocked(nativeCliCommand).mockImplementation(provider => parseNativeCliRegistry(registry).adapters[provider]!);
+  const compiled = compileNativeCodingDockerProfile(template, { ...invocation('codex'), discovery: { schemaVersion: 1, mode: 'disabled' } });
+  const argv = compiled.parameters.argv as string[];
+  expect(argv).toContain('skills.include_instructions=false');
+  expect(() => assertNativeWorkerBinding(compiled)).not.toThrow();
+  const at = argv.indexOf('skills.include_instructions=false'), swapped = [...argv];
+  [swapped[at], swapped[at + 2]] = [swapped[at + 2]!, swapped[at]!];
+  expect(() => assertNativeWorkerBinding({ ...compiled, parameters: { ...compiled.parameters, argv: swapped } })).toThrow('WORKER_MODEL_BINDING_MISMATCH');
 });
 it('rejects old unversioned assets and unsupported versions', () => {
   expect(() => parseNativeCliRegistry(registry.adapters)).toThrow('NATIVE_CLI_REGISTRY_INVALID');

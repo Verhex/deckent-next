@@ -99,7 +99,7 @@ type TemplateResult = Awaited<ReturnType<CodingTemplateHandler>>;
  * card, and only "apply" writes; off a terminal a missing `--provider`/`--kind` lists the admitted choices and `--preview`/`--apply` stays required.
  */
 async function codingTemplateCommand(argv: readonly string[], context: AdminCommandContext) {
-  const { values, flags } = readFlags(argv, 2, ['--preview', '--apply', '--json', '--provider', '--kind', '--image', '--lang']);
+  const { values, flags } = readFlags(argv, 2, ['--preview', '--apply', '--json', '--provider', '--kind', '--image', '--discovery', '--lang']);
   if (flags.has('--preview') && flags.has('--apply') || !context.configureCodingTemplate) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, locale = commandLocale(context, values.get('--lang'));
   const config = await loadConfig(root, { env, heal: false }), pins = affectedToolchainProfiles(config);
@@ -131,7 +131,8 @@ async function codingTemplateCommand(argv: readonly string[], context: AdminComm
   }
   // Off a terminal the write intent stays explicit: `--preview` or `--apply` (the flag contract AI callers already use).
   if (!person && !flags.has('--preview') && !flags.has('--apply')) throw ErrorRegistry.createError('CLI_USAGE');
-  const request = { provider, kind, ...(image ? { image } : {}) }, run = (apply: boolean) => template(context, root, env, config, { ...request, apply }, locale);
+  const discovery = values.get('--discovery');
+  const request = { provider, kind, ...(image ? { image } : {}), ...(discovery ? { discovery } : {}) }, run = (apply: boolean) => template(context, root, env, config, { ...request, apply }, locale);
   const sinks = { json: flags.has('--json'), ...sinksOf(context) }, show = (result: TemplateResult) => emit(output(result), { ...sinks, render: value => renderTemplate(value, locale) });
   if (!person || flags.has('--preview') || flags.has('--apply')) { show(await run(flags.has('--apply'))); return; }
   const preview = await run(false);
@@ -149,7 +150,7 @@ function templateKinds(config: DeckentConfig, pins: Pins, provider: string): str
 const imageLabel = (image: string, pins: Pins, provider: string) =>
   `${shortImage(image)} · ${pins.filter(pin => pin.provider === provider && pin.imageId === image).map(pin => pin.cliVersion).join(', ')}`;
 async function template(context: AdminCommandContext, root: string, env: NodeJS.ProcessEnv, config: DeckentConfig,
-  request: { provider: string; kind: string; image?: string; apply: boolean }, locale: Locale): Promise<TemplateResult> {
+  request: { provider: string; kind: string; image?: string; discovery?: string; apply: boolean }, locale: Locale): Promise<TemplateResult> {
   try { return await context.configureCodingTemplate!(root, request, { env, heal: false }); }
   catch (error) { throw unadmittedImage(error, config, request, locale) ?? error; }
 }
@@ -166,11 +167,14 @@ function unadmittedImage(error: unknown, config: DeckentConfig, request: { provi
 const output = (result: TemplateResult) => ({ schemaVersion: 1 as const, status: result.status, profile: result.profile, kind: result.kind,
   registryRevision: result.registry.revision, expect: result.expect, write: result.write });
 function templateLines(value: ReturnType<typeof output>, locale: Locale): string[] {
-  const parameters = value.profile.parameters as { docker?: { imageId?: string }; invocation?: { provider?: string; cliVersion?: string } };
+  const parameters = value.profile.parameters as { docker?: { imageId?: string }; invocation?: { provider?: string; cliVersion?: string; discovery?: { mode?: string } } };
+  const discovery = parameters.invocation?.discovery?.mode;
   return [t('clisetup.coding.result.profile', { profile: `${value.profile.id}@${value.profile.version}` }, locale),
     t('clisetup.coding.result.kind', { kind: String((value.kind as { kind?: unknown } | null)?.kind ?? '-') }, locale),
     t('clisetup.coding.result.toolchain', { provider: parameters.invocation?.provider ?? '-', cli: parameters.invocation?.cliVersion ?? '-',
       image: shortImage(parameters.docker?.imageId) }, locale),
+    ...(discovery === 'disabled' ? [t('clisetup.coding.result.discovery.disabled', {}, locale)]
+      : discovery === 'repository' ? [t('clisetup.coding.result.discovery.repository', {}, locale)] : []),
     t('clisetup.coding.result.registry', { revision: value.registryRevision }, locale)];
 }
 function renderTemplate(value: ReturnType<typeof output>, locale: Locale): string {

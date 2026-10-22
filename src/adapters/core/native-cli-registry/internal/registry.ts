@@ -11,6 +11,10 @@ export const nativeCliCapabilitiesSchema = z.object({
       && (value.mode === 'model-id' ? value.args.length === 0 : value.args.some(arg => arg.includes('{effort}')))).readonly().nullable(),
   maxTurns: z.object({ flag, hiddenHelpProbe: z.object({ args: argumentsSchema, refusal: argument }).strict().readonly().nullable() }).strict().readonly().nullable(),
   settings: z.object({ flag }).strict().readonly().nullable(),
+  /** How the preflight proves `disabledArgs` take effect: the help flags they need, and hidden probes whose invalid value must draw the exact
+   * parser refusal (a CLI that silently ignores an unknown key would otherwise leave repository instructions on). Null = no `disabled` mode. */
+  discovery: z.object({ requiredFlags: z.array(flag).min(1).readonly(),
+    hiddenProbes: z.array(z.object({ args: argumentsSchema, refusal: argument }).strict().readonly()).max(4).readonly() }).strict().readonly().nullable(),
   promptChannel: z.enum(['claude-system-prompt', 'codex-instructions-file', 'inline']),
   // A flag channel passes the report schema through a CLI flag; `final-text-json` has no flag: the schema rides in the prompt and the
   // report is the worker's final answer text (CLIs without a structured-output flag).
@@ -23,7 +27,7 @@ export const nativeCliCapabilitiesSchema = z.object({
 export type NativeCliCapabilities = z.infer<typeof nativeCliCapabilitiesSchema>;
 const commandSchema = z.object({ executable: argument, args: argumentsSchema, modelFlag: flag, helpArgs: argumentsSchema,
   disabledArgs: argumentsSchema.nullable(), coreArgs: argumentsSchema, modelAliases: argumentsSchema,
-  capabilities: nativeCliCapabilitiesSchema }).strict().readonly();
+  capabilities: nativeCliCapabilitiesSchema }).strict().refine(value => (value.disabledArgs === null) === (value.capabilities.discovery === null)).readonly();
 const registrySchema = z.object({ schemaVersion: z.literal(3), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), commandSchema)
   .refine(value => Object.keys(value).length > 0).readonly() }).strict().readonly();
 export { NativeCliRegistryError, REASONING_EFFORTS, workerEffortSchema, type WorkerEffort };

@@ -132,4 +132,53 @@ else writeFileSync('/workspace/capture.json', JSON.stringify({ argv, core: readF
     } else expect(capture.argv).toEqual([...argv.slice(1, -1), body.core + '\n\n' + body.task + instruction]);
     expect(result.stdout).toContain('native-prompt-delivery');
   });
+  // C1 (owner 2026-10-23 Q2): disabled discovery runs every registered hidden probe in the real bootstrap before credentials or the task;
+  // a CLI that accepts the probe value (it would silently ignore the suppression key) stops at preflight (78) and never runs the task.
+  it.for([['codex', true], ['codex', false]] as const)('%s disabled discovery: hidden probes refused as registered = %s', async ([provider, refuses], context) => {
+    if (process.platform === 'win32') context.skip('NATIVE_CONNECTION_UNAVAILABLE: Docker bootstrap requires the POSIX private UNIX gateway');
+    if (!imageId) context.skip('DOCKER_TEST_IMAGE_UNAVAILABLE: pinned DECKENT_TEST_DOCKER_IMAGE fixture is not configured');
+    const root = await mkdtemp(join(tmpdir(), 'dn-disc-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const workspace = join(root, 'work'); await mkdir(workspace);
+    const source = await readFile(new URL('../../../src/adapters/core/native-connection/internal/worker.ts', import.meta.url), 'utf8');
+    const artifact = await transform(source, { loader: 'ts', format: 'esm', target: 'node24' });
+    const bootstrapPath = join(root, 'bootstrap.mjs'); await writeFile(bootstrapPath, artifact.code, { mode: 0o600 });
+    const command = nativeCliCommand(provider), capabilities = command.capabilities, discovery = capabilities.discovery!;
+    const requiredFlags = [...command.args.filter(flag => flag.startsWith('--')), ...discovery.requiredFlags, ...command.coreArgs.filter(flag => flag.startsWith('--')), command.modelFlag];
+    const help = [...requiredFlags, ...(capabilities.structuredReport?.flag ? [capabilities.structuredReport.flag] : [])].join(' ');
+    const probes = Object.fromEntries(discovery.hiddenProbes.map(probe => [JSON.stringify(probe.args), probe.refusal]));
+    const fake = `#!/usr/bin/env node
+import { writeFileSync, appendFileSync } from 'node:fs';
+const argv = process.argv.slice(2), probes = ${JSON.stringify(probes)}, key = JSON.stringify(argv);
+if (argv.includes('--version')) process.stdout.write('fixture-1');
+else if (argv.includes('--help')) process.stdout.write(${JSON.stringify(help)});
+else if (key in probes) { appendFileSync('/workspace/probes.log', key + '\\n'); if (${refuses}) { process.stderr.write('Error loading config.toml: invalid type: string, ' + probes[key] + '\\n'); process.exitCode = 1; } }
+else writeFileSync('/workspace/capture.json', JSON.stringify({ argv }));
+`;
+    await writeFile(join(workspace, 'native-cli'), fake); await chmod(join(workspace, 'native-cli'), 0o700);
+    const argv = ['/workspace/native-cli', ...command.args, ...command.disabledArgs!, ...command.coreArgs, command.modelFlag, 'fixture-model', '--', '__DECKENT_TASK_PROMPT__'];
+    const body = { schemaVersion: 1 as const, channel: capabilities.promptChannel, core: 'Fixture core', task: 'Fixture task',
+      segments: (['core', 'persona', 'task', 'scope'] as const).map(kind => ({ kind, id: kind, version: 1, sha256: hash(kind) })) };
+    const connection = await openNativeConnection({ binding: { schemaVersion: 1, provider, preflight: { schemaVersion: 1, cliVersion: 'fixture-1', discovery: 'disabled', helpArgs: command.helpArgs, requiredFlags },
+      promptDelivery: { ...body, sha256: hash(JSON.stringify(body)), argvSha256: hash(JSON.stringify(argv)) } }, directory: root, credential: { tokens: { access_token: access, id_token: 'fixture-id' } }, deadlineMs: 20000 });
+    cleanups.push(connection.close);
+    const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
+      logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 536870912, pids: 128, cpus: 1, tmpBytes: 67108864, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536,
+      connection: { ...connection.descriptor, bootstrapPath, bootstrapSha256: hash(artifact.code) } });
+    const sandbox: SandboxRequest = { protocolVersion: 1, identity: { runId: 'run', taskId: 'task', attemptId: randomUUID(), scopeId: 'test', generation: 1, layoutRevision: 'layout' }, workspace, argv };
+    cleanups.push(async () => { await supervisor.cancel(sandbox); await supervisor.release(sandbox); });
+    const result = await supervisor.execute(sandbox);
+    const probed = (await readFile(join(workspace, 'probes.log'), 'utf8')).trim().split('\n');
+    if (refuses) {
+      expect(result.result).toEqual({ kind: 'exited', exitCode: 0 });
+      expect(probed).toEqual(discovery.hiddenProbes.map(probe => JSON.stringify(probe.args)));
+      const capture = JSON.parse(await readFile(join(workspace, 'capture.json'), 'utf8')) as { argv: string[] };
+      const at = capture.argv.indexOf(command.disabledArgs![0]!);
+      expect(capture.argv.slice(at, at + command.disabledArgs!.length)).toEqual(command.disabledArgs);
+    } else {
+      expect(result.result).toEqual({ kind: 'exited', exitCode: 78 });
+      expect(result.stdout).toContain('"failure":"preflight"');
+      expect(probed).toEqual([JSON.stringify(discovery.hiddenProbes[0]!.args)]);
+      await expect(readFile(join(workspace, 'capture.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    }
+  });
 });

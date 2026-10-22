@@ -31,7 +31,7 @@ describe('I-S7 first-job steps (one ordered source for setup and doctor)', () =>
     // The execution JSON is quoted once for the shell; the minimal form the built binary accepts (docker executable + image, git executable).
     expect(commands[1]).toBe(`deckent config set execution '{"docker":{"executable":"<docker path>","imageId":"<image id>"},"git":{"gitExecutable":"<git path>"}}'`);
     // Every flag `init registry` requires; providers come from the native CLI registry, the scope is filled in.
-    expect(commands[2]).toBe(`deckent init registry --scope erp-demo --provider <${nativeCliIds.join('|')}> --kind <kind> --pool <pool> --execution-slots <n> --in-flight-slots <n> --discovery <repository|disabled> --preview`);
+    expect(commands[2]).toBe(`deckent init registry --scope erp-demo --provider <${nativeCliIds.join('|')}> --kind <kind> --pool <pool> --execution-slots <n> --in-flight-slots <n> --discovery <disabled|repository> --preview`);
     expect(commands[3]).toBe('deckent init pool --scope erp-demo --preview');
     expect(firstJobSteps(NONE, null).at(-1)?.argv).toContain('<scope>');
     expect(firstJobLines([], 'en')).toEqual(['Worker image, registry and pool are set up: ready for the first job.']);
