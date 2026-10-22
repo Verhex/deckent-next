@@ -20,6 +20,9 @@ function admission(input: unknown): ModelCatalogAdmission {
 const NOW = Date.parse('2026-10-22');
 const channelId = 'cursor-cli-subscription';
 
+const NAMES: Readonly<Record<string, string>> = { auto: 'Auto', 'composer-2.5': 'Composer 2.5', 'claude-opus-5-thinking-high': 'Claude Opus 5 300K High',
+  'claude-sonnet-5-thinking-high': 'Claude Sonnet 5 300K High', 'claude-sonnet-5-thinking-xhigh': 'Claude Sonnet 5 300K Extra High',
+  'gpt-5.6-sol-high': 'GPT-5.6 Sol 272K High', 'gpt-5.6-sol-xhigh': 'GPT-5.6 Sol 272K Extra High' };
 describe('packaged Cursor catalog seed (CURSOR-ISCI C4)', () => {
   it('validates with the owner K2 narrow set, model-id effort bindings and measured session-start names only', async () => {
     const doc = parseProviderCatalogDocument(await raw());
@@ -33,10 +36,8 @@ describe('packaged Cursor catalog seed (CURSOR-ISCI C4)', () => {
     expect(by['composer-2.5']!['effortBinding']).toBeUndefined();
     expect(by['gpt-5.6-sol-xhigh']).toMatchObject({ efforts: ['xhigh'], effortBinding: { mode: 'fixed-model', level: 'xhigh' } });
     expect(by['claude-sonnet-5-thinking-high']).toMatchObject({ efforts: ['high'], effortBinding: { mode: 'fixed-model', level: 'high' } });
-    // Names not measured on a logged-in host are left absent, never guessed from the display text.
-    for (const id of ['claude-opus-5-thinking-high', 'claude-sonnet-5-thinking-high', 'claude-sonnet-5-thinking-xhigh', 'gpt-5.6-sol-high', 'gpt-5.6-sol-xhigh']) {
-      expect(by[id]!['reportedNames']).toBeUndefined();
-    }
+    // Each name is the exact `system/init` model string measured on the logged-in host (proof CURSOR-2026-10-22/init-names), not the --list-models text.
+    for (const [id, name] of Object.entries(NAMES)) expect(by[id]).toMatchObject({ reportedNames: [{ name, cliVersion: '2026.10.19-6bbf2c4', source: 'cursor-agent stream-json system/init' }] });
     expect(models.some(m => m.nativeId.endsWith('-fast'))).toBe(false);
   });
   it('registers like --seed does, activates and admits named models with names and auto as provider-chosen', async () => {
@@ -52,16 +53,16 @@ describe('packaged Cursor catalog seed (CURSOR-ISCI C4)', () => {
         const task = (modelId: string, pin: object, effort?: object) => [{ taskId: 't', profile: { parameters: { nativeSubscription: { schemaVersion: 4, provider: 'cursor',
           preflight: { cliVersion: '2026.10.19-6bbf2c4' }, ...(effort ? { reasoningEffort: effort, effortMode: 'model-id' } : {}),
           model: { channelId, modelId, auxiliaryModelIds: [], ...pin } } } } }];
-        const others = (names: string[]) => names;
-        await expect(admitWorkerModels(task('auto', { reportedNames: ['Auto'], otherReportedNames: others(['Composer 2.5']), providerChosen: true }), 's', reader, NOW)).resolves.toEqual([]);
-        await expect(admitWorkerModels(task('auto', { reportedNames: ['Auto'], otherReportedNames: ['Composer 2.5'] }), 's', reader, NOW))
+        const others = (own: string) => Object.values(NAMES).filter(name => name !== own).sort();
+        await expect(admitWorkerModels(task('auto', { reportedNames: ['Auto'], otherReportedNames: others('Auto'), providerChosen: true }), 's', reader, NOW)).resolves.toEqual([]);
+        await expect(admitWorkerModels(task('auto', { reportedNames: ['Auto'], otherReportedNames: others('Auto') }), 's', reader, NOW))
           .rejects.toMatchObject({ code: 'WORKER_MODEL_BINDING_MISMATCH' });
-        await expect(admitWorkerModels(task('composer-2.5', { reportedNames: ['Composer 2.5'], otherReportedNames: ['Auto'] }), 's', reader, NOW)).resolves.toEqual([]);
-        await expect(admitWorkerModels(task('composer-2.5', { reportedNames: ['Auto'], otherReportedNames: ['Composer 2.5'] }), 's', reader, NOW))
+        await expect(admitWorkerModels(task('composer-2.5', { reportedNames: ['Composer 2.5'], otherReportedNames: others('Composer 2.5') }), 's', reader, NOW)).resolves.toEqual([]);
+        await expect(admitWorkerModels(task('composer-2.5', { reportedNames: ['Auto'], otherReportedNames: others('Auto') }), 's', reader, NOW))
           .rejects.toMatchObject({ code: 'WORKER_MODEL_BINDING_MISMATCH' });
         const high = { schemaVersion: 1, level: 'high', source: 'explicit', status: 'selected' };
-        await expect(admitWorkerModels(task('gpt-5.6-sol-high', { otherReportedNames: ['Auto', 'Composer 2.5'] }, high), 's', reader, NOW)).resolves.toEqual([]);
-        await expect(admitWorkerModels(task('gpt-5.6-sol-high', { otherReportedNames: ['Auto', 'Composer 2.5'] }, { ...high, level: 'xhigh' }), 's', reader, NOW))
+        await expect(admitWorkerModels(task('gpt-5.6-sol-high', { reportedNames: [NAMES['gpt-5.6-sol-high']], otherReportedNames: others(NAMES['gpt-5.6-sol-high']) }, high), 's', reader, NOW)).resolves.toEqual([]);
+        await expect(admitWorkerModels(task('gpt-5.6-sol-high', { reportedNames: [NAMES['gpt-5.6-sol-high']], otherReportedNames: others(NAMES['gpt-5.6-sol-high']) }, { ...high, level: 'xhigh' }), 's', reader, NOW))
           .rejects.toMatchObject({ code: 'WORKER_EFFORT_UNSUPPORTED' });
         await expect(admitWorkerModels(task('gpt-5.6-sol-xhigh', {}), 's', reader, NOW)).rejects.toMatchObject({ code: 'WORKER_MODEL_NOT_ACTIVE' });
       } finally { reader.close(); }

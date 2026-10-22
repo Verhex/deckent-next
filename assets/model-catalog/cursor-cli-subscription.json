@@ -213,7 +213,15 @@
           "effortBinding": {
             "mode": "fixed-model",
             "level": "high"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "Claude Opus 5 300K High",
+              "cliVersion": "2026.10.19-6bbf2c4",
+              "source": "cursor-agent stream-json system/init",
+              "observedAt": "2026-10-22"
+            }
+          ]
         },
         {
           "id": "claude-sonnet-5-thinking-high",
@@ -278,7 +286,15 @@
           "effortBinding": {
             "mode": "fixed-model",
             "level": "high"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "Claude Sonnet 5 300K High",
+              "cliVersion": "2026.10.19-6bbf2c4",
+              "source": "cursor-agent stream-json system/init",
+              "observedAt": "2026-10-22"
+            }
+          ]
         },
         {
           "id": "claude-sonnet-5-thinking-xhigh",
@@ -343,7 +359,15 @@
           "effortBinding": {
             "mode": "fixed-model",
             "level": "xhigh"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "Claude Sonnet 5 300K Extra High",
+              "cliVersion": "2026.10.19-6bbf2c4",
+              "source": "cursor-agent stream-json system/init",
+              "observedAt": "2026-10-22"
+            }
+          ]
         },
         {
           "id": "gpt-5.6-sol-high",
@@ -408,7 +432,15 @@
           "effortBinding": {
             "mode": "fixed-model",
             "level": "high"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "GPT-5.6 Sol 272K High",
+              "cliVersion": "2026.10.19-6bbf2c4",
+              "source": "cursor-agent stream-json system/init",
+              "observedAt": "2026-10-22"
+            }
+          ]
         },
         {
           "id": "gpt-5.6-sol-xhigh",
@@ -473,7 +505,15 @@
           "effortBinding": {
             "mode": "fixed-model",
             "level": "xhigh"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "GPT-5.6 Sol 272K Extra High",
+              "cliVersion": "2026.10.19-6bbf2c4",
+              "source": "cursor-agent stream-json system/init",
+              "observedAt": "2026-10-22"
+            }
+          ]
         }
       ]
     }
