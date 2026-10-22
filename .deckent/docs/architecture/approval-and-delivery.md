@@ -1166,5 +1166,5 @@ reaches awaiting-confirmation and appends a record (`autonomy-shadow:<commandId>
 to the bounded append-only store `state/autonomy-shadow` (`autonomy-shadow.jsonl`; limits: 4096 entries, 1 MiB file, 4096 bytes per line)
 outside the audit chain, so an older binary's audit verification is unaffected. It is advice only: deliver, adopt, rollback, consent
 digests and queue state never read it, deleting or altering records changes none of them, and it must never appear on the y/N consent prompt
-(the shadow line belongs only to `integration-queue-list`/`inspect` and the monitor brief; surface wiring is slice A3). A later comparison joins it to the `target-batch-decision` audit by
+(the shadow appears only as the `integration-queue-list` Rule column and an `integration-queue-inspect` line; no consent path accepts it). A later comparison joins it to the `target-batch-decision` audit by
 commandId; opening the rule (acting on it) is a separate owner decision.
