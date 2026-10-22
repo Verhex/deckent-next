@@ -1938,7 +1938,8 @@
         "src/engine/core/runs",
         "src/engine/core/policy",
         "src/capabilities/core/evaluation-evidence",
-        "src/engine/core/audit"
+        "src/engine/core/audit",
+        "src/engine/core/delivery-summary"
       ],
       "plan": "ISOLATION"
     },
@@ -3333,7 +3334,8 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-render",
-        "src/surfaces/core/terminal-window"
+        "src/surfaces/core/terminal-window",
+        "src/capabilities/core/evaluation-evidence"
       ],
       "plan": "SURFACES"
     },
@@ -3445,6 +3447,22 @@
         "src/platform/core/output"
       ],
       "plan": "SECURITY"
+    },
+    "src/engine/core/delivery-summary": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/attempt",
+        "src/domain/core/run",
+        "src/domain/core/worker-event",
+        "src/domain/core/principal",
+        "src/capabilities/core/evaluation-evidence",
+        "src/platform/core/redaction",
+        "src/platform/core/output",
+        "src/engine/core/dispatch",
+        "src/engine/core/worker-observation",
+        "src/engine/core/runs"
+      ],
+      "plan": "CONTRACT"
     }
   },
   "composition": {

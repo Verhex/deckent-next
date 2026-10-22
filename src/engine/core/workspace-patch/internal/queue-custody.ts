@@ -5,6 +5,7 @@ import { workspacePatchSchema } from './contract.js';
 import { integrationManifestSchema } from './integration.js';
 import type { IntegrationReader } from './inspection.js';
 import { queueCommandIds } from './queue-git.js';
+import type { IntegrationCommitMetadata } from './commit-metadata.js';
 /** Reuses immutable integration and patch receipts; a queue JSON path is never workspace authority. */
 export async function readQueueCandidate(record: TargetQueueRecord, reader: IntegrationReader, artifacts: ArtifactStore, maxBytes: number) {
   const candidate = record.candidate, ids = queueCommandIds(record), identity = record.request.identity;
@@ -20,11 +21,24 @@ export async function readQueueCandidate(record: TargetQueueRecord, reader: Inte
     throw new CandidateBindingError('CANDIDATE_MISMATCH');
   return { manifest, patch };
 }
-export function queueCommitMetadata(record: TargetQueueRecord, run: RunSnapshot) {
+/** Deterministic from durable inputs only (no clock, no secret snapshot): the commit message, hence the candidate commit, is replayable.
+ * The title is the Brain-authored work-input title, else the task id; the Git adapter redacts and bounds it at commit time. */
+export function queueCommitMetadata(record: TargetQueueRecord, run: RunSnapshot): IntegrationCommitMetadata {
   const task = run.graph.tasks.find(row => row.id === record.request.identity.taskId), progress = run.progress.find(row => row.taskId === task?.id);
   if (!task || progress?.phase !== 'accepted' || !run.bindings.some(row => sameAttemptIdentity(row.identity, record.request.identity))) throw new CandidateBindingError('CANDIDATE_MISMATCH');
-  return { title: task.id, acceptance: { phase: progress.phase, criteria: task.acceptanceCriteria.length, runRevision: record.request.acceptedRevision,
+  return { title: task.workInput?.title || task.id, acceptance: { phase: progress.phase, criteria: task.acceptanceCriteria.length, runRevision: record.request.acceptedRevision,
     modelUnverified: progress.acceptedEvidence === 'model-unverified' }, deliveredAtMs: record.request.submittedAt };
+}
+/**
+ * Plans a ticket's commit and keeps candidates bound before alpha.53 replayable: they were planned with the task id as title, so when the
+ * exact candidate commit does not match the current title, the same plan is tried once with that title. Never a weaker check: the caller
+ * still requires `plan.commit === candidate.candidateVersion`.
+ */
+export async function planQueueCommit<P extends { readonly commit: string }>(record: TargetQueueRecord, run: RunSnapshot,
+  plan: (metadata: IntegrationCommitMetadata) => Promise<P>): Promise<P> {
+  const metadata = queueCommitMetadata(record, run), planned = await plan(metadata), legacy = record.request.identity.taskId;
+  if (!record.candidate || planned.commit === record.candidate.candidateVersion || metadata.title === legacy) return planned;
+  return plan({ ...metadata, title: legacy });
 }
 
 export async function describeWorkspaceQueueCandidate(record: TargetQueueRecord, queue: TargetQueueStore, reader: IntegrationReader, artifacts: ArtifactStore, maxBytes: number) {
