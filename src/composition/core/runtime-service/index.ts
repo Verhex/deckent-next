@@ -8,3 +8,4 @@ export type { ConfiguredRuntimeServiceObserver } from './internal/server.js';
 export type { ConfiguredRuntimeClient } from './internal/client.js';
 export { executeRuntimeApproval } from './internal/approvals.js';
 export { inspectInstallationStartability } from './internal/startability.js';
+export { readAutonomyShadow } from './internal/autonomy-shadow.js';

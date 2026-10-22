@@ -24,6 +24,8 @@ interface QueuePreparationPorts {
   readonly delivery: IntegrationDeliveryTarget;
   provider(record: TargetQueueRecord): Promise<PrivateCandidateWorkspace>;
   withAdmission<T>(work: (app: RunAdmissionApplication) => Promise<T>): Promise<T>;
+  /** OTONOM-TESLIM shadow writer (workspaceQueueShadow); absent = no shadow evaluation. */
+  shadow?(record: TargetQueueRecord): Promise<void>;
 }
 export function createWorkspaceQueuePreparation(c: QueuePreparationContext, store: IntegrationStore & Pick<RunStore, 'loadRun'> & AdoptionVerificationStore,
   patches: WorkspacePatchApplication, ports: QueuePreparationPorts): TargetQueuePreparation {
@@ -34,6 +36,7 @@ export function createWorkspaceQueuePreparation(c: QueuePreparationContext, stor
     return { original, ...queueVerificationGraph(record, original, c.registry, c.bar) };
   };
   return {
+    ...(ports.shadow ? { shadow: ports.shadow } : {}),
     effectIds(record) { return Object.values(queueCommandIds(record)); },
     async prepare(record, predecessor) {
       await c.validate(record.request);

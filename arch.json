@@ -625,7 +625,8 @@
         "src/adapters/core/file-artifacts",
         "src/adapters/core/git-patch",
         "src/adapters/core/target-queue-store",
-        "src/engine/core/workspace-patch"
+        "src/engine/core/workspace-patch",
+        "src/adapters/core/autonomy-shadow"
       ],
       "plan": "EXECUTION"
     },
@@ -3091,6 +3092,13 @@
         "src/platform/core/config-fields"
       ],
       "plan": "KAYNAK-KALITE"
+    },
+    "src/adapters/core/autonomy-shadow": {
+      "dependencies": [
+        "src/engine/core/delivery-summary",
+        "src/platform/core/config"
+      ],
+      "plan": "CONTRACT"
     },
     "src/composition/core/resource-observation": {
       "dependencies": [

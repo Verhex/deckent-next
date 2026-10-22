@@ -97,6 +97,7 @@ export { inspectInstallationStartabilityFiles, type InstallationStartability } f
 export { firstSessionTargets, firstSessionPublication } from '#adapters/core/installation-files/index.js';
 export { openSqliteRunProposalStore, openSqliteRunProposalReader } from '#adapters/core/run-proposal-store/index.js';
 export * from '#adapters/core/resource-trace/index.js';
+export * from '#adapters/core/autonomy-shadow/index.js';
 export { sampleDockerResources } from '#adapters/core/docker-supervisor/index.js';
 
 export { openInstallationPoolStore } from '#adapters/core/installation-pool-store/index.js';
