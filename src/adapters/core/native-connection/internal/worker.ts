@@ -219,25 +219,44 @@ export function validateFinalReport(value: unknown, secrets: readonly string[], 
   if (report.handoff && !handoff(report.handoff)) return { status: 'unavailable', reason: 'invalid' };
   return Buffer.byteLength(JSON.stringify(report)) > l.reportBytes ? { status: 'unavailable', reason: 'oversized' } : { status: 'reported', report };
 }
-export function finalReportCollector(provider: string, secrets: readonly string[], limits: ReportLimits) {
+/** Strict-schema transport nulls (OpenAI strict schemas require every property) become absence before validation. */
+function dropTransportNulls(value: unknown): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const report = value as Record<string, unknown>;
+  if (report.exit === null) delete report.exit;
+  if (Array.isArray(report.checks)) for (const check of report.checks as Record<string, unknown>[]) if (check && typeof check === 'object') for (const key of ['checkId', 'role']) if (check[key] === null) delete check[key];
+  if (report.handoff === null) delete report.handoff;
+  else if (report.handoff && typeof report.handoff === 'object' && !Array.isArray(report.handoff) && (report.handoff as Record<string, unknown>).toTask === null) delete (report.handoff as Record<string, unknown>).toTask;
+}
+/**
+ * `final-text-json` channel: the report is the whole final answer text of a successful terminal `result` record. One fenced block that
+ * is the entire text (```json … ```) is unwrapped, because models often fence JSON despite the instruction; JSON is never searched for
+ * inside prose (no guessing which object is the report). A failed or empty result carries no report (`missing`); other text is `invalid`.
+ */
+function finalTextReport(data: Record<string, unknown>, secrets: readonly string[], limits: ReportLimits): FinalReportResult {
+  if (data.subtype !== 'success' || data.is_error === true || typeof data.result !== 'string' || !data.result.trim()) return { status: 'unavailable', reason: 'missing' };
+  const text = data.result.trim(), fenced = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n?```$/.exec(text);
+  let value: unknown;
+  try { value = JSON.parse(fenced ? fenced[1]! : text); } catch { return { status: 'unavailable', reason: 'invalid' }; }
+  dropTransportNulls(value);
+  return validateFinalReport(value, secrets, limits);
+}
+/** The report channel (registry capability) decides how the report is read; flag channels keep their native stream readers. */
+export function finalReportCollector(provider: string, secrets: readonly string[], limits: ReportLimits, channel?: string) {
   let result: FinalReportResult = { status: 'unavailable', reason: 'missing' };
   return {
     observe(line: string) {
       let data; try { data = JSON.parse(line) as Record<string, unknown>; } catch { return; }
       if (!data || typeof data !== 'object') return;
+      if (channel === 'final-text-json') { if (data.type === 'result') result = finalTextReport(data, secrets, limits); return; }
       if (provider === 'claude' && data.type === 'result') result = data.structured_output === undefined
         ? { status: 'unavailable', reason: 'missing' } : validateFinalReport(data.structured_output, secrets, limits);
       if (provider === 'codex' && data.type === 'item.completed') {
         const item = data.item as Record<string, unknown> | undefined;
         if (item?.type !== 'agent_message') return;
         try {
-          const value = JSON.parse(String(item.text)) as Record<string, unknown>;
-          if (value && typeof value === 'object' && !Array.isArray(value)) {
-            if (value.exit === null) delete value.exit;
-            if (Array.isArray(value.checks)) for (const check of value.checks as Record<string, unknown>[]) if (check && typeof check === 'object') for (const key of ['checkId', 'role']) if (check[key] === null) delete check[key];
-            if (value.handoff === null) delete value.handoff;
-            else if (value.handoff && typeof value.handoff === 'object' && !Array.isArray(value.handoff) && (value.handoff as Record<string, unknown>).toTask === null) delete (value.handoff as Record<string, unknown>).toTask;
-          }
+          const value = JSON.parse(String(item.text)) as unknown;
+          dropTransportNulls(value);
           result = validateFinalReport(value, secrets, limits);
         }
         catch { result = { status: 'unavailable', reason: 'invalid' }; }
@@ -450,20 +469,101 @@ function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormaliz
       apiDurationMs: null, costUsd: null, costBasis: null, tokens: { ...codex.tokens, cacheWrite: 0 }, permissionDenials: 0 });
   } else if (!CODEX_KNOWN.has(type)) miss(type);
 }
+/** Cursor `tool_call` keys (cursor-agent stream-json: documented readToolCall/writeToolCall/function, observed editToolCall). Unknown keys stay
+ * visible as `other` calls and are also counted as unmapped, so a new native tool is never silently misclassified. */
+const CURSOR_TOOLS: Readonly<Record<string, string>> = { readToolCall: 'read', editToolCall: 'edit', writeToolCall: 'write', function: 'other' };
+/** Cursor state beyond the shared normalizer state: seen tool calls, derived turns and the byte size of the thinking segment in progress. */
+export interface CursorNormalizerState { readonly calls: Set<string>; turns: number; thinkingBytes: number }
+export function createCursorState(): CursorNormalizerState { return { calls: new Set(), turns: 0, thinkingBytes: 0 }; }
 /**
- * Splits a native stdout stream into lines and normalizes each onto contract events. Observation never changes execution:
+ * Maps one line of `cursor-agent --print --output-format stream-json` onto contract events. Shapes follow the real cursor-agent
+ * 2026.10.19-6bbf2c4 streams (tests/fixtures/native-cursor): system/init, user, thinking delta|completed, tool_call started|completed,
+ * assistant, result. Cursor reports no turn count, cost or per-model usage: turns are derived (assistant message events), cost is null.
+ * Thinking text and tool output are never kept; this function never throws (observation must not change execution).
+ */
+export function normalizeCursorLine(line: string, state: NormalizerState, cursor: CursorNormalizerState, now = Date.now()): BridgeEvent[] {
+  const events: BridgeEvent[] = [];
+  try { mapCursorLine(line, state, cursor, now, events); }
+  catch { countUnmapped(state, 'cursor-invalid'); }
+  return events;
+}
+function mapCursorLine(line: string, state: NormalizerState, cursor: CursorNormalizerState, now: number, events: BridgeEvent[]): void {
+  const emit = (kind: string, body: Record<string, unknown>) => events.push({ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, now - state.startMs), kind, ...body });
+  const miss = (type: string) => countUnmapped(state, type);
+  const red = (value: unknown, max: number) => redactText(typeof value === 'string' ? value : '', state.secrets, max);
+  let parsed: unknown;
+  try { parsed = JSON.parse(line); } catch { if (line.trim()) miss('non-json'); return; }
+  const data = record(parsed);
+  if (!data) { miss('non-object'); return; }
+  const type = typeof data.type === 'string' ? data.type : 'untyped', subtype = typeof data.subtype === 'string' ? data.subtype : '';
+  if (type === 'system' && subtype === 'init') {
+    if (typeof data.cwd === 'string') state.cwd = data.cwd;
+    emit('session.started', { provider: 'cursor', model: typeof data.model === 'string' ? data.model.slice(0, 128) : null, cliVersion: null });
+  } else if (type === 'system') miss(`system:${subtype}`);
+  else if (type === 'user') return; // the echoed task prompt: known, never kept
+  else if (type === 'thinking') {
+    if (subtype === 'delta') cursor.thinkingBytes += Buffer.byteLength(typeof data.text === 'string' ? data.text : '');
+    else if (subtype === 'completed') { emit('message', { role: 'assistant', textBytes: cursor.thinkingBytes, thinking: true, excerpt: '' }); cursor.thinkingBytes = 0; }
+    else miss(`thinking:${subtype}`);
+  } else if (type === 'assistant') {
+    cursor.turns++;
+    const message = record(data.message);
+    for (const block of Array.isArray(message?.content) ? message.content as unknown[] : []) {
+      const entry = record(block);
+      if (entry?.type === 'text') emit('message', { role: 'assistant', textBytes: Buffer.byteLength(typeof entry.text === 'string' ? entry.text : ''), thinking: false, excerpt: red(entry.text, 240) });
+      else miss(`assistant:${String(entry?.type ?? 'unknown')}`);
+    }
+  } else if (type === 'tool_call') {
+    const call = record(data.tool_call), rawId = typeof data.call_id === 'string' ? data.call_id : '';
+    // The tool is the one object-valued key; toolCallId, startedAtMs and hookAdditionalContexts are scalar or array metadata.
+    const key = call ? Object.keys(call).find(name => record(call[name]) !== null) : undefined;
+    if (!call || !rawId || key === undefined || (subtype !== 'started' && subtype !== 'completed')) { miss(`tool_call:${subtype || 'invalid'}`); return; }
+    const entry = record(call[key])!, args = record(entry.args);
+    const toolId = rawId.length <= 64 && /^[A-Za-z0-9_.:-]+$/.test(rawId) && red(rawId, 96) === rawId ? rawId : `h${createHash('sha256').update(rawId).digest('hex').slice(0, 40)}`;
+    if (!cursor.calls.has(rawId)) {
+      cursor.calls.add(rawId);
+      const known = Object.hasOwn(CURSOR_TOOLS, key);
+      if (!known) miss(`tool_call:${key}`);
+      const fn = key === 'function' ? red(entry.name, 64) : '';
+      const path = relative(args?.path, state.cwd);
+      emit('tool.call', { toolId, name: fn || red(key, 64) || 'unknown', toolClass: known ? CURSOR_TOOLS[key] : 'other', target: path === null ? null : red(path, 256) || null, detail: null });
+    }
+    if (subtype === 'completed') {
+      // A missing result is unknown, never success; any result without a `success` object is an error.
+      const result = record(entry.result);
+      if (!result) miss('tool_call:result-missing');
+      else emit('tool.result', { toolId, status: Object.hasOwn(result, 'success') ? 'ok' : 'error', bytes: Buffer.byteLength(JSON.stringify(result)) });
+    }
+  } else if (type === 'result') {
+    // A missing or malformed usage record is unknown, never a measured zero.
+    const usage = record(data.usage);
+    if (!usage && data.usage !== undefined) miss('usage-invalid');
+    emit('session.ended', { outcome: subtype === 'success' && data.is_error !== true ? 'success' : 'error', turns: cursor.turns,
+      durationMs: num(data.duration_ms), apiDurationMs: typeof data.duration_api_ms === 'number' ? num(data.duration_api_ms) : null, costUsd: null, costBasis: null,
+      tokens: usage ? { input: num(usage.inputTokens), output: num(usage.outputTokens), cacheRead: num(usage.cacheReadTokens), cacheWrite: num(usage.cacheWriteTokens), thinking: null } : null,
+      permissionDenials: 0 });
+  } else miss(type);
+}
+/** Normalizers by the registry `eventStream` capability (data), so a new adapter id with a known stream format needs no code change. */
+const STREAM_NORMALIZERS: Readonly<Record<string, (state: NormalizerState, codex: CodexNormalizerState) => (line: string) => BridgeEvent[]>> = {
+  'claude-code-stream-json': state => line => normalizeClaudeLine(line, state),
+  'codex-exec-json': (state, codex) => line => normalizeCodexLine(line, state, codex),
+  'cursor-agent-stream-json': state => { const cursor = createCursorState(); return line => normalizeCursorLine(line, state, cursor); },
+};
+/**
+ * Splits a native stdout stream into lines and normalizes each onto contract events (normalizer chosen by the registry `eventStream`). Observation never changes execution:
  * a normalizer or delivery fault is counted as unmapped and never thrown into the child process listeners (Astra 2066 R2).
  */
-export function createNativeLineObserver(provider: string, state: NormalizerState, codex: CodexNormalizerState, push: (events: BridgeEvent[]) => void, report?: ReturnType<typeof finalReportCollector>) {
+export function createNativeLineObserver(stream: string, state: NormalizerState, codex: CodexNormalizerState, push: (events: BridgeEvent[]) => void, report?: ReturnType<typeof finalReportCollector>) {
   let pending = ''; let skipping = false;
   const decoder = new TextDecoder();
+  const normalize = Object.hasOwn(STREAM_NORMALIZERS, stream) ? STREAM_NORMALIZERS[stream]!(state, codex) : null;
   const normalizeLine = (line: string) => {
     try {
       if (Buffer.byteLength(line) > 1_048_576) { report?.oversized(); countUnmapped(state, 'oversized-line'); return; }
       report?.observe(line);
-      if (provider === 'claude') push(normalizeClaudeLine(line, state));
-      else if (provider === 'codex') push(normalizeCodexLine(line, state, codex));
-      else if (line.trim()) countUnmapped(state, `${provider}-event`);
+      if (normalize) push(normalize(line));
+      else if (line.trim()) countUnmapped(state, `${stream}-event`);
     } catch { countUnmapped(state, 'normalizer-error'); }
   };
   return {
@@ -511,8 +611,9 @@ export interface NativeWorkerCapabilities {
   readonly maxTurns: { readonly flag: string; readonly hiddenHelpProbe: { readonly args: readonly string[]; readonly refusal: string } | null } | null;
   readonly settings: { readonly flag: string } | null;
   readonly promptChannel: 'claude-system-prompt' | 'codex-instructions-file' | 'inline';
-  readonly structuredReport: { readonly flag: string; readonly channel: 'inline-json' | 'schema-file' } | null;
+  readonly structuredReport: { readonly flag: string; readonly channel: 'inline-json' | 'schema-file' } | { readonly flag: null; readonly channel: 'final-text-json' } | null;
   readonly modelUsageEvidence: 'session-events' | 'none';
+  readonly eventStream: 'claude-code-stream-json' | 'codex-exec-json' | 'cursor-agent-stream-json';
 }
 /** Validates native prompt custody and returns the argv delivered to the CLI, selected only by capability. */
 export function nativePromptArguments(input: readonly string[], core: string, task: string, capabilities: NativeWorkerCapabilities): string[] {
@@ -541,11 +642,18 @@ export function nativePreflightCapabilities(capabilities: NativeWorkerCapabiliti
     }
     return true;
   })) throw new Error();
-  return capabilities.structuredReport !== null && help.includes(capabilities.structuredReport.flag);
+  // A flagless channel (`final-text-json`) needs no help flag: the schema rides in the prompt.
+  const report = capabilities.structuredReport;
+  return report !== null && (report.flag === null || help.includes(report.flag));
 }
 export function nativeReportArguments(capabilities: NativeWorkerCapabilities, schema: string): string[] {
   const report = capabilities.structuredReport;
-  return report ? [report.flag, report.channel === 'inline-json' ? schema : '/tmp/deckent-report-schema.json'] : [];
+  return report && report.flag !== null ? [report.flag, report.channel === 'inline-json' ? schema : '/tmp/deckent-report-schema.json'] : [];
+}
+/** Flagless report channel: the instruction and schema appended to the task prompt (the last argv element); null for flag channels. */
+export function nativeReportInstruction(capabilities: NativeWorkerCapabilities, schema: string): string | null {
+  return capabilities.structuredReport?.channel === 'final-text-json' ? '### report:final-text-json@1\nWhen the task is finished, your final answer must be '
+    + 'your final report: exactly one JSON object that matches the JSON Schema below, with no other text before or after it, no Markdown and no code fence.\n' + schema : null;
 }
 
 async function main() {
@@ -602,9 +710,11 @@ async function main() {
   }
   if (setup.finalReport && reportSupported) {
     const schema = JSON.stringify(createFinalReportJsonSchema(setup.finalReport.limits, setup.capabilities.structuredReport?.channel === 'schema-file'));
-    const extra = nativeReportArguments(setup.capabilities, schema);
+    const extra = nativeReportArguments(setup.capabilities, schema), instruction = nativeReportInstruction(setup.capabilities, schema);
     if (setup.capabilities.structuredReport?.channel === 'schema-file') await writeFile('/tmp/deckent-report-schema.json', schema, { mode: 0o600, flag: 'wx' });
     const end = argv.lastIndexOf('--'); argv.splice(end < 0 ? argv.length : end, 0, ...extra);
+    // The prompt is the argument after the end-of-options marker; without that shape the instruction cannot be delivered (no report).
+    if (instruction !== null) { if (argv.at(-2) === '--') argv[argv.length - 1] += '\n\n' + instruction; else reportSupported = false; }
   }
   const authRoot = join(home, setup.home); await mkdir(authRoot, { recursive: true, mode: 0o700 });
   await writeFile(join(authRoot, setup.file), JSON.stringify(setup.credential), { mode: 0o600, flag: 'wx' });
@@ -642,8 +752,8 @@ async function main() {
   const codex = createCodexState();
   if (setup.capabilities.modelUsageEvidence === 'none') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);
   const capture = (part: Buffer) => { bytes += part.length; tail = (tail + part.toString('utf8')).slice(-65536); };
-  const report = setup.finalReport && reportSupported ? finalReportCollector(setup.provider, state.secrets, setup.finalReport.limits) : undefined;
-  const lineObserver = createNativeLineObserver(setup.provider, state, codex, events => channel.push(events), report);
+  const report = setup.finalReport && reportSupported ? finalReportCollector(setup.provider, state.secrets, setup.finalReport.limits, setup.capabilities.structuredReport?.channel) : undefined;
+  const lineObserver = createNativeLineObserver(setup.capabilities.eventStream, state, codex, events => channel.push(events), report);
   const observe = (part: Buffer) => { capture(part); lineObserver.observe(part); };
   child.stdout.on('data', observe); child.stderr.on('data', capture);
   const result = await new Promise<{ code: number | null; signal: string | null }>(resolve => {

@@ -30,6 +30,7 @@
         "maxTurns": null,
         "settings": null,
         "promptChannel": "codex-instructions-file",
+        "eventStream": "codex-exec-json",
         "structuredReport": {
           "flag": "--output-schema",
           "channel": "schema-file"
@@ -103,6 +104,7 @@
           "flag": "--settings"
         },
         "promptChannel": "claude-system-prompt",
+        "eventStream": "claude-code-stream-json",
         "structuredReport": {
           "flag": "--json-schema",
           "channel": "inline-json"
@@ -147,7 +149,11 @@
         "maxTurns": null,
         "settings": null,
         "promptChannel": "inline",
-        "structuredReport": null,
+        "eventStream": "cursor-agent-stream-json",
+        "structuredReport": {
+          "flag": null,
+          "channel": "final-text-json"
+        },
         "modelUsageEvidence": "none",
         "reasoningEffort": {
           "mode": "model-id",

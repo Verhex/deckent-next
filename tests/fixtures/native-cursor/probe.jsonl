@@ -1,0 +1,8 @@
+{"type":"system","subtype":"init","apiKeySource":"login","cwd":"/workspace","session_id":"021062a5-1bf8-4580-8037-0e26c87b4bab","model":"Composer 2.5","permissionMode":"default"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Reply with the single word: ok"}]},"session_id":"021062a5-1bf8-4580-8037-0e26c87b4bab"}
+{"type":"thinking","subtype":"delta","text":"The","session_id":"021062a5-1bf8-4580-8037-0e26c87b4bab","timestamp_ms":1792689343671}
+{"type":"thinking","subtype":"delta","text":" user requested a single","session_id":"021062a5-1bf8-4580-8037-0e26c87b4bab","timestamp_ms":1792689343672}
+{"type":"thinking","subtype":"delta","text":"-word response.","session_id":"021062a5-1bf8-4580-8037-0e26c87b4bab","timestamp_ms":1792689343718}
+{"type":"thinking","subtype":"completed","session_id":"021062a5-1bf8-4580-8037-0e26c87b4bab","timestamp_ms":1792689344175}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]},"session_id":"021062a5-1bf8-4580-8037-0e26c87b4bab"}
+{"type":"result","subtype":"success","duration_ms":2911,"duration_api_ms":2911,"is_error":false,"result":"ok","session_id":"021062a5-1bf8-4580-8037-0e26c87b4bab","request_id":"4c97283c-d4f6-4f66-affc-20127ae4af19","usage":{"inputTokens":10478,"outputTokens":101,"cacheReadTokens":4025,"cacheWriteTokens":0}}

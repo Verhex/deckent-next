@@ -12,8 +12,13 @@ export const nativeCliCapabilitiesSchema = z.object({
   maxTurns: z.object({ flag, hiddenHelpProbe: z.object({ args: argumentsSchema, refusal: argument }).strict().readonly().nullable() }).strict().readonly().nullable(),
   settings: z.object({ flag }).strict().readonly().nullable(),
   promptChannel: z.enum(['claude-system-prompt', 'codex-instructions-file', 'inline']),
-  structuredReport: z.object({ flag, channel: z.enum(['inline-json', 'schema-file']) }).strict().readonly().nullable(),
+  // A flag channel passes the report schema through a CLI flag; `final-text-json` has no flag: the schema rides in the prompt and the
+  // report is the worker's final answer text (CLIs without a structured-output flag).
+  structuredReport: z.union([z.object({ flag, channel: z.enum(['inline-json', 'schema-file']) }).strict().readonly(),
+    z.object({ flag: z.null(), channel: z.literal('final-text-json') }).strict().readonly()]).nullable(),
   modelUsageEvidence: modelUsageEvidenceSchema,
+  /** Native stdout event format the mounted worker normalizes; selects the normalizer by data, never by adapter id. */
+  eventStream: z.enum(['claude-code-stream-json', 'codex-exec-json', 'cursor-agent-stream-json']),
 }).strict().readonly();
 export type NativeCliCapabilities = z.infer<typeof nativeCliCapabilitiesSchema>;
 const commandSchema = z.object({ executable: argument, args: argumentsSchema, modelFlag: flag, helpArgs: argumentsSchema,

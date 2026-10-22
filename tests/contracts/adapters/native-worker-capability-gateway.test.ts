@@ -72,7 +72,7 @@ describe('candidate standalone bootstrap through the real pinned Docker worker',
     const command = nativeCliCommand(provider), capabilities = command.capabilities;
     const requiredFlags = [...command.args.filter(flag => flag.startsWith('--')), ...command.coreArgs.filter(flag => flag.startsWith('--')), command.modelFlag,
       ...(capabilities.maxTurns ? [capabilities.maxTurns.flag] : [])];
-    const help = [...requiredFlags.filter(flag => flag !== capabilities.maxTurns?.flag), ...(capabilities.structuredReport ? [capabilities.structuredReport.flag] : [])].join(' ');
+    const help = [...requiredFlags.filter(flag => flag !== capabilities.maxTurns?.flag), ...(capabilities.structuredReport?.flag ? [capabilities.structuredReport.flag] : [])].join(' ');
     const fake = `#!/usr/bin/env node
 import { readFileSync, writeFileSync } from 'node:fs';
 const argv = process.argv.slice(2);
@@ -101,13 +101,20 @@ else writeFileSync('/workspace/capture.json', JSON.stringify({ argv, core: readF
     expect(result.result).toEqual({ kind: 'exited', exitCode: 0 });
     const capture = JSON.parse(await readFile(join(workspace, 'capture.json'), 'utf8')) as { argv: string[]; core: string; reportFile: string | null };
     expect(capture.core).toBe(body.core);
-    expect(capture.argv.at(-1)).toBe(capabilities.promptChannel === 'inline' ? body.core + '\n\n' + body.task : body.task);
+    const prompt = capabilities.promptChannel === 'inline' ? body.core + '\n\n' + body.task : body.task;
+    // The flagless final-text-json channel appends its instruction and one-line schema to the prompt; flag channels leave it exact.
+    const instruction = capabilities.structuredReport?.channel === 'final-text-json' ? capture.argv.at(-1)!.slice(prompt.length) : '';
+    expect(capture.argv.at(-1)).toBe(prompt + instruction);
+    if (instruction) {
+      expect(instruction.startsWith('\n\n### report:final-text-json@1\n')).toBe(true);
+      expect(JSON.parse(instruction.split('\n').at(-1)!)).toMatchObject({ type: 'object', properties: { schemaVersion: { const: 1 } } });
+    }
     if (capabilities.promptChannel === 'claude-system-prompt') expect(capture.argv[capture.argv.indexOf('--system-prompt') + 1]).toBe(body.core);
-    if (capabilities.structuredReport) {
+    if (capabilities.structuredReport?.flag) {
       const value = capture.argv[capture.argv.indexOf(capabilities.structuredReport.flag) + 1];
       expect(value).toEqual(capabilities.structuredReport.channel === 'schema-file' ? '/tmp/deckent-report-schema.json' : expect.any(String));
       expect(JSON.parse(capture.reportFile ?? value!)).toMatchObject({ type: 'object', properties: { schemaVersion: { const: 1 } } });
-    } else expect(capture.argv).toEqual([...argv.slice(1, -1), body.core + '\n\n' + body.task]);
+    } else expect(capture.argv).toEqual([...argv.slice(1, -1), body.core + '\n\n' + body.task + instruction]);
     expect(result.stdout).toContain('native-prompt-delivery');
   });
 });

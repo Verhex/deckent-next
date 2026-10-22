@@ -29,7 +29,7 @@ it('uses one registry-fed accepted set on every schema and refuses unknown ids',
   expect(workerProviderSchema.safeParse('unknown-cli').success).toBe(false);
   expect(() => compileNativeCodingDockerProfile(template, invocation('unknown-cli'))).toThrow('NATIVE_CODING_INVOCATION_INVALID');
 });
-it.each(['maxTurns', 'settings', 'promptChannel', 'structuredReport', 'modelUsageEvidence', 'reasoningEffort'])('refuses missing capability %s without defaults', field => {
+it.each(['maxTurns', 'settings', 'promptChannel', 'structuredReport', 'modelUsageEvidence', 'reasoningEffort', 'eventStream'])('refuses missing capability %s without defaults', field => {
   const asset = structuredClone(registry);
   delete (asset.adapters.claude.capabilities as Record<string, unknown>)[field];
   expect(() => parseNativeCliRegistry(asset)).toThrow(NativeCliRegistryError);
@@ -37,6 +37,8 @@ it.each(['maxTurns', 'settings', 'promptChannel', 'structuredReport', 'modelUsag
 });
 it.each([
   ['maxTurns', true], ['settings', 'yes'], ['promptChannel', 'unknown'], ['structuredReport', { flag: '--schema', channel: 'guess' }], ['modelUsageEvidence', 'guess'],
+  // A flag channel needs its flag and the flagless final-text channel may not carry one; the event stream format is a closed set.
+  ['structuredReport', { flag: null, channel: 'inline-json' }], ['structuredReport', { flag: '--schema', channel: 'final-text-json' }], ['structuredReport', { channel: 'final-text-json' }], ['eventStream', 'guess'],
 ])('validates the capability %s shape', (field, value) => {
   const asset = structuredClone(registry);
   (asset.adapters.claude.capabilities as Record<string, unknown>)[field] = value;
