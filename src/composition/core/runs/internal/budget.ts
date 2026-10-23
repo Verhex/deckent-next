@@ -30,8 +30,8 @@ export async function classifyConfiguredRunSpending(root: string, proposal: RunP
       let selected = profile;
       if (profile && isNativeCodingTemplate(profile) && task.workInput) {
         if (instructions.oversize) throw ErrorRegistry.createError('WORKER_INSTRUCTIONS_TOO_LARGE'); // the same snapshot refusal as at creation
-        const compile = (template: typeof profile, input: typeof task.workInput) => {
-          try { return compileNativeCodingWorkInput(template, input, undefined, undefined, instructions.parts); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); }
+        const compile = (template: typeof profile, input: typeof task.workInput, evidence?: Parameters<typeof compileNativeCodingWorkInput>[3]) => {
+          try { return compileNativeCodingWorkInput(template, input, undefined, evidence, instructions.parts); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); }
         };
         let input = task.workInput;
         if (!input.model && catalog) {

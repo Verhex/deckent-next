@@ -80,7 +80,7 @@ it('skips an inactive, an unknown-channel and a CLI-mismatched candidate with th
   // The light list names gpt-6-luna second: it is chosen, its catalog vendor default (medium) is the effort, and the skip is sealed.
   const execution = await resolveWorkerEffortExecution(graph('codex-coding', input(), 'small'), registry(), reader, validation, compiler, context());
   expect(execution.tasks[0]!.assignment).toMatchObject({ workClass: 'small', candidatePolicy: { id: 'light', version: 2 }, candidateIndex: 1, modelId: 'gpt-6-luna',
-    catalogRevision: 'codex-cli-subscription-2026-10-02', effort: { level: 'medium', source: 'catalog' },
+    catalogRevision: 'codex-cli-subscription-2026-10-23', effort: { level: 'medium', source: 'catalog' },
     skipped: [{ index: 0, channelId: 'claude-cli-subscription', modelId: 'claude-sonnet-5-5', reason: 'WORKER_CHANNEL_MISMATCH' }] });
   expect(readWorkerModelPin(execution.tasks[0]!.profile.parameters)!.reasoningEffort).toMatchObject({ level: 'medium', source: 'policy-default', workClass: 'small', target: 'medium' });
 });

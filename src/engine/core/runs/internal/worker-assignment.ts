@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { canonicalModelMaker, catalogDefaultEffort, eligibleRoleModels, isCandidateSelector, MODEL_TIERS, resolveTaskWorkClass, resolveWorkClassCandidates, roleModelKey, WORK_CLASS_LIMITS,
-  WORK_CLASS_WORKER_ROLE, WorkerEffortError, type CandidateSelector, type CatalogModel, type ExecutionProfileDefinition, type ModelRolePolicy, type ReasoningEffort,
+import { canonicalModelMaker, catalogDefaultEffort, catalogPinModelEvidence, eligibleRoleModels, isCandidateSelector, MODEL_TIERS, resolveTaskWorkClass, resolveWorkClassCandidates, roleModelKey, WORK_CLASS_LIMITS,
+  WORK_CLASS_WORKER_ROLE, WorkerEffortError, type CandidateSelector, type CatalogModel, type CatalogPinModelEvidence, type ExecutionProfileDefinition, type ModelRolePolicy, type ReasoningEffort,
   type WorkClassRegistry, type WorkInput, type WorkerAssignment, type WorkerAssignmentSkip } from '#domain/index.js';
 import { admitWorkerModels, WorkerModelAdmissionError, type ModelCatalogReader } from '#engine/core/model-activation/index.js';
 /** The admission facts a system assignment reads: the Run's scope (activation is per scope), admission time, the image-refresh caveat and
@@ -30,7 +30,8 @@ const skippedText = (skipped: readonly WorkerAssignmentSkip[]) => skipped.map(ro
  */
 export async function assignTaskWorker(task: Readonly<{ id: string; kind: string; workClass?: string | undefined }>, input: WorkInput,
   template: ExecutionProfileDefinition, registry: WorkClassRegistry | undefined, reader: ModelCatalogReader,
-  compile: (template: ExecutionProfileDefinition, input: WorkInput) => ExecutionProfileDefinition, context: WorkerAssignmentContext): Promise<PendingWorkerAssignment> {
+  compile: (template: ExecutionProfileDefinition, input: WorkInput, evidence?: CatalogPinModelEvidence) => ExecutionProfileDefinition,
+  context: WorkerAssignmentContext): Promise<PendingWorkerAssignment> {
   const refuse = (code: 'WORKER_ASSIGNMENT_NO_CANDIDATES' | 'WORKER_ASSIGNMENT_NONE', workClass: string | null, skipped: readonly WorkerAssignmentSkip[] = []): never => {
     throw new WorkerModelAdmissionError(code, Object.freeze({ taskId: task.id, channelId: null, modelId: null, workClass: workClass ?? '-', skipped: skippedText(skipped) || '-' }));
   };
@@ -85,7 +86,8 @@ export async function assignTaskWorker(task: Readonly<{ id: string; kind: string
         skipped.push(Object.freeze({ index, channelId: candidate.channelId, modelId: candidate.modelId, reason: ROLE_REFUSED })); continue;
       }
       const chosen: WorkInput = { ...input, model: { channelId: candidate.channelId, modelId: candidate.modelId, auxiliaryModelIds: [] } };
-      const profile = compile(template, chosen);
+      // The candidate's pin carries the catalog's session-start names exactly as a pinned model's does (owner K1/K2), or admission refuses it.
+      const profile = compile(template, chosen, catalogPinModelEvidence((await reader.models(candidate.channelId)).map(row => row.model), candidate.modelId));
       try { await admitWorkerModels([{ taskId: task.id, profile }], context.scopeId, reader, context.nowMs, [], { imageRefreshInProgress: context.imageRefreshInProgress === true }); }
       catch (error) {
         if (!(error instanceof WorkerModelAdmissionError)) throw error;
