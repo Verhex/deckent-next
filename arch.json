@@ -561,7 +561,11 @@
         "src/engine/core/project-instructions",
         "src/engine/core/nervous",
         "src/platform/core/common",
-        "src/platform/core/utils"
+        "src/platform/core/utils",
+        "src/engine/core/memory",
+        "src/adapters/core/memory-journal-store",
+        "src/composition/core/memory",
+        "src/platform/core/integrity"
       ],
       "plan": "EXECUTION"
     },
@@ -3573,7 +3577,8 @@
         "src/domain/core/primitives",
         "src/domain/core/principal",
         "src/domain/core/run",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/domain/core/audit"
       ],
       "plan": "MEMORY"
     },

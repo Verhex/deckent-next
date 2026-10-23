@@ -3,6 +3,7 @@ import type { TaskBrief, ResultBrief } from '#engine/index.js';
 import { acceptanceEvidenceQualifier } from '#surfaces/core/cli-human/index.js';
 import { deliveryLabel, notAcceptedLabel, verdictLabel } from './labels.js';
 const safe = (text: string) => redactSensitive(terminalSafeText(text));
+const MEMORY_PART = /^memory-[a-f0-9]{16}$/u;
 /** PRE-1 B3: an `accepted` verdict names what it rests on (one shared label); callers that print it separately skip theirs when this is true. */
 export const briefQualifiesAcceptance = (task: TaskBrief | undefined, verdict: ResultBrief['evaluation']['verdict']) => verdict === 'accepted' && !!task?.criteria.length;
 export function evaluationText(task: TaskBrief | undefined, evaluation: ResultBrief['evaluation'], locale: Locale): string {
@@ -22,6 +23,9 @@ export function renderBriefLines(task: TaskBrief | undefined, result: ResultBrie
       t('monitor.brief.model', { value: task.model ? `${safe(task.model.channelId)}/${safe(task.model.modelId)}` : missing }, locale),
       t('monitor.brief.effort', { value: task.effort ? safe(task.effort) : missing }, locale),
       t('monitor.brief.context', { value: task.contextRefs.length ? task.contextRefs.map(ref => `${safe(ref.id)}@${ref.version} (${ref.sha256})`).join(', ') : missing }, locale));
+    // S4B-5: the memory part frozen at admission (only when one was sent), recognised by the id admission gives it (a template's own part could share the prefix).
+    const memory = task.contextRefs.filter(ref => MEMORY_PART.test(ref.id));
+    if (memory.length) lines.push(t('inspect.context.memory', { value: memory.map(ref => `${safe(ref.id)}@${ref.version} (${ref.sha256})`).join(', ') }, locale));
     for (const criterion of task.criteria) lines.push(t('monitor.brief.criterion', { id: safe(criterion.id), value: safe(criterion.description), evaluator: `${safe(criterion.evaluator.id)}@${criterion.evaluator.version}` }, locale));
   }
   const checks = { passed: t('monitor.human.passed', {}, locale), failed: t('monitor.human.failed', {}, locale),

@@ -3,7 +3,7 @@
   "revision": "memory-automation-core-1",
   "status": "provisional",
   "bounds": { "perAttempt": 3, "perRun": 10, "perScopePerDay": 50, "supportPerEntry": 64, "loopPage": 20 },
-  "context": { "maxEntries": 6, "maxBytes": 4096, "maxSourcesChecked": 8 },
+  "context": { "maxEntries": 6, "maxBytes": 4096, "maxSourcesChecked": 8, "candidatePool": 200, "termsMax": 64 },
   "evaluation": { "perScopePerDay": 30, "contestsPerScopePerDay": 5, "unknownPerScopePerDay": 5, "spendMinorUnitsPerScopePerDay": 500, "maxCompletionTokens": 2048,
     "outputMaxBytes": 4096, "conflictTitles": 8, "conflictsMax": 4, "reasonCodesMax": 4,
     "passIntervalMs": 60000 },

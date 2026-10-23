@@ -20,6 +20,18 @@ function withheldWarning(warning: Extract<WorkerAdmissionWarning, { code: 'WORKE
   if (warning.reason === 'untrusted') return t('run.warning.WORKER_INSTRUCTIONS_WITHHELD.untrusted', params, locale);
   return warning.reason === 'unsafe' ? t('run.warning.WORKER_INSTRUCTIONS_WITHHELD.unsafe', params, locale) : t('run.warning.WORKER_INSTRUCTIONS_WITHHELD.unreadable', params, locale);
 }
+/** S4B-5: memory left out of a worker prompt names the task and a count only (never which entries). */
+function memoryWithheldWarning(warning: Extract<WorkerAdmissionWarning, { code: 'MEMORY_CONTEXT_WITHHELD' }>, locale: Locale) {
+  const params = { taskId: warning.taskId ?? '-', count: warning.count };
+  if (warning.reason === 'policy') return t('run.warning.MEMORY_CONTEXT_WITHHELD.policy', params, locale);
+  if (warning.reason === 'sources') return t('run.warning.MEMORY_CONTEXT_WITHHELD.sources', params, locale);
+  return warning.reason === 'budget' ? t('run.warning.MEMORY_CONTEXT_WITHHELD.budget', params, locale) : t('run.warning.MEMORY_CONTEXT_WITHHELD.contests', params, locale);
+}
+function admissionWarning(warning: WorkerAdmissionWarning, locale: Locale) {
+  if (warning.code === 'WORKER_INSTRUCTIONS_WITHHELD') return withheldWarning(warning, locale);
+  if (warning.code === 'MEMORY_CONTEXT_WITHHELD') return memoryWithheldWarning(warning, locale);
+  return t('run.warning.WORKER_IMAGE_REFRESHING', { taskId: warning.taskId, modelId: warning.modelId, minCliVersion: warning.minCliVersion, cliVersion: warning.cliVersion ?? '-' }, locale);
+}
 export type { RunCancellationDeliveryHandler, RunQueryHandler } from '#surfaces/core/cli-terminal/index.js';
 export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }>; warnings?: readonly WorkerAdmissionWarning[] }>>;
 /** Local (not runtime-service) admission of a Run pinned to a completed delivery's commit (B06-2a `createDeliveryRun`). */
@@ -98,9 +110,7 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
       : await context.createDeliveryRun!(root, runDeliveryAdmissionSchema.parse({ ...parsed.data, deliveryCommandId }), options);
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => t('cli.run.create.result', {
       run: data.admission.run.runId, revision: data.admission.run.revision,
-    }, locale) + (data.warnings ?? []).map(warning => `\n${warning.code === 'WORKER_INSTRUCTIONS_WITHHELD'
-      ? withheldWarning(warning, locale)
-      : t('run.warning.WORKER_IMAGE_REFRESHING', { taskId: warning.taskId, modelId: warning.modelId, minCliVersion: warning.minCliVersion, cliVersion: warning.cliVersion ?? '-' }, locale)}`).join('') }); return;
+    }, locale) + (data.warnings ?? []).map(warning => `\n${admissionWarning(warning, locale)}`).join('') }); return;
   }
   if (action === 'reserve') {
     const commandId = values.get('--command-id'); const revision = values.get('--expected-revision');

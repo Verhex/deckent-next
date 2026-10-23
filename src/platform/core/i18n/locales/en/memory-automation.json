@@ -1,5 +1,5 @@
 {
-  "memory.config.section": "Memory automation (protected; no AI may change it): extraction.mode turns on candidates from accepted work (off, shadow records only, live writes candidates); verification.mode turns on the independent evaluator (off, shadow seals its records and verifies nothing, on verifies); automation narrows the Core bounds and WorkClass rows.",
+  "memory.config.section": "Memory automation (protected; no AI may change it): extraction.mode turns on candidates from accepted work (off, shadow records only, live writes candidates); verification.mode turns on the independent evaluator (off, shadow seals its records and verifies nothing, on verifies); context.mode lets verified entries reach worker prompts at Run admission (off, shadow seals what would be sent and sends nothing, on sends); automation narrows the Core bounds and WorkClass rows.",
   "memory.withheld": "{count} more entries are hidden: they come from work you may not read or a work target you may not use.",
   "memory.alert.extractionBound": "Memory extraction reached a bound in scope {scope}: {count} candidates were not written in this window (nothing was shortened).",
   "memory.alert.screening": "Memory extraction refused {count} candidates in scope {scope}: they held a secret or hidden characters.",
@@ -23,5 +23,12 @@
   "memory.view.evaluator.unavailable": "The memory evaluator could not be read; candidates stay candidates.",
   "error.MEMORY_EVALUATION_NOT_INDEPENDENT": "The evaluation is not independent of the models that did the work, so it cannot verify this memory entry.",
   "error.MEMORY_EVALUATION_MAKER_UNKNOWN": "The maker of a model behind this memory entry is not known, so independence cannot be shown and the entry stays a candidate.",
-  "error.MEMORY_EVALUATOR_REQUIRED": "Only this installation's memory evaluator applies its own evaluation; no other AI verifies memory."
+  "error.MEMORY_EVALUATOR_REQUIRED": "Only this installation's memory evaluator applies its own evaluation; no other AI verifies memory.",
+  "error.MEMORY_CONTEXT_HELD": "The Run was not admitted: its worker memory could not be read ({reason}). Nothing was started.",
+  "memory.held.next.MEMORY_CONTEXT_HELD": "Run deckent doctor and repair the memory store, or have a person set memoryAutomation.context.mode to off at their own terminal; then create the Run again.",
+  "run.warning.MEMORY_CONTEXT_WITHHELD.policy": "Warning: workers in this Run get no project memory: you may not read this scope's memory.",
+  "run.warning.MEMORY_CONTEXT_WITHHELD.sources": "Warning: task {taskId}: {count} memory entries were left out of the worker prompt; they come from work you may not read or a work target you may not use.",
+  "run.warning.MEMORY_CONTEXT_WITHHELD.budget": "Warning: task {taskId}: the worker prompt had no room for project memory, so the worker runs without it.",
+  "run.warning.MEMORY_CONTEXT_WITHHELD.contests": "Warning: workers in this Run get no project memory: more memory contests are open than can be checked; resolve them with deckent memory review.",
+  "inspect.context.memory": "Memory: {value} (verified entries, sent as data; they grant no permission)"
 }

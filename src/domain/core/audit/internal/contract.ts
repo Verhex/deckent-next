@@ -4,6 +4,8 @@ import { identitySchema, counterSchema } from '#domain/core/primitives/index.js'
 import limits from './limits.json' with { type: 'json' };
 /** S4B-3 memory evaluation record modes (the memory domain owns their meaning). */
 const MEMORY_EVALUATION_RECORD_MODES = Object.freeze(['shadow', 'live'] as const);
+/** S4B-5: the context modes that read and seal (`off` reads nothing, so it is never recorded). */
+const MEMORY_CONTEXT_RECORD_MODES = Object.freeze(['shadow', 'on'] as const);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** The MCP registry scopes (the adapter's own list; the audit contract stays dependency-free). */
 const MCP_REGISTRY_SCOPES = ['managed', 'local', 'project', 'user'] as const;
@@ -28,6 +30,8 @@ export const AUDIT_TRACKED_PATHS_MAX = 50;
 /** Crash-loop breaker: the phases of one dispatch preparation, in order (before workspace acquisition → secret gate → handoff → supervisor/claim). */
 /** S5 D1 (owner Q5 2026-10-17): the most refused / silently allowed calls one `policy-turn` record names (each count is always the full number). */
 export const AUDIT_POLICY_TURN_LIMITS = Object.freeze({ refusedMax: limits.policyTurnRefusedMax, allowedMax: limits.policyTurnAllowedMax });
+/** S4B-5: the most memory entries one `memory-context` event names (the memory registry's `context.maxEntries` stays at or below it). */
+export const AUDIT_MEMORY_CONTEXT_ENTRIES_MAX = limits.memoryContextEntriesMax;
 export const DISPATCH_PREPARATION_PHASES = Object.freeze(['prepare', 'workspace', 'secret-gate', 'handoff', 'dispatch'] as const);
 /** S6R-2: the typed signal summary a `recovery-detection` seals (counts and states only, never a log line, path or worker output). */
 export const recoveryEvidenceSchema = z.object({ activity: z.enum(NERVOUS_ACTIVITY_STATES).nullable(), launcher: z.enum(NERVOUS_LAUNCHER_BASES).nullable(),
@@ -116,6 +120,12 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     invocations: counterSchema, replay: z.boolean() }).strict(),
   z.object({ kind: z.literal('memory-contest-resolution'), contestId: identitySchema, entryId: identitySchema, decision: z.enum(['retire-contested', 'retire-candidate', 'dismiss']),
     retiredEntryId: identitySchema.nullable() }).strict(),
+  /** S4B-5 (§7.1, §9): the memory part frozen into one task's worker prompt at Run admission (`shadow`: computed and sealed, never sent;
+   * `delivered` false also when the prompt budget had no room). Keyed digests and ids only, never entry text; `withheld` counts entries the
+   * admitting principal may not read. */
+  z.object({ kind: z.literal('memory-context'), runId: identitySchema, taskId: identitySchema, mode: z.enum(MEMORY_CONTEXT_RECORD_MODES), delivered: z.boolean(),
+    entries: z.array(z.object({ entryId: identitySchema, revision: counterSchema.positive(), contentDigest: digest, basis: z.enum(['human-review', 'independent-evaluation']) }).strict())
+      .min(1).max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), partDigest: digest, withheld: counterSchema }).strict(),
   /** S7 agent/skill catalog: one definition or import of one row (persona and skill text are never recorded, only their digests). */
   z.object({ kind: z.literal('agent-catalog'), item: z.enum(['agent', 'skill']), action: z.enum(['define', 'import']), id: identitySchema, commandId: identitySchema,
     revision: counterSchema.positive(), contentDigest: digest, skillSetDigest: digest.nullable() }).strict(),
