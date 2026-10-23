@@ -8,8 +8,8 @@ export const MODEL_FIELDS = Object.freeze({
    * `doctor` warn. Display only: admission still refuses a retired model on its own day, whatever this says. */
   models: field('config.field.models', { state: 'bound', consumers: ['src/surfaces/core/cli-models'] }, 'live', z.object({
     retirementWarningDays: z.number().int().min(1).max(365).default(15),
-    /** S3-3 (design §10): the installation owner's switch for preview connection kinds (the subscription Brain through the person's own CLI)
-     * until isolation (S3-5) lands. Protected (AI floor); read from the user layer only; default off: the kind is refused typed. */
+    /** S3-3 (design §10) owner switch for the subscription Brain preview, retired by S3-5: the kind now connects wherever its isolation realm is
+     * usable and nothing reads this key. It still parses (alpha.54 configs hold it; the strict schema must accept them) and stays protected. */
     headless: z.object({ preview: z.boolean().default(false) }).strict().default({}),
   }).strict().default({})),
 });

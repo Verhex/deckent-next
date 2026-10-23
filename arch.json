@@ -313,7 +313,8 @@
         "src/surfaces/core/cli",
         "src/surfaces/core/cli-kit",
         "src/surfaces/core/config-window",
-        "src/surfaces/core/effect-confirmation"
+        "src/surfaces/core/effect-confirmation",
+        "src/composition/core/memory-rollout"
       ],
       "plan": "SURFACES"
     },
@@ -1639,6 +1640,7 @@
         "src/adapters/core/provider-anthropic-messages",
         "src/adapters/core/provider-connect",
         "src/adapters/core/provider-openai-chat",
+        "src/adapters/core/shell-sandbox-bwrap",
         "src/adapters/core/workspace-read",
         "src/composition/core/config",
         "src/composition/core/model-activation",
@@ -1804,7 +1806,9 @@
         "src/adapters/core/provider-decision-http",
         "src/adapters/core/workspace-read",
         "src/composition/core/secrets",
-        "src/adapters/core/native-cli-headless"
+        "src/adapters/core/native-cli-headless",
+        "src/adapters/core/shell-sandbox-bwrap",
+        "src/platform/core/host"
       ],
       "plan": "PROVIDERS"
     },
@@ -2672,7 +2676,9 @@
         "src/composition/core/model-activation",
         "src/composition/core/model-invocation",
         "src/engine/core/policy",
-        "src/composition/core/agent-catalog"
+        "src/composition/core/agent-catalog",
+        "src/platform/core/managed-files",
+        "src/adapters/core/brain-wait-store"
       ],
       "plan": "MONITOR"
     },
@@ -2776,7 +2782,8 @@
         "src/adapters/core/contract",
         "src/platform/core/errors",
         "src/composition/core/model-invocation",
-        "src/engine/core/model-invocation"
+        "src/engine/core/model-invocation",
+        "src/composition/core/memory-rollout"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -3166,7 +3173,9 @@
         "src/engine/core/model-activation",
         "src/adapters/core/sqlite-model-activation",
         "src/composition/core/toolchains",
-        "src/composition/core/memory"
+        "src/composition/core/memory",
+        "src/platform/core/managed-files",
+        "src/adapters/core/brain-wait-store"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -3641,7 +3650,8 @@
         "src/engine/core/provider-spend",
         "src/domain/core/model-invocation",
         "src/engine/core/model-activation",
-        "src/engine/core/dispatch"
+        "src/engine/core/dispatch",
+        "src/platform/core/config-fields"
       ],
       "plan": "MEMORY"
     },
@@ -3695,6 +3705,25 @@
         "src/engine/core/run-proposal",
         "src/adapters/core/audit-store",
         "src/platform/core/errors"
+      ],
+      "plan": "MEMORY"
+    },
+    "src/composition/core/memory-rollout": {
+      "dependencies": [
+        "src/engine/core/memory",
+        "src/engine/core/audit",
+        "src/adapters/core/memory-journal-store",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/sqlite-model-activation",
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/platform/core/clock",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/domain/core/principal",
+        "src/platform/core/host"
       ],
       "plan": "MEMORY"
     },
@@ -3876,10 +3905,12 @@
     },
     "src/adapters/core/native-cli-headless": {
       "dependencies": [
+        "src/adapters/core/host-shell",
         "src/adapters/core/native-cli-registry",
         "src/adapters/core/native-connection",
         "src/adapters/core/process-runner",
         "src/adapters/core/setup-detect-execution",
+        "src/adapters/core/shell-sandbox-bwrap",
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog",
@@ -3931,6 +3962,14 @@
         "src/adapters/core/sqlite-ledger"
       ],
       "plan": "LEARNING"
+    },
+    "src/adapters/core/brain-wait-store": {
+      "dependencies": [
+        "src/domain/core/run",
+        "src/domain/core/command",
+        "src/platform/core/integrity"
+      ],
+      "plan": "M5-D5 Brain ve Auditor"
     }
   },
   "composition": {
@@ -4043,6 +4082,7 @@
       "memory",
       "memory-automation",
       "memory-review",
+      "memory-rollout",
       "assignment",
       "agents",
       "agentsign",
@@ -4211,6 +4251,14 @@
       }
     ],
     "invariants": [
+      {
+        "file": "src/adapters/core/native-connection/internal/egress.ts",
+        "symbol": "tunnelNativeConnect",
+        "values": [
+          "HTTP/1.1 200 Connection Established"
+        ],
+        "reason": "HTTP CONNECT success response (RFC 9110 section 9.3.6: any 2xx turns the connection into a tunnel); a protocol constant of the worker and headless egress gateway, moved from gateway.ts with the shared tunnel (S3-5). Not an operator policy."
+      },
       {
         "file": "src/adapters/core/shell-sandbox-bwrap/internal/arguments.ts",
         "symbol": "BUBBLEWRAP_ARGUMENT_MAX_BYTES",

@@ -30,6 +30,8 @@ export const nativeCliCapabilitiesSchema = z.object({
 }).strict().readonly();
 export type NativeCliCapabilities = z.infer<typeof nativeCliCapabilitiesSchema>;
 const positive = z.number().int().positive().safe(), names = z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/)).readonly(), words = z.array(argument).readonly();
+/** Proxy variables are read in both spellings (`HTTPS_PROXY`, `https_proxy`). */
+const proxyNames = z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/)).readonly();
 /** S3 headless model step (HEADLESS-0, 2026-10-23): one tool-less, MCP-less turn of the unmodified CLI. Argv, environment, guard expectations and
  * bounds are data; a forbidden flag (fallback model, bare mode, permission bypass, extra config) can never be part of the argv. */
 export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), revision: argument, source: argument,
@@ -50,8 +52,14 @@ export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), r
     lengthStopReasons: words, loginErrors: words, creditsErrors: words, loginStatuses: z.array(positive).readonly(), quotaStatuses: z.array(positive).readonly() }).strict().readonly(),
   limits: z.object({ stdinMaxBytes: positive, maxLineBytes: positive, stderrMaxBytes: positive, preflightTimeoutMs: positive, preflightOutputBytes: positive,
     killGraceMs: positive, responseFramingBytes: positive }).strict().readonly(),
+  /** S3-5: the realm every spawn runs in (bubblewrap): the POSIX shell that sets the process limits, the gateway socket's path inside the realm,
+   * the in-realm proxy the CLI is pointed at, the login-dir entries the CLI keeps seeing (every other existing one is masked) and the bounds. */
+  isolation: z.object({ source: argument, shell: z.string().startsWith('/'), socketPath: z.string().regex(/^\/run\/[a-z][a-z0-9.-]*\.sock$/),
+    proxy: z.object({ host: z.literal('127.0.0.1'), port: z.number().int().min(1024).max(65535), env: proxyNames.refine(value => value.length > 0), clear: proxyNames }).strict().readonly(),
+    configVisible: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/).refine(value => value !== '.' && value !== '..')).readonly(), configVisibleSource: argument,
+    configMaxEntries: positive, limits: z.object({ tmpfsBytes: positive, fileSizeBlocks: positive, fileSizeBlocksSource: argument, openFiles: positive }).strict().readonly() }).strict().readonly(),
 }).strict().refine(value => {
-  const built = [...Object.keys(value.env.fixed), ...value.env.runDir, value.env.configDir];
+  const built = [...Object.keys(value.env.fixed), ...value.env.runDir, value.env.configDir, ...value.isolation.proxy.env, ...value.isolation.proxy.clear];
   return new Set(built).size === built.length && !built.some(name => value.env.deny.includes(name))
     && !value.args.some(arg => value.forbiddenFlags.some(forbidden => arg === forbidden || arg.startsWith(forbidden + '=')));
 }).readonly();
@@ -77,10 +85,11 @@ export function nativeCliCommand(provider: z.infer<typeof nativeCliIdSchema>) {
   return registry.adapters[parsed.data]!;
 }
 
-/** The CLI whose event stream is `protocolFamily` and that declares a headless model step; selected by data, never by a CLI name. */
+/** The CLI whose event stream is `protocolFamily` and that declares a headless model step; selected by data, never by a CLI name. `id` is its
+ * registry key (S3-5: the native provider whose gateway destinations its isolated network may reach). */
 export function nativeCliHeadless(protocolFamily: string) {
-  const found = Object.values(registry.adapters).filter(command => command.headless && command.capabilities.eventStream === protocolFamily);
-  return found.length === 1 ? { command: found[0]!, headless: found[0]!.headless! } : null;
+  const found = Object.entries(registry.adapters).filter(([, command]) => command.headless && command.capabilities.eventStream === protocolFamily);
+  return found.length === 1 ? { id: found[0]![0], command: found[0]![1], headless: found[0]![1].headless! } : null;
 }
 /** Generic registry interpolation only; the compiler and binding guard share the exact argv segment. */
 export function nativeEffortArgs(capability: NativeCliCapabilities['reasoningEffort'], input: WorkerEffort): readonly string[] {

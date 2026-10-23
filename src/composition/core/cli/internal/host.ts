@@ -9,6 +9,7 @@ import { readHeadlessLogins, unifiedDiff, readInstallationProfileFile, isSelfSou
 import { settledProviderCacheUsage } from '#engine/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, configuredConfigChoiceSources } from '#composition/core/config/index.js';
+import { inspectConfiguredMemoryRollout } from '#composition/core/memory-rollout/index.js';
 import { inspectConfiguredWorkerTranscript, inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { inspectConfiguredMemory, listConfiguredMemory, searchConfiguredMemory, proposeConfiguredMemory, verifyConfiguredMemory, retireConfiguredMemory, inspectConfiguredMemoryEvaluators,
   reviewConfiguredMemory, listConfiguredMemorySource, purgeConfiguredMemory, resolveConfiguredMemoryContest, countConfiguredMemoryPurgesPending } from '#composition/core/memory/index.js';
@@ -59,6 +60,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision, listDecisions: listConfiguredDecisions, listAgents: listConfiguredAgents, inspectAgent: inspectConfiguredAgent, listSkills: listConfiguredSkills, inspectSkill: inspectConfiguredSkill, defineAgent: defineConfiguredAgent, defineSkill: defineConfiguredSkill, inspectAgentStats: inspectConfiguredAgentStats, importSkill: importConfiguredSkill, listSigners: listConfiguredSigners, enrolSigner: enrolConfiguredSigner, addSigner: addConfiguredSigner, revokeSigner: revokeConfiguredSigner, repairSigners: repairConfiguredSigners, listSuggestions: listConfiguredSuggestions, inspectSuggestion: inspectConfiguredSuggestion, changeStanding: changeConfiguredStanding, dismissSuggestion: dismissConfiguredSuggestion, bulkStanding: bulkConfiguredStanding, listRevokedPromotions: listConfiguredRevokedPromotions, draftSuggestion: draftConfiguredSuggestion, defineFromSuggestion: defineConfiguredFromSuggestion,
     listMemory: listConfiguredMemory, searchMemory: searchConfiguredMemory, inspectMemory: inspectConfiguredMemory, proposeMemory: proposeConfiguredMemory, verifyMemory: verifyConfiguredMemory, retireMemory: retireConfiguredMemory, inspectMemoryEvaluators: inspectConfiguredMemoryEvaluators,
     reviewMemory: reviewConfiguredMemory, listMemorySource: listConfiguredMemorySource, purgeMemory: purgeConfiguredMemory, resolveMemoryContest: resolveConfiguredMemoryContest,
+    inspectMemoryRollout: inspectConfiguredMemoryRollout,
     countMemoryPurgesPending: countConfiguredMemoryPurgesPending,
     ...configuredTargetQueueTerminal(root),
     deliverWorkspaceIntegration: delivery.deliver,

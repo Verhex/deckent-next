@@ -117,5 +117,8 @@ export interface MonitorPorts {
   /** Whether the answering service started with the restart-apply configuration this target has now; absent: not reported. */
   readConfigFreshness?(target: MonitorTarget, descriptor: RuntimeServiceDescriptor): Promise<'current' | 'stale' | 'unknown'>;
   readImageRefresh?(target: MonitorTarget): Promise<Readonly<{ status: 'updating' | 'current' | 'failed' | 'unknown'; reason: string | null; imageVersion: string | null }>>;
+  /** f4: the install's active Brain quota waits (host state, before any Run exists); the application shows only those of scopes the viewer
+   * may read, as it does Runs. Absent: not read. `truncated`: more were stored than the store's bound reads. */
+  readBrainWaits?(target: MonitorTarget): Promise<Readonly<{ records: readonly import('#domain/index.js').BrainQuotaWaitRecord[]; truncated: boolean }>>;
   now(): number;
 }

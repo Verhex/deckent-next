@@ -43,8 +43,9 @@ const kindSchema = z.object({
   /** `models connect`: adapter, chat path and seed (seed null: bounded endpoint model discovery or an already declared exact reference).
    * Connect null: the kind stores a key but cannot bind a model. */
   connect: z.object({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).nullable(),
-    /** S3-3 (CLI kinds only): the CLI's event-stream family, a person-only connection (never an AI/MCP actor) and an owner-enabled preview. */
-    protocolFamily: z.string().min(1).max(64).optional(), personOnly: z.boolean().default(false), preview: z.boolean().default(false),
+    /** S3-3 (CLI kinds only): the CLI's event-stream family and a person-only connection (never an AI/MCP actor). S3-5: no preview switch — the
+     * adapter connects only where its isolation realm is usable, on every installation alike. */
+    protocolFamily: z.string().min(1).max(64).optional(), personOnly: z.boolean().default(false),
     seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
     /** Optional provider counter on the same endpoint origin; only Anthropic exposes this connection path here. */
     tokenCountPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).optional(),

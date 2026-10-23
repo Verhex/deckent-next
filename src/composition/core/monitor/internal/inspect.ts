@@ -1,7 +1,7 @@
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { resolve } from 'node:path';
-import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
-import { indexMonitorInstall, listSurfaceRunIds, prepareMonitorInstall, stampMonitorInstall, followLedgerSurface as readLedgerSurface } from '#adapters/index.js';
+import { SystemTrustedClock, inspectProductDirectory, ManagedFileError, type ConfigLoadOptions } from '#platform/index.js';
+import { FileBrainQuotaWaitStore, indexMonitorInstall, listSurfaceRunIds, prepareMonitorInstall, stampMonitorInstall, followLedgerSurface as readLedgerSurface } from '#adapters/index.js';
 import { MonitorApplication, monitorQuerySchema, authorizeApproval, runtimeConfigFreshness, PoolControlPolicyAuthorization, assertPoolControlAllowed, MonitorSourceMemo, monitorScopeDiagnosticsAllowed, type SurfaceNotInitialized, type MonitorQuery, type MonitorSnapshot, type MonitorRecall } from '#engine/index.js';
 import { inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
@@ -44,6 +44,10 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
   return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
     readConfigFreshness: async (target, descriptor) => runtimeConfigFreshness(descriptor.configDigest, await loadComposedConfig(target.path, { ...options, heal: false }) as unknown as Record<string, unknown>),
     readImageRefresh: target => inspectToolchainRefresh(target.path, options),
+    // f4: active Brain quota waits (state/brain-waits) of this install; the reader creates nothing, a missing store is no wait.
+    readBrainWaits: async target => { const layout = (await installed(target.path)).config.productLayout;
+      return new FileBrainQuotaWaitStore(async () => inspectProductDirectory(layout, 'brainWaits').catch((error: unknown) => {
+        if (error instanceof ManagedFileError && error.code === 'MANAGED_FILE_MISSING') return null; throw error; }), () => new SystemTrustedClock().sample().wallMs).list(); },
     describeService: target => createConfiguredRuntimeClient(target.path, options).describeService(undefined, 'current'),
     indexLedger: async target => indexMonitorInstall((await installed(target.path)).config),
     // M-VIS: allowed when the viewer's `pool inspect` decision allows in any admitted or own configured scope (same decision as `pool status`).

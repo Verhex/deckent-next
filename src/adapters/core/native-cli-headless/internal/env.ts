@@ -6,13 +6,16 @@ import { refuse } from './contract.js';
 export type HeadlessEntry = NonNullable<ReturnType<typeof nativeCliHeadless>>;
 /**
  * The one environment of every headless spawn (preflight probes and the call): built from registry names, never inherited. HOME and TMPDIR
- * are the connection's emptied run dir (HEADLESS-0: the login survives), the config-dir name points at the person's CLI config directory.
+ * are the connection's emptied run dir (HEADLESS-0: the login survives), the config-dir name points at the person's CLI config directory, and
+ * the proxy names point at the realm's relay (S3-5: its network namespace has no other way out); no-proxy names are empty.
  * A deny name can never be present (credential overrides outrank the subscription login in print mode).
  */
 export function buildHeadlessEnv(headless: NativeCliHeadless, runDir: string, configDir: string): Readonly<Record<string, string>> {
-  const env: Record<string, string> = { ...headless.env.fixed };
+  const env: Record<string, string> = { ...headless.env.fixed }, { proxy } = headless.isolation;
   for (const name of headless.env.runDir) env[name] = runDir;
   env[headless.env.configDir] = configDir;
+  for (const name of proxy.env) env[name] = `http://${proxy.host}:${proxy.port}`;
+  for (const name of proxy.clear) env[name] = '';
   if (Object.keys(env).some(name => headless.env.deny.includes(name))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'environment' });
   return Object.freeze(env);
 }
@@ -21,11 +24,12 @@ export function headlessRequiredFlags({ command, headless }: HeadlessEntry): rea
   return [...new Set([...headless.args.filter(arg => arg.startsWith('--')), command.modelFlag, headless.systemPromptFlag,
     ...(command.capabilities.maxTurns ? [command.capabilities.maxTurns.flag] : []), ...(command.capabilities.reasoningEffort?.requiredFlags ?? [])])];
 }
-/** The argv shape this release sends (flags, bounds, env names): sealed in the preflight record and every response. */
+/** The argv shape this release sends (flags, bounds, env names, the realm's shape): sealed in the preflight record and every response. */
 export function headlessFlagSetDigest(entry: HeadlessEntry): string {
   const { headless } = entry;
   return createHash('sha256').update(JSON.stringify({ revision: headless.revision, args: headless.args, maxTurns: headless.maxTurns, flags: headlessRequiredFlags(entry),
-    forbidden: headless.forbiddenFlags, env: { fixed: headless.env.fixed, runDir: headless.env.runDir, configDir: headless.env.configDir } })).digest('hex');
+    forbidden: headless.forbiddenFlags, env: { fixed: headless.env.fixed, runDir: headless.env.runDir, configDir: headless.env.configDir },
+    isolation: { ...headless.isolation, source: undefined, configVisibleSource: undefined } })).digest('hex');
 }
 /** The call argv: no prompt and no secret (system prompt by 0600 file, user message by stdin); a forbidden flag or alias refuses. */
 export function headlessArgv({ command, headless }: HeadlessEntry, runDir: string, model: string, effortArgs: readonly string[]): readonly string[] {

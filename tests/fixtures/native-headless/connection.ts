@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseModelBindingDefinition, parseModelInvocationProfile, type ModelInvocationDelta } from '#domain/index.js';
 import { createNativeCliHeadlessPort, NATIVE_CLI_HEADLESS_ADAPTER } from '#adapters/core/native-cli-headless/index.js';
+import type { BubblewrapCapability } from '#adapters/index.js';
+import { measureTestShellHost } from '../shell-host.js';
 import { FAMILY, PINNED, writeFakeCli, type FakeScenario, type FakeStep } from './stream.js';
 
 const roots: string[] = [];
@@ -15,10 +17,14 @@ export const binding = parseModelBindingDefinition({ encodingVersion: 1, provide
 export const request = (over: Record<string, unknown> = {}) => ({ model: PINNED, messages: [{ role: 'system', content: 'You are a planner. Answer only JSON.' },
   { role: 'user', content: PROMPT }], max_completion_tokens: 1000, stream: false, ...over });
 type Logged = { mode: string; argv: string[]; env: Record<string, string>; cwd: string; stdin?: string; system?: string; systemMode?: number; entries?: string[] };
-/** A fresh connection: private state dir, a config dir of this uid, a scripted fake CLI; profile v2 subscription. */
-export async function connection(scenario: Omit<FakeScenario, 'logPath'> = {}, definitionOver: Record<string, unknown> = {}, bindingDigest = 'a'.repeat(64)) {
+/** S3-5: this host's measured bubblewrap launcher, realized under a temporary state root (never the owner's global one). */
+export const testIsolation = async (): Promise<BubblewrapCapability> => (await measureTestShellHost()).bubblewrap;
+/** A fresh connection: private state dir, a config dir of this uid, a scripted fake CLI; profile v2 subscription. The fake logs into the CLI's own
+ * state file in the login dir (S3-5: the only place the isolated CLI may write). */
+export async function connection(scenario: Omit<FakeScenario, 'logPath'> = {}, definitionOver: Record<string, unknown> = {}, bindingDigest = 'a'.repeat(64),
+  isolation: () => Promise<BubblewrapCapability> = testIsolation) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'deckent-headless-'))); roots.push(root);
-  const configDir = join(root, 'config'), bin = join(root, 'bin'), logPath = join(root, 'calls.jsonl');
+  const configDir = join(root, 'config'), bin = join(root, 'bin'), logPath = join(configDir, '.claude.json');
   await mkdir(configDir, { mode: 0o700 }); await mkdir(bin);
   const write = (next: Omit<FakeScenario, 'logPath'>) => writeFakeCli(bin, { initCwd: 'actual', ...next, logPath });
   const executable = await write(scenario);
@@ -27,7 +33,7 @@ export async function connection(scenario: Omit<FakeScenario, 'logPath'> = {}, d
     protocol: { family: FAMILY, version: 'v1' }, adapter: { ...NATIVE_CLI_HEADLESS_ADAPTER, definition: { schemaVersion: 1, executable, configDir,
       stateDir: join(root, 'state'), ownerUid: process.getuid!(), minCliVersion: '9.0.0', delegatedUse: null, ...definitionOver } },
     allocation: { id: 'allocation', maxCalls: null, maxInFlight: 1 }, limits: { requestMaxBytes: 65_536, responseMaxBytes: 65_536, timeoutMs: 5000 } });
-  const port = createNativeCliHeadlessPort({ now: () => 1 });
+  const port = createNativeCliHeadlessPort({ now: () => 1, isolation });
   const log = async (): Promise<Logged[]> => existsSync(logPath) ? (await readFile(logPath, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as Logged) : [];
   const call = async (steps: readonly FakeStep[] | null = null, over: Record<string, unknown> = {}, signal?: AbortSignal, deltas?: ModelInvocationDelta[]) => {
     if (steps) await write({ ...scenario, steps });

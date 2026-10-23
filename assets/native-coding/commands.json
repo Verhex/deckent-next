@@ -328,6 +328,16 @@
           "preflightOutputBytes": 262144,
           "killGraceMs": 3000,
           "responseFramingBytes": 65536
+        },
+        "isolation": {
+          "source": "bubblewrap 0.13.0 bwrap.xml (the bundled locked build's own manual source, read 2026-10-23): --unshare-all, --unshare-user, --disable-userns (requires --unshare-user), --die-with-parent, --proc, --dev, --size + --tmpfs, --perms, --ro-bind, --ro-bind-try, --bind, --chdir. No --share-net: the network namespace stays empty and only the gateway socket leads out. No --new-session: the runner's detached spawn already starts a session without a controlling terminal, and the process group must reach the CLI so SIGINT ends the turn first. S3-5 lane.",
+          "shell": "/bin/sh",
+          "socketPath": "/run/deckent-egress.sock",
+          "proxy": { "host": "127.0.0.1", "port": 18080, "env": ["HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"], "clear": ["NO_PROXY", "no_proxy"] },
+          "configVisible": [".claude.json", ".claude.json.backup", ".credentials.json", ".oauth_refresh.lock", ".oauth_refresh.lock.owner"],
+          "configVisibleSource": "S3-5 lane 2026-10-23 from CLI 2.1.309 strings (no run): the CLI keeps its state file and login in the config dir, writes them through a sibling temporary file + rename and refreshes the login under a lock beside them. Every other existing entry of the login dir is masked (a directory becomes empty private memory, a file unreadable). Unmeasured against the real CLI until the lead's acceptance run.",
+          "configMaxEntries": 4096,
+          "limits": { "tmpfsBytes": 67108864, "fileSizeBlocks": 131072, "fileSizeBlocksSource": "POSIX ulimit -f counts 512-byte blocks (dash; bash in POSIX mode): 131072 blocks = 64 MiB, the largest file the isolated CLI may write", "openFiles": 1024 }
         }
       }
     },

@@ -127,7 +127,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    * admitting principal may not read. */
   z.object({ kind: z.literal('memory-context'), runId: identitySchema, taskId: identitySchema, mode: z.enum(MEMORY_CONTEXT_RECORD_MODES), delivered: z.boolean(),
     entries: z.array(z.object({ entryId: identitySchema, revision: counterSchema.positive(), contentDigest: digest, basis: z.enum(['human-review', 'independent-evaluation']) }).strict())
-      .min(1).max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), partDigest: digest, withheld: counterSchema }).strict(),
+      .min(1).max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), partDigest: digest, withheld: counterSchema, /** S4B-7: whether the part fit the prompt (sealed in both modes). */ fit: z.boolean().optional() }).strict(),
   /** S4B-6 (§7.2, §9): the memory block of one Brain planning request, sealed before the first prompt leaves the machine (`shadow`: computed,
    * never sent). `runId` is the Brain's Run id, `contextDigest` the planning context digest the stored proposal's contribution carries: the event
    * of a plan that was then refused stays (the effect may have happened) and is recognised by a digest no stored proposal names. Keyed digests

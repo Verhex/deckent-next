@@ -543,6 +543,22 @@
     "agentstats.config.section": {
       "before": "Agent catalog aggregation (protected; no AI may change it): mode turns on the pass that records agent and skill statistics from sealed metrics (off, shadow records only, on records only in this release); overlay replaces registry rule rows or lowers its bounds.",
       "after": "Agent catalog aggregation (protected; no AI may change it): mode turns on the pass that records agent and skill statistics and sealed suggestions from sealed metrics (off; shadow: suggestions as evidence only, no card or narrowing; on: suggestions for cards, narrowing only on calibrated rules); the pass writes only signed by the aggregator's own key; overlay replaces registry rule rows or lowers its bounds."
+    },
+    "config.field.models": {
+      "before": "Model display settings: how many days before a switched-on model's retirement `deckent models` and doctor warn",
+      "after": "Model settings: how many days before a switched-on model's retirement `deckent models` and doctor warn, and headless.preview — the installation owner's switch (user layer only, default off) for preview connection kinds such as the subscription Brain through the person's own CLI"
+    },
+    "tui.provider.kind.claudeCliSubscription": {
+      "before": "Claude subscription (your own claude CLI, preview)",
+      "after": "Claude subscription (your own claude CLI, isolated)"
+    },
+    "headless.help.connect": {
+      "before": "Subscription Brain (claude-cli-subscription, preview, owner only): no key and no address; the\nconnected CLI uses your own Claude login. [--executable <abs path>] (default: first in PATH)\n[--config-dir <abs dir>] (default: ~/.claude) [--delegate none|ai|system|ai,system] (who besides\nyou may use it; absent keeps your earlier choice). The installation owner first sets\nmodels.headless.preview=true on the user layer.",
+      "after": "Subscription Brain (claude-cli-subscription, owner only): no key and no address; the connected\nCLI uses your own Claude login and runs isolated (bubblewrap: only its login dir, no other files,\nnetwork to the provider only). [--executable <abs path>] (default: first in PATH)\n[--config-dir <abs dir>] (default: ~/.claude) [--delegate none|ai|system|ai,system] (who besides\nyou may use it; absent keeps your earlier choice). Without usable bubblewrap it is refused."
+    },
+    "error.HEADLESS_KIND_UNAVAILABLE": {
+      "before": "The subscription Brain is not available on this installation. It is a preview for the owner's own installation until isolation lands: the owner turns it on with the installation setting `models.headless.preview` (user layer). Nothing was changed.",
+      "after": null
     }
   },
   "tr": {
@@ -1321,6 +1337,22 @@
     "agentstats.config.section": {
       "before": "Ajan kataloğu toplaması (korumalı; hiçbir AI değiştiremez): mode mühürlü metriklerden ajan ve skill istatistiği kaydeden geçişi açar (off kapalı, shadow yalnız kayıt, on bu sürümde yalnız kayıt); overlay registry kural satırlarını değiştirir ya da sınırlarını yalnız düşürür.",
       "after": "Ajan kataloğu toplaması (korumalı; hiçbir AI değiştiremez): mode mühürlü metriklerden ajan ve skill istatistiği ile mühürlü öneri kaydeden geçişi açar (off kapalı; shadow öneriler yalnız kanıt, kart ve daraltma yok; on öneriler kart için, daraltma yalnız ölçümle onaylanmış kurallarda); geçiş yalnız toplayıcının kendi anahtarıyla imzalayarak yazar; overlay registry kural satırlarını değiştirir ya da sınırlarını yalnız düşürür."
+    },
+    "config.field.models": {
+      "before": "Model gösterim ayarları: açık bir modelin emekliliğinden kaç gün önce `deckent models` ve doctor uyarır",
+      "after": "Model ayarları: açık bir modelin emekliliğinden kaç gün önce `deckent models` ve doctor uyarır; headless.preview — kişinin kendi CLI'ı üzerinden abonelik Brain'i gibi önizleme bağlantı türleri için kurulum sahibinin anahtarı (yalnız kullanıcı katmanı, varsayılan kapalı)"
+    },
+    "tui.provider.kind.claudeCliSubscription": {
+      "before": "Claude aboneliği (kendi claude CLI'niz, önizleme)",
+      "after": "Claude aboneliği (kendi claude CLI'ınız, yalıtılmış)"
+    },
+    "headless.help.connect": {
+      "before": "Abonelik Brain'i (claude-cli-subscription, önizleme, yalnız sahip): anahtar ve adres yok;\nbağlanan CLI kendi Claude girişinizi kullanır. [--executable <mutlak yol>] (varsayılan: PATH'te ilk)\n[--config-dir <mutlak dizin>] (varsayılan: ~/.claude) [--delegate none|ai|system|ai,system] (sizin\ndışınızda kimin kullanabileceği; verilmezse önceki seçiminiz kalır). Kurulum sahibi önce kullanıcı\nkatmanında models.headless.preview=true ayarlar.",
+      "after": "Abonelik Brain'i (claude-cli-subscription, yalnız sahip): anahtar ve adres yok; bağlanan CLI\nkendi Claude girişinizi kullanır ve yalıtılmış çalışır (bubblewrap: yalnız giriş dizini, başka dosya\nyok, ağ yalnız sağlayıcıya). [--executable <mutlak yol>] (varsayılan: PATH'te ilk)\n[--config-dir <mutlak dizin>] (varsayılan: ~/.claude) [--delegate none|ai|system|ai,system] (sizin\ndışınızda kimin kullanabileceği; verilmezse önceki seçiminiz kalır). Kullanılabilir bubblewrap yoksa reddedilir."
+    },
+    "error.HEADLESS_KIND_UNAVAILABLE": {
+      "before": "Abonelik Brain'i bu kurulumda kullanılamıyor. Yalıtım inene kadar yalnız sahibin kendi kurulumu için önizlemedir: sahip onu kullanıcı katmanındaki `models.headless.preview` kurulum ayarıyla açar. Hiçbir şey değiştirilmedi.",
+      "after": null
     }
   }
 }

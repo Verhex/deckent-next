@@ -24,7 +24,8 @@ const OFF: MemoryContextHook = Object.freeze({ wrap: (inner: RunAdmissionContext
  * S4B-5 (S4B-DESIGN rev 4 §7.1, §7.3; owner S-M6/S-M8/S-M9): verified memory into the worker prompt, frozen at Run admission. Before the
  * admission resolves its execution, one read as the admitting principal selects each work-input task's part (its WorkClass family and risk from
  * the installation registry, the Run's work target, the task's words); after every task compiled and before the Run is created, one
- * `memory-context` event per task with a part is sealed (keyed digests only). `shadow` seals what would be sent and sends nothing; `on` sends
+ * `memory-context` event per task with a part is sealed (keyed digests only; S4B-7: with whether the part fit the prompt, in both modes, the
+ * rollout's overflow measure). `shadow` seals what would be sent and sends nothing; `on` sends
  * the part when the prompt has room (otherwise it is left out with a warning, never another part and never the Run). A failed read or seal
  * holds the Run (`MEMORY_CONTEXT_HELD`); a policy refusal or an unreadable source is a visible warning. A replayed admission never reaches this.
  */
@@ -48,12 +49,12 @@ export function prepareMemoryContext(context: ScopeContext, sealing: { readonly 
     const audit = new AuditApplication(sealing.audit, sealing.integrity);
     for (const task of parts.values()) {
       if (!task.part || !task.partDigest || !fits.has(task.taskId)) continue; // a task the compiler never built (no native prompt) carries nothing
-      const delivered = mode === 'on' && fits.get(task.taskId) === true;
+      const fit = fits.get(task.taskId) === true, delivered = mode === 'on' && fit;
       if (mode === 'on' && !delivered) notes.push({ code: 'MEMORY_CONTEXT_WITHHELD', taskId: task.taskId, reason: 'budget', count: task.entries.length });
       try {
         audit.record({ schemaVersion: 1, eventId: randomUUID(), scopeId: admitted.scopeId, principal: { issuer: principal.issuer, subject: principal.subject }, policyRevision,
           atMs: clock.sample().wallMs, subject: { kind: 'memory-context', runId: admitted.runId, taskId: task.taskId, mode, delivered,
-            entries: task.entries.map(row => ({ ...row })), partDigest: task.partDigest, withheld: task.withheld } });
+            entries: task.entries.map(row => ({ ...row })), partDigest: task.partDigest, withheld: task.withheld, fit } });
       } catch (error) { throw hold('seal', error); }
     }
   };

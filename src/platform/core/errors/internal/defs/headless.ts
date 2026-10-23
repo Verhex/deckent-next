@@ -12,6 +12,15 @@ const preflight = (p: Params, l: Locale) => {
     default: return t('error.HEADLESS_PREFLIGHT_FAILED', p, l);
   }
 };
+/** S3-5: why the isolation realm is not usable selects the sentence (no usable bubblewrap, a restricted user namespace, a realm or gateway that did not start). */
+const isolation = (p: Params, l: Locale) => {
+  switch (p['check']) {
+    case 'user-namespace': return t('error.HEADLESS_ISOLATION_UNAVAILABLE.user-namespace', p, l);
+    case 'realm': return t('error.HEADLESS_ISOLATION_UNAVAILABLE.realm', p, l);
+    case 'gateway': return t('error.HEADLESS_ISOLATION_UNAVAILABLE.gateway', p, l);
+    default: return t('error.HEADLESS_ISOLATION_UNAVAILABLE', p, l);
+  }
+};
 /** Error codes owned by the `headless` family (S3 subscription Brain through the person's own CLI; i18n `locales/<locale>/headless.json`). */
 export const headlessErrors: ErrorDefinitions = Object.freeze({
   HEADLESS_CLI_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_CLI_UNAVAILABLE', p, l) }) },
@@ -19,9 +28,9 @@ export const headlessErrors: ErrorDefinitions = Object.freeze({
   HEADLESS_PREFLIGHT_FAILED: { category: 'error', render: (p, l) => ({ message: preflight(p, l) }) },
   HEADLESS_LOGIN_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_LOGIN_REQUIRED', p, l) }) },
   HEADLESS_REQUEST_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_REQUEST_INVALID', p, l) }) },
+  HEADLESS_ISOLATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: isolation(p, l) }) },
   HEADLESS_DELEGATION_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_DELEGATION_REFUSED', p, l) }) },
   HEADLESS_PERSON_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_PERSON_REQUIRED', p, l) }) },
-  HEADLESS_KIND_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_KIND_UNAVAILABLE', p, l) }) },
   HEADLESS_GUARD_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_GUARD_FAILED', p, l) }) },
   HEADLESS_CREDITS_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_CREDITS_REQUIRED', p, l) }) },
   // S9 card texts reused read-only: a known reset time names when to ask again. f3: a Brain plan whose reset is within brain_planner.quotaWait waits

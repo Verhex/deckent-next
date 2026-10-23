@@ -3,8 +3,8 @@ import { createOpenRouterOpenAiPricedNative, OpenRouterPricingError, PROVIDER_CO
 import { modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
 import { ProviderSpendError, providerSpendLocalZeroTariff, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
-import { createNativeCliHeadlessPort, isNativeCliHeadlessAdapter } from '#adapters/index.js';
-import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
+import { createNativeCliHeadlessPort, isNativeCliHeadlessAdapter, shellSandboxCapabilities } from '#adapters/index.js';
+import { globalStateRoot, type ConfigLoadOptions, type TrustedClock } from '#platform/index.js';
 import { admitInvocationCredential, scopedInvocationCredentialResolver } from './credential.js';
 import { createCatalogTariffLookup } from './catalog-tariff.js';
 import type { loadInvocationContext } from './context.js';
@@ -19,6 +19,8 @@ const installationCacheSalt = (context: InvocationNativeContext, scopeId: string
 /** One invocation-scoped registry owns the exact OpenRouter native/quote pair. Metadata acquisition is unauthenticated and completes before pure preparation; credential resolution remains send-only. Tariff acquisition, preparation, quote and send read one trusted clock: the host wall may step backwards between them (I40), and the platform floor, not raw Date.now, keeps them ordered within this process. */
 export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock, readOnly = false) {
   const now = () => clock.sample().wallMs;
+  // S3-5: the headless CLI runs in the bubblewrap realm this environment's service measured (launcher under its global state root).
+  const isolation = async () => (await shellSandboxCapabilities(globalStateRoot(options.env ?? process.env))).bubblewrap;
   const catalogTariff = createCatalogTariffLookup(async () => openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }));
   // The scope's ledger account wins (governed create/revision, stage 1); a configured budget alone opens the first account; neither: unavailable.
   const budgetFor = async (scopeId: string) => {
@@ -43,7 +45,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
     resolve(profileInput: ModelInvocationProfile): ModelInvocationNativePort | null {
       const profile = modelInvocationProfileSchema.parse(profileInput);
       // S3-2: the person's own CLI login as one tool-less turn; an older release resolves this adapter id to null (MODEL_INVOCATION_UNAVAILABLE).
-      if (isNativeCliHeadlessAdapter(profile.adapter)) return createNativeCliHeadlessPort({ now });
+      if (isNativeCliHeadlessAdapter(profile.adapter)) return createNativeCliHeadlessPort({ now, isolation });
       if(profile.adapter.id===decisionHttpAdapter.id&&profile.adapter.version===decisionHttpAdapter.version){
         const definition=parseDecisionHttpDefinition(profile.adapter.definition); return createDecisionHttpNativePort({resolveCredential:scopedInvocationCredentialResolver(context,profile,definition.authentication,options)});
       }
@@ -74,7 +76,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
     // PRE-8 v2 credential-source decision: for the headless CLI it is the preflight (version, flags, login kind; no model call), typed and before
     // any claim; read-only views never spawn it.
     admit: async (profile: ModelInvocationProfile, signal?: AbortSignal) => isNativeCliHeadlessAdapter(profile.adapter)
-      ? readOnly ? undefined : createNativeCliHeadlessPort({ now }).preflight(profile, signal) : admitInvocationCredential(context, profile, options),
+      ? readOnly ? undefined : createNativeCliHeadlessPort({ now, isolation }).preflight(profile, signal) : admitInvocationCredential(context, profile, options),
     async acquire(input: { readonly profile: ModelInvocationProfile; readonly definition: ModelBindingDefinition; readonly native: ModelInvocationNativePort }, signal?: AbortSignal): Promise<void> {
       const openaiDefinition = isOpenAiChatHttpAdapter(input.profile.adapter) ? parseOpenAiChatHttpDefinition(input.profile.adapter.definition) : null;
       const metadataTariff = openaiDefinition?.tariff.kind === 'openrouter-endpoint' ? openaiDefinition.tariff : null;

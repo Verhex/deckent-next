@@ -44,16 +44,22 @@ export function createTerminalRuntimeClient(project: string, options: ConfigLoad
   const argv = [process.execPath, resolve('tests/fixtures/approval-terminal-client.mjs'), project, JSON.stringify(options)];
   const child = spawn('python3', ['-c', DRIVER, JSON.stringify(argv)], { env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
   const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: unknown) => void; args: unknown[]; clear: () => void }>();
-  let ready!: (peer: LocalPeerIdentity) => void;
-  const peer = new Promise<LocalPeerIdentity>(resolve => { ready = resolve; });
+  let ready!: (peer: LocalPeerIdentity) => void, unready!: (error: Error) => void, started = false;
+  const peer = new Promise<LocalPeerIdentity>((resolve, reject) => { ready = resolve; unready = reject; });
   const connection = new AbortController();
   let alive = true;
   let next = 0, stderr = '';
   child.stderr.on('data', chunk => { stderr = (stderr + String(chunk)).slice(-8000); });
-  child.on('exit', () => { alive = false; connection.abort(); for (const item of pending.values()) { item.clear(); item.reject(new Error(stderr || 'terminal peer exited')); } pending.clear(); });
+  // A peer that exits before it is ready (most often: no `dist/` build for the fixture to import) fails its caller at once with the child's
+  // stderr, instead of leaving the awaited peer pending until the test timeout.
+  // A peer that is never awaited stays quiet; every awaiting caller still sees the refusal.
+  peer.catch(() => undefined);
+  child.on('close', () => { if (!started) unready(new Error(`terminal peer exited before it was ready (the fixture imports dist/: run npm run build first): ${stderr || 'no output'}`)); });
+  child.on('exit', () => { alive = false; connection.abort();
+    for (const item of pending.values()) { item.clear(); item.reject(new Error(stderr || 'terminal peer exited')); } pending.clear(); });
   createInterface({ input: child.stdout }).on('line', line => {
     const value = JSON.parse(line) as { ready?: { pid: number; uid: number; gid: number }; id: number; event?: unknown; index?: number; result?: unknown; error?: { code?: string; params?: Record<string, unknown>; message: string } };
-    if (value.ready) { ready({ ...value.ready, assurance: 'linux-so-peercred', connection: connection.signal, isConnectionActive: () => alive }); return; }
+    if (value.ready) { started = true; ready({ ...value.ready, assurance: 'linux-so-peercred', connection: connection.signal, isConnectionActive: () => alive }); return; }
     const item = pending.get(value.id); if (!item) return;
     if ('event' in value) { (item.args[value.index!] as (event: unknown) => void)(value.event); return; }
     pending.delete(value.id); item.clear();

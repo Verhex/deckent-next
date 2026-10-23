@@ -37,4 +37,6 @@ export const memoryErrors: ErrorDefinitions = Object.freeze({
   MEMORY_PERSON_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_PERSON_REQUIRED', p, l) }) },
   MEMORY_CONTEST_RESOLVED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_CONTEST_RESOLVED', p, l) }) },
   MEMORY_PURGE_INVOCATION_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_PURGE_INVOCATION_REFUSED', p, l) }) },
+  // S4B-7 (texts in the `memory-rollout` family): a protected live switch whose measured exit criteria do not hold is not written.
+  MEMORY_ROLLOUT_CRITERIA_UNMET: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_ROLLOUT_CRITERIA_UNMET', p, l), suggestion: t('memory.held.next.MEMORY_ROLLOUT_CRITERIA_UNMET', p, l) }) },
 });

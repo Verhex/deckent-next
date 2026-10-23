@@ -161,6 +161,22 @@ describe('restore safety (N31): the journal outlives a restored ledger and is re
   });
 });
 
+describe('f4 item 5: a torn journal tail is cut before the next append', () => {
+  it('a torn write, then another purge appends a whole line: every line parses, list and replay read both records, never held', async () => {
+    const f = await fixture(), app = f.app(), first = (await app.propose(proposal('m1'))).entry, second = (await app.propose(proposal('m2', { ...secret, title: 'İkinci', body: 'İkinci kayıt.' }))).entry;
+    await app.purge({ schemaVersion: 1, commandId: 'x1', scopeId: 's', entryId: first.entryId, expectedRevision: 1, reasonCode: 'other' });
+    const whole = await readFile(f.journalFile, 'utf8');
+    await appendFile(f.journalFile, '{"record":{"purgeId":"torn');
+    await app.purge({ schemaVersion: 1, commandId: 'x2', scopeId: 's', entryId: second.entryId, expectedRevision: 1, reasonCode: 'other' });
+    const text = await readFile(f.journalFile, 'utf8'), lines = text.split('\n');
+    expect(text.startsWith(whole)).toBe(true); expect(text.endsWith('\n')).toBe(true); expect(text).not.toContain('"torn');
+    expect(lines.filter(Boolean)).toHaveLength(2); for (const line of lines.filter(Boolean)) expect(() => JSON.parse(line) as unknown).not.toThrow();
+    expect(await f.journal.list()).toHaveLength(2);
+    expect(await app.list({ schemaVersion: 1, scopeId: 's', limit: 10 })).toMatchObject({ status: 'ok' });
+    expect(await app.replayPurges('s')).toMatchObject({ records: 2 });
+  });
+});
+
 describe('review card, source lists and contest resolution', () => {
   it('withheld system entries are only counted on the review and the source list; a person\'s candidate is shown with its evidence', async () => {
     const f = await fixture(), app = f.app(), writer = f.app(distiller);

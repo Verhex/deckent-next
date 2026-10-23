@@ -141,6 +141,9 @@ export interface MonitorInstall {
   readonly diagnostics: readonly string[];
   /** MONITOR v1.1 map: what feeds what in this install — config layers, execution registry, model catalog, policy, memory. */
   readonly map?: MonitorMap | null;
+  /** f4 (additive): Brain planning commands waiting for a subscription quota reset, before any Run exists — only of scopes the viewer may read
+   * (the same scope decision as Runs), oldest first. Absent: none, or not read. */
+  readonly brainWaits?: readonly import('#domain/index.js').BrainQuotaWaitRecord[];
 }
 export interface MonitorMap {
   /** Config layers in precedence order with the top-level sections each one actually sets (no values: secrets never appear). */

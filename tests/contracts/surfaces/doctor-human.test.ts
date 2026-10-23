@@ -122,6 +122,14 @@ describe('doctor rows (pure)', () => {
       .toBe('Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent ai, system');
     for (const value of [[], null, undefined]) expect(doctorChecks(report, facts({ headlessLogins: value }), 'en').some(row => row.id === 'work.brainLogin')).toBe(false);
   });
+  it('S3-5 "Brain girişi" names the isolation realm of the last passing check, or that the realm closed the channel', () => {
+    const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', consent: [], isolation: { launcher: 'bundled', version: '0.13.0' } },
+      { state: 'closed' as const, authMethod: null, subscriptionType: null, configDir: '/home/p/.claude', consent: [], isolation: 'unavailable' as const }];
+    expect(doctorChecks(report, facts({ headlessLogins: logins }), 'en').filter(row => row.id === 'work.brainLogin').map(row => [row.state, row.text])).toEqual([
+      ['ok', 'Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent none (you only); isolated by bubblewrap 0.13.0 (bundled)'],
+      ['warning', 'Brain login: -, directory /home/p/.claude, channel closed, consent none (you only); isolation unavailable (no usable bubblewrap: see the sandbox rows)']]);
+    expect(doctorChecks(report, facts({ headlessLogins: logins.slice(0, 1) }), 'tr').find(row => row.id === 'work.brainLogin')?.text).toContain('bubblewrap 0.13.0 (bundled) ile yalıtılmış');
+  });
   it('tool rows: stale offers the update fix, not-admitted and offline are "not tested" in words (no raw status code)', () => {
     const toolchains = { mode: 'report', registryEndpoint: 'https://registry.npmjs.org', providers: [
       { provider: 'claude', status: 'stale', admitted: [], latest: { version: '2.9.0' } }, { provider: 'codex', status: 'not-admitted', admitted: [], latest: null },
