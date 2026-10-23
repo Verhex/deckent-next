@@ -39,10 +39,32 @@ function catalogTariff<T extends Tariff>(schema: z.ZodType<T, z.ZodTypeDef, unkn
   const term = row && 'connect' in row.model ? row.model.connect?.tariff : undefined;
   if (term === undefined) return null;
   const parsed = schema.safeParse(structuredClone(term));
-  if (!parsed.success || parsed.data.modelId !== nativeId || (endpoint !== undefined && (parsed.data as { endpoint?: unknown }).endpoint !== endpoint)) {
+  if (!parsed.success || parsed.data.modelId !== nativeId || (endpoint !== undefined && (parsed.data as { endpoint?: unknown }).endpoint !== endpoint)
+    || !displayAgrees(row!.model, (parsed.data as { usdPerMTok?: Readonly<Record<string, string>> }).usdPerMTok)) {
     throw new ProviderConnectError('MODEL_CONNECT_TARIFF_UNVERIFIED');
   }
   return { ...parsed.data, source: { ...parsed.data.source, catalog: { channelId: row!.channelId, modelRevision: row!.modelRevision } } } as T;
+}
+/** Exact decimal equality of two non-negative decimal strings (`12` = `12.0`, `0.3` = `0.30`). */
+const sameDecimal = (left: string, right: string) => {
+  const canonical = (value: string) => { const [whole = '0', fraction = ''] = value.split('.'); return `${BigInt(whole)}.${fraction.replace(/0+$/u, '')}`; };
+  return /^\d+(\.\d+)?$/u.test(left) && /^\d+(\.\d+)?$/u.test(right) && canonical(left) === canonical(right);
+};
+/**
+ * Lead 2026-10-23: the rates a row displays (`pricing`, what a person is shown) and the tariff that bills (`connect.tariff`) never disagree:
+ * input, output and cache read are compared exactly where the row displays them (the tariff's base rates; cache read is the adapter's
+ * `cacheRead` or `cachedInput`).
+ */
+function displayAgrees(model: CatalogModel, rates: Readonly<Record<string, string>> | undefined): boolean {
+  const pricing = 'pricing' in model ? model.pricing : undefined;
+  if (!pricing) return true;
+  const pairs: [string | undefined, string | undefined][] = [[pricing.inputPerMTok, rates?.['input']], [pricing.outputPerMTok, rates?.['output']],
+    [pricing.cacheReadPerMTok, rates?.['cacheRead'] ?? rates?.['cachedInput']]];
+  return pairs.every(([shown, billed]) => shown === undefined || (billed !== undefined && sameDecimal(shown, billed)));
+}
+/** Terms a row carries that this adapter cannot use are refused, never ignored (lead 2026-10-23). */
+function refuseUnusedTerm(row: ConnectCatalogRow | null | undefined, term: 'tariff' | 'route'): void {
+  if (row && 'connect' in row.model && row.model.connect?.[term] !== undefined) throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID');
 }
 /** A row's `connect.route` for exactly this model, parsed by the registry's own route schema (the model id is the row's). */
 function catalogRoute<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, row: ConnectCatalogRow | null | undefined, nativeId: string): T | undefined {
@@ -86,6 +108,7 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
   const secure = endpointMayCarryKey(input.endpoint); // G2-7: the one key rule; plain http (loopback too) is `authentication: none`
   if (connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID) {
     if (!secure || input.credentialRef === null) throw new ProviderConnectError('MODEL_CONNECT_KEY_INSECURE');
+    refuseUnusedTerm(input.catalog, 'route');
     const tariff = firstTariff(anthropicPublishedTariff(input.nativeId), catalogTariff(anthropicTariffSchema, input.catalog, input.nativeId));
     const capability = anthropicModelCapability(input.nativeId);
     // A model without a shipped capability row keeps the catalog's output bound and the request shape every model accepts (no effort, no thinking).
@@ -103,6 +126,7 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
   const metadata = connect.metadataPricing;
   const pricedRoute = metadata && (metadata.routes.find(row => row.modelId === input.nativeId) ?? catalogRoute(providerMetadataRouteSchema, input.catalog, input.nativeId));
   if (metadata) {
+    refuseUnusedTerm(input.catalog, 'tariff'); // the price is the provider's live endpoint metadata, never a catalog tariff
     if (!pricedRoute || input.currency !== 'USD' || new URL(pricedRoute.sourceUrl).origin !== new URL(input.endpoint).origin) throw new ProviderConnectError('MODEL_CONNECT_TARIFF_UNVERIFIED');
     if (!secure || input.credentialRef === null) throw new ProviderConnectError('MODEL_CONNECT_KEY_INSECURE');
     const metadataEndpoint = new URL(`/api/v1/models/${input.nativeId.split('/').map(encodeURIComponent).join('/')}/endpoints`, input.endpoint).href;

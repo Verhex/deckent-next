@@ -30,12 +30,14 @@ const localRegistry = parseProviderConnectRegistry({ ...PROVIDER_CONNECT_REGISTR
     key: { required: true, secretName: 'DECKENT_OPENAI_KEY' }, connect: { adapter: 'openai-chat-http', chatPath: '/v1/chat/completions', seed: 'openai-api',
       dialect: { tokenLimitField: 'max_completion_tokens', streamUsage: 'include', toolChoice: ['auto', 'none', 'required'] } } }] });
 /** The seed's channel with its first row copied under each new exact id (and its `connect` terms): the document a person registers with `--file`. */
-async function document(seed: string, rows: readonly [string, Record<string, unknown> | undefined][]) {
+async function document(seed: string, rows: readonly [string, Record<string, unknown> | undefined, Record<string, unknown>?][]) {
   const value = structuredClone(await readProviderConnectSeed(seed)) as unknown as { providers: { models: Record<string, unknown>[] }[] } & Record<string, unknown>;
   const provider = value.providers[0]!, template = provider.models[0]!;
   delete value['recommendedActivations'];
-  return { ...value, revision: `${seed}-synthetic-2026-10-23`, providers: [{ ...provider, models: rows.map(([nativeId, connect]) => ({ ...template, id: nativeId, nativeId,
-    channelModelId: nativeId, canonicalModelId: nativeId, displayName: nativeId, ...(connect ? { connect } : {}) })) }] };
+  return { ...value, revision: `${seed}-synthetic-2026-10-23`, providers: [{ ...provider, models: rows.map(([nativeId, connect, rates]) => ({ ...template, id: nativeId, nativeId,
+    channelModelId: nativeId, canonicalModelId: nativeId, displayName: nativeId, ...(connect ? { connect } : {}),
+    // The displayed rates are the new model's own (the template's would be another model's price).
+    pricing: { ...Object.fromEntries(Object.entries(template['pricing'] as object).filter(([key]) => !key.endsWith('PerMTok'))), ...rates } })) }] };
 }
 async function harness(noServer: boolean) {
   const f = await runtime({ extraGrants: grants, noServer });
@@ -55,7 +57,7 @@ describe.skipIf(process.platform !== 'linux')('models.connect from a registered 
   it('a new Anthropic model connects with the price its row states (sealed to the row); a row without terms is refused before any write', async () => {
     const f = await harness(true);
     // The person's path, through the built `deckent` binary: `models catalog register --file`, then `models connect --model`.
-    await writeFile(join(f.project, 'synthetic.json'), JSON.stringify(await document('anthropic-api', [[FABLE, { tariff: fableTariff }], [UNPRICED, undefined]])));
+    await writeFile(join(f.project, 'synthetic.json'), JSON.stringify(await document('anthropic-api', [[FABLE, { tariff: fableTariff }, { inputPerMTok: '12', outputPerMTok: '60', cacheReadPerMTok: '0.3' }], [UNPRICED, undefined]])));
     const deckent = (...args: string[]) => promisify(execFile)(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), ...args],
       { cwd: f.project, env: f.options.env as NodeJS.ProcessEnv });
     await deckent('models', 'catalog', 'register', '--scope', 'scope', '--file', 'synthetic.json', '--command-id', 'register-fable', '--json');

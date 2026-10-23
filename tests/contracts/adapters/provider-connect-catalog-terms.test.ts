@@ -25,12 +25,14 @@ const responsesRoute = { path: '/v1/responses', dialect: { tokenLimitField: 'max
   source: { url: 'https://developers.openai.com/api/docs/models/gpt-sol-7-test', observedOn: '2026-10-23' } };
 const routerRoute = { endpointTag: 'openai', tokenLimitField: 'max_tokens', sourceUrl: `https://openrouter.ai/api/v1/models/${ROUTED}/endpoints`, observedOn: '2026-10-23' };
 
+const rateless = (pricing: Record<string, unknown>) => Object.fromEntries(Object.entries(pricing).filter(([key]) => !key.endsWith('PerMTok')));
 /** A synthetic catalog v3 document: the seed's channel with one seed row copied under a new exact id, plus the given `connect` terms. */
 async function synthetic(seed: string, nativeId: string, connect?: Record<string, unknown>, pricing?: Record<string, unknown>): Promise<ProviderCatalogDocument> {
   const document = structuredClone(await readProviderConnectSeed(seed)) as unknown as { providers: { models: Record<string, unknown>[] }[] } & Record<string, unknown>;
   const provider = document.providers[0]!, template = provider.models[0]!;
   const model = { ...template, id: nativeId.replace(/[^a-z0-9-]/gu, '-'), nativeId, channelModelId: nativeId, canonicalModelId: nativeId, displayName: nativeId,
-    ...(pricing ? { pricing: { ...(template['pricing'] as object), ...pricing } } : {}), ...(connect ? { connect } : {}) };
+    // The copied row's display rates are the template model's: drop them, so only the rates a test states are shown.
+    pricing: { ...rateless(template['pricing'] as Record<string, unknown>), ...pricing }, ...(connect ? { connect } : {}) };
   delete document['recommendedActivations'];
   return parseProviderCatalogDocument({ ...document, revision: `${seed}-synthetic-2026-10-23`, providers: [{ ...provider, models: [model] }] });
 }
@@ -194,6 +196,26 @@ describe('catalog v3 connect terms', () => {
 });
 
 describe('catalog v3 connect terms: security review M4', () => {
+  it('a row whose display pricing disagrees with its connect tariff, or that carries a term its adapter cannot use, is refused (negative)', async () => {
+    const anthropic = providerConnectKind('anthropic-api')!, openai = providerConnectKind('openai-api')!, router = providerConnectKind('openrouter')!;
+    const messages = 'https://api.anthropic.com/v1/messages', chat = 'https://api.openai.com/v1/chat/completions';
+    // Lead 2026-10-23: the row's display pricing (what a person is shown) must state the same input/output/cache-read rates as the tariff that bills.
+    for (const pricing of [{ inputPerMTok: '11' }, { outputPerMTok: '61' }, { cacheReadPerMTok: '0.31' }]) {
+      const row = rowOf(await synthetic('anthropic-api', FABLE, { tariff: fableTariff }, pricing), FABLE);
+      expect(() => connectionAdapter(anthropic, input(messages, FABLE, 'DECKENT_ANTHROPIC_KEY', row)), JSON.stringify(pricing)).toThrow('MODEL_CONNECT_TARIFF_UNVERIFIED');
+    }
+    const sol = rowOf(await synthetic('openai-api', SOL, { tariff: solTariff(chat) }, { cacheReadPerMTok: '0.25' }), SOL);
+    expect(() => connectionAdapter(openai, input(chat, SOL, 'DECKENT_OPENAI_KEY', sol))).toThrow('MODEL_CONNECT_TARIFF_UNVERIFIED');
+    // Equal values in another decimal spelling agree; absent display fields are not compared.
+    const agreeing = rowOf(await synthetic('anthropic-api', FABLE, { tariff: fableTariff }, { inputPerMTok: '12.0', outputPerMTok: '60', cacheReadPerMTok: '0.30' }), FABLE);
+    expect(connectionAdapter(anthropic, input(messages, FABLE, 'DECKENT_ANTHROPIC_KEY', agreeing)).tariff).toBe('published');
+    // Terms the adapter cannot use are refused, never ignored: a route on an Anthropic row, a tariff on an OpenRouter row.
+    const routed = rowOf(await synthetic('anthropic-api', FABLE, { tariff: fableTariff, route: responsesRoute }), FABLE);
+    expect(() => connectionAdapter(anthropic, input(messages, FABLE, 'DECKENT_ANTHROPIC_KEY', routed))).toThrow('MODEL_CONNECT_DEFINITION_INVALID');
+    const priced = rowOf(await synthetic('openrouter-api', ROUTED, { route: routerRoute, tariff: solTariff('https://openrouter.ai/api/v1/chat/completions') }), ROUTED);
+    expect(() => connectionAdapter(router, input('https://openrouter.ai/api/v1/chat/completions', ROUTED, 'DECKENT_OPENROUTER_KEY', priced))).toThrow('MODEL_CONNECT_DEFINITION_INVALID');
+  });
+
   it('a catalog route can never move the request, or its key, to another origin (negative)', async () => {
     const openai = providerConnectKind('openai-api')!, chat = 'https://api.openai.com/v1/chat/completions';
     const send = vi.spyOn(http, 'sendNativeJsonHttp');
