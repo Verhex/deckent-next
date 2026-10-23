@@ -1,6 +1,6 @@
 # AI floor compliance / AI yetki tabanı uyumu
 
-ai-floor: routes=266 floor=188 policy=1596 steps=48 uyumlu=1644 İHLAL=0
+ai-floor: routes=269 floor=188 policy=1614 steps=48 uyumlu=1662 İHLAL=0
 
 Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.
 
@@ -15,6 +15,24 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 
 | Kind / id / action | Family | Context | Expected | Actual | Verdict | Reason |
 |---|---|---|---|---|---|---|
+| agent-catalog / fixture-target / define | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| agent-catalog / fixture-target / define | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / define | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / define | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / define | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / define | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / import | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| agent-catalog / fixture-target / import | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / import | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / import | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / import | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / import | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / inspect | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| agent-catalog / fixture-target / inspect | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / inspect | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / inspect | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / inspect | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| agent-catalog / fixture-target / inspect | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | agent-tool / fixture-target / invoke | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
 | agent-tool / fixture-target / invoke | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | agent-tool / fixture-target / invoke | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -1685,7 +1703,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/schema.ts`: `7ee507ceee1166b0f2fada5ad67e334ab5c883b47ad7a16f4ec3f0665220df9c`
 - `src/domain/core/policy/internal/scope.ts`: `7515bab07e7ee92d03be12c0a8710f72d6973419ca53a79fdeff61a84a496da4`
 - `src/domain/core/policy/internal/standing.ts`: `bb3b4f7c301474d2df1f690d85f3b1ea7219fbfe6f90af8b8d680017bb50d5db`
-- `src/domain/core/policy/internal/vocabulary.ts`: `4c6bd3d9daf7b4fb7ec78097d47a73b62586fbedbba517b8a758ac207a493a6f`
+- `src/domain/core/policy/internal/vocabulary.ts`: `7aac0c5202a18b00304cfc01939e6146027e1cdfeeafc9645d0136be6945e1bb`
 - `src/domain/core/primitives/index.ts`: `afa5a6e9acc3b73c157054ae1607652478b464a9da45b3ce27a46a6ec86e72a0`
 - `src/domain/core/primitives/internal/command-id.ts`: `69a16b34a9225fe7c8bb1047e9b9e99d03fd71573baf2281bfa8e870e1a219c9`
 - `src/domain/core/primitives/internal/hidden-paths.ts`: `0f7e83b0231ee7deaf9487bb1bdc8e6f7f27fd6cb914bae341a59462596f2916`
