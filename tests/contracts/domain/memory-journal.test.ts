@@ -38,17 +38,19 @@ describe('memory entry lifecycle', () => {
     for (const actor of [mcp, workload]) expect(() => verifyMemoryEntry(propose(), { actor, atMs: 20, basis: { kind: 'human-review', note: 'self' } }))
       .toThrow(expect.objectContaining({ code: 'MEMORY_VERIFIER_NOT_HUMAN' }));
   });
-  it('an independent evaluation verifies only when it passed, is bound to this content and is not by the author', () => {
-    const record = { kind: 'task-evaluation', id: 'r1/t1/a1', digest: 'b'.repeat(64) };
-    const evaluation = { record, evaluator: { issuer: 'deckent-evaluator', subject: 'process-exit' }, verdict: 'pass' as const, subjectDigest: digest };
-    const ok = verifyMemoryEntry(propose(mcp), { actor: mcp, atMs: 30, basis: { kind: 'independent-evaluation', record }, evaluation });
+  it('an independent evaluation verifies only when it passed, is bound to this content and is not by the author (S4B-3: an AI actor only as the evaluator)', () => {
+    const record = { kind: 'task-evaluation', id: 'r1/t1/a1', digest: 'b'.repeat(64) }, sourceModels = [{ channelId: 'c1', modelId: 'm1', maker: 'maker-a' }];
+    const evaluation = { record, evaluator: { issuer: 'deckent-evaluator', subject: 'process-exit' }, verdict: 'pass' as const, subjectDigest: digest, mode: 'live' as const,
+      evaluatorModel: { channelId: 'c2', modelId: 'm2', maker: 'maker-b' }, sourceModels };
+    const ok = verifyMemoryEntry(propose(mcp), { actor: human, atMs: 30, basis: { kind: 'independent-evaluation', record }, evaluation, sourceModels });
     expect(ok.verification).toEqual({ basis: 'independent-evaluation', evaluator: evaluation.evaluator, record, verifiedAtMs: 30 });
-    const refuse = (patch: object, code: string) => expect(() => verifyMemoryEntry(propose(mcp), { actor: mcp, atMs: 30, basis: { kind: 'independent-evaluation', record },
-      evaluation: { ...evaluation, ...patch } as never })).toThrow(expect.objectContaining({ code }));
+    const refuse = (patch: object, code: string, actor: typeof human | typeof mcp = human) => expect(() => verifyMemoryEntry(propose(mcp), { actor, atMs: 30,
+      basis: { kind: 'independent-evaluation', record }, evaluation: { ...evaluation, ...patch } as never, sourceModels })).toThrow(expect.objectContaining({ code }));
     refuse({ verdict: 'unknown' }, 'MEMORY_EVALUATION_NOT_PASSED');
     refuse({ subjectDigest: 'c'.repeat(64) }, 'MEMORY_EVALUATION_OTHER_CONTENT');
     refuse({ evaluator: { issuer: mcp.issuer, subject: mcp.subject } }, 'MEMORY_SELF_VERIFICATION');
     refuse({ record: { ...record, id: 'other' } }, 'MEMORY_EVALUATION_OTHER_CONTENT');
+    refuse({}, 'MEMORY_EVALUATOR_REQUIRED', mcp);
     expect(() => verifyMemoryEntry(propose(), { actor: human, atMs: 30, basis: { kind: 'independent-evaluation', record } }))
       .toThrow(expect.objectContaining({ code: 'MEMORY_EVALUATION_UNAVAILABLE' }));
   });

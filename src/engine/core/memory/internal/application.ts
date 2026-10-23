@@ -6,6 +6,7 @@ import { memoryProposeCommandSchema, memoryVerifyCommandSchema, memoryRetireComm
   memoryExtractCommandSchema, MemoryJournalError, type MemoryAction, type MemoryHeld, type MemoryInspection, type MemoryJournalDependencies, type MemoryJournalStore, type MemoryListing,
   type MemoryMutationResult, type MemorySearchResult, type MemorySupport, type MemoryDistilOutcome } from './contract.js';
 import { distilSource } from './distil.js';
+import { rederiveMemorySourceModels } from './evaluate.js';
 
 const DEFAULT_STATES: readonly MemoryState[] = Object.freeze(['candidate', 'verified']);
 const held = (error: unknown): MemoryHeld => ({ schemaVersion: 1, status: 'held',
@@ -149,9 +150,11 @@ export class MemoryJournalApplication {
   }
   async verify(input: unknown, credential?: unknown): Promise<MemoryMutationResult> {
     const command = memoryVerifyCommandSchema.parse(input), { principal, authorization } = await this.admit('verify', command.scopeId, credential);
-    return this.mutate('verify', command, principal, authorization.revision, command.entryId, command.expectedRevision, async previous => {
+    return this.mutate('verify', command, principal, authorization.revision, command.entryId, command.expectedRevision, async (previous, store) => {
       const evaluation = command.basis.kind === 'independent-evaluation' ? await this.deps.resolveEvaluation?.(command.scopeId, command.basis.record) ?? null : null;
-      return verifyMemoryEntry(previous!, { actor: principal, atMs: this.deps.now(), basis: command.basis, evaluation });
+      // S4B-3 §6.3: independence binds to the sealed Runs, re-derived here at the transition (never taken from the record or the support rows).
+      const sources = evaluation ? await rederiveMemorySourceModels(store, this.deps.evaluationSources, composeMemoryAutomation(this.deps.automation), previous!) : null;
+      return verifyMemoryEntry(previous!, { actor: principal, atMs: this.deps.now(), basis: command.basis, evaluation, sourceModels: sources?.models ?? null });
     });
   }
   async retire(input: unknown, credential?: unknown): Promise<MemoryMutationResult> {

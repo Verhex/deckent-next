@@ -66,11 +66,15 @@ export type MemoryEvaluationRef = z.infer<typeof memoryEvaluationRefSchema>;
 export type MemoryVerificationBasis = z.infer<typeof memoryVerificationBasisSchema>;
 export type MemoryEntry = z.infer<typeof memoryEntrySchema>;
 export type MemoryState = MemoryEntry['state'];
-/** An evaluation the engine resolved for an `independent-evaluation` basis: who evaluated, the verdict and the content digest it judged. */
+/** An evaluation the engine resolved for an `independent-evaluation` basis: who evaluated, the verdict and the content digest it judged; S4B-3:
+ * its mode (a `shadow` record is never a basis) and the models it names (the evaluator's, and the source models it judged independent of). */
 export interface MemoryResolvedEvaluation { readonly record: MemoryEvaluationRef; readonly evaluator: { readonly issuer: string; readonly subject: string };
-  readonly verdict: 'pass' | 'fail' | 'unknown'; readonly subjectDigest: string }
+  readonly verdict: 'pass' | 'fail' | 'unknown'; readonly subjectDigest: string; readonly mode: 'shadow' | 'live';
+  readonly evaluatorModel: { readonly channelId: string; readonly modelId: string; readonly maker: string | null };
+  readonly sourceModels: readonly { readonly channelId: string; readonly modelId: string; readonly maker: string | null }[] }
 export type MemoryErrorCode = 'MEMORY_ENTRY_INVALID' | 'MEMORY_TRANSITION_INVALID' | 'MEMORY_VERIFIER_NOT_HUMAN' | 'MEMORY_SELF_VERIFICATION'
-  | 'MEMORY_EVALUATION_UNAVAILABLE' | 'MEMORY_EVALUATION_NOT_PASSED' | 'MEMORY_EVALUATION_OTHER_CONTENT' | 'MEMORY_QUERY_INVALID' | 'MEMORY_AUTOMATION_INVALID';
+  | 'MEMORY_EVALUATION_UNAVAILABLE' | 'MEMORY_EVALUATION_NOT_PASSED' | 'MEMORY_EVALUATION_OTHER_CONTENT' | 'MEMORY_QUERY_INVALID' | 'MEMORY_AUTOMATION_INVALID'
+  | 'MEMORY_EVALUATION_NOT_INDEPENDENT' | 'MEMORY_EVALUATION_MAKER_UNKNOWN' | 'MEMORY_EVALUATOR_REQUIRED';
 export class MemoryError extends Error {
   constructor(readonly code: MemoryErrorCode) { super(code); this.name = 'MemoryError'; }
 }

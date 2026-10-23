@@ -3532,7 +3532,8 @@
       "dependencies": [
         "src/domain/core/primitives",
         "src/domain/core/principal",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "MEMORY"
     },
@@ -3552,7 +3553,8 @@
         "src/domain/core/task-graph",
         "src/domain/core/attempt",
         "src/domain/core/run",
-        "src/domain/core/task-evaluation"
+        "src/domain/core/task-evaluation",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "MEMORY"
     },

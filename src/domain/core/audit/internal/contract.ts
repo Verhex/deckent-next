@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { authorityDecisionSubjectSchema } from './authority-decision.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import limits from './limits.json' with { type: 'json' };
+/** S4B-3 memory evaluation record modes (the memory domain owns their meaning). */
+const MEMORY_EVALUATION_RECORD_MODES = Object.freeze(['shadow', 'live'] as const);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** The MCP registry scopes (the adapter's own list; the audit contract stays dependency-free). */
 const MCP_REGISTRY_SCOPES = ['managed', 'local', 'project', 'user'] as const;
@@ -101,6 +103,10 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('memory-journal'), action: z.union([z.literal('propose'), z.literal('verify'), z.literal('retire')]), entryId: identitySchema, commandId: identitySchema,
     revision: counterSchema.positive(), state: z.enum(['candidate', 'verified', 'retired']), contentDigest: digest,
     basis: z.enum(['human-review', 'independent-evaluation']).nullable() }).strict(),
+  /** S4B-3 (§9): one sealed evaluation record (shadow or live) and one contest it opened; digests and ids only, never candidate text. */
+  z.object({ kind: z.literal('memory-evaluation'), recordId: identitySchema, entryId: identitySchema, revision: counterSchema.positive(), mode: z.enum(MEMORY_EVALUATION_RECORD_MODES),
+    verdict: z.enum(['pass', 'fail', 'unknown']), recordDigest: digest, subjectDigest: digest }).strict(),
+  z.object({ kind: z.literal('memory-contest'), contestId: identitySchema, entryId: identitySchema, candidateEntryId: identitySchema, recordId: identitySchema }).strict(),
   /** S7 agent/skill catalog: one definition or import of one row (persona and skill text are never recorded, only their digests). */
   z.object({ kind: z.literal('agent-catalog'), item: z.enum(['agent', 'skill']), action: z.enum(['define', 'import']), id: identitySchema, commandId: identitySchema,
     revision: counterSchema.positive(), contentDigest: digest, skillSetDigest: digest.nullable() }).strict(),

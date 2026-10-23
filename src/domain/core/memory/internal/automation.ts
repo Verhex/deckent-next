@@ -16,9 +16,14 @@ const workClassRowSchema = z.object({ workClassId: identitySchema, retentionProf
   personalData: z.enum(['none', 'possible']), extraction: z.boolean() }).strict().readonly();
 const boundsSchema = z.object({ perAttempt: positive, perRun: positive, perScopePerDay: positive, supportPerEntry: positive, loopPage: positive }).strict();
 const contextSchema = z.object({ maxEntries: positive, maxBytes: positive, maxSourcesChecked: positive }).strict();
-const evaluationSchema = z.object({ perScopePerDay: positive, contestsPerScopePerDay: positive }).strict();
+/** S4B-3 (§6.2, §10, owner S-M5/S-M10): evaluator calls, contests, unknown answers (the circuit breaker) and settled spend (minor units of the
+ * scope's spend currency) per scope per UTC day; the answer's token and byte caps; how many verified titles are offered for conflicts. */
+const evaluationSchema = z.object({ perScopePerDay: positive, contestsPerScopePerDay: positive, unknownPerScopePerDay: positive, spendMinorUnitsPerScopePerDay: positive,
+  maxCompletionTokens: positive, outputMaxBytes: positive, conflictTitles: positive, conflictsMax: positive, reasonCodesMax: positive }).strict();
 const automationSchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']), bounds: boundsSchema.readonly(),
-  context: contextSchema.readonly(), evaluation: evaluationSchema.readonly(), workClasses: z.array(workClassRowSchema).max(256).readonly() }).strict().readonly();
+  context: contextSchema.readonly(), evaluation: evaluationSchema.readonly(),
+  /** The evaluator's answer vocabulary (versioned Core data; no overlay changes it). */ reasonCodes: z.array(identitySchema).min(1).max(32).readonly(),
+  workClasses: z.array(workClassRowSchema).max(256).readonly() }).strict().readonly();
 export const memoryAutomationOverlaySchema = z.object({ bounds: boundsSchema.partial().optional(), context: contextSchema.partial().optional(),
   evaluation: evaluationSchema.partial().optional(), workClasses: z.array(workClassRowSchema).max(256).readonly().optional() }).strict().readonly();
 export type MemoryAutomation = z.infer<typeof automationSchema>;
