@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { execFile } from 'node:child_process';
+import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import { PROVIDER_CONNECT_REGISTRY, parseProviderConnectRegistry, readProviderConnectSeed } from '#adapters/index.js';
 import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
 import { applyConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
@@ -48,8 +50,15 @@ const connect = (nativeId: string, commandId: string, connection = 'anthropic-ap
 describe.skipIf(process.platform !== 'linux')('models.connect from a registered catalog row', () => {
   it('a new Anthropic model connects with the price its row states (sealed to the row); a row without terms is refused before any write', async () => {
     const f = await harness(true);
-    await f.register(await document('anthropic-api', [[FABLE, { tariff: fableTariff }], [UNPRICED, undefined]]), 'register-fable');
-    const result = await connectConfiguredModel(f.project, connect(FABLE, 'connect-fable'), f.options);
+    // The person's path, through the built `deckent` binary: `models catalog register --file`, then `models connect --model`.
+    await writeFile(join(f.project, 'synthetic.json'), JSON.stringify(await document('anthropic-api', [[FABLE, { tariff: fableTariff }], [UNPRICED, undefined]])));
+    const deckent = (...args: string[]) => promisify(execFile)(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), ...args],
+      { cwd: f.project, env: f.options.env as NodeJS.ProcessEnv });
+    await deckent('models', 'catalog', 'register', '--scope', 'scope', '--file', 'synthetic.json', '--command-id', 'register-fable', '--json');
+    clearConfigCache();
+    const out = [(await deckent('models', 'connect', '--scope', 'scope', '--connection', 'anthropic-api', '--model', FABLE, '--command-id', 'connect-fable', '--json')).stdout];
+    clearConfigCache();
+    const result = JSON.parse(out.join('')) as Record<string, unknown>;
     const reference = { providerId: 'anthropic-api', providerVersion: 1, modelId: FABLE, modelVersion: 1 };
     expect(result).toMatchObject({ status: 'connected', reference, tariff: 'published', credentialRef: 'DECKENT_ANTHROPIC_KEY',
       steps: { catalog: 'skipped', declaration: 'written', profile: 'written', activation: 'written' } });
