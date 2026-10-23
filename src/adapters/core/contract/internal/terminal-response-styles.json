@@ -1,0 +1,8 @@
+{
+  "default": "standard",
+  "styles": {
+    "standard": null,
+    "concise": "Answer in as few words as the question allows: lead with the result, skip preamble and recaps, and add detail only when asked or when a risk needs it.",
+    "explanatory": "Explain your reasoning for the person: say why you chose an approach, name the alternatives you rejected and what each trades off, and define terms a newcomer may not know."
+  }
+}

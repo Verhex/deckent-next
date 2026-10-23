@@ -2,6 +2,7 @@ import { render, type Instance } from 'ink';
 import { createElement, type ReactElement } from 'react';
 import { WorklinePaletteProvider, type WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { createClipboardWriter, type ClipboardResult } from './clipboard.js';
 import { mainScreenOutput, mouseFilteredInput, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, osc52Copy, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 
 /** What the host decided before the view exists: the view receives it and renders from it. */
@@ -14,6 +15,8 @@ export interface TerminalHostContext {
   readonly wheel?: WheelSource;
   readonly pointer?: PointerSource;
   readonly copyText?: (text: string) => void;
+  /** T1 `/copy`: the clipboard request writer (OSC 52, tmux-wrapped, byte-capped); present on every real TTY, not only in the full window. */
+  readonly clipboard?: (text: string) => ClipboardResult;
 }
 
 export interface TerminalHostOptions {
@@ -49,7 +52,7 @@ export async function runTerminalHost(options: TerminalHostOptions): Promise<voi
   const realInput = stdin ?? process.stdin, mouse = fullscreen && realInput.isTTY === true ? mouseFilteredInput(realInput) : null;
   const mouseOff = () => { try { out.write(MOUSE_REPORTING_OFF); } catch { /* the terminal is gone */ } };
   const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
-    options.view({ fullscreen, transcriptExit,
+    options.view({ fullscreen, transcriptExit, ...(out.isTTY === true ? { clipboard: createClipboardWriter(out) } : {}),
       ...(mouse ? { wheel: mouse.wheel, pointer: mouse.pointer, copyText: (text: string) => { try { out.write(osc52Copy(text)); } catch { /* the terminal is gone */ } } } : {}) }));
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   // Full window: Ink's alternate screen (left on exit, as vim/htop/the Claude Code fullscreen renderer do) with incremental line updates.

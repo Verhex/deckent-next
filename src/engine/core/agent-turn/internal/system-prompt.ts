@@ -90,8 +90,11 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
   /** v7 TRUNCATED-TOOLCALL: the completion limit every round requests (`terminal.chat.maxCompletionTokens`); absent = not named. */
   readonly outputLimitTokens?: number | null;
   /** v10 NATIVE-BAGLAM: the turn's descriptive session snapshot (absent: no session block — a caller without one keeps the rest unchanged). */
-  readonly session?: AgentSessionSnapshot | null }): string {
-  const { projectRoot, layout, tools, scratch, network, model, mcp, language, shell, outputLimitTokens, session } = input;
+  readonly session?: AgentSessionSnapshot | null;
+  /** T6 (alpha.54): the person's configured response style (`terminal.responseStyle`); a null instruction (the default style) adds nothing, so the text and
+   * the request digest of a turn without a chosen style stay as they were. */
+  readonly responseStyle?: { readonly id: string; readonly instruction: string | null } | null }): string {
+  const { projectRoot, layout, tools, scratch, network, model, mcp, language, shell, outputLimitTokens, session, responseStyle } = input;
   const hosts = network ? (network.allowedHosts.length > NAMED_HOSTS_MAX ? `${network.allowedHosts.length} hosts` : network.allowedHosts.join(', ')) : '';
   const data = shown(projectRoot, layout.root);
   const named = (toolClass: AgentToolSpec['toolClass']) => tools.filter(tool => tool.toolClass === toolClass).map(tool => tool.name).join(', ');
@@ -148,6 +151,7 @@ export function renderAgentTurnSystemPrompt(input: { readonly projectRoot: strin
       + ` next part with edit_file (old_string = the current last lines)${offers('scratch_write') && offers('run_shell') ? ', or write the parts with scratch_write and'
       + ' join them with one run_shell command' : ''}.`] : []),
     '- Base your answer on what you have seen; say what you did not check.',
+    ...(responseStyle?.instruction ? [`- Response style (${responseStyle.id}, chosen by the person): ${responseStyle.instruction}`] : []),
     // v10: a live answer once carried the model's English reasoning (owner 2026-10-14); the answer is only what the person should read.
     '- Keep your reasoning out of the answer: think in your reasoning channel, and write only what the person should read.',
     `- Write every reply to the user in ${AGENT_TURN_REPLY_LANGUAGES[language]}.`);
