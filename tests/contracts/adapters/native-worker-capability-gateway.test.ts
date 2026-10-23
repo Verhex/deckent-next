@@ -32,7 +32,8 @@ const post = (socketPath: string, provider: string) => new Promise<void>((resolv
 const access = 'eyJhbGciOiJub25lIn0.' + Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url') + '.fixture-signature';
 it.for([
   ['claude', { claudeAiOauth: { accessToken: access, expiresAt: Date.now() + 3_600_000, scopes: ['user:inference'] } }, 'session-events', 'verified'],
-  ['codex', { auth_mode: 'chatgpt', tokens: { access_token: access, refresh_token: 'fixture-refresh', id_token: 'fixture-id' }, last_refresh: new Date().toISOString() }, 'none', 'unverified'],
+  // Codex: the client's own session log names the model (owner Q4 2026-10-23); the name equals the admitted exact id.
+  ['codex', { auth_mode: 'chatgpt', tokens: { access_token: access, refresh_token: 'fixture-refresh', id_token: 'fixture-id' }, last_refresh: new Date().toISOString() }, 'client-reported', 'client-reported'],
   // Cursor reports only a start name; this pin carries no catalog names, so the reported name is unrecorded: unverified (owner K1 2026-10-22).
   ['cursor', { accessToken: access }, 'session-start-name', 'unverified'],
 ] as const)('projects bound %s registry capabilities and host model-evidence custody through the real UNIX gateway', async ([provider, credential, evidenceCapability, status], context) => {
@@ -67,6 +68,22 @@ it.for([
   expect(connection.modelVerification()).toEqual({ status, admitted: 'fixture-model', observed: ['fixture-model'], unexpected, evidenceCapability: 'session-start-name' });
 });
 
+it('keeps the first session start for the host verdict: a later start cannot replace the reported model (alpha.54 CX)', async context => {
+  if (process.platform === 'win32') context.skip('NATIVE_CONNECTION_UNAVAILABLE: private UNIX gateway requires POSIX ownership and socket permissions');
+  const root = await mkdtemp(join(tmpdir(), 'dn-cap-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const connection = await openNativeConnection({ binding: { schemaVersion: 2 as const, provider: 'codex',
+    model: { channelId: 'codex-cli-subscription', modelId: 'fixture-model', auxiliaryModelIds: [] } }, directory: root,
+    credential: { tokens: { access_token: access, id_token: 'fixture-id' } }, deadlineMs: 10000 });
+  cleanups.push(connection.close);
+  await fetchBootstrap(connection.descriptor.socketPath);
+  const start = (sequence: number, model: string) => JSON.stringify({ schemaVersion: 1, sequence, atMs: sequence, kind: 'session.started', provider: 'codex', model, cliVersion: null });
+  const body = [start(1, 'other-model'), start(2, 'fixture-model'), ended.replace('"sequence":2', '"sequence":3')].join('\n') + '\n';
+  await new Promise<void>((resolve, reject) => {
+    const req = request({ socketPath: connection.descriptor.socketPath, path: '/events', method: 'POST', headers: { 'content-length': Buffer.byteLength(body) } }, response => { response.resume(); response.on('end', resolve); });
+    req.on('error', reject); req.end(body);
+  });
+  expect(connection.modelVerification()).toMatchObject({ status: 'client-reported-mismatch', unexpected: ['other-model'], evidenceCapability: 'client-reported' });
+});
 
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -180,5 +197,44 @@ else writeFileSync('/workspace/capture.json', JSON.stringify({ argv }));
       expect(probed).toEqual([JSON.stringify(discovery.hiddenProbes[0]!.args)]);
       await expect(readFile(join(workspace, 'capture.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     }
+  });
+  // Owner Q4 2026-10-23: inside the real container the bootstrap reads the Codex client's own session log under the worker HOME and the host
+  // seals a client-reported verdict; only the model and client version leave the container.
+  it.for([['fixture-model', 'client-reported', []], ['other-model', 'client-reported-mismatch', ['other-model']]] as const)(
+    'codex session log naming %s seals %s through the real pinned Docker worker', async ([logged, status, unexpected], context) => {
+    if (process.platform === 'win32') context.skip('NATIVE_CONNECTION_UNAVAILABLE: Docker bootstrap requires the POSIX private UNIX gateway');
+    if (!imageId) context.skip('DOCKER_TEST_IMAGE_UNAVAILABLE: pinned DECKENT_TEST_DOCKER_IMAGE fixture is not configured');
+    const root = await mkdtemp(join(tmpdir(), 'dn-codex-log-')); cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const workspace = join(root, 'work'); await mkdir(workspace);
+    const source = await readFile(new URL('../../../src/adapters/core/native-connection/internal/worker.ts', import.meta.url), 'utf8');
+    const artifact = await transform(source, { loader: 'ts', format: 'esm', target: 'node24' });
+    const bootstrapPath = join(root, 'bootstrap.mjs'); await writeFile(bootstrapPath, artifact.code, { mode: 0o600 });
+    const thread = '00000000-0000-4000-8000-000000000001';
+    const fake = `#!/usr/bin/env node
+import { mkdirSync, writeFileSync } from 'node:fs';
+const day = process.env.HOME + '/.codex/sessions/2026/10/23'; mkdirSync(day, { recursive: true });
+process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: '${thread}' }) + '\\n');
+writeFileSync(day + '/rollout-2026-10-23T04-17-57-${thread}.jsonl', [JSON.stringify({ type: 'session_meta', payload: { cli_version: '0.163.0', base_instructions: { text: 'secret-free' } } }),
+  JSON.stringify({ type: 'turn_context', payload: { model: '${logged}', cwd: '/workspace', approval_policy: 'never' } })].join('\\n') + '\\n');
+process.stdout.write(JSON.stringify({ type: 'turn.started' }) + '\\n');
+setTimeout(() => process.stdout.write(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 100, cached_input_tokens: 40, cache_write_input_tokens: 60, output_tokens: 10 } }) + '\\n'), 300);
+`;
+    await writeFile(join(workspace, 'native-cli'), fake); await chmod(join(workspace, 'native-cli'), 0o700);
+    const events: Record<string, unknown>[] = [];
+    const connection = await openNativeConnection({ binding: { schemaVersion: 2 as const, provider: 'codex',
+      model: { channelId: 'codex-cli-subscription', modelId: 'fixture-model', auxiliaryModelIds: [] } }, directory: root,
+      credential: { tokens: { access_token: access, id_token: 'fixture-id' } }, deadlineMs: 20000, onEvents: batch => events.push(...batch) });
+    cleanups.push(connection.close);
+    const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
+      logMaxSizeKiB: 64, logMaxFiles: 2, memoryBytes: 536870912, pids: 128, cpus: 1, tmpBytes: 67108864, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536,
+      connection: { ...connection.descriptor, bootstrapPath, bootstrapSha256: hash(artifact.code) } });
+    const sandbox: SandboxRequest = { protocolVersion: 1, identity: { runId: 'run', taskId: 'task', attemptId: randomUUID(), scopeId: 'test', generation: 1, layoutRevision: 'layout' },
+      workspace, argv: ['/workspace/native-cli', 'exec', '--json', '--model', 'fixture-model', '--', 'Fixture task'] };
+    cleanups.push(async () => { await supervisor.cancel(sandbox); await supervisor.release(sandbox); });
+    expect((await supervisor.execute(sandbox)).result).toEqual({ kind: 'exited', exitCode: 0 });
+    expect(events.filter(event => event.kind === 'session.started')).toEqual([{ schemaVersion: 1, sequence: expect.any(Number), atMs: expect.any(Number),
+      kind: 'session.started', provider: 'codex', model: logged, cliVersion: '0.163.0' }]);
+    expect(events.find(event => event.kind === 'session.ended')).toMatchObject({ tokens: { input: 0, cacheRead: 40, cacheWrite: 60, output: 10 } });
+    expect(connection.modelVerification()).toEqual({ status, admitted: 'fixture-model', observed: [logged], unexpected, evidenceCapability: 'client-reported' });
   });
 });

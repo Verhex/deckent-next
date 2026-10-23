@@ -483,6 +483,10 @@
     "terminal.slash.runs": {
       "before": "Every run of this scope; h hold, r resume, c close a parked run (each after its own y)",
       "after": "Every run of this scope; h hold, r resume, c close a parked run, a answer a worker's question (each after its own y)"
+    },
+    "cli.worker.model.notice": {
+      "before": "The model verdict compares the models the worker reported (Claude usage) with the Run's pin on this host; it is not provider attestation. A CLI without model evidence stays unverified; a CLI that reports only the model name at session start gets ‘start name matched’ or ‘left to the provider’, never verified.",
+      "after": "The model verdict compares the models the worker reported (Claude usage) with the Run's pin on this host; it is not provider attestation. A CLI without model evidence stays unverified; a CLI that reports only the model name at session start gets ‘start name matched’ or ‘left to the provider’, and a CLI whose own session log names the model gets ‘client-reported’ (the worker can rewrite that log); none of them is ever verified."
     }
   },
   "tr": {
@@ -1141,6 +1145,10 @@
     "terminal.jobs.trackingFull": {
       "before": "Bitiş izleme sınırı dolu ({limit}). İş {run} kabul edildi; /run ile kontrol edin.",
       "after": "Bitiş izleme sınırı dolu ({limit}). Run {run} başlatıldı; /run ile kontrol edin."
+    },
+    "cli.worker.model.notice": {
+      "before": "Model kararı, işçinin bildirdiği modelleri (Claude kullanım verisi) bu makinede Run'ın sabitlediği modelle karşılaştırır; sağlayıcı onayı (attestation) değildir. Model kanıtı vermeyen CLI doğrulanmamış kalır; yalnız oturum başında model adını bildiren CLI ‘başlangıç adı eşleşti’ ya da ‘sağlayıcıya bırakıldı’ alır, hiçbir zaman doğrulandı almaz.",
+      "after": "Model kararı, işçinin bildirdiği modelleri (Claude kullanım verisi) bu makinede Run'ın sabitlediği modelle karşılaştırır; sağlayıcı onayı (attestation) değildir. Model kanıtı vermeyen CLI doğrulanmamış kalır; yalnız oturum başında model adını bildiren CLI ‘başlangıç adı eşleşti’ ya da ‘sağlayıcıya bırakıldı’ alır, modeli kendi oturum günlüğünde adlandıran CLI ‘istemci beyanı’ alır (işçi bu günlüğü değiştirebilir); hiçbiri doğrulandı almaz."
     }
   }
 }

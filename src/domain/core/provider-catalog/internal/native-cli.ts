@@ -36,8 +36,10 @@ export function instructionSurfacePaths(profileParameters: unknown): WorkspaceHi
   return frozen.success ? frozen.data.nativeSubscription.checkout.hiddenPaths : INSTRUCTION_SURFACE_PATHS;
 }
 /** How a native CLI reports the model it ran: `session-events` = start model plus per-model usage (verifiable); `session-start-name` = only the
- * model's display name at session start, compared with the catalog's recorded reported names (never `verified`); `none` = no model evidence. */
-export const modelUsageEvidenceSchema = z.enum(['session-events', 'session-start-name', 'none']);
+ * model's display name at session start, compared with the catalog's recorded reported names (never `verified`); `client-reported` = the model
+ * the client resolved, read from the client's own session log, which the worker can rewrite (owner Q4 2026-10-23: never `verified`, a differing
+ * name is held, never a substitution fail); `none` = no model evidence. */
+export const modelUsageEvidenceSchema = z.enum(['session-events', 'session-start-name', 'client-reported', 'none']);
 export type ModelUsageEvidence = z.infer<typeof modelUsageEvidenceSchema>;
 /** Capabilities that existed before capability stamping; unstamped records were written under one of these. */
 const LEGACY_MODEL_USAGE_EVIDENCE: readonly ModelUsageEvidence[] = Object.freeze(['session-events', 'none']);
