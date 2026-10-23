@@ -12,11 +12,14 @@ export const runIdentitySchema = z.object({ runId: identitySchema, scopeId: iden
 /** R3 (owner D4a/D5a): why a superseded Attempt was retried by the bounded stall recovery; only on a `stalled` previous binding. */
 export const STALL_CAUSES = ['inactivity', 'report-missing', 'report-invalid'] as const;
 export const runBindingSchema = z.object({ identity: attemptIdentitySchema, observedRevision: counterSchema.positive().nullable(),
-  observedKind: z.enum(['started', 'exited', 'quota-exhausted', 'cancelled', 'unknown', 'handoff-refused', 'launch-refused', 'stalled']).nullable(),
+  observedKind: z.enum(['started', 'exited', 'quota-exhausted', 'cancelled', 'unknown', 'handoff-refused', 'launch-refused', 'stalled', 'lost']).nullable(),
   stallCause: z.enum(STALL_CAUSES).optional(),
+  // S6R-4: the sealed recovery decision that continued a lost Attempt's task in a new one; only on a `lost` previous binding.
+  recoveryDecisionId: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   // REVISE 2695: the environment probes this unobserved attempt's custody covers (written before the first probe container can start).
   probes: z.array(identitySchema).max(environmentLimits.limits.requirements).readonly().optional(),
-}).strict().refine(value => (value.observedKind === 'stalled') === (value.stallCause !== undefined) && (value.probes === undefined || value.observedKind === null), 'RUN_SNAPSHOT_INCONSISTENT').readonly();
+}).strict().refine(value => (value.observedKind === 'stalled') === (value.stallCause !== undefined) && (value.observedKind === 'lost') === (value.recoveryDecisionId !== undefined)
+  && (value.probes === undefined || value.observedKind === null), 'RUN_SNAPSHOT_INCONSISTENT').readonly();
 /** S5b (Auditor owner decision 6): who placed a hold. `operator` is the public Run control and is never written, so earlier releases read every
  * operator hold; each safety source (Nervous pause, Auditor park) is resumed only by a person at a terminal (Y4 floor, ai-floor.ts). */
 export const RUN_HOLD_SOURCES = ['operator', 'nervous', 'auditor'] as const;
@@ -62,13 +65,13 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
   for (const binding of run.previousBindings ?? []) {
     const id = binding.identity;
     if (!tasks.has(id.taskId) || attempts.has(id.attemptId) || id.runId !== run.identity.runId || id.scopeId !== run.identity.scopeId
-      || id.layoutRevision !== run.identity.layoutRevision || !['exited', 'quota-exhausted', 'stalled', 'launch-refused'].includes(binding.observedKind ?? '') || binding.observedRevision === null) invalid();
+      || id.layoutRevision !== run.identity.layoutRevision || !['exited', 'quota-exhausted', 'stalled', 'launch-refused', 'lost'].includes(binding.observedKind ?? '') || binding.observedRevision === null) invalid();
     attempts.add(id.attemptId);
   }
   for (const binding of run.bindings) {
     const id = binding.identity;
     if (!tasks.has(id.taskId) || bound.has(id.taskId) || attempts.has(id.attemptId) || id.runId !== run.identity.runId || id.scopeId !== run.identity.scopeId || id.layoutRevision !== run.identity.layoutRevision ||
-      (binding.observedRevision === null) !== (binding.observedKind === null) || binding.observedKind === 'stalled') invalid();
+      (binding.observedRevision === null) !== (binding.observedKind === null) || binding.observedKind === 'stalled' || binding.observedKind === 'lost') invalid();
     bound.add(id.taskId); attempts.add(id.attemptId);
     if (binding.probes && !run.progress.some(task => task.taskId === id.taskId && task.phase === 'active' && task.unresolvedEffects)) invalid();
   }

@@ -61,7 +61,7 @@ async function fixture(input: { status: 'running' | 'missing' | 'created'; retai
     if (operation !== 'inspect') throw new Error('unexpected worker mutation: ' + operation);
     if (container.status === 'missing' || ![handle, containerId].includes(args[1]!)) throw new DockerCommandFailure('', 'Error: No such object: ' + args[1], 1, false);
     return { stdout: JSON.stringify([{ Id: containerId, Image: docker.imageId, Config: { Labels: { 'deckent.request': digest } },
-      State: { Status: container.status, ExitCode: container.status === 'exited' ? 137 : 0, StartedAt: startedAt, FinishedAt: container.status === 'exited' ? '2026-10-23T10:01:00Z' : '0001-01-01T00:00:00Z' } }]), stderr: '' };
+      State: { Status: container.status, ExitCode: container.status === 'exited' ? 137 : 0, StartedAt: container.status === 'created' ? '0001-01-01T00:00:00Z' : startedAt, FinishedAt: container.status === 'exited' ? '2026-10-23T10:01:00Z' : '0001-01-01T00:00:00Z' } }]), stderr: '' };
   };
   const supervisor = new DockerSupervisor(docker, runner), profile = await supervisor.captureProfile();
   const restore = DockerSupervisor.restoreProfile.bind(DockerSupervisor);

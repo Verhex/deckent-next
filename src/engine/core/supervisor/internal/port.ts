@@ -38,6 +38,9 @@ export interface ExecutionSupervisor {
   observeTermination?(request: SandboxRequest, worker: import('#domain/index.js').WorkerIncarnation): Promise<SupervisorTermination | null>;
   /** S6R-3: absence of the exact container id `create` returned (no incarnation retained); null while that container exists. */
   observeCreatedAbsence?(request: SandboxRequest, containerId: string): Promise<Readonly<{ kind: 'created-container-absent'; containerId: string }> | null>;
+  /** S6R-4 (lead on s6r3 Q3): removes the never-started container of a lost dispatch by the exact id `create` returned, only while it is `created`
+   * under this request; `not-created` when it ever started (a stop, never a removal, ends that), `absent` when it is gone. */
+  removeCreatedContainer?(request: SandboxRequest, containerId: string): Promise<'removed' | 'absent' | 'not-created'>;
   /** Optional local data port; only stopped workers, never a launch or acceptance operation. */
   collectOutputFiles?(request: SandboxRequest): Promise<readonly CollectedOutputFile[]>;
   cancel(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container' | 'worker'>>;

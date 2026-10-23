@@ -42,7 +42,12 @@ export async function reconcileAttemptFor(projectRoot: string, input: AttemptIde
           createdAbsence: record => supervisor.observeCreatedAbsence?.(record.request, record.containerId!) ?? Promise.resolve(null),
         }, target => new AuditApplication(target, integrity), document.revision, Date.now);
         const command = { schemaVersion: 1, identity, expectedRunRevision: run.revision, expectedAttemptRevision: attempt.revision };
-        if (step === 'stop') { await recovery.fence(command); await app.cancel(recorded.request).catch(error => { if (!(error instanceof DispatchError && error.code === 'DISPATCH_FENCED')) throw error; }); }
+        if (step === 'stop') {
+          await recovery.fence(command); await app.cancel(recorded.request).catch(error => { if (!(error instanceof DispatchError && error.code === 'DISPATCH_FENCED')) throw error; });
+          // S6R-4 (lead on s6r3 Q3): a never-started container (only its created id retained) is removed by that id, so its absence can prove the release.
+          const lost = await dispatchStore.loadBoundDispatch(identity);
+          if (lost && !lost.worker && lost.containerId) await supervisor.removeCreatedContainer?.(lost.request, lost.containerId);
+        }
         const recovered = await recovery.recover(command), kept = await dispatchStore.loadBoundDispatch(identity), crashes = await inspectProductDirectory(layout, 'crashes').catch(() => null);
         // The case ends in a release: the launcher's records of this Attempt are pruned (its sealed detection keeps the evidence summary).
         if (recovered.decision.kind === 'release' && crashes) await Promise.all(['dispatch-preparation', 'dispatch-launcher'].map(name => removeDispatchLaunchRecord(jsonRecordDirectory(join(crashes, name)), identity)));

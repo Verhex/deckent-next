@@ -49,3 +49,18 @@ it('a removal Docker does not confirm is not a removal', async () => {
   const d = daemon({ status: 'created', rmFails: true });
   await expect(d.supervisor.removeCreatedContainer(request, containerId)).rejects.toMatchObject({ code: 'SUPERVISOR_RELEASE_UNCONFIRMED' });
 });
+
+const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
+it.skipIf(!imageId || process.platform !== 'linux')('real Docker: removes a never-started labelled container by its id, and refuses to touch it once it ran', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const real = { ...docker, imageId: imageId!, controlTimeoutMs: 10000 }, supervisor = new DockerSupervisor(real), label = identifyDockerRequest(request, real).digest;
+  const create = (name: string) => execFileSync('docker', ['create', '--name', name, '--label', 'deckent.request=' + label, '--network', 'none', '--entrypoint', 'true', imageId!], { encoding: 'utf8' }).trim();
+  const gone = (id: string) => { try { execFileSync('docker', ['inspect', id], { stdio: 'pipe' }); return false; } catch (error) { return String((error as { stderr?: unknown }).stderr).toLowerCase().includes('no such object'); } };
+  const suffix = String(process.pid) + '-' + String(Date.now()), created = create('dn-s6r4-created-' + suffix), started = create('dn-s6r4-started-' + suffix);
+  try {
+    execFileSync('docker', ['start', '--attach', started], { stdio: 'pipe' });
+    expect(await supervisor.removeCreatedContainer(request, created)).toBe('removed'); expect(gone(created)).toBe(true);
+    expect(await supervisor.removeCreatedContainer(request, created)).toBe('absent');
+    expect(await supervisor.removeCreatedContainer(request, started)).toBe('not-created'); expect(gone(started)).toBe(false);
+  } finally { for (const id of [created, started]) { try { execFileSync('docker', ['rm', '--force', id], { stdio: 'pipe' }); } catch { /* already gone */ } } }
+});

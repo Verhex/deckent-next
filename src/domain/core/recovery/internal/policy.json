@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "revision": "core-2026-10-23",
+  "status": "provisional",
+  "maxLostContinuationsPerTask": 1,
+  "maxRecoveryActionsPerRun": 4,
+  "maxAttemptsPerTask": 3,
+  "maxGateIntents": 64,
+  "settledFacts": { "maxCount": 16, "maxBytes": 16384 }
+}

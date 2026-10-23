@@ -25,18 +25,18 @@ const grant = (ids: readonly string[] | 'all' = ['continue-new-attempt']) => ({ 
 async function harness(input: { recovery?: unknown } = {}) {
   const f = await releasedLostTask(roots, stores, input.recovery === undefined ? policy : input.recovery);
   const caseId = await sealDetection(f.path, f.identity);
-  const store = openSqliteRecoveryStore(f.path, LEDGER_OPTIONS); closers.push(() => store.close());
+  const cases = openSqliteRecoveryStore(f.path, LEDGER_OPTIONS); closers.push(() => cases.close());
   const audit = await openSqliteAuditStore(f.path, LEDGER_OPTIONS); closers.push(() => audit.close());
   const state = { document: grant() as unknown, principal: recovery as VerifiedPrincipal };
   const holds: unknown[] = [];
-  const app = new RecoveryApplication({ store, detections: new AuditApplication(audit, lostIntegrity), recorder: target => new AuditApplication(target, lostIntegrity),
+  const app = new RecoveryApplication({ store: cases, detections: new AuditApplication(audit, lostIntegrity), recorder: target => new AuditApplication(target, lostIntegrity),
     approval: async scopeId => recoveryContinuationApproval(state.document, owner, scopeId, 30), hold: async command => { holds.push(command); return null; },
     policyRevision: 'owner-policy', now: () => 30, timeoutMs: 1000 }, { async verify() { return state.principal; } });
   const rows = (sql: string) => { const db = new DatabaseSync(f.path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   const events = () => rows("SELECT record FROM audit_events WHERE kind='run-lifecycle' ORDER BY sequence").map(row => JSON.parse(String(row['record'])).event.subject);
-  const cases = () => rows('SELECT state,revision FROM recovery_cases ORDER BY case_id');
+  const caseRows = () => rows('SELECT state,revision FROM recovery_cases ORDER BY case_id');
   const claim = (commandId: string, extra: Parameters<typeof effectIntent>[1] = {}) => f.store.claimEffect(effectIntent(commandId, { producer: { kind: 'attempt', identity: f.identity }, ...extra }));
-  return { ...f, caseId, store, app, state, holds, events, cases, claim, rows };
+  return { ...f, caseId, app, state, holds, events, cases: caseRows, claim, rows };
 }
 const command = (caseId: string, extra: Record<string, unknown> = {}) => ({ schemaVersion: 1, scopeId: 's', caseId, ...extra });
 

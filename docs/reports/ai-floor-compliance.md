@@ -1,6 +1,6 @@
 # AI floor compliance / AI yetki tabanı uyumu
 
-ai-floor: routes=291 floor=210 policy=1746 steps=48 uyumlu=1794 İHLAL=0
+ai-floor: routes=293 floor=212 policy=1758 steps=48 uyumlu=1806 İHLAL=0
 
 Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.
 
@@ -1563,6 +1563,18 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | provider-spend-account / fixture-target / reconcile | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | provider-spend-account / fixture-target / reconcile | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | provider-spend-account / fixture-target / reconcile | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| recovery-action / continue-new-attempt / apply | recovery | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| recovery-action / continue-new-attempt / apply | recovery | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| recovery-action / continue-new-attempt / apply | recovery | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| recovery-action / continue-new-attempt / apply | recovery | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| recovery-action / continue-new-attempt / apply | recovery | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| recovery-action / continue-new-attempt / apply | recovery | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| recovery-action / continue-new-attempt / future-action | recovery | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| recovery-action / continue-new-attempt / future-action | recovery | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| recovery-action / continue-new-attempt / future-action | recovery | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| recovery-action / continue-new-attempt / future-action | recovery | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| recovery-action / continue-new-attempt / future-action | recovery | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| recovery-action / continue-new-attempt / future-action | recovery | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | recovery-action / fence-attempt / apply | recovery | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | recovery-action / fence-attempt / apply | recovery | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | recovery-action / fence-attempt / apply | recovery | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -1819,10 +1831,10 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 
 - `src/domain/core/approval/index.ts`: `d9920351b89a86cc6d62984cbeb7bbd8c28fbfd2a31935f08c9aa05db00ebb4b`
 - `src/domain/core/approval/internal/contract.ts`: `10a07d273d83e76858c4ef935d84f8db0ac52ccd5007ba1254ebf3b77fc023fa`
-- `src/domain/core/policy/index.ts`: `e7cf3e5bd69cf0ca6b4cad488a2cb8f2a10dd30f8a1381e231f55118396bdb8d`
+- `src/domain/core/policy/index.ts`: `59975eb1090f60f4030a0e351bc5c819bf828ed1c45869ca93b045b3eaf9ba44`
 - `src/domain/core/policy/internal/administer.ts`: `7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004`
 - `src/domain/core/policy/internal/administration.ts`: `c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b`
-- `src/domain/core/policy/internal/ai-floor.ts`: `e7c88a8f7563db96b230891edf5508cc14feb940110d2dedd350a2b04b161ff1`
+- `src/domain/core/policy/internal/ai-floor.ts`: `71d391a339c07832a0971bfdaa74fbaa19f91978e9fc0826cb374839210ffc2b`
 - `src/domain/core/policy/internal/decision-step.ts`: `70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe`
 - `src/domain/core/policy/internal/delegations.ts`: `c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
@@ -1843,5 +1855,5 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/primitives/internal/json.ts`: `51c0ef2cee02728e7cf4a51bd26c6b472c7c3b54a9c49b65ad55221c6aae171f`
 - `src/domain/core/primitives/internal/project-identity.ts`: `9064bacf688c1269071d7d0bbb87bee94863e9ab663b74bd80e764eb948c137b`
 - `src/domain/core/primitives/internal/values.ts`: `8fb9eb5396a3a5f2fc5a631c30e4fbd824936e30187b7827b2bc87d48b16490a`
-- `src/domain/core/principal/index.ts`: `513dad17a0fac81ce826eb687f3d42eff679e133e104ef92afdff964ced0781c`
-- `src/domain/core/principal/internal/principal.ts`: `1838dbeb01e3e53eaf6be0b22a4b661314a56399070824a6d80eca6707a27374`
+- `src/domain/core/principal/index.ts`: `afa3499a4223a33f6977d85454cfd4a066f5c677db94a59dac57b84f1df844d7`
+- `src/domain/core/principal/internal/principal.ts`: `8a4140ce51235c5410169bc77356c46abbd8edcd513fc482886f0610f147c1a2`

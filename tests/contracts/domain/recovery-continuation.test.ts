@@ -19,7 +19,7 @@ const continuation = (identity: AttemptIdentity, overrides: Partial<Parameters<t
 const record = (commandId: string, state: EffectRecord['state'], input: Parameters<typeof effectIntent>[1] = {}): EffectRecord => effectRecordSchema.parse({
   intent: effectIntent(commandId, input), sequence: 1, state, evidence: state === 'settled' ? { kind: 'idempotency-record', version: 'v2', observedAt: 9 } : null,
   refusal: state === 'refused' ? 'EFFECT_REJECTED' : null });
-const code = (work: () => unknown) => { try { work(); } catch (error) { return error instanceof RecoveryError ? error.code : String(error); } return 'no-error'; };
+const code = (work: () => unknown) => { try { work(); } catch (error) { return error instanceof RecoveryError || (error as { code?: unknown }).code ? (error as { code: string }).code : String(error); } return 'no-error'; };
 
 it('the registry seed holds the owner bounds (1 continuation per lost task, 3 Attempts per task) and freezes into a Run snapshot shape', () => {
   expect(loadRecoveryPolicy(RECOVERY_POLICY_SEED)).toMatchObject({ schemaVersion: 1, maxLostContinuationsPerTask: 1, maxAttemptsPerTask: 3 });
