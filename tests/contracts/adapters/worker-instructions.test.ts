@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -66,6 +66,25 @@ describe('worker instruction source selection', () => {
     await expect(second.revoke('not-a-digest')).rejects.toThrow('unsafe');
     // A trust folder inside the workspace (here: HOME is the project) is never used for a CLI trust: refused, not session-only.
     await expect(openWorkerInstructionTrust(root, { HOME: root }, undefined, file)).rejects.toThrow();
+  });
+
+  it('REVISE 2734 R1: given the file the card showed, trust and revoke act only while the read just before the write is that file (path, identity, digest)', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'worker-instructions-')), home = await mkdtemp(join(tmpdir(), 'worker-home-')); roots.push(root, home);
+    await chmod(home, 0o700); await mkdir(join(root, '.deckent')); const path = join(root, '.deckent/worker-instructions.md'); await writeFile(path, 'conventions');
+    const env = { HOME: home }, file = workerInstructionFile('worker-md'), fresh = async () => (await (await openWorkerInstructionTrust(root, env, undefined, file)).inspect()).status;
+    const reader = await openWorkerInstructionTrust(root, env, undefined, file), view = await reader.inspect();
+    if (view.status !== 'trust-required') throw new Error(view.status);
+    const identity = async () => { const info = await stat(path); return { path: view.source.path, dev: info.dev, ino: info.ino }; }, shown = await identity();
+    await writeFile(join(root, '.deckent/replacement.md'), 'conventions'); await rename(join(root, '.deckent/replacement.md'), path); // identical bytes, new inode
+    await expect(reader.trust(view.source.digest, shown)).rejects.toThrow('changed');
+    expect(await fresh()).toBe('trust-required'); // nothing written
+    const current = await identity();
+    expect((await reader.trust(view.source.digest, current)).status).toBe('ready');
+    await expect(reader.revoke(view.source.digest, shown)).rejects.toThrow('changed');
+    await expect(reader.revoke('cd'.repeat(32), current)).rejects.toThrow('changed'); // not the content read now
+    expect(await fresh()).toBe('ready'); // the record stays
+    expect(await reader.revoke(view.source.digest, current)).toBe(true);
+    expect(await fresh()).toBe('trust-required');
   });
 
   it('refuses a worker file reached through a symlinked directory', async () => {
