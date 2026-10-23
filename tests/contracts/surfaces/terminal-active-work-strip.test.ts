@@ -95,8 +95,12 @@ describe('active work rows: one line per Run (owner 2026-10-17)', () => {
     expect(items(EN, runs).map(row => row.title)).toEqual(['OPEN1', 'OPEN0', 'DONE4', 'DONE3', 'DONE2']);
   });
   it('names the park reason on the row and the reason, failure code and note in the Run window', () => {
-    const held = view('h', { kind: 'parked', reason: 'operator-hold', since: 0, deadline: 1, operatorHold: { schemaVersion: 1, note: 'waiting for the vendor' } },
+    // The Run's own hold park carries its note on the park (domain heldRunState; the snapshot refuses an operator-hold park without one).
+    const held = view('h', { kind: 'parked', reason: 'operator-hold', note: 'waiting for the vendor', since: 0, deadline: 1 },
       [{ id: 't', kind: 'k', phase: 'pending', dependencies: [], acceptanceCriteria: [], taskBrief: brief('HELD') }]);
+    // A hold laid over another park keeps the original reason and carries its note in the overlay (domain runHoldOverlay).
+    const over = view('o', { kind: 'parked', reason: 'needs-input', since: 0, deadline: 1, operatorHold: { schemaVersion: 1, note: 'ask the vendor first' } },
+      [{ id: 't', kind: 'k', phase: 'pending', dependencies: [], acceptanceCriteria: [], taskBrief: brief('OVER') }]);
     const failed = view('f', { kind: 'parked', reason: 'progression-failed', failureCode: 'RUN_STORE_CONFLICT', since: 0, deadline: 1 },
       [{ id: 't', kind: 'k', phase: 'pending', dependencies: [], acceptanceCriteria: [], taskBrief: brief('STUCK') }]);
     for (const labels of [EN, TR]) {
@@ -106,6 +110,7 @@ describe('active work rows: one line per Run (owner 2026-10-17)', () => {
       const window = (run: RunView) => runDetailLines(run, labels).map(line => [...(line.label ?? []), ...line.spans].map(part => part.text).join('')).join('\n');
       expect(window(held)).toContain(labels.jobs!.parkReasons!['operator-hold']); expect(window(held)).toContain('waiting for the vendor');
       expect(window(failed)).toContain('RUN_STORE_CONFLICT');
+      expect(window(over)).toContain(labels.jobs!.parkReasons!['needs-input']); expect(window(over)).toContain('ask the vendor first');
     }
   });
 });
