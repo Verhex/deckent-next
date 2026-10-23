@@ -4,6 +4,8 @@ import { identitySchema, counterSchema } from '#domain/core/primitives/index.js'
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** The MCP registry scopes (the adapter's own list; the audit contract stays dependency-free). */
 const MCP_REGISTRY_SCOPES = ['managed', 'local', 'project', 'user'] as const;
+/** S5b: the safety hold sources (Nervous pause, Auditor park) a Run hold and its audit name; the Run contract reuses this one list. */
+export const runSafetyHoldSourceSchema = z.enum(['nervous', 'auditor']);
 /** Versioned audit event contract (general Core audit port, first slice — owner 2026-09-27 q4/q5). */
 export const AUDIT_EVENT_SCHEMA_VERSION = 1;
 export const AUDIT_SHELL_HEAD_MAX_CHARS = 200;
@@ -55,6 +57,8 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('run-lifecycle'), action: z.enum(['close', 'resume', 'hold', 'answer', 'accept', 'reject', 'park-progression', 'release-worker-custody']),
     inputDigest: digest.optional(), deciderClass: z.enum(['human-tty', 'ai-policy', 'system']).optional(),
     decisionRuleId: identitySchema.optional(), approvalId: identitySchema.optional(),
+    // S5b: present only for a safety hold and its resume, so every operator event keeps its earlier shape.
+    holdSource: runSafetyHoldSourceSchema.optional(),
     runId: identitySchema, commandId: identitySchema, taskId: identitySchema.nullable(), revision: counterSchema,
     evidence: z.literal('model-unverified').nullable() }).strict(),
   z.object({kind:z.literal('decision-port'),action:z.enum(['ask','record','outcome']),phase:z.enum(['admitted','observed']),

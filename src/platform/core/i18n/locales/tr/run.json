@@ -346,6 +346,7 @@
   "error.HANDOFF_PATCH_UNAPPLICABLE": "Kabul edilmiş öncül yaması Run tabanına uygulanamıyor; işçi başlamadı.",
   "error.HANDOFF_INVALID": "Yapılandırılmış devir notu geçersiz.",
   "error.HANDOFF_LIMIT_EXCEEDED": "Devir notları yapılandırılmış sınırları aşıyor.",
+  "error.RUN_HOLD_PERSON_REQUIRED": "Güvenlik bekletmesini (izleyici duraklatması veya denetçi parkı) yalnızca etkileşimli terminaldeki bir kişi kaldırır; hiçbir policy izni bunun yerini tutmaz. Hiçbir şey değişmedi.",
   "error.SUPERVISOR_REQUEST_INVALID": "Supervisor isteği veya salt okunur girdisi geçersiz; worker başlatılmadı.",
   "error.SUPERVISOR_WORKSPACE_INVALID": "Supervisor çalışma alanı geçersiz.",
   "error.SUPERVISOR_IDENTITY_CONFLICT": "Supervisor kimliği veya gerçekleşen bağlantılar kabul edilmiş istekle uyuşmuyor.",

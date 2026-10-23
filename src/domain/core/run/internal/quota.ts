@@ -1,6 +1,7 @@
 import { attemptSnapshotSchema, type AttemptSnapshot } from '#domain/core/attempt/index.js';
 import { readWorkerModelPin } from '#domain/core/worker-event/index.js';
 import { checkedRun, runSnapshotSchema, RunError, type RunSnapshot } from './contract.js';
+import { heldRunState, readRunHold } from './hold.js';
 export type RunQuotaWait = NonNullable<RunSnapshot['quotaWaits']>[number];
 /** Host-proven exit classification, not a worker grant. Application verifies artifacts and model evidence first. */
 export function parkRunQuota(input: unknown, expectedRevision: number, attempt: AttemptSnapshot, wait: RunQuotaWait) {
@@ -42,5 +43,5 @@ export function releaseRunQuota(run: RunSnapshot, channelId: string, now: number
   return runSnapshotSchema.parse({ ...run, revision: run.revision + 1,
     quotaWaits: run.quotaWaits!.map(wait => ids.has(wait.identity.attemptId) ? { ...wait, releasedAtMs: now } : wait),
     ...(movable ? { bindings: run.bindings.filter(row => !held.includes(row)), previousBindings: [...(run.previousBindings ?? []), ...held] } : {}),
-    ...(resume ? { state: remaining.length ? { kind: 'parked', reason: 'quota-exhausted', ...(run.state.kind === 'parked' && run.state.operatorHold ? { operatorHold: run.state.operatorHold } : {}), since: Math.min(...remaining.map(wait => wait.since)), deadline: Math.max(...remaining.map(wait => wait.deadline)) } : run.state.kind === 'parked' && run.state.operatorHold ? { kind: 'parked', reason: 'operator-hold', note: run.state.operatorHold.note, since: run.state.since, deadline: run.state.deadline } : { kind: 'running' } } : {}) });
+    ...(resume ? { state: remaining.length ? { kind: 'parked', reason: 'quota-exhausted', ...(run.state.kind === 'parked' && run.state.operatorHold ? { operatorHold: run.state.operatorHold } : {}), since: Math.min(...remaining.map(wait => wait.since)), deadline: Math.max(...remaining.map(wait => wait.deadline)) } : run.state.kind === 'parked' && run.state.operatorHold ? heldRunState(readRunHold(run.state)!, run.state.since, run.state.deadline) : { kind: 'running' } } : {}) });
 }

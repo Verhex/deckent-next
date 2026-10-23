@@ -2,7 +2,7 @@ import { readWorkerModelPin, quotaExhaustedSchema } from '#domain/core/worker-ev
 import { runExecutionSnapshotSchema } from './registry.js';
 import { z } from 'zod';
 import { runProposalBindingSchema } from './proposal.js';
-import { authorityAdmissionSchema } from '#domain/core/audit/index.js';
+import { authorityAdmissionSchema, runSafetyHoldSourceSchema } from '#domain/core/audit/index.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { taskGraphSchema, taskProgressSchema, inspectTaskReadiness, branchDecisionSchema, assertAdmissionBranch } from '#domain/core/task-graph/index.js';
@@ -17,11 +17,18 @@ export const runBindingSchema = z.object({ identity: attemptIdentitySchema, obse
   // REVISE 2695: the environment probes this unobserved attempt's custody covers (written before the first probe container can start).
   probes: z.array(identitySchema).max(environmentLimits.limits.requirements).readonly().optional(),
 }).strict().refine(value => (value.observedKind === 'stalled') === (value.stallCause !== undefined) && (value.probes === undefined || value.observedKind === null), 'RUN_SNAPSHOT_INCONSISTENT').readonly();
+/** S5b (Auditor owner decision 6): who placed a hold. `operator` is the public Run control and is never written, so earlier releases read every
+ * operator hold; each safety source (Nervous pause, Auditor park) is resumed only by a person at a terminal (Y4 floor, ai-floor.ts). */
+export const RUN_HOLD_SOURCES = ['operator', 'nervous', 'auditor'] as const;
+export const safetyHoldSourceSchema = runSafetyHoldSourceSchema;
+export type RunHoldSource = typeof RUN_HOLD_SOURCES[number];
+export type SafetyHoldSource = z.infer<typeof safetyHoldSourceSchema>;
 export const runStateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('running') }).strict(),
   z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready']),
-    failureCode: identitySchema.optional(), operatorHold: z.object({ schemaVersion: z.literal(1), note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars) }).strict().optional(),
-    note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars).optional(), since: counterSchema, deadline: counterSchema }).strict(),
+    failureCode: identitySchema.optional(), operatorHold: z.object({ schemaVersion: z.literal(1), note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars),
+      source: safetyHoldSourceSchema.optional() }).strict().optional(),
+    note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars).optional(), holdSource: safetyHoldSourceSchema.optional(), since: counterSchema, deadline: counterSchema }).strict(),
   z.object({ kind: z.literal('terminal'), outcome: z.enum(['completed', 'incomplete', 'failed', 'cancelled']), reason: z.enum(['completed', 'cancelled', 'operator-close', 'park-timeout']) }).strict(),
 ]).readonly();
 export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identity: runIdentitySchema, revision: counterSchema,
@@ -45,6 +52,7 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
     if (!selected || selected.evaluator.id !== criterion.evaluator.id || selected.evaluator.version !== criterion.evaluator.version) invalid();
   }
   if (run.state.kind === 'parked' && (run.state.deadline <= run.state.since || (run.state.reason === 'operator-hold') !== (run.state.note !== undefined)
+    || (run.state.holdSource !== undefined && (run.state.reason !== 'operator-hold' || run.state.operatorHold !== undefined))
     || ['progression-failed', 'environment-not-ready'].includes(run.state.reason) !== (run.state.failureCode !== undefined)
     // PRE-7: an environment park names the unmet requirement (failureCode) and holds the attempt its preflight refused.
     || (run.state.reason === 'environment-not-ready' && !run.bindings.some(row => row.observedKind === 'launch-refused'))

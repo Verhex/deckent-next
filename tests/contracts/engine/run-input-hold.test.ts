@@ -75,7 +75,7 @@ async function fixture(docker = false) {
   };
   const auditCount = () => { const db = new DatabaseSync(path, { readOnly: true }); try { return Number(db.prepare('SELECT COUNT(*) AS n FROM audit_events').get()!.n); } finally { db.close(); } };
   return { root, store, path, read, command, reserve, exit, evaluation, evaluator, lifecycle, reservation, artifacts, verifier, attemptPolicy, auditCount,
-    time(value: number) { now = value; }, deny() { allowed = false; }, allow() { allowed = true; }, agent() { principal = { ...human, assurance: 'workload-verified' }; } };
+    time(value: number) { now = value; }, deny() { allowed = false; }, allow() { allowed = true; }, agent() { principal = { ...human, assurance: 'workload-verified' }; }, person() { principal = human; } };
 }
 
 it('parks a typed input exit, never auto-retries or accepts it, then delivers the answer to one new attempt', async () => {
@@ -136,11 +136,16 @@ it('checks fresh policy before hold/resume/answer and their replay; denial write
   f.allow(); f.agent(); await expect(f.lifecycle.execute(answer)).rejects.toMatchObject({ code: 'TASK_DECISION_HUMAN_REQUIRED' });
 });
 
-it('policy-authorized workload hold/resume cannot answer or resume the input decision', async () => {
+// S5b (Auditor owner decision 6): a workload may hold under policy, but resume is a decision: without the explicit run-decision cell it is refused
+// and nothing is written; the person at the terminal resumes it.
+it('policy-authorized workload hold cannot resume without the decision cell, nor answer or resume the input decision', async () => {
   const f = await fixture(); f.agent();
   await f.lifecycle.execute(await f.command('hold', { holdReason: 'Scoped automation hold' }));
-  const resume = await f.command('resume'), resumed = await f.lifecycle.execute(resume);
-  expect(await f.lifecycle.execute(resume)).toEqual(resumed);
+  const before = await f.read();
+  await expect(f.lifecycle.execute(await f.command('resume', { commandId: 'workload-resume' }))).rejects.toMatchObject({ code: 'TASK_DECISION_HUMAN_REQUIRED' });
+  expect(await f.read()).toEqual(before); expect(f.auditCount()).toBe(1);
+  f.person(); const resume = await f.command('resume'), resumed = await f.lifecycle.execute(resume);
+  expect(await f.lifecycle.execute(resume)).toEqual(resumed); f.agent();
   const identity = await f.reserve('task'); await f.evaluation.execute(await f.exit(identity));
   await expect(f.lifecycle.execute(await f.command('resume', { commandId: 'resume-input' }))).rejects.toMatchObject({ code: 'TASK_DECISION_HUMAN_REQUIRED' });
 });
