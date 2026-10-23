@@ -332,8 +332,6 @@ When a Task of a Run that this terminal's `/do` admitted reaches "accepted · pa
 
 ## Source build and sandbox posture
 
-Moved from the README (alpha.53 rewrite); the README keeps the short install path.
-
 - A fresh source build needs Docker to build and stage the locked bubblewrap (currently 0.13.0); it downloads the locked
   source and verifies the source and binary digests. A verified staged bundle can be reused offline. System bubblewrap,
   when selected, must be 0.12.0 or newer. A C build toolchain is required for the native sandbox helper.

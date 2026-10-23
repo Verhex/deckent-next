@@ -29,8 +29,8 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 
 > [!NOTE]
 > **Ön sürüm `1.0.0-alpha.53`** (sürüm adayı; yayımlanmış son sürüm [CHANGELOG.md](CHANGELOG.md) içindeki ilk tarihli
-> satırdır). Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için
-> planlanıyor.
+> satırdır). Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için,
+> büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil).
 
 ## Deckent nedir
 
@@ -247,9 +247,9 @@ deckent config set execution '{"docker":{"executable":"/usr/bin/docker","imageId
 
 # 3. İşçi havuzunu ve ilk iş türünü tanımlayın
 deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
-  --execution-slots 2 --in-flight-slots 2 --preview
+  --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
 deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
-  --execution-slots 2 --in-flight-slots 2 --apply
+  --execution-slots 2 --in-flight-slots 2 --discovery repository --apply
 deckent init pool --scope my-project --preview
 deckent init pool --scope my-project --apply
 
@@ -306,7 +306,7 @@ Değerler örnektir: işçiyi (`codex` ya da `claude`), havuz adını ve kapasit
 `deckent` etkileşimli terminali açar. Her slash komutu kendi penceresinde yanıt verir; <kbd>Esc</kbd> pencereyi kapatır ve
 konuşmada metin yığını yerine tek bir çerçeveli `Deckent sistemi` satırı bırakır. Ayarlar yazarak değil seçerek değişir:
 `/config` bölümden anahtara, oradan izin verilen değerlere ilerler; her değişiklik policy'den geçer ve bir onaya
-dönüşebilir. `/help` tüm komutları amaca göre listeler:
+dönüşebilir. `/help` tüm komutları amaca göre listeler; en çok kullanılanlar şunlardır:
 
 | Amaç | Komutlar |
 |---|---|

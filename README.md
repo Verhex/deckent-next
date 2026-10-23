@@ -30,7 +30,8 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 > [!NOTE]
 > **Pre-release `1.0.0-alpha.53`** (release candidate; the latest released version is the first dated line in
 > [CHANGELOG.md](CHANGELOG.md)). Deckent is not on npm yet: install it from source as shown in
-> [Get started](#get-started). An npm package is planned for the beta.
+> [Get started](#get-started). An npm package is planned for the beta, probably as `@verhex/deckent` (the name is
+> not final yet).
 
 ## What is Deckent
 
@@ -246,9 +247,9 @@ deckent config set execution '{"docker":{"executable":"/usr/bin/docker","imageId
 
 # 3. Declare the worker pool and the first kind of work
 deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
-  --execution-slots 2 --in-flight-slots 2 --preview
+  --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
 deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
-  --execution-slots 2 --in-flight-slots 2 --apply
+  --execution-slots 2 --in-flight-slots 2 --discovery repository --apply
 deckent init pool --scope my-project --preview
 deckent init pool --scope my-project --apply
 
@@ -306,7 +307,7 @@ what each preview checks, and what to do on an installation set up before the cu
 `deckent` opens the interactive terminal. Every slash command answers in its own window; <kbd>Esc</kbd> closes it and leaves
 one framed `Deckent system` line in the conversation instead of a wall of text. Settings are changed by choosing, not
 typing: `/config` walks from section to key to the allowed values, and each change goes through policy and may become
-an approval. `/help` lists every command by purpose:
+an approval. `/help` lists every command by purpose; the most used ones are:
 
 | Purpose | Commands |
 |---|---|

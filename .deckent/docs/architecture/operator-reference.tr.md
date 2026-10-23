@@ -341,8 +341,6 @@ Bu terminalin `/do` ile kabul ettiği bir Run'ın görevi "kabul edildi · yama 
 
 ## Kaynak derleme ve sandbox durumu
 
-README'den taşındı (alpha.53 yeniden yazımı); README kısa kurulum yolunu tutar.
-
 - Yeni bir kaynak derlemesi, kilitli bubblewrap'ı (şu an 0.13.0) derleyip yerleştirmek için Docker ister; kilitli kaynağı
   indirir, kaynak ve binary özetlerini doğrular. Doğrulanmış, yerleştirilmiş paket çevrimdışı yeniden kullanılabilir. Sistem
   bubblewrap'ı seçilirse sürümü en az 0.12.0 olmalıdır. Native yalıtım yardımcısı için C derleme araçları gerekir.
