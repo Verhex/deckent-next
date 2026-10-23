@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, catalogAggregatorPrincipal, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipal, memoryDistillerPrincipalRef, memoryEvaluatorPrincipal, memoryEvaluatorPrincipalRef, namedPersonPolicyAdditions, recoveryPrincipalRef, resolvePolicyBindings,
   upgradeFirstRunPolicy } from '#domain/index.js';
 import { FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
@@ -10,7 +10,7 @@ import { FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.j
 // S4B-3 (owner S-M3/S-M5, §5 A6/A7): the person may verify and contest (the delegation bound needs both to grant V2/V3); the memory evaluator workload gets V1–V3 (memory inspect, verify, contest), V4 (run inspect) and, as its own
 // rule, V5 (model-invocation invoke). Rollback removes exactly this delta.
 const person = { issuer: 'host', subject: 'owner' };
-const mcpRef = mcpPrincipalRef(person), distillerRef = memoryDistillerPrincipalRef(person), evaluatorRef = memoryEvaluatorPrincipalRef(person);
+const mcpRef = mcpPrincipalRef(person), distillerRef = memoryDistillerPrincipalRef(person), evaluatorRef = memoryEvaluatorPrincipalRef(person), aggregatorRef = catalogAggregatorPrincipalRef(person);
 const owner = { id: 'owner', ...person, assurance: 'os-user' as const, scopeIds: ['installation', 'other'] };
 const distiller = memoryDistillerPrincipal(person, ['installation', 'other']), evaluator = memoryEvaluatorPrincipal(person, ['installation', 'other']);
 const names = { proposeMcpToolName: FIRST_RUN_TOOL_NAMES.proposeMcpToolName, mcpCallOperationId: FIRST_RUN_TOOL_NAMES.mcpCallOperationId,
@@ -26,14 +26,19 @@ const decide = (policy: unknown, principal: typeof owner, kind: string, action: 
 it('v15 adds exactly the person\'s memory propose, the distiller D1+D2, D4 and D3 (own rule) and the agent catalog rules; the ids are the rollback delta', () => {
   expect(built.version).toBe(15); expect(built.policy.revision).toBe('first-run-template-v15');
   expect(v15).toEqual([scoped('first-run-memory-propose', person, 'memory', ['propose']), scoped('first-run-memory-distiller', distillerRef, 'memory', ['inspect', 'propose']), scoped('first-run-memory-distiller-runs', distillerRef, 'run', ['inspect']),
-    scoped('first-run-memory-distiller-output', distillerRef, 'attempt', ['read-output']), scoped('first-run-agent-catalog', person, 'agent-catalog', ['inspect', 'define']),
+    scoped('first-run-memory-distiller-output', distillerRef, 'attempt', ['read-output']),
+    scoped('first-run-agent-catalog', person, 'agent-catalog', ['inspect', 'define', 'promote', 'demote', 'restore', 'retire', 'dismiss']),
     scoped('first-run-mcp-observe-agent-catalog', mcpRef, 'agent-catalog', ['inspect']), scoped('first-run-memory-review', person, 'memory', ['verify', 'contest']),
     scoped('first-run-memory-evaluator', evaluatorRef, 'memory', ['inspect', 'verify', 'contest']),
     scoped('first-run-memory-evaluator-runs', evaluatorRef, 'run', ['inspect']), scoped('first-run-memory-evaluator-model', evaluatorRef, 'model-invocation', ['invoke']),
     // S4B-4 (owner S-M12, A11): the named person retires and purges memory (the purge card); no model-invocation grant (lead review 2026-10-23).
     scoped('first-run-memory-purge', person, 'memory', ['retire', 'purge']),
     // S6R-5: the recovery principal invokes its recovery-decision role model (its floor refuses every other pair).
-    scoped('first-run-recovery-model', recoveryPrincipalRef(person), 'model-invocation', ['invoke'])]);
+    scoped('first-run-recovery-model', recoveryPrincipalRef(person), 'model-invocation', ['invoke']),
+    // S8-5: the person's signer cards and signed import. S8-3: the catalog aggregator's exact list (its writes are signed by its own key).
+    scoped('first-run-skill-signers', person, 'skill-signer', ['inspect', 'enrol', 'add', 'revoke', 'repair']), scoped('first-run-agent-catalog-import', person, 'agent-catalog', ['import']),
+    scoped('first-run-catalog-aggregator', aggregatorRef, 'agent-catalog', ['inspect', 'suggest', 'narrow']), scoped('first-run-catalog-aggregator-runs', aggregatorRef, 'run', ['inspect']),
+    scoped('first-run-catalog-aggregator-memory', aggregatorRef, 'memory', ['inspect'])]);
   expect(firstRunPolicyTemplate({ ...input, principal: mcpRef }).policy.grants.filter(rule => ids.includes(rule.id)).map(rule => rule.id)).toEqual([FIRST_RUN_UPGRADE_RULE_IDS.observeAgentCatalog]);
 });
 
@@ -52,8 +57,15 @@ it('the grants decide only inside the floor: the distiller proposes and reads, n
     expect(decide(built.policy, evaluator, kind!, action!).decision, `${kind}/${action}`).toBe('deny');
   expect(decide(built.policy, evaluator, 'memory', 'verify', 'other').decision).toBe('deny');
   expect(decide(built.policy, distiller, 'memory', 'verify').decision).toBe('deny');
-  for (const action of ['inspect', 'define']) expect(decide(built.policy, owner, 'agent-catalog', action).decision).toBe('allow');
-  expect(decide(built.policy, owner, 'agent-catalog', 'import').decision).toBe('deny');
+  // S8-4: the person's catalog cards (import behind floor (d), S8-5); suggest/narrow are the aggregator's only.
+  for (const action of ['inspect', 'define', 'import', 'promote', 'demote', 'restore', 'retire', 'dismiss']) expect(decide(built.policy, owner, 'agent-catalog', action).decision, action).toBe('allow');
+  for (const action of ['suggest', 'narrow']) expect(decide(built.policy, owner, 'agent-catalog', action).decision, action).toBe('deny');
+  const aggregator = catalogAggregatorPrincipal(person, ['installation', 'other']);
+  for (const [kind, action] of [['agent-catalog', 'inspect'], ['agent-catalog', 'suggest'], ['agent-catalog', 'narrow'], ['run', 'inspect'], ['memory', 'inspect']])
+    expect(decide(built.policy, aggregator, kind!, action!).decision, `${kind}/${action}`).toBe('allow');
+  for (const [kind, action] of [['agent-catalog', 'promote'], ['agent-catalog', 'define'], ['memory', 'propose'], ['attempt', 'read-output']])
+    expect(decide(built.policy, aggregator, kind!, action!).decision, `${kind}/${action}`).toBe('deny');
+  expect(decide(built.policy, aggregator, 'agent-catalog', 'suggest', 'other').decision).toBe('deny');
   // The person may propose (their own card; it lets them delegate D2) and, S4B-3, verify and contest (it lets them delegate V2/V3; a person's verify is a
   // human review at the terminal); S4B-4: retire and purge (the person's review and purge cards).
   for (const action of ['propose', 'verify', 'contest', 'retire', 'purge']) expect(decide(built.policy, owner, 'memory', action).decision, action).toBe('allow');

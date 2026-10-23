@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { defineConfiguredAgent, defineConfiguredSkill, inspectConfiguredAgentStats, prepareConfiguredCatalogAggregation } from '#composition/core/agent-catalog/index.js';
+import { defineConfiguredAgent, defineConfiguredSkill, enrolConfiguredSigner, inspectConfiguredAgentStats, prepareConfiguredCatalogAggregation } from '#composition/core/agent-catalog/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
 import { aiAuthorityFloor, encodeDeckentJson, type DeckentMetrics, type JsonValue } from '#domain/index.js';
@@ -17,8 +17,8 @@ import { agentsCommand } from '#surfaces/core/cli-agents/index.js';
 import { metric, type MetricSpec } from '../support/catalog-metrics.js';
 
 // S8-2 through the real composition (policy file, integrity key, SQLite ledger): `deckent agents stats` and MCP `inspect_agent_stats` are the
-// catalog's `inspect` read over sealed metrics rows; the aggregator pass (mode off|shadow|on, protected) writes only its rebuildable position
-// record — no standing, suggestion or card. Numbers carry "association, not causation" and "acceptance rate, not accuracy" on the view itself.
+// catalog's `inspect` read over sealed metrics rows; the aggregator pass (mode off|shadow|on, protected) writes its rebuildable position record (S8-3:
+// and signed suggestions, only with its own enrolled key — catalog-suggestions.test.ts). Numbers carry "association, not causation" and "acceptance rate, not accuracy" on the view itself.
 beforeEach(context => {
   if (process.platform === 'win32') context.skip('LOCAL_OS_PRINCIPAL_UNSUPPORTED: configured policy/integrity flows require a verified POSIX UID');
 });
@@ -36,7 +36,10 @@ async function fixture(options: { actions?: string[]; mcp?: string[]; catalogEvo
   openSqliteLedger(ledger, sqlite).close();
   const id = readLocalOsIdentity(), principal = { issuer: id.issuer, subject: id.subject };
   const grants = [{ id: 'catalog', effect: 'allow', actions: options.actions ?? ['inspect', 'define'], scopes: ['scope'], principals: [principal], resource: { kind: 'agent-catalog', ids: 'all' } },
-    ...options.mcp ? [{ id: 'catalog-mcp', effect: 'allow', actions: options.mcp, scopes: ['scope'], principals: [{ issuer: `${id.issuer}/mcp`, subject: id.subject }], resource: { kind: 'agent-catalog', ids: 'all' } }] : []];
+    ...options.mcp ? [{ id: 'catalog-mcp', effect: 'allow', actions: options.mcp, scopes: ['scope'], principals: [{ issuer: `${id.issuer}/mcp`, subject: id.subject }], resource: { kind: 'agent-catalog', ids: 'all' } }] : [],
+    // S8-3: the person's signer cards and the catalog aggregator's exact list (as the first-run template grants them).
+    { id: 'signers', effect: 'allow', actions: ['inspect', 'enrol'], scopes: ['scope'], principals: [principal], resource: { kind: 'skill-signer', ids: 'all' } },
+    { id: 'aggregator', effect: 'allow', actions: ['inspect', 'suggest', 'narrow'], scopes: ['scope'], principals: [{ issuer: `${id.issuer}/catalog-aggregator`, subject: id.subject }], resource: { kind: 'agent-catalog', ids: 'all' } }];
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'catalog-policy', restrictions: [], grants }), { mode: 0o600 });
   return { project, ledger, options: { env: { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '/usr/bin:/bin' } } };
 }
@@ -117,9 +120,19 @@ describe('agents stats read', () => {
     }
   });
 });
+/** S8-3: the aggregator writes only signed by its own key, which a person enrols on a terminal card. */
+const enrolAggregator = async (f: Awaited<ReturnType<typeof fixture>>) => { const id = readLocalOsIdentity();
+  await enrolConfiguredSigner(f.project, { schemaVersion: 1, scopeId: 'scope', commandId: 'e-aggregator', principal: { issuer: `${id.issuer}/catalog-aggregator`, subject: id.subject }, label: 'aggregator' }, f.options, person); };
 describe('aggregator pass', () => {
-  it('off loads nothing; shadow records one position with the touched keys, then nothing until a new row; no standing or catalog row changes', async () => {
+  it('S8-3: without the aggregator\'s key the pass is read-only — nothing is written and the same rows wait for the key', async () => {
     const f = await fixture({ catalogEvolution: { mode: 'shadow' } }); await catalog(f); seed(f.ledger, ...work);
+    expect(await prepareConfiguredCatalogAggregation(f.project, f.options, 'shadow')!.run('scope')).toBeNull();
+    expect(count(f.ledger, 'catalog_evolution_positions')).toBe(0);
+    await enrolAggregator(f);
+    expect(await prepareConfiguredCatalogAggregation(f.project, f.options, 'shadow')!.run('scope')).toMatchObject({ position: 8 });
+  });
+  it('off loads nothing; shadow records one position with the touched keys, then nothing until a new row; no standing or catalog row changes', async () => {
+    const f = await fixture({ catalogEvolution: { mode: 'shadow' } }); await catalog(f); seed(f.ledger, ...work); await enrolAggregator(f);
     expect(prepareConfiguredCatalogAggregation(f.project, f.options, 'off')).toBeNull();
     const pass = prepareConfiguredCatalogAggregation(f.project, f.options, 'shadow')!, standings = count(f.ledger, 'agent_standing_revisions');
     const first = await pass.run('scope');
@@ -133,13 +146,13 @@ describe('aggregator pass', () => {
     expect(await inspectConfiguredAgentStats(f.project, { schemaVersion: 1, scopeId: 'scope', agentId: 'invoice-auditor' }, f.options)).toMatchObject({ mode: 'shadow', lastPass: { position: 9 } });
   });
   it('a page bound stops the position before the row that would pass maxKeysPerPass; the next pass continues', async () => {
-    const f = await fixture({ catalogEvolution: { mode: 'on', overlay: { revision: 'site', pass: { maxKeysPerPass: 2 } } } }); await catalog(f); seed(f.ledger, ...work);
+    const f = await fixture({ catalogEvolution: { mode: 'on', overlay: { revision: 'site', pass: { maxKeysPerPass: 2 } } } }); await catalog(f); seed(f.ledger, ...work); await enrolAggregator(f);
     const pass = prepareConfiguredCatalogAggregation(f.project, f.options, 'on')!;
     expect(await pass.run('scope')).toMatchObject({ mode: 'on', position: 5, keys: [{ kind: 'work-class' }, { kind: 'agent', agentId: 'invoice-auditor' }] });
     expect(await pass.run('scope')).toMatchObject({ previousPosition: 5, position: 8 });
   });
   it('N34: an invalid registry overlay → typed refusal; the pass writes nothing and the read computes nothing', async () => {
-    const f = await fixture({ catalogEvolution: { mode: 'shadow', overlay: { revision: 'site', stats: { readRowsMax: 999999 } } } }); await catalog(f); seed(f.ledger, ...work);
+    const f = await fixture({ catalogEvolution: { mode: 'shadow', overlay: { revision: 'site', stats: { readRowsMax: 999999 } } } }); await catalog(f); seed(f.ledger, ...work); await enrolAggregator(f);
     await expect(prepareConfiguredCatalogAggregation(f.project, f.options, 'shadow')!.run('scope')).rejects.toMatchObject({ code: 'CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE' });
     await expect(inspectConfiguredAgentStats(f.project, { schemaVersion: 1, scopeId: 'scope' }, f.options)).rejects.toMatchObject({ code: 'CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE' });
     expect(count(f.ledger, 'catalog_evolution_positions')).toBe(0);
