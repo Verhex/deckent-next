@@ -46,11 +46,12 @@ export async function assignTaskWorker(task: Readonly<{ id: string; kind: string
   // Permission for the tier/role registry is the scope's registered-catalog activation (the one worker admission enforces), never the
   // declared invocation catalog. Only measured rows can drop a dated exception, so only they are read before a row list is taken.
   const active = async (channelId: string, modelId: string) => (await reader.activation(context.scopeId, channelId, modelId))?.state === 'active';
-  const facts = async (roleId: string) => {
-    const measured = new Set<string>();
+  // Reads stay bounded by channels and roles, not rows: one catalog read per channel and one measured-row pass per role per assignment.
+  const channelRows = new Map<string, Awaited<ReturnType<ModelCatalogReader['models']>>>(), roleFacts = new Map<string, { today: string; active: ReadonlySet<string> }>();
+  const rowsOf = async (channelId: string) => { let rows = channelRows.get(channelId); if (!rows) channelRows.set(channelId, rows = await reader.models(channelId)); return rows; };
+  const facts = async (roleId: string) => { if (roleFacts.has(roleId)) return roleFacts.get(roleId)!; const measured = new Set<string>();
     for (const row of context.roles.models) if (row.measured !== undefined && row.roles.includes(roleId) && await active(row.channelId, row.modelId)) measured.add(roleModelKey(row));
-    return { today, active: measured };
-  };
+    roleFacts.set(roleId, { today, active: measured }); return roleFacts.get(roleId)!; };
   let workers: ReadonlySet<string> | undefined, expandedTotal = 0, sawSelector = false;
   const workerKeys = async () => workers ??= new Set(eligibleRoleModels(context.roles, WORK_CLASS_WORKER_ROLE, await facts(WORK_CLASS_WORKER_ROLE)).map(roleModelKey));
   const expand = async (index: number, selector: CandidateSelector): Promise<readonly Tried[]> => {
@@ -61,18 +62,15 @@ export async function assignTaskWorker(task: Readonly<{ id: string; kind: string
       if (tried.has(key) || !allowed.has(key) || (selector.channelIn !== undefined && !selector.channelIn.includes(row.channelId))) continue;
       if ((selector.minTier !== undefined || selector.maxTier !== undefined) && (row.tier === null
         || (selector.minTier !== undefined && tierRank(row.tier) < tierRank(selector.minTier)) || (selector.maxTier !== undefined && tierRank(row.tier) > tierRank(selector.maxTier)))) continue;
-      const entry = (await reader.models(row.channelId)).find(model => model.modelId === row.modelId);
+      const entry = (await rowsOf(row.channelId)).find(model => model.modelId === row.modelId), maker = entry ? canonicalModelMaker(entry.model) : null;
       if (!entry) continue;
-      const maker = canonicalModelMaker(entry.model);
       if (selector.makerIn !== undefined && (maker === null || !selector.makerIn.includes(maker))) continue;
       if (selector.makerNotIn !== undefined && (maker === null || selector.makerNotIn.includes(maker))) continue;
       if (!await active(row.channelId, row.modelId)) continue;
       found.push({ channelId: row.channelId, modelId: row.modelId });
     }
     expandedTotal += found.length;
-    if (expandedTotal > WORK_CLASS_LIMITS.expandedCandidatesPerPolicy) {
-      throw new WorkerModelAdmissionError('WORKER_ASSIGNMENT_EXPANSION_LIMIT', { taskId: task.id, channelId: null, modelId: null, workClass: workClass.id });
-    }
+    if (expandedTotal > WORK_CLASS_LIMITS.expandedCandidatesPerPolicy) throw new WorkerModelAdmissionError('WORKER_ASSIGNMENT_EXPANSION_LIMIT', { taskId: task.id, channelId: null, modelId: null, workClass: workClass.id });
     const expansionDigest = createHash('sha256').update(JSON.stringify([selector, context.roles.revision, found.map(row => [row.channelId, row.modelId])]), 'utf8').digest('hex');
     return found.map((row, position) => ({ index, ...row, effort: selector.effort, selector: { roleRevision: context.roles.revision, expanded: found.length, position, expansionDigest } }));
   };
@@ -87,7 +85,7 @@ export async function assignTaskWorker(task: Readonly<{ id: string; kind: string
       }
       const chosen: WorkInput = { ...input, model: { channelId: candidate.channelId, modelId: candidate.modelId, auxiliaryModelIds: [] } };
       // The candidate's pin carries the catalog's session-start names exactly as a pinned model's does (owner K1/K2), or admission refuses it.
-      const profile = compile(template, chosen, catalogPinModelEvidence((await reader.models(candidate.channelId)).map(row => row.model), candidate.modelId));
+      const profile = compile(template, chosen, catalogPinModelEvidence((await rowsOf(candidate.channelId)).map(row => row.model), candidate.modelId));
       try { await admitWorkerModels([{ taskId: task.id, profile }], context.scopeId, reader, context.nowMs, [], { imageRefreshInProgress: context.imageRefreshInProgress === true }); }
       catch (error) {
         if (!(error instanceof WorkerModelAdmissionError)) throw error;
