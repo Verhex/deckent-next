@@ -400,3 +400,27 @@ describe('G4 protocol version fields', () => {
     expect(run(root)).toMatchObject({ code: 1, out: expect.stringContaining('[hardcode-G4]') });
   });
 });
+
+describe('model independence guard (owner rule 2026-10-23: a new model arrives as data, never as code)', () => {
+  const families = ['opus', 'sonnet', 'haiku', 'fable', 'gpt-', 'sol', 'luna', 'astra', 'terra'];
+  it('names deepseek, zai and zhipu as vendor slugs and keeps a data list of model-family words', () => {
+    const ratchet = JSON.parse(readFileSync('arch.json', 'utf8')).hardcodeRatchet;
+    expect(ratchet.slugs).toEqual(expect.arrayContaining(['deepseek', 'zai', 'zhipu']));
+    expect(ratchet.modelFamilies).toEqual(expect.arrayContaining(families));
+  });
+  it('flags a model-family word in a string literal as G5, but not in a comment or inside another word', () => {
+    const root = fixture([
+      "// opus and sonnet are only named in this comment",
+      "export function pick(id: string) { if (id.startsWith('claude-opus-5-5')) return 1; return id === 'gpt-6.1-sol' ? 2 : 3; }",
+      "export const fine = ['solid', 'console', 'asterisk', 'terrain'];",
+    ].join('\n'), { modelFamilies: families });
+    const inventory = JSON.parse(run(root, true).out) as { rule: string; literal: string }[];
+    expect(inventory.filter(row => row.rule === 'G5').map(row => row.literal).sort()).toEqual(['claude-opus-5-5', 'gpt-6.1-sol']);
+    expect(run(root)).toMatchObject({ code: 1, out: expect.stringContaining('[hardcode-G5]') });
+  });
+  it('lets a model-family word pass only as a declared invariant with a reason, and ignores import specifiers', () => {
+    const root = fixture("import x from 'sonnet-lib';\nexport const WIRE_ID = 'haiku';", { modelFamilies: families,
+      invariants: [{ file, symbol: 'WIRE_ID', values: ['haiku'], reason: 'Protocol literal' }] });
+    expect(run(root)).toMatchObject({ code: 0 });
+  });
+});
