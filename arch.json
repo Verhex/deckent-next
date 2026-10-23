@@ -1933,7 +1933,9 @@
         "src/domain/core/primitives",
         "src/domain/core/task-graph",
         "src/adapters/core/native-cli-registry",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/domain/core/memory",
+        "src/domain/core/worker-event"
       ],
       "plan": "PROVIDERS"
     },
@@ -3596,7 +3598,8 @@
         "src/domain/core/worker-event",
         "src/engine/core/provider-spend",
         "src/domain/core/model-invocation",
-        "src/engine/core/model-activation"
+        "src/engine/core/model-activation",
+        "src/engine/core/dispatch"
       ],
       "plan": "MEMORY"
     },
@@ -3633,7 +3636,15 @@
         "src/adapters/core/sqlite-model-activation",
         "src/adapters/core/sqlite-model-invocation",
         "src/adapters/core/provider-openai-chat",
-        "src/engine/core/model-activation"
+        "src/engine/core/model-activation",
+        "src/engine/core/policy",
+        "src/adapters/core/file-artifacts",
+        "src/adapters/core/attempt-store",
+        "src/platform/core/managed-files",
+        "src/domain/core/attempt",
+        "src/domain/core/memory",
+        "src/domain/core/principal",
+        "src/capabilities/core/artifacts"
       ],
       "plan": "MEMORY"
     },

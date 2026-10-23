@@ -6,11 +6,12 @@ import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { inspectConfiguredMemory, listConfiguredMemory, prepareConfiguredMemoryExtraction, searchConfiguredMemory } from '#composition/core/memory/index.js';
+import { attemptReportClaimReader, inspectConfiguredMemory, listConfiguredMemory, prepareConfiguredMemoryExtraction, searchConfiguredMemory } from '#composition/core/memory/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { memoryKeyedDigest, openLocalIntegrityAuthority, openSqliteMemoryJournalStore, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
+import { FileArtifactStore, memoryKeyedDigest, openLocalIntegrityAuthority, openSqliteMemoryJournalStore, readLocalOsIdentity, withMcpPrincipal } from '#adapters/index.js';
 import { encodeDeckentJson, memoryDistillerPrincipal, type JsonValue } from '#domain/index.js';
 import { MemoryJournalApplication } from '#engine/index.js';
+import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { memoryCommand } from '#surfaces/core/cli-memory/index.js';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
@@ -93,4 +94,29 @@ it('the distiller pass is off by default (nothing loads), and in shadow it pages
   try { expect(check.prepare("SELECT count(*) AS n FROM memory_extraction_cursors WHERE scope_id='scope'").get()?.['n']).toBe(1); } finally { check.close(); }
   // A scope the distiller holds no grant in is refused, never silently empty.
   await expect(pass.run('elsewhere')).rejects.toBeTruthy();
+});
+
+// S4B-2 (E3) through the real distiller policy decision and a real sealed artifact: the report callback returns the worker's claims only when the
+// distiller holds `attempt/read-output`; a denied decision gives no claims and no error; an output that cannot be read back gives none either.
+it('S4B-2: the report callback reads a sealed output under the distiller\'s own read-output decision; denied or unreadable gives no claims and no error', async () => {
+  const identity = { scopeId: 'scope', runId: 'r1', taskId: 't1', attemptId: 'a1', generation: 1, layoutRevision: 'l' };
+  const lesson = { kind: 'lesson', title: 'Masraf merkezi', body: 'Boş geçilemez.', cause: 'Alan boştu', correction: 'Onaya gönder' };
+  const stdout = JSON.stringify({ schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: { schemaVersion: 1, summary: 'ok', changedFiles: [], checks: [], openIssues: [], lessons: [lesson] } }) + '\n';
+  const envelope = new TextEncoder().encode(JSON.stringify({ schemaVersion: 1, identity, completeness: 'complete', stdout, stderr: '' }));
+  const source = { scopeId: 'scope', runId: 'r1', attemptId: 'a1' } as never;
+  for (const [granted, expected] of [[true, 'claims'], [false, 'none']] as const) {
+    const f = await fixture(false), artifactsRoot = join(f.layout.root, 'artifacts-test');
+    await mkdir(artifactsRoot, { recursive: true, mode: 0o700 });
+    const store = new FileArtifactStore({ root: artifactsRoot, maxBytes: 1_000_000 }), receipt = await store.put('scope', envelope);
+    const distiller = memoryDistillerPrincipal(f.person, ['scope']), me = { issuer: `${f.person.issuer}/memory-distiller`, subject: f.person.subject };
+    const document = { schemaVersion: 1, revision: 'report-read', restrictions: [], grants: granted ? [{ id: 'outputs', effect: 'allow', actions: ['read-output'], scopes: ['scope'], principals: [me], resource: { kind: 'attempt', ids: 'all' } }] : [] };
+    const reader = { async loadRun() { return { bindings: [{ identity }] } as never; }, async loadBoundDispatch() { return { output: receipt } as never; } };
+    const read = attemptReportClaimReader({ scopeId: 'scope', reader, artifacts: async () => store,
+      authorization: contextDispatchAuthorization({ layout: f.layout, config: { inspection: { policyMaxBytes: 65_536 } } }, document) });
+    const claims = await read(source, distiller);
+    if (expected === 'claims') expect(claims).toMatchObject({ lessons: [lesson], reportDigest: expect.stringMatching(/^[a-f0-9]{64}$/) }); else expect(claims).toBeNull();
+    // An output that cannot be read back (a missing artifact) is no claim set, not an error.
+    if (granted) expect(await attemptReportClaimReader({ scopeId: 'scope', reader, artifacts: async () => ({ read: async () => { throw new Error('gone'); } }),
+      authorization: contextDispatchAuthorization({ layout: f.layout, config: { inspection: { policyMaxBytes: 65_536 } } }, document) })(source, distiller)).toBeNull();
+  }
 });
