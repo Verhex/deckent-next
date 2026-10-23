@@ -1,12 +1,13 @@
 import type { ModelReference } from '#domain/index.js';
 import type { PermissionModeQuery, PermissionModeView } from '#domain/index.js';
 import type { ConfigLoadOptions, Locale } from '#platform/index.js';
-import type { ModelCatalogInspectionHandler, ProviderSpendAccountInspectionHandler, ModelCommandContext } from '#surfaces/core/cli-models/index.js';
+import type { ModelCatalogInspectionHandler, ModelRoleInspectionHandler, ProviderSpendAccountInspectionHandler, ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 
 /** The slice of the host's command context the read-only management commands use; the CLI context satisfies it. */
 export interface TerminalAdminContext {
   readonly describeTerminalChatPlan?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ status: 'ready' | 'not-configured' | 'model-not-declared'; reference: ModelReference | null }>>;
   readonly inspectModelCatalog?: ModelCatalogInspectionHandler;
+  readonly inspectModelRoles?: ModelRoleInspectionHandler;
   readonly inspectProviderSpendAccount?: ProviderSpendAccountInspectionHandler;
   readonly manageProviderSpend?: ModelCommandContext['manageProviderSpend'];
   readonly inspectPermissionMode?: (root: string, input: PermissionModeQuery, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<PermissionModeView>;
@@ -21,4 +22,6 @@ export interface TerminalAdminCall {
   readonly options: ConfigLoadOptions;
   readonly locale: Locale;
   readonly context: TerminalAdminContext;
+  /** Terminal width in columns for tables; absent = unbounded. */
+  readonly columns?: number;
 }

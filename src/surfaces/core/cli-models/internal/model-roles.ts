@@ -3,7 +3,7 @@ import { ErrorRegistry, EXIT_CODES, MESSAGE_REGISTRY, emit, loadConfig, t, termi
 import { MODEL_TIERS, type ModelTier } from '#domain/index.js';
 import type { ModelRoleAssignCommand, ModelRoleAssignResult, ModelRoleEntry, ModelRoleInspection, ModelRoleQuery } from '#engine/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
-import { cliTableStyle, renderCliTable, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
+import { cliTableStyle, renderCliTable, type CliTableStyle, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import type { ModelCommandContext } from './context.js';
 import { askModelsCard, modelsConfirmOptions, modelsInteractive, modelsSinks, reportModelsCancelled } from './io.js';
 
@@ -58,14 +58,15 @@ function priceText(entry: ModelRoleEntry, locale: Locale): string {
 }
 const makerText = (entry: ModelRoleEntry, locale: Locale) => entry.catalog?.maker ? terminalSafeText(entry.catalog.maker) : t('climodels.roles.makerUnknown', {}, locale);
 
-function renderInspection(view: ModelRoleInspection, locale: Locale, context: ModelCommandContext): string {
+/** The read view as text: `deckent models roles` and the terminal `/roles` window render the very same table and legend. */
+export function renderModelRoleInspection(view: ModelRoleInspection, locale: Locale, style: CliTableStyle): string {
   if (!view.models.length) return t('climodels.roles.empty', {}, locale);
   const rows = view.models.map(entry => [terminalSafeText(entry.modelId), terminalSafeText(entry.channelId), makerText(entry, locale), tierWord(entry.tier, locale),
     rolesWord(entry.roles, locale), stateWord(entry, locale)]);
   const lines = [t('climodels.roles.heading', { revision: terminalSafeText(view.revision) }, locale), renderCliTable([
     { header: t('climodels.models.table.model', {}, locale), shrink: false }, { header: t('climodels.roles.table.channel', {}, locale) },
     { header: t('climodels.roles.table.maker', {}, locale) }, { header: t('climodels.roles.table.tier', {}, locale) },
-    { header: t('climodels.roles.table.roles', {}, locale) }, { header: t('climodels.roles.table.state', {}, locale) }], rows, cliTableStyle(context)), '',
+    { header: t('climodels.roles.table.roles', {}, locale) }, { header: t('climodels.roles.table.state', {}, locale) }], rows, style), '',
   t('climodels.roles.legend', { roles: view.roles.map(role => `${terminalSafeText(role.id)} (${tierWord(role.minimumTier, locale)})`).join(', ') }, locale)];
   if (view.pending) lines.push(t('climodels.roles.pendingFooter', { count: view.pending }, locale));
   return lines.join('\n');
@@ -106,7 +107,7 @@ export async function modelRolesCommand(argv: readonly string[], context: ModelC
   const query: ModelRoleQuery = { schemaVersion: 1, scopeId: scope.scopeId, ...(parsed.channelId ? { channelId: parsed.channelId } : {}), ...(parsed.modelId ? { modelId: parsed.modelId } : {}) };
   const view = await context.inspectModelRoles(root, query, options);
   if (!parsed.json) emit(scopeNotice(scope, locale), sinks);
-  if (!writing) { emit(view, { ...sinks, json: parsed.json, render: value => renderInspection(value, locale, context) }); return; }
+  if (!writing) { emit(view, { ...sinks, json: parsed.json, render: value => renderModelRoleInspection(value, locale, cliTableStyle(context)) }); return; }
   const entry = view.models.find(row => row.channelId === parsed.channelId && row.modelId === parsed.modelId);
   if (!entry) throw ErrorRegistry.createError('MODEL_ROLE_CATALOG_UNKNOWN');
   const title = entry.state === 'pending' ? t('climodels.roles.card.titleNew', {}, locale) : t('climodels.roles.card.titleChange', {}, locale);

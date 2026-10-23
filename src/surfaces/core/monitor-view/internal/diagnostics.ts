@@ -58,6 +58,8 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'image-refresh-unreadable': () => t('monitor.diagnostic.imageRefreshUnreadable', { detail }, locale),
     'map-config-global-unavailable': () => t('monitor.diagnostic.mapConfigGlobalUnavailable', {}, locale),
     'map-policy-unavailable': () => t('monitor.diagnostic.mapPolicyUnavailable', { detail }, locale),
+    // M2 (f2): `model-roles-pending:<n>` mirrors the doctor row; a new catalog model refuses every role until a person assigns one.
+    'model-roles-pending': () => t('monitor.diagnostic.modelRolesPending', { count: detail }, locale),
     'output-denied': () => t('monitor.diagnostic.outputDenied', {}, locale),
     'observation-unavailable': () => t('monitor.diagnostic.observationUnavailable', {}, locale),
     // `attempt-files-unavailable:<attempt key>:<CODE>`: the key may itself hold `/`; the code is the last part.
@@ -67,6 +69,7 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
   const actions: Readonly<Record<string, () => string>> = {
     'runs-truncated': () => t('monitor.action.runsTruncated', {}, locale),
     'image-refresh-failed': () => t('monitor.action.imageRefreshFailed', {}, locale),
+    'model-roles-pending': () => t('monitor.action.modelRolesPending', {}, locale),
   };
   return { code, note, text: Object.hasOwn(words, code) ? words[code]!() : body, ...(Object.hasOwn(actions, code) ? { action: actions[code]!() } : {}) };
 }
