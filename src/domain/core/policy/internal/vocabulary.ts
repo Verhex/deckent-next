@@ -6,6 +6,9 @@ export const policyResources = Object.freeze({
   backup: Object.freeze({ kind: 'backup' as const, actions: Object.freeze(['create', 'verify', 'restore'] as const) }),
   config: Object.freeze({ kind: 'config' as const, actions: Object.freeze(['write'] as const) }),
   decision: Object.freeze({kind:'decision' as const, actions:Object.freeze(['prepare','ask','record','outcome','inspect'] as const)}),
+  // S4 memory journal v1: the resource id is the scope. `inspect` reads (list, search, one entry with history); propose/verify/retire are the
+  // application's transitions (no surface writes in v1). Verify additionally needs a human or an independent evaluation record (domain rule).
+  memory: Object.freeze({ kind: 'memory' as const, actions: Object.freeze(['inspect', 'propose', 'verify', 'retire'] as const) }),
   approval: Object.freeze({ kind: 'approval' as const, actions: Object.freeze(['inspect', 'decide', 'renew'] as const) }),
   task: Object.freeze({ kind: 'task' as const, actions: Object.freeze(['execute'] as const) }),
   attempt: Object.freeze({ kind: 'attempt' as const, actions: Object.freeze(['execute', 'release', 'reconcile', 'recover-output', 'cancel', 'evaluate', 'read-output', 'prepare-integration', 'deliver-integration', 'adopt-integration', 'rollback-integration'] as const) }),

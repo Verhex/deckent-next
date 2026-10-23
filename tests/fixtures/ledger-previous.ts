@@ -23,7 +23,8 @@ export const PREVIOUS_LEDGER_VERSION = 50;
  * repositories' rows of one target at the same sequence, makes it fail, as it must; restoring the pre-switch backup is the real path. */
 /** v59 → v58 (PRE-7): v59 widened only record vocabularies (environment park, `not-run` acceptance), so the version alone goes back —
  * exact for a ledger that holds none of them; restoring the pre-switch backup is the real path. */
-export const DOWNGRADE_TO_V58_LEDGER_SQL = 'PRAGMA user_version=58;';
+export const DOWNGRADE_TO_V59_LEDGER_SQL = 'DROP TABLE memory_search; DROP TABLE memory_command_receipts; DROP TABLE memory_entry_revisions; DROP TABLE memory_entries; PRAGMA user_version=59;';
+export const DOWNGRADE_TO_V58_LEDGER_SQL = `${DOWNGRADE_TO_V59_LEDGER_SQL} PRAGMA user_version=58;`;
 export const DOWNGRADE_TO_V57_LEDGER_SQL = `${DOWNGRADE_TO_V58_LEDGER_SQL} CREATE TABLE workspace_adoptions_v57(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,target_ref TEXT NOT NULL,
     sequence INTEGER NOT NULL CHECK(sequence>0),kind TEXT NOT NULL CHECK(kind IN('adopt','rollback')),intent TEXT NOT NULL,
     settled INTEGER NOT NULL CHECK(settled IN(0,1)),PRIMARY KEY(scope_id,command_id),UNIQUE(target_ref,sequence));

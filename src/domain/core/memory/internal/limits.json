@@ -1,0 +1,15 @@
+{
+  "titleMaxBytes": 200,
+  "bodyMaxBytes": 8192,
+  "tagsMax": 16,
+  "tagMaxBytes": 64,
+  "lessonFieldMaxBytes": 2048,
+  "noteMaxBytes": 1024,
+  "reasonMaxBytes": 1024,
+  "originRefMaxBytes": 512,
+  "queryMaxBytes": 512,
+  "queryTermsMax": 8,
+  "pageMax": 50,
+  "scanMax": 500,
+  "historyMax": 64
+}

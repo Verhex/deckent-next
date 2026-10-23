@@ -26,6 +26,9 @@ Observe:
   workers     List or watch workers (without an action: list)
       list | watch
       [--scope <id>] [--all | --since <12h>] [--verbose] [--limit <n>]
+  memory      Read the scope's memory journal: curated facts and lessons
+      search | inspect
+      [--scope <id>] [--state <name>] [--json]
 
 Execute work:
   do          Plan an intent through Brain and existing approval gates

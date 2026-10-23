@@ -414,6 +414,38 @@
     },
     {
       "schemaVersion": 1,
+      "id": "memory",
+      "version": 1,
+      "labelKey": "policy.mcp.group.memory",
+      "noteKey": "policy.mcp.note.memory",
+      "proposed": false,
+      "cells": [
+        {
+          "id": "inspect",
+          "tools": {
+            "list_memory": [
+              "inspect"
+            ],
+            "search_memory": [
+              "inspect"
+            ],
+            "inspect_memory": [
+              "inspect"
+            ]
+          },
+          "actions": [
+            "inspect"
+          ],
+          "resource": {
+            "kind": "memory",
+            "ids": "all"
+          },
+          "scope": "selected"
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "id": "service",
       "version": 1,
       "labelKey": "policy.mcp.group.service",

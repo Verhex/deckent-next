@@ -26,6 +26,9 @@ Başlarken:
   workers     İşçileri listele veya izle (eylemsiz: list)
       list | watch
       [--scope <id>] [--all | --since <12h>] [--verbose] [--limit <n>]
+  memory      Kapsamın hafıza dergisini oku: düzenlenmiş bilgiler ve dersler
+      search | inspect
+      [--scope <id>] [--state <ad>] [--json]
 
 İş yürütme:
   do          Brain ve mevcut onay kapılarıyla bir isteği planla
