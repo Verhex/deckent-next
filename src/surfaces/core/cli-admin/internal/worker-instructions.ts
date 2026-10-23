@@ -16,16 +16,19 @@ const where = (row: WorkerInstructionStatus, locale: Locale) => row.target === n
   : t('cli.coding.instructions.target', { target: terminalSafeText(row.target), root: terminalSafeText(row.root) }, locale);
 const fileLine = (row: WorkerInstructionStatus, locale: Locale) => t('cli.coding.instructions.file', { path: terminalSafeText(row.path ?? row.file ?? '-'),
   bytes: row.bytes ?? 0, digest: row.digest ?? '-' }, locale);
+/** alpha.54 R1: a work target's file is the one committed on its base ref; the line names the ref and the commit it named at this read. */
+const revisionLines = (row: WorkerInstructionStatus, locale: Locale) => row.ref && row.commit
+  ? [t('cli.coding.instructions.revision', { ref: terminalSafeText(row.ref), commit: row.commit }, locale)] : [];
 function stateLine(row: WorkerInstructionStatus, locale: Locale): string {
-  const params = { source: row.source, file: row.file ?? '-', reason: row.reason ?? '-' };
+  const params = { source: row.source, file: row.file ?? '-', reason: row.reason ?? '-', ref: terminalSafeText(row.ref ?? '-') };
   if (row.state === 'off') return row.off === 'source-none' ? t('cli.coding.instructions.state.sourceNone', params, locale) : t('cli.coding.instructions.state.noExecution', params, locale);
-  if (row.state === 'absent') return t('cli.coding.instructions.state.absent', params, locale);
+  if (row.state === 'absent') return row.ref ? t('cli.coding.instructions.state.absentAtRef', params, locale) : t('cli.coding.instructions.state.absent', params, locale);
   if (row.state === 'blocked') return t('cli.coding.instructions.state.blocked', params, locale);
   return row.state === 'trusted' ? t('cli.coding.instructions.state.trusted', params, locale) : t('cli.coding.instructions.state.untrusted', params, locale);
 }
 /** Target · file (path, bytes, sha256) · whether workers get it now, and the next command when they do not. */
 export function renderWorkerInstructionStatus(rows: readonly WorkerInstructionStatus[], locale: Locale): string {
-  return rows.flatMap(row => [where(row, locale), ...(row.digest ? [`  ${fileLine(row, locale)}`] : []), `  ${stateLine(row, locale)}`,
+  return rows.flatMap(row => [where(row, locale), ...(row.digest ? [`  ${fileLine(row, locale)}`] : []), ...revisionLines(row, locale).map(line => `  ${line}`), `  ${stateLine(row, locale)}`,
     ...(row.state === 'untrusted' ? [`  ${t('cli.coding.instructions.next', {}, locale)}`] : [])]).join('\n');
 }
 
@@ -75,7 +78,7 @@ export async function codingInstructionsCommand(argv: readonly string[], context
   }
   const trust = action === 'trust';
   const answer = await askAdminCard(context, locale, { title: trust ? t('cli.coding.instructions.card.trustTitle', {}, locale) : t('cli.coding.instructions.card.revokeTitle', {}, locale),
-    body: [where(row, locale), fileLine(row, locale), trust ? t('cli.coding.instructions.card.trustBody', {}, locale) : t('cli.coding.instructions.card.revokeBody', {}, locale),
+    body: [where(row, locale), fileLine(row, locale), ...revisionLines(row, locale), trust ? t('cli.coding.instructions.card.trustBody', {}, locale) : t('cli.coding.instructions.card.revokeBody', {}, locale),
       ...(trust ? ['', ...row.preview.map(line => `  ${terminalSafeText(line)}`)] : [])], options: confirmOptions(locale) });
   if (answer !== 'apply') return cancelled();
   if (!row.binding) throw ErrorRegistry.createError('WORKER_INSTRUCTIONS_UNAVAILABLE', { params: { reason: 'unreadable' } });

@@ -1,7 +1,7 @@
 # Record redaction, terminal S06 and SAFE-APPROVAL-A1 — module note
 
 Section "Current closure — 2026-10-05" of ARCHITECTURE.md; its product contracts stay in force (landing evidence is in COMPLETED-PLAN).
-Kaynak/Source: ARCHITECTURE.md @58537c7f lines 3360–3371; text below is verbatim.
+Kaynak/Source: ARCHITECTURE.md @58537c7f lines 3360–3371; the original text below is verbatim; later dated additions are marked separately.
 
 ## Current closure — 2026-10-05 (main’e indi)
 
@@ -17,7 +17,7 @@ SAFE-APPROVAL-A1 uses private ephemeral WeakMap custody for complete display fie
 
 CI-R7 ve devamındaki PR #4/#6 düzeltmeleri üretim güvenlik kapılarını gevşetmez; tarihsel koşumlar COMPLETED-PLAN 2026-10-05’te, kalan CI-DEBT PLAN’dadır. Eski 6/6 veya hedefli yeşil sonucu güncel main/canlı kabulü değildir.
 
-## W12 SECRET-REDACTOR remaining — author candidate, 2026-10-10
+## W12 SECRET-REDACTOR remaining — landed in alpha.26, 2026-10-10
 
 RECORD now matches registered known values across inserted LF/CRLF line breaks as well as exact multiline values.
 DECISION retains exact bytes, match counts and approval semantics. The generated standalone worker shares this canonical record matcher.
@@ -43,7 +43,7 @@ uses a credential-shaped fixture through the existing pattern guard; it is not p
 Encoded values, text already lost upstream, independently framed native message fields and post-print retraction remain outside this candidate.
 Targeted author checks do not supply independent review, hosted, native-other-platform, running Desktop, live or N1 acceptance.
 
-## S6 pre-dispatch worker tree secret gate — author candidate, 2026-10-14
+## S6 pre-dispatch worker tree secret gate — landed in alpha.39, 2026-10-14
 
 Owner decision S6: a Docker worker receives a full Git clone of the Run's pinned base (plus accepted predecessor patches), and everything
 in it can reach the model provider through the worker's one egress. The terminal read floor was not applied to that tree before S6.

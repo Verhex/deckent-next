@@ -1,7 +1,7 @@
 # Brain Run planning
 
-DO-DILIM-B author candidate, 2026-10-12, based on `4cd6837f`. This contract describes
-the candidate; it does not grant release, independent review or live acceptance.
+DO-DILIM-B, 2026-10-12, based on `4cd6837f`; landed in alpha.31 (`/do`, `deckent do`, SDK, MCP). This contract
+describes the planning behaviour; it does not by itself record independent review or live acceptance.
 The owner-admitted `do` boundary is defined in [ARCHITECTURE.md](../../../../ARCHITECTURE.md).
 
 `BrainPlanCommand` v1 carries intent, scope and command identity, with an optional
@@ -162,7 +162,7 @@ Author fixture/check evidence is outside Git in KOTA-D1 proof; paid, live, N1,
 browser, hosted and independent acceptance were not performed by this lane.
 
 
-BRAIN-BAGLAM author candidate (2026-10-13): context projection v2 replaces raw
+BRAIN-BAGLAM (2026-10-13; landed in alpha.32): context projection v2 replaces raw
 execution-registry serialization. It carries sorted kinds with `template`/`prepared`
 pairing and template provider, merged WorkClasses, installed evaluator parameter
 JSON schemas, policy vocabulary, applicable budget and scoped worker-model choices.
@@ -207,7 +207,7 @@ incomplete/unknown outcomes remain unknown. Raw provider bodies never enter
 Brain error parameters. No automatic retry or new acceptance/effect flow is added.
 Yazar kanıtı ve açık sınırlar dış `proof/BRAIN-BAGLAM-2026-10-13/WORKER.md` içindedir.
 
-BRAIN-DUSUNME author candidate (2026-10-13): `brain_planner.maxCompletionTokens`
+BRAIN-DUSUNME (2026-10-13; landed in alpha.33): `brain_planner.maxCompletionTokens`
 selects the planning call's completion cap independently of terminal chat.
 Omitted or `null` inherits the effective terminal cap, including its profile limit;
 an explicit positive safe integer is not silently narrowed. The native adapter
@@ -241,7 +241,7 @@ request digest binds the added native settings. Author checks and open limits ar
 in external `proof/BRAIN-DUSUNME-2026-10-13/WORKER.md`; independent, hosted and
 live/N1 acceptance are separate.
 
-KUCUK-DUZELTMELER author candidate (2026-10-14): `RunProposalResult` optionally
+KUCUK-DUZELTMELER (2026-10-14; landed in alpha.36): `RunProposalResult` optionally
 projects `planningSpending` from the source invocation's authorized read-only
 inspection. It carries spending class, currency, settled minor-unit amount and
 evidence (`measured-tariff`, `provider-reported`, `settled-local`, `held`, `unknown`).

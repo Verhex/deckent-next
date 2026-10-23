@@ -98,13 +98,14 @@ export async function prepareWorkerImageBuildContext(input: Readonly<{ packageRo
   return Object.freeze({ context, files: [...WORKER_IMAGE_BUILDER_FILES, 'Dockerfile', 'recipe.json'] });
 }
 export type WorkerImageBuildRunner = (command: ProcessCommand, signal?: AbortSignal) => Promise<ProcessEvidence>;
-/** Runs the copied builder through the bounded process runner; the receipt file it writes is the only success evidence. */
-export async function runWorkerImageBuild(input: Readonly<{ context: string; receiptPath: string; timeoutMs: number; outputBytes: number; env?: Readonly<Record<string, string>>; signal?: AbortSignal }>,
+/** Runs the copied builder through the bounded process runner; the receipt file it writes is the only success evidence. `imageId` (BR1 adopt):
+ * the builder's own `--image-id` re-probe of an existing image instead of a build (its receipt says so). */
+export async function runWorkerImageBuild(input: Readonly<{ context: string; receiptPath: string; timeoutMs: number; outputBytes: number; env?: Readonly<Record<string, string>>; signal?: AbortSignal; imageId?: string }>,
   runner: WorkerImageBuildRunner = runNodeProcess) {
   if (!isAbsolute(input.context) || !isAbsolute(input.receiptPath)) throw new WorkerImageBuildError('WORKER_IMAGE_SOURCE_INVALID');
   await privateDirectory(input.context);
   const env = allowedEnvironment(input.env ?? process.env);
-  const command: ProcessCommand = { schemaVersion: 1, requestId: randomUUID(), executable: process.execPath, args: [join(input.context, 'build.mjs'), input.receiptPath],
+  const command: ProcessCommand = { schemaVersion: 1, requestId: randomUUID(), executable: process.execPath, args: [join(input.context, 'build.mjs'), input.receiptPath, ...(input.imageId ? ['--image-id', input.imageId] : [])],
     cwd: input.context, env, timeoutMs: input.timeoutMs, outputBytes: input.outputBytes };
   // An aborted signal ends the builder process through the runner's own termination (reason `cancelled`); it is a failed build, never a receipt.
   const evidence = await runner(command, input.signal);

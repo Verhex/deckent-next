@@ -16,7 +16,7 @@
   "config.surface.bound": "bağlı",
   "config.surface.declared": "beyan",
   "config.surface.live": "anında",
-  "config.surface.restart": "yeniden",
+  "config.surface.restart": "yeniden başlatınca",
   "config.surface.redacted": "[GİZLENDİ]",
   "config.surface.valid": "Yapılandırma geçerli.",
   "config.surface.changed": "{key}, {layer} katmanına kaydedildi. Uygulama: {apply}. Yedek: {backup}",

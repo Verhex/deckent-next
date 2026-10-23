@@ -2,7 +2,7 @@
 
 [Türkçe](policy-and-ai.tr.md) · [Architecture](architecture-overview.md) · [Compliance report](reports/ai-floor-compliance.md)
 
-Source snapshot: 2026-10-15. Policy says which verified actor may perform an action on a
+Last checked against source: 2026-10-23. Policy says which verified actor may perform an action on a
 resource in a scope. A grant permits an application to consider that action; it does not
 skip state checks, approvals, isolation, acceptance criteria or durable effect evidence.
 An administrator grants only authority they hold. AI actors cannot administer authority.
@@ -129,6 +129,15 @@ on/off), and `deckent policy mcp` / `deckent policy delegations` let you pick a 
 preview on a card and apply it through the same governed change as the commands above. `policy revoke`
 revokes one of those entries, not an arbitrary policy grant. Non-TTY standing revocation has
 a `--yes` confirmation flag; it does not bypass authority, policy or the AI floor.
+
+## Opening modes and sharing provider keys
+
+Two actions stay with a person at their own terminal. `deckent init policy --scope <id> --modes <list>|none` opens or closes
+full-auto and full-access for the installation owner; AI tools, pipes and CI cannot. Provider keys live in a main vault (the
+installation's) or a project vault. Outside a terminal, `deckent secret set NAME` needs `--main` or `--project`. A main-vault key
+is used in a project only after a grant: a card at a solo terminal, or `deckent secret grant NAME --scope <id>`. Project keys need a
+`.deck` file, which holds references only. Limits (no terminal witness on native macOS and Windows, rollback to alpha.50) are
+in [known limits](known-limits.md).
 
 ## Delegate human steps to AI
 

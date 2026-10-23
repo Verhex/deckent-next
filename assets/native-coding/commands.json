@@ -80,7 +80,7 @@
           "flag": "--output-schema",
           "channel": "schema-file"
         },
-        "modelUsageEvidence": "none",
+        "modelUsageEvidence": "client-reported",
         "reasoningEffort": {
           "mode": "arguments",
           "levels": [

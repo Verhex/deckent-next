@@ -1,7 +1,7 @@
 # Operator terminal surface — module note
 
 Terminal contract v1, phases, tool lines, `@` index, TC-M harness (moved from ARCHITECTURE.md Packages 2026-10-05).
-Kaynak/Source: ARCHITECTURE.md @58537c7f lines 690–842, 1005–1027, 1117–1127, 1268–1277; text below is verbatim.
+Kaynak/Source: ARCHITECTURE.md @58537c7f lines 690–842, 1005–1027, 1117–1127, 1268–1277; the original text below is verbatim; later dated additions are marked separately.
 
 ### Operator terminal contract v1 (accepted target, partial implementation)
 
@@ -142,7 +142,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
 - **Bounded windows (TUI2 L1, 2026-10-07; `wave/tui-2`; released with alpha.10, PR #37):** unit `terminal-window` (← terminal-kit, terminal-render)
   owns the `Window` frame (title left, status right, body capped to the terminal rows and scrolled by ↑↓/PgUp/PgDn/Home/End, wrapped key
   hints, widths in display cells, ASCII frame with ASCII glyphs; `exact` rows keep commands/patterns/previews character for character)
-  and the window stack: one input owner. TERMINAL-SABIT R2 (owner 2026-10-14, author candidate) focuses user-opened windows
+  and the window stack: one input owner. TERMINAL-SABIT R2 (owner 2026-10-14; landed in alpha.36) focuses user-opened windows
   immediately. Automatic /do/turn cards and run/worker watches keep composer focus; Ctrl+O transfers it to the top layer
   (approval priority, then newest) and back. TERMINAL-SABIT-DUZEN slice 2 (owner 2026-10-18; security review of 6d458d9d): approval-priority
   layers (approval cards, `QuestionWindow`) take the keyboard by themselves, and so does the next queued decision when the shown one closes;
@@ -196,7 +196,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   latest sent message only (`terminal-work/active-work-note.ts`, English protocol text, marker stripped from resume/fresh-context displays);
   the strip itself is unchanged and the note grants nothing.
   Read-only diff (alpha.46): `DeliveryPreview.diffs` (bounded per file by `deliver-port.json`) feed a file list + hunk view inside the same window; viewing is inert for delivery.
-  TESLIM-PENCERESI (owner 2026-10-14, author candidate): unit `terminal-delivery` (← terminal-window, terminal-render) owns the delivery
+  TESLIM-PENCERESI (owner 2026-10-14; landed in alpha.36): unit `terminal-delivery` (← terminal-window, terminal-render) owns the delivery
   window over a `TerminalDeliveryPort` that `cli-terminal/deliver-port.ts` builds from the CLI's own handlers (inventory, patch preview,
   integration check/prepare) and the composition's `interactiveDeliveryHandlers(answer)` (the TESLIM-GUVENLIK port; installed only by
   the CLI composition, never SDK/MCP). A tracked Run's accepted work-input task with `deliveryOutlook: awaiting-delivery` opens it once in

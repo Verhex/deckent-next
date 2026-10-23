@@ -1,3 +1,4 @@
 {
-  "terminal.jobs.acceptanceEvidence": "Kabul dayanağı: {evidence}"
+  "terminal.jobs.acceptanceEvidence": "Kabul dayanağı: {evidence}",
+  "terminal.jobs.parked.heldOver": "ayrıca operatör tarafından bekletiliyor"
 }

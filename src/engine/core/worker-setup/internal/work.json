@@ -1,0 +1,7 @@
+{
+  "$comment": "BR1 1b: the first work kind and pool `deckent init` proposes (registry data; the person sees them on the card before anything is written, and `deckent init registry` with its own flags stays the way to choose others). One running and one in-flight slot is a conservative start for one machine, not a measured optimum; discovery is left to the adapter default (disabled).",
+  "kind": "coding",
+  "pool": "workers",
+  "executionSlots": 1,
+  "inFlightSlots": 1
+}

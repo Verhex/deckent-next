@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { effectCommandSchema, type EffectCommand, type EffectRecord } from '#domain/index.js';
 import { projectInputSchema, type EffectOutcome } from '#engine/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
@@ -55,7 +55,8 @@ export async function operationCommand(argv: readonly string[], context: AdminCo
     // A command this scope has no record of is a failed read (exit 1) for a person, as for `run inspect`. J2e: `--json` keeps the unchanged machine
     // contract (`record: null`, exit 0) that the SDK, MCP and the ERP process fixture read.
     if (!result.record && !json) throw ErrorRegistry.createError('CLI_OPERATION_NOT_FOUND', { params: { command: commandId, scope: scopeId }, locale });
-    emit(result, { ...sinks, json, render: data => t('cli.operation.inspect', { command: commandId, state: data.record!.state, sequence: data.record!.sequence }, locale) });
+    emit(result, { ...sinks, json, render: data => [t('cli.operation.inspect', { command: commandId, state: data.record!.state, sequence: data.record!.sequence }, locale),
+      ...inspectNextStep(data.record!, locale)].join('\n') });
     return;
   }
   const source = values.get('--input'); const handler = action === 'execute' ? context.executeOperation : context.compensateOperation;
@@ -72,12 +73,29 @@ export async function operationCommand(argv: readonly string[], context: AdminCo
     // The issue's code, not its message: the message is English and may quote the received value.
     throw ErrorRegistry.createError('CLI_OPERATION_INPUT_INVALID', { params: { field: issue.path.length ? issue.path.join('.') : '(document)', problem: issue.code }, locale });
   }
-  const result = await handler(root, input as EffectCommand, options, timeoutMs === undefined ? undefined : { awaitApproval: { timeoutMs } });
+  let result: EffectOutcome;
+  try { result = await handler(root, input as EffectCommand, options, timeoutMs === undefined ? undefined : { awaitApproval: { timeoutMs } }); }
+  catch (error) { throw withNextStep(error, command.data, locale); }
   emit(result, { ...sinks, json, render: data => data.status === 'approval-pending'
     ? t('cli.operation.pending', { operation: data.operation.id, version: data.operation.version, kind: data.target.kind, id: data.target.id,
       approvalId: data.approval.approvalId, expiresAt: new Date(data.approval.expiresAt).toISOString() }, locale)
     : t('cli.operation.settled', { operation: data.operation.id, version: data.operation.version,
       kind: data.target.kind, id: data.target.id, sequence: data.sequence, recordVersion: data.version ?? t('cli.value.none', {}, locale) }, locale) });
+}
+
+/** BETA-RAKIP-3: an uncertain or blocked outcome names this command's scope, id and record, so the suggestion is the exact next step. The typed
+ * code and category stay the engine's; nothing is retried here. */
+function withNextStep(error: unknown, command: EffectCommand, locale: Locale): unknown {
+  if (!(error instanceof DeckentError) || (error.code !== 'EFFECT_OUTCOME_UNKNOWN' && error.code !== 'EFFECT_TARGET_BUSY')) return error;
+  return ErrorRegistry.createError(error.code, { params: { ...error.params, scope: command.scopeId, command: command.commandId,
+    kind: command.target.kind, id: command.target.id }, locale, cause: error });
+}
+/** The next step a person can take for a recorded but unsettled operation; a settled or refused record has none. */
+function inspectNextStep(record: EffectRecord, locale: Locale): string[] {
+  const { kind, id } = record.intent.command.target;
+  if (record.state === 'unknown') return [t('cli.operation.inspect.next.unknown', { kind, id }, locale)];
+  if (record.state === 'claimed') return [t('cli.operation.inspect.next.claimed', { kind, id }, locale)];
+  return [];
 }
 
 function renderCatalog(catalog: readonly CatalogEntry[], targets: readonly { adapter: string; kind: string }[], locale: Locale, style: ReturnType<typeof cliTableStyle>): string {

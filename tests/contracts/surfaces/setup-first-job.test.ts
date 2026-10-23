@@ -14,7 +14,7 @@ import { planSetup } from '#engine/index.js';
 
 /**
  * I-S7 (owner 2026-10-19: "ordered list + doctor"): after `deckent init` the person sees, in order, the steps the first `/do` still needs
- * (worker image → execution configuration → first registry → pool), each with its exact command; doctor's pool row names the first one.
+ * (worker image and execution settings through `deckent init` → first registry → pool), each with its exact command; doctor's pool row names the first one.
  * Facts are configuration and pool-ledger reads only: the registry preview starts a container and never runs from setup.
  */
 const NONE: FirstJobFacts = { execution: false, registry: false, pool: false };
@@ -22,17 +22,16 @@ const ids = (facts: FirstJobFacts) => firstJobSteps(facts, 'erp-demo').map(step 
 
 describe('I-S7 first-job steps (one ordered source for setup and doctor)', () => {
   it('lists only the missing steps, in order, with exact commands; nothing missing reads "ready"', () => {
-    expect(ids(NONE)).toEqual(['worker-image', 'execution', 'registry', 'pool']);
+    // BR1: the worker image and the execution settings are one step `deckent init` does itself (a card, the build, the composed settings).
+    expect(ids(NONE)).toEqual(['execution', 'registry', 'pool']);
     expect(ids({ execution: true, registry: false, pool: false })).toEqual(['registry', 'pool']);
     expect(ids({ execution: true, registry: true, pool: false })).toEqual(['pool']);
     expect(ids({ execution: true, registry: true, pool: true })).toEqual([]);
     const commands = firstJobSteps(NONE, 'erp-demo').map(firstJobCommand);
-    expect(commands[0]).toBe('npm run worker:image -- <receipt.json>');
-    // The execution JSON is quoted once for the shell; the minimal form the built binary accepts (docker executable + image, git executable).
-    expect(commands[1]).toBe(`deckent config set execution '{"docker":{"executable":"<docker path>","imageId":"<image id>"},"git":{"gitExecutable":"<git path>"}}'`);
+    expect(commands[0]).toBe('deckent init');
     // Every flag `init registry` requires; providers come from the native CLI registry, the scope is filled in.
-    expect(commands[2]).toBe(`deckent init registry --scope erp-demo --provider <${nativeCliIds.join('|')}> --kind <kind> --pool <pool> --execution-slots <n> --in-flight-slots <n> --discovery <disabled|repository> --preview`);
-    expect(commands[3]).toBe('deckent init pool --scope erp-demo --preview');
+    expect(commands[1]).toBe(`deckent init registry --scope erp-demo --provider <${nativeCliIds.join('|')}> --kind <kind> --pool <pool> --execution-slots <n> --in-flight-slots <n> --discovery <disabled|repository> --preview`);
+    expect(commands[2]).toBe('deckent init pool --scope erp-demo --preview');
     expect(firstJobSteps(NONE, null).at(-1)?.argv).toContain('<scope>');
     expect(firstJobLines([], 'en')).toEqual(['Worker image, registry and pool are set up: ready for the first job.']);
     expect(firstJobLines(firstJobSteps({ execution: true, registry: true, pool: false }, 's'), 'tr'))
@@ -58,7 +57,7 @@ describe('I-S7 doctor: registry present, pool missing is a warning naming decken
     expect(pool({ poolStatus: 'missing', firstJob: { execution: true, registry: true } })).toMatchObject({ state: 'warning',
       text: 'The worker pool is configured but not set up yet: Runs cannot start workers',
       next: 'Set up the worker pool: preview, then the same command with --apply: deckent init pool --scope erp-demo --preview' });
-    expect(pool({ poolStatus: 'unconfigured', firstJob: { execution: false, registry: false } })?.next).toMatch(/^Build a worker image in the Deckent source checkout .*: npm run worker:image -- <receipt\.json>$/u);
+    expect(pool({ poolStatus: 'unconfigured', firstJob: { execution: false, registry: false } })?.next).toMatch(/^Build or adopt the worker image .*: deckent init$/u);
     expect(pool({ poolStatus: 'unconfigured', firstJob: { execution: true, registry: false } })?.next).toMatch(/: deckent init registry --scope erp-demo --provider /u);
     expect(pool({ poolStatus: 'ready', firstJob: { execution: true, registry: true } })).toMatchObject({ state: 'ok' });
     expect(pool({ poolStatus: 'ready' })?.next).toBeUndefined();
@@ -79,7 +78,7 @@ describe('I-S7 deckent init summary: text, window and --json show the same order
     const text = renderSetupLines(plan, 'en', apply, NONE).split('\n');
     const at = text.indexOf('Before the first job (/do), still to do, in this order:');
     expect(at).toBeGreaterThan(0);
-    expect(text.slice(at + 1).filter(line => /^\d\. /u.test(line))).toHaveLength(4);
+    expect(text.slice(at + 1).filter(line => /^\d\. /u.test(line))).toHaveLength(3);
     expect(text.at(-1)).toBe('   $ deckent init pool --scope erp-demo --preview');
     expect(renderSetupLines(plan, 'en', apply, { execution: true, registry: true, pool: true }).split('\n').at(-1)).toBe('Worker image, registry and pool are set up: ready for the first job.');
     expect(renderSetupLines(plan, 'en', apply)).not.toContain('first job');
@@ -106,10 +105,13 @@ describe('I-S7 deckent init summary: text, window and --json show the same order
     expect(none.slice(-2)).toEqual(['', '']);
   });
 
-  it('negative (source): no setup or doctor unit can reach the registry preview (it starts a container)', async () => {
+  it('negative (source): no observation, apply-port or doctor unit can reach the registry preview (it starts a container)', async () => {
     const forbidden = /initializeNativeCodingRegistry|detectNativeCliVersion|native-coding|configureNativeCodingTemplate/u;
+    // BR1 1b: only the foreground stage reaches `init registry`'s owner (the CLI host's port), after the window's Apply and on a terminal; the
+    // contract file names that port's type. Nothing that observes, plans, renders or applies off the window does.
+    const foreground = new Set(['src/surfaces/core/setup/internal/foreground.ts', 'src/surfaces/core/setup/internal/contract.ts']);
     for (const unit of ['src/composition/core/setup', 'src/surfaces/core/setup', 'src/surfaces/core/doctor']) {
-      const files = (await readdir(unit, { recursive: true, encoding: 'utf8' })).filter(file => /\.(ts|json)$/u.test(file));
+      const files = (await readdir(unit, { recursive: true, encoding: 'utf8' })).filter(file => /\.(ts|json)$/u.test(file) && !foreground.has(`${unit}/${file}`));
       expect(files.length, unit).toBeGreaterThan(0);
       for (const file of files) expect(forbidden.test(await readFile(join(unit, file), 'utf8')), `${unit}/${file}`).toBe(false);
     }
@@ -122,7 +124,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 describe.skipIf(process.platform !== 'linux')('I-S7 real binary: the list as data, never a container from a pipe, an agent, --json or --yes', () => {
-  it('a recording docker on PATH sees no container command; --json lists 4 steps, then 2 after the execution configuration', async () => {
+  it('a recording docker on PATH sees no container command; --json lists 3 steps, then 2 after the execution configuration', async () => {
     const base = await mkdtemp(join(tmpdir(), 'deckent-i-s7-')); roots.push(base);
     const root = join(base, 'erp-demo'), home = join(base, 'home'), bin = join(base, 'bin'), calls = join(base, 'docker-calls.txt');
     for (const dir of [root, home, bin]) await mkdir(dir, { recursive: true });
@@ -134,11 +136,11 @@ describe.skipIf(process.platform !== 'linux')('I-S7 real binary: the list as dat
     const steps = (stdout: string) => (JSON.parse(stdout) as { firstJob: { id: string }[] | null }).firstJob?.map(step => step.id);
     const yes = await run(['init', '--yes', '--scope', 'erp-demo', '--json']);
     expect(yes.code, yes.stderr).toBe(0);
-    expect(steps(yes.stdout)).toEqual(['worker-image', 'execution', 'registry', 'pool']);
+    expect(steps(yes.stdout)).toEqual(['execution', 'registry', 'pool']);
     const piped = await run(['init']);
     expect(piped.stdout).toContain('Before the first job (/do), still to do, in this order:');
     expect(piped.stdout).toContain('   $ deckent init pool --scope erp-demo --preview');
-    expect(steps((await run(['init'], { CLAUDECODE: '1' })).stdout)).toEqual(['worker-image', 'execution', 'registry', 'pool']);
+    expect(steps((await run(['init'], { CLAUDECODE: '1' })).stdout)).toEqual(['execution', 'registry', 'pool']);
     const set = await run(['config', 'set', 'execution', JSON.stringify({ docker: { executable: join(bin, 'docker'), imageId: `sha256:${'a'.repeat(64)}` }, git: { gitExecutable: '/usr/bin/git' } })]);
     expect(set.code, set.stderr).toBe(0);
     expect(steps((await run(['init', '--json'])).stdout)).toEqual(['registry', 'pool']);

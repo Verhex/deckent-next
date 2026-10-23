@@ -27,8 +27,8 @@ export const DELIVERY_SUMMARY_ACTIONS = Object.freeze({
 } as const);
 const actionKeySchema = z.enum(['publish-candidate', 'nothing-published', 'move-target', 'target-unchanged', 'restore-previous', 'current-stays']);
 
-/** Host verdicts of a pinned worker's model evidence (WORKER-CURRENCY-1/2, incl. the session-start-name pair) plus `pending`. */
-export const DELIVERY_MODEL_VERDICTS = ['verified', 'substituted', 'unverified', 'start-name-matched', 'provider-chosen', 'pending'] as const satisfies readonly WorkerModelVerdict[];
+/** Host verdicts of a pinned worker's model evidence (WORKER-CURRENCY-1/2, incl. the session-start-name and client-reported pairs) plus `pending`. */
+export const DELIVERY_MODEL_VERDICTS = ['verified', 'substituted', 'unverified', 'start-name-matched', 'provider-chosen', 'client-reported', 'client-reported-mismatch', 'pending'] as const satisfies readonly WorkerModelVerdict[];
 type MissingVerdict = Exclude<WorkerModelVerdict, typeof DELIVERY_MODEL_VERDICTS[number]>;
 const exhaustiveVerdicts: MissingVerdict extends never ? true : never = true; void exhaustiveVerdicts;
 export const deliveryModelVerdictSchema = z.enum(DELIVERY_MODEL_VERDICTS);

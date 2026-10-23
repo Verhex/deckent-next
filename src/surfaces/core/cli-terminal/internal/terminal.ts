@@ -9,7 +9,7 @@ import { DeckentError, ErrorRegistry, emit, getConfigMetadata, getConfigKnownSec
 import { buildInferenceServingPlan, estimateReplicaCapacity, readInferenceServingProfile, runtimeConfigFreshness, RUNTIME_SERVICE_HEARTBEAT_MS, type IdentityRead, type InstallationIdentityRead } from '#engine/index.js';
 import { prefersAsciiGlyphs, runTerminalWorkline, resolveWorklinePalette, resolveTerminalTheme, STARTUP_BANNERS, TERMINAL_THEME_SETTINGS, type TerminalThemeSetting, type WorklineStartup, buildWorklineBridgeSnapshot, streamLineTurn, boundAgentHistory, boundChatHistory, bindSessionScope, type AgentChatMessage, type ChatTurnMessage, type TurnDelta, type WorklineLabels, type SlashWindowLabels } from '#surfaces/core/terminal/index.js';
 import { fillTemplate, plainText, projectHumanText, shortenHomePath } from '#surfaces/core/terminal-render/index.js';
-import { terminalComposerLabels, terminalRenderLabels, terminalSessionLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
+import { terminalComposerLabels, terminalHandoffLabels, terminalRenderLabels, terminalSessionLabels, terminalStartupLabels } from '#surfaces/core/terminal-labels/index.js';
 import { createWorklineLedgerPorts } from './terminal-ledger.js';
 import { terminalDeliveryPort } from './deliver-port.js';
 import { deliveryWindowLabels, pickerLabels, runtimeBuildSkew, terminalPanelLabels, workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
@@ -169,7 +169,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
     runUsage: t('terminal.slash.runUsage', {}, locale), watchStarted: t('terminal.workline.watchStarted', {}, locale),
     watchRunsStarted: t('terminal.workline.watchRunsStarted', {}, locale), watchStopped: t('terminal.workline.watchStopped', {}, locale),
     unknownCommand: t('terminal.workline.unknownCommand', {}, locale), statusLine,
-    render: terminalRenderLabels(locale), composer: terminalComposerLabels(locale), sessions: terminalSessionLabels(locale),
+    render: terminalRenderLabels(locale), composer: terminalComposerLabels(locale), sessions: terminalSessionLabels(locale), handoff: terminalHandoffLabels(locale),
     mentions: { attached: t('terminal.mention.attached', {}, locale), truncated: t('terminal.mention.truncated', {}, locale),
       refused: t('terminal.mention.refused', {}, locale) },
     mode: { current: t('terminal.mode.current', {}, locale), changed: t('terminal.mode.changed', {}, locale), inert: t('terminal.mode.inert', {}, locale),
@@ -184,6 +184,8 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       searchNone: t('terminal.viewport.searchNone', {}, locale), copied: t('terminal.viewport.copied', {}, locale) },
     decisionArm: { arming: t('terminal.decision.arming', {}, locale), ignored: t('terminal.decision.ignored', {}, locale) },
     reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale), unsupported: t('tui.model.reason.reasoningOff', {}, locale) },
+    copy: { sent: t('tuicopy.sent', {}, locale), none: t('tuicopy.none', {}, locale), range: t('tuicopy.range', {}, locale), usage: t('tuicopy.usage', {}, locale),
+      tooLarge: t('tuicopy.tooLarge', {}, locale), unavailable: t('tuicopy.unavailable', {}, locale) },
     scratch: { summary: t('terminal.scratch.summary', {}, locale), empty: t('terminal.scratch.empty', {}, locale), entry: t('terminal.scratch.entry', {}, locale),
       more: t('terminal.scratch.more', {}, locale), path: t('terminal.scratch.path', {}, locale), cleared: t('terminal.scratch.cleared', {}, locale),
       usage: t('terminal.scratch.usage', {}, locale) },
@@ -399,6 +401,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     approvalPageSize: config.approvals.pageSize,
     ...(context.inspectWorkers ? { inspectWorkers: context.inspectWorkers } : {}),
     ...(context.inspectRun ? { inspectRun: context.inspectRun } : {}),
+    ...(context.describeDeliverySummaries ? { describeQueueSummaries: context.describeDeliverySummaries } : {}),
     ...(context.inspectInventory ? { inspectInventory: context.inspectInventory } : {}),
     ...(context.inspectWorkerTranscript ? { inspectWorkerTranscript: context.inspectWorkerTranscript } : {}),
     ...(context.listApprovals ? { listApprovals: context.listApprovals } : {}),
@@ -414,7 +417,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   const target = scopeId;
   // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
   // clears). A config without a `terminal` section (scope from --scope) keeps every default.
-  const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean; readonly layout?: 'fullscreen' | 'inline'; readonly viewportRows?: number };
+  const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean; readonly layout?: 'fullscreen' | 'inline'; readonly notify?: 'bell' | 'off'; readonly viewportRows?: number };
   const theme = resolveTerminalTheme(presentation.theme ?? TERMINAL_THEME_SETTINGS[0], colorCapability({ env, isTTY: tty.stdout, argv: process.argv }), env['COLORFGBG']);
   const ascii = prefersAsciiGlyphs(env);
   const home = env['HOME'] ?? env['USERPROFILE'], where = shortenHomePath(root, home);
@@ -445,13 +448,14 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     // NO_COLOR concerns colour only, so it does not stop the clear.
     clearScreen: env['TERM']?.trim().toLowerCase() !== 'dumb',
     // TERMINAL-SABIT-DUZEN: the full-window layout unless the person keeps the inline one (`terminal.layout: inline`).
+    ...(presentation.notify !== 'off' ? { attention: true } : {}),
     ...(presentation.layout === 'inline' ? { fullscreen: false } : {}), ...(presentation.viewportRows ? { viewportRows: presentation.viewportRows } : {}),
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(context.planRun ? { doPlan: { planning: t('brain.planning', {}, locale), cancelHint: t('brain.cancelHint', {}, locale), requestHint: t('brain.requestHint', {}, locale),
       plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference) => context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(reference ? { reference } : {}) }, options, signal),
       lines: (result: Parameters<typeof brainProposalLines>[0]) => brainProposalLines(result, locale) } } : {}),
     ...(context.inspectProviderSpendAccount && context.manageProviderSpend ? { spending: () => spendRecoveryView({ root, scopeId, options, locale, context }) } : {}),
-    ...(inputHistory ? { inputHistory } : {}),
+    ...(inputHistory ? { inputHistory } : {}), ...(context.externalEditor ? { externalEditor: context.externalEditor } : {}),
     // T-L5 `@file`: candidates and content come from the runtime service's scoped read port; this surface reads no file.
     ...(context.findTerminalMentions ? { mentions: (query: string, signal: AbortSignal) => context.findTerminalMentions!(root, { scopeId, query }, options, signal) } : {}),
     ...(context.attachTerminalMentions ? { attachMentions: (text: string, paths: readonly string[], signal: AbortSignal) =>

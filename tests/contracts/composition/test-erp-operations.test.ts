@@ -120,6 +120,9 @@ describe.each(['sdk', 'runtime'] as const)('test.erp through the %s operation su
   });
 
   unknownReconcileSteps(open);
+  lateReplySteps(open);
+  lateResendSteps(open);
+  approveAfterRestartSteps(open, surface);
   compensationSteps(open);
 });
 
@@ -155,6 +158,15 @@ function unknownReconcileSteps(open: () => Promise<Opened>) {
       expect(f.server.writes).toHaveLength(1); expect(f.server.current().status).toBe(config.approvedStatus);
       await expect(f.execute(command)).rejects.toMatchObject({ code: 'EFFECT_OUTCOME_UNKNOWN' });
       expect(f.server.requests.filter(request => request.method === 'POST')).toHaveLength(1);
+      if (f.runtime) {
+        // BETA-RAKIP-3: the installed CLI a person runs names the next safe step and the exact inspect command; it resends nothing.
+        const next = `deckent operation inspect --scope ${config.scopeId} --command-id ${command.commandId}`;
+        const refused = await f.runtime.human(['operation', 'execute', '--lang', 'en'], command);
+        expect(refused.status).toBe(1); expect(refused.stderr).toContain('EFFECT_OUTCOME_UNKNOWN'); expect(refused.stderr).toContain(next);
+        const shown = await f.runtime.human(['operation', 'inspect', '--scope', config.scopeId, '--command-id', command.commandId, '--lang', 'tr']);
+        expect(shown.status).toBe(0); expect(shown.stdout).toContain('Sonraki adım:'); expect(shown.stdout).toContain(`${config.targetKind}/${config.recordId}`);
+        expect(f.server.requests.filter(request => request.method === 'POST')).toHaveLength(1);
+      }
       run.passed(1);
     });
     it('step 2: blocks a new approved intent on the busy target', async context => {
@@ -178,6 +190,91 @@ function unknownReconcileSteps(open: () => Promise<Opened>) {
       expect(await f.checkpoint('settled-after-lookup', command.commandId)).toMatchObject({ state: 'settled', evidence: { kind: 'idempotency-record' } });
       expect(f.server.requests.filter(request => request.method === 'POST')).toHaveLength(1); expect(f.server.writes).toHaveLength(1);
       run.passed(4);
+    });
+  });
+}
+
+const posts = (f: Fixture) => f.server.requests.filter(request => request.method === 'POST');
+/** BETA-RAKIP-3 "late reply after timeout": the target holds the write past the client deadline, then applies it and replies to nobody. */
+async function heldUntilTimeout(f: Fixture, command: Command) {
+  await f.approve(command); f.server.faults.replyLate = true;
+  await expect(f.execute(command)).rejects.toMatchObject({ code: 'EFFECT_OUTCOME_UNKNOWN' });
+  // The lookup right after the timeout found no idempotency record (the write had not landed): unknown, never refused, never resent.
+  expect(f.server.heldLate()).toBe(true); expect(f.server.writes).toEqual([]); expect(posts(f)).toHaveLength(1);
+  expect(await f.checkpoint('unknown-before-late-write', command.commandId)).toMatchObject({ state: 'unknown', evidence: null });
+}
+function lateReplySteps(open: () => Promise<Opened>) {
+  describe('keeps unknown through a reply that arrives after the timeout and settles the late write by lookup without writing twice', { concurrent: false, shuffle: false }, () => {
+    const run = steps('late-reply', open); let command: Command;
+    it('step 1: a write held past the client deadline is unknown, not refused and not resent', async context => {
+      const f = await run.open(context); command = f.command('late'); await heldUntilTimeout(f, command);
+      run.passed(1);
+    });
+    it('step 2: the late write lands, its reply reaches no client and settles nothing', async context => {
+      const f = run.next(2, context);
+      expect(await f.server.releaseLate()).toEqual({ key: expect.any(String), status: 200, clientGone: true });
+      expect(f.server.writes).toHaveLength(1); expect(f.server.current().status).toBe(config.approvedStatus);
+      expect(await f.checkpoint('unknown-after-late-reply', command.commandId)).toMatchObject({ state: 'unknown', evidence: null });
+      run.passed(2);
+    });
+    it('step 3: the same command settles from the target idempotency record with no second write', async context => {
+      const f = run.next(3, context);
+      expect(await f.execute(command)).toMatchObject({ status: 'settled', evidence: 'idempotency-record', version: f.server.etag(config.initialVersion + 1) });
+      expect(await f.checkpoint('settled-after-late-reply', command.commandId)).toMatchObject({ state: 'settled', evidence: { kind: 'idempotency-record' } });
+      expect(posts(f)).toHaveLength(1); expect(f.server.writes).toHaveLength(1);
+      run.passed(3);
+    });
+  });
+}
+function lateResendSteps(open: () => Promise<Opened>) {
+  describe('a resubmission before the late write lands sends the same keyed conditional write once; the late original then writes nothing', { concurrent: false, shuffle: false }, () => {
+    const run = steps('late-resend', open); let command: Command; let settled: Awaited<ReturnType<Fixture['inspect']>>['record'];
+    it('step 1: a write held past the client deadline is unknown', async context => {
+      const f = await run.open(context); command = f.command('late-resend'); await heldUntilTimeout(f, command);
+      run.passed(1);
+    });
+    it('step 2: the target has no record yet, so the same conditional write is resent under the same key and settles once', async context => {
+      const f = run.next(2, context);
+      expect(await f.execute(command)).toMatchObject({ status: 'settled', evidence: 'idempotency-record', version: f.server.etag(config.initialVersion + 1) });
+      const [first, second] = posts(f);
+      expect(posts(f)).toHaveLength(2); expect(second!.key).toBe(first!.key); expect(second!.ifMatch).toBe(command.expectedVersion);
+      expect(f.server.writes).toHaveLength(1);
+      settled = await f.checkpoint('settled-by-resend', command.commandId);
+      expect(settled).toMatchObject({ state: 'settled' });
+      run.passed(2);
+    });
+    it('step 3: the late original finds the idempotency record, writes nothing, and the settlement is unchanged', async context => {
+      const f = run.next(3, context);
+      expect(await f.server.releaseLate()).toEqual({ key: expect.any(String), status: 200, clientGone: true });
+      expect(f.server.writes).toHaveLength(1); expect(f.server.current()).toEqual({ version: config.initialVersion + 1, status: config.approvedStatus });
+      expect((await f.inspect(command.commandId)).record).toEqual(settled);
+      run.passed(3);
+    });
+  });
+}
+function approveAfterRestartSteps(open: () => Promise<Opened>, surface: 'sdk' | 'runtime') {
+  describe('decides an operation card after a service restart and executes it after another restart with one write', { concurrent: false, shuffle: false }, () => {
+    const run = steps('approve-after-restart', open); let command: Command; let approvalId: string;
+    it('step 1: the card is open and nothing is sent or recorded', async context => {
+      const f = await run.open(context); command = f.command('restart-card');
+      const pending = await f.execute(command); if (pending.status !== 'approval-pending') throw new Error('missing operation card');
+      approvalId = pending.approval.approvalId;
+      expect(f.server.requests).toEqual([]); expect((await f.inspect(command.commandId)).record).toBeNull();
+      run.passed(1);
+    });
+    it('step 2: after a restart the same card is still open and an allow decides it', async context => {
+      const f = run.next(2, context); if (surface === 'runtime') await f.restart();
+      expect(await f.inspectApproval(approvalId)).toMatchObject({ status: 'pending', revision: 0, decision: null });
+      expect(await f.decide(approvalId, 'allow-after-restart')).toMatchObject({ status: 'decided', decision: { decision: 'allow' } });
+      expect(f.server.requests).toEqual([]);
+      run.passed(2);
+    });
+    it('step 3: after another restart the same command settles under that card with one write', async context => {
+      const f = run.next(3, context); if (surface === 'runtime') await f.restart();
+      expect(await f.execute(command)).toMatchObject({ status: 'settled', version: f.server.etag(config.initialVersion + 1) });
+      expect((await f.inspect(command.commandId)).record).toMatchObject({ state: 'settled', intent: { approval: { approvalId } } });
+      expect(f.server.writes).toHaveLength(1); expect(posts(f)).toHaveLength(1);
+      run.passed(3);
     });
   });
 }

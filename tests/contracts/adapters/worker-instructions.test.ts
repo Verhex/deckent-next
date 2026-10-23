@@ -1,14 +1,18 @@
-import { chmod, mkdir, mkdtemp, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { chmod, mkdir, mkdtemp, readdir, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { compileNativeCodingWorkInput, nativeCodingRefusalCode, openProjectInstructionReader, openWorkerInstructionTrust, workerInstructionFile, workerInstructionSelection } from '#adapters/index.js';
+import { compileNativeCodingWorkInput, gitRefFileSource, nativeCodingRefusalCode, openProjectInstructionReader, openWorkerInstructionTrust, PROJECT_INSTRUCTION_REGISTRY,
+  workerInstructionFile, workerInstructionSelection } from '#adapters/index.js';
 
 /** DECKENT-MD-WORKERS (owner Q3 2026-10-23): per-project worker instruction source, digest-bound, consent consumed never granted. */
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const DIGEST = 'ab'.repeat(32);
-const source = (content: string) => ({ path: '/p/.deckent/worker-instructions.md', bytes: Buffer.byteLength(content), digest: DIGEST, content });
+const source = (content: string) => ({ path: '/p/.deckent/worker-instructions.md', bytes: Buffer.byteLength(content), digest: DIGEST, content, identity: { kind: 'file' as const, dev: 1, ino: 2 } });
 
 describe('worker instruction source selection', () => {
   it('maps each selection to exactly one root file from registry data and never to CLAUDE.md', () => {
@@ -91,6 +95,130 @@ describe('worker instruction source selection', () => {
     const root = await mkdtemp(join(tmpdir(), 'worker-instructions-')), outside = await mkdtemp(join(tmpdir(), 'worker-outside-')); roots.push(root, outside);
     await writeFile(join(outside, 'worker-instructions.md'), 'planted'); await symlink(outside, join(root, '.deckent'));
     expect(await (await openProjectInstructionReader(root, null, undefined, [workerInstructionFile('worker-md')])).inspect()).toEqual({ status: 'blocked', reason: 'unsafe' });
+  });
+});
+
+/** alpha.54 R1 (owner Q5 2026-10-23): with a work target, workers read the file committed on its base ref, never the working tree. */
+describe.skipIf(process.platform === 'win32')('worker instruction file read from the work target ref', () => {
+  const exec = promisify(execFile), GIT = { gitExecutable: '/usr/bin/git', timeoutMs: 10_000, outputBytes: 65_536 }, REF = 'refs/heads/main', FILE = '.deckent/worker-instructions.md';
+  const git = async (root: string, ...args: string[]) => (await exec('/usr/bin/git', ['-C', root, '-c', 'user.name=T', '-c', 'user.email=t@example.invalid', ...args])).stdout.trim();
+  async function repository(files: Record<string, string> = { [FILE]: 'committed' }) {
+    const root = await mkdtemp(join(tmpdir(), 'worker-ref-')); roots.push(root);
+    await git(root, 'init', '-q', '-b', 'main');
+    for (const [name, text] of Object.entries(files)) { await mkdir(join(root, name, '..'), { recursive: true }); await writeFile(join(root, name), text); }
+    await git(root, 'add', '-A'); await git(root, 'commit', '-q', '--allow-empty', '-m', 'base');
+    return root;
+  }
+  const commit = async (root: string, message = 'next') => { await git(root, 'add', '-A'); await git(root, 'commit', '-q', '--allow-empty', '-m', message); return git(root, 'rev-parse', REF); };
+  const committed = (root: string, ref = REF) => gitRefFileSource(GIT, root, ref, () => git(root, 'rev-parse', '--verify', `${ref}^{commit}`));
+  const reader = (root: string, trust: string | null = null, file = FILE, ref = REF) => openProjectInstructionReader(root, trust, undefined, [file], committed(root, ref));
+
+  it('reads the ref content: a modified, uncommitted or detached working tree is never what workers get', async () => {
+    const root = await repository(), head = await git(root, 'rev-parse', REF);
+    await writeFile(join(root, FILE), 'dirty, not committed');
+    const view = await (await reader(root)).inspect();
+    expect(view).toMatchObject({ status: 'trust-required', source: { content: 'committed', bytes: 9, path: `${REF}:${FILE}`,
+      identity: { kind: 'ref', ref: REF, commit: head, blobOid: await git(root, 'rev-parse', `${REF}:${FILE}`) } } });
+    // A detached HEAD with other committed bytes: the configured ref still wins.
+    await git(root, 'checkout', '-q', '--detach'); await writeFile(join(root, FILE), 'detached'); await commit(root);
+    expect(await git(root, 'rev-parse', REF)).toBe(head);
+    expect(await (await reader(root)).inspect()).toMatchObject({ source: { content: 'committed', identity: { commit: head } } });
+    // Present in the working tree but not committed on the ref: absent.
+    const fresh = await repository({ 'note.txt': 'x' }); await mkdir(join(fresh, '.deckent')); await writeFile(join(fresh, FILE), 'untracked');
+    expect(await (await reader(fresh)).inspect()).toEqual({ status: 'absent' });
+    // A ref that names no commit is unreadable, never absent.
+    expect(await (await reader(root, null, FILE, 'refs/heads/missing')).inspect()).toEqual({ status: 'blocked', reason: 'unreadable' });
+  });
+
+  it('refuses a symlink, submodule or file .deckent and a non-regular entry at the ref; the size comes from the tree before any read', async () => {
+    const outside = await repository({ 'worker-instructions.md': 'planted' });
+    const linked = await repository({ 'note.txt': 'x' }); await symlink(outside, join(linked, '.deckent')); await commit(linked);
+    const plain = await repository({ '.deckent': 'a file' });
+    const sub = await repository({ 'note.txt': 'x' });
+    await git(sub, 'update-index', '--add', '--cacheinfo', `160000,${await git(outside, 'rev-parse', 'HEAD')},.deckent`); await git(sub, 'commit', '-q', '-m', 'gitlink');
+    const fileLink = await repository({ '.deckent/target.md': 'x' }); await symlink('target.md', join(fileLink, FILE)); await commit(fileLink);
+    const tree = await repository({ 'AGENTS.md/inner.md': 'x' });
+    for (const [root, file] of [[linked, FILE], [plain, FILE], [sub, FILE], [fileLink, FILE], [tree, 'AGENTS.md']] as const) {
+      expect(await (await reader(root, null, file)).inspect(), `${root} ${file}`).toEqual({ status: 'blocked', reason: 'unsafe' });
+    }
+    const large = await repository({ [FILE]: 'x'.repeat(PROJECT_INSTRUCTION_REGISTRY.maxBytes + 1) });
+    expect(await (await reader(large)).inspect()).toEqual({ status: 'blocked', reason: 'size' });
+    expect(await (await reader(await repository({ 'AGENTS.md': 'agents' }), null, 'AGENTS.md')).inspect()).toMatchObject({ source: { content: 'agents', path: `${REF}:AGENTS.md` } });
+  });
+
+  it('REVISE 2738 R1 (owner Q5): a new trust binds ref + content; another ref or the folder with the same bytes needs its own trust; revokes stay per ref', async () => {
+    const root = await repository(), home = await mkdtemp(join(tmpdir(), 'worker-home-')); roots.push(home); await chmod(home, 0o700);
+    const env = { HOME: home }, OTHER = 'refs/heads/other'; await git(root, 'branch', 'other');
+    const open = (ref: string | null) => openWorkerInstructionTrust(root, env, undefined, FILE, ref === null ? undefined : committed(root, ref));
+    const fresh = async (ref: string | null) => (await (await open(ref)).inspect()).status; // a new process: only the persisted records count
+    const atA = await open(REF), shown = await atA.inspect();
+    if (shown.status !== 'trust-required') throw new Error(shown.status);
+    const digest = shown.source.digest;
+    expect((await atA.trust(digest)).status).toBe('ready');
+    expect([await fresh(REF), await fresh(OTHER), await fresh(null)]).toEqual(['ready', 'trust-required', 'trust-required']);
+    const atB = await open(OTHER);
+    expect((await atB.trust(digest)).status).toBe('ready');
+    expect(await atA.revoke(digest)).toBe(true); // A's record only
+    expect([await fresh(REF), await fresh(OTHER)]).toEqual(['trust-required', 'ready']);
+    expect((await atA.trust(digest)).status).toBe('ready');
+    expect(await atB.revoke(digest)).toBe(true); // and the other way round
+    expect([await fresh(REF), await fresh(OTHER)]).toEqual(['ready', 'trust-required']);
+    // The same ref advancing with the same bytes stays trusted; other bytes on it need a new trust.
+    await writeFile(join(root, 'other.txt'), 'unrelated'); const advanced = await commit(root);
+    expect(await (await open(REF)).inspect()).toMatchObject({ status: 'ready', source: { digest, identity: { kind: 'ref', ref: REF, commit: advanced } } });
+    await writeFile(join(root, FILE), 'changed on the branch'); await commit(root);
+    expect(await (await open(REF)).inspect()).toMatchObject({ status: 'trust-required', source: { content: 'changed on the branch' } });
+  });
+
+  // The legacy-rule fixtures use a trust folder the test controls, so the exact alpha.53 record bytes can be laid down before any access.
+  const store = async () => { const dir = await mkdtemp(join(tmpdir(), 'worker-trust-')); roots.push(dir); await chmod(dir, 0o700); return dir; };
+  const at = (root: string, trust: string, ref: string | null, file = FILE) => openProjectInstructionReader(root, trust, undefined, [file], ref === null ? undefined : committed(root, ref));
+  const sha = (text: string) => createHash('sha256').update(text).digest('hex');
+  /** The record alpha.53 wrote: sha256(sha256(real root \0 dev \0 ino) \0 digest), content = the digest, mode 0600. */
+  const legacyName = async (root: string, digest: string) => { const real = await realpath(root), info = await stat(real); return sha(`${sha(`${real}\0${info.dev}\0${info.ino}`)}\0${digest}`); };
+  const records = async (trust: string) => (await readdir(trust)).filter(name => /^[a-f0-9]{64}$/u.test(name)).sort();
+  const status = async (reader: Promise<{ inspect(): Promise<{ status: string }> }>) => (await (await reader).inspect()).status;
+
+  it('legacy rule: a folder + content record that existed before this release first opened the store (alpha.53, the N1 trust) unlocks a ref; a ref revoke ends that without dropping the folder trust', async () => {
+    const root = await repository(), trust = await store(), digest = sha('committed'), legacy = await legacyName(root, digest);
+    await writeFile(join(trust, legacy), digest, { mode: 0o600 }); // left by alpha.53 before this release ever opened the store
+    expect(await (await at(root, trust, REF)).inspect()).toMatchObject({ status: 'ready', source: { digest, identity: { kind: 'ref' } } });
+    expect(await status(at(root, trust, null))).toBe('ready'); // the working tree (no target) reads it as before
+    await writeFile(join(root, 'other.txt'), 'unrelated'); await commit(root);
+    expect(await status(at(root, trust, REF))).toBe('ready'); // the ref advancing with the same bytes
+    // A revoke at the ref: the ref is untrusted, the folder's own (working-tree, terminal) trust and its record stay.
+    expect(await (await at(root, trust, REF)).revoke(digest)).toBe(true);
+    expect([await status(at(root, trust, REF)), await status(at(root, trust, null)), await records(trust)]).toEqual(['trust-required', 'ready', [legacy]]);
+    // A new trust at the ref writes the ref form only, and its revoke leaves the folder trust alone.
+    expect((await (await at(root, trust, REF)).trust(digest)).status).toBe('ready');
+    expect((await records(trust)).length).toBe(2);
+    expect(await (await at(root, trust, REF)).revoke(digest)).toBe(true);
+    expect([await status(at(root, trust, REF)), await status(at(root, trust, null)), await records(trust)]).toEqual(['trust-required', 'ready', [legacy]]);
+    // Revoking the folder trust and giving it again on this release never revives the ref's legacy eligibility.
+    const again = await repository(), trust2 = await store(), legacy2 = await legacyName(again, digest);
+    await writeFile(join(trust2, legacy2), digest, { mode: 0o600 });
+    expect(await (await at(again, trust2, null)).revoke(digest)).toBe(true);
+    expect((await (await at(again, trust2, null)).trust(digest)).status).toBe('ready');
+    expect([await status(at(again, trust2, REF)), await status(at(again, trust2, null))]).toEqual(['trust-required', 'ready']);
+  });
+
+  it('a folder + content trust given on this release (no target, the terminal\'s AGENTS.md, a later record) never unlocks a ref, also when that write is the first access', async () => {
+    const root = await repository({ [FILE]: 'committed', 'AGENTS.md': 'agents' }), trust = await store(), digest = sha('committed');
+    // The very first access to an empty store is a no-target trust write.
+    expect((await (await at(root, trust, null)).trust(digest)).status).toBe('ready');
+    expect([await status(at(root, trust, null)), await status(at(root, trust, REF))]).toEqual(['ready', 'trust-required']);
+    // The terminal's trust of AGENTS.md in the same folder (default DECKENT.md → AGENTS.md lookup, working tree).
+    const terminal = await openProjectInstructionReader(root, trust);
+    expect((await terminal.trust(sha('agents'))).status).toBe('ready');
+    expect(await status(at(root, trust, REF, 'AGENTS.md'))).toBe('trust-required');
+    // Any folder + content record laid down after the store was first opened (here by hand) is not legacy either.
+    const late = await repository(), lateDigest = sha('committed'); await at(late, trust, null);
+    await writeFile(join(trust, await legacyName(late, lateDigest)), lateDigest, { mode: 0o600 });
+    expect([await status(at(late, trust, null)), await status(at(late, trust, REF))]).toEqual(['ready', 'trust-required']);
+    // The same process races a first no-target trust write against a ref reader's open on an empty store: the write is never legacy.
+    const raced = await repository(), racedStore = await store();
+    await Promise.all([(async () => (await at(raced, racedStore, null)).trust(digest))(), at(raced, racedStore, REF), (async () => (await at(raced, racedStore, null)).trust(digest))()]);
+    expect([await status(at(raced, racedStore, null)), await status(at(raced, racedStore, REF))]).toEqual(['ready', 'trust-required']);
   });
 });
 

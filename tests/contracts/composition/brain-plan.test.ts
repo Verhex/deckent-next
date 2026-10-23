@@ -224,7 +224,7 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
   expect(first.proposal.proposal.requiredPermissions).toEqual(invented('gpt-6.1-sol'));
   for (const locale of ['en', 'tr'] as const) {
     const lines = brainProposalLines(first, locale).join('\n');
-    expect(lines).toContain(locale === 'tr' ? 'Kabulde politikayla denetlenen izinler: task/execute/task' : 'Permissions checked by policy at admission: task/execute/task');
+    expect(lines).toContain(locale === 'tr' ? 'Başlatılırken policy\'nin denetlediği izinler: task/execute/task' : 'Permissions checked by policy at admission: task/execute/task');
     expect(lines).toContain(locale === 'tr' ? 'Modelin ayrıca andığı izinler (yalnız bilgi, değerlendirilmedi, yetki vermez)' : 'The model also mentioned (advisory, not evaluated, grants nothing)');
     expect(lines).toContain('model-invocation/invoke/gpt-6.1-sol'); expect(lines).toContain('scope/inspect/live');
     expect(lines).toContain(locale === 'tr' ? 'Bu kurulumda tanınmayan izinler (yalnız bilgi, değerlendirilmedi, yetki vermez): erp-ledger/post/invoice'

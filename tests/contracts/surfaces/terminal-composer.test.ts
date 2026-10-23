@@ -452,3 +452,75 @@ describe('composer rendered by Ink (no colour tier)', () => {
     });
   });
 });
+
+describe('T3 withdraw a queued message and T4 external editor (composer)', () => {
+  const none: Key = { upArrow: false, downArrow: false, leftArrow: false, rightArrow: false, pageDown: false, pageUp: false, home: false, end: false,
+    return: false, escape: false, ctrl: false, shift: false, tab: false, backspace: false, delete: false, meta: false, super: false, hyper: false,
+    capsLock: false, numLock: false } as Key;
+  it('maps Alt+Up to withdraw (plain Up stays a move) and Ctrl+G to the editor key', () => {
+    expect(composerKey('', { ...none, upArrow: true, meta: true })).toEqual({ type: 'withdraw' });
+    expect(composerKey('', { ...none, upArrow: true })).toEqual({ type: 'move', to: 'up' });
+    expect(composerKey('g', { ...none, ctrl: true })).toEqual({ type: 'editor' });
+  });
+
+  it('asks the owner for a queued message only on an empty draft; a draft or an open search is never replaced', () => {
+    expect(run([{ type: 'withdraw' }]).intents).toEqual([{ type: 'withdraw' }]);
+    const kept = run([{ type: 'withdraw' }], draft('mine'));
+    expect(kept.intents).toEqual([]); expect(kept.state.text).toBe('mine');
+    const searching = run([K.ctrlR, { type: 'withdraw' }], draft('x'));
+    expect(searching.intents).toEqual([]); expect(searching.state.search).not.toBeNull();
+  });
+
+  it('restores an entry with its paste chips as one undo step', () => {
+    const entry: ComposerHistoryEntry = { text: 'see [PASTE 3]', pastes: [{ chip: '[PASTE 3]', body: 'a\nb\nc' }] };
+    const restored = run([{ type: 'restore', entry }], draft('earlier'));
+    expect(restored.state.text).toBe('see [PASTE 3]'); expect(restored.state.cursor).toBe(entry.text.length); expect(restored.state.pastes).toEqual(entry.pastes);
+    expect(submitted(run([K.submit], restored.state).intents)).toEqual(['see a\nb\nc']);
+    expect(run([{ type: 'undo' }], restored.state).state.text).toBe('earlier');
+  });
+
+  it('Ctrl+G hands the whole draft (chips expanded) to the editor; without an editor it stays the Esc it was', () => {
+    const state = { ...draft('x [PASTE 2]'), pastes: [{ chip: '[PASTE 2]', body: 'p\nq' }] };
+    expect(run([{ type: 'editor' }], state, context({ editor: true })).intents).toEqual([{ type: 'editor', text: 'x p\nq' }]);
+    expect(run([{ type: 'editor' }], draft(''), context({ editor: true })).intents).toEqual([{ type: 'editor', text: '' }]);
+    expect(run([{ type: 'editor' }], draft('x'), context({ busy: true })).intents).toEqual([{ type: 'cancel' }]);
+    expect(run([{ type: 'editor' }], draft('x')).intents).toEqual([]);
+  });
+
+  it('Alt+Up loads what the owner gives back; Ctrl+G replaces the draft with the editor text (one trailing newline dropped)', async () => {
+    const given: ComposerHistoryEntry[] = [{ text: 'queued words', pastes: [] }];
+    let asked = 0; const edited: string[] = [];
+    const view = mount({ onWithdraw: () => { asked++; return given.shift() ?? null; },
+      onEditor: async text => { edited.push(text); return `${text} and more\n`; } });
+    await view.keys('\u001b[1;3A');
+    await until(() => view.stdout.text.includes('> queued words|'), 'withdrawn text in the draft');
+    await view.keys('\u001b[1;3A');
+    await settle(20); expect(asked).toBe(1);
+    await view.keys('\u0007');
+    await until(() => view.stdout.text.includes('> queued words and more|'), 'editor text in the draft');
+    expect(edited).toEqual(['queued words']);
+    await view.keys('\r');
+    await until(() => view.sent.length === 1, 'submit'); expect(view.sent).toEqual(['queued words and more']);
+  });
+
+  it('keeps the draft when the editor gives nothing back and opens one editor at a time', async () => {
+    let release: (value: string | null) => void = () => undefined; let opened = 0;
+    const view = mount({ onEditor: () => { opened++; return new Promise(resolve => { release = resolve; }); } });
+    await view.type('keep me');
+    await view.keys('\u0007'); await view.keys('\u0007');
+    await settle(20); expect(opened).toBe(1);
+    const mark = view.stdout.text.length;
+    release(null); await view.type('!');
+    await until(() => view.stdout.text.slice(mark).includes('> keep me!|'), 'draft kept and editable');
+  });
+
+  it('hands the owner the draft as typed while recall keeps only the remembered form', async () => {
+    const entries: ComposerHistoryEntry[] = [];
+    const view = mount({ historyText: text => text.split(' ')[0]!, onSubmit: (_text, _mentions, entry) => entries.push(entry) });
+    await view.type('/mode full-auto\r');
+    await until(() => entries.length === 1, 'submit');
+    expect(entries[0]!.text).toBe('/mode full-auto');
+    await view.keys('\u001b[A');
+    await until(() => view.stdout.text.includes('> /mode|'), 'recall shows the remembered form');
+  });
+});

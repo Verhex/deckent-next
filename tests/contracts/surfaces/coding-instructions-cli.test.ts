@@ -37,14 +37,20 @@ const capture = () => { const lines: string[] = []; return { lines, text: () => 
 const piped = () => Object.assign(Readable.from([]), { isTTY: false });
 const tty = () => Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return undefined; } });
 const DIGEST = 'ab'.repeat(32);
-const row = (state: WorkerInstructionStatus['state']): WorkerInstructionStatus => ({ target: 'n1', root: '/work/n1', source: 'worker-md', file: '.deckent/worker-instructions.md',
-  explicit: false, off: null, state, reason: null, path: '/work/n1/.deckent/worker-instructions.md', bytes: 31, digest: DIGEST, preview: ['Run npm test before reporting.'], binding: BINDING });
+const row = (state: WorkerInstructionStatus['state']): WorkerInstructionStatus => ({ target: 'n1', root: '/work/n1', ref: null, source: 'worker-md', file: '.deckent/worker-instructions.md',
+  explicit: false, off: null, state, reason: null, path: '/work/n1/.deckent/worker-instructions.md', bytes: 31, digest: DIGEST, preview: ['Run npm test before reporting.'], binding: BINDING, commit: null });
 /** The host-made canonical place of the card (REVISE 2734 R1): the CLI hands exactly this to the writer, never a digest or target id alone. */
-const BINDING = { target: 'n1', root: '/real/n1', rootDev: 1, rootIno: 2, source: 'worker-md', file: '.deckent/worker-instructions.md',
-  path: '/real/n1/.deckent/worker-instructions.md', fileDev: 1, fileIno: 3, digest: DIGEST };
-function handlers(state: WorkerInstructionStatus['state'], calls: unknown[]) {
+const BINDING = { target: 'n1', root: '/real/n1', rootDev: 1, rootIno: 2, source: 'worker-md', file: '.deckent/worker-instructions.md', ref: null,
+  path: '/real/n1/.deckent/worker-instructions.md', commit: null, blobOid: null, fileDev: 1, fileIno: 3, digest: DIGEST };
+const COMMIT = 'c0'.repeat(20), REF = 'refs/heads/main';
+/** alpha.54 R1: a work target's file is read at its base ref; the row names the ref and the commit it named. */
+const atRef = (state: WorkerInstructionStatus['state']): WorkerInstructionStatus => state === 'absent'
+  ? { ...row(state), ref: REF, path: null, bytes: null, digest: null, preview: [], binding: null }
+  : { ...row(state), ref: REF, commit: COMMIT, path: `${REF}:.deckent/worker-instructions.md`, binding: { ...BINDING, ref: REF, path: `${REF}:.deckent/worker-instructions.md`, commit: COMMIT,
+    blobOid: 'b1'.repeat(20), fileDev: null, fileIno: null } };
+function handlers(state: WorkerInstructionStatus['state'], calls: unknown[], shape: typeof row = row) {
   return {
-    inspectWorkerInstructions: async () => ({ schemaVersion: 1 as const, targets: [row(state)] }),
+    inspectWorkerInstructions: async () => ({ schemaVersion: 1 as const, targets: [shape(state)] }),
     changeWorkerInstructionTrust: async (_root: string, input: { scopeId: string; action: 'trust' | 'revoke'; binding: typeof BINDING }) => {
       calls.push(input);
       return { schemaVersion: 1 as const, action: input.action, target: 'n1', path: row(state).path!, digest: DIGEST, trusted: input.action === 'trust', changed: true, decisionEventId: 'decision:x' };
@@ -120,4 +126,26 @@ it('a person confirms the card: trust passes the exact place shown (host-made bi
     stderr: wrongTarget.sink, ...handlers('untrusted', calls) })).not.toBe(0);
   expect(wrongTarget.text()).toContain('WORKER_INSTRUCTIONS_UNAVAILABLE');
   expect(calls).toEqual([{ scopeId: 'scope', action: 'trust', binding: BINDING }, { scopeId: 'scope', action: 'revoke', binding: BINDING }]);
+});
+
+it('alpha.54 R1: a work target row names the ref and commit it was read from in status and on the card, in both languages', async () => {
+  const f = await project(), calls: unknown[] = [];
+  const en = capture();
+  expect(await main(['coding', 'instructions'], { root: f.root, env: f.env, stdin: piped(), stdout: en.sink, stderr: capture().sink, ...handlers('untrusted', calls, atRef) })).toBe(0);
+  expect(en.text()).toContain(`File ${REF}:.deckent/worker-instructions.md · 31 bytes`);
+  expect(en.text()).toContain(`Committed on ${REF} at ${COMMIT}; uncommitted changes in this folder are not used.`);
+  const tr = capture();
+  expect(await main(['coding', 'instructions', '--lang', 'tr'], { root: f.root, env: f.env, stdin: piped(), stdout: tr.sink, stderr: capture().sink, ...handlers('trusted', calls, atRef) })).toBe(0);
+  expect(tr.text()).toContain(`${REF} üzerinde ${COMMIT} commit'indeki sürüm; bu klasörde commit edilmemiş değişiklikler kullanılmaz.`);
+  for (const [lang, text] of [['en', `No .deckent/worker-instructions.md committed on ${REF}`], ['tr', `${REF} üzerinde commit edilmiş .deckent/worker-instructions.md yok`]] as const) {
+    const out = capture();
+    expect(await main(['coding', 'instructions', '--lang', lang], { root: f.root, env: f.env, stdin: piped(), stdout: out.sink, stderr: capture().sink, ...handlers('absent', calls, atRef) })).toBe(0);
+    expect(out.text()).toContain(text);
+  }
+  card.interactive = true; card.answers = ['apply'];
+  expect(await main(['coding', 'instructions', 'trust', '--scope', 'scope'], { root: f.root, env: f.env, stdin: piped(), stdout: capture().sink, stderr: capture().sink,
+    ...handlers('untrusted', calls, atRef) })).toBe(0);
+  expect(card.asked[0]!.body.slice(0, 3)).toEqual(['Work target n1 · /work/n1', `File ${REF}:.deckent/worker-instructions.md · 31 bytes · SHA-256 ${DIGEST}`,
+    `Committed on ${REF} at ${COMMIT}; uncommitted changes in this folder are not used.`]);
+  expect(calls).toEqual([{ scopeId: 'scope', action: 'trust', binding: atRef('untrusted').binding }]);
 });

@@ -33,6 +33,13 @@ function workerInstructionsUnavailable(p: Params, l: Locale): string {
     default: return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE', p, l);
   }
 }
+/** BETA-RAKIP-3: the next safe step after an uncertain or blocked operation. A surface that knows the command (`deckent operation`) passes
+ * scope, command, kind and id and gets the exact inspect command; any other producer keeps the generic sentence. */
+function effectNextStep(kind: 'unknown' | 'busy', p: Params, l: Locale): string {
+  const named = typeof p['scope'] === 'string' && typeof p['command'] === 'string' && typeof p['kind'] === 'string' && typeof p['id'] === 'string';
+  if (kind === 'unknown') return named ? t('remedy.EFFECT_OUTCOME_UNKNOWN.command', p, l) : t('remedy.EFFECT_OUTCOME_UNKNOWN', p, l);
+  return named ? t('remedy.EFFECT_TARGET_BUSY.command', p, l) : t('remedy.EFFECT_TARGET_BUSY', p, l);
+}
 /** TASK_GRAPH_LIMIT (PARALLEL-S3) names the exceeded admission bound; an unknown detail keeps the generic sentence. */
 function taskGraphLimit(p: Params, l: Locale): string {
   switch (p['detail']) {
@@ -449,9 +456,9 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   EFFECT_OPERATION_UNKNOWN: { category: 'config', render: (p, l) => ({ message: t('error.EFFECT_OPERATION_UNKNOWN', p, l) }) },
   EFFECT_APPROVAL_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_APPROVAL_REQUIRED', p, l) }) },
   EFFECT_PRECONDITION_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_PRECONDITION_CHANGED', p, l) }) },
-  EFFECT_TARGET_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_TARGET_BUSY', p, l) }) },
+  EFFECT_TARGET_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_TARGET_BUSY', p, l), suggestion: effectNextStep('busy', p, l) }) },
   EFFECT_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_CONFLICT', p, l) }) },
-  EFFECT_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_OUTCOME_UNKNOWN', p, l) }) },
+  EFFECT_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_OUTCOME_UNKNOWN', p, l), suggestion: effectNextStep('unknown', p, l) }) },
   EFFECT_NOT_COMPENSABLE: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_NOT_COMPENSABLE', p, l) }) },
   EFFECT_REJECTED: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_REJECTED', p, l) }) },
   EFFECT_TARGET_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.EFFECT_TARGET_CHANGED', p, l) }) },

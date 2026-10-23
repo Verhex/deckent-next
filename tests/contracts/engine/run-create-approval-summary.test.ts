@@ -85,7 +85,7 @@ it.each(['en', 'tr'] as const)('a proposal card shows the system-checked task se
   const permissions = [{ kind: 'task', action: 'execute', resourceId: 'task' }, { kind: 'scope', action: 'inspect', resourceId: 'live' },
     { kind: 'model-invocation', action: 'invoke', resourceId: 'gpt-6.1-sol' }];
   const text = renderRunCreateApprovalSummary({ ...command, proposal: { ...command.proposal!, requiredPermissions: permissions } }, create, verdict, locale);
-  expect(text).toContain(locale === 'tr' ? 'Kabulde politikayla denetlenen: 1 görevin her biri için task / execute' : 'Checked by policy at admission: task / execute for each of the 1 tasks');
+  expect(text).toContain(locale === 'tr' ? 'Başlatılırken policy\'nin denetlediği: 1 görevin her biri için task / execute' : 'Checked by policy at admission: task / execute for each of the 1 tasks');
   expect(text).toContain(locale === 'tr' ? 'Önerinin ayrıca andığı izinler (yalnız bilgi, değerlendirilmedi, yetki vermez): 2' : 'Also mentioned by the proposal (advisory, not evaluated, grants nothing): 2');
   expect(text).toContain('scope / inspect / live'); expect(text).toContain('model-invocation / invoke / gpt-6.1-sol'); expect(text).not.toContain('task / execute / task');
 });

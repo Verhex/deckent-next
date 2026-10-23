@@ -15,4 +15,6 @@ export const setupErrors: ErrorDefinitions = Object.freeze({
   SETUP_INSTALL_STATE_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.SETUP_INSTALL_STATE_UNKNOWN', p, l) }) },
   // I-S3: a stage's owner refused (no terminal, no witness, no grant) in an unattended `deckent init --yes`; the stage is named, nothing after it ran.
   SETUP_STAGE_REFUSED: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_STAGE_REFUSED', p, l) }) },
+  // BR1: the worker-image stage found no reachable Docker when the person confirmed; nothing was built or checked.
+  SETUP_WORKER_DOCKER_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.SETUP_WORKER_DOCKER_UNAVAILABLE', p, l) }) },
 });

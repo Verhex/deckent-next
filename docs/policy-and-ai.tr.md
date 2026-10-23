@@ -2,7 +2,7 @@
 
 [English](policy-and-ai.md) · [Mimari](architecture-overview.tr.md) · [Uyum raporu](reports/ai-floor-compliance.md)
 
-Kaynak görünümü: 2026-10-15. Politika, doğrulanmış aktörün hangi kapsamda hangi kaynak üzerinde
+Kaynakla son karşılaştırma: 2026-10-23. Politika, doğrulanmış aktörün hangi kapsamda hangi kaynak üzerinde
 hangi eylemi yapabileceğini belirler. Grant (yetki kuralı), uygulamanın eylemi değerlendirmesine
 izin verir; durum kontrolü, onay, yalıtım, kabul kriteri ve kalıcı etki kanıtını kaldırmaz.
 Yönetici yalnız kendisinde bulunan yetkiyi devreder. AI aktör yetki yönetimi yapamaz.
@@ -128,6 +128,15 @@ okur ve yukarıdaki komutlarla aynı yönetilen değişiklikle uygularsınız.
 `policy revoke` rastgele politika grant'ini değil, bu kayıtlardan birini kaldırır.
 TTY dışındaki kalıcı izin geri alımında `--yes` teyit bayrağı vardır; yetki, politika veya AI
 tabanını aşmaz.
+
+## Kipleri açmak ve sağlayıcı anahtarlarını paylaşmak
+
+İki eylem kişinin kendi terminalinde kalır. `deckent init policy --scope <id> --modes <list>|none` kurulum sahibi için tam otomatik
+ve tam erişim kiplerini açar ya da kapatır; yapay zekâ araçları, borular ve CI yapamaz. Sağlayıcı anahtarları ana kasada
+(kurulumun kasası) ya da proje kasasındadır. Terminal dışında `deckent secret set NAME` için `--main` ya da `--project` gerekir. Ana
+kasa anahtarı bir projede yalnız izinle kullanılır: solo terminalde kart ya da `deckent secret grant NAME --scope <id>`. Proje
+anahtarları yalnız referans tutan bir `.deck` dosyası ister. Sınırlar (native macOS ve Windows'ta terminal tanığı yok, alpha.50'ye
+dönüş) [bilinen sınırlar](known-limits.tr.md) belgesindedir.
 
 ## İnsan adımlarını AI aktörüne devretme
 

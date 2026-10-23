@@ -91,3 +91,32 @@ it('preserves another scope with older timestamps during interleaved cap pruning
 });
 
 });
+
+describe.skipIf(process.platform === 'win32')('T5 session titles', () => {
+  it('names a saved session of this scope, lists the title, redacts secrets and leaves the snapshot file untouched for the previous release', async () => {
+    const { directory, sessions } = await store(), id = randomUUID();
+    await sessions.save({ schemaVersion: 1, sessionId: id, scopeId: 'live', updatedAtMs: 1, messages: history('q') });
+    const snapshot = await readFile(join(directory, `${id}.json`), 'utf8');
+    const secret = 'sk-ant-api03-' + 'A'.repeat(40);
+    expect(await sessions.rename('live', id, `  release\n notes ${secret}  `)).toBe(true);
+    const [row] = await sessions.list('live');
+    expect(row!.title).toBe('release notes [REDACTED]');
+    // The snapshot is byte-identical (alpha.53 reads it as before); the title is a private sidecar its listing never opens.
+    expect(await readFile(join(directory, `${id}.json`), 'utf8')).toBe(snapshot);
+    expect((await readdir(directory)).sort()).toEqual([`${id}.json`, `${id}.json.title`]);
+    expect((await stat(join(directory, `${id}.json.title`))).mode & 0o777).toBe(0o600);
+    expect(await readFile(join(directory, `${id}.json.title`), 'utf8')).not.toContain(secret);
+  });
+
+  it('refuses an unsaved session, another scope, a malformed id and an empty title; bounds the title; removes it with the pruned snapshot', async () => {
+    const { directory, sessions } = await store({ maxSessions: 1, maxFileBytes: 1_000_000, previewChars: 120 }), id = randomUUID(), next = randomUUID();
+    expect(await sessions.rename('live', id, 'x')).toBe(false);
+    await sessions.save({ schemaVersion: 1, sessionId: id, scopeId: 'live', updatedAtMs: 1, messages: history('q') });
+    expect(await sessions.rename('other', id, 'x')).toBe(false); expect(await sessions.rename('live', '../escape', 'x')).toBe(false);
+    expect(await sessions.rename('live', id, ' \n\t ')).toBe(false);
+    expect(await sessions.rename('live', id, 'n'.repeat(500))).toBe(true);
+    expect((await sessions.list('live'))[0]!.title).toHaveLength(80);
+    await sessions.save({ schemaVersion: 1, sessionId: next, scopeId: 'live', updatedAtMs: 2, messages: history('q2') });
+    expect((await readdir(directory)).sort()).toEqual([`${next}.json`]);
+  });
+});

@@ -1,10 +1,10 @@
 import { constants } from 'node:fs';
-import { mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises';
+import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
-import { selectWorkerLineage, workerImageRecipeSchema, failedContextsToPrune, toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
-import { readWorkerImageHeldVersion, localPrincipalChannel, prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { selectWorkerLineage, toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
+import { buildWorkerImageInHome, readBuiltWorkerLineage, readWorkerImageHeldVersion, localPrincipalChannel, readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; decision: 'disabled' | 'no-change' | 'planned' | 'built';
@@ -22,25 +22,6 @@ export async function writeArtifact(directory: string, name: string, value: unkn
   try { await handle.writeFile(JSON.stringify(value, null, 2) + '\n'); await handle.sync(); } finally { await handle.close(); }
   return path;
 }
-/** The newest build this installation completed and verified: the receipt names the version, and the retained build context holds the exact
- * recipe and Dockerfile that produced it. Anything missing or inconsistent reads as none (the packaged lineage then decides). */
-async function readBuiltLineage(home: string): Promise<{ recipe: unknown; dockerfile: string } | null> {
-  try {
-    const names = (await readdir(join(home, 'receipts'))).filter(name => /^r[1-9][0-9]*-\d{8}\.json$/.test(name))
-      .sort((a, b) => Number(/^r(\d+)-/.exec(b)![1]) - Number(/^r(\d+)-/.exec(a)![1]));
-    for (const name of names) {
-      const version = name.slice(0, -5);
-      try {
-        const receipt = JSON.parse(await readFile(join(home, 'receipts', name), 'utf8')) as { imageVersion?: unknown; imageId?: unknown };
-        const recipe = JSON.parse(await readFile(join(home, 'builds', version, 'recipe.json'), 'utf8')) as unknown;
-        const parsed = workerImageRecipeSchema.safeParse(recipe);
-        if (receipt.imageVersion !== version || typeof receipt.imageId !== 'string' || !parsed.success || parsed.data.imageVersion !== version) continue;
-        return { recipe: parsed.data, dockerfile: await readFile(join(home, 'builds', version, 'Dockerfile'), 'utf8') };
-      } catch { continue; }
-    }
-  } catch { /* no receipts yet */ }
-  return null;
-}
 /** Plan/build. A build floors its counter on the daemon-held revision (installations sharing a daemon share its tags), read before any artifact; config/package bytes and running work stay unchanged. */
 export async function updateConfiguredToolchains(projectRoot: string, input: Readonly<{ apply?: boolean | undefined }> = {}, options: ConfigLoadOptions = {},
   dependencies: ToolchainUpdateDependencies = {}): Promise<ToolchainUpdateResult> {
@@ -56,7 +37,7 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const root = dependencies.packageRoot ?? packageRoot; const sources = await readWorkerImageSources(root);
   const plannedAt = now();
   const home = join(mcpCheckOnly ? productResourcePath(config.productLayout, 'workspaces') : await prepareProductDirectory(config.productLayout, 'workspaces'), 'toolchains');
-  const lineage = selectWorkerLineage(sources, await readBuiltLineage(home));
+  const lineage = selectWorkerLineage(sources, await readBuiltWorkerLineage(home));
   const planFor = (heldVersion: string | null) => planToolchainUpdate({ report, recipe: lineage.recipe, plannedAt, affectedProfiles: affectedToolchainProfiles(config), heldVersion });
   const proposed = planFor(null);
   if (proposed.decision === 'no-change') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'no-change', plan: proposed, planPath: null, build: null, proposal: null, proposalPath: null });
@@ -67,20 +48,11 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   const planPath = await writeArtifact(join(home, 'plans'), `${plan.next!.imageVersion}-${plannedAt.replace(/[:.]/g, '-')}.json`, plan);
   if (!apply) return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan, planPath, build: null, proposal: null, proposalPath: null });
   await dependencies.onBuild?.(plan);
-  const prepared = await prepareWorkerImageBuildContext({ packageRoot: root, parent: join(home, 'builds'), imageVersion: plan.next!.imageVersion,
-    dockerfile: insertHistoryLine(lineage.dockerfile, plan.next!.historyLine), recipe: plan.next!.recipe });
-  await mkdir(join(home, 'receipts'), { recursive: true, mode: 0o700 });
-  const receiptPath = join(home, 'receipts', `${plan.next!.imageVersion}.json`);
-  // A failed build keeps its context as evidence under another name, so the next attempt may reuse the planned version.
-  const built = await runWorkerImageBuild({ context: prepared.context, receiptPath, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes,
-    env, ...signal }, dependencies.runner).catch(async (error: unknown) => {
-      await rename(prepared.context, `${prepared.context}.failed-${Date.now()}`).catch(() => undefined);
-      const builds = join(home, 'builds'); // bounded retention: the newest failed contexts stay as evidence
-      for (const name of failedContextsToPrune(await readdir(builds).catch(() => []), policy.failedContextsKept)) await rm(join(builds, name), { recursive: true, force: true }).catch(() => undefined);
-      throw error;
-    });
+  // A failed build keeps its context as evidence under another name (bounded retention), so the next attempt may reuse the planned version.
+  const built = await buildWorkerImageInHome({ packageRoot: root, home, imageVersion: plan.next!.imageVersion, dockerfile: insertHistoryLine(lineage.dockerfile, plan.next!.historyLine),
+    recipe: plan.next!.recipe, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, failedContextsKept: policy.failedContextsKept, env, ...signal }, dependencies.runner);
   const proposal = proposeProfileRevisions(plan, built.receipt, now());
   const proposalPath = await writeArtifact(join(home, 'proposals'), `${plan.next!.imageVersion}.json`, proposal);
   return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'built', plan, planPath,
-    build: { context: prepared.context, receiptPath, imageId: proposal.imageId, tag: proposal.tag }, proposal, proposalPath });
+    build: { context: built.context, receiptPath: built.receiptPath, imageId: proposal.imageId, tag: proposal.tag }, proposal, proposalPath });
 }

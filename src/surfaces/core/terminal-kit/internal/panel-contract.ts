@@ -25,6 +25,8 @@ export type PanelInput<C extends PanelContext> =
   | Readonly<{ kind: 'edit-queued'; context: C; inputId: string; text: string; mentions?: readonly string[] }>
   | Readonly<{ kind: 'cancel'; context: C; turnId: string }>
   | Readonly<{ kind: 'cancel-input'; context: C; inputId: string }>
+  /** T3: take a still-queued input out of the FIFO before it runs (the person edits it again); never the active input. */
+  | Readonly<{ kind: 'withdraw-queued'; context: C; inputId: string }>
   | Readonly<{ kind: 'close-view'; context: C }>
   | (Readonly<{ kind: 'decide-approval'; context: C }> & PanelApprovalIntent)
   | Readonly<{ kind: 'choose-item'; context: C; pickerHandle: string; itemHandle: string | null }>;

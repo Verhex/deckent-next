@@ -1,0 +1,14 @@
+{
+  "terminal.runAnswer.key": "a answer",
+  "terminal.runAnswer.title": "Answer run {run}: {title}?",
+  "terminal.runAnswer.question": "The worker asks: {question}",
+  "terminal.runAnswer.detail": "Your answer resumes the waiting task with your words; nothing else changes. The service records you as the person who answered.",
+  "terminal.runAnswer.prompt": "Tab write the answer · y send · n keep · Enter/Esc keep (default)",
+  "terminal.runAnswer.reason.label": "Answer:",
+  "terminal.runAnswer.reason.hint": "Type the answer · Enter or Tab done · Esc back · sent only with y",
+  "terminal.runAnswer.reason.empty": "(no answer yet: Tab to write)",
+  "terminal.runAnswer.empty": "Run {run}: no answer was written; nothing was sent.",
+  "terminal.runAnswer.none": "Run {run} no longer waits for an answer; nothing was sent.",
+  "terminal.runAnswer.reread": "The run changed meanwhile and was read again; check the question and answer once more.",
+  "terminal.runAnswer.result": "Answer for run {run} recorded, now {state} (revision {revision}). Command {command}"
+}

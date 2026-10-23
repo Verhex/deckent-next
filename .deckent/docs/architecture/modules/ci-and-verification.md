@@ -1,6 +1,6 @@
 # CI and verification tooling — module note
 
-**CI-BWRAP-CACHE (owner card 2026-10-15; author candidate, hosted/independent acceptance pending).**
+**CI-BWRAP-CACHE (owner card 2026-10-15; landed in alpha.40).**
 CI's exact lock/recipe/driver/verifier/architecture cache now retains built outputs and fetched APKs.
 A hit verifies its input identity and all file/APK checksums, then the committed binary/source/license
 hashes and every installed closure before copying/staging. A missing cache builds; a corrupt one fails.
@@ -17,7 +17,7 @@ runs no package code, re-verifies the candidate (only pin fields may change, str
 draft PR. No auto-merge; Astra plus exact-candidate hosted CI remain separate release gates. See CONTRIBUTING for the entrypoints and cache limits.
 External proof: `proof/CI-BWRAP-CACHE-2026-10-15/`. Local author checks do not prove Actions/Alpine execution.
 
-**CI doctor preparation (CI-ONARIM, 2026-10-11; author candidate, hosted acceptance pending).**
+**CI doctor preparation (CI-ONARIM, 2026-10-11; landed in alpha.30).**
 `ci-shell-realm.mjs` verifies the locked source/dist bundles and the service's bubblewrap probe, then
 initializes a disposable project with an isolated HOME through the normal `init policy --apply` command.
 The same built CLI must return zero from `doctor --json`, report ready startability with no checks and
@@ -26,11 +26,11 @@ in `finally`; the checkout is never initialized and no runtime or provider is st
 doctor, bundle and sandbox failures still stop the job. This aligns CI with the first-install readiness
 checks added in W5-INSTALL-FLOW; it does not change doctor or weaken its nonzero refusal.
 
-**CI-SPEED amendment (owner approved 2026-10-06; isolated author candidate, hosted acceptance pending).**
+**CI-SPEED amendment (owner approved 2026-10-06; landed in alpha.8).**
 The required Ubuntu Node24/26 check names stay unchanged for PR/integration verification. Each Node builds once,
 then all Vitest files run in duration-balanced shards with normal fork/file isolation. `scripts/ci-test-config.json`
 owns shard/fork capacity; the prepare job exports the same configuration used by partitioning and complete-coverage validation.
-CI-STABILITY (owner 2026-10-19 author candidate): 16 shards and two forks per runner retain 32 test forks per Node version
+CI-STABILITY (owner 2026-10-19; PR #103, first released in alpha.48): 16 shards and two forks per runner retain 32 test forks per Node version
 while leaving CPU/memory headroom for each test's real CLI/MCP/Docker children. Initial candidate `3e4ed3d1` passed
 hosted PR 39286417261 and exact-head dispatch 39286432209: each Node collected 1012 files, 9027 passes and the same
 eight pre-existing skips. Their two-fork per-file maxima refresh all scheduling weights. Vitest shard maxima were
@@ -93,7 +93,7 @@ security refusals, test names and timeouts stay unchanged. External evidence and
 `proof/CI-STABILITY-2026-10-19/REPORT.md`; author checks do not establish independent acceptance.
 
 CI-FULL, CI-FIX, SOCKET-PUBLICATION, CI-WINDOWS-MACOS (moved from ARCHITECTURE.md Packages 2026-10-05).
-Kaynak/Source: ARCHITECTURE.md @58537c7f lines 1327–1406; text below is verbatim.
+Kaynak/Source: ARCHITECTURE.md @58537c7f lines 1327–1406; the original text below is verbatim; later dated additions are marked separately.
 
 **CI-FULL build inputs (owner 2026-10-01; developer tooling only).** The bubblewrap driver constrains every
 resolved host and per-architecture sysroot package to its locked version before installing, in addition to the direct requests;

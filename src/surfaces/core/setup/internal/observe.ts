@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { basename, resolve } from 'node:path';
 import { FIRST_RUN_POLICY_TEMPLATE_VERSION } from '#domain/index.js';
 import { LOCALES, NODE_ENGINE_RANGE, assessNodeSupport, envValue, isWslHost, loadConfig, loadConfigLanguage, productResourcePath, type Locale } from '#platform/index.js';
-import { SETUP_PLAN_SCHEMA_VERSION, SetupStageRegistry, setupProfileRefSchema, type SetupFamilyPackage, type SetupObservation } from '#engine/index.js';
+import { SETUP_PLAN_SCHEMA_VERSION, SetupStageRegistry, WORK_SETUP_FAMILY, setupProfileRefSchema, type SetupFamilyPackage, type SetupObservation } from '#engine/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY, projectInstructionFacts, projectSkeleton } from '#surfaces/core/project-instructions/index.js';
 import { assessPoolReadiness } from '#surfaces/core/cli-admin/index.js';
 import { poolProvisioned, type FirstJobFacts } from '#surfaces/core/doctor/index.js';
@@ -53,6 +53,9 @@ export async function observeCoreSetup(context: SetupCommandContext, root: strin
   const realm = context.inspectShellRealm && !pending ? await context.inspectShellRealm(root, options).catch(() => null) : null;
   const instructions = context.openProjectInstructions && !pending ? await context.openProjectInstructions(root, options)
     .then(port => port.preview([], projectSkeleton('en'))).catch(() => null) : null;
+  // I-S7: the first-job steps after setup, from configuration and the pool ledger only (never the registry preview: it starts a container).
+  const pool = config && scopeId ? poolProvisioned((await assessPoolReadiness(root, context.inspectPoolCapacity ? { inspectPoolCapacity: context.inspectPoolCapacity } : {}, options, config.admission, scopeId)).status) : false;
+  const firstJob = { execution: !!config?.execution?.docker, registry: !!config?.admission?.registry, pool };
   const observation: SetupObservation = { schemaVersion: SETUP_PLAN_SCHEMA_VERSION,
     environment: { platform, node: assessNodeSupport(process.version, NODE_ENGINE_RANGE).status === 'supported' ? 'supported' : 'below-floor' },
     language: { configured: locale(await loadConfigLanguage(root, options).catch(() => undefined)),
@@ -69,9 +72,6 @@ export async function observeCoreSetup(context: SetupCommandContext, root: strin
     model: { connections: scopeId && context.inspectModelCatalog ? await context.inspectModelCatalog(root, { schemaVersion: 1, scopeId }, options).then(catalog => catalog.channels
       .flatMap(channel => channel.access === 'denied' ? [] : channel.models.filter(entry => entry.activation?.state === 'active')).length, () => 0) : 0 },
     check: { state: 'not-run' },
-    families: { ...extra.facts, ...(instructions ? { instructions: projectInstructionFacts(instructions) } : {}) } };
-  // I-S7: the first-job steps after setup, from configuration and the pool ledger only (never the registry preview: it starts a container).
-  const pool = config && scopeId ? poolProvisioned((await assessPoolReadiness(root, context.inspectPoolCapacity ? { inspectPoolCapacity: context.inspectPoolCapacity } : {}, options, config.admission, scopeId)).status) : false;
-  return { observation, registry: new SetupStageRegistry([PROJECT_INSTRUCTION_SETUP_FAMILY, ...extra.packages]),
-    firstJob: { execution: !!config?.execution?.docker, registry: !!config?.admission?.registry, pool } };
+    families: { ...extra.facts, ...(instructions ? { instructions: projectInstructionFacts(instructions) } : {}), ...(config && !pending ? { work: firstJob } : {}) } };
+  return { observation, registry: new SetupStageRegistry([PROJECT_INSTRUCTION_SETUP_FAMILY, WORK_SETUP_FAMILY, ...extra.packages]), firstJob };
 }

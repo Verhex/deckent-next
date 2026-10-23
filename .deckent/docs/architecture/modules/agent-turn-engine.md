@@ -1,7 +1,7 @@
 # Agent turn engine, context and sessions — module note
 
 Agent turn loop, durable turns, runtime chatTurn, context measurement, compaction, history, system prompt and reasoning control (moved from ARCHITECTURE.md Packages 2026-10-05).
-Kaynak/Source: ARCHITECTURE.md @58537c7f lines 855–1004, 1028–1101, 1102–1116; text below is verbatim.
+Kaynak/Source: ARCHITECTURE.md @58537c7f lines 855–1004, 1028–1101, 1102–1116; the original text below is verbatim; later dated additions are marked separately.
 
 **Agent turn loop (T-L3b, engine core; runtime and terminal wiring below).** `engine/core/agent-turn` `runAgentTurn` runs one turn over ports: a
 governed model round (the composition derives the round command id from the turn so a replay never bills twice) → each declared

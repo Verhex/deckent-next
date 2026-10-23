@@ -221,5 +221,5 @@
   "error.WORKER_INSTRUCTIONS_UNAVAILABLE.size": "The worker instruction file is larger than the instruction file limit; shorten it. Nothing was changed.",
   "error.WORKER_INSTRUCTIONS_UNAVAILABLE.unsafe": "The worker instruction file is a link or special file and cannot be trusted. Nothing was changed.",
   "error.WORKER_INSTRUCTIONS_CHANGED": "The worker instruction file changed after it was shown. Run the command again to review the new content. Nothing was trusted.",
-  "error.WORKER_INSTRUCTIONS_CHANGED.place": "The folder or file workers read is not the one the card showed (the work target, its folder, the worker source or the file was replaced). Run the command again to review it. Nothing was changed."
+  "error.WORKER_INSTRUCTIONS_CHANGED.place": "The folder, ref or file workers read is not the one the card showed (the work target, its folder, its base ref, the worker source or the file was replaced). Run the command again to review it. Nothing was changed."
 }
