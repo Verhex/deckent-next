@@ -152,7 +152,6 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v15-/) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
-
     // The same upgrade run again adds the remaining v15 rules (each run add-only and idempotent); a third run is current.
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded', rules: [{ id: 'first-run-memory-distiller-output' }, { id: 'first-run-agent-catalog' }, { id: 'first-run-mcp-observe-agent-catalog' }] });
     const upgraded = await f.bytes();
@@ -170,8 +169,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
   it('upgrades the hand-built live-read-tools v9 shape to v11 and enables the /do policy chain only for its owner', async () => {
     const f = await installation();
     // Retain the older add-only upgrades in a hand-built policy; no first-run-read-tools anchor is invented. Since v15 the plan takes two runs (POLICY_CHANGE_MAX).
-    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
-    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
+    for (let run = 0; run < 2; run++) expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
     const current = JSON.parse(await f.bytes()) as { grants: { id: string }[] };
     const v9 = { ...current, revision: 'hand-built-v9', grants: current.grants.filter(rule => !['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown'].includes(rule.id)) };
     await writeFile(f.policyPath, JSON.stringify(v9), { mode: 0o600 });
