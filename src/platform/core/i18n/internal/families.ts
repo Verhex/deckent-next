@@ -48,6 +48,16 @@ import securitytr from '../locales/tr/security.json' with { type: 'json' };
 import terminaltr from '../locales/tr/terminal.json' with { type: 'json' };
 import deliverytr from '../locales/tr/delivery.json' with { type: 'json' };
 import termruntr from '../locales/tr/termrun.json' with { type: 'json' };
+import tuicopyen from '../locales/en/tuicopy.json' with { type: 'json' };
+import tuinotifyen from '../locales/en/tuinotify.json' with { type: 'json' };
+import tuiqueueen from '../locales/en/tuiqueue.json' with { type: 'json' };
+import tuieditoren from '../locales/en/tuieditor.json' with { type: 'json' };
+import tuisessionen from '../locales/en/tuisession.json' with { type: 'json' };
+import tuicopytr from '../locales/tr/tuicopy.json' with { type: 'json' };
+import tuinotifytr from '../locales/tr/tuinotify.json' with { type: 'json' };
+import tuiqueuetr from '../locales/tr/tuiqueue.json' with { type: 'json' };
+import tuieditortr from '../locales/tr/tuieditor.json' with { type: 'json' };
+import tuisessiontr from '../locales/tr/tuisession.json' with { type: 'json' };
 
 export const families = [
   { en: configen, tr: configtr },
@@ -75,6 +85,11 @@ export const families = [
   { en: terminalen, tr: terminaltr },
   { en: termrunen, tr: termruntr },
   { en: deliveryen, tr: deliverytr },
+  { en: tuicopyen, tr: tuicopytr },
+  { en: tuinotifyen, tr: tuinotifytr },
+  { en: tuiqueueen, tr: tuiqueuetr },
+  { en: tuieditoren, tr: tuieditortr },
+  { en: tuisessionen, tr: tuisessiontr },
 ] as const;
 
 // Derived from `families` (distributive over the tuple), not from the JSON imports: the emitted declaration then names no JSON module, which a
