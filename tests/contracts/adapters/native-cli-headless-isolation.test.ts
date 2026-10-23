@@ -129,6 +129,11 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI
     await expect(c.call(bounded({ burn: 'abort' }))).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
     await expect(c.call([{ line: initLine() }, { exit: headless.isolation.limits.exits['cpu-time'] }])).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
   }, 30_000);
+  it('f5 negative: an interrupted turn near the data bound is never named a bound (its outcome stays unknown)', async () => {
+    const c = await connection();
+    await expect(c.call(bounded({ lower: ['--data=+1048576'], burn: 'interrupt' }))).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
+    expect((await c.log()).map(entry => entry.mode)).toContain('interrupted');
+  }, 30_000);
   it('keeps SIGINT first through the realm: a cancelled turn is interrupted inside the sandbox, then the outcome is unknown', async () => {
     const c = await connection({ steps: [{ line: initLine() }, { hang: true }] }), controller = new AbortController();
     await c.port.preflight(c.profile);

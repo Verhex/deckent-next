@@ -31,7 +31,7 @@ export interface IsolationProbe { readonly read?: readonly string[]; readonly li
   readonly exists?: readonly string[]; readonly connect?: readonly { host: string; port: number }[]; readonly proxy?: readonly string[] }
 /** f5 bound probes: `lower` lowers this process's own limits with the registry's limiter (`--pid self`), then `burn` spins the CPU (optionally ignoring
  * SIGXCPU), starts sleeping children until the realm refuses one, or allocates until memory is refused, and aborts like a crashed CLI. */
-export type BoundProbe = { lower?: readonly string[]; burn: 'cpu' | 'cpu-ignore' | 'processes' | 'memory' | 'abort' };
+export type BoundProbe = { lower?: readonly string[]; burn: 'cpu' | 'cpu-ignore' | 'processes' | 'memory' | 'abort' | 'interrupt' };
 export type FakeStep = { line: Line | string } | { sleepMs: number } | { floodBytes: number } | { hang: true; ignoreInterrupt?: boolean } | { exit: number } | { isolation: IsolationProbe }
   | { bound: BoundProbe };
 export interface FakeScenario {
@@ -94,6 +94,8 @@ async function bound(p) {
   const lower = (p.lower ?? []).map(arg => arg.startsWith('--data=+') ? '--data=' + (data() + Number(arg.slice(8))) : arg);
   if (lower.length) child.spawnSync(${JSON.stringify(headless.isolation.limits.limiter)}, ['--pid', String(process.pid), ...lower]);
   log({ mode: 'bound', burn: p.burn });
+  // 'interrupt': a SIGINT to the realm's process group that did not come from the runner (the relay sees it too), then an abort like a crashed CLI.
+  if (p.burn === 'interrupt') { process.on('SIGINT', () => { log({ mode: 'interrupted' }); process.abort(); }); setInterval(() => {}, 1000); setTimeout(() => process.kill(0, 'SIGINT'), 300); return new Promise(() => {}); }
   if (p.burn === 'cpu-ignore') process.on('SIGXCPU', () => {});
   if (p.burn.startsWith('cpu')) for (;;) Math.sqrt(Math.random());
   if (p.burn === 'processes') { for (let i = 0; i < 4096; i++) if (!await new Promise(resolve => { const c = child.spawn('/bin/sleep', ['30'], { stdio: 'ignore' }); c.on('spawn', () => resolve(true)); c.on('error', () => resolve(false)); })) break; }

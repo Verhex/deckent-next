@@ -28,13 +28,15 @@ export type HeadlessLimit = 'cpu-time' | 'processes' | 'memory';
  * the CLI, in the same process group, ends its turn and the relay ends with it. Plain JavaScript text: it runs inside the realm in every build.
  * f5: it first proves the limiter's bounds are its own (`/proc/self/limits`), samples the realm's tasks and the CLI's data size and effective bounds
  * (the realm's fresh /proc shows only its own processes), and when the CLI ends abnormally near a bound it exits with that bound's reserved code
- * (a CLI's own exit with a reserved code becomes 1, so the code always means the bound).
+ * (a CLI's own exit with a reserved code becomes 1, so the code always means the bound). An interrupted turn (SIGINT to the group: cancel or timeout)
+ * is never named a bound: its outcome stays unknown. Data and task attribution is sampled, not kernel-reported.
  */
 const RELAY = String.raw`'use strict';
 const net = require('node:net'), fs = require('node:fs'), { spawn } = require('node:child_process'), { constants } = require('node:os');
 const [config, executable, ...args] = process.argv.slice(1), c = JSON.parse(config);
 const fail = text => { process.stderr.write('deckent-relay: ' + text + '\n'); process.exit(1); };
-process.on('SIGINT', () => {});
+let interrupted = false;
+process.on('SIGINT', () => { interrupted = true; });
 const row = (text, name) => { const m = new RegExp('^Max ' + name + '\\s+(\\S+)\\s+(\\S+)', 'm').exec(text); return m ? m[1] + ':' + m[2] : ''; };
 const own = fs.readFileSync('/proc/self/limits', 'utf8');
 if (row(own, 'cpu time') !== c.cpu || row(own, 'processes') !== c.processes || row(own, 'data size') !== c.data) fail('limits');
@@ -70,8 +72,8 @@ server.listen(c.port, c.host, () => {
   child.on('error', () => fail('start failed'));
   child.on('exit', (code, signal) => {
     clearInterval(timer);
-    const near = (value, bound) => value * 1000 >= bound * c.permille, abnormal = signal !== null || code >= 128;
-    const cause = signal === 'SIGXCPU' || (signal === 'SIGKILL' && near(peak.cpuTicks, peak.cpuLimit * c.ticks)) ? 'cpu-time'
+    const near = (value, bound) => value * 1000 >= bound * c.permille, abnormal = !interrupted && signal !== 'SIGINT' && signal !== 'SIGTERM' && (signal !== null || code >= 128);
+    const cause = abnormal && (signal === 'SIGXCPU' || (signal === 'SIGKILL' && near(peak.cpuTicks, peak.cpuLimit * c.ticks))) ? 'cpu-time'
       : abnormal && near(peak.tasks, peak.processes) ? 'processes' : abnormal && near(peak.data, peak.dataLimit) ? 'memory' : null;
     const mirrored = code ?? 128 + (constants.signals[signal] ?? 0);
     process.exit(cause ? c.exits[cause] : Object.values(c.exits).includes(mirrored) ? 1 : mirrored);
