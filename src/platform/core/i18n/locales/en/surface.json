@@ -589,6 +589,7 @@
   "task.acceptance.noChangeProduced": "Not accepted: no change produced.",
   "task.acceptance.reportMissing": "Not accepted: the worker ended without a result report.",
   "task.acceptance.reportInvalid": "Not accepted: the worker's result report was invalid.",
+  "task.acceptance.lessonsInvalid": "Not accepted: the worker's report carried invalid lessons (too many, too long or incomplete).",
   "task.acceptance.declaredCheckNotPassed": "Not accepted: an acceptance check in the worker report did not pass.",
   "task.acceptance.workerStalled": "Not accepted: the worker went silent and its retry was used up.",
   "monitor.detail.container": "Container {id} · image {image} · start {started} · end {ended} · resource limits: CPU {cpus} · memory {memory}",

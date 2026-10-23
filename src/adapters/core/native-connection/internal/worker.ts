@@ -156,9 +156,15 @@ export function secretValues(value: unknown, into: string[] = []): string[] {
 /** B09-2: bounded claims, never acceptance. Mirrored by the pure domain report schema; no host imports in this mounted file. */
 interface ReportLimits { reportBytes: number; summaryChars: number; changedFiles: number; changedFileChars: number; checks: number;
   checkCommandChars: number; checkIdChars: number; openIssues: number; openIssueChars: number; handoffTaskIdChars: number; handoffSummaryChars: number;
-  handoffArtifacts: number; handoffArtifactNameChars: number; handoffOpenQuestions: number; handoffOpenQuestionChars: number; sharedNotes: number; sharedNoteChars: number; promptBytes: number }
+  handoffArtifacts: number; handoffArtifactNameChars: number; handoffOpenQuestions: number; handoffOpenQuestionChars: number; sharedNotes: number; sharedNoteChars: number; lessons: number; lessonTitleChars: number; lessonBodyChars: number; lessonFieldChars: number; promptBytes: number }
 const reportText = (maxLength: number) => ({ type: 'string', maxLength });
 const reportObject = (properties: Record<string, unknown>, required = Object.keys(properties)) => ({ type: 'object', additionalProperties: false, required, properties });
+/** S4B-2: one lesson claim. Under a strict (OpenAI) schema every property is required, so cause/correction become nullable; the validator is the floor. */
+const lessonSchema = (l: ReportLimits, strictSchema: boolean) => {
+  const field = { ...reportText(l.lessonFieldChars), minLength: 1 }, nullable = { type: ['string', 'null'], minLength: 1, maxLength: l.lessonFieldChars };
+  return reportObject({ kind: { type: 'string', enum: LESSON_KINDS }, title: { ...reportText(l.lessonTitleChars), minLength: 1 }, body: { ...reportText(l.lessonBodyChars), minLength: 1 },
+    cause: strictSchema ? nullable : field, correction: strictSchema ? nullable : field }, strictSchema ? ['kind', 'title', 'body', 'cause', 'correction'] : ['kind', 'title', 'body']);
+};
 export function createFinalReportJsonSchema(l: ReportLimits, strictSchema: boolean) {
   const texts = (maxItems: number, chars: number) => ({ type: 'array', maxItems, items: reportText(chars) });
   const schema = reportObject({ schemaVersion: { type: 'integer', const: 1 }, summary: reportText(l.summaryChars), changedFiles: texts(l.changedFiles, l.changedFileChars),
@@ -170,6 +176,7 @@ export function createFinalReportJsonSchema(l: ReportLimits, strictSchema: boole
       openQuestions: texts(l.handoffOpenQuestions, l.handoffOpenQuestionChars) }, ['summary', 'artifacts', 'openQuestions']), sharedNotes: texts(l.sharedNotes, l.sharedNoteChars),
     exit: reportObject({ schemaVersion: { type: 'integer', const: 1 }, kind: { type: 'string', const: 'needs-input' },
       question: { ...reportText(l.handoffOpenQuestionChars), minLength: 1 } }),
+    lessons: { type: 'array', maxItems: l.lessons, items: lessonSchema(l, strictSchema) },
   }, ['schemaVersion', 'summary', 'changedFiles', 'checks', 'openIssues']);
   if (strictSchema) {
     // OpenAI strict schemas require all properties. Null is transport-only and becomes absence before sealing.
@@ -177,6 +184,7 @@ export function createFinalReportJsonSchema(l: ReportLimits, strictSchema: boole
     handoff.required = Object.keys(handoff.properties); handoff.properties.toTask = { type: ['string', 'null'], maxLength: l.handoffTaskIdChars };
     schema.properties.handoff = { anyOf: [handoff, { type: 'null' }] }; schema.required = Object.keys(schema.properties);
     schema.properties.exit = { anyOf: [schema.properties.exit, { type: 'null' }] };
+    schema.properties.lessons = { anyOf: [schema.properties.lessons, { type: 'null' }] };
     const check = (schema.properties.checks as { items: ReturnType<typeof reportObject> }).items;
     check.required = Object.keys(check.properties); check.properties.checkId = { type: ['string', 'null'], minLength: 1, maxLength: l.checkIdChars };
     check.properties.role = { type: ['string', 'null'], enum: [...CHECK_ROLES, null] };
@@ -184,11 +192,12 @@ export function createFinalReportJsonSchema(l: ReportLimits, strictSchema: boole
   return schema;
 }
 interface HandoffNote { toTask?: string; summary: string; artifacts: { name: string; digest: string }[]; openQuestions: string[] }
-const CHECK_ROLES = ['acceptance', 'exploratory'];
+const CHECK_ROLES = ['acceptance', 'exploratory'], LESSON_KINDS = ['fact', 'lesson'];
+type Lesson = { kind: 'fact'; title: string; body: string } | { kind: 'lesson'; title: string; body: string; cause: string; correction: string }
 interface FinalReport { schemaVersion: 1; summary: string; changedFiles: string[]; openIssues: string[];
   checks: { command: string; outcome: 'passed' | 'failed' | 'not-run' | 'unknown'; checkId?: string; role?: 'acceptance' | 'exploratory' }[];
-  handoff?: HandoffNote; sharedNotes?: string[]; exit?: { schemaVersion: 1; kind: 'needs-input'; question: string } }
-type FinalReportResult = { status: 'reported'; report: FinalReport } | { status: 'unavailable'; reason: 'invalid' | 'oversized' | 'missing' | 'unsupported' };
+  handoff?: HandoffNote; sharedNotes?: string[]; lessons?: Lesson[]; exit?: { schemaVersion: 1; kind: 'needs-input'; question: string } }
+type FinalReportResult = { status: 'reported'; report: FinalReport } | { status: 'unavailable'; reason: 'invalid' | 'oversized' | 'missing' | 'unsupported' | 'lessons-invalid' };
 export function validateFinalReport(value: unknown, secrets: readonly string[], l: ReportLimits): FinalReportResult {
   if (Buffer.byteLength(JSON.stringify(value) ?? '') > l.reportBytes) return { status: 'unavailable', reason: 'oversized' };
   const object = (v: unknown, keys: string[], optional: string[] = []): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -199,15 +208,23 @@ export function validateFinalReport(value: unknown, secrets: readonly string[], 
     && (!Object.hasOwn(v, 'toTask') || (text(v.toTask, l.handoffTaskIdChars) && v.toTask.length > 0)) && text(v.summary, l.handoffSummaryChars)
     && texts(v.openQuestions, l.handoffOpenQuestions, l.handoffOpenQuestionChars) && Array.isArray(v.artifacts) && v.artifacts.length <= l.handoffArtifacts
     && v.artifacts.every(a => object(a, ['name', 'digest']) && text(a.name, l.handoffArtifactNameChars) && a.name.length > 0 && typeof a.digest === 'string' && /^[a-f0-9]{64}$/.test(a.digest));
+  // S4B-2: a lesson needs a non-empty title and body; a `lesson` also its cause and correction, a `fact` carries neither (never coerced).
+  const lessonText = (v: unknown, max: number): v is string => text(v, max) && v.trim().length > 0;
+  const lessonOk = (v: unknown) => !!v && typeof v === 'object' && !Array.isArray(v) && (v as Record<string, unknown>).kind === 'lesson'
+    ? object(v, ['kind', 'title', 'body', 'cause', 'correction']) && lessonText(v.title, l.lessonTitleChars) && lessonText(v.body, l.lessonBodyChars)
+      && lessonText(v.cause, l.lessonFieldChars) && lessonText(v.correction, l.lessonFieldChars)
+    : object(v, ['kind', 'title', 'body']) && v.kind === 'fact' && lessonText(v.title, l.lessonTitleChars) && lessonText(v.body, l.lessonBodyChars);
+  const lessonsOk = (v: unknown) => Array.isArray(v) && v.length <= l.lessons && v.every(lessonOk);
   const needsInput = (v: unknown) => object(v, ['schemaVersion', 'kind', 'question']) && v.schemaVersion === 1 && v.kind === 'needs-input'
     && text(v.question, l.handoffOpenQuestionChars) && v.question.trim().length > 0;
-  if (!object(value, ['schemaVersion', 'summary', 'changedFiles', 'checks', 'openIssues'], ['handoff', 'sharedNotes', 'exit']) || value.schemaVersion !== 1
+  if (!object(value, ['schemaVersion', 'summary', 'changedFiles', 'checks', 'openIssues'], ['handoff', 'sharedNotes', 'exit', 'lessons']) || value.schemaVersion !== 1
     || !text(value.summary, l.summaryChars) || !texts(value.changedFiles, l.changedFiles, l.changedFileChars) || !texts(value.openIssues, l.openIssues, l.openIssueChars)
     || (Object.hasOwn(value, 'handoff') && !handoff(value.handoff)) || (Object.hasOwn(value, 'sharedNotes') && !texts(value.sharedNotes, l.sharedNotes, l.sharedNoteChars))
     || (Object.hasOwn(value, 'exit') && !needsInput(value.exit))
     || !Array.isArray(value.checks) || value.checks.length > l.checks || !value.checks.every(c => object(c, ['command', 'outcome'], ['checkId', 'role'])
       && (!Object.hasOwn(c, 'checkId') || (text(c.checkId, l.checkIdChars) && c.checkId.length > 0)) && (!Object.hasOwn(c, 'role') || CHECK_ROLES.includes(c.role as string))
       && text(c.command, l.checkCommandChars) && typeof c.outcome === 'string' && ['passed', 'failed', 'not-run', 'unknown'].includes(c.outcome))) return { status: 'unavailable', reason: 'invalid' };
+  if (Object.hasOwn(value, 'lessons') && !lessonsOk(value.lessons)) return { status: 'unavailable', reason: 'lessons-invalid' };
   const input = value as unknown as FinalReport, red = (text: string, max: number) => redactText(text, secrets, max);
   const report: FinalReport = { schemaVersion: 1, summary: red(input.summary, l.summaryChars), changedFiles: input.changedFiles.map(x => red(x, l.changedFileChars)),
     checks: input.checks.map(x => ({ command: red(x.command, l.checkCommandChars), outcome: x.outcome,
@@ -216,8 +233,11 @@ export function validateFinalReport(value: unknown, secrets: readonly string[], 
       summary: red(input.handoff.summary, l.handoffSummaryChars), artifacts: input.handoff.artifacts.map(a => ({ name: red(a.name, l.handoffArtifactNameChars), digest: red(a.digest, a.digest.length) })),
       openQuestions: input.handoff.openQuestions.map(x => red(x, l.handoffOpenQuestionChars)) } } : {}),
     ...(input.sharedNotes ? { sharedNotes: input.sharedNotes.map(x => red(x, l.sharedNoteChars)) } : {}),
+    ...(input.lessons ? { lessons: input.lessons.map(x => ({ kind: x.kind, title: red(x.title, l.lessonTitleChars), body: red(x.body, l.lessonBodyChars),
+      ...(x.kind === 'lesson' ? { cause: red(x.cause, l.lessonFieldChars), correction: red(x.correction, l.lessonFieldChars) } : {}) } as Lesson)) } : {}),
     ...(input.exit ? { exit: { schemaVersion: 1, kind: 'needs-input', question: red(input.exit.question.trim(), l.handoffOpenQuestionChars) } } : {}) };
   if (report.handoff && !handoff(report.handoff)) return { status: 'unavailable', reason: 'invalid' };
+  if (report.lessons && !lessonsOk(report.lessons)) return { status: 'unavailable', reason: 'lessons-invalid' };
   return Buffer.byteLength(JSON.stringify(report)) > l.reportBytes ? { status: 'unavailable', reason: 'oversized' } : { status: 'reported', report };
 }
 /** Strict-schema transport nulls (OpenAI strict schemas require every property) become absence before validation. */
@@ -226,6 +246,8 @@ function dropTransportNulls(value: unknown): void {
   const report = value as Record<string, unknown>;
   if (report.exit === null) delete report.exit;
   if (Array.isArray(report.checks)) for (const check of report.checks as Record<string, unknown>[]) if (check && typeof check === 'object') for (const key of ['checkId', 'role']) if (check[key] === null) delete check[key];
+  if (report.lessons === null) delete report.lessons;
+  else if (Array.isArray(report.lessons)) for (const lesson of report.lessons as Record<string, unknown>[]) if (lesson && typeof lesson === 'object') for (const key of ['cause', 'correction']) if (lesson[key] === null) delete lesson[key];
   if (report.handoff === null) delete report.handoff;
   else if (report.handoff && typeof report.handoff === 'object' && !Array.isArray(report.handoff) && (report.handoff as Record<string, unknown>).toTask === null) delete (report.handoff as Record<string, unknown>).toTask;
 }

@@ -1,11 +1,12 @@
 import { encodeCommandProjection, proposeMemoryEntry, verifyMemoryEntry, retireMemoryEntry, memorySearchTerms, memoryEntryMatches, isMemoryDistillerPrincipal, composeMemoryAutomation,
-  MEMORY_LIMITS, type AuditEvent, type MemoryEntry, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
+  MEMORY_LIMITS, memoryExtractionSourceSchema, type AuditEvent, type MemoryEntry, type MemoryExtractionSource, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
 import { memoryProposeCommandSchema, memoryVerifyCommandSchema, memoryRetireCommandSchema, memoryInspectQuerySchema, memoryListQuerySchema, memorySearchQuerySchema,
   memoryExtractCommandSchema, MemoryJournalError, type MemoryAction, type MemoryHeld, type MemoryInspection, type MemoryJournalDependencies, type MemoryJournalStore, type MemoryListing,
   type MemoryMutationResult, type MemorySearchResult, type MemorySupport, type MemoryDistilOutcome } from './contract.js';
 import { distilSource } from './distil.js';
+import type { MemoryReportClaims } from './source.js';
 import { rederiveMemorySourceModels } from './evaluate.js';
 
 const DEFAULT_STATES: readonly MemoryState[] = Object.freeze(['candidate', 'verified']);
@@ -125,7 +126,10 @@ export class MemoryJournalApplication {
    * cursor advanced past each. Off the hot path (the service's reconciliation pass calls it); an error stops the page with the cursor at the
    * last finished source, so the next pass retries it.
    */
-  async distilPage(scopeId: string, mode: 'live' | 'shadow', port: { page(after: string | null, limit: number): Promise<readonly { readonly position: string; readonly source: unknown }[]> },
+  async distilPage(scopeId: string, mode: 'live' | 'shadow', port: { page(after: string | null, limit: number): Promise<readonly { readonly position: string; readonly source: unknown }[]>;
+    /** S4B-2 (E3): the lesson claims of an accepted source's sealed report, read under the distiller's own `attempt/read-output` decision; the port returns
+     * null when the decision refuses or no claim is sealed (the source then yields no E3 candidate, never an error). */
+    report?(source: MemoryExtractionSource, principal: VerifiedPrincipal): Promise<MemoryReportClaims | null> },
     credential?: unknown): Promise<{ readonly processed: number; readonly outcomes: readonly MemoryDistilOutcome[] }> {
     const { principal } = await this.admit('propose', scopeId, credential);
     if (!isMemoryDistillerPrincipal(principal)) throw new MemoryJournalError('MEMORY_DISTILLER_REQUIRED');
@@ -135,11 +139,18 @@ export class MemoryJournalApplication {
     const outcomes: MemoryDistilOutcome[] = [];
     for (const row of (await port.page(after, limit)).slice(0, limit)) {
       // A row without a sealed source (Run or evaluation gone) is passed over; it is never invented.
-      if (row.source !== null) outcomes.push(await this.distil(row.source, { mode }, credential));
+      if (row.source !== null) outcomes.push(await this.distil(await this.withReport(row.source, port, principal), { mode }, credential));
       const store = await this.deps.openStore('write');
       try { await store.advanceCursor!(scopeId, row.position); } finally { store.close(); }
     }
     return { processed: outcomes.length, outcomes };
+  }
+  /** E3's input only for an accepted, settled source whose Attempt left claims; every other source goes on unchanged (the schema parse stays distil's). */
+  private async withReport(input: unknown, port: { report?(source: MemoryExtractionSource, principal: VerifiedPrincipal): Promise<MemoryReportClaims | null> }, principal: VerifiedPrincipal): Promise<unknown> {
+    const parsed = port.report ? memoryExtractionSourceSchema.safeParse(input) : null;
+    if (!parsed?.success || !parsed.data.accepted || !parsed.data.settled) return input;
+    const claims = await port.report!(parsed.data, principal);
+    return claims ? { ...parsed.data, lessons: claims.lessons, reportDigest: claims.reportDigest } : input;
   }
   /** S4B-1 §4.1–§4.5: the distiller's pass over one sealed source (rules, WorkClass gate, screening, bounds, once per Attempt). Off the hot path. */
   async distil(input: unknown, options: { readonly mode: 'live' | 'shadow' }, credential?: unknown): Promise<MemoryDistilOutcome> {

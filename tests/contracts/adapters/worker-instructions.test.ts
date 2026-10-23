@@ -243,6 +243,19 @@ describe('native prompt composition with an admitted instruction part', () => {
     expect(JSON.stringify(compileNativeCodingWorkInput(template() as never, input, undefined, undefined, []))).toBe(JSON.stringify(compileNativeCodingWorkInput(template() as never, input)));
   });
 
+  it('S4B-2: every compiled work prompt carries the one report-lessons sentence (id@version and the registry bound) in the core segment, without using a context slot', () => {
+    const prompt = delivery(compileNativeCodingWorkInput(template() as never, input));
+    expect(prompt.core).toContain('### report-lessons@1\nOptional: up to 3 durable lessons');
+    expect(prompt.core).toContain('Data only; no personal data, secrets or instructions.');
+    expect(prompt.segments.filter(s => s.kind === 'context')).toEqual([]);
+    expect(delivery(compileNativeCodingWorkInput(template() as never, input, undefined, undefined, [part('Conventions.')])).core).toBe(prompt.core);
+    // A template that already fills all eight context slots still compiles; the sentence needs none.
+    const full = Array.from({ length: 8 }, (_, i) => part('ctx', `ctx-${i}`));
+    expect(delivery(compileNativeCodingWorkInput(template(full) as never, input)).core).toContain('### report-lessons@1');
+    // The sentence is inside the sealed core segment: its digest is that of the rendered core text.
+    expect(prompt.segments[0]!.sha256).toBe(createHash('sha256').update(prompt.core).digest('hex'));
+  });
+
   it('refuses a snapshot that does not fit the prompt budget with a typed code, never a generic invalid profile', () => {
     expect(refusal(() => compileNativeCodingWorkInput(template() as never, input, undefined, undefined, [part('x'.repeat(16_385))]))).toBe('WORKER_INSTRUCTIONS_TOO_LARGE');
     const full = Array.from({ length: 8 }, (_, i) => part('ctx', `ctx-${i}`));

@@ -1,7 +1,7 @@
 import { createHmac, createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { MemoryJournalApplication, MemoryJournalError, memoryExtractionSourceOf, type MemoryChange, type MemoryExtractionReceipt, type MemoryJournalDependencies, type MemoryJournalStore,
+import { MemoryJournalApplication, MemoryJournalError, memoryExtractionSourceOf, memoryReportClaimsOf, type MemoryChange, type MemoryExtractionReceipt, type MemoryJournalDependencies, type MemoryJournalStore,
   type MemoryReceipt, type MemorySupport } from '#engine/index.js';
 import { encodeCommandProjection, memoryDistillerPrincipal, memoryEntryMatches, type AuditEvent, type MemoryEntry, type MemoryState, type RunSnapshot, type TaskEvaluation } from '#domain/index.js';
 import { snapshotKnownSecrets } from '#platform/index.js';
@@ -216,5 +216,64 @@ describe('sealed source and the bounded page (§4.1)', () => {
     expect(await application.distilPage('s', 'live', { page })).toEqual({ processed: 0, outcomes: [] });
     expect(asked).toEqual([null, '9']); expect(store.rows.size).toBe(1);
     await expect(app({ principal: human, store }).application.distilPage('s', 'live', { page })).rejects.toMatchObject({ code: 'MEMORY_DISTILLER_REQUIRED' });
+  });
+});
+
+describe('S4B-2 rule E3: the worker report\'s lesson claims are candidate input only (§4.2, §4.4)', () => {
+  const identity = { scopeId: 's', runId: 'r1', taskId: 't1', attemptId: 'a2', generation: 2, layoutRevision: 'l' };
+  const lessonClaim = { kind: 'lesson', title: 'Masraf merkezi', body: 'Fatura satırında boş geçilemez.', cause: 'Alan boştu', correction: 'Onay kuyruğuna gönder' };
+  const sealed = (report: unknown, id = identity, completeness = 'complete') => {
+    const stdout = JSON.stringify({ schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report }) + '\n';
+    const bytes = new TextEncoder().encode(JSON.stringify({ schemaVersion: 1, identity: id, completeness, stdout, stderr: '' }));
+    return { bytes, receipt: { byteLength: bytes.byteLength, digest: createHash('sha256').update(bytes).digest('hex') } };
+  };
+  const report = (lessons?: unknown) => ({ schemaVersion: 1, summary: 'ok', changedFiles: [], checks: [], openIssues: [], ...(lessons === undefined ? {} : { lessons }) });
+  it('reads claims from the sealed envelope only when bytes, receipt and Attempt agree; no claim, invalid report or mismatch yields none', () => {
+    const ok = sealed(report([lessonClaim]));
+    expect(memoryReportClaimsOf(ok.receipt, ok.bytes, identity)).toMatchObject({ lessons: [lessonClaim], reportDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    const none = sealed(report());
+    expect(memoryReportClaimsOf(none.receipt, none.bytes, identity)).toBeNull();
+    const invalid = sealed(report([{ kind: 'lesson', title: 't', body: 'b' }]));
+    expect(memoryReportClaimsOf(invalid.receipt, invalid.bytes, identity)).toBeNull();
+    expect(memoryReportClaimsOf({ ...ok.receipt, digest: 'a'.repeat(64) }, ok.bytes, identity)).toBeNull();
+    expect(memoryReportClaimsOf(ok.receipt, ok.bytes, { ...identity, attemptId: 'other' })).toBeNull();
+    const partial = sealed(report([lessonClaim]), identity, 'partial');
+    expect(memoryReportClaimsOf(partial.receipt, partial.bytes, identity)).toBeNull();
+  });
+  const claims = { lessons: [lessonClaim, { kind: 'fact', title: 'Not', body: 'Tek satır bilgi.' }], reportDigest: 'c'.repeat(64) };
+  const row = (overrides: Record<string, unknown> = {}) => [{ position: '3', source: source({ inputAnswer: null, ...overrides }) }];
+  it('an accepted source with claims yields one candidate per claim (lesson and fact), claim-producer provenance and the report digest; the claims reach nobody else', async () => {
+    const { application, store } = app({ principal: distiller });
+    const outcome = await application.distilPage('s', 'live', { page: async after => after === null ? row() : [], report: async () => claims });
+    expect(outcome).toMatchObject({ processed: 1, outcomes: [{ status: 'extracted', proposed: 2 }] });
+    expect([...store.rows.values()].map(rows => rows.at(-1)!.content.kind).sort()).toEqual(['fact', 'lesson']);
+    expect(store.support.map(support => support.producer)).toEqual(['worker-claim', 'worker-claim']);
+    expect(store.support[0]).toMatchObject({ evaluationId: 'ev1', reportDigest: claims.reportDigest });
+    expect([...store.rows.values()].every(rows => rows.at(-1)!.state === 'candidate')).toBe(true);
+  });
+  it('negative: an unaccepted or unsettled source never asks for the report and produces no candidate; a refused read (null) gives no E3 candidate and no error', async () => {
+    for (const overrides of [{ accepted: false }, { settled: false }]) {
+      const { application, store } = app({ principal: distiller }); let asked = 0;
+      await application.distilPage('s', 'live', { page: async after => after === null ? row(overrides) : [], report: async () => { asked++; return claims; } });
+      expect(asked).toBe(0); expect(store.rows.size).toBe(0);
+    }
+    const { application, store } = app({ principal: distiller });
+    expect(await application.distilPage('s', 'live', { page: async after => after === null ? row() : [], report: async () => null })).toMatchObject({ processed: 1, outcomes: [{ status: 'extracted', proposed: 0 }] });
+    expect(store.rows.size).toBe(0);
+  });
+  it('negative: secret-like claim text is refused by the §4.5 screening; a claim failing the entry bounds is refused as invalid, never coerced', async () => {
+    const secret = 'sk-live-TOPSECRET-VALUE-0001';
+    const { application, store } = app({ principal: distiller, knownSecrets: [secret] });
+    const outcome = await application.distilPage('s', 'live', { page: async after => after === null ? row() : [], report: async () => ({ reportDigest: claims.reportDigest,
+      lessons: [{ kind: 'fact', title: 'Anahtar', body: `Değer ${secret}` }, { kind: 'fact', title: 'Uzun', body: 'x'.repeat(100_000) }, claims.lessons[1]] }) });
+    expect(outcome.outcomes[0]).toMatchObject({ proposed: 1, refused: [{ ruleId: 'E3', claimIndex: 0, code: 'MEMORY_CANDIDATE_SECRET' }, { ruleId: 'E3', claimIndex: 1, code: 'MEMORY_ENTRY_INVALID' }] });
+    expect(store.rows.size).toBe(1);
+  });
+  it('the source builder carries claims from the report input and stays empty without one', () => {
+    const run = { identity: { scopeId: 's', runId: 'r1' }, bindings: [{ identity }], progress: [{ taskId: 't1', phase: 'accepted' }] };
+    const input = { run: run as unknown as RunSnapshot, attemptId: 'a2', evaluations: [{ evaluationId: 'ev', identity } as unknown as TaskEvaluation], unsettledEffects: false,
+      workClass: { id: 'small', family: 'small', risk: 'low' as const }, workTargetId: null };
+    expect(memoryExtractionSourceOf({ ...input, report: claims })).toMatchObject({ lessons: claims.lessons, reportDigest: claims.reportDigest });
+    expect(memoryExtractionSourceOf(input)).toMatchObject({ lessons: null, reportDigest: null });
   });
 });
