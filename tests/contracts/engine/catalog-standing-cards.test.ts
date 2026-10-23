@@ -95,6 +95,21 @@ describe('person cards', () => {
     await f.evolution().runPass('scope', 'on');
     expect((await standingOf(f))!.standing).toBe('candidate');
   });
+  it('N35: a reset card restoring a narrowed agent decides the narrowing\'s suggestion too (no re-narrowing without the cooldown)', async () => {
+    const f = await catalogEvolutionFixture(roots, { overlay: { revision: 'site-1', rules: [{ id: 'redesign-agent', version: 2, kind: 'redesign-agent', status: 'calibrated', params: { minSamples: 10, upperBoundMicro: 500000 } }] } });
+    await f.catalog().defineAgent(agentDefine('auditor', 'a1'));
+    await f.signers.enrol(enrol(aggregator, 'e-aggregator'));
+    await f.standing(person).change(change('promote', 'p1', 1));
+    seedMetrics(f.path, ...agentTasks('auditor', 10, 1), ...plainTasks(10, 5));
+    await f.evolution().runPass('scope', 'on');
+    const narrowed = (await standingOf(f))!;
+    await f.standing(person).bulk({ schemaVersion: 1, scopeId: 'scope', commandId: 'b1', reason: { kind: 'reset', workClass: 'feature' },
+      targets: [{ agentId: 'auditor', revision: 1, workClass: 'feature', expectedStandingRevision: narrowed.standingRevision }] });
+    expect((await f.standing(person).listSuggestions({ schemaVersion: 1, scopeId: 'scope', limit: 5 })).items.find(row => row.kind === 'redesign-agent')).toMatchObject({ state: 'decided', decision: 'restore' });
+    seedMetrics(f.path, ...agentTasks('auditor', 1, 0, 'after'));
+    await f.evolution().runPass('scope', 'on');
+    expect((await standingOf(f))!.standing).toBe('candidate');
+  });
 });
 
 describe('signed AI commands (N1, N42, N46)', () => {

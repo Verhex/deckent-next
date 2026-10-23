@@ -207,8 +207,16 @@ export class AgentStandingApplication {
         return { previous, action, next: transitionAgentStanding(previous, { action, expectedStandingRevision: previous.standingRevision, actor, atMs: at, commandId: command.commandId, suggestionId: null,
           reasonCode: reason.kind })[0]! };
       });
-      await store.commitEvolution({ scopeId, principal: actor, receipt: { scopeId, commandId: command.commandId, digest }, standings, suggestions: [], states: [], signed: [],
-        events: standings.map(row => this.standingEvent(scopeId, principal, revisions[0]!, row)) });
+      // A restored narrowing decides its rule suggestion too, as on a single restore card (the cooldown starts, N35).
+      const decided: { found: StoredCatalogSuggestion; next: CatalogSuggestionState }[] = [];
+      for (const row of standings) if (row.action === 'restore' && row.previous.basis.kind === 'rule' && row.previous.basis.suggestionId) {
+        const found = await this.decidable(store, scopeId, row.previous.basis.suggestionId, principal).catch(() => null);
+        if (found) decided.push({ found, next: this.decided(found, principal, at, command.commandId, 'restore') });
+      }
+      await store.commitEvolution({ scopeId, principal: actor, receipt: { scopeId, commandId: command.commandId, digest }, standings, suggestions: [],
+        states: decided.map(row => ({ previous: row.found.state, next: row.next })), signed: [],
+        events: [...standings.map(row => this.standingEvent(scopeId, principal, revisions[0]!, row)),
+          ...decided.map(row => this.event(scopeId, principal, revisions[0]!, at, catalogSuggestionAuditSubject(row.found.record, 'decide', row.next)))] });
       return { schemaVersion: 1 as const, replayed: false, standings: standings.map(row => row.next) };
     });
   }
