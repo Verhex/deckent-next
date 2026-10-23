@@ -9,7 +9,9 @@ import limits from './limits.json' with { type: 'json' };
  * Every optional section is typed `available | withheld` (the caller may not read it) `| unavailable` (no evidence); strings are bounded and redacted.
  */
 export const DELIVERY_SUMMARY_LIMITS = Object.freeze(limits);
-const text = (max: number) => z.string().max(max);
+/** Bounded text counts code points (the `*Chars` limits, the projector's cut and the list cells agree; REVISE 2734 R4), so an astral character
+ * never makes a correctly cut string fail the envelope. The UTF-16 ceiling (two units per code point) is checked first and keeps the count cheap. */
+const text = (max: number, min = 0) => z.string().min(min).max(max * 2).refine(value => Array.from(value).length <= max);
 const count = z.number().int().nonnegative().safe();
 const withheld = z.object({ state: z.literal('withheld') }).strict();
 const unavailable = z.object({ state: z.literal('unavailable') }).strict();
@@ -50,7 +52,7 @@ export const deliverySummarySchema = z.object({ schemaVersion: z.literal(1), ope
   subject: attemptIdentitySchema,
   target: z.discriminatedUnion('state', [z.object({ state: z.literal('available'), id: text(limits.targetChars), protected: z.boolean().nullable() }).strict(), unavailable]),
   /** Brain-authored work-input title, else the first instruction line, else untitled (surfaces render the word). */
-  title: z.discriminatedUnion('source', [z.object({ source: z.enum(['work-input', 'instruction']), text: text(limits.titleChars).min(1) }).strict(),
+  title: z.discriminatedUnion('source', [z.object({ source: z.enum(['work-input', 'instruction']), text: text(limits.titleChars, 1) }).strict(),
     z.object({ source: z.literal('untitled') }).strict()]),
   /** The worker's own report summary: a CLAIM, never acceptance. */
   outcome: z.discriminatedUnion('state', [z.object({ state: z.literal('available'), claim: z.literal(true), summary: text(limits.outcomeChars), truncated: z.boolean() }).strict(), withheld, unavailable]),
