@@ -26,6 +26,8 @@
   "headless.help.connect": "Subscription Brain (claude-cli-subscription, owner only): no key and no address; the connected\nCLI uses your own Claude login and runs isolated (bubblewrap: only its login dir, no other files,\nnetwork to the provider only). [--executable <abs path>] (default: first in PATH)\n[--config-dir <abs dir>] (default: ~/.claude) [--delegate none|ai|system|ai,system] (who besides\nyou may use it; absent keeps your earlier choice). Without usable bubblewrap it is refused.",
   "doctor.headless.login": "Brain login: {method}{plan}, directory {dir}, channel {state}, consent {consent}",
   "doctor.headless.loginUnknown": "Brain login: not checked yet (directory {dir}); the first call or a reconnect runs the check",
+  "doctor.headless.isolated": "; isolated by bubblewrap {version} ({launcher})",
+  "doctor.headless.isolationUnavailable": "; isolation unavailable (no usable bubblewrap: see the sandbox rows)",
   "doctor.headless.open": "open",
   "doctor.headless.closed": "closed",
   "doctor.headless.none": "none (you only)"

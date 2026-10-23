@@ -48,14 +48,18 @@ export const headlessConnectionAdapter = (definition: NativeCliHeadlessDefinitio
   maxInFlight: nativeCliHeadless(protocol.family)?.headless.connect.maxInFlight ?? 1,
   adapter: { id: NATIVE_CLI_HEADLESS_ADAPTER.id, version: NATIVE_CLI_HEADLESS_ADAPTER.version, definition: nativeCliHeadlessDefinitionSchema.parse(definition) as unknown as JsonObject },
   protocol: { family: protocol.family, version: protocol.version }, tariff: 'unmetered' as const, billingAxis: 'subscription' as const });
-/** Doctor (read-soft, no spawn): each subscription connection of the scope with its last preflight record's state and login kind (`unknown`: none yet). */
+/** Doctor (read-soft, no spawn): each subscription connection of the scope with its last preflight record's state, login kind and isolation (S3-5:
+ * the launcher a passing check ran in, or `unavailable` when the realm closed the channel; `unknown`: no record yet). */
 export async function readHeadlessLogins(section: unknown, scopeId: string) {
   const profiles = ((section as { profiles?: unknown } | undefined)?.profiles as { scopeId?: unknown; adapter?: { id: string; version: number; definition?: unknown } }[] | undefined) ?? [];
   const text = (value: unknown) => typeof value === 'string' ? value.slice(0, 64) : null;
   return Promise.all(profiles.flatMap(profile => { const definition = profile.scopeId === scopeId && profile.adapter && isNativeCliHeadlessAdapter(profile.adapter)
     ? nativeCliHeadlessDefinitionSchema.safeParse(profile.adapter.definition) : null; return definition?.success ? [definition.data] : []; }).map(async definition => {
-    const record = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8').then(raw => JSON.parse(raw) as { state?: unknown; auth?: { authMethod?: unknown; subscriptionType?: unknown } }, () => null);
+    const record = await readFile(join(definition.stateDir, 'preflight.json'), 'utf8').then(raw => JSON.parse(raw) as { state?: unknown; refusal?: unknown;
+      auth?: { authMethod?: unknown; subscriptionType?: unknown }; isolation?: { launcher?: unknown; version?: unknown } }, () => null);
+    const isolation = record?.state === 'open' && text(record.isolation?.version) ? { launcher: text(record.isolation?.launcher) ?? '-', version: text(record.isolation?.version)! }
+      : record?.refusal === 'HEADLESS_ISOLATION_UNAVAILABLE' ? 'unavailable' as const : null;
     return Object.freeze({ state: !record ? 'unknown' as const : record.state === 'open' ? 'open' as const : 'closed' as const, authMethod: text(record?.auth?.authMethod),
-      subscriptionType: text(record?.auth?.subscriptionType), configDir: definition.configDir, consent: definition.delegatedUse?.classes ?? [] });
+      subscriptionType: text(record?.auth?.subscriptionType), configDir: definition.configDir, consent: definition.delegatedUse?.classes ?? [], isolation });
   }));
 }

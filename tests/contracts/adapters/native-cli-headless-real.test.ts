@@ -1,5 +1,6 @@
-// Lead-only acceptance against the real CLI (S3-2): skipped unless DECKENT_HEADLESS_REAL_CLI names the absolute executable. Preflight makes no
-// model call; DECKENT_HEADLESS_REAL_SEND=1 adds exactly one tiny one-turn call on the person's own subscription. Nothing personal is stored here.
+// Lead-only acceptance against the real CLI (S3-2, S3-5): skipped unless DECKENT_HEADLESS_REAL_CLI names the absolute executable. Every spawn runs
+// in the bubblewrap realm (this host's measured launcher under a temporary state root). Preflight makes no model call; DECKENT_HEADLESS_REAL_SEND=1
+// adds exactly one tiny one-turn call on the person's own subscription. Nothing personal is stored here; the printed line holds durations only.
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { parseModelBindingDefinition, parseModelInvocationProfile } from '#domain/index.js';
 import { createNativeCliHeadlessPort, NATIVE_CLI_HEADLESS_ADAPTER } from '#adapters/core/native-cli-headless/index.js';
 import catalog from '../../../assets/model-catalog/claude-cli-subscription.json' with { type: 'json' };
+import { testIsolation } from '../../fixtures/native-headless/connection.js';
 
 const executable = process.env.DECKENT_HEADLESS_REAL_CLI, roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -24,12 +26,16 @@ describe.skipIf(!executable)('S3-2 real CLI acceptance (lead only)', () => {
         configDir: await realpath(process.env.DECKENT_HEADLESS_CONFIG_DIR ?? join(homedir(), '.claude')), stateDir: join(root, 'state'), ownerUid: process.getuid!(),
         minCliVersion: model.minCliVersion ?? '0.0.0', delegatedUse: null } },
       allocation: { id: 'real', maxCalls: 1, maxInFlight: 1 }, limits: { requestMaxBytes: 65_536, responseMaxBytes: 65_536, timeoutMs: 60_000 } });
-    const port = createNativeCliHeadlessPort({ now: Date.now });
+    const port = createNativeCliHeadlessPort({ now: Date.now, isolation: testIsolation });
+    const started = performance.now();
     await port.preflight(profile);
-    if (process.env.DECKENT_HEADLESS_REAL_SEND !== '1') return;
+    const preflightMs = Math.round(performance.now() - started), report = (sendMs: number | null) => console.info(JSON.stringify({ check: 'S3-5 headless real CLI', isolated: true, preflightMs, sendMs }));
+    if (process.env.DECKENT_HEADLESS_REAL_SEND !== '1') { report(null); return; }
+    const sent = performance.now();
     const prepared = await port.prepare(profile, binding, { model: model.nativeId, messages: [{ role: 'system', content: 'You are a planner. Answer only JSON.' },
       { role: 'user', content: 'Reply exactly {"ok":true}' }], stream: false, reasoning_effort: 'low' });
     const result = await port.send(prepared);
+    report(Math.round(performance.now() - sent));
     expect(result).toMatchObject({ native: { model: model.nativeId, headless: { guard: 'passed' } } });
   }, 120_000);
 });

@@ -26,6 +26,8 @@
   "headless.help.connect": "Abonelik Brain'i (claude-cli-subscription, yalnız sahip): anahtar ve adres yok; bağlanan CLI\nkendi Claude girişinizi kullanır ve yalıtılmış çalışır (bubblewrap: yalnız giriş dizini, başka dosya\nyok, ağ yalnız sağlayıcıya). [--executable <mutlak yol>] (varsayılan: PATH'te ilk)\n[--config-dir <mutlak dizin>] (varsayılan: ~/.claude) [--delegate none|ai|system|ai,system] (sizin\ndışınızda kimin kullanabileceği; verilmezse önceki seçiminiz kalır). Kullanılabilir bubblewrap yoksa reddedilir.",
   "doctor.headless.login": "Brain girişi: {method}{plan}, dizin {dir}, kanal {state}, onay {consent}",
   "doctor.headless.loginUnknown": "Brain girişi: henüz denetlenmedi (dizin {dir}); ilk çağrı ya da yeniden bağlama denetimi koşar",
+  "doctor.headless.isolated": "; bubblewrap {version} ({launcher}) ile yalıtılmış",
+  "doctor.headless.isolationUnavailable": "; yalıtım kullanılamıyor (kullanılabilir bubblewrap yok: sandbox satırlarına bakın)",
   "doctor.headless.open": "açık",
   "doctor.headless.closed": "kapalı",
   "doctor.headless.none": "yok (yalnız siz)"

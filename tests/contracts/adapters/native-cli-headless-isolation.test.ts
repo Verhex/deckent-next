@@ -1,13 +1,13 @@
 // S3-5 customer isolation of the headless subscription Brain: the CLI runs inside a bubblewrap realm (the bundled locked build in tests) that shows
 // it only the system prefixes, its own executable, the person's bound login dir and its private run dir; its network is the provider allowlist
 // through the gateway. A scripted fake CLI probes the realm from inside: no real CLI, no model call, no real credential.
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { existsSync, lstatSync } from 'node:fs';
 import { createServer, type Server } from 'node:net';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { bubblewrapObservation } from '#adapters/index.js';
-import { prepareHeadlessConnection } from '#adapters/core/native-cli-headless/index.js';
+import { prepareHeadlessConnection, readHeadlessLogins } from '#adapters/core/native-cli-headless/index.js';
 import { assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
 import { cleanupConnections, connection, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
@@ -67,6 +67,13 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI
     expect(env[headless.isolation.proxy.env[0]!]).toBe(`http://${headless.isolation.proxy.host}:${headless.isolation.proxy.port}`);
     for (const name of headless.isolation.proxy.clear) expect(env[name]).toBe('');
   });
+  it('records the realm of a passing check for doctor (launcher kind and version, never a path)', async () => {
+    const c = await connection({ steps: happy({}) });
+    await c.call();
+    const [login] = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId), launcher = (await testIsolation()).launcher!;
+    expect(login).toMatchObject({ state: 'open', isolation: { launcher: launcher.source, version: launcher.version } });
+    expect(JSON.stringify(JSON.parse(await readFile(join(c.root, 'state', 'preflight.json'), 'utf8')).isolation)).not.toContain('/');
+  });
   it('runs under process limits: no core dump, bounded file size and descriptors, no nested user namespace, no controlling terminal', async () => {
     const c = await connection();
     await c.call(happy({}));
@@ -96,6 +103,17 @@ describe.skipIf(process.platform !== 'linux')('S3-5 no unisolated fallback', () 
     await expect(prepareHeadlessConnection({ protocol: { family: c.profile.protocol.family, version: 'v1' }, minCliVersion: '9.0.0', stateDir: join(c.root, 'state'),
       executable: c.executable, configDir: c.configDir, env: {}, now: () => 1, isolation: unavailable })).rejects.toMatchObject({ code: 'HEADLESS_ISOLATION_UNAVAILABLE' });
     expect(await c.log()).toEqual([]);
+  });
+  it('closes the channel typed when the realm itself cannot start (a launcher that refuses), and never runs the CLI outside it', async () => {
+    const c = await connection({ steps: happy({}) }, {}, 'a'.repeat(64), async () => broken);
+    const path = join(c.root, 'bin', 'bwrap-refusing');
+    await writeFile(path, '#!/bin/sh\necho "bwrap: setting up uid map: Permission denied" >&2\nexit 1\n'); await chmod(path, 0o700);
+    const info = lstatSync(path, { bigint: true }), broken = { ...bubblewrapObservation('available'), status: 'available' as const, launcher: { source: 'system' as const, path,
+      version: '0.13.0', sha256: null, overlay: true, identity: `${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}` } };
+    await expect(c.port.preflight(c.profile)).rejects.toMatchObject({ code: 'HEADLESS_ISOLATION_UNAVAILABLE', params: { check: 'realm' } });
+    expect(await c.log()).toEqual([]);
+    const profiles = { profiles: [{ ...c.profile, scopeId: 'scope' }] };
+    expect(await readHeadlessLogins(profiles, 'scope')).toMatchObject([{ state: 'closed', isolation: 'unavailable' }]);
   });
   it('refuses typed when the kernel restricts the user namespace the realm needs', async () => {
     const restricted = async () => ({ ...(await testIsolation()), status: 'restricted' as const });

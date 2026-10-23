@@ -35,6 +35,12 @@ describe('S3-1 headless registry data', () => {
     ['a missing bound', (h: Record<string, unknown>) => { delete (h.limits as Record<string, unknown>).killGraceMs; }],
     ['a non-positive bound', (h: Record<string, unknown>) => { (h.limits as Record<string, unknown>).maxLineBytes = 0; }],
     ['an empty deny list', (h: Record<string, unknown>) => { (h.env as Record<string, unknown>).deny = []; }],
+    ['no isolation realm (S3-5)', (h: Record<string, unknown>) => { delete h.isolation; }],
+    ['a proxy off the realm loopback', (h: Record<string, unknown>) => { ((h.isolation as Record<string, unknown>).proxy as Record<string, unknown>).host = '0.0.0.0'; }],
+    ['a gateway socket outside /run', (h: Record<string, unknown>) => { (h.isolation as Record<string, unknown>).socketPath = '/home/x/egress.sock'; }],
+    ['a visible login entry that climbs out', (h: Record<string, unknown>) => { (h.isolation as Record<string, unknown>).configVisible = ['..']; }],
+    ['a proxy variable that is a deny name', (h: Record<string, unknown>) => { (h.env as { deny: string[] }).deny = [...(h.env as { deny: string[] }).deny, 'HTTPS_PROXY']; }],
+    ['a relative realm shell', (h: Record<string, unknown>) => { (h.isolation as Record<string, unknown>).shell = 'sh'; }],
   ])('refuses a registry with %s', (_label, change) => {
     const asset = structuredClone(registry) as unknown as { adapters: { claude: { headless: Record<string, unknown> } } };
     change(asset.adapters.claude.headless);
