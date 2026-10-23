@@ -92,6 +92,14 @@ describe('SQLite memory journal store', () => {
     expect(await app(f.path).list({ schemaVersion: 1, scopeId: 's', limit: 10 })).toEqual({ schemaVersion: 1, status: 'held', code: 'MEMORY_UNAVAILABLE' });
     const check = new DatabaseSync(f.path, { readOnly: true }); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(59); } finally { check.close(); }
   });
+  it('the full-text index survives a VACUUM (the backup path uses VACUUM INTO): hits stay bound to the entries they index', async () => {
+    const f = await ledger(), memory = app(f.path);
+    await memory.propose(propose('a', 's', 'Birinci kural')); await memory.propose(propose('b', 's', 'İkinci kural')); await memory.propose(propose('c', 's', 'Üçüncü fatura'));
+    await memory.retire({ schemaVersion: 1, commandId: 'ra', scopeId: 's', entryId: 'a', expectedRevision: 1, reason: 'old', supersededBy: null });
+    const db = new DatabaseSync(f.path); db.exec('VACUUM'); expect(db.prepare("SELECT s.rowid=e.id AS bound FROM memory_search s JOIN memory_entries e ON e.id=s.rowid WHERE e.entry_id='c'").get()?.bound).toBe(1); db.close();
+    const found = await memory.search({ schemaVersion: 1, scopeId: 's', query: 'ucuncu', limit: 10 });
+    expect(found.status === 'ok' && found.entries.map(entry => entry.entryId)).toEqual(['c']);
+  });
   it('list reads newest-changed first through the scope index and stays bounded', async () => {
     const f = await ledger(), memory = app(f.path);
     for (let index = 0; index < 5; index++) await memory.propose(propose(`m${index}`, 's', `Kural ${index}`));

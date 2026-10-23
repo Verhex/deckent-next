@@ -11,7 +11,7 @@ const SEAL = 'memory-journal-store:1';
 const corrupt = () => new MemoryJournalError('MEMORY_CORRUPT');
 /**
  * Core SQLite adapter of the DB-neutral memory journal port, on the shared ledger (lane v60). Every row is sealed with the installation integrity
- * key and cross-checked against its columns on read. The FTS5 table indexes the domain-folded text (`memoryIndexText`) under the entry's rowid;
+ * key and cross-checked against its columns on read. The FTS5 table indexes the domain-folded text (`memoryIndexText`) under the entry's explicit `id` (stable across VACUUM);
  * it is a derived index, never the record: hits are re-read and re-verified from `memory_entries` by the engine.
  */
 class SqliteMemoryJournalStore implements MemoryJournalStore {
@@ -34,8 +34,8 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
   }
   private read<T>(work: () => T): T { try { return work(); } catch (error) { throw error instanceof MemoryJournalError ? error : new MemoryJournalError('MEMORY_UNAVAILABLE'); } }
   private current(scopeId: string, entryId: string) {
-    const row = this.db.prepare('SELECT rowid,entry_id,revision,state,record FROM memory_entries WHERE scope_id=? AND entry_id=?').get(scopeId, entryId);
-    return row ? { rowid: Number(row['rowid']), entry: this.entry(row, scopeId, entryId) } : null;
+    const row = this.db.prepare('SELECT id,entry_id,revision,state,record FROM memory_entries WHERE scope_id=? AND entry_id=?').get(scopeId, entryId);
+    return row ? { id: Number(row['id']), entry: this.entry(row, scopeId, entryId) } : null;
   }
   async load(scopeId: string, entryId: string) { return this.read(() => this.current(scopeId, entryId)?.entry ?? null); }
   private revision(scopeId: string, entryId: string, revision: number) {
@@ -53,7 +53,7 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
   }
   /** Terms are already folded words (letters/digits only); each is quoted, so no FTS5 operator or column filter can reach MATCH. */
   async search(scopeId: string, terms: readonly string[], states: readonly MemoryState[], limit: number) {
-    return this.read(() => this.db.prepare(`SELECT e.entry_id FROM memory_search s JOIN memory_entries e ON e.rowid=s.rowid WHERE memory_search MATCH ? AND e.scope_id=?
+    return this.read(() => this.db.prepare(`SELECT e.entry_id FROM memory_search s JOIN memory_entries e ON e.id=s.rowid WHERE memory_search MATCH ? AND e.scope_id=?
       AND e.state IN(${states.map(() => '?').join(',')}) ORDER BY bm25(memory_search) LIMIT ?`)
       .all(terms.map(term => `"${term.replaceAll('"', '""')}"`).join(' '), scopeId, ...states, limit).map(row => String(row['entry_id'])));
   }
@@ -82,16 +82,16 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
     const current = this.current(next.scopeId, next.entryId);
     if (!isDeepStrictEqual(current?.entry ?? null, change.previous)) throw new MemoryJournalError('MEMORY_REVISION_CONFLICT');
     this.audit.record(change.event);
-    const seq = Number(this.db.prepare('SELECT coalesce(max(rowid),0)+1 AS seq FROM memory_entry_revisions').get()?.['seq']), record = this.seal(next);
-    let rowid = current?.rowid;
+    const seq = Number(this.db.prepare('SELECT coalesce(max(seq),0)+1 AS seq FROM memory_entries WHERE scope_id=?').get(next.scopeId)?.['seq']), record = this.seal(next);
+    let id = current?.id;
     if (current) this.db.prepare('UPDATE memory_entries SET revision=?,state=?,seq=?,record=? WHERE scope_id=? AND entry_id=? AND revision=?')
       .run(next.revision, next.state, seq, record, next.scopeId, next.entryId, current.entry.revision);
-    else rowid = Number(this.db.prepare('INSERT INTO memory_entries(scope_id,entry_id,revision,state,seq,record) VALUES(?,?,?,?,?,?)')
+    else id = Number(this.db.prepare('INSERT INTO memory_entries(scope_id,entry_id,revision,state,seq,record) VALUES(?,?,?,?,?,?)')
       .run(next.scopeId, next.entryId, next.revision, next.state, seq, record).lastInsertRowid);
     this.db.prepare('INSERT INTO memory_entry_revisions(scope_id,entry_id,revision,record) VALUES(?,?,?,?)').run(next.scopeId, next.entryId, next.revision, record);
     this.db.prepare('INSERT INTO memory_command_receipts(scope_id,command_id,entry_id,revision,record) VALUES(?,?,?,?,?)')
       .run(receipt.scopeId, receipt.commandId, receipt.entryId, receipt.revision, this.seal(receipt));
-    this.db.prepare('DELETE FROM memory_search WHERE rowid=?').run(rowid!); this.db.prepare('INSERT INTO memory_search(rowid,text) VALUES(?,?)').run(rowid!, memoryIndexText(next));
+    this.db.prepare('DELETE FROM memory_search WHERE rowid=?').run(id!); this.db.prepare('INSERT INTO memory_search(rowid,text) VALUES(?,?)').run(id!, memoryIndexText(next));
     return { replayed: false, entry: next };
   }
   close() { this.db.close(); }

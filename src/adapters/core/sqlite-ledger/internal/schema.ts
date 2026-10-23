@@ -39,7 +39,7 @@ export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
 export const CURRENT_LEDGER_VERSION = 60;
 // S4 memory journal v1 (lane v60; the lead renumbers at landing): additive tables (current entry, append-only revisions and receipts, FTS5 index
-// keyed by the entry rowid). No earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v60).
+// keyed by the entry's explicit `id`, which VACUUM never renumbers). No earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v60).
 export const MEMORY_JOURNAL_LEDGER_VERSION = 60;
 // PRE-7 ORTAM-HAZIR: environment park + `not-run` acceptance vocabularies (Run park reason and its requirement as failure code, a
 // `launch-refused` previous binding, the launch refusal's `requirement` and `probe`, a binding's probe custody `probes`, report evidence `not-run`,
@@ -72,8 +72,8 @@ export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
-  [MEMORY_JOURNAL_LEDGER_VERSION]: `CREATE TABLE memory_entries(scope_id TEXT NOT NULL,entry_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),
-    state TEXT NOT NULL CHECK(state IN('candidate','verified','retired')),seq INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,entry_id));
+  [MEMORY_JOURNAL_LEDGER_VERSION]: `CREATE TABLE memory_entries(id INTEGER PRIMARY KEY,scope_id TEXT NOT NULL,entry_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),
+    state TEXT NOT NULL CHECK(state IN('candidate','verified','retired')),seq INTEGER NOT NULL,record TEXT NOT NULL,UNIQUE(scope_id,entry_id));
     CREATE INDEX memory_entries_recent ON memory_entries(scope_id,seq DESC);
     CREATE TRIGGER memory_entries_no_delete BEFORE DELETE ON memory_entries BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
     CREATE TABLE memory_entry_revisions(scope_id TEXT NOT NULL,entry_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,
