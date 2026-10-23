@@ -29,6 +29,9 @@ Observe:
   memory      Read and curate the scope's memory journal: facts and lessons
       search | inspect | propose | verify | retire
       [--scope <id>] [--state <name>] [--json]
+  agents      Read and define the scope's agents and skills
+      inspect | skills | skill | define | define-skill
+      [--scope <id>] [--json]
 
 Execute work:
   do          Plan an intent through Brain and existing approval gates

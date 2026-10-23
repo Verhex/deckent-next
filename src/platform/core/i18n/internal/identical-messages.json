@@ -119,5 +119,7 @@
   "terminal.delivery.adoptTarget",
   "memory.column.id",
   "memory.view.author.ai",
-  "memory.view.revision"
+  "memory.view.revision",
+  "agents.view.revision",
+  "agents.view.author.ai"
 ]

@@ -446,6 +446,41 @@
     },
     {
       "schemaVersion": 1,
+      "id": "agents",
+      "version": 1,
+      "labelKey": "policy.mcp.group.agents",
+      "noteKey": "policy.mcp.note.agents",
+      "proposed": false,
+      "cells": [
+        {
+          "id": "inspect",
+          "tools": {
+            "list_agents": [
+              "inspect"
+            ],
+            "inspect_agent": [
+              "inspect"
+            ],
+            "list_skills": [
+              "inspect"
+            ],
+            "inspect_skill": [
+              "inspect"
+            ]
+          },
+          "actions": [
+            "inspect"
+          ],
+          "resource": {
+            "kind": "agent-catalog",
+            "ids": "all"
+          },
+          "scope": "selected"
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "id": "service",
       "version": 1,
       "labelKey": "policy.mcp.group.service",

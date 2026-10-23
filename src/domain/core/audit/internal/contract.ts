@@ -101,6 +101,9 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('memory-journal'), action: z.union([z.literal('propose'), z.literal('verify'), z.literal('retire')]), entryId: identitySchema, commandId: identitySchema,
     revision: counterSchema.positive(), state: z.enum(['candidate', 'verified', 'retired']), contentDigest: digest,
     basis: z.enum(['human-review', 'independent-evaluation']).nullable() }).strict(),
+  /** S7 agent/skill catalog: one definition or import of one row (persona and skill text are never recorded, only their digests). */
+  z.object({ kind: z.literal('agent-catalog'), item: z.enum(['agent', 'skill']), action: z.enum(['define', 'import']), id: identitySchema, commandId: identitySchema,
+    revision: counterSchema.positive(), contentDigest: digest, skillSetDigest: digest.nullable() }).strict(),
   /** `person` null (MODES-3): the default `standart`, which no bindings entry names. */
   z.object({ kind: z.literal('permission-mode'), mode: z.enum(['auto-edit', 'full-auto', 'standart']), cell: z.enum(['edit-non-floor', 'shell-modify', 'mcp-call']),
     tool: toolRef, call: callRef, grants: z.object({ company: identitySchema, person: identitySchema.nullable() }).strict(),

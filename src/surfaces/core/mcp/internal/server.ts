@@ -26,6 +26,8 @@ import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrenc
 import { quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseReceipt, poolCapacityCommandSchema, type PoolCapacityCommand, type PoolCapacityReceipt, type PoolCapacityView, poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView } from '#engine/index.js';
 import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
 import { memoryListQuerySchema, memorySearchQuerySchema, memoryInspectQuerySchema, type MemoryListQuery, type MemoryListing, type MemorySearchQuery, type MemorySearchResult, type MemoryInspectQuery, type MemoryInspection } from '#engine/index.js';
+import { agentListQuerySchema, agentInspectQuerySchema, skillListQuerySchema, skillInspectQuerySchema, type AgentListQuery, type AgentListing, type AgentInspectQuery,
+  type AgentInspection, type SkillListQuery, type SkillListing, type SkillInspectQuery, type SkillInspection } from '#engine/index.js';
 import { policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/index.js';
 export interface McpApplications {
   inspectTargetQueue?(query: QueueQuery): Promise<unknown>;
@@ -39,6 +41,9 @@ export interface McpApplications {
   inspectDecision?(query: DecisionQuery): Promise<DecisionInspection>;
   /** S4 memory journal v1: read-only; a failed read answers `held`, never an empty memory. */
   listMemory?(query: MemoryListQuery): Promise<MemoryListing>; searchMemory?(query: MemorySearchQuery): Promise<MemorySearchResult>; inspectMemory?(query: MemoryInspectQuery): Promise<MemoryInspection>;
+  /** S7 agent/skill catalog: read-only; creating, revising and importing stay a person's terminal card. */
+  listAgents?(query: AgentListQuery): Promise<AgentListing>; inspectAgent?(query: AgentInspectQuery): Promise<AgentInspection>;
+  listSkills?(query: SkillListQuery): Promise<SkillListing>; inspectSkill?(query: SkillInspectQuery): Promise<SkillInspection>;
   renewApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   listApprovals?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   inspectApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
@@ -127,6 +132,12 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     schema: memorySearchQuerySchema, invoke: input => searchMemory.call(applications, memorySearchQuerySchema.parse(input)) });
   if (inspectMemory) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_memory', description: t('mcp.tool.inspectMemory', {}, locale),
     schema: memoryInspectQuerySchema, invoke: input => inspectMemory.call(applications, memoryInspectQuerySchema.parse(input)) });
+  for (const [name, description, schema, invoke] of [['list_agents', t('mcp.tool.listAgents', {}, locale), agentListQuerySchema, applications.listAgents],
+    ['inspect_agent', t('mcp.tool.inspectAgent', {}, locale), agentInspectQuerySchema, applications.inspectAgent], ['list_skills', t('mcp.tool.listSkills', {}, locale), skillListQuerySchema, applications.listSkills],
+    ['inspect_skill', t('mcp.tool.inspectSkill', {}, locale), skillInspectQuerySchema, applications.inspectSkill]] as const) {
+    if (invoke) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name, description, schema,
+      invoke: input => (invoke as (query: unknown) => Promise<unknown>).call(applications, schema.parse(input)) });
+  }
   if (applications.inspectPolicyAdministration) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_policy_administration',
     description: t('mcp.tool.policyAdministration', {}, locale), schema: policyAdministrationQuerySchema,
     invoke: input => applications.inspectPolicyAdministration!(policyAdministrationQuerySchema.parse(input)) });

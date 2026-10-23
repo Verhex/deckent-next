@@ -21,6 +21,7 @@ export * from '#domain/core/agent-tool/index.js';
 export * from '#domain/core/agent-turn/index.js';
 export * from '#domain/core/decision/index.js';
 export * from '#domain/core/memory/index.js';
+export * from '#domain/core/agent-catalog/index.js';
 export * from '#domain/core/text/index.js';
 export * from '#domain/core/identity-profile/index.js';
 export * from '#domain/core/work-cost/index.js';

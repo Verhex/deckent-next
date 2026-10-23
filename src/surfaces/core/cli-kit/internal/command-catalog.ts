@@ -139,6 +139,14 @@ export const CLI_CATALOG = [
     action('verify', 'observe', 'memory.help.action.verify', 'memory.help.detail', { requires: ['<id>', '--note <text>'] }),
     action('retire', 'observe', 'memory.help.action.retire', 'memory.help.detail', { requires: ['<id>', '--reason <text>'] }),
   ] },
+  // S7 agent/skill catalog core: reads (agents by default, inspect, skills, skill) and a person's terminal-card writes (define, define-skill).
+  { name: 'agents', group: 'observe', summary: 'agents.help.summary', detail: 'agents.help.detail', args: '[--scope <id>] [--json]', bare: 'handler', children: [
+    action('inspect', 'observe', 'agents.help.action.inspect', 'agents.help.detail', { requires: ['<id>'] }),
+    action('skills', 'observe', 'agents.help.action.skills', 'agents.help.detail'),
+    action('skill', 'observe', 'agents.help.action.skill', 'agents.help.detail', { requires: ['<id>'] }),
+    action('define', 'observe', 'agents.help.action.define', 'agents.help.detail', { requires: ['--input <file>'] }),
+    action('define-skill', 'observe', 'agents.help.action.define-skill', 'agents.help.detail', { requires: ['--input <file>'] }),
+  ] },
   { name: 'models', group: 'models', summary: 'cli.help.summary.models', detail: 'cli.help.models', args: '[--scope <id>] [--declared] [--catalog] [--verbose]', bare: 'handler', children: [
     action('binding', 'models', 'cli.help.action.binding', 'cli.help.modelsBinding', { requires: MODEL }),
     action('activation', 'models', 'cli.help.action.activation', 'cli.help.modelsActivation', { requires: MODEL }),
