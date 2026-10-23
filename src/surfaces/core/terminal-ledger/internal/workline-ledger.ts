@@ -13,6 +13,8 @@ export interface WorklineLedgerPorts {
   readonly clearSessionStanding?: (sessionId: string) => Promise<void>;
   readonly listWorkers: () => Promise<WorkerObservationReport>;
   readonly inspectRun: (runId: string) => Promise<RunView | null>;
+  /** alpha.54 g: the summary lines of each queue row of a Run window (same reader and renderer as the delivery card, under the person's own grants; an unreadable one renders as not available). */
+  readonly queueSummaryLines?: (views: NonNullable<RunView['targetQueue']>['records']) => Promise<readonly (readonly string[])[]>;
   readonly listRunIds?: () => Promise<readonly string[]>;
   readonly workerHeartbeatMs?: number;
   /** When set, replaces polling for that watch. The runtime owns the event source. */

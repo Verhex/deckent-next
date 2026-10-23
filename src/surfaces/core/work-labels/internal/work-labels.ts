@@ -80,7 +80,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
         'needs-input': t('terminal.jobs.parked.needs-input', {}, locale), 'operator-hold': t('terminal.jobs.parked.operator-hold', {}, locale),
         'progression-failed': t('terminal.jobs.parked.progression-failed', {}, locale), 'quota-exhausted': t('terminal.jobs.parked.quota-exhausted', {}, locale),
         'environment-not-ready': t('terminal.jobs.parked.environment-not-ready', {}, locale) },
-      parkCode: t('terminal.jobs.parkCode', {}, locale), parkNote: t('terminal.jobs.parkNote', {}, locale) },
+      heldOver: t('terminal.jobs.parked.heldOver', {}, locale), parkCode: t('terminal.jobs.parkCode', {}, locale), parkNote: t('terminal.jobs.parkNote', {}, locale) },
     workerLine: { numberLocale: locale, ordinal: t('terminal.worker.ordinal', {}, locale),
       phases: Object.fromEntries(phases.map(phase => [phase, phaseLabel(phase, locale)])) as WorkSurfaceLabels['workerLine']['phases'],
       durationSeconds: t('terminal.duration.seconds', {}, locale), durationMinutes: t('terminal.duration.minutes', {}, locale), durationHours: t('terminal.duration.hours', {}, locale),

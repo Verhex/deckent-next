@@ -401,6 +401,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     approvalPageSize: config.approvals.pageSize,
     ...(context.inspectWorkers ? { inspectWorkers: context.inspectWorkers } : {}),
     ...(context.inspectRun ? { inspectRun: context.inspectRun } : {}),
+    ...(context.describeDeliverySummaries ? { describeQueueSummaries: context.describeDeliverySummaries } : {}),
     ...(context.inspectInventory ? { inspectInventory: context.inspectInventory } : {}),
     ...(context.inspectWorkerTranscript ? { inspectWorkerTranscript: context.inspectWorkerTranscript } : {}),
     ...(context.listApprovals ? { listApprovals: context.listApprovals } : {}),

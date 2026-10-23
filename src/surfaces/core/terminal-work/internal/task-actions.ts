@@ -3,7 +3,7 @@ import { span } from '#surfaces/core/terminal-render/index.js';
 import type { TaskWindowAction } from './live-windows.js';
 import type { LocalExecution, WorklinePanel } from './workline-panel.js';
 import type { WorkSurfaceLabels } from './workline-actions.js';
-import { runDetailLines, runTitle } from './job-windows.js';
+import { queueRowSummaries, runDetailLines, runTitle } from './job-windows.js';
 
 /** Selected identities travel out of band through the local controller; no typed slash argument can select or cancel a task. */
 export async function openTaskAction(action: TaskWindowAction, panel: WorklinePanel, execution: LocalExecution, ledger: WorklineLedgerPorts,
@@ -16,7 +16,7 @@ export async function openTaskAction(action: TaskWindowAction, panel: WorklinePa
     : runs.find(run => (target.attempt ? run.runId === target.attempt.runId : run.tasks.some(task => task.id === target.taskId)));
   if (action.action === 'run') {
     // The same read model and window as `/run`: the Run is read again here, so the window never shows a stale strip copy.
-    await panel.pick(execution, run ? { kind: 'job-window', title: runTitle(run, work.jobs!), lines: runDetailLines(run, work) }
+    await panel.pick(execution, run ? { kind: 'job-window', title: runTitle(run, work.jobs!), lines: runDetailLines(run, work, await queueRowSummaries(run, ledger.queueSummaryLines)) }
       : { kind: 'job-window', title: work.jobs!.runTitle, lines: [{ spans: [span(work.unavailable)] }] }, ['close']);
     return;
   }

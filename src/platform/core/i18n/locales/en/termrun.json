@@ -1,3 +1,4 @@
 {
-  "terminal.jobs.acceptanceEvidence": "Accepted on: {evidence}"
+  "terminal.jobs.acceptanceEvidence": "Accepted on: {evidence}",
+  "terminal.jobs.parked.heldOver": "also held by an operator"
 }
