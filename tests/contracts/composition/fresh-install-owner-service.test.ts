@@ -109,7 +109,7 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     const preview = await upgradePolicyTemplateInstallation(f.project, SCOPE, false, undefined, { env: f.env });
     expect(preview).toMatchObject({ status: 'preview', basis: 'first-run', exact: true, serviceIdentity: { status: 'kept' } });
     expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual([...V12, ...V13]);
-    expect(await upgradePolicyTemplateInstallation(f.project, SCOPE, true, preview.expect!, { env: f.env })).toMatchObject({ status: 'upgraded', template: { to: 14 } });
+    expect(await upgradePolicyTemplateInstallation(f.project, SCOPE, true, preview.expect!, { env: f.env })).toMatchObject({ status: 'upgraded', template: { to: 15 } });
     await expect(inspectConfiguredInventory(f.project, { schemaVersion: 1, scopeId: SCOPE }, { env: f.env })).resolves.toMatchObject({ page: { entries: [], nextAfter: null } });
     await stopConfiguredRuntimeService(f.project, { env: f.env }); await service.done;
     f.errors.length = 0; f.pages.length = 0; await f.start(); await f.settle();

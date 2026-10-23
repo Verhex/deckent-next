@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource } from '#adapters/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type AgentTurnStreamEvent } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, POLICY_CHANGE_MAX, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, type AgentTurnStreamEvent } from '#domain/index.js';
 import { FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_MCP_CALL_OPERATION_ID, FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, FIRST_RUN_PROPOSE_MCP_TOOL_NAME, FIRST_RUN_READ_TOOL_NAMES, FIRST_RUN_SCRATCH_TOOL_NAMES,
   FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, FIRST_RUN_SHELL_OPERATION_ID, FIRST_RUN_WRITE_OPERATION_ID, FIRST_RUN_EXECUTION_ENVIRONMENT_IDS } from '#engine/index.js';
 import { configuredPolicyTemplateUpgrade } from '#composition/core/approvals/index.js';
@@ -26,10 +26,11 @@ const upgradePolicyTemplateInstallation = (...args: Parameters<typeof upgradeIns
 const FIXTURE = resolve('tests/fixtures/mcp-stdio-server.mjs');
 const roots: string[] = [];
 afterEach(async () => { await closeModeRuntimes(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-/** The v13 delta (I-POL) and the v14 delta (S4), which the plan adds last; rollback removes only the current (v14) delta (earlier rules stay once added). */
+/** The v13 delta (I-POL), the v14 delta (S4) and the v15 delta (S4B-1 + S7), which the plan adds last; rollback removes only the current (v15) delta
+ * (earlier rules stay once added). A v4-era plan is longer than one policy change since v15: the same run again adds the rest. */
 const DELTA: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
 const V13: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect',
-  'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', ...DELTA];
+  'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory', ...DELTA];
 const echo = { name: 'echo', description: 'Echo the arguments', inputSchema: { type: 'object', properties: { text: { type: 'string' } } } };
 
 /** The first-run v4 grants of this test's scope and person: the v5 template without its MCP rules and without the proposal tool. */
@@ -84,17 +85,19 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     const preview = await upgrade('preview');
     expect(preview).toMatchObject({ status: 'preview', missing: [] });
     // The harness's own approval grant already covers approval inspect/decide, so that rule is not added again.
-    expect(preview.rules.map(rule => rule.id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13]);
+    expect(preview.rules.map(rule => rule.id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13].slice(0, POLICY_CHANGE_MAX));
     expect(preview.summary).toContain('+ grant first-run-mcp-servers');
-    // Security: the plan never grants another principal (each added rule names this person alone).
-    for (const rule of preview.rules) expect(rule.principals).toEqual(rule.id.startsWith('first-run-mcp-observe-') ? [{ ...me[0]!, issuer: `${me[0]!.issuer}/mcp` }] : me);
+    // Security: besides this person, a rule names only their MCP actor (observation) or their memory distiller workload (S4B-1 D1–D4, its own floor).
+    for (const rule of preview.rules) expect(rule.principals).toEqual(rule.id.startsWith('first-run-mcp-observe-') ? [{ ...me[0]!, issuer: `${me[0]!.issuer}/mcp` }]
+      : rule.id.startsWith('first-run-memory-distiller') ? [{ ...me[0]!, issuer: `${me[0]!.issuer}/memory-distiller` }] : me);
     expect(grants().map(grant => grant.id)).toEqual(before); // preview writes nothing
     expect(await upgrade('apply', 'stale-revision')).toMatchObject({ status: 'conflict' });
     expect(await upgrade('apply', preview.revision)).toMatchObject({ status: 'upgraded' });
-    expect(grants().map(grant => grant.id)).toEqual([...before, ...['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13]]);
+    expect(grants().map(grant => grant.id)).toEqual([...before, ...['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13].slice(0, POLICY_CHANGE_MAX)]);
     expect(grants().find(grant => grant.id === HAND_ADDED.id)).toEqual(HAND_ADDED);
+    expect(await upgrade('apply')).toMatchObject({ status: 'upgraded' }); // the rest of the plan (POLICY_CHANGE_MAX per change)
     expect(await upgrade('apply')).toMatchObject({ status: 'current' });
-    expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(1);
+    expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(2);
     expect(existsSync(join(f.data, 'audit', 'authority-revisions'))).toBe(true);
     // The upgraded installation: the first-use trust windows (yes) write this person's mcp-server grant; full-auto then runs the call without a card.
     const root = mkdtempSync(join(tmpdir(), 'deckent-upgrade-mcp-')); roots.push(root);
@@ -117,9 +120,9 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     expect(grants().map(grant => grant.id).filter(id => id.startsWith('first-run-mcp') && !id.startsWith('first-run-mcp-observe-'))).toHaveLength(3);
   }, 180_000);
 
-  it('(c) rollback removes only the current (v14) delta rules, keeps older authority (the v11 rules too) and hand-added rules, and is idempotent', async () => {
+  it('(c) rollback removes only the current (v15) delta rules, keeps older authority (the v11 rules too) and hand-added rules, and is idempotent', async () => {
     const { upgrade, grants } = await project('owner-role');
-    expect(await upgrade('apply')).toMatchObject({ status: 'upgraded' });
+    for (let run = 0; run < 2; run++) expect(await upgrade('apply')).toMatchObject({ status: 'upgraded' });
     const upgraded = grants();
     expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: DELTA.join(',') });
     expect(grants()).toEqual(upgraded.filter(grant => !DELTA.includes(grant.id)));
@@ -144,10 +147,13 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     const preview = await upgradePolicyTemplateInstallation(f.project, 'scope', false, undefined, { env: f.env });
     expect(preview).toMatchObject({ status: 'preview', revision: 'first-run-template-v4', wireRules: ['hand-mcp-files'], conflicts: [] });
     // v7: the harness's own model-invocation rule (ids all, this scope) covers the invocation rule; only activation is added.
-    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13]);
+    expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13].slice(0, POLICY_CHANGE_MAX));
     expect(grants().map(grant => grant.id)).toEqual(before);
     expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, preview.expect!, { env: f.env })).toMatchObject({ status: 'upgraded' });
-    expect(grants().map(grant => grant.id)).toEqual([...before, ...['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13]]);
+    const firstBatch = grants().map(grant => grant.id);
+    expect(grants().map(grant => grant.id)).toEqual([...before, ...['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-mcp-propose-tool', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-backup', 'first-run-mcp-observe-run', 'first-run-mcp-observe-scope', 'first-run-mcp-observe-approval', 'first-run-mcp-observe-model-activation', 'first-run-mcp-observe-model-invocation', 'first-run-mcp-observe-provider-spend-account', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13].slice(0, POLICY_CHANGE_MAX)]);
+    expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, undefined, { env: f.env })).toMatchObject({ status: 'upgraded' }); // the rest (POLICY_CHANGE_MAX)
+    expect(grants().map(grant => grant.id).slice(0, firstBatch.length)).toEqual(firstBatch);
     const upgraded = bytes();
     expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, undefined, { env: f.env })).toMatchObject({ status: 'current' });
     expect(bytes()).toBe(upgraded);
@@ -177,9 +183,9 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
       shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
       policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS }).policy;
     writeFileSync(join(f.data, 'policy.json'), JSON.stringify({ ...v5, grants: v5.grants.filter(rule => rule.id !== 'first-run-policy-administer')
-      .map(rule => rule.id === 'first-run-memory-inspect' ? { ...rule, actions: ['execute'], resource: { kind: 'operation', ids: ['policy.administer'] } } : rule) }), { mode: 0o600 });
+      .map(rule => rule.id === 'first-run-agent-catalog' ? { ...rule, actions: ['execute'], resource: { kind: 'operation', ids: ['policy.administer'] } } : rule) }), { mode: 0o600 });
     const before = bytes();
-    expect(await upgrade('rollback')).toMatchObject({ status: 'unavailable', reason: 'history-unavailable', conflicts: ['first-run-memory-inspect'] });
+    expect(await upgrade('rollback')).toMatchObject({ status: 'unavailable', reason: 'history-unavailable', conflicts: ['first-run-agent-catalog'] });
     expect(bytes()).toBe(before);
     expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(0);
   }, 120_000);
@@ -187,26 +193,26 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
   it('(e, archived) approves rollback, preserves the customized only admin grant; the writer refuses losing approval authority and a hand-staged headless state cannot roll back', async () => {
     const { f, upgrade, grants, bytes } = await project('pure');
     // Installer upgrade supplies real provenance; a later archived customization is not an upgrade-owned rule.
-    expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, undefined, { env: f.env })).toMatchObject({ status: 'upgraded' });
+    for (let run = 0; run < 2; run++) expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, undefined, { env: f.env })).toMatchObject({ status: 'upgraded' });
     const source = new FilePolicySource({ path: join(f.data, 'policy.json'), bindingsPath: join(f.data, 'bindings.json'),
       archivePath: join(f.data, 'audit', 'authority-revisions'), ownerUid: process.getuid!(), maxBytes: 65_536 });
-    // The person keeps memory reads through a hand rule, so removing the MCP memory read stays inside their own authority (I2).
+    // The person keeps catalog authority through a hand rule, so removing the MCP catalog read stays inside their own authority (I2).
     await source.updateAuthority(state => ({ write: { policy: { ...state.policy, revision: 'a-custom-admin',
-      grants: [...state.policy.grants.filter(rule => rule.id !== 'first-run-policy-administer').map(rule => rule.id === 'first-run-memory-inspect'
+      grants: [...state.policy.grants.filter(rule => rule.id !== 'first-run-policy-administer').map(rule => rule.id === 'first-run-agent-catalog'
         ? { ...rule, actions: ['execute'], resource: { kind: 'operation', ids: ['policy.administer'] } } : rule),
-        { ...state.policy.grants.find(rule => rule.id === 'first-run-memory-inspect')!, id: 'hand-memory-read' }] }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-custom-admin');
+        { ...state.policy.grants.find(rule => rule.id === 'first-run-agent-catalog')!, id: 'hand-agent-catalog' }] }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-custom-admin');
     const before = grants(), auditCount = f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change').length;
-    const customAdmin = before.find(rule => rule.id === 'first-run-memory-inspect'), removed = DELTA.filter(id => id !== 'first-run-memory-inspect');
-    expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: removed.join(','), conflicts: ['first-run-memory-inspect'] });
+    const customAdmin = before.find(rule => rule.id === 'first-run-agent-catalog'), removed = DELTA.filter(id => id !== 'first-run-agent-catalog');
+    expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', reason: removed.join(','), conflicts: ['first-run-agent-catalog'] });
     expect(grants()).toEqual(before.filter(rule => !removed.includes(rule.id)));
-    expect(grants().find(rule => rule.id === 'first-run-memory-inspect')).toEqual(customAdmin);
+    expect(grants().find(rule => rule.id === 'first-run-agent-catalog')).toEqual(customAdmin);
     expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(auditCount + 1);
     const kept = bytes();
-    expect(await upgrade('rollback')).toMatchObject({ status: 'nothing-to-roll-back', conflicts: ['first-run-memory-inspect'] });
+    expect(await upgrade('rollback')).toMatchObject({ status: 'nothing-to-roll-back', conflicts: ['first-run-agent-catalog'] });
     expect(bytes()).toBe(kept);
 
     const guarded = await project('pure');
-    expect(await upgradePolicyTemplateInstallation(guarded.f.project, 'scope', true, undefined, { env: guarded.f.env })).toMatchObject({ status: 'upgraded' });
+    for (let run = 0; run < 2; run++) expect(await upgradePolicyTemplateInstallation(guarded.f.project, 'scope', true, undefined, { env: guarded.f.env })).toMatchObject({ status: 'upgraded' });
     const guardedSource = new FilePolicySource({ path: join(guarded.f.data, 'policy.json'), bindingsPath: join(guarded.f.data, 'bindings.json'),
       archivePath: join(guarded.f.data, 'audit', 'authority-revisions'), ownerUid: process.getuid!(), maxBytes: 65_536 });
     // The governed writer itself refuses to remove the last approval authority (P0); assert that, then stage the headless state on disk.

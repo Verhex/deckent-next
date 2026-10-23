@@ -196,10 +196,10 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     await access(cli);
     const f = await fixture('erp');
     expect((await f.deckent(['init', '--yes', '--scope', 'erp'])).code).toBe(0);
-    // The installation as v13 left it: the same first-run policy without the v14 rules.
+    // The installation as v14 left it: the same first-run policy without the v15 rules.
     const path = join(f.root, '.deckent', 'policy.json'), current = JSON.parse(await readFile(path, 'utf8')) as { grants: { id: string }[] };
     const delta: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
-    await writeFile(path, JSON.stringify({ ...current, revision: 'first-run-template-v13', grants: current.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
+    await writeFile(path, JSON.stringify({ ...current, revision: 'first-run-template-v14', grants: current.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
     expect(await f.plan()).toMatchObject({ 'core:policy': 'needs-answer:setup.reason.policyUpgrade' });
     const run = await f.pty('policy-upgrade', [process.execPath, cli, 'init'], [['> 5. Who uses', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
       ['> 6. Permissions', '1\r'], ['Apply now', '1\r'],
