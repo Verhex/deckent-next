@@ -15,5 +15,15 @@
   "error.HEADLESS_KIND_UNAVAILABLE": "The subscription Brain is not available on this installation. It is a preview for the owner's own installation until isolation lands: the owner turns it on with the installation setting `models.headless.preview` (user layer). Nothing was changed.",
   "error.HEADLESS_GUARD_FAILED": "The Claude CLI started differently than allowed ({field}), so it was stopped before using the result. Nothing was accepted and no other model was chosen; the channel check runs again on the next call.",
   "error.HEADLESS_CREDITS_REQUIRED": "The Claude subscription asks for extra credits for this request. Deckent never buys usage: nothing was accepted and no other model was chosen. Decide in your Claude account, then try again.",
-  "error.HEADLESS_QUOTA_EXHAUSTED": "The Claude subscription's usage limit is reached, so this step did not run. No other model was chosen and nothing is retried on its own; send a new request after the reset."
+  "error.HEADLESS_QUOTA_EXHAUSTED": "The Claude subscription's usage limit is reached, so this step did not run. No other model was chosen and nothing is retried on its own; send a new request after the reset.",
+  "tui.provider.kind.claudeCliSubscription": "Claude subscription (your own claude CLI, preview)",
+  "headless.connect.login": "Claude login used: {dir} (the CLI reads it itself; Deckent never opens it).",
+  "headless.connect.delegated": "Besides you, these may use this login after your consent: {classes}.",
+  "headless.connect.personOnly": "Only you may use this login: AI/MCP actors and background roles are refused until you consent with --delegate.",
+  "headless.help.connect": "Subscription Brain (claude-cli-subscription, preview, owner only): no key and no address; the\nconnected CLI uses your own Claude login. [--executable <abs path>] (default: first in PATH)\n[--config-dir <abs dir>] (default: ~/.claude) [--delegate none|ai|system|ai,system] (who besides\nyou may use it; absent keeps your earlier choice). The installation owner first sets\nmodels.headless.preview=true on the user layer.",
+  "doctor.headless.login": "Brain login: {method}{plan}, directory {dir}, channel {state}, consent {consent}",
+  "doctor.headless.loginUnknown": "Brain login: not checked yet (directory {dir}); the first call or a reconnect runs the check",
+  "doctor.headless.open": "open",
+  "doctor.headless.closed": "closed",
+  "doctor.headless.none": "none (you only)"
 }

@@ -158,6 +158,9 @@
     }
   },
   "models": {
+    "headless": {
+      "preview": false
+    },
     "retirementWarningDays": 15
   },
   "operations": {

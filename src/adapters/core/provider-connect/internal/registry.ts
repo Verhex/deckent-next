@@ -8,7 +8,7 @@ import { openAiChatDialectSchema } from '#adapters/core/provider-openai-chat/ind
  * endpoints are versioned data here, not code (ARCHITECTURE literal rule); a kind with `available: false` is listed with its reason only.
  */
 /** The invocation adapters a connection can be bound to (adapter ids, not vendors): Anthropic Messages and OpenAI chat completions. */
-export const PROVIDER_CONNECT_ADAPTERS = ['anthropic-messages-http', 'openai-chat-http'] as const;
+export const PROVIDER_CONNECT_ADAPTERS = ['anthropic-messages-http', 'openai-chat-http', 'native-cli-headless'] as const;
 const SECRET_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/u;
 const secretNameSchema = z.string().regex(SECRET_NAME);
 const header = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
@@ -42,7 +42,9 @@ const kindSchema = z.object({
     .refine(key => (key.secretName === null) === (key.derive !== undefined)).nullable(),
   /** `models connect`: adapter, chat path and seed (seed null: bounded endpoint model discovery or an already declared exact reference).
    * Connect null: the kind stores a key but cannot bind a model. */
-  connect: z.object({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u),
+  connect: z.object({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).nullable(),
+    /** S3-3 (CLI kinds only): the CLI's event-stream family, a person-only connection (never an AI/MCP actor) and an owner-enabled preview. */
+    protocolFamily: z.string().min(1).max(64).optional(), personOnly: z.boolean().default(false), preview: z.boolean().default(false),
     seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
     /** Optional provider counter on the same endpoint origin; only Anthropic exposes this connection path here. */
     tokenCountPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).optional(),
@@ -65,6 +67,7 @@ const kindSchema = z.object({
       routes: z.array(providerMetadataRouteSchema).min(1)
         .refine(routes => new Set(routes.map(route => route.modelId)).size === routes.length).readonly() }).strict().optional() }).strict()
     .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined))
+    .refine(connect => (connect.adapter === 'native-cli-headless') === (connect.chatPath === null) && (connect.chatPath === null) === (connect.protocolFamily !== undefined))
     .refine(connect => connect.tokenCountPath === undefined || connect.adapter === 'anthropic-messages-http')
     .refine(connect => connect.protocolRoutes === undefined || connect.adapter === 'openai-chat-http')
     .refine(connect => connect.cacheDefault === undefined || connect.adapter === 'anthropic-messages-http').nullable().default(null),

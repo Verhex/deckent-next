@@ -3,3 +3,4 @@ export type { NativeCliHeadlessDefinition, HeadlessRejectionBody } from './inter
 export { buildHeadlessEnv } from './internal/env.js';
 export { createNativeCliHeadlessPort } from './internal/port.js';
 export type { NativeCliHeadlessPort } from './internal/port.js';
+export { prepareHeadlessConnection, headlessConsent, headlessConnectionAdapter, readHeadlessLogins } from './internal/connect.js';

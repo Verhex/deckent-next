@@ -33,7 +33,9 @@ const positive = z.number().int().positive().safe(), names = z.array(z.string().
 /** S3 headless model step (HEADLESS-0, 2026-10-23): one tool-less, MCP-less turn of the unmodified CLI. Argv, environment, guard expectations and
  * bounds are data; a forbidden flag (fallback model, bare mode, permission bypass, extra config) can never be part of the argv. */
 export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), revision: argument, source: argument,
-  args: z.array(z.string().refine(value => !value.includes('\0'))).readonly(), maxTurns: positive, systemPromptFlag: flag, systemPromptFile: z.string().regex(/^[a-z][a-z0-9.-]*$/),
+  args: z.array(z.string().refine(value => !value.includes('\0'))).readonly(), maxTurns: positive,
+  /** S3-3 connect defaults: the login directory under the person's home (owner Q-H1) and the bounded PATH search for the executable. */
+  connect: z.object({ configDirDefault: z.string().regex(/^[A-Za-z0-9._-]+$/), configDirSource: argument, pathSearchDirectories: positive, pathSearchTimeoutMs: positive }).strict().readonly(), systemPromptFlag: flag, systemPromptFile: z.string().regex(/^[a-z][a-z0-9.-]*$/),
   forbiddenFlags: z.array(flag).min(1).readonly(),
   /** `hiddenFlags`: options the CLI accepts but its help does not list, each proven by the parser refusing a bad value (every fragment must appear);
    * `max-turns-capability` = the capability's own hidden-help probe (one source). Every other required flag must be listed by help. */

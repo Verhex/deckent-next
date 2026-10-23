@@ -204,6 +204,7 @@
           "none"
         ],
         "maxTurns": 1,
+        "connect": { "configDirDefault": ".claude", "configDirSource": "owner Q-H1 2026-10-23: the standard login directory under the person's home", "pathSearchDirectories": 64, "pathSearchTimeoutMs": 5000 },
         "systemPromptFlag": "--system-prompt-file",
         "systemPromptFile": "system.txt",
         "forbiddenFlags": [
