@@ -25,17 +25,17 @@ async function v63() {
 
 describe('ledger v64 agent/skill catalog migration', () => {
   it('pins the step: v64 is the agent catalog and the current ledger', () => {
-    expect(AGENT_CATALOG_LEDGER_VERSION).toBe(64); expect(CURRENT_LEDGER_VERSION).toBe(67);
+    expect(AGENT_CATALOG_LEDGER_VERSION).toBe(64); expect(CURRENT_LEDGER_VERSION).toBe(68);
   });
   it('backs up a v63 ledger with no rows and adds only the empty catalog tables', async () => {
     const f = await v63();
     expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
     const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-23T00:00:00Z'));
-    expect(upgrade).toMatchObject({ from: 63, to: 67 });
+    expect(upgrade).toMatchObject({ from: 63, to: 68 });
     const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true }), db = new DatabaseSync(f.path, { readOnly: true });
     try {
       expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(63); expect(catalog(backup)).toEqual([]);
-      expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(67); expect(catalog(db)).toEqual(TABLES);
+      expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(68); expect(catalog(db)).toEqual(TABLES);
       for (const table of TABLES) expect(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.['n']).toBe(0);
     } finally { backup.close(); db.close(); }
   });
@@ -59,7 +59,7 @@ describe('ledger v64 agent/skill catalog migration', () => {
     try {
       migrateLedger(db, 'allow'); expect(catalog(db)).toEqual(TABLES);
       db.exec(DOWNGRADE_TO_V63_LEDGER_SQL); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(63); expect(catalog(db)).toEqual([]);
-      migrateLedger(db, 'allow'); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(67); expect(catalog(db)).toEqual(TABLES);
+      migrateLedger(db, 'allow'); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(68); expect(catalog(db)).toEqual(TABLES);
     } finally { db.close(); }
   });
   it('negative: the step never adopts an existing catalog table, and a build refuses a ledger newer than its own', async () => {

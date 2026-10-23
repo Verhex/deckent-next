@@ -30,7 +30,8 @@ Observe:
       search | inspect | propose | verify | retire | review | purge
       [--scope <id>] [--state <name>] [--json]
   agents      Read and define the scope's agents and skills
-      inspect | skills | skill | define | define-skill
+      inspect | skills | skill | define | define-skill | signers |
+      enrol-signer | add-signer | revoke-signer | repair-signers | import-skill
       [--scope <id>] [--json]
 
 Execute work:

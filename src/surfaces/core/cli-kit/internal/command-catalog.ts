@@ -149,6 +149,12 @@ export const CLI_CATALOG = [
     action('skill', 'observe', 'agents.help.action.skill', 'agents.help.detail', { requires: ['<id>'] }),
     action('define', 'observe', 'agents.help.action.define', 'agents.help.detail', { requires: ['--input <file>'] }),
     action('define-skill', 'observe', 'agents.help.action.define-skill', 'agents.help.detail', { requires: ['--input <file>'] }),
+    action('signers', 'observe', 'agentsign.help.action.signers', 'agentsign.help.detail'),
+    action('enrol-signer', 'observe', 'agentsign.help.action.enrol-signer', 'agentsign.help.detail', { requires: ['--principal <issuer:subject>', '--label <text>'] }),
+    action('add-signer', 'observe', 'agentsign.help.action.add-signer', 'agentsign.help.detail', { requires: ['--input <file>'] }),
+    action('revoke-signer', 'observe', 'agentsign.help.action.revoke-signer', 'agentsign.help.detail', { requires: ['<key-id>'] }),
+    action('repair-signers', 'observe', 'agentsign.help.action.repair-signers', 'agentsign.help.detail'),
+    action('import-skill', 'observe', 'agentsign.help.action.import-skill', 'agentsign.help.detail', { requires: ['--input <file>'] }),
   ] },
   { name: 'models', group: 'models', summary: 'cli.help.summary.models', detail: 'cli.help.models', args: '[--scope <id>] [--declared] [--catalog] [--verbose]', bare: 'handler', children: [
     action('binding', 'models', 'cli.help.action.binding', 'cli.help.modelsBinding', { requires: MODEL }),

@@ -14,6 +14,8 @@ export const policyResources = Object.freeze({
   // S7 agent/skill catalog core: the resource id is the scope. `inspect` reads agents and skills; `define` creates or revises an agent or a person's
   // own skill; `import` brings a skill from elsewhere (always also behind the pinned + signed floor, which no grant relaxes).
   agentCatalog: Object.freeze({ kind: 'agent-catalog' as const, actions: Object.freeze(['inspect', 'define', 'import'] as const) }),
+  // S8-5 signer keys: the resource id is the scope. `inspect` lists public rows; enrol/add/revoke/repair are a person's terminal cards (AI floor).
+  skillSigner: Object.freeze({ kind: 'skill-signer' as const, actions: Object.freeze(['inspect', 'enrol', 'add', 'revoke', 'repair'] as const) }),
   approval: Object.freeze({ kind: 'approval' as const, actions: Object.freeze(['inspect', 'decide', 'renew'] as const) }),
   task: Object.freeze({ kind: 'task' as const, actions: Object.freeze(['execute'] as const) }),
   attempt: Object.freeze({ kind: 'attempt' as const, actions: Object.freeze(['execute', 'release', 'reconcile', 'recover-output', 'cancel', 'evaluate', 'read-output', 'prepare-integration', 'deliver-integration', 'adopt-integration', 'rollback-integration'] as const) }),

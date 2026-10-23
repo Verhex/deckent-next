@@ -84,6 +84,7 @@ export { SystemTrustedClock, MAX_WALL_SKEW_MS, processWallLagMs } from '#platfor
 export type { TrustedClock, ClockSample } from '#platform/core/clock/index.js';
 export { sha256, constantTimeDigestEqual, createHmacIntegrity } from '#platform/core/integrity/index.js';
 export type { IntegrityAuthority } from '#platform/core/integrity/index.js';
+export { ED25519_PKCS8_BYTES, ED25519_SPKI_BYTES, ed25519KeyId, ed25519Signer, generateEd25519Pair, signatureMessage, verifyEd25519, type Ed25519Signer } from '#platform/core/integrity/index.js';
 export { GLOB_WILDCARD, globLiteralHead, hasGlobWildcard, createGlobMatcher } from '#platform/core/common/index.js';
 export { shortId, mapBounded, HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 
