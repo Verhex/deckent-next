@@ -1,5 +1,5 @@
 {
-  "memory.config.section": "Memory automation (protected; no AI may change it): extraction.mode turns on candidates from accepted work (off, shadow records only, live writes candidates); automation narrows the Core bounds and WorkClass rows.",
+  "memory.config.section": "Memory automation (protected; no AI may change it): extraction.mode turns on candidates from accepted work (off, shadow records only, live writes candidates); verification.mode turns on the independent evaluator (off, shadow seals its records and verifies nothing, on verifies); automation narrows the Core bounds and WorkClass rows.",
   "memory.withheld": "{count} more entries are hidden: they come from work you may not read or a work target you may not use.",
   "memory.alert.extractionBound": "Memory extraction reached a bound in scope {scope}: {count} candidates were not written in this window (nothing was shortened).",
   "memory.alert.screening": "Memory extraction refused {count} candidates in scope {scope}: they held a secret or hidden characters.",
@@ -9,5 +9,19 @@
   "error.MEMORY_CANDIDATE_SECRET": "The memory candidate holds a secret and was refused.",
   "error.MEMORY_CANDIDATE_QUARANTINED": "The memory candidate holds hidden characters and was refused.",
   "error.MEMORY_DISTILLER_REQUIRED": "Only the memory distiller of this installation writes system candidates.",
-  "error.MEMORY_AUTOMATION_INVALID": "The memory automation settings are invalid or try to widen a Core bound; only narrowing is allowed."
+  "error.MEMORY_AUTOMATION_INVALID": "The memory automation settings are invalid or try to widen a Core bound; only narrowing is allowed.",
+  "memory.alert.evaluationDailyCap": "The memory evaluator reached its daily call limit in scope {scope}; candidates stay candidates until tomorrow.",
+  "memory.alert.spendCap": "The memory evaluator stopped in scope {scope}: the day's spend limit was reached or a call's cost is not settled yet; candidates stay candidates.",
+  "memory.alert.evaluatorBreaker": "The memory evaluator stopped in scope {scope}: too many answers today could not be read; candidates stay candidates.",
+  "memory.alert.contestBound": "The memory evaluator reached its daily contest limit in scope {scope}; further conflicts are not withdrawn from model context today.",
+  "memory.view.noIndependentEvaluator": "No independent evaluator is available in this scope: candidates stay candidates until a person verifies them.",
+  "memory.view.evaluator": "Evaluator for this scope: {model} by {maker}, {price}.",
+  "memory.view.evaluator.price.perToken": "catalog price {input} in / {output} out per million tokens (as of {asOf}); at most {calls} calls a day of up to {tokens} answer tokens, so answers cost at most {ceiling} a day",
+  "memory.view.evaluator.price.subscription": "subscription channel (quota only, no money)",
+  "memory.view.evaluator.price.notVerified": "price not verified",
+  "memory.view.evaluator.independence": "An entry is evaluated only by a model of another maker than the one that did the work; the candidate text is sent to that model's provider.",
+  "memory.view.evaluator.unavailable": "The memory evaluator could not be read; candidates stay candidates.",
+  "error.MEMORY_EVALUATION_NOT_INDEPENDENT": "The evaluation is not independent of the models that did the work, so it cannot verify this memory entry.",
+  "error.MEMORY_EVALUATION_MAKER_UNKNOWN": "The maker of a model behind this memory entry is not known, so independence cannot be shown and the entry stays a candidate.",
+  "error.MEMORY_EVALUATOR_REQUIRED": "Only this installation's memory evaluator applies its own evaluation; no other AI verifies memory."
 }

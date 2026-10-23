@@ -11,6 +11,10 @@ import { modelSpendRefusal } from './spend-refusal.js';
 export interface RuntimeModelInvocationHost { readonly ownerId: string; readonly controllers: ModelInvocationControllers; readonly clock?: TrustedClock }
 /** A direct local invocation. A claimed operation is never sent again by receipt replay. */
 export async function invokeConfiguredModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, delivery?: ModelInvocationDelivery) { return invoke(input, scopeId => loadInvocationContext(projectRoot, scopeId, options, 'write'), options, signal, delivery); }
+/** S4B-3: a composition-root workload (the memory evaluator) invokes under its own verified principal and grants (V5); no client channel reaches it. */
+export async function invokeConfiguredModelAs(projectRoot: string, input: ModelInvocationCommand, principal: Awaited<ReturnType<typeof loadInvocationContext>>['principal'], options: ConfigLoadOptions = {}) {
+  return invoke(input, async scopeId => Object.freeze({ ...await loadInvocationContext(projectRoot, scopeId, options, 'write'), principal }), options);
+}
 export async function previewConfiguredModel(projectRoot: string, input: ModelInvocationCommand, options: ConfigLoadOptions = {}) { try { return await application(await loadInvocationContext(projectRoot, input.scopeId, options, 'read'), options).preview(input); } catch (error) { throw queryFailure(error); } }
 /** Internal runtime wiring only. A missing/invalid peer never falls back to process identity. */
 export async function invokePeerConfiguredModel(projectRoot: string, input: ModelInvocationCommand, peer: LocalPeerIdentity, options: ConfigLoadOptions = {}, delivery?: ModelInvocationDelivery, host?: RuntimeModelInvocationHost, onDelta?: ModelInvocationDeltaSink, signal?: AbortSignal) { return invoke(input, scopeId => loadPeerInvocationContext(projectRoot, scopeId, options, peer, 'write'), options, signal, delivery, host, onDelta); }

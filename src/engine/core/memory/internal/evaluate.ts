@@ -1,7 +1,8 @@
 import { MEMORY_LIMITS, composeMemoryAutomation, encodeCommandProjection, independentMakerRows, isMemoryEvaluatorPrincipal, memorySearchTerms, memoryTemplate, parseMemoryEvaluationRecord,
   readMemoryEvaluatorAnswer, memoryContestTargets, type AuditEvent, type MemoryAutomation, type MemoryEntry, type MemoryEvaluationRecord, type MemoryEvaluationRef,
-  type MemoryModelRef, type MemoryResolvedEvaluation, type VerifiedPrincipal } from '#domain/index.js';
+  type MemoryEvaluationSpend, type MemoryModelRef, type MemoryResolvedEvaluation, type ModelInvocationReceipt, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
+import { verifyInvocationSpendReservation } from '#engine/core/provider-spend/index.js';
 import { MemoryJournalError, type MemoryEvaluationAlertKey, type MemoryEvaluationPass, type MemoryEvaluationSkip, type MemoryEvaluationSource, type MemoryEvaluationSources, type MemoryEvaluatorPorts,
   type MemoryEvaluatorRow, type MemoryJournalDependencies, type MemoryJournalStore } from './contract.js';
 
@@ -86,9 +87,12 @@ export class MemoryEvaluationApplication {
     const automation = composeMemoryAutomation(deps.automation), pass = { calls: 0, records: [] as MemoryEvaluationPass['records'][number][],
       skipped: [] as { entryId: string; reason: MemoryEvaluationSkip }[], alerts: [] as { key: MemoryEvaluationAlertKey; scopeId: string }[] };
     const store = await deps.openStore('read');
-    let candidates: Candidate[], stop: MemoryEvaluationAlertKey | null;
+    let candidates: Candidate[], stop: MemoryEvaluationAlertKey | null, rows: readonly MemoryEvaluatorRow[];
     try {
       if (!store.putEvaluation || !store.loadEvaluation || !store.recentEvaluations || !store.listSupport || !store.openContest || !store.contestCount) throw new MemoryJournalError('MEMORY_UNAVAILABLE');
+      // No invocable evaluator row in the scope: nothing to examine this pass (N29 before any candidate is read).
+      rows = (await this.ports.evaluator.rows(scopeId)).filter(row => row.invocable);
+      if (!rows.length) return Object.freeze({ schemaVersion: 1, mode, ...pass });
       stop = capped(await store.recentEvaluations(scopeId, automation.evaluation.perScopePerDay + 1), deps.now(), automation);
       // The scan window (protocol `scanMax`, newest first): evaluated candidates stay candidates, so a page-sized list would starve older ones.
       candidates = stop ? [] : (await store.list(scopeId, ['candidate'], MEMORY_LIMITS.scanMax)).map(entry => ({ entry,
@@ -96,14 +100,14 @@ export class MemoryEvaluationApplication {
     } finally { store.close(); }
     for (const candidate of candidates) {
       if (pass.calls >= automation.bounds.loopPage) break;
-      stop = await this.evaluate(candidate, mode, automation, pass);
+      stop = await this.evaluate(candidate, mode, automation, rows, pass);
       if (stop) break;
     }
     if (stop) pass.alerts.push({ key: stop, scopeId });
     return Object.freeze({ schemaVersion: 1, mode, ...pass });
   }
   /** One candidate; returns the alert key that stops the pass (a daily cap reached), else null. */
-  private async evaluate(candidate: Candidate, mode: 'shadow' | 'live', automation: MemoryAutomation, pass: { calls: number; records: unknown[];
+  private async evaluate(candidate: Candidate, mode: 'shadow' | 'live', automation: MemoryAutomation, rows: readonly MemoryEvaluatorRow[], pass: { calls: number; records: unknown[];
     skipped: { entryId: string; reason: MemoryEvaluationSkip }[] }): Promise<MemoryEvaluationAlertKey | null> {
     const { deps } = this.ports, { entry } = candidate, skip = (reason: MemoryEvaluationSkip) => { pass.skipped.push({ entryId: entry.entryId, reason }); return null; };
     if (!entry.audience) return skip('not-system');
@@ -118,7 +122,7 @@ export class MemoryEvaluationApplication {
       const sources = await rederiveMemorySourceModels(store, deps.evaluationSources, automation, entry);
       if (!sources) return skip('source-not-accepted');
       if (sources.models.length === 0 || sources.models.some(model => model.maker === null)) return skip('maker-unknown');
-      const row = selectMemoryEvaluator(await this.ports.evaluator.rows(entry.scopeId), sources.models);
+      const row = selectMemoryEvaluator(rows, sources.models);
       if (!row || row.maker === null) return skip('no-independent-evaluator');
       const stop = capped(await store.recentEvaluations!(entry.scopeId, automation.evaluation.perScopePerDay + 1), deps.now(), automation);
       if (stop) return stop;
@@ -210,4 +214,20 @@ export class MemoryEvaluationApplication {
     } finally { store.close(); }
     return { contests, alert: null };
   }
+}
+/**
+ * The exact spend of one evaluator call from its sealed invocation and spend reservation (the provider-spend ledger's own verified record):
+ * released (not sent, rejected without charge) → none; settled → the settled minor units in the reservation's currency; a subscription or local
+ * profile without a reservation → none; anything else (reserved, held, unreadable) → unknown, which stops the evaluator for the day.
+ */
+export function memoryEvaluationSpendOf(stored: { readonly receipt: ModelInvocationReceipt; readonly spending: unknown } | null, billing: MemoryEvaluatorRow['billing']): MemoryEvaluationSpend {
+  if (!stored) return { state: 'unknown' };
+  if (stored.spending === null) return billing === 'subscription' || billing === 'local' ? { state: 'none' } : { state: 'unknown' };
+  let reservation;
+  try { reservation = verifyInvocationSpendReservation(stored.spending, stored.receipt); } catch { return { state: 'unknown' }; }
+  const state = reservation.disposition;
+  if (state.state === 'released-not-sent' || state.state === 'released-no-charge') return { state: 'none' };
+  if (state.state === 'settled-local' || state.state === 'settled-measured-tariff' || state.state === 'settled-provider-reported')
+    return { state: 'settled', minorUnits: state.amountMinorUnits, currency: reservation.descriptor.currency };
+  return { state: 'unknown' };
 }

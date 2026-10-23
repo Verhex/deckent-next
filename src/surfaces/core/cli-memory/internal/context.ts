@@ -3,6 +3,7 @@ import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { MemoryInspectQuery, MemoryInspection, MemoryListQuery, MemoryListing, MemorySearchQuery, MemorySearchResult, MemoryProposeCommand, MemoryVerifyCommand,
   MemoryRetireCommand, MemoryMutationResult } from '#engine/index.js';
+import type { memoryEvaluatorView } from '#engine/index.js';
 
 /** S4 memory journal v1: reads use the application's `inspect` authorization; propose/verify/retire run only from a person's terminal card. */
 export interface MemoryCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'configChoiceSources'> {
@@ -12,4 +13,6 @@ export interface MemoryCommandContext extends CliBaseContext, Pick<TerminalLaunc
   proposeMemory?: (root: string, input: MemoryProposeCommand, options: ConfigLoadOptions) => Promise<MemoryMutationResult>;
   verifyMemory?: (root: string, input: MemoryVerifyCommand, options: ConfigLoadOptions) => Promise<MemoryMutationResult>;
   retireMemory?: (root: string, input: MemoryRetireCommand, options: ConfigLoadOptions) => Promise<MemoryMutationResult>;
+  /** S4B-3: the read-only line under the list — which evaluator would serve the scope and what it may cost. */
+  inspectMemoryEvaluators?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<ReturnType<typeof memoryEvaluatorView>>;
 }

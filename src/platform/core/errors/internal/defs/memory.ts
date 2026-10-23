@@ -24,4 +24,8 @@ export const memoryErrors: ErrorDefinitions = Object.freeze({
   MEMORY_CANDIDATE_QUARANTINED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_CANDIDATE_QUARANTINED', p, l) }) },
   MEMORY_DISTILLER_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_DISTILLER_REQUIRED', p, l) }) },
   MEMORY_AUTOMATION_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MEMORY_AUTOMATION_INVALID', p, l) }) },
+  // S4B-3 (texts in the `memory-automation` family).
+  MEMORY_EVALUATION_NOT_INDEPENDENT: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_EVALUATION_NOT_INDEPENDENT', p, l) }) },
+  MEMORY_EVALUATION_MAKER_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_EVALUATION_MAKER_UNKNOWN', p, l) }) },
+  MEMORY_EVALUATOR_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_EVALUATOR_REQUIRED', p, l) }) },
 });
