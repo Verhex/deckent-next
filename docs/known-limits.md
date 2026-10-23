@@ -475,7 +475,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   restarts it. *Workaround:* after a switch, restart the client (the Claude Code session, or close and reopen the terminal);
   `deckent runtime describe` shows which build the service runs.
 
-- **Switching to alpha.55 and back needs care.** The ledger moves from v59 to v69 and alpha.54 cannot open it, so going back means
+- **Switching to alpha.55 and back needs care.** The ledger moves from v59 to v70 and alpha.54 cannot open it, so going back means
   restoring the backup taken right before the switch (with the daily schedule no fresh set is taken; run `deckent backup create`
   yourself). Before going back, also unset the settings alpha.54 does not know: `memoryAutomation`, `catalogEvolution`,
   `runRuntime.nervous`, `runRuntime.recovery`, `runRuntime.quotaRecovery.maxRewaits`, `model_roles`, `models.headless` and
@@ -534,10 +534,13 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **The Brain's quota wait is short and only on a watching surface.** When the subscription quota is exhausted, `/do` and `deckent do`
   wait at most 15 minutes for the known reset (two attempts, provisional) and then plan once more; a longer reset, an unknown reset or
   MCP `plan_run` gets the typed refusal `HEADLESS_QUOTA_EXHAUSTED` with the reset time at once.
-- **Agents cannot be promoted yet.** A newly defined agent starts as a candidate and always needs the Run card; promotion, demotion and
-  suggestion cards are not in this build. Agent statistics count only failures attributable to the worker or the evaluator, are an
-  association and not a cause, and do not include tokens for CLI workers (effort is time, API cost and quota parks).
-  <!-- TODO(s834): update this item for S8-3/S8-4 (suggestions, person cards, signed AI path on MCP, automatic narrowing, revoke one-step demote). -->
+- **Agent promotion is manual until the rules are measured.** A newly defined agent starts as a candidate and always needs the Run
+  card; a person promotes it on a card (`deckent agents promote`), or a separately keyed and granted AI does so through a signed MCP
+  command (never for a revision that AI wrote, so an installation with one AI principal cannot use this path). The suggestion rules are
+  provisional and automatic narrowing runs only for a calibrated rule with `catalogEvolution.mode` `on`, so nothing narrows today.
+  Agent statistics count only failures attributable to the worker or the evaluator, are an association and not a cause, and do not
+  include tokens for CLI workers (effort is time, API cost and quota parks). *Workaround:* `deckent agents suggestions` lists what the
+  aggregator sealed; decide each on its card.
 - **Signer keys need the host key store.** AI and system catalog writes need a signer key that a person enrolled; on native Windows
   the host key store is not available and these writes are refused. Revoking a key stops its new and pending actions, but promotions it
   already made stay until a person demotes them (owner's choice). Skills can be imported only with an import key a person added; the

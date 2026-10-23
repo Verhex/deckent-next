@@ -142,8 +142,8 @@ and a read-only auditor identity; safety holds only a person lifts. Nervous and 
 measured rules under the owner's grant, and a role-model decision that may continue a lost task in a new Attempt within registry
 bounds (`runRuntime.nervous.mode`, `runRuntime.recovery.mode`). Headless Brain: the person's own `claude -p` subscription in a
 bubblewrap realm with a provider-only gateway and an explicit consent for AI and background use. Agents: versioned agent and skill
-rows, system agent selection by standing, sealed statistics with Wilson bounds, and person-enrolled signer keys for AI and system
-writes. Ledger v59 → v69, runtime protocol v29 unchanged. Detail, switches and bounds:
+rows, system agent selection by standing, sealed statistics with Wilson bounds, suggestions decided on person cards or signed AI
+commands, and person-enrolled signer keys for AI and system writes. Ledger v59 → v70, runtime protocol v29 unchanged. Detail, switches and bounds:
 [core-layers](.deckent/docs/architecture/modules/core-layers.md); owner record:
 [decisions](.deckent/docs/decisions/owner-decisions.md#cekirdek-katmanlar-2026-10-23).
 
@@ -931,7 +931,7 @@ Layers: `platform` (config, errors/i18n, identity, paths), `domain` (pure versio
 | [ci-and-verification](.deckent/docs/architecture/modules/ci-and-verification.md) | CI-FULL, CI-FIX, CI-SPEED (one build/Node, complete shard collection), SOCKET-PUBLICATION, platform verification tooling. |
 | [permission-modes](.deckent/docs/architecture/modules/permission-modes.md) | MODES-3 (standart/full-auto/full-access), decision and audit, write postures, FA-TRACKED-WARN, `/mode`, PRE-9 owner-opened modes, PRE-8 project key vault and grants. |
 | [record-redaction-and-safe-approval](.deckent/docs/architecture/modules/record-redaction-and-safe-approval.md) | Canonical record redactor, terminal S06, SAFE-APPROVAL-A1 custody (former "Current closure"). |
-| [core-layers](.deckent/docs/architecture/modules/core-layers.md) | alpha.55 core layers: system assignment and model roles, memory automation, Auditor and safety holds, Nervous and lost-worker recovery, headless subscription Brain, agent catalog, standing, statistics and signer keys; switches, bounds and ledger v60–v69. |
+| [core-layers](.deckent/docs/architecture/modules/core-layers.md) | alpha.55 core layers: system assignment and model roles, memory automation, Auditor and safety holds, Nervous and lost-worker recovery, headless subscription Brain, agent catalog, standing, statistics and suggestions and signer keys; switches, bounds and ledger v60–v70. |
 | [run-planning](.deckent/docs/architecture/modules/run-planning.md) | Brain Run planning behind `/do` / `deckent do`: RunProposal planning call, context projection, planning budget and reasoning, subscription quota recovery (KOTA-D1). |
 | [development-host-and-documents](.deckent/docs/architecture/modules/development-host-and-documents.md) | Development-host only: review roles and channel, host kit and skills, Jev host checks, process board and PLAN/COMPLETED-PLAN roles (no product authority). |
 | [host-qwen-decision-pilot](.deckent/docs/architecture/modules/host-qwen-decision-pilot.md) | Canceled development-host Qwen decision research (owner 2026-10-06; historical record only, outside customer src/native). |

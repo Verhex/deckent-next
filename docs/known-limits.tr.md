@@ -473,7 +473,7 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yüklediği kodu kullanır. *Yol:* geçişten sonra istemciyi yeniden başlatın (Claude Code oturumu ya da terminali kapatıp yeniden
   açın); servisin hangi derlemeyle çalıştığını `deckent runtime describe` gösterir.
 
-- **alpha.55'e geçiş ve geri dönüş dikkat ister.** Defter v59'dan v69'a geçer ve alpha.54 onu açamaz; geri dönmek, geçişten hemen önce
+- **alpha.55'e geçiş ve geri dönüş dikkat ister.** Defter v59'dan v70'e geçer ve alpha.54 onu açamaz; geri dönmek, geçişten hemen önce
   alınan yedeği geri yüklemek demektir (günlük zamanlamada taze set alınmaz; `deckent backup create`'i kendiniz çalıştırın). Geri dönmeden
   önce alpha.54'ün tanımadığı ayarları da kaldırın: `memoryAutomation`, `catalogEvolution`, `runRuntime.nervous`, `runRuntime.recovery`,
   `runRuntime.quotaRecovery.maxRewaits`, `model_roles`, `models.headless` ve `brain_planner.quotaWait`. Geçişte: modeli model rol
@@ -534,10 +534,13 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
 - **Brain'in kota beklemesi kısadır ve yalnız izleyen bir yüzeyde olur.** Abonelik kotası tükendiğinde `/do` ve `deckent do` bilinen
   sıfırlanmayı en çok 15 dakika bekler (iki deneme, geçici) ve sonra bir kez daha planlar; daha uzak ya da bilinmeyen bir sıfırlanma ve
   MCP `plan_run` hemen sıfırlanma saatiyle tipli `HEADLESS_QUOTA_EXHAUSTED` reddini alır.
-- **Ajanlar henüz terfi ettirilemez.** Yeni tanımlanan bir ajan aday olarak başlar ve her zaman Run kartı ister; terfi, geri alma ve öneri
-  kartları bu derlemede yok. Ajan istatistikleri yalnız işçiye ya da değerlendiriciye bağlanabilen başarısızlıkları sayar, nedensellik değil
-  ilişkidir ve CLI işçileri için token içermez (emek = süre, API maliyeti ve kota beklemeleri).
-  <!-- TODO(s834): bu maddeyi S8-3/S8-4 için güncelle (öneriler, kişi kartları, MCP'de imzalı AI yolu, otomatik daraltma, iptalde tek adımlık geri alma). -->
+- **Ajan terfisi, kurallar ölçülene kadar elle yapılır.** Yeni tanımlanan bir ajan aday olarak başlar ve her zaman Run kartı ister; onu
+  bir kişi kartla terfi ettirir (`deckent agents promote`) ya da ayrı anahtarlı ve izinli bir AI imzalı bir MCP komutuyla ettirir (o AI'ın
+  yazdığı sürüm için asla; bu yüzden tek AI kimliği olan bir kurulum bu yolu kullanamaz). Öneri kuralları geçicidir ve otomatik daraltma
+  yalnız `catalogEvolution.mode` `on` iken ölçümle onaylanmış bir kuralda çalışır, bu yüzden bugün hiçbir şey daraltılmaz. Ajan
+  istatistikleri yalnız işçiye ya da değerlendiriciye bağlanabilen başarısızlıkları sayar, nedensellik değil ilişkidir ve CLI işçileri
+  için token içermez (emek = süre, API maliyeti ve kota beklemeleri). *Yol:* `deckent agents suggestions` toplayıcının mühürlediği
+  önerileri listeler; her birine kendi kartında karar verin.
 - **İmza anahtarları host anahtar deposunu ister.** AI ve sistem katalog yazmaları bir kişinin kaydettiği imza anahtarını ister; native
   Windows'ta host anahtar deposu yoktur ve bu yazmalar reddedilir. Bir anahtarı iptal etmek yeni ve bekleyen eylemlerini durdurur, ama
   verdiği terfiler bir kişi geri alana kadar kalır (owner'ın seçimi). Skill'ler yalnız bir kişinin eklediği içe aktarma anahtarıyla içe

@@ -135,7 +135,7 @@ id; otherwise it returns `HEADLESS_QUOTA_EXHAUSTED` with the reset time. The wai
 `inspect_monitor` before a Run exists. A worker Run parked on a quota waits at most `runRuntime.quotaRecovery.maxWaitMs` (default 5 hours)
 and then asks the person (`quota-ask`: keep waiting or use the next candidate); it is never cancelled on its own, and an AI cannot answer.
 
-## Agents, standing, statistics and signer keys (S7, S8-1a, S8-1b, S8-2, S8-5)
+## Agents, standing, statistics, suggestions and signer keys (S7, S8-1a…S8-5)
 
 An agent definition (ledger v64) is versioned data: persona text, WorkClass bindings, skills pinned by id, revision and digest, and an
 optional manager that forms an org tree (cycles and depth over the registry bound refused). The tier field stays empty (owner A4).
@@ -147,11 +147,24 @@ with integer Wilson bounds over non-overlapping windows; only failures attributa
 says "association, not causation". Signer keys (ledger v68) give each AI or system principal its own Ed25519 key, which only a person
 enrols, adds or revokes; every AI or system catalog write carries a `catalog-action:1` signature verified inside the write transaction,
 and the HMAC-chained `revocations.log` re-applies revocations at start-up. Private keys stay in the non-backed-up `signers` resource.
-<!-- TODO(s834): S8-3/S8-4 suggestions, person cards (promote, demote, restore, retire, dismiss, reset, define from draft), inheritance display, signed AI path on MCP, revoke one-step demote, automatic narrowing and the monitor line. -->
+
+The `<owner>/catalog-aggregator` pass (incremental, off the hot path) applies registry rules to those statistics and seals suggestions
+(ledger v70: promote, redesign, revise, a new agent, a new skill) signed by its own key; a suggestion changes nothing by itself, and an
+overlay of `catalogEvolution.overlay.suggestions` may only lower its bounds. A person decides on terminal cards: `deckent agents
+promote|demote|restore|retire <agent-id> --work-class <id>`, `dismiss <suggestion-id>`, `standing reset --work-class <id>` and
+`define|define-skill --from-suggestion <id>`, whose draft is rendered at card time through that person's memory read filter and is
+never stored or returned over MCP (a skill drafted from lessons is marked as AI output). An AI principal with its own active key and a
+scoped grant may do the same through the signed MCP tools `define_agent`, `define_skill`, `import_skill`, `change_agent_standing` and
+`dismiss_agent_suggestion`; the transition table in versioned code refuses a suggestion's producer deciding it and an AI promoting or
+restoring a revision it authored (`src/domain/core/agent-catalog/internal/standing.ts:71`). A person-authored revision with the same
+skill set inherits its promotion ("carried over"); an AI-authored revision starts as a candidate. Automatic narrowing happens only for
+a `calibrated` rule in mode `on` (`src/engine/core/catalog-evolution/internal/pass.ts:110`); every Core rule is provisional. The
+monitor shows open suggestions, a revoked signer whose promotions are still in effect, an aggregator without a signing key and an
+unavailable registry; the revoke card demotes a revoked key's promotions in one step.
 
 ## Ledger steps and read compatibility
 
-alpha.55 moves the ledger from v59 to v69 (`CURRENT_LEDGER_VERSION`, `src/adapters/core/sqlite-ledger/internal/schema.ts:18`; the lead
+alpha.55 moves the ledger from v59 to v70 (`CURRENT_LEDGER_VERSION`, `src/adapters/core/sqlite-ledger/internal/schema.ts:18`; the lead
 renumbers at landing if needed). Every step is additive; no earlier row is read or rewritten. The local runtime protocol stays v29.
 
 | Step | Adds |
@@ -166,6 +179,7 @@ renumbers at landing if needed). Every step is additive; no earlier row is read 
 | v67 | agent standings |
 | v68 | signer keys |
 | v69 | agent statistics pass position |
+| v70 | catalog suggestions, their state history and the aggregator's window cache |
 
 An older build refuses a newer ledger, so going back to alpha.54 means restoring the backup taken before the switch; the switch and
 rollback notes are in [known limits](../../../../docs/known-limits.md#core-layers).

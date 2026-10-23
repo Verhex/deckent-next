@@ -534,6 +534,12 @@ kimlikler haklarını politika şablonu v15'ten alır (`deckent policy upgrade -
 - **Ajanlar ve skill'ler.** `deckent agents` ajanları listeler (`inspect <id>`, `skills`, `skill <id>`, `stats [<id>]`); `define --input
   <dosya>` ve `define-skill --input <dosya>` kendi terminalinizdeki kartlardır. MCP `list_agents`, `inspect_agent`, `list_skills`,
   `inspect_skill` ve `inspect_agent_stats` salt okunurdur.
+- **Ajan önerileri ve durum.** `deckent agents suggestions [list | show <öneri-kimliği>]` mühürlü önerileri listeler;
+  `promote|demote|restore|retire <ajan-kimliği> --work-class <id> [--suggestion <id>]`, `dismiss <öneri-kimliği>`,
+  `standing reset --work-class <id>` ve `define|define-skill --from-suggestion <id> --id <yeni kimlik>` kendi terminalinizdeki
+  kartlardır (taslak kart anında, okuyabildiklerinizden üretilir). MCP `list_agent_suggestions` ve `inspect_agent_suggestion` salt
+  okunurdur; imzalı yazma araçları (`define_agent`, `define_skill`, `import_skill`, `change_agent_standing`, `dismiss_agent_suggestion`)
+  yalnız kendi etkin imza anahtarı ve kapsamlı izni olan bir AI kimliği için çalışır.
 - **İmza anahtarları.** `deckent agents signers` anahtarları listeler; `enrol-signer --principal <issuer:subject> --label <metin>` bir AI
   ya da sistem kimliği için host'ta tutulan bir eylem anahtarı üretir, `add-signer --input <dosya>` dış bir açık anahtarı kaydeder,
   `revoke-signer <anahtar-kimliği>` anahtarın yeni, bekleyen ve yeniden oynatılan eylemlerini hemen durdurur, `repair-signers` bozuk bir

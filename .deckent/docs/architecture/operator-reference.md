@@ -525,6 +525,12 @@ new identities get their rights from policy template v15 (`deckent policy upgrad
 - **Agents and skills.** `deckent agents` lists agents (`inspect <id>`, `skills`, `skill <id>`, `stats [<id>]`); `define --input <file>`
   and `define-skill --input <file>` are cards on your own terminal. MCP `list_agents`, `inspect_agent`, `list_skills`, `inspect_skill`
   and `inspect_agent_stats` are read-only.
+- **Agent suggestions and standing.** `deckent agents suggestions [list | show <suggestion-id>]` lists the sealed suggestions;
+  `promote|demote|restore|retire <agent-id> --work-class <id> [--suggestion <id>]`, `dismiss <suggestion-id>`,
+  `standing reset --work-class <id>` and `define|define-skill --from-suggestion <id> --id <new id>` are cards on your own terminal (the
+  draft is rendered at card time from what you may read). MCP `list_agent_suggestions` and `inspect_agent_suggestion` are read-only;
+  the signed write tools (`define_agent`, `define_skill`, `import_skill`, `change_agent_standing`, `dismiss_agent_suggestion`) work only
+  for an AI principal with its own active signer key and a scoped grant.
 - **Signer keys.** `deckent agents signers` lists keys; `enrol-signer --principal <issuer:subject> --label <text>` creates a host-kept
   action key for one AI or system principal, `add-signer --input <file>` registers an external public key, `revoke-signer <key-id>`
   stops its new, pending and replayed actions at once, `repair-signers` repairs a broken revocation log and `import-skill --input <file>`
