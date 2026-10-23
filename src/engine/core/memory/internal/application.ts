@@ -1,10 +1,11 @@
-import { encodeCommandProjection, proposeMemoryEntry, verifyMemoryEntry, retireMemoryEntry, memorySearchTerms, memoryEntryMatches, MEMORY_LIMITS,
-  type AuditEvent, type MemoryEntry, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
+import { encodeCommandProjection, proposeMemoryEntry, verifyMemoryEntry, retireMemoryEntry, memorySearchTerms, memoryEntryMatches, isMemoryDistillerPrincipal, composeMemoryAutomation,
+  MEMORY_LIMITS, type AuditEvent, type MemoryEntry, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
 import { memoryProposeCommandSchema, memoryVerifyCommandSchema, memoryRetireCommandSchema, memoryInspectQuerySchema, memoryListQuerySchema, memorySearchQuerySchema,
-  MemoryJournalError, type MemoryAction, type MemoryHeld, type MemoryInspection, type MemoryJournalDependencies, type MemoryJournalStore, type MemoryListing,
-  type MemoryMutationResult, type MemorySearchResult } from './contract.js';
+  memoryExtractCommandSchema, MemoryJournalError, type MemoryAction, type MemoryHeld, type MemoryInspection, type MemoryJournalDependencies, type MemoryJournalStore, type MemoryListing,
+  type MemoryMutationResult, type MemorySearchResult, type MemorySupport, type MemoryDistilOutcome } from './contract.js';
+import { distilSource } from './distil.js';
 
 const DEFAULT_STATES: readonly MemoryState[] = Object.freeze(['candidate', 'verified']);
 const held = (error: unknown): MemoryHeld => ({ schemaVersion: 1, status: 'held',
@@ -18,33 +19,52 @@ export class MemoryJournalApplication {
     const principal = await authenticate(this.deps.verifier, credential, scopeId);
     return { principal, authorization: await this.deps.authorize(action, scopeId, principal) };
   }
-  /** Authorization refusals throw; every failure after it (open, integrity, dangling index) becomes a typed hold. */
-  private async read<T>(scopeId: string, credential: unknown, work: (store: MemoryJournalStore) => Promise<T>): Promise<T | MemoryHeld> {
-    await this.admit('inspect', scopeId, credential);
+  /** Authorization refusals throw; every failure after it (open, integrity, dangling index) becomes a typed hold. A withheld entry is a refusal. */
+  private async read<T>(scopeId: string, credential: unknown, work: (store: MemoryJournalStore, principal: VerifiedPrincipal) => Promise<T>): Promise<T | MemoryHeld> {
+    const { principal } = await this.admit('inspect', scopeId, credential);
     let store: MemoryJournalStore;
     try { store = await this.deps.openStore('read'); } catch (error) { return held(error); }
-    try { return await work(store); } catch (error) { return held(error); } finally { store.close(); }
+    try { return await work(store, principal); }
+    catch (error) { if (error instanceof MemoryJournalError && error.code === 'MEMORY_ENTRY_WITHHELD') throw error; return held(error); } finally { store.close(); }
+  }
+  /**
+   * S4B-1 §7.4 source filter (one owner for CLI and MCP): a system-derived entry (with an audience) is visible only when the caller may read the
+   * output of at least one of its first `maxSourcesChecked` source Attempts and may use its work target. A person's entry needs `inspect` only.
+   * Pure policy evaluation over one loaded document; no filter wired or no support port: every system entry is withheld (fail closed).
+   */
+  private async visible(store: MemoryJournalStore, principal: VerifiedPrincipal, scopeId: string, entries: readonly MemoryEntry[]) {
+    const system = entries.filter(entry => entry.audience);
+    const filter = system.length && this.deps.readFilter ? await this.deps.readFilter(principal, scopeId) : null, checked = composeMemoryAutomation(this.deps.automation).context.maxSourcesChecked;
+    const shown: MemoryEntry[] = [];
+    for (const entry of entries) {
+      const audience = entry.audience;
+      if (!audience) { shown.push(entry); continue; }
+      if (!filter || !store.listSupport || (audience.workTargetId !== null && !filter({ kind: 'work-target', id: audience.workTargetId }, 'use'))) continue;
+      if ((await store.listSupport(scopeId, entry.entryId, checked)).some(row => filter({ kind: 'attempt', id: row.source.attemptId }, 'read-output'))) shown.push(entry);
+    }
+    return { entries: shown, withheld: entries.length - shown.length };
   }
   async inspect(input: unknown, credential?: unknown): Promise<MemoryInspection> {
     const query = memoryInspectQuerySchema.parse(input);
-    return this.read(query.scopeId, credential, async store => {
+    return this.read(query.scopeId, credential, async (store, principal) => {
       const entry = await store.load(query.scopeId, query.entryId);
       if (!entry) return { schemaVersion: 1 as const, status: 'not-found' as const, entryId: query.entryId };
       const history = (await store.history(query.scopeId, query.entryId, MEMORY_LIMITS.historyMax)).map(item => inScope(item, query.scopeId));
       if (inScope(entry, query.scopeId).entryId !== query.entryId || history.at(-1)?.revision !== entry.revision) throw new MemoryJournalError('MEMORY_CORRUPT');
+      if ((await this.visible(store, principal, query.scopeId, [entry])).withheld) throw new MemoryJournalError('MEMORY_ENTRY_WITHHELD');
       return { schemaVersion: 1 as const, status: 'ok' as const, entry, history };
     });
   }
   async list(input: unknown, credential?: unknown): Promise<MemoryListing> {
     const query = memoryListQuerySchema.parse(input), states = query.states ?? DEFAULT_STATES;
-    return this.read(query.scopeId, credential, async store => {
+    return this.read(query.scopeId, credential, async (store, principal) => {
       const entries = (await store.list(query.scopeId, states, query.limit)).slice(0, query.limit).map(entry => inScope(entry, query.scopeId));
-      return { schemaVersion: 1 as const, status: 'ok' as const, scopeId: query.scopeId, entries };
+      return { schemaVersion: 1 as const, status: 'ok' as const, scopeId: query.scopeId, ...await this.visible(store, principal, query.scopeId, entries) };
     });
   }
   async search(input: unknown, credential?: unknown): Promise<MemorySearchResult> {
     const query = memorySearchQuerySchema.parse(input), states = query.states ?? DEFAULT_STATES, terms = memorySearchTerms(query.query);
-    return this.read(query.scopeId, credential, async store => {
+    return this.read(query.scopeId, credential, async (store, principal) => {
       const ok = { schemaVersion: 1 as const, status: 'ok' as const, scopeId: query.scopeId, terms };
       if (store.capabilities.fullTextSearch && store.search) {
         const entries: MemoryEntry[] = [];
@@ -54,18 +74,57 @@ export class MemoryJournalApplication {
           if (!entry || !states.includes(inScope(entry, query.scopeId).state)) throw new MemoryJournalError('MEMORY_CORRUPT');
           entries.push(entry);
         }
-        return { ...ok, method: 'full-text' as const, complete: true, entries };
+        return { ...ok, method: 'full-text' as const, complete: true, ...await this.visible(store, principal, query.scopeId, entries) };
       }
       const scanned = (await store.list(query.scopeId, states, MEMORY_LIMITS.scanMax + 1)).map(entry => inScope(entry, query.scopeId));
       return { ...ok, method: 'scan' as const, complete: scanned.length <= MEMORY_LIMITS.scanMax,
-        entries: scanned.slice(0, MEMORY_LIMITS.scanMax).filter(entry => memoryEntryMatches(entry, terms)).slice(0, query.limit) };
+        ...await this.visible(store, principal, query.scopeId, scanned.slice(0, MEMORY_LIMITS.scanMax).filter(entry => memoryEntryMatches(entry, terms)).slice(0, query.limit)) };
     });
   }
   async propose(input: unknown, credential?: unknown): Promise<MemoryMutationResult> {
     const command = memoryProposeCommandSchema.parse(input), { principal, authorization } = await this.admit('propose', command.scopeId, credential);
-    return this.mutate('propose', command, principal, authorization.revision, command.commandId, null, () => proposeMemoryEntry({ scopeId: command.scopeId,
-      entryId: command.commandId, commandId: command.commandId, content: command.content, origin: command.origin, author: principal, atMs: this.deps.now(),
-      contentDigest: sha256(encodeCommandProjection('memory-content:1', command.content)) }));
+    const contentDigest = this.deps.keyedDigest('memory-content:2', command.content);
+    return this.mutate('propose', command, principal, authorization.revision, command.commandId, null, async (_previous, store) => {
+      if (await store.findTombstone?.(command.scopeId, contentDigest)) throw new MemoryJournalError('MEMORY_PURGED_CONTENT');
+      return proposeMemoryEntry({ scopeId: command.scopeId, entryId: command.commandId, commandId: command.commandId, content: command.content, origin: command.origin,
+        author: principal, atMs: this.deps.now(), contentDigest });
+    });
+  }
+  /**
+   * S4B-1 §4.3: the distiller's candidate. The entry id is the keyed digest of (scope, audience, content), so the same knowledge from another
+   * Attempt adds a support row to the one entry (whatever its state: retired stays retired) instead of a second entry; a replay adds nothing;
+   * purged content is refused. Support rows per entry are bounded by the registry.
+   */
+  async proposeExtracted(input: unknown, credential?: unknown): Promise<{ readonly status: 'proposed' | 'supported' | 'replayed'; readonly entry: MemoryEntry }> {
+    const command = memoryExtractCommandSchema.parse(input), { principal, authorization } = await this.admit('propose', command.scopeId, credential);
+    if (!isMemoryDistillerPrincipal(principal)) throw new MemoryJournalError('MEMORY_DISTILLER_REQUIRED');
+    const { scopeId, source, content, audience } = command, kd = this.deps.keyedDigest;
+    const commandId = sha256(encodeCommandProjection('memory-extract:1', { scopeId, source, ruleId: command.ruleId, ruleVersion: command.ruleVersion, claimIndex: command.claimIndex }));
+    const entryId = kd('memory-entry:2', { scopeId, audience, content }), contentDigest = kd('memory-content:2', content), bound = composeMemoryAutomation(this.deps.automation).bounds.supportPerEntry;
+    const support: MemorySupport = { schemaVersion: 1, scopeId, entryId, supportId: commandId, producer: command.support.producer, source, ruleId: command.ruleId,
+      ruleVersion: command.ruleVersion, evaluationId: command.support.evaluationId, evaluationDigest: command.support.evaluationDigest, reportDigest: command.support.reportDigest, atMs: this.deps.now() };
+    const store = await this.deps.openStore('write');
+    try {
+      if (!store.appendSupport || !store.listSupport || !store.findTombstone) throw new MemoryJournalError('MEMORY_UNAVAILABLE');
+      const existing = await store.load(scopeId, entryId);
+      if (existing) {
+        const rows = await store.listSupport(scopeId, entryId, bound);
+        if (rows.some(row => row.supportId === commandId)) return { status: 'replayed', entry: inScope(existing, scopeId) };
+        if (rows.length >= bound) throw new MemoryJournalError('MEMORY_EXTRACTION_BOUND');
+        return { status: (await store.appendSupport(support)).replayed ? 'replayed' : 'supported', entry: inScope(existing, scopeId) };
+      }
+      if (await store.findTombstone(scopeId, contentDigest)) throw new MemoryJournalError('MEMORY_PURGED_CONTENT');
+    } finally { store.close(); }
+    const saved = await this.mutate('propose', { scopeId, commandId }, principal, authorization.revision, entryId, null, () => proposeMemoryEntry({ scopeId, entryId, commandId, content,
+      contentDigest, author: principal, atMs: support.atMs, audience, origin: { kind: 'run', ref: `run/${source.runId}/task/${source.taskId}/attempt/${source.attemptId}` } }), support, command);
+    return { status: saved.replayed ? 'replayed' : 'proposed', entry: saved.entry };
+  }
+  /** S4B-1 §4.1–§4.5: the distiller's pass over one sealed source (rules, WorkClass gate, screening, bounds, once per Attempt). Off the hot path. */
+  async distil(input: unknown, options: { readonly mode: 'live' | 'shadow' }, credential?: unknown): Promise<MemoryDistilOutcome> {
+    return distilSource(this.deps, input, options, {
+      admit: async scopeId => { const { principal } = await this.admit('propose', scopeId, credential);
+        if (!isMemoryDistillerPrincipal(principal)) throw new MemoryJournalError('MEMORY_DISTILLER_REQUIRED'); },
+      propose: command => this.proposeExtracted(command, credential) });
   }
   async verify(input: unknown, credential?: unknown): Promise<MemoryMutationResult> {
     const command = memoryVerifyCommandSchema.parse(input), { principal, authorization } = await this.admit('verify', command.scopeId, credential);
@@ -80,8 +139,10 @@ export class MemoryJournalApplication {
       retireMemoryEntry(previous!, { actor: principal, atMs: this.deps.now(), reason: command.reason, supersededBy: command.supersededBy }));
   }
   private async mutate(action: 'propose' | 'verify' | 'retire', command: { scopeId: string; commandId: string }, principal: VerifiedPrincipal, policyRevision: string,
-    entryId: string, expectedRevision: number | null, next: (previous: MemoryEntry | null) => MemoryEntry | Promise<MemoryEntry>): Promise<MemoryMutationResult> {
-    const digest = sha256(encodeCommandProjection(`memory-${action}:1`, { command, principal: { issuer: principal.issuer, subject: principal.subject } }));
+    entryId: string, expectedRevision: number | null, next: (previous: MemoryEntry | null, store: MemoryJournalStore) => MemoryEntry | Promise<MemoryEntry>,
+    support?: MemorySupport, fingerprinted: unknown = command): Promise<MemoryMutationResult> {
+    // S4B-1 §4.6: the receipt fingerprint covers content, so it is keyed (a receipt sealed before v65 keeps its plain digest and no longer replays).
+    const digest = this.deps.keyedDigest(`memory-${action}:2`, { command: fingerprinted, principal: { issuer: principal.issuer, subject: principal.subject } });
     const store = await this.deps.openStore('write');
     try {
       const replay = await store.receipt(command.scopeId, command.commandId);
@@ -93,11 +154,12 @@ export class MemoryJournalApplication {
       const previous = expectedRevision === null ? null : await store.load(command.scopeId, entryId);
       if (expectedRevision !== null && !previous) throw new MemoryJournalError('MEMORY_NOT_FOUND');
       if (previous && previous.revision !== expectedRevision) throw new MemoryJournalError('MEMORY_REVISION_CONFLICT');
-      const entry = await next(previous);
+      const entry = await next(previous, store);
       const event: AuditEvent = { schemaVersion: 1, eventId: this.deps.eventId(), scopeId: command.scopeId, principal: { issuer: principal.issuer, subject: principal.subject },
         policyRevision, atMs: entry.updatedAtMs, subject: { kind: 'memory-journal', action, entryId: entry.entryId, commandId: command.commandId, revision: entry.revision,
           state: entry.state, contentDigest: entry.contentDigest, basis: entry.verification?.basis ?? null } };
-      const saved = await store.commit({ previous, next: entry, receipt: { scopeId: command.scopeId, commandId: command.commandId, entryId, revision: entry.revision, digest }, event });
+      const saved = await store.commit({ previous, next: entry, receipt: { scopeId: command.scopeId, commandId: command.commandId, entryId, revision: entry.revision, digest }, event,
+        ...(support ? { support } : {}) });
       return { schemaVersion: 1, replayed: saved.replayed, entry: saved.entry };
     } finally { store.close(); }
   }

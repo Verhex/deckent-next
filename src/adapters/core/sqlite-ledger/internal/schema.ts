@@ -15,7 +15,13 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 64;
+export const CURRENT_LEDGER_VERSION = 65;
+// S4B-1 memory automation (lane v65 after s7's v64; the lead renumbers at landing): the one memory migration for S4B-1..S4B-7 — support rows,
+// extraction receipts + cursor, evaluation records, contests, purge records (all sealed; append-only except the cursor and a contest's single
+// resolution) and the revision trigger that allows only the tombstone rewrite of the same (scope, entry, revision): a sealed record whose
+// `$.value.content.purged` is true, over a row that is not yet a tombstone. No earlier row is read or rewritten. Downgrade = restore the pre-switch
+// backup (an older build refuses v65).
+export const MEMORY_AUTOMATION_LEDGER_VERSION = 65;
 // S7 agent/skill catalog (lane v64 after s6r1's v63; the lead renumbers at landing): additive tables only, append-only revisions and receipts; an existing
 // table is refused, never adopted; no earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v64).
 export const AGENT_CATALOG_LEDGER_VERSION = 64;
@@ -63,7 +69,33 @@ export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const append = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;`).join('');
+const memoryAppend = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;`).join('');
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  [MEMORY_AUTOMATION_LEDGER_VERSION]: `CREATE TABLE memory_entry_support(scope_id TEXT NOT NULL,entry_id TEXT NOT NULL,support_id TEXT NOT NULL,seq INTEGER NOT NULL,record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,support_id),FOREIGN KEY(scope_id,entry_id) REFERENCES memory_entries(scope_id,entry_id));
+    CREATE INDEX memory_entry_support_entry ON memory_entry_support(scope_id,entry_id,seq);
+    CREATE TABLE memory_extraction_receipts(scope_id TEXT NOT NULL,run_id TEXT NOT NULL,task_id TEXT NOT NULL,attempt_id TEXT NOT NULL,at_ms INTEGER NOT NULL,
+    proposed INTEGER NOT NULL CHECK(proposed>=0),record TEXT NOT NULL,PRIMARY KEY(scope_id,run_id,task_id,attempt_id));
+    CREATE INDEX memory_extraction_receipts_window ON memory_extraction_receipts(scope_id,at_ms);
+    CREATE TABLE memory_extraction_cursors(scope_id TEXT PRIMARY KEY NOT NULL,record TEXT NOT NULL);
+    CREATE TABLE memory_evaluations(scope_id TEXT NOT NULL,record_id TEXT NOT NULL,entry_id TEXT NOT NULL,seq INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,record_id));
+    CREATE INDEX memory_evaluations_entry ON memory_evaluations(scope_id,entry_id,seq);
+    CREATE TABLE memory_contests(scope_id TEXT NOT NULL,contest_id TEXT NOT NULL,entry_id TEXT NOT NULL,opened_at_ms INTEGER NOT NULL,record TEXT NOT NULL,resolution TEXT,
+    PRIMARY KEY(scope_id,contest_id));
+    CREATE INDEX memory_contests_open ON memory_contests(scope_id,entry_id) WHERE resolution IS NULL;
+    CREATE INDEX memory_contests_window ON memory_contests(scope_id,opened_at_ms);
+    CREATE TRIGGER memory_contests_resolve_once BEFORE UPDATE ON memory_contests WHEN OLD.resolution IS NOT NULL OR NEW.resolution IS NULL OR NEW.record IS NOT OLD.record
+      OR NEW.scope_id IS NOT OLD.scope_id OR NEW.contest_id IS NOT OLD.contest_id OR NEW.entry_id IS NOT OLD.entry_id OR NEW.opened_at_ms IS NOT OLD.opened_at_ms
+      BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    CREATE TABLE memory_purges(scope_id TEXT NOT NULL,purge_id TEXT NOT NULL,entry_id TEXT NOT NULL,content_digest TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,purge_id));
+    CREATE INDEX memory_purges_digest ON memory_purges(scope_id,content_digest);
+    ${memoryAppend('memory_entry_support', 'UPDATE', 'DELETE')}${memoryAppend('memory_extraction_receipts', 'UPDATE', 'DELETE')}${memoryAppend('memory_evaluations', 'UPDATE', 'DELETE')}
+    ${memoryAppend('memory_purges', 'UPDATE', 'DELETE')}${memoryAppend('memory_contests', 'DELETE')}${memoryAppend('memory_extraction_cursors', 'DELETE')}
+    DROP TRIGGER memory_entry_revisions_no_update;
+    CREATE TRIGGER memory_entry_revisions_tombstone_only BEFORE UPDATE ON memory_entry_revisions WHEN NOT (NEW.scope_id=OLD.scope_id AND NEW.entry_id=OLD.entry_id
+      AND NEW.revision=OLD.revision AND json_valid(NEW.record) AND json_valid(OLD.record) AND json_extract(NEW.record,'$.value.content.purged') IS 1
+      AND json_extract(OLD.record,'$.value.content.purged') IS NOT 1) BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    PRAGMA user_version=65;`,
   [AGENT_CATALOG_LEDGER_VERSION]: `CREATE TABLE agent_definitions(scope_id TEXT NOT NULL,agent_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),parent_id TEXT,seq INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,agent_id));
     CREATE TABLE agent_definition_revisions(scope_id TEXT NOT NULL,agent_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,agent_id,revision));
     CREATE TABLE skill_definitions(scope_id TEXT NOT NULL,skill_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),seq INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,skill_id));
@@ -310,7 +342,7 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === 54) { migrateQuotaWaits(db); continue; }
     const sql = migrations[next];
     if (!sql) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
-    if (next === RUN_PROPOSAL_LEDGER_VERSION) {
+    if (next === RUN_PROPOSAL_LEDGER_VERSION || next === MEMORY_AUTOMATION_LEDGER_VERSION) {
       // A previous version cannot contain proposal objects. Refuse a contradictory
       // schema; never silently adopt an existing table or bypass append-only triggers.
       try { db.exec(sql); } catch { throw new AttemptStoreError('ATTEMPT_STORE_VERSION'); }

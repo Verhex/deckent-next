@@ -21,3 +21,4 @@ export { MODEL_TIERS, CORE_MODEL_ROLES, ModelRoleError, modelRoleRegistrySchema,
   roleModelKey } from './internal/model-role.js';
 export type { ModelTier, ModelRoleRegistry, ModelRolePolicy, ModelRoleErrorCode, RoleModelTarget, RoleModelFacts, RoleModelRefusal, RoleModelDecision,
   RoleModelRow } from './internal/model-role.js';
+export { MODEL_MAKERS, canonicalModelMaker, makersIndependent } from './internal/model-maker.js';

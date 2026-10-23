@@ -1,0 +1,13 @@
+{
+  "memory.config.section": "Memory automation (protected; no AI may change it): extraction.mode turns on candidates from accepted work (off, shadow records only, live writes candidates); automation narrows the Core bounds and WorkClass rows.",
+  "memory.withheld": "{count} more entries are hidden: they come from work you may not read or a work target you may not use.",
+  "memory.alert.extractionBound": "Memory extraction reached a bound in scope {scope}: {count} candidates were not written in this window (nothing was shortened).",
+  "memory.alert.screening": "Memory extraction refused {count} candidates in scope {scope}: they held a secret or hidden characters.",
+  "error.MEMORY_ENTRY_WITHHELD": "This memory entry comes from work you may not read; it is not shown.",
+  "error.MEMORY_PURGED_CONTENT": "This content was purged from memory and cannot be proposed again.",
+  "error.MEMORY_EXTRACTION_BOUND": "A memory extraction bound was reached; the candidate was not written.",
+  "error.MEMORY_CANDIDATE_SECRET": "The memory candidate holds a secret and was refused.",
+  "error.MEMORY_CANDIDATE_QUARANTINED": "The memory candidate holds hidden characters and was refused.",
+  "error.MEMORY_DISTILLER_REQUIRED": "Only the memory distiller of this installation writes system candidates.",
+  "error.MEMORY_AUTOMATION_INVALID": "The memory automation settings are invalid or try to widen a Core bound; only narrowing is allowed."
+}

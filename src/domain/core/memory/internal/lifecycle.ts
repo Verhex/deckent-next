@@ -1,5 +1,5 @@
 import { isAiPrincipal } from '#domain/core/principal/index.js';
-import { MEMORY_LIMITS, MemoryError, memoryContentSchema, memoryEntrySchema, memoryOriginSchema, memoryVerificationBasisSchema,
+import { MEMORY_LIMITS, MEMORY_SCHEMA_VERSION, MemoryError, memoryAudienceSchema, memoryContentSchema, memoryEntrySchema, memoryOriginSchema, memoryVerificationBasisSchema,
   type MemoryEntry, type MemoryResolvedEvaluation } from './contract.js';
 
 interface Actor { readonly issuer: string; readonly subject: string; readonly assurance?: string }
@@ -8,12 +8,13 @@ const entry = (value: unknown): MemoryEntry => { const parsed = memoryEntrySchem
 const who = (actor: Actor) => ({ issuer: actor.issuer, subject: actor.subject, ai: isAiPrincipal(actor) });
 const bytes = (value: string) => new TextEncoder().encode(value).length;
 
-/** A new candidate (revision 1). `contentDigest` is the engine's digest of the canonical content; the domain stays free of hashing. */
+/** A new candidate (revision 1, entry v2). `contentDigest` is the engine's keyed digest of the canonical content; the domain stays free of hashing.
+ * `audience` (S4B-1) is the distiller's; a person's proposal is scope-wide (`null`). */
 export function proposeMemoryEntry(input: { readonly scopeId: string; readonly entryId: string; readonly commandId: string; readonly content: unknown;
-  readonly contentDigest: string; readonly author: Actor; readonly origin: unknown; readonly atMs: number }): MemoryEntry {
-  const content = memoryContentSchema.safeParse(input.content), origin = memoryOriginSchema.safeParse(input.origin);
-  if (!content.success || !origin.success) throw new MemoryError('MEMORY_ENTRY_INVALID');
-  return entry({ schemaVersion: 1, scopeId: input.scopeId, entryId: input.entryId, revision: 1, state: 'candidate', content: content.data,
+  readonly contentDigest: string; readonly author: Actor; readonly origin: unknown; readonly atMs: number; readonly audience?: unknown }): MemoryEntry {
+  const content = memoryContentSchema.safeParse(input.content), origin = memoryOriginSchema.safeParse(input.origin), audience = memoryAudienceSchema.nullable().safeParse(input.audience ?? null);
+  if (!content.success || !origin.success || !audience.success) throw new MemoryError('MEMORY_ENTRY_INVALID');
+  return entry({ schemaVersion: MEMORY_SCHEMA_VERSION, audience: audience.data, scopeId: input.scopeId, entryId: input.entryId, revision: 1, state: 'candidate', content: content.data,
     contentDigest: input.contentDigest, provenance: { author: who(input.author), origin: origin.data, proposedAtMs: input.atMs, commandId: input.commandId },
     verification: null, retirement: null, updatedAtMs: input.atMs });
 }

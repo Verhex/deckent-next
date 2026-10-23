@@ -3544,7 +3544,9 @@
         "src/engine/core/authentication",
         "src/domain/core/policy",
         "src/engine/core/policy",
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/platform/core/redaction",
+        "src/engine/core/agent-turn"
       ],
       "plan": "MEMORY"
     },
@@ -3795,6 +3797,7 @@
       "termrun",
       "delivery",
       "memory",
+      "memory-automation",
       "assignment",
       "agents"
     ]

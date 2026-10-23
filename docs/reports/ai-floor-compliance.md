@@ -1,6 +1,6 @@
 # AI floor compliance / AI yetki tabanı uyumu
 
-ai-floor: routes=269 floor=188 policy=1614 steps=48 uyumlu=1662 İHLAL=0
+ai-floor: routes=283 floor=202 policy=1698 steps=48 uyumlu=1746 İHLAL=0
 
 Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.
 
@@ -519,6 +519,42 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | config / global:layout[0] / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / global:layout[0] / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / global:layout[0] / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / global:memory / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory.fixture / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory.fixture / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory.fixture / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / global:memory.fixture / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory.fixture / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory.fixture / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / global:memoryAutomation / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation.fixture / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation.fixture / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation.fixture / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / global:memoryAutomation.fixture / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation.fixture / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation.fixture / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation[0] / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation[0] / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation[0] / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / global:memoryAutomation[0] / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation[0] / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memoryAutomation[0] / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory[0] / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory[0] / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory[0] / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / global:memory[0] / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory[0] / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / global:memory[0] / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / global:network / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / global:network / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / global:network / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -957,6 +993,42 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | config / project:max_workers / write | boundary-control | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | config / project:max_workers / write | boundary-control | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | config / project:max_workers / write | boundary-control | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / project:memory / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / project:memory / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory.fixture / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory.fixture / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory.fixture / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / project:memory.fixture / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory.fixture / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory.fixture / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / project:memoryAutomation / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation.fixture / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation.fixture / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation.fixture / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / project:memoryAutomation.fixture / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation.fixture / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation.fixture / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation[0] / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation[0] / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation[0] / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / project:memoryAutomation[0] / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation[0] / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memoryAutomation[0] / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory[0] / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory[0] / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory[0] / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| config / project:memory[0] / write | configuration | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory[0] / write | configuration | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| config / project:memory[0] / write | configuration | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / project:network / write | configuration | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / project:network / write | configuration | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | config / project:network / write | configuration | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -1281,6 +1353,12 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | mcp-server / fixture-target / invoke | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | mcp-server / fixture-target / invoke | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | mcp-server / fixture-target / invoke | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| memory / fixture-target / contest | memory | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| memory / fixture-target / contest | memory | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| memory / fixture-target / contest | memory | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| memory / fixture-target / contest | memory | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| memory / fixture-target / contest | memory | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| memory / fixture-target / contest | memory | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | memory / fixture-target / inspect | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
 | memory / fixture-target / inspect | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | memory / fixture-target / inspect | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -1293,6 +1371,12 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | memory / fixture-target / propose | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | memory / fixture-target / propose | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | memory / fixture-target / propose | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| memory / fixture-target / purge | memory | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| memory / fixture-target / purge | memory | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| memory / fixture-target / purge | memory | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| memory / fixture-target / purge | memory | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| memory / fixture-target / purge | memory | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| memory / fixture-target / purge | memory | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | memory / fixture-target / retire | memory | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | memory / fixture-target / retire | memory | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | memory / fixture-target / retire | memory | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -1687,10 +1771,10 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 
 - `src/domain/core/approval/index.ts`: `d9920351b89a86cc6d62984cbeb7bbd8c28fbfd2a31935f08c9aa05db00ebb4b`
 - `src/domain/core/approval/internal/contract.ts`: `10a07d273d83e76858c4ef935d84f8db0ac52ccd5007ba1254ebf3b77fc023fa`
-- `src/domain/core/policy/index.ts`: `0d46ce2a16f21d44f3df7e6f9a5552656b234b38700a0f7a06cd6a66eaaeb5fc`
+- `src/domain/core/policy/index.ts`: `071da82f0de2d48450fc316fbc6574cc210e3aab89320887eb1b42009d5173eb`
 - `src/domain/core/policy/internal/administer.ts`: `7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004`
 - `src/domain/core/policy/internal/administration.ts`: `85ea655acb0a388542fae3740c47c81f6cfe7763434117e8d5aef10bc40c93b0`
-- `src/domain/core/policy/internal/ai-floor.ts`: `cd40a5c7ba64f36bf35f255fe765d85c810fa2e91809ece00ee80447118364bc`
+- `src/domain/core/policy/internal/ai-floor.ts`: `2be801bfd8199a75287ba439852351169aceb71178118a179de637177f0cb964`
 - `src/domain/core/policy/internal/decision-step.ts`: `70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe`
 - `src/domain/core/policy/internal/delegations.ts`: `c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
@@ -1703,7 +1787,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/schema.ts`: `7ee507ceee1166b0f2fada5ad67e334ab5c883b47ad7a16f4ec3f0665220df9c`
 - `src/domain/core/policy/internal/scope.ts`: `7515bab07e7ee92d03be12c0a8710f72d6973419ca53a79fdeff61a84a496da4`
 - `src/domain/core/policy/internal/standing.ts`: `bb3b4f7c301474d2df1f690d85f3b1ea7219fbfe6f90af8b8d680017bb50d5db`
-- `src/domain/core/policy/internal/vocabulary.ts`: `7aac0c5202a18b00304cfc01939e6146027e1cdfeeafc9645d0136be6945e1bb`
+- `src/domain/core/policy/internal/vocabulary.ts`: `f047c930896eefda4e5bc19d44855d50a24edd76d11d475edf9ad99108d500b3`
 - `src/domain/core/primitives/index.ts`: `afa5a6e9acc3b73c157054ae1607652478b464a9da45b3ce27a46a6ec86e72a0`
 - `src/domain/core/primitives/internal/command-id.ts`: `69a16b34a9225fe7c8bb1047e9b9e99d03fd71573baf2281bfa8e870e1a219c9`
 - `src/domain/core/primitives/internal/hidden-paths.ts`: `0f7e83b0231ee7deaf9487bb1bdc8e6f7f27fd6cb914bae341a59462596f2916`
@@ -1711,5 +1795,5 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/primitives/internal/json.ts`: `51c0ef2cee02728e7cf4a51bd26c6b472c7c3b54a9c49b65ad55221c6aae171f`
 - `src/domain/core/primitives/internal/project-identity.ts`: `9064bacf688c1269071d7d0bbb87bee94863e9ab663b74bd80e764eb948c137b`
 - `src/domain/core/primitives/internal/values.ts`: `8fb9eb5396a3a5f2fc5a631c30e4fbd824936e30187b7827b2bc87d48b16490a`
-- `src/domain/core/principal/index.ts`: `ac08be6c1e547f4d2adf8fa73679b03729f2432ac8cd5a52f66a83ae70f8bdf6`
-- `src/domain/core/principal/internal/principal.ts`: `3d65db28daf24a41bbb0cf4af1fa51a3aaf9c6bcb5cdeae8eb92a14c9d87f5dc`
+- `src/domain/core/principal/index.ts`: `ae7b6a5fbeeb7b662be5180fa5fda75b858bda96165e593af90e0ec1f5eb26c5`
+- `src/domain/core/principal/internal/principal.ts`: `bafc00bb5e92eba57c9be53e2fd4c7f602803062f924a6ff99c60e1c8d1b1f8c`

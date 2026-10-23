@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openSqliteLedger, CURRENT_LEDGER_VERSION, MEMORY_JOURNAL_LEDGER_VERSION } from '#adapters/core/sqlite-ledger/index.js';
-import { openSqliteMemoryJournalStore, upgradeExistingProductLedger } from '#adapters/index.js';
+import { memoryKeyedDigest, openSqliteMemoryJournalStore, upgradeExistingProductLedger } from '#adapters/index.js';
 import { MemoryJournalApplication } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 import { DOWNGRADE_TO_V60_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
@@ -21,14 +21,14 @@ async function ledger() { const root = await mkdtemp(join(tmpdir(), 'dn-memory-v
   await mkdir(backups); openSqliteLedger(path, options).close(); return { path, backups }; }
 function app(path: string, key = integrity) {
   return new MemoryJournalApplication({ verifier: { verify: async () => human }, authorize: async () => ({ revision: 'p', ruleId: 'r' }),
-    openStore: async access => openSqliteMemoryJournalStore(path, options, key, access), now: () => 1_000, eventId: () => `e${Math.random()}` });
+    openStore: async access => openSqliteMemoryJournalStore(path, options, key, access), keyedDigest: memoryKeyedDigest(key), now: () => 1_000, eventId: () => `e${Math.random()}` });
 }
 const content = (title: string) => ({ kind: 'fact', title, body: 'İrsaliyesiz fatura onaya düşer; sipariş eşleştirme zorunlu.', tags: ['erp'], lesson: null });
 const propose = (commandId: string, scopeId: string, title = 'Fatura eşleştirme İstanbul') => ({ schemaVersion: 1, commandId, scopeId, content: content(title), origin: { kind: 'human', ref: null } });
 
 describe('ledger v61 memory journal migration', () => {
   it('pins the version: v61 is the memory journal step', () => {
-    expect(MEMORY_JOURNAL_LEDGER_VERSION).toBe(61); expect(CURRENT_LEDGER_VERSION).toBe(64);
+    expect(MEMORY_JOURNAL_LEDGER_VERSION).toBe(61); expect(CURRENT_LEDGER_VERSION).toBe(65);
   });
   it('backs up v60 and adds only the memory tables; an older reader refuses the upgraded ledger', async () => {
     const f = await ledger(); const db = new DatabaseSync(f.path); db.exec(DOWNGRADE_TO_V60_LEDGER_SQL); db.close();
@@ -38,9 +38,11 @@ describe('ledger v61 memory journal migration', () => {
     const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true }), current = new DatabaseSync(f.path, { readOnly: true });
     try {
       expect(backup.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'memory%'").all()).toEqual([]);
+      // v61's own objects; S4B-1's v65 replaces the revisions no-update trigger with the tombstone-only one (memory-automation-ledger-v65).
+      const v61 = ['memory_command_receipts', 'memory_command_receipts_no_delete', 'memory_command_receipts_no_update', 'memory_entries',
+        'memory_entries_no_delete', 'memory_entries_recent', 'memory_entry_revisions', 'memory_entry_revisions_no_delete', 'memory_entry_revisions_tombstone_only', 'memory_search'];
       expect(current.prepare("SELECT name FROM sqlite_master WHERE type IN('table','trigger','index') AND name LIKE 'memory%' AND name NOT LIKE 'memory_search_%' ORDER BY name").all()
-        .map(row => row.name)).toEqual(['memory_command_receipts', 'memory_command_receipts_no_delete', 'memory_command_receipts_no_update', 'memory_entries',
-        'memory_entries_no_delete', 'memory_entries_recent', 'memory_entry_revisions', 'memory_entry_revisions_no_delete', 'memory_entry_revisions_no_update', 'memory_search']);
+        .map(row => String(row.name)).filter(name => v61.includes(name))).toEqual(v61);
     } finally { backup.close(); current.close(); }
   });
   it('refuses a v60 ledger holding a foreign same-name table and rolls the version back', async () => {

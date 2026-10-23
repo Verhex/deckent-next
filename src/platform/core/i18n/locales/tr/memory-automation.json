@@ -1,0 +1,13 @@
+{
+  "memory.config.section": "Hafıza otomasyonu (korumalı; hiçbir AI değiştiremez): extraction.mode kabul edilen işten aday kaydı açar (off kapalı, shadow yalnız kayıt tutar, live aday yazar); automation Core sınırlarını ve iş türü satırlarını yalnız daraltır.",
+  "memory.withheld": "{count} kayıt daha gizli: okuyamadığınız işten ya da kullanamadığınız bir hedeften geliyor.",
+  "memory.alert.extractionBound": "{scope} kapsamında hafıza damıtma sınıra ulaştı: bu dönemde {count} aday yazılmadı (hiçbir metin kısaltılmadı).",
+  "memory.alert.screening": "{scope} kapsamında hafıza damıtma {count} adayı reddetti: içlerinde gizli bilgi ya da görünmez karakter vardı.",
+  "error.MEMORY_ENTRY_WITHHELD": "Bu hafıza kaydı okuyamadığınız bir işten geliyor; gösterilmiyor.",
+  "error.MEMORY_PURGED_CONTENT": "Bu içerik hafızadan silindi (purge); yeniden önerilemez.",
+  "error.MEMORY_EXTRACTION_BOUND": "Hafıza damıtma sınırına ulaşıldı; aday yazılmadı.",
+  "error.MEMORY_CANDIDATE_SECRET": "Hafıza adayı gizli bilgi içeriyor; reddedildi.",
+  "error.MEMORY_CANDIDATE_QUARANTINED": "Hafıza adayı görünmez karakter içeriyor; reddedildi.",
+  "error.MEMORY_DISTILLER_REQUIRED": "Sistem adaylarını yalnız bu kurulumun hafıza damıtıcısı yazar.",
+  "error.MEMORY_AUTOMATION_INVALID": "Hafıza otomasyonu ayarları geçersiz ya da bir Core sınırını genişletmeye çalışıyor; yalnız daraltma yapılabilir."
+}

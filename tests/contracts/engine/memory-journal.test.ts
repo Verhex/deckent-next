@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isDeepStrictEqual } from 'node:util';
+import { createHmac } from 'node:crypto';
 import { MemoryJournalApplication, MemoryJournalError, type MemoryJournalStore, type MemoryJournalDependencies, type MemoryChange, type MemoryReceipt } from '#engine/index.js';
 import { memoryEntryMatches, type AuditEvent, type MemoryEntry, type MemoryState } from '#domain/index.js';
 
@@ -40,7 +41,7 @@ function app(options: { fullText?: boolean; principal?: typeof human; deny?: str
   const store = options.store ?? new MemoryStore({ fullTextSearch: options.fullText ?? true }); let clock = 100, ids = 0;
   const application = new MemoryJournalApplication({ verifier: { verify: async () => options.principal ?? human },
     authorize: async action => { if (options.deny?.includes(action)) throw Object.assign(new Error('POLICY_DENIED'), { code: 'POLICY_DENIED' }); return { revision: 'p1', ruleId: 'r' }; },
-    openStore: async () => { if (options.openFails) throw new MemoryJournalError('MEMORY_UNAVAILABLE'); return store; },
+    openStore: async () => { if (options.openFails) throw new MemoryJournalError('MEMORY_UNAVAILABLE'); return store; }, keyedDigest: (label, value) => createHmac('sha256', 'test-key').update(`${label}\0${JSON.stringify(value)}`).digest('hex'),
     ...(options.evaluation ? { resolveEvaluation: options.evaluation } : {}), now: () => clock++, eventId: () => `e${ids++}` });
   return { application, store };
 }

@@ -86,11 +86,13 @@ export async function memoryCommand(argv: readonly string[], context: MemoryComm
     lines.push(result.method === 'scan' ? t('memory.search.method.scan', { count: MEMORY_LIMITS.scanMax, terms }, locale) : t('memory.search.method.full-text', { terms }, locale));
     if (!result.complete) lines.push(t('memory.search.incomplete', {}, locale));
     lines.push(result.entries.length ? table(result.entries, locale, context) : t('memory.search.none', { terms }, locale));
+    if (result.withheld) lines.push(t('memory.withheld', { count: result.withheld }, locale));
   } else {
     if (!context.listMemory) throw ErrorRegistry.createError('MEMORY_UNAVAILABLE');
     const result = await context.listMemory(root, { ...base, limit: limits.list.limit }, options);
     if (args.json || result.status === 'held') return finish(result);
     lines.push(result.entries.length ? table(result.entries, locale, context) : t('memory.none', {}, locale));
+    if (result.withheld) lines.push(t('memory.withheld', { count: result.withheld }, locale));
   }
   emit(lines.join('\n'), sinks);
 }

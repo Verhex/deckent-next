@@ -21,7 +21,8 @@ it('publishes the versioned policy action/resource matrix through the SDK', () =
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'backup')!.actions).toEqual(['create', 'verify', 'restore']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'decision')!.actions).toEqual(['prepare','ask','record','outcome','inspect']);
   // S4 memory journal v1: the scope is the resource id; v1 surfaces only inspect.
-  expect(getPolicyVocabulary().resources.find(r => r.kind === 'memory')!.actions).toEqual(['inspect', 'propose', 'verify', 'retire']);
+  // S4B-1: contest (narrowing, S4B-3) and purge (a person's tombstone, S4B-4) join the vocabulary; both are on the AI floor.
+  expect(getPolicyVocabulary().resources.find(r => r.kind === 'memory')!.actions).toEqual(['inspect', 'propose', 'verify', 'retire', 'contest', 'purge']);
   // S7 agent/skill catalog: the scope is the resource id; import is also behind the pinned + signed floor, which no grant relaxes.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'agent-catalog')!.actions).toEqual(['inspect', 'define', 'import']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'attempt')!.actions).toContain('recover-output');

@@ -1,1 +1,1 @@
-export { openSqliteMemoryJournalStore } from './internal/store.js';
+export { openSqliteMemoryJournalStore, memoryKeyedDigest } from './internal/store.js';

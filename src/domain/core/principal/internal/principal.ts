@@ -34,6 +34,19 @@ export const nervousPrincipalRef = (owner: { readonly issuer: string; readonly s
   Object.freeze({ issuer: identitySchema.parse(`${owner.issuer}/nervous`), subject: identitySchema.parse(owner.subject) });
 export const isNervousPrincipal = (actor: { readonly issuer: string }) => actor.issuer.endsWith('/nervous');
 
-/** Transport identity dominates assurance: a forged legacy MCP, auditor or Nervous os-user is still AI. */
+/**
+ * S4B-1 (owner S-M1/S-M2 2026-10-23, S4B-DESIGN §5 A1): the memory distiller's workload identity, issued only by the composition root (no
+ * client channel names it; same auditor/OG5 precedent). Its floor is an exact allow-list (`MEMORY_DISTILLER_ALLOWED_PAIRS`). A forged `os-user`
+ * distiller is still it, and still AI.
+ */
+export const memoryDistillerPrincipalRef = (owner: { readonly issuer: string; readonly subject: string }) =>
+  Object.freeze({ issuer: identitySchema.parse(`${owner.issuer}/memory-distiller`), subject: identitySchema.parse(owner.subject) });
+export const isMemoryDistillerPrincipal = (actor: { readonly issuer: string }) => actor.issuer.endsWith('/memory-distiller');
+export const memoryDistillerPrincipal = (owner: { readonly issuer: string; readonly subject: string }, scopeIds: readonly string[]): VerifiedPrincipal => {
+  const ref = memoryDistillerPrincipalRef(owner);
+  return verifiedPrincipalSchema.parse({ id: `${ref.subject}@${ref.issuer}`, ...ref, assurance: 'workload-verified', scopeIds: [...scopeIds] });
+};
+
+/** Transport identity dominates assurance: a forged legacy MCP, auditor, Nervous or memory-distiller os-user is still AI. */
 export const isAiPrincipal = (actor: { readonly issuer: string; readonly assurance?: string }) =>
-  isMcpPrincipal(actor) || isAuditorPrincipal(actor) || isNervousPrincipal(actor) || actor.assurance !== 'os-user';
+  isMcpPrincipal(actor) || isAuditorPrincipal(actor) || isNervousPrincipal(actor) || isMemoryDistillerPrincipal(actor) || actor.assurance !== 'os-user';
