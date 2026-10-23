@@ -2,7 +2,7 @@ import type { ConfigLoadOptions } from '#platform/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { AgentCatalogMutation, AgentDefineCommand, AgentInspectQuery, AgentInspection, AgentListQuery, AgentListing, SignerAddCommand, SignerEnrolCommand, SignerListQuery,
-  SignerListing, SignerMutation, SignerRepairCommand, SignerRevokeCommand, SkillDefineCommand, SkillImportCommand, SkillInspectQuery, SkillInspection, SkillListQuery, SkillListing } from '#engine/index.js';
+  SignerListing, SignerMutation, SignerRepairCommand, SignerRevokeCommand, SkillDefineCommand, SkillImportCommand, SkillInspectQuery, SkillInspection, SkillListQuery, SkillListing, AgentStatsQuery, AgentStatsView } from '#engine/index.js';
 import type { AgentDefinition, SkillDefinition } from '#domain/index.js';
 
 /** S7 agent/skill catalog: reads use the application's `inspect` authorization; define and define-skill run only from a person's terminal card. */
@@ -11,6 +11,8 @@ export interface AgentsCommandContext extends CliBaseContext, Pick<TerminalLaunc
   inspectAgent?: (root: string, input: AgentInspectQuery, options: ConfigLoadOptions) => Promise<AgentInspection>;
   listSkills?: (root: string, input: SkillListQuery, options: ConfigLoadOptions) => Promise<SkillListing>;
   inspectSkill?: (root: string, input: SkillInspectQuery, options: ConfigLoadOptions) => Promise<SkillInspection>;
+  /** S8-2 statistics read (the same `inspect` authorization). */
+  inspectAgentStats?: (root: string, input: AgentStatsQuery, options: ConfigLoadOptions) => Promise<AgentStatsView>;
   defineAgent?: (root: string, input: AgentDefineCommand, options: ConfigLoadOptions) => Promise<AgentCatalogMutation<AgentDefinition>>;
   defineSkill?: (root: string, input: SkillDefineCommand, options: ConfigLoadOptions) => Promise<AgentCatalogMutation<SkillDefinition>>;
   /** S8-5 signer keys and signed import (each write a person's card). */

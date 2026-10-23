@@ -29,7 +29,9 @@ export const PREVIOUS_LEDGER_VERSION = 50;
  * restoring the pre-switch backup is the real path. */
 /** v68 → v67 (S8-5 signer keys): the additive tables (with their triggers) are dropped; exact for a ledger without signer rows; restoring the
  * pre-switch backup is the real path. */
-export const DOWNGRADE_TO_V67_LEDGER_SQL = 'DROP TABLE skill_signer_receipts; DROP TABLE skill_signer_key_revisions; DROP TABLE skill_signer_keys; PRAGMA user_version=67;';
+/** v69 → v68 (S8-2 aggregator pass position): the additive table (with its triggers) is dropped; exact (it is rebuildable state). */
+export const DOWNGRADE_TO_V68_LEDGER_SQL = 'DROP TABLE catalog_evolution_positions; PRAGMA user_version=68;';
+export const DOWNGRADE_TO_V67_LEDGER_SQL = DOWNGRADE_TO_V68_LEDGER_SQL + ' DROP TABLE skill_signer_receipts; DROP TABLE skill_signer_key_revisions; DROP TABLE skill_signer_keys; PRAGMA user_version=67;';
 export const DOWNGRADE_TO_V66_LEDGER_SQL = DOWNGRADE_TO_V67_LEDGER_SQL + ' DROP TABLE agent_standing_receipts; DROP TABLE agent_standing_revisions; DROP TABLE agent_standings; PRAGMA user_version=66;';
 export const DOWNGRADE_TO_V65_LEDGER_SQL = DOWNGRADE_TO_V66_LEDGER_SQL + ' DROP TABLE recovery_cases; PRAGMA user_version=65;';
 /** v65 → v64 (S4B-1 memory automation): the additive tables (with their indexes and triggers) are dropped and the v61 no-update trigger on revisions

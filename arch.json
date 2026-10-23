@@ -468,7 +468,8 @@
         "src/engine/core/nervous",
         "src/domain/core/provider-catalog",
         "src/engine/core/agent-catalog",
-        "src/domain/core/agent-catalog"
+        "src/domain/core/agent-catalog",
+        "src/domain/core/catalog-evolution"
       ],
       "plan": "FOUNDATION"
     },
@@ -1395,7 +1396,8 @@
         "src/engine/core/effect",
         "src/engine/core/run-proposal",
         "src/engine/core/memory",
-        "src/engine/core/agent-catalog"
+        "src/engine/core/agent-catalog",
+        "src/engine/core/catalog-evolution"
       ],
       "plan": "SURFACES"
     },
@@ -3777,7 +3779,12 @@
         "src/composition/core/root",
         "src/composition/core/scoped-request",
         "src/composition/core/policy",
-        "src/composition/core/query-errors"
+        "src/composition/core/query-errors",
+        "src/engine/core/catalog-evolution",
+        "src/engine/core/model-activation",
+        "src/engine/core/memory",
+        "src/adapters/core/catalog-evolution-store",
+        "src/adapters/core/sqlite-model-activation"
       ],
       "plan": "LEARNING"
     },
@@ -3793,7 +3800,9 @@
         "src/surfaces/core/cli-kit",
         "src/surfaces/core/cli-human",
         "src/surfaces/core/cli-approval",
-        "src/surfaces/core/cli-terminal"
+        "src/surfaces/core/cli-terminal",
+        "src/engine/core/catalog-evolution",
+        "src/domain/core/catalog-evolution"
       ],
       "plan": "LEARNING"
     },
@@ -3880,6 +3889,39 @@
         "src/engine/core/recovery"
       ],
       "plan": "SURFACES"
+    },
+    "src/domain/core/catalog-evolution": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/run"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/engine/core/catalog-evolution": {
+      "dependencies": [
+        "src/domain/core/catalog-evolution",
+        "src/domain/core/agent-catalog",
+        "src/domain/core/primitives",
+        "src/domain/core/run",
+        "src/domain/core/task-graph",
+        "src/domain/core/principal",
+        "src/domain/core/provider-catalog",
+        "src/platform/core/integrity",
+        "src/engine/core/authentication",
+        "src/engine/core/agent-catalog"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/catalog-evolution-store": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/catalog-evolution",
+        "src/domain/core/task-graph",
+        "src/engine/core/catalog-evolution",
+        "src/platform/core/integrity",
+        "src/adapters/core/sqlite-ledger"
+      ],
+      "plan": "LEARNING"
     }
   },
   "composition": {
@@ -4004,7 +4046,8 @@
       "quotaask",
       "headless",
       "recovery",
-      "brainwait"
+      "brainwait",
+      "agentstats"
     ]
   },
   "literals": {

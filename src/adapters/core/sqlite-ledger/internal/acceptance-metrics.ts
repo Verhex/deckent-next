@@ -77,6 +77,19 @@ export function readAcceptedTaskMetrics(db: DatabaseSync, scopeId: string, after
     .all(scopeId, after, limit).map(row => ({ position: Number(row['position']), metric: parseMetricRecord(row['record']) }))
     .filter(row => row.metric.outcome.kind === 'task' && row.metric.outcome.status === 'accepted' && row.metric.identity.scopeId === scopeId);
 }
+/** S8-2: the scope's current rows of every outcome kind with their record digest and the sealed `now` of the producer command (a
+ * lifecycle write or an evaluation commit; anything else, or a missing receipt, is `null`), newest first up to `upTo`, or oldest first after `after`. */
+export function readCurrentMetricRows(db: DatabaseSync, scopeId: string, limit: number, range: { readonly after: number } | { readonly upTo: number | null }) {
+  const after = 'after' in range;
+  return db.prepare(`SELECT m.rowid AS position,m.record,CASE WHEN json_valid(r.command) THEN json_extract(r.command,'$.now') END AS at FROM acceptance_metrics m
+    LEFT JOIN run_receipts r ON r.scope_id=m.scope_id AND r.command_id=m.producer_command_id WHERE m.scope_id=? AND m.superseded_by IS NULL
+    AND m.rowid${after ? '>' : '<='}? ORDER BY m.rowid ${after ? 'ASC' : 'DESC'} LIMIT ?`)
+    .all(scopeId, after ? range.after : range.upTo ?? Number.MAX_SAFE_INTEGER, limit).map(row => {
+      const metric = parseMetricRecord(row['record']), at = row['at'];
+      return { position: Number(row['position']), digest: (JSON.parse(String(row['record'])) as { digest: string }).digest, metric,
+        atMs: typeof at === 'number' && Number.isSafeInteger(at) && at >= 0 ? at : null };
+    });
+}
 /** Same-Run sharing requires a currently accepted Task and its exact immutable settlement digest, never mere prior use. */
 export function readAcceptedOperationSettlements(db: DatabaseSync, run: RunSnapshot): NonNullable<OperationEvidenceBinding['acceptedSettlements']> {
   return Object.freeze(readRunAcceptanceEvaluations(db, run).flatMap(evaluation => {

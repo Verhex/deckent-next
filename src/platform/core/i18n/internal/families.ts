@@ -80,6 +80,8 @@ import tuisessiontr from '../locales/tr/tuisession.json' with { type: 'json' };
 import termanswertr from '../locales/tr/termanswer.json' with { type: 'json' };
 import quotaasktr from '../locales/tr/quotaask.json' with { type: 'json' };
 import headlesstr from '../locales/tr/headless.json' with { type: 'json' };
+import agentstatsen from '../locales/en/agentstats.json' with { type: 'json' };
+import agentstatstr from '../locales/tr/agentstats.json' with { type: 'json' };
 
 export const families = [
   { en: configen, tr: configtr },
@@ -109,6 +111,7 @@ export const families = [
   { en: termansweren, tr: termanswertr },
   { en: quotaasken, tr: quotaasktr },
   { en: headlessen, tr: headlesstr },
+  { en: agentstatsen, tr: agentstatstr },
   { en: deliveryen, tr: deliverytr },
   { en: memoryen, tr: memorytr },
   { en: memoryautomationen, tr: memoryautomationtr },

@@ -29,18 +29,18 @@ async function v61() {
 }
 
 it('pins the step: v62 is the assignment step', () => {
-  expect(WORKER_ASSIGNMENT_LEDGER_VERSION).toBe(62); expect(CURRENT_LEDGER_VERSION).toBe(68);
+  expect(WORKER_ASSIGNMENT_LEDGER_VERSION).toBe(62); expect(CURRENT_LEDGER_VERSION).toBe(69);
 });
 it('backs up v61 and records v62 (then v63, v64) without rewriting a byte; v61 Run records still parse', async () => {
   const f = await v61();
   expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-23T00:00:00Z'));
-  expect(upgrade).toMatchObject({ from: 61, to: 68 });
+  expect(upgrade).toMatchObject({ from: 61, to: 69 });
   const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true });
   try { expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(61); } finally { backup.close(); }
   const db = new DatabaseSync(f.path, { readOnly: true });
   try {
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(68);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(69);
     expect([db.prepare('SELECT snapshot FROM runs').get()?.snapshot, db.prepare('SELECT snapshot FROM run_receipts').get()?.snapshot]).toEqual([f.snapshot, f.snapshot]);
   } finally { db.close(); }
   expect(runSnapshotSchema.parse(JSON.parse(f.snapshot))).toEqual(JSON.parse(f.snapshot));
@@ -49,9 +49,9 @@ it('backs up v61 and records v62 (then v63, v64) without rewriting a byte; v61 R
 it('the v62 → v61 fixture is exact for a ledger without new records and the upgrade replays to the same state', async () => {
   const f = await v61(); const db = new DatabaseSync(f.path);
   try {
-    migrateLedger(db, 'allow'); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(68);
+    migrateLedger(db, 'allow'); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(69);
     db.exec(DOWNGRADE_TO_V61_LEDGER_SQL); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(61);
-    migrateLedger(db, 'allow'); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(68);
+    migrateLedger(db, 'allow'); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(69);
     expect(db.prepare('SELECT snapshot FROM runs').get()?.snapshot).toBe(f.snapshot);
   } finally { db.close(); }
 });

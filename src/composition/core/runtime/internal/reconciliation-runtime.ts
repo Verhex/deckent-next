@@ -4,7 +4,7 @@ import { ReconciliationRuntimeLoop, type ReconciliationRecoveryCommand, type Rec
 import { prepareConfiguredNervous, prepareConfiguredRecovery, recoverConfiguredReconciliation } from '#composition/core/runs/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { prepareConfiguredMemoryEvaluation, prepareConfiguredMemoryExtraction, replayConfiguredMemoryPurges } from '#composition/core/memory/index.js';
-import { replayConfiguredSignerRevocations } from '#composition/core/agent-catalog/index.js';
+import { prepareConfiguredCatalogAggregation, replayConfiguredSignerRevocations } from '#composition/core/agent-catalog/index.js';
 
 export interface ConfiguredReconciliationRuntimeObserver {
   onPage(command: ReconciliationRecoveryCommand, result: ReconciliationRecoveryPage): void | Promise<void>;
@@ -38,13 +38,16 @@ export async function prepareConfiguredReconciliationRuntime(projectRoot: string
   const memory = prepareConfiguredMemoryExtraction(projectRoot, options, config.memoryAutomation.extraction.mode);
   // S4B-3: the memory evaluator after the distiller, at most once per pass interval per scope; its failure is reported, never a reconciliation failure.
   const evaluation = prepareConfiguredMemoryEvaluation(projectRoot, options, config.memoryAutomation.verification.mode);
+  // S8-2: the catalog aggregator last (first page only), off the hot path; its failure is reported, never a reconciliation failure.
+  const aggregation = prepareConfiguredCatalogAggregation(projectRoot, options, config.catalogEvolution.mode);
   const loop = new ReconciliationRuntimeLoop(async command =>
     (await recoverConfiguredReconciliation(projectRoot, command, options, serviceScopeIds)).recovery,
   abortableRuntimeWait, { now: () => clock.sample().monotonicMs }, {
     async onPage(command, result) { await observer.onPage(command, result); await nervous?.observe(command).catch(error => observer.onError(command, queryFailure(error)));
       if (command.after === null) { await recovery?.run(command.scopeId).catch(error => observer.onError(command, queryFailure(error)));
         await memory?.run(command.scopeId).catch(error => observer.onError(command, queryFailure(error)));
-        await evaluation?.run(command.scopeId).catch(error => observer.onError(command, queryFailure(error))); } },
+        await evaluation?.run(command.scopeId).catch(error => observer.onError(command, queryFailure(error)));
+        await aggregation?.run(command.scopeId).catch(error => observer.onError(command, queryFailure(error))); } },
     async onError(command, error) { await observer.onError(command, queryFailure(error)); },
   }, { scopeIds: runtime.scopeIds, pollIntervalMs: runtime.pollIntervalMs, failureBackoffMs: runtime.failureBackoffMs });
   return Object.freeze({ run: (signal: AbortSignal) => loop.run(signal) });
