@@ -7,12 +7,12 @@
     "src/domain/core/policy/index.ts": "59975eb1090f60f4030a0e351bc5c819bf828ed1c45869ca93b045b3eaf9ba44",
     "src/domain/core/policy/internal/administer.ts": "7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004",
     "src/domain/core/policy/internal/administration.ts": "c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b",
-    "src/domain/core/policy/internal/ai-floor.ts": "71d391a339c07832a0971bfdaa74fbaa19f91978e9fc0826cb374839210ffc2b",
+    "src/domain/core/policy/internal/ai-floor.ts": "5a38cd83addfd95ff7525582e3411e7a44c94af07f6db8af6b6cb399edac480c",
     "src/domain/core/policy/internal/decision-step.ts": "70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe",
     "src/domain/core/policy/internal/delegations.ts": "c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320",
     "src/domain/core/policy/internal/describe.ts": "0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df",
     "src/domain/core/policy/internal/evaluate.ts": "61b1172eabcab5da8a7a0935bc2d0bf523d5327a4c95e96b4a70ec7b191714f2",
-    "src/domain/core/policy/internal/first-run-template.ts": "a4ee1404be7fb24a90586accb4276b9fb45beed4a8675d706ab2df68a65a8b92",
+    "src/domain/core/policy/internal/first-run-template.ts": "3541461e380ad916941ee390457a6b921e717a544aff9ac5f198e75368178b37",
     "src/domain/core/policy/internal/mcp-capabilities.ts": "c864257ab5ce5852f0799805d358f7b8790ec54fe8656157a1e4addd8cdeafb4",
     "src/domain/core/policy/internal/mcp-grant.ts": "8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a",
     "src/domain/core/policy/internal/mode.ts": "b1f9479911852c8b3842c6b2135156534e16a8e2016e3c7120c2b4f627f4c444",
@@ -32,10 +32,10 @@
     "src/domain/core/principal/internal/principal.ts": "8a4140ce51235c5410169bc77356c46abbd8edcd513fc482886f0610f147c1a2"
   },
   "summary": {
-    "routes": 293,
-    "floorRoutes": 212,
+    "routes": 301,
+    "floorRoutes": 220,
     "contexts": 6,
-    "policyChecks": 1758,
+    "policyChecks": 1806,
     "stepChecks": 48,
     "violations": 0
   },
@@ -11058,6 +11058,438 @@
     },
     {
       "kind": "config",
+      "id": "global:runRuntime",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:runRuntime.recovery[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
       "id": "global:secrets",
       "action": "write",
       "floor": true,
@@ -19573,6 +20005,438 @@
     {
       "kind": "config",
       "id": "project:policy[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:runRuntime.recovery[0]",
       "action": "write",
       "floor": true,
       "family": "configuration",

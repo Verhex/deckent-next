@@ -42,12 +42,12 @@ export const floorFamilies = [
     routes: ['fixture-target', 'fence-attempt', 'stop-orphan', 'hand-to-human', 'continue-new-attempt'].flatMap(id => ['apply', 'future-action'].map(action => ['recovery-action', id, action])) },
 ];
 export const protectedPaths = ['policy', 'approvals', 'identity', 'security', 'storage', 'service', 'paths', 'shell', 'network', 'layout', 'execution',
-  'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit', 'memory', 'memoryAutomation',
+  'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit', 'memory', 'memoryAutomation', 'runRuntime.recovery',
   'terminal.shell.realm', 'terminal.shell.environment', 'terminal.fetch.egress', 'terminal.fetch.allowedHosts'];
 floorFamilies.push({ id: 'configuration', en: 'Protected configuration subtrees, descendants and whole-object ancestors',
   tr: 'Korunan ayar ağaçları, alt yolları ve bütün nesneyi değiştiren üst yolları',
-  whyEn: 'Security, isolation, admission, operations, audit, shell environment and network egress cannot be weakened through configuration.',
-  whyTr: 'Güvenlik, yalıtım, admission, operasyon, audit, shell ortamı ve ağ çıkışı ayarla gevşetilemez.',
+  whyEn: 'Security, isolation, admission, operations, audit, the recovery mode, shell environment and network egress cannot be weakened through configuration.',
+  whyTr: 'Güvenlik, yalıtım, admission, operasyon, audit, kurtarma modu, shell ortamı ve ağ çıkışı ayarla gevşetilemez.',
   routes: [...new Set(['', ...protectedPaths.flatMap(path => [path, `${path}.fixture`, `${path}[0]`,
     ...path.split('.').slice(0, -1).map((_part, index) => path.split('.').slice(0, index + 1).join('.'))])])]
     .flatMap(path => ['project', 'global'].map(layer => ['config', `${layer}:${path}`, 'write'])) });

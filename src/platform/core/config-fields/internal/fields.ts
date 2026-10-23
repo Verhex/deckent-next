@@ -117,6 +117,10 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     /** S6R-2/3 Nervous (owner 2026-10-23 Q-R2: shadow first, customer default off): `shadow` seals proposals and executes nothing; `live` executes a
      * measured (`live`) rule's stop step only under the owner's standing policy grant (`recovery-action`); anything else stays a sealed proposal. */
     nervous: z.object({ mode: z.enum(['off', 'shadow', 'live']).default('off') }).strict().default({}),
+    /** S6R-5 (owner Q-R2, lead on s6r4 Q1; protected: no AI writes it): `off` (customer default) freezes no recovery bounds at admission (never a
+     * continuation); `shadow` freezes them and a decision only seals what it would do; `live` lets the recovery decision continue a lost task under
+     * the owner's standing grant. The stricter of a Run's frozen mode and this one applies. */
+    recovery: z.object({ mode: z.enum(['off', 'shadow', 'live']).default('off') }).strict().default({}),
     maxConcurrentRuns: z.number().int().positive().safe().default(SERVICE_EXECUTION_CAPACITY_DEFAULT),
     maxReservationsPerTurn: z.number().int().positive().safe().default(4),
     pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),

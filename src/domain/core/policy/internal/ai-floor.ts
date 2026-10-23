@@ -10,8 +10,9 @@ export const MEMORY_DISTILLER_ALLOWED_PAIRS = Object.freeze([['memory', 'inspect
  * candidate, open a contest, read Runs, invoke its model. No propose, retire, purge or raw worker output (`attempt/read-output`). */
 export const MEMORY_EVALUATOR_ALLOWED_PAIRS = Object.freeze([['memory', 'inspect'], ['memory', 'verify'], ['memory', 'contest'], ['run', 'inspect'], ['model-invocation', 'invoke']] as const);
 /** S6R-4 (S6R-DESIGN §9, lead on s6r3 Q4): the recovery principal's exact allow-list — reconcile an Attempt, read a Run. It continues a lost task only
- * through its own application under the owner's standing grant (`recovery-action`, a person's), never through a policy grant of its own. */
-export const RECOVERY_ALLOWED_PAIRS = Object.freeze([['attempt', 'reconcile'], ['run', 'inspect']] as const);
+ * through its own application under the owner's standing grant (`recovery-action`, a person's), never through a policy grant of its own. S6R-5: it
+ * invokes its `recovery-decision` role model (`model-invocation`/invoke; the role registry restricts which rows). */
+export const RECOVERY_ALLOWED_PAIRS = Object.freeze([['attempt', 'reconcile'], ['run', 'inspect'], ['model-invocation', 'invoke']] as const);
 const pairIn = (pairs: readonly (readonly [string, string])[], kind: string, action: string) => pairs.some(([allowedKind, allowed]) => allowedKind === kind && allowed === action);
 /**
  * Approval cards whose decision widens authority: identity profile distribution, MCP capability grants and the first-run template
@@ -69,6 +70,8 @@ const PROTECTED_CONFIG_PATHS = Object.freeze(['policy', 'approvals', 'identity',
   'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit',
   // S4B-1 A10 (lead 2026-10-23, a tightening): the memory automation switches and registry overlay (`memoryAutomation`), and the reserved `memory` root.
   'memory', 'memoryAutomation',
+  // S6R-5 (lead on s6r4 Q1): the recovery mode, which lets the recovery decision continue a lost task.
+  'runRuntime.recovery',
   'terminal.shell.realm', 'terminal.shell.environment', 'terminal.fetch.egress', 'terminal.fetch.allowedHosts']);
 export function protectedConfigKey(keyPath: string): boolean {
   const key = keyPath.replace(/\[[^\]]*\]/gu, '.0').replace(/\.+$/u, '');

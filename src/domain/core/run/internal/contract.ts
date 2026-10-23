@@ -5,6 +5,7 @@ import { runProposalBindingSchema } from './proposal.js';
 import { authorityAdmissionSchema, runSafetyHoldSourceSchema } from '#domain/core/audit/index.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
+import { recoveryEffectGateSchema, recoveryNoteCodeSchema } from '#domain/core/recovery/index.js';
 import { taskGraphSchema, taskProgressSchema, inspectTaskReadiness, branchDecisionSchema, assertAdmissionBranch } from '#domain/core/task-graph/index.js';
 import { workerReportLimits } from '#domain/core/worker-event/index.js';
 import environmentLimits from './environment-requirements.json' with { type: 'json' };
@@ -16,10 +17,13 @@ export const runBindingSchema = z.object({ identity: attemptIdentitySchema, obse
   stallCause: z.enum(STALL_CAUSES).optional(),
   // S6R-4: the sealed recovery decision that continued a lost Attempt's task in a new one; only on a `lost` previous binding.
   recoveryDecisionId: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  // S6R-5: what the next Attempt learns of the lost one — the decision's registry note code and the settled task-idempotent work the gate saw
+  // (bounded by the frozen `settledFacts`); present only on a `lost` binding with a note or a fact, never free model text.
+  recoveryContext: z.object({ note: recoveryNoteCodeSchema.nullable(), facts: recoveryEffectGateSchema.unwrap().shape.facts }).strict().readonly().optional(),
   // REVISE 2695: the environment probes this unobserved attempt's custody covers (written before the first probe container can start).
   probes: z.array(identitySchema).max(environmentLimits.limits.requirements).readonly().optional(),
 }).strict().refine(value => (value.observedKind === 'stalled') === (value.stallCause !== undefined) && (value.observedKind === 'lost') === (value.recoveryDecisionId !== undefined)
-  && (value.probes === undefined || value.observedKind === null), 'RUN_SNAPSHOT_INCONSISTENT').readonly();
+  && (value.recoveryContext === undefined || value.observedKind === 'lost') && (value.probes === undefined || value.observedKind === null), 'RUN_SNAPSHOT_INCONSISTENT').readonly();
 /** S5b (Auditor owner decision 6): who placed a hold. `operator` is the public Run control and is never written, so earlier releases read every
  * operator hold; each safety source (Nervous pause, Auditor park) is resumed only by a person at a terminal (Y4 floor, ai-floor.ts). */
 export const RUN_HOLD_SOURCES = ['operator', 'nervous', 'auditor'] as const;

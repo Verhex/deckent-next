@@ -1,5 +1,8 @@
-export { RecoveryApplication } from './internal/application.js';
-export type { RecoveryOutcome, RecoveryPorts } from './internal/application.js';
+export { RecoveryApplication, recoveryDecisionCommandId } from './internal/application.js';
+export type { RecoveryOutcome, RecoveryPorts, RecoveryPrepared } from './internal/application.js';
+export { RecoveryDecisionApplication } from './internal/decide.js';
+export type { RecoveryDecisionOutcome, RecoveryDecisionPorts, RecoveryModelPorts, RecoveryModelRequest, RecoveryModelResult, RecoveryModelRow } from './internal/decide.js';
 export { RECOVERY_CONTINUE_ACTION, recoveryContinuationApproval, recoveryContinuationApprovalSchema } from './internal/approval.js';
 export type { RecoveryContinuationApproval } from './internal/approval.js';
 export type { RecoveryAudit, RecoveryContinuationWrite, RecoveryStore, RecoveryTermination } from './internal/port.js';
+export { RECOVERY_DECISION_ROLE, recoveryDecisionPrincipal, recoveryDecisionRegistry, recoveryModelReference, recoveryModelRows } from './internal/models.js';

@@ -22,8 +22,9 @@ export class AuditApplication {
     // S6R-2: a `recovery-detection` comes only from Nervous, and Nervous records nothing else (it writes no state).
     if (!parsed.success || isAuditorPrincipal(parsed.data.principal)
       || isNervousPrincipal(parsed.data.principal) !== (parsed.data.subject.kind === 'recovery-detection')
-      // S6R-4: a lost task's continuation comes only from the recovery principal, and it records nothing else.
-      || isRecoveryPrincipal(parsed.data.principal) !== (parsed.data.subject.kind === 'run-lifecycle' && parsed.data.subject.action === 'continue-lost-task')) throw new AuditError('AUDIT_INVALID');
+      // S6R-4: a lost task's continuation comes only from the recovery principal; S6R-5: so does its decision seal. It records nothing else.
+      || isRecoveryPrincipal(parsed.data.principal) !== (parsed.data.subject.kind === 'recovery-decision'
+        || parsed.data.subject.kind === 'run-lifecycle' && parsed.data.subject.action === 'continue-lost-task')) throw new AuditError('AUDIT_INVALID');
     const event: AuditEvent = parsed.data;
     return this.guard(() => verifyAuditRecord(this.store.append(event, sequence => sealAuditRecord(event, sequence, this.integrity)), this.integrity));
   }

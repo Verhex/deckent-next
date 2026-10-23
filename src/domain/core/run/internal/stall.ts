@@ -2,6 +2,7 @@ import { counterSchema } from '#domain/core/primitives/index.js';
 import { sameAttemptIdentity, type AttemptIdentity } from '#domain/core/attempt/index.js';
 import { checkedRun, RunError, type STALL_CAUSES } from './contract.js';
 import { reconcileRunLifecycle } from './lifecycle.js';
+import { taskAttemptCeilingReached } from './lost.js';
 export type StallCause = typeof STALL_CAUSES[number];
 /**
  * R3 (owner D4a/D5a): the one owner of the bounded stall retry, modelled on the quota park/reset pair. A worker stopped for host-observed
@@ -16,7 +17,8 @@ export function recoverStalledTask(input: unknown, expectedRevision: number, ide
   const policy = run.execution.tasks.find(row => row.taskId === identity.taskId)?.stall;
   if (!task || !binding || !policy || task.phase !== 'evaluating' || task.unresolvedEffects || run.cancelRequested || run.state.kind === 'terminal'
     || binding.observedKind !== 'exited') throw new RunError('RUN_ATTEMPT_CONFLICT');
-  const retry = (run.previousBindings ?? []).filter(row => row.identity.taskId === identity.taskId && row.observedKind === 'stalled').length < policy.maxRetries;
+  const retry = (run.previousBindings ?? []).filter(row => row.identity.taskId === identity.taskId && row.observedKind === 'stalled').length < policy.maxRetries
+    && !taskAttemptCeilingReached(run, identity.taskId); // S6R-5: the total Attempt ceiling stall shares with lost continuation
   const eligibility = timing.backoffMs > 0 ? { kind: 'not-before' as const, at: counterSchema.parse(timing.now + timing.backoffMs) } : { kind: 'immediate' as const };
   const next = retry ? { ...task, phase: 'pending' as const, decision: undefined, notAcceptedReason: undefined, eligibility }
     : { ...task, phase: 'failed' as const, decision: undefined, notAcceptedReason: cause === 'inactivity' ? 'worker-stalled' as const : cause };

@@ -6,7 +6,17 @@ import { reconcileRunLifecycle } from './lifecycle.js';
 
 /** What a continuation carries: the sealed decision id, the case's evidence signature, the gate the writer re-derived in its own transaction and the
  * signatures of the task's earlier continued cases (changed-evidence requirement, S6R-DESIGN §8). */
-export type LostContinuation = Readonly<{ decisionId: string; signature: string | null; gate: unknown; priorSignatures: readonly string[] }>;
+export type LostContinuation = Readonly<{ decisionId: string; signature: string | null; gate: unknown; priorSignatures: readonly string[]; note?: string | null }>;
+
+/**
+ * S6R-4/S6R-5 (owner Q-R3, lead on s6r4 Q2): whether one more automatic Attempt of the task would pass the Run's frozen total ceiling
+ * (`maxAttemptsPerTask`), shared by every automatic path — stall (R3), lost and a future RETRY: superseded Attempts + the current one + the new
+ * one. A Run without frozen recovery bounds has no total ceiling (its per-path bounds stay).
+ */
+export function taskAttemptCeilingReached(run: RunSnapshot, taskId: string): boolean {
+  const policy = run.execution.recovery;
+  return policy !== undefined && (run.previousBindings ?? []).filter(row => row.identity.taskId === taskId).length + 2 > policy.maxAttemptsPerTask;
+}
 
 /**
  * Pure: why the lost task of `identity` may not continue now (null: it may), in a fixed order — the Run is closing, it was admitted without frozen
@@ -28,8 +38,7 @@ export function lostContinuationRefusal(run: RunSnapshot, identity: AttemptIdent
   if (refused) return refused;
   const previous = (run.previousBindings ?? []).filter(row => row.identity.taskId === identity.taskId);
   if (previous.filter(row => row.observedKind === 'lost').length >= policy.maxLostContinuationsPerTask) return 'RECOVERY_CONTINUATION_BOUND';
-  // Superseded Attempts + the lost one + the new one.
-  if (previous.length + 2 > policy.maxAttemptsPerTask) return 'RECOVERY_ATTEMPT_CEILING';
+  if (taskAttemptCeilingReached(run, identity.taskId)) return 'RECOVERY_ATTEMPT_CEILING';
   if ((run.previousBindings ?? []).filter(row => row.observedKind === 'lost').length >= policy.maxRecoveryActionsPerRun) return 'RECOVERY_RUN_BOUND';
   if (continuation.signature !== null && continuation.priorSignatures.includes(continuation.signature)) return 'RECOVERY_SAME_EVIDENCE';
   return null;
@@ -45,11 +54,15 @@ export function continueLostTask(input: unknown, expectedRevision: number, ident
   const run = checkedRun(input, expectedRevision);
   const refused = lostContinuationRefusal(run, identity, continuation);
   if (refused) throw new RecoveryError(refused);
+  // S6R-5: a Run frozen in `shadow` never continues (a shadow decision seals what would happen and changes nothing).
+  if (run.execution.recovery?.mode !== 'live') throw new RecoveryError('RECOVERY_OFF');
+  const gate = recoveryEffectGateSchema.parse(continuation.gate), note = continuation.note ?? null;
+  const context = note !== null || gate.facts.length ? { recoveryContext: { note, facts: gate.facts } } : {};
   const binding = run.bindings.find(row => sameAttemptIdentity(row.identity, identity))!, task = run.progress.find(row => row.taskId === identity.taskId)!;
   const next = { ...task, phase: 'pending' as const, unresolvedEffects: false, workerCustody: undefined, decision: undefined, notAcceptedReason: undefined,
     eligibility: { kind: 'immediate' as const } };
   const snapshot = reconcileRunLifecycle({ ...run, revision: run.revision + 1, progress: run.progress.map(row => row === task ? next : row),
     bindings: run.bindings.filter(row => row !== binding),
-    previousBindings: [...run.previousBindings ?? [], { ...binding, observedKind: 'lost', recoveryDecisionId: continuation.decisionId }] }, counterSchema.parse(timing.now), timing.timeoutMs);
+    previousBindings: [...run.previousBindings ?? [], { ...binding, observedKind: 'lost', recoveryDecisionId: continuation.decisionId, ...context }] }, counterSchema.parse(timing.now), timing.timeoutMs);
   return Object.freeze({ snapshot });
 }
