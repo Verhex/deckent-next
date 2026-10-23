@@ -42,6 +42,15 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
         const listed = await inspectConfiguredModelCatalog(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), channelId }, options);
         return listed.channels.some(channel => channel.channelId === channelId && channel.access !== 'denied' && channel.models.some(entry => entry.model.nativeId === nativeId));
       },
+      async registered(channelId, nativeId) {
+        const listed = await inspectConfiguredModelCatalog(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), channelId }, options);
+        for (const channel of listed.channels) {
+          if (channel.channelId !== channelId || channel.access !== 'allowed') continue;
+          const entry = channel.models.find(item => item.model.nativeId === nativeId);
+          if (entry) return { providerVersion: channel.providerVersion, modelRevision: entry.revision, model: entry.model };
+        }
+        return null;
+      },
       async register(catalog, commandId) { await applyConfiguredModelCatalog(projectRoot, { schemaVersion: 1, commandId, scopeId, action: 'register', catalog }, options); },
       binding: reference => inspectModelBinding(projectRoot, reference, options),
       async activation(reference) { return (await inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: String(scopeId), reference }, options)).activation; },

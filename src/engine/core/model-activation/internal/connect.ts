@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { AUDIT_EVENT_SCHEMA_VERSION, MODEL_CONNECT_OPERATION_ID, endpointMayCarryKey, modelConnectCommandSchema, parseProviderCatalog, parseModelInvocationProfile, type AuditEvent, type JsonObject,
   type ModelActivationRecord, type ModelBindingDefinition, type ModelConnectCommand, type ModelConnectResult, type ModelConnectStepState, type ModelReference,
-  type ProviderCatalog, type ProviderCatalogDocument, type VerifiedPrincipal } from '#domain/index.js';
+  type CatalogModel, type ProviderCatalog, type ProviderCatalogDocument, type VerifiedPrincipal } from '#domain/index.js';
 
 export type ModelConnectLayer = 'project' | 'global';
 /** What `models.connect` needs of one registry kind (the adapter's data, read through the port: engine never imports an adapter). */
@@ -13,6 +13,9 @@ export type ModelConnectKind = Readonly<{ id: string; available: boolean; endpoi
  * (cache TTL, a TLS CA, a longer catalog revision, version digits) still delivers (P1 DELIVERY-FIT 2026-10-09: an exact fit failed after `cache: '5m'`). */
 export type ModelConnectDefaults = Readonly<{ requestMaxBytes: number; responseMaxBytes: number; timeoutMs: number; maxInFlight: number; maxOutputTokens: number; currency: string;
   deliveryHeadroomBytes: number }>;
+/** A registered ledger catalog row (M4): the channel's provider version, the row's revision and its v3 entry (its `connect` terms price a model
+ * the adapter's shipped tables do not list). */
+export type ModelConnectCatalogRow = Readonly<{ providerVersion: number; modelRevision: number; model: CatalogModel }>;
 export type ModelConnectBinding = Readonly<{ status: 'declared'; catalogRevision: string; definition: ModelBindingDefinition;
   binding: Readonly<{ encodingVersion: 1; algorithm: 'sha256'; digest: string }> }> | Readonly<{ status: 'not-configured' | 'not-declared' }>;
 /** Every effect of the operation goes through an existing governed owner behind one of these ports (composition binds them). */
@@ -23,11 +26,14 @@ export interface ModelConnectPorts {
   endpoint(text: string): string | null;
   secretName(kind: string, base: string): string | null;
   seed(name: string): Promise<ProviderCatalogDocument>;
+  /** M4: the installation's registered catalog row for this exact id on a channel (null: none, or not visible to this scope). */
+  registered?(channelId: string, nativeId: string): Promise<ModelConnectCatalogRow | null>;
   /** Seedless kinds: a fresh bounded endpoint list must contain the selected exact id before any write. */
   discover?(kind: string, endpoint: string, nativeId: string): Promise<ProviderCatalogDocument>;
   /** The adapter part of the profile, validated by the adapter's own parser. `existing`: the adapter definition already written for this model on
    * the layer being written (null: a new profile), so the adapter keeps the person's own choices in it (CACHE-SLICE1: the cache TTL). */
-  adapter(kind: string, input: Readonly<{ endpoint: string; credentialRef: string | null; nativeId: string; maxOutputTokens: number; currency: string; existing?: JsonObject | null }>):
+  adapter(kind: string, input: Readonly<{ endpoint: string; credentialRef: string | null; nativeId: string; maxOutputTokens: number; currency: string; existing?: JsonObject | null;
+    catalog?: Readonly<{ channelId: string; modelRevision: number; model: CatalogModel }> | null }>):
     Readonly<{ adapter: Readonly<{ id: string; version: number; definition: JsonObject }>; protocol: Readonly<{ family: string; version: string }>; tariff: 'published' | 'unmetered' }>;
   principal(): Promise<VerifiedPrincipal>;
   /** The two authored layer documents and the merged configuration, read fresh. */
@@ -59,7 +65,8 @@ const canonical = (value: unknown): string => value === null || typeof value !==
 const step = (commandId: string, ...parts: readonly string[]) => [commandId, ...parts].join('.');
 type Declared = ProviderCatalog['providers'][number]['models'][number];
 type Target = Readonly<{ reference: ModelReference; nativeId: string; maxOutputTokens: number; contextWindow: number | null; seed: ProviderCatalogDocument | null;
-  declare: Readonly<{ provider: Readonly<{ id: string; version: number }>; model: Declared }> | null }>;
+  declare: Readonly<{ provider: Readonly<{ id: string; version: number }>; model: Declared }> | null;
+  catalog: Readonly<{ channelId: string; modelRevision: number; model: CatalogModel }> | null }>;
 
 /** The catalog with the model declared; null when it already declares exactly this model (a different declaration is a typed conflict). */
 export function declareConnectedModel(current: ProviderCatalog | null, declare: NonNullable<Target['declare']>): ProviderCatalog | null {
@@ -112,7 +119,7 @@ export class ModelConnectApplication {
       return pending ? result('approval-pending', { approvalId: pending.approvalId, keyPath, layer }) : null;
     };
     // The profile's adapter part first (stage 1): an unpriced remote model or a malformed definition is refused before any catalog or config write.
-    const adapterInput = { endpoint, credentialRef, nativeId: target.nativeId, maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency };
+    const adapterInput = { endpoint, credentialRef, nativeId: target.nativeId, maxOutputTokens: target.maxOutputTokens, currency: ports.defaults.currency, catalog: target.catalog };
     const adapter = ports.adapter(kind.id, { ...adapterInput, existing: null });
     tariff = adapter.tariff;
     // 1. Ledger catalog facts (installation-wide, no restart).
@@ -193,20 +200,37 @@ export class ModelConnectApplication {
     return result('connected', null, credentialRef ? await ports.keyStored(credentialRef) : null, await ports.service());
   }
 
-  /** Exact seed/discovered id, or an already declared reference. Discovery is a port: no network or endpoint fact is guessed in the engine. */
+  /**
+   * Exact seed/discovered id, or an already declared reference. Discovery is a port: no network or endpoint fact is guessed in the engine.
+   * M4: a seeded kind also finds an exact id the installation registered on the seed's channel (`models catalog register --file`); its row is
+   * handed to the adapter, whose shipped tables stay first. A seed entry keeps its own identity and declaration (unchanged bytes).
+   */
   private async target(kind: ModelConnectKind, command: ModelConnectCommand, catalog: ProviderCatalog | null, base: string): Promise<Target> {
     const fallback = this.ports.defaults.maxOutputTokens;
+    const registered = async (channelId: string, version: number | null, nativeId: string) => {
+      const row = this.ports.registered ? await this.ports.registered(channelId, nativeId) : null;
+      return row && (version === null || row.providerVersion === version) ? row : null;
+    };
+    const facts = (model: unknown) => model as { maxOutputTokens?: number | null; contextWindow?: number | null };
     if ('nativeId' in command.model) {
       const seedName = kind.connect?.seed, nativeId = command.model.nativeId;
       if (!seedName && !this.ports.discover) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
       const seed = seedName ? await this.ports.seed(seedName) : await this.ports.discover!(kind.id, base, nativeId);
       for (const provider of seed.providers) {
         const model = provider.models.find(item => item.nativeId === nativeId);
-        if (!model) continue;
-        const metadata = model as { maxOutputTokens?: number | null; contextWindow?: number | null };
-        return { reference: { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version }, nativeId, seed,
-          maxOutputTokens: metadata.maxOutputTokens ?? fallback, contextWindow: metadata.contextWindow ?? null,
-          declare: { provider: { id: provider.id, version: provider.version }, model: { id: model.id, version: model.version, nativeId, protocols: model.protocols } } };
+        const row = seedName ? await registered(provider.id, model ? provider.version : null, nativeId) : null;
+        const fromRow = row && { channelId: provider.id, modelRevision: row.modelRevision, model: row.model };
+        if (model) {
+          return { reference: { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version }, nativeId, seed,
+            maxOutputTokens: facts(model).maxOutputTokens ?? fallback, contextWindow: facts(model).contextWindow ?? null, catalog: fromRow,
+            declare: { provider: { id: provider.id, version: provider.version }, model: { id: model.id, version: model.version, nativeId, protocols: model.protocols } } };
+        }
+        if (row) {
+          // Already in the ledger catalog: nothing to register; the declaration is the row's own identity and protocols.
+          return { reference: { providerId: provider.id, providerVersion: row.providerVersion, modelId: row.model.id, modelVersion: row.model.version }, nativeId, seed: null,
+            maxOutputTokens: facts(row.model).maxOutputTokens ?? fallback, contextWindow: facts(row.model).contextWindow ?? null, catalog: fromRow,
+            declare: { provider: { id: provider.id, version: row.providerVersion }, model: { id: row.model.id, version: row.model.version, nativeId, protocols: row.model.protocols } } };
+        }
       }
       throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
     }
@@ -214,7 +238,9 @@ export class ModelConnectApplication {
     const model = catalog?.providers.find(provider => provider.id === reference.providerId && provider.version === reference.providerVersion)
       ?.models.find(item => item.id === reference.modelId && item.version === reference.modelVersion);
     if (!model) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
-    return { reference, nativeId: model.nativeId, maxOutputTokens: fallback, contextWindow: null, declare: null, seed: null };
+    const row = await registered(reference.providerId, reference.providerVersion, model.nativeId);
+    return { reference, nativeId: model.nativeId, maxOutputTokens: fallback, contextWindow: null, declare: null, seed: null,
+      catalog: row && { channelId: reference.providerId, modelRevision: row.modelRevision, model: row.model } };
   }
   /** This scope's other models active under the catalog revision being replaced (re-activated afterwards when their binding is unchanged). */
   private async carryable(before: ProviderCatalog | null, skip: ModelReference) {

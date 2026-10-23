@@ -1,6 +1,6 @@
 import { X509Certificate } from 'node:crypto';
 import { z } from 'zod';
-import { createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/index.js';
+import { catalogTariffSealSchema, createImmutableJsonObjectSchema, MODEL_INVOCATION_NATIVE_JSON_LIMITS } from '#domain/index.js';
 import { OpenAiChatHttpError, parseOpenAiChatHttpLimits } from '#adapters/core/provider-openai-chat/index.js';
 import { ANTHROPIC_EFFORT_LEVELS, ANTHROPIC_METERING, anthropicControlsAdmitted } from './model-capabilities.js';
 export const ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID = 'anthropic-messages-http' as const;
@@ -20,7 +20,9 @@ const ratesSchema = z.object({ input: rate, cacheWrite5m: rate, cacheWrite1h: ra
 // Key order is the v1 order (kind, version, currency, modelId, usdPerMTok, source): parsed tariffs keep their serialized bytes and digests.
 const tariffFields = <V extends 1 | 2>(version: V) => ({ kind: z.literal('anthropic-published'), version: z.literal(version), currency: z.literal('USD'),
   modelId: z.string().min(1).max(256), usdPerMTok: ratesSchema,
-  source: z.object({ url: z.string().url().startsWith('https://'), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict() });
+  // M4: `catalog` seals the registered catalog row `models connect` took the tariff from (absent on shipped `pricing.json` rows).
+  source: z.object({ url: z.string().url().startsWith('https://'), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    catalog: catalogTariffSealSchema.optional() }).strict() });
 export type AnthropicTariffRates = z.infer<typeof ratesSchema>;
 /** A later tier never costs less in any class, so the last tier is the dearest (the price of an unknown prompt size). */
 const notCheaper = (before: AnthropicTariffRates, after: AnthropicTariffRates) =>

@@ -2,13 +2,16 @@ import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
 import COMPATIBILITY from './request-compatibility.json' with { type: 'json' };
 import data from './pricing.json' with { type: 'json' };
+import { catalogTariffSealSchema } from '#domain/index.js';
 /** A vendor identity is registry data (request-compatibility.json `vendors`), so a new OpenAI-compatible maker is a data update. */
 const vendorSchema = z.string().refine(value => (COMPATIBILITY.vendors as readonly string[]).includes(value));
 const rate = z.string().regex(/^(0|[1-9]\d*)(\.\d{1,4})?$/);
 const rates = z.object({ input: rate, cachedInput: rate, output: rate }).strict();
 const cacheRates = rates.extend({ cacheWrite: rate }).strict();
 const common = { kind: z.literal('vendor-published'), currency: z.literal('USD'), modelId: z.string().min(1).max(256), endpoint: z.string().url(),
-  source: z.object({ url: z.string().url().startsWith('https://'), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict() };
+  // M4: `catalog` seals the registered catalog row `models connect` took a model's tariff from (absent on the shipped rows below).
+  source: z.object({ url: z.string().url().startsWith('https://'), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    catalog: catalogTariffSealSchema.optional() }).strict() };
 export const openAiCompatiblePublishedTariffSchema = z.discriminatedUnion('version', [
   z.object({ ...common, version: z.literal(1), vendor: vendorSchema, usdPerMTok: rates,
     offPeakUsdPerMTok: rates.optional(), schedule: z.literal('provider-tier-required').optional() }).strict(),
@@ -26,6 +29,23 @@ export function lookupOpenAiCompatibleTariff(endpoint: string, modelId: string):
   const row = catalog.rows.find(value => value.endpoint === endpoint && value.modelId === modelId);
   return row ? openAiCompatiblePublishedTariffSchema.parse(structuredClone(row)) : null;
 }
-export function verifiedOpenAiCompatibleTariff(input: OpenAiCompatiblePublishedTariff, endpoint: string, modelId: string): boolean {
-  return isDeepStrictEqual(input, lookupOpenAiCompatibleTariff(endpoint, modelId));
+/**
+ * A shipped row is the authority for its exact endpoint and model: the profile's tariff must equal it. Without one (M4), only a tariff
+ * `models connect` sealed from a registered catalog row, for exactly this endpoint and model, AND re-verified against that row by the spend
+ * authority (`catalogVerified`, see `catalogTariffMatches`) is admitted; an unsealed or unverified one stays unverified.
+ */
+export function verifiedOpenAiCompatibleTariff(input: OpenAiCompatiblePublishedTariff, endpoint: string, modelId: string, catalogVerified = false): boolean {
+  const shipped = lookupOpenAiCompatibleTariff(endpoint, modelId);
+  if (shipped) return isDeepStrictEqual(input, shipped);
+  return catalogVerified && input.source.catalog !== undefined && input.endpoint === endpoint && input.modelId === modelId;
+}
+/**
+ * Security review M4: a sealed tariff equals the registered row's own term (`lookup` result, parsed by the adapter's tariff schema) under the
+ * same seal. The lookup itself guarantees the (channel, model, revision) of the seal; a missing row, another revision or other numbers fail.
+ */
+export function catalogTariffMatches(tariff: Readonly<{ source: Readonly<{ catalog?: unknown }> }>, term: unknown,
+  schema: z.ZodType<Readonly<{ source: object }>, z.ZodTypeDef, unknown>): boolean {
+  if (tariff.source.catalog === undefined || term === null || term === undefined) return false;
+  const parsed = schema.safeParse(structuredClone(term));
+  return parsed.success && isDeepStrictEqual({ ...parsed.data, source: { ...parsed.data.source, catalog: tariff.source.catalog } }, tariff);
 }
