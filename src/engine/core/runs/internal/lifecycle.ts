@@ -2,7 +2,8 @@ import { clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AUDIT_EVENT_SCHEMA_VERSION, workerReportLimits, parkRunProgression, holdRun, answerTaskInput, closeParkedRun, resumeParkedRun, expireParkedRun, parkTaskAwaitingDecision, resolveTaskDecision,
-  deciderClassSchema, isAiPrincipal, counterSchema, identitySchema, runSnapshotSchema, type AttemptIdentity, type VerifiedPrincipal, type TaskProgress, type RunSnapshot } from '#domain/index.js';
+  deciderClassSchema, isAiPrincipal, aiAuthorityFloor, readRunHold, safetyHoldSourceSchema, counterSchema, identitySchema, runSnapshotSchema, type AttemptIdentity, type VerifiedPrincipal,
+  type TaskProgress, type RunSnapshot, type SafetyHoldSource } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { AuditStore } from '#engine/core/audit/index.js';
 interface TaskDecisionAuthorization { authorize(identity: AttemptIdentity, principal: VerifiedPrincipal): Promise<void> }
@@ -25,10 +26,12 @@ export const runLifecycleCommandSchema = z.discriminatedUnion('action', [
   base.extend({ action: z.enum(['accept', 'reject']), taskId: identitySchema }).strict(),
 ]);
 export const runProgressionParkCommandSchema = base.extend({ failureCode: identitySchema }).strict();
+/** S5b: a safety hold's input; its source is bound by composition to the producer (Nervous pause, Auditor park), never by a caller. */
+export const runSafetyHoldCommandSchema = base.extend({ holdReason }).strict();
 export type RunLifecycleCommand = z.infer<typeof runLifecycleCommandSchema>;
 /** Trusted, freshly authenticated application-to-ledger transition. */
 export const runLifecycleWriteSchema = base.extend({ action: z.enum(['close', 'resume', 'hold', 'answer', 'expire', 'park-task', 'park-progression', 'accept', 'reject']),
-  holdReason: holdReason.optional(), answer: answer.optional(), failureCode: identitySchema.optional(),
+  holdReason: holdReason.optional(), holdSource: safetyHoldSourceSchema.optional(), answer: answer.optional(), failureCode: identitySchema.optional(),
   taskId: identitySchema.optional(), reason: z.enum(['evaluation-unknown', 'evaluation-not-ready']).optional(),
   actor: z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema,
     assurance: z.enum(['os-user', 'token-verified', 'workload-verified']) }).strict(),
@@ -37,7 +40,7 @@ export const runLifecycleWriteSchema = base.extend({ action: z.enum(['close', 'r
   now: counterSchema, timeoutMs: counterSchema.positive(),
 }).strict().superRefine((value, context) => {
   if ((['accept', 'reject', 'answer', 'park-task'].includes(value.action) !== (value.taskId !== undefined))
-    || ((value.action === 'hold') !== (value.holdReason !== undefined)) || ((value.action === 'answer') !== (value.answer !== undefined))
+    || ((value.action === 'hold') !== (value.holdReason !== undefined)) || (value.holdSource !== undefined && value.action !== 'hold') || ((value.action === 'answer') !== (value.answer !== undefined))
     || ((value.action === 'park-progression') !== (value.failureCode !== undefined))
     || ((value.action === 'park-task') !== (value.reason !== undefined))) context.addIssue({ code: z.ZodIssueCode.custom, message: 'RUN_INVALID' });
 });
@@ -64,7 +67,7 @@ export interface RunLifecycleStore extends Pick<RunStore, 'loadRun'> {
 }
 export type RunLifecycleAuditRecorder = (store: AuditStore) => { record(event: unknown): unknown };
 export class RunLifecycleError extends Error {
-  constructor(readonly code: 'TASK_DECISION_HUMAN_REQUIRED' | 'TASK_DECISION_APPROVAL_REQUIRED', readonly approvalId?: string) { super(code); this.name = 'RunLifecycleError'; }
+  constructor(readonly code: 'TASK_DECISION_HUMAN_REQUIRED' | 'TASK_DECISION_APPROVAL_REQUIRED' | 'RUN_HOLD_PERSON_REQUIRED', readonly approvalId?: string) { super(code); this.name = 'RunLifecycleError'; }
 }
 export type RunDecisionEvidence = NonNullable<RunLifecycleWrite['decision']>;
 export interface RunDecisionAuthorization {
@@ -73,16 +76,20 @@ export interface RunDecisionAuthorization {
 /** Trusted ledger transition proposal; the adapter owns CAS, receipt and atomic audit persistence. */
 export function proposeRunLifecycleWrite(current: RunSnapshot, write: RunLifecycleWrite, audited: boolean, evidence?: readonly string[]): RunSnapshot {
   const { action, expectedRevision, now, timeoutMs } = write;
-  const needsDecision = ['accept', 'reject', 'answer', 'close'].includes(action)
-    || action === 'resume' && (current.state.kind !== 'parked' || current.state.reason !== 'operator-hold');
+  // S5b (Auditor owner decision 6): every resume is a decision, an operator hold's included; an AI actor needs its explicit cell (MCP1).
+  const needsDecision = ['accept', 'reject', 'answer', 'close', 'resume'].includes(action);
+  // A safety hold is lifted only by a person at a terminal, whatever a policy cell or a forged decision says (the Y4 floor, here at the ledger).
+  const hold = action === 'resume' ? readRunHold(current.state) : null;
+  if (hold && (aiAuthorityFloor(write.actor, { kind: 'run-hold', id: hold.source }, 'resume') || hold.source !== 'operator' && write.decision?.deciderClass !== 'human-tty'))
+    throw new RunLifecycleError('RUN_HOLD_PERSON_REQUIRED');
   if (needsDecision && isAiPrincipal(write.actor) && (!write.decision || write.decision.deciderClass !== 'ai-policy' && !write.decision.approvalId || !write.decision.ruleId && !write.decision.approvalId))
     throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
-  if ((needsDecision || action === 'resume') && !audited) throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
+  if (needsDecision && !audited) throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
   if (action === 'park-progression') {
     if (!audited) throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
     return parkRunProgression(current, expectedRevision, write.failureCode!, now, timeoutMs);
   }
-  if (action === 'hold') return holdRun(current, expectedRevision, write.holdReason!, now, timeoutMs);
+  if (action === 'hold') return holdRun(current, expectedRevision, write.holdReason!, now, timeoutMs, write.holdSource);
   if (action === 'answer') return answerTaskInput(current, expectedRevision, write.taskId!, write.answer!, now, timeoutMs);
   if (action === 'close') return closeParkedRun(current, expectedRevision, now, timeoutMs);
   if (action === 'resume') return resumeParkedRun(current, expectedRevision, now, timeoutMs);
@@ -132,6 +139,21 @@ export class RunLifecycleApplication {
           taskId: null, revision: snapshot.revision, evidence: null } });
     });
   }
+  /** S5b: the trusted safety-hold ingress (Nervous pause, Auditor park). Composition binds `source` to its producer; no surface carries it.
+   * Same fresh cancel policy, CAS, receipt and atomic audit as the operator hold; only a person at a terminal resumes it. */
+  async holdFrom(source: SafetyHoldSource, input: unknown, credential?: unknown) {
+    const command = runSafetyHoldCommandSchema.parse(input), holdSource = safetyHoldSourceSchema.parse(source);
+    const principal = await authenticate(this.verifier, credential, command.scopeId);
+    await this.runAuthorization.authorize('cancel', command, principal);
+    const now = counterSchema.parse(this.now());
+    return this.store.commitRunLifecycle({ ...command, action: 'hold', holdSource, actor: { id: principal.id, issuer: principal.issuer,
+      subject: principal.subject, assurance: principal.assurance }, now, timeoutMs: this.timeoutMs }, (store, snapshot) => {
+      this.recorder(store).record({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: command.scopeId,
+        principal: { issuer: principal.issuer, subject: principal.subject }, policyRevision: this.policyRevision, atMs: now,
+        subject: { kind: 'run-lifecycle', action: 'hold', deciderClass: 'system', holdSource, runId: command.runId, commandId: command.commandId,
+          inputDigest: createHash('sha256').update(command.holdReason).digest('hex'), taskId: null, revision: snapshot.revision, evidence: null } });
+    });
+  }
   async execute(input: unknown, credential?: unknown) {
     const command = runLifecycleCommandSchema.parse(input);
     const principal = await authenticate(this.verifier, credential, command.scopeId);
@@ -154,15 +176,16 @@ export class RunLifecycleApplication {
     if (!this.decisions && command.action !== 'hold' && !(command.action === 'resume' && run.state.kind === 'parked' && run.state.reason === 'operator-hold'))
       throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
     const decision = this.decisions ? await this.decisions.authorize(command, principal, run, replay) : undefined;
-    if (!decision && command.action === 'resume' && isAiPrincipal(principal)
-      && (run.state.kind !== 'parked' || run.state.reason !== 'operator-hold')) throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
+    if (!decision && command.action === 'resume' && isAiPrincipal(principal)) throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
+    const lifted = command.action === 'resume' ? readRunHold(run.state)?.source : undefined;
     const now = counterSchema.parse(this.now());
     return this.store.commitRunLifecycle({ ...command, ...(decision ? { decision } : {}), actor: { id: principal.id, issuer: principal.issuer,
       subject: principal.subject, assurance: principal.assurance }, now, timeoutMs: this.timeoutMs }, (store, snapshot) => {
       this.recorder(store).record({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: randomUUID(), scopeId: command.scopeId,
         principal: { issuer: principal.issuer, subject: principal.subject }, policyRevision: decision?.policyRevision ?? this.policyRevision, atMs: now,
         subject: { kind: 'run-lifecycle', action: command.action, deciderClass: decision?.deciderClass ?? 'system',
-          ...(decision?.ruleId ? { decisionRuleId: decision.ruleId } : {}), ...(decision?.approvalId ? { approvalId: decision.approvalId } : {}), runId: command.runId, commandId: command.commandId,
+          ...(decision?.ruleId ? { decisionRuleId: decision.ruleId } : {}), ...(decision?.approvalId ? { approvalId: decision.approvalId } : {}),
+          ...(lifted && lifted !== 'operator' ? { holdSource: lifted } : {}), runId: command.runId, commandId: command.commandId,
           ...(command.action === 'hold' || command.action === 'answer' ? { inputDigest: createHash('sha256').update(command.action === 'hold' ? command.holdReason : command.answer).digest('hex') } : {}),
           taskId: 'taskId' in command ? command.taskId : null, revision: snapshot.revision,
           evidence: command.action === 'accept' ? 'model-unverified' : null } });

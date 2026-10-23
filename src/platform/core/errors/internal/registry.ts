@@ -288,6 +288,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   TASK_DECISION_APPROVAL_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.TASK_DECISION_APPROVAL_REQUIRED', p, l) }) },
   AI_AUTHORITY_NON_DELEGABLE: { category: 'error', render: (p, l) => ({ message: t('error.AI_AUTHORITY_NON_DELEGABLE', p, l) }) },
   TASK_DECISION_HUMAN_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.TASK_DECISION_HUMAN_REQUIRED', p, l) }) },
+  RUN_HOLD_PERSON_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_HOLD_PERSON_REQUIRED', p, l) }) },
   RUN_PARKED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_PARKED', p, l) }) },
   RUN_TERMINAL: { category: 'error', render: (p, l) => ({ message: t('error.RUN_TERMINAL', p, l) }) },
   RUN_NOT_PARKED: { category: 'error', render: (p, l) => ({ message: t('error.RUN_NOT_PARKED', p, l) }) },

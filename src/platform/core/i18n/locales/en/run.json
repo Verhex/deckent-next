@@ -346,6 +346,7 @@
   "error.HANDOFF_PATCH_UNAPPLICABLE": "The accepted predecessor patch cannot be applied to the Run base; the worker did not start.",
   "error.HANDOFF_INVALID": "The structured handoff note is invalid.",
   "error.HANDOFF_LIMIT_EXCEEDED": "Handoff notes exceed the configured limits.",
+  "error.RUN_HOLD_PERSON_REQUIRED": "A safety hold (a monitor pause or an auditor park) is lifted only by a person at an interactive terminal; no policy grant replaces that. Nothing changed.",
   "error.SUPERVISOR_REQUEST_INVALID": "The supervisor request or read-only input is invalid; the worker was not started.",
   "error.SUPERVISOR_WORKSPACE_INVALID": "The supervisor workspace is invalid.",
   "error.SUPERVISOR_IDENTITY_CONFLICT": "Supervisor identity or realized mounts conflict with the admitted request.",

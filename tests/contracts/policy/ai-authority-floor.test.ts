@@ -48,6 +48,9 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
   ['operation targets', 'config', 'project:operations.targets', 'write'],
   ['audit monitoring', 'config', 'project:audit.checkpointIntervalMs', 'write'],
   ['principal assurance enforcement', 'config', 'project:enforce_principal_assurance', 'write'],
+  // S5b (Auditor owner decision 6): a safety hold is a person's to lift; the public operator hold stays policy-governed (run-decision resume).
+  ['Nervous pause resume', 'run-hold', 'nervous', 'resume'],
+  ['Auditor park resume', 'run-hold', 'auditor', 'resume'],
 ];
 const grantAll = (kind: string, principal: VerifiedPrincipal) => ({ id: `all-${kind}`, effect: 'allow' as const, actions: 'all' as const, scopes: 'all' as const,
   principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind, ids: 'all' as const } });
