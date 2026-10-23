@@ -27,10 +27,10 @@ export class FileMemoryPurgeJournal implements MemoryPurgeJournal {
   private readonly limits: MemoryPurgeJournalLimits;
   constructor(private readonly directory: () => Promise<string | null>, private readonly integrity: () => Promise<IntegrityAuthority>,
     limits: MemoryPurgeJournalLimits = MEMORY_PURGE_JOURNAL_LIMITS) { this.limits = memoryPurgeJournalLimitsSchema.parse(limits); }
-  private async read(path: string): Promise<{ records: MemoryPurgeRecord[]; torn: boolean }> {
+  private async read(path: string): Promise<{ records: MemoryPurgeRecord[]; torn: boolean; wholeBytes: number }> {
     let handle: FileHandle;
     try { handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { records: [], torn: false }; throw unreadable(); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { records: [], torn: false, wholeBytes: 0 }; throw unreadable(); }
     try {
       const info = await handle.stat();
       if (!info.isFile() || info.size > this.limits.maxFileBytes + this.limits.maxLineBytes) throw unreadable();
@@ -47,7 +47,8 @@ export class FileMemoryPurgeJournal implements MemoryPurgeJournal {
         if (!record.success || !integrity!.verify(encodeCommandProjection(SEAL, record.data), row.mac, row.keyId)) throw unreadable();
         records.push(record.data);
       }
-      return { records, torn };
+      // The bytes up to and with the last newline: every complete line; a torn tail starts here.
+      return { records, torn, wholeBytes: buffer.lastIndexOf('\n') + 1 };
     } finally { await handle.close(); }
   }
   async list(): Promise<readonly MemoryPurgeRecord[]> {
@@ -69,10 +70,12 @@ export class FileMemoryPurgeJournal implements MemoryPurgeJournal {
       const handle = await open(path, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
       try {
         const info = await handle.stat();
-        if (!info.isFile() || info.size + Buffer.byteLength(line) > this.limits.maxFileBytes) throw new MemoryJournalError('MEMORY_UNAVAILABLE');
+        if (!info.isFile() || info.size < current.wholeBytes || current.wholeBytes + Buffer.byteLength(line) > this.limits.maxFileBytes) throw new MemoryJournalError('MEMORY_UNAVAILABLE');
         await handle.chmod(0o600);
-        // A torn tail (an append that never returned) is closed first so the new line stays whole; the torn bytes are never a record.
-        await handle.writeFile(current.torn ? `\n${line}` : line);
+        // f4 item 5: a torn tail (an append that never returned) is cut back to the last whole line before the append, so the file never keeps a
+        // partial line (closing it with a newline made it an unreadable line that held every later replay). Complete sealed lines are never touched.
+        if (current.torn) { await handle.truncate(current.wholeBytes); await handle.sync(); }
+        await handle.writeFile(line);
         await handle.sync();
       } finally { await handle.close(); }
       return { replayed: false };
