@@ -81,6 +81,7 @@ export { taskBriefSchema, resultBriefSchema, projectTaskBrief, projectResultBrie
 export type { TaskBrief, ResultBrief } from '#engine/core/runs/index.js';
 export * from '#engine/core/identity-profile/index.js';
 export * from '#engine/core/setup/index.js';
+export * from '#engine/core/worker-setup/index.js';
 
 export * from '#engine/core/project-instructions/index.js';
 export * from '#engine/core/backup/index.js';

@@ -194,7 +194,7 @@ describe('I-S2 families in the setup plan', () => {
   it('a fresh dev machine: repository after the folder stage, the runtime after the sandbox stage, sign-ins after the model stage', () => {
     const plan = planSetup(observation({ execution: ready, coding: repo }), undefined, registry);
     expect(plan.stages.map(stage => stage.id)).toEqual(['core:environment', 'core:language', 'core:folder', 'coding:repository', 'core:profile', 'core:policy',
-      'core:sandbox', 'execution:runtime', 'core:model', 'coding:hosts', 'core:final-check']);
+      'core:sandbox', 'execution:runtime', 'execution:worker', 'execution:worker-settings', 'core:model', 'coding:hosts', 'core:final-check']);
     expect(['coding:repository', 'execution:runtime', 'coding:hosts'].map(id => at(plan.stages, id).state)).toEqual(['done', 'done', 'done']);
     expect(plan.stages.filter(stage => stage.namespace !== 'core').every(stage => !stage.autoEligible && stage.operation === null)).toBe(true);
     for (const stage of plan.stages.filter(item => item.namespace !== 'core')) for (const locale of ['en', 'tr'] as const) {

@@ -2288,7 +2288,10 @@
     "src/adapters/core/worker-image": {
       "dependencies": [
         "src/platform/core/errors",
-        "src/adapters/core/process-runner"
+        "src/adapters/core/process-runner",
+        "src/engine/core/toolchain-currency",
+        "src/adapters/core/docker-supervisor",
+        "src/engine/core/worker-setup"
       ],
       "plan": "PROVIDERS"
     },
@@ -3413,9 +3416,19 @@
       ],
       "plan": "INSTALLATION"
     },
+    "src/engine/core/worker-setup": {
+      "dependencies": [
+        "src/engine/core/setup",
+        "src/engine/core/toolchain-currency",
+        "src/platform/core/errors",
+        "src/domain/core/provider-catalog"
+      ],
+      "plan": "INSTALLATION"
+    },
     "src/adapters/core/setup-detect-execution": {
       "dependencies": [
-        "src/engine/core/setup"
+        "src/engine/core/setup",
+        "src/engine/core/worker-setup"
       ],
       "plan": "INSTALLATION"
     },
@@ -3462,7 +3475,10 @@
         "src/surfaces/core/cli-observe",
         "src/composition/core/installation",
         "src/composition/core/config",
-        "src/composition/core/agent-turn"
+        "src/composition/core/agent-turn",
+        "src/adapters/core/worker-image",
+        "src/platform/core/host",
+        "src/engine/core/worker-setup"
       ],
       "plan": "INSTALLATION"
     },
@@ -3486,7 +3502,9 @@
         "src/surfaces/core/cli-models",
         "src/surfaces/core/cli-observe",
         "src/surfaces/core/doctor",
-        "src/surfaces/core/cli-admin"
+        "src/surfaces/core/cli-admin",
+        "src/engine/core/installation",
+        "src/engine/core/worker-setup"
       ],
       "plan": "INSTALLATION"
     },

@@ -107,8 +107,10 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
   it('sets up an empty folder stage by stage through each owner; the final check runs the human doctor between windows; a re-run reads done', async () => {
     await access(cli);
     const f = await fixture();
+    // A Docker that never answers (any host, any CI): the execution stages stay blocked, so this flow never offers a real worker-image build (BR1).
     const run = await f.pty('full-init', [process.execPath, cli, 'init'], [['Enter confirm', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'], ['> 6. Permissions', '1\r'],
-      ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 5. Who uses this installation · ready', '1\r'], ['> 9. Model connection', '2\r'], ['> 11. Project instructions', '2\r'], ['> 12. Final check', '1\r'], ['Final check: applied; observed again.', '1\r']]);
+      ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 5. Who uses this installation · ready', '1\r'], ['> 11. Model connection', '2\r'], ['> 13. Project instructions', '2\r'], ['> 16. Final check', '1\r'], ['Final check: applied; observed again.', '1\r']],
+      { DOCKER_HOST: 'unix:///nonexistent/docker.sock' });
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.status, run.output.slice(-2000)).toBe(0);
     // The human doctor ran on the plain terminal between two windows (its summary line, then the window again).
@@ -116,7 +118,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(doctor).toBeGreaterThan(0);
     expect(run.output.indexOf('Deckent setup', doctor)).toBeGreaterThan(doctor);
     const summary = screen(run.output);
-    for (const line of ['2. Language · done', '6. Permissions · done', '3. Folder and scope · done · This folder already uses the scope "erp-demo"', '11. Project instructions · skipped'])
+    for (const line of ['2. Language · done', '6. Permissions · done', '3. Folder and scope · done · This folder already uses the scope "erp-demo"', '13. Project instructions · skipped', '9. Worker image · blocked'])
       expect(summary).toContain(line);
     expect(summary).toContain('core:policy: applied'); expect(summary).toContain('core:language: applied'); expect(summary).toContain('core:final-check: applied');
     // SOLO-PROFILE (owner 2026-10-20): the solo choice is saved like any profile (the user's global layer) and doctor no longer asks for one.
@@ -125,10 +127,10 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     // I-S7: the summary ends with what the first job still needs, in order, each with its exact command (configuration and ledger reads only).
     const firstJob = summary.slice(summary.indexOf('Before the first job (/do), still to do, in this order:'));
     expect(firstJob.length).toBeLessThan(summary.length);
-    for (const command of ['$ npm run worker:image -- <receipt.json>', "$ deckent config set execution '{", '$ deckent init registry --scope erp-demo --provider',
-      '$ deckent init pool --scope erp-demo --preview']) expect(firstJob).toContain(command);
-    expect(firstJob.indexOf('worker:image')).toBeLessThan(firstJob.indexOf('config set execution'));
-    expect(firstJob.indexOf('config set execution')).toBeLessThan(firstJob.indexOf('init registry'));
+    // BR1: the worker image and execution settings are `deckent init` itself; no source-checkout command, no hand JSON.
+    for (const command of ['$ deckent init registry --scope erp-demo --provider', '$ deckent init pool --scope erp-demo --preview']) expect(firstJob).toContain(command);
+    expect(firstJob).toMatch(/^\s*1\. Build or adopt the worker image.*\n\s*\$ deckent init\s*$/mu);
+    expect(firstJob).not.toMatch(/worker:image|config set execution/u);
     expect(firstJob.indexOf('init registry')).toBeLessThan(firstJob.indexOf('init pool'));
     // No hand-written JSON: the folder holds the installation the owners wrote; nothing else (no DECKENT.md: the bridges were declined).
     expect((await readdir(f.root)).sort()).toEqual(['.deckent']);
@@ -242,7 +244,7 @@ printf 'fake-sudo ran: %s\\n' "\${*:2}"
     // PATH without any docker; the caller's environment carries a secret that must never reach sudo.
     const run = await f.pty('docker-handoff', [process.execPath, driver, f.root, work, sudo], [['Enter confirm', '1\r'], ['Apply now', '1\r'], ['> 5. Who uses', '1\r'],
       ['> 5. Who uses this installation · ready', '1\r'], ['> 8. Execution environment', '1\r'], ['Apply now', '1\r'], ['apt-get install -y docker-ce', 'y'], ['[fake-sudo] password for fake:', `${SUDO_ANSWER}\r`],
-      ['> 9. Model connection', '\u001b']], { PATH: join(work, 'bin'), TMPDIR: work, DECKENT_SECRET_PASSPHRASE: 'must-not-reach-sudo' }); // ggignore: fixed fake values the test proves never reach sudo (secret-scanner false positive)
+      ['> 9. Worker image', '\u001b']], { PATH: join(work, 'bin'), TMPDIR: work, DECKENT_SECRET_PASSPHRASE: 'must-not-reach-sudo' }); // ggignore: fixed fake values the test proves never reach sudo (secret-scanner false positive)
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.output).toContain('DRIVER-STATUS=closed');
     // Order on the terminal: the window offers the stage → the window closes → the card → sudo's own prompt → re-detection → the window again.
@@ -263,4 +265,73 @@ printf 'fake-sudo ran: %s\\n' "\${*:2}"
       expect(names.filter(name => !['PWD', 'SHLVL', '_'].includes(name)).sort(), file).toEqual(['LANG', 'PATH', 'TERM']);
     }
   }, 240_000);
+});
+
+describe.skipIf(process.platform !== 'linux')('BR1 deckent init to the first job on a real PTY (compiled CLI, fake Docker)', () => {
+  it('BR1 first durable job without hand JSON: build the worker image after a card, apply the composed settings, declare the kind and the pool; a second init reads done', async () => {
+    await access(cli);
+    const f = await fixture(), state = join(f.work, 'docker-state'), bin = join(f.work, 'bin'), sock = join(f.work, 'docker.sock');
+    await mkdir(state, { recursive: true }); await writeFile(sock, '');
+    // A stateful fake Docker: the read verbs setup, doctor and the registry preview use, and the verbs the installed builder runs (build writes an
+    // image id, run prints the inspection manifest, tag records the tag). It never touches a real daemon; every argv line is recorded.
+    await writeFile(join(bin, 'docker'), String.raw`#!/bin/bash
+S='${state}'
+echo "$*" >> "$S/argv.log"
+[ "$1" = --host ] && shift 2
+case "$1" in
+  version) echo '{"Client":{"Version":"29.0.0"},"Server":{"Version":"29.0.0"}}';;
+  context) case "$*" in *Endpoints.docker.Host*) echo '"unix://${sock}"';; *) echo '{"Host":"unix://${sock}"}';; esac;;
+  info) case "$*" in *'{{.ID}}'*) echo 'FAKE:DAEMON:1';; *) echo '{"OperatingSystem":"Ubuntu 24.04","SecurityOptions":[]}';; esac;;
+  image) case "$2" in
+    ls) cut -d' ' -f1 "$S/tags" 2>/dev/null; exit 0;;
+    inspect) ref="$3"; id=''
+      if [[ "$ref" == sha256:* ]]; then grep -qx "$ref" "$S/images" 2>/dev/null && id="$ref"; else id=$(awk -v t="${'$'}{ref#*:}" '$1==t{print $2}' "$S/tags" 2>/dev/null); fi
+      [ -z "$id" ] && { echo "Error: No such image: $ref" >&2; exit 1; }
+      if [ "$5" = '{{json .Config.Labels}}' ]; then echo "{\"org.opencontainers.image.version\":\"$(cat "$S/version-${'$'}{id#sha256:}")\"}"; else echo "$id"; fi;;
+    *) exit 64;; esac;;
+  build) prev=''; for arg in "$@"; do [ "$prev" = --iidfile ] && file="$arg"; case "$arg" in IMAGE_VERSION=*) v="${'$'}{arg#IMAGE_VERSION=}";; esac; prev="$arg"; done
+    id="sha256:$(printf '%s' "$v" | sha256sum | cut -c1-64)"; printf '%s' "$id" > "$file"; echo "$id" >> "$S/images"; printf '%s' "$v" > "$S/version-${'$'}{id#sha256:}";;
+  run) echo '{"schemaVersion":1,"providers":[{"id":"codex","version":"codex-cli 0.46.0","requiredFlagsPresent":true}],"installation":{},"evidence":"fake","authenticatedExecution":"not-tested"}';;
+  tag) echo "${'$'}{3#*:} $2" >> "$S/tags";;
+  create) echo 'fake-container';;
+  start) echo 'codex-cli 0.46.0';;
+  inspect) echo 0;;
+  rm) exit 0;;
+  *) exit 64;;
+esac
+`); await chmod(join(bin, 'docker'), 0o755);
+    const path = `${bin}:${resolve(process.execPath, '..')}:/usr/local/bin:/usr/bin:/bin`;
+    expect((await execute(process.execPath, [cli, 'init', '--yes', '--scope', 'erp-demo'], { cwd: f.root, env: { ...f.env, PATH: path, TERM: 'dumb' }, timeout: 120_000 })).stdout).toContain('core:policy');
+    const run = await f.pty('first-job', [process.execPath, cli, 'init'], [['> 5. Who uses', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
+      ['> 9. Worker image', '1\r'], ['Apply now', '1\r'], ['Build worker image', 'y'], ['> 10. Execution settings', '1\r'], ['> 11. Model connection', '2\r'],
+      ['> 13. Project instructions', '2\r'], ['> 14. First work kind', '1\r'], ['> 14. First work kind · ready', '1\r'], ['Declare work kind coding on codex?', 'y'],
+      ['> 15. Worker pool', '1\r'], ['Set up worker pool workers?', 'y'], ['> 16. Final check', '\u001b']], { PATH: path });
+    expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
+    expect(run.status, run.output.slice(-2000)).toBe(0);
+    // Order on the terminal: the question in the window → the card (size and time) → the build line → the window again with the settings.
+    const at = (text: string, from = 0) => run.output.indexOf(text, from);
+    const asked = at('Build the Deckent worker image now?'), card = at('Build worker image', asked), building = at('Building the worker image', card), settings = at('Execution settings', building);
+    expect([asked, card, building, settings].every(index => index > 0) && asked < card && card < building && building < settings, run.output.slice(-4000)).toBe(true);
+    expect(run.output.slice(card, building)).toMatch(/about 3\.3 GB/u);
+    expect(run.output).toContain('Worker image, registry and pool are set up: ready for the first job.');
+    const config = JSON.parse(await readFile(join(f.root, '.deckent/config.json'), 'utf8')) as { execution: { docker: { executable: string; imageId: string }; git: { gitExecutable: string } };
+      admission: { registry: { kinds: { kind: string }[] }; poolId: string; executionSlots: number } };
+    const images = (await readFile(join(state, 'images'), 'utf8')).trim().split('\n');
+    expect(images).toHaveLength(1);
+    expect(config.execution.docker).toMatchObject({ executable: join(bin, 'docker'), imageId: images[0] });
+    expect(config.execution.git.gitExecutable).toMatch(/\/git$/u);
+    expect(config.admission).toMatchObject({ poolId: 'workers', executionSlots: 1 });
+    expect(config.admission.registry.kinds.map(entry => entry.kind)).toEqual(['coding']);
+    // Second init: every BR1 stage reads done from configuration, the receipt, a read-only inspect and the ledger; nothing is built again.
+    const builds = () => readFile(join(state, 'argv.log'), 'utf8').then(text => text.split('\n').filter(line => / build /u.test(` ${line} `)).length);
+    const before = await builds();
+    const again = await execute(process.execPath, [cli, 'init', '--json'], { cwd: f.root, env: { ...f.env, PATH: path, TERM: 'dumb' }, timeout: 120_000 });
+    const document = JSON.parse(again.stdout.slice(again.stdout.indexOf('{"schemaVersion":1,"planSchemaVersion"'))) as { stages: { id: string; state: string; reason: { code: string } }[]; firstJob: unknown[] };
+    expect(document.firstJob).toEqual([]);
+    expect(Object.fromEntries(document.stages.map(stage => [stage.id, `${stage.state}:${stage.reason.code}`]))).toMatchObject({ 'execution:worker': 'done:setup.execution.workerReady', 'execution:worker-settings': 'done:setup.execution.settingsWritten',
+      'work:kind': 'done:setup.work.kindDone', 'work:pool': 'done:setup.work.poolDone' });
+    expect(await builds()).toBe(before);
+    const doctor = await execute(process.execPath, [cli, 'doctor'], { cwd: f.root, env: { ...f.env, PATH: path, TERM: 'dumb' }, timeout: 120_000 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '' }));
+    expect(doctor.stdout).toMatch(new RegExp(`ok\\s+Worker image ${images[0]!.slice(0, 19)} is on this Docker`, 'u'));
+  }, 300_000);
 });

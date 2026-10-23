@@ -180,11 +180,13 @@
   "doctor.check.toolchains.disabled": "{provider}: sürüm kontrolü burada kapalı ya da karşılaştırılacak bir şey yok",
   "doctor.firstJob.header": "İlk işten (/do) önce, bu sırayla yapılacaklar:",
   "doctor.firstJob.ready": "Worker imajı, kayıt ve havuz kurulu: ilk iş için hazır.",
-  "doctor.firstJob.workerImage": "Deckent kaynak kodunda bir worker imajı oluşturun (Docker gerekir; imaj kimliğini yazar)",
-  "doctor.firstJob.execution": "İşin nerede çalışacağını söyleyin: o imaj kimliği ile docker ve git yolları (command -v docker, command -v git)",
+  "doctor.firstJob.execution": "Worker imajını derleyin ya da benimseyin ve çalıştırma ayarlarını yazın (deckent init önce kartta sorar)",
   "doctor.firstJob.registry": "İlk iş türünü ve worker havuzunu tanımlayın: önce önizleme, sonra aynı komut --apply ile",
   "doctor.firstJob.pool": "Worker havuzunu kurun: önce önizleme, sonra aynı komut --apply ile",
   "doctor.firstJob.next": "{step}; komut: {command}",
   "doctor.check.pool.missing": "Worker havuzu yapılandırılmış ama henüz kurulmamış: Run'lar worker başlatamaz",
-  "doctor.poolReadiness.status.missing": "yapılandırılmış, henüz kurulmamış"
+  "doctor.poolReadiness.status.missing": "yapılandırılmış, henüz kurulmamış",
+  "doctor.check.workerImage.ok": "Worker imajı {image} bu Docker'da var",
+  "doctor.check.workerImage.missing": "Ayarlı worker imajı {image} bu Docker'da yok: Run'lar worker başlatamaz",
+  "doctor.check.workerImage.unknown": "Worker imajı {image} bu Docker'da mı denetlenemedi"
 }

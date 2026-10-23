@@ -491,6 +491,14 @@
     "cli.run.inspect.unresolved": {
       "before": "  Effects unresolved; reconciliation required.",
       "after": "  Worker outcome not confirmed: Deckent could not confirm whether the worker stopped or what it changed. The task stays held; nothing is retried, released or accepted, and no new attempt starts. While it runs, the runtime service checks the worker again; there is no automatic recovery in this release."
+    },
+    "doctor.firstJob.workerImage": {
+      "before": "Build a worker image in the Deckent source checkout (needs Docker; it prints the image id)",
+      "after": null
+    },
+    "doctor.firstJob.execution": {
+      "before": "Tell Deckent where work runs: that image id and the docker and git paths (command -v docker, command -v git)",
+      "after": "Build or adopt the worker image and write the execution settings (deckent init asks on a card first)"
     }
   },
   "tr": {
@@ -1157,6 +1165,14 @@
     "cli.run.inspect.unresolved": {
       "before": "  Etkiler çözümlenmemiş; uzlaştırma gerekli.",
       "after": "  Worker sonucu doğrulanmadı: Deckent worker'ın durup durmadığını ya da neyi değiştirdiğini doğrulayamadı. Görev bekletiliyor; hiçbir şey yeniden denenmez, serbest bırakılmaz ya da kabul edilmez ve yeni deneme başlamaz. Çalışırken runtime servisi worker'ı yeniden kontrol eder; bu sürümde otomatik kurtarma yok."
+    },
+    "doctor.firstJob.workerImage": {
+      "before": "Deckent kaynak kodunda bir worker imajı oluşturun (Docker gerekir; imaj kimliğini yazar)",
+      "after": null
+    },
+    "doctor.firstJob.execution": {
+      "before": "İşin nerede çalışacağını söyleyin: o imaj kimliği ile docker ve git yolları (command -v docker, command -v git)",
+      "after": "Worker imajını derleyin ya da benimseyin ve çalıştırma ayarlarını yazın (deckent init önce kartta sorar)"
     }
   }
 }
