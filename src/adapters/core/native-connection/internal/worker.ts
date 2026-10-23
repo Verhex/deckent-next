@@ -2,7 +2,8 @@
 import { get, request as httpRequest } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { createServer, connect, type Socket } from 'node:net';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readdir, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { join } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -376,8 +377,10 @@ const CODEX_CHANGE_KINDS: Readonly<Record<string, 'write' | 'edit'>> = { add: 'w
 /** Changes attributed per file_change item; the rest are counted as unmapped, never silently dropped (Astra 2066 R3). */
 const CODEX_MAX_CHANGES = 512;
 /** Codex state beyond the shared normalizer state: seen tool items (by native id) and running token totals for the summary. */
-export interface CodexNormalizerState { readonly calls: Set<string>; turns: number; measured: boolean; readonly tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; thinking: number | null } }
-export function createCodexState(): CodexNormalizerState { return { calls: new Set(), turns: 0, measured: false, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: null } }; }
+export interface CodexNormalizerState { readonly calls: Set<string>; turns: number; measured: boolean; readonly tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; thinking: number | null };
+  /** The first `thread.started.thread_id`, untrusted: the client-model reader validates it before it names a file. */
+  threadId: string | null }
+export function createCodexState(): CodexNormalizerState { return { calls: new Set(), turns: 0, measured: false, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: null }, threadId: null }; }
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 /**
  * Maps one line of `codex exec --json` onto contract events (B09-3). Shapes follow the pinned Codex 0.155.1 SDK item types
@@ -401,6 +404,7 @@ function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormaliz
   const data = record(parsed);
   if (!data) { miss('non-object'); return; }
   const type = typeof data.type === 'string' ? data.type : 'untyped';
+  if (type === 'thread.started' && codex.threadId === null && typeof data.thread_id === 'string') codex.threadId = data.thread_id;
   const errorText = type === 'turn.failed' ? record(data.error)?.message : type === 'error' ? data.message
     : type === 'item.completed' && record(data.item)?.type === 'error' ? record(data.item)?.message : null;
   if (typeof errorText === 'string' && state.quotaPolicy?.codexPatterns.some(pattern => new RegExp(pattern, 'i').test(errorText))) {
@@ -477,6 +481,91 @@ function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormaliz
     emit('session.ended', { outcome: type === 'turn.completed' ? 'success' : 'error', turns: codex.turns, durationMs: Math.max(0, now - state.startMs),
       apiDurationMs: null, costUsd: null, costBasis: null, tokens: { ...codex.tokens }, permissionDenials: 0 });
   } else if (!CODEX_KNOWN.has(type)) miss(type);
+}
+/** Mirrored `providers.json` `limits.clientModelReport`: bounds for reading the model a client resolved from its own session log (owner Q4 2026-10-23). */
+export interface ClientModelReportLimits { readonly pollMs: number; readonly waitMs: number; readonly maxFileBytes: number; readonly maxLineBytes: number; readonly maxEntries: number }
+export type ClientModelRead = Readonly<{ status: 'found'; model: string; cliVersion: string | null; contexts: number }> | Readonly<{ status: 'absent' | 'unsafe' | 'oversized' | 'invalid' }>;
+const CODEX_THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/**
+ * The model the Codex client resolved for `threadId`: the first `turn_context.payload.model` of its rollout log
+ * `<sessions>/YYYY/MM/DD/rollout-<time>-<thread_id>.jsonl` (Codex 0.163.0), plus `session_meta.payload.cli_version`; nothing else is kept.
+ * The walk never follows a symbolic link and is bounded by entries; the read is bounded by bytes and per line; a partial last line is not read.
+ * The worker runs as the same user and can rewrite this log, so the result is client-reported evidence, never verification.
+ */
+export async function readCodexRolloutModel(sessions: string, threadId: string, limits: ClientModelReportLimits): Promise<ClientModelRead> {
+  if (!CODEX_THREAD_ID.test(threadId)) return { status: 'invalid' };
+  try { const root = await lstat(sessions); if (!root.isDirectory()) return { status: 'unsafe' }; }
+  catch (error) { return (error as { code?: unknown }).code === 'ENOENT' ? { status: 'absent' } : { status: 'unsafe' }; }
+  const suffix = `-${threadId}.jsonl`, files: string[] = []; let entries = 0;
+  const walk = async (dir: string, depth: number): Promise<ClientModelRead | null> => {
+    const names = (await readdir(dir)).sort(); entries += names.length;
+    if (entries > limits.maxEntries) return { status: 'oversized' };
+    for (const name of names) {
+      const path = join(dir, name), stat = await lstat(path);
+      if (depth < 3) { const result = stat.isDirectory() ? await walk(path, depth + 1) : null; if (result) return result; }
+      else if (name.startsWith('rollout-') && name.endsWith(suffix)) { if (!stat.isFile()) return { status: 'unsafe' }; files.push(path); }
+    }
+    return null;
+  };
+  const walked = await walk(sessions, 0);
+  if (walked) return walked;
+  if (files.length !== 1) return { status: files.length ? 'invalid' : 'absent' };
+  const handle = await open(files[0]!, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    if (!(await handle.stat()).isFile()) return { status: 'unsafe' };
+    const buffer = Buffer.allocUnsafe(limits.maxFileBytes + 1); let length = 0;
+    for (let read = -1; read !== 0 && length < buffer.length; length += read) read = (await handle.read(buffer, length, buffer.length - length, length)).bytesRead;
+    const end = Math.min(length, limits.maxFileBytes);
+    let model: string | null = null, cliVersion: string | null = null, contexts = 0;
+    for (let start = 0, newline = buffer.indexOf(10, 0); newline >= 0 && newline < end; start = newline + 1, newline = buffer.indexOf(10, start)) {
+      if (newline - start > limits.maxLineBytes) continue;
+      let line: Record<string, unknown> | null = null;
+      try { line = record(JSON.parse(buffer.toString('utf8', start, newline))); } catch { continue; }
+      const payload = record(line?.payload);
+      if (line?.type === 'session_meta' && cliVersion === null && typeof payload?.cli_version === 'string') cliVersion = payload.cli_version;
+      else if (line?.type === 'turn_context' && ++contexts === 1) model = typeof payload?.model === 'string' && payload.model ? payload.model : null;
+    }
+    return model !== null ? { status: 'found', model, cliVersion, contexts } : { status: length > limits.maxFileBytes ? 'oversized' : contexts ? 'invalid' : 'absent' };
+  } finally { await handle.close(); }
+}
+/** Client-model readers by the registry `eventStream` (data), each with the native label its unmapped causes carry; `clientHome` is the CLI's home. */
+const CLIENT_MODEL_READERS: Readonly<Record<string, { readonly label: string; readonly read: (clientHome: string, codex: CodexNormalizerState, limits: ClientModelReportLimits) => Promise<ClientModelRead> | null }>> = {
+  'codex-exec-json': { label: 'codex-rollout', read: (clientHome, codex, limits) => codex.threadId === null ? null : readCodexRolloutModel(join(clientHome, 'sessions'), codex.threadId, limits) },
+};
+const validLimits = (limits: ClientModelReportLimits | undefined): limits is ClientModelReportLimits => !!limits
+  && [limits.pollMs, limits.waitMs, limits.maxFileBytes, limits.maxLineBytes, limits.maxEntries].every(value => Number.isSafeInteger(value) && value > 0);
+/**
+ * `client-reported` capability (owner Q4 2026-10-23): exactly one `session.started` per worker, carrying only the redacted model and client version.
+ * The log is polled while the worker runs (bounded by `pollMs`/`waitMs`) so the name is read near turn start, then read once more at the end: a
+ * missing, unsafe or oversized log yields a start without a model plus an unmapped cause; later turn contexts are counted unmapped, never a second start.
+ */
+export function createClientModelReport(stream: string, provider: string, clientHome: string, limits: ClientModelReportLimits | undefined, state: NormalizerState,
+  codex: CodexNormalizerState, push: (events: BridgeEvent[]) => void) {
+  const reader = Object.hasOwn(CLIENT_MODEL_READERS, stream) && validLimits(limits) ? CLIENT_MODEL_READERS[stream]! : null, startMs = Date.now();
+  let emitted = false, inflight: Promise<void> | null = null;
+  const emit = (model: string | null, cliVersion: string | null) => { emitted = true;
+    push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, Date.now() - state.startMs), kind: 'session.started', provider, model, cliVersion }]); };
+  const read = async (): Promise<ClientModelRead | null> => { try { return await reader!.read(clientHome, codex, limits!); } catch { return { status: 'unsafe' }; } };
+  const accept = (result: ClientModelRead | null) => {
+    const model = result?.status === 'found' ? redactText(result.model, state.secrets, 128) : '';
+    if (model && result?.status === 'found') emit(model, result.cliVersion === null ? null : redactText(result.cliVersion, state.secrets, 64) || null);
+    return emitted;
+  };
+  const timer = reader ? setInterval(() => {
+    if (emitted || inflight) return;
+    if (Date.now() - startMs > limits!.waitMs) { clearInterval(timer); return; }
+    inflight = read().then(result => { if (accept(result)) clearInterval(timer); }).finally(() => { inflight = null; });
+  }, limits!.pollMs) : undefined;
+  timer?.unref();
+  return {
+    async finish() {
+      clearInterval(timer); await inflight;
+      if (!reader) { if (!emitted) { emit(null, null); countUnmapped(state, 'client-model-report:unsupported'); } return; }
+      const result = await read();
+      if (!emitted && !accept(result)) { emit(null, null); countUnmapped(state, `${reader.label}:${result === null ? 'thread' : result.status === 'found' ? 'invalid' : result.status}`); return; }
+      if (result?.status === 'found' && result.contexts > 1) countUnmapped(state, `${reader.label}:turn_context`, result.contexts - 1);
+    },
+  };
 }
 /** Cursor `tool_call` keys (cursor-agent stream-json: documented readToolCall/writeToolCall/function, observed editToolCall). Unknown keys stay
  * visible as `other` calls and are also counted as unmapped, so a new native tool is never silently misclassified. */
@@ -631,7 +720,7 @@ export interface NativeWorkerCapabilities {
     readonly checkout: { readonly hiddenPaths: readonly string[] } | null } | null;
   readonly promptChannel: 'claude-system-prompt' | 'codex-instructions-file' | 'inline';
   readonly structuredReport: { readonly flag: string; readonly channel: 'inline-json' | 'schema-file' } | { readonly flag: null; readonly channel: 'final-text-json' } | null;
-  readonly modelUsageEvidence: 'session-events' | 'session-start-name' | 'none';
+  readonly modelUsageEvidence: 'session-events' | 'session-start-name' | 'client-reported' | 'none';
   readonly eventStream: 'claude-code-stream-json' | 'codex-exec-json' | 'cursor-agent-stream-json';
 }
 /** Validates native prompt custody and returns the argv delivered to the CLI, selected only by capability. */
@@ -689,7 +778,8 @@ async function main() {
     request.on('error', reject); request.on('timeout', () => request.destroy(new Error()));
   });
   const setup = JSON.parse(payload) as { schemaVersion: number; provider: string; capabilities: NativeWorkerCapabilities; home: string; file: string;
-    quotaPolicy?: QuotaPolicy; credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>; limits: { connections: number; idleMs: number };
+    quotaPolicy?: QuotaPolicy; credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>;
+    limits: { connections: number; idleMs: number; clientModelReport?: ClientModelReportLimits };
     finalReport?: { schemaVersion: 1; limits: ReportLimits };
     dependencyContext?: { text: string; sha256: string; maxBytes: number };
     preflight?: { schemaVersion: number; cliVersion: string; helpArgs: string[]; requiredFlags: string[]; discovery?: string };
@@ -772,6 +862,8 @@ async function main() {
   const channel = eventChannel(socketPath);
   const codex = createCodexState();
   if (setup.capabilities.modelUsageEvidence === 'none') channel.push([{ schemaVersion: 1, sequence: ++state.sequence, atMs: 0, kind: 'session.started', provider: setup.provider, model: null, cliVersion: null }]);
+  const clientModel = setup.capabilities.modelUsageEvidence === 'client-reported' ? createClientModelReport(setup.capabilities.eventStream, setup.provider, authRoot,
+    setup.limits.clientModelReport, state, codex, events => channel.push(events)) : null;
   const capture = (part: Buffer) => { bytes += part.length; tail = (tail + part.toString('utf8')).slice(-65536); };
   const report = setup.finalReport && reportSupported ? finalReportCollector(setup.provider, state.secrets, setup.finalReport.limits, setup.capabilities.structuredReport?.channel) : undefined;
   const lineObserver = createNativeLineObserver(setup.capabilities.eventStream, state, codex, events => channel.push(events), report);
@@ -786,6 +878,7 @@ async function main() {
     : /model.*not.*(found|supported|available)|invalid.model/i.test(tail) ? 'model'
     : /connect|proxy|network|fetch failed|socket|ENOTFOUND|ECONN/i.test(tail) ? 'connection' : 'native';
   lineObserver.flush();
+  await clientModel?.finish();
   if (setup.finalReport) {
     const final = report?.finish() ?? { status: 'unavailable', reason: 'unsupported' };
     if (final.status === 'unavailable' && (final.reason === 'invalid' || final.reason === 'oversized')) channel.push([

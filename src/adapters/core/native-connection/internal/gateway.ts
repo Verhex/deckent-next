@@ -60,7 +60,8 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
   // The values this gateway projects into the worker; kept only to scrub events it receives (never sent anywhere).
   let secrets: string[] = secretValues(projected);
   let lastSequence = 0;
-  const reported: { started: string | null; used: readonly string[] | null; ended: boolean } = { started: null, used: null, ended: false };
+  // The first session start is the one the verdict compares; a later (possibly forged) start cannot replace it.
+  const reported: { startSeen: boolean; started: string | null; used: readonly string[] | null; ended: boolean } = { startSeen: false, started: null, used: null, ended: false };
   // Worker-reported events after the bootstrap only: bounded per request and per attempt, schema-validated, strictly ordered.
   const receiveEvents = (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => {
     // Budget exhausted (one event and a little space stay reserved): refuse without parsing; the loss is sealed later.
@@ -82,7 +83,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
         // A worker can never claim the host's model verdict; such a line is invalid like any other forged host event.
         if (!parsed?.success || parsed.data.kind === 'model.verification' || parsed.data.sequence <= lastSequence || statistics.events >= limits.maxEvents - 1 || statistics.eventBytes + bytes > limits.maxEventBytes - 256) { dropped++; continue; }
         lastSequence = parsed.data.sequence; statistics.events++; statistics.eventBytes += bytes; accepted.push(event!);
-        if (parsed.data.kind === 'session.started') reported.started = parsed.data.model;
+        if (parsed.data.kind === 'session.started' && !reported.startSeen) { reported.startSeen = true; reported.started = parsed.data.model; }
         else if (parsed.data.kind === 'session.ended') { reported.ended = true; reported.used = parsed.data.models ?? null; }
       }
       statistics.eventsDropped += dropped;

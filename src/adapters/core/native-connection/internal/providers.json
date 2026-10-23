@@ -8,7 +8,14 @@
     "trafficBytes": 67108864,
     "eventBatchBytes": 262144,
     "maxEvents": 5000,
-    "maxEventBytes": 4194304
+    "maxEventBytes": 4194304,
+    "clientModelReport": {
+      "pollMs": 100,
+      "waitMs": 15000,
+      "maxFileBytes": 4194304,
+      "maxLineBytes": 1048576,
+      "maxEntries": 256
+    }
   },
   "providers": {
     "codex": {
