@@ -77,11 +77,19 @@ it('N14: only the recovery principal may assess or continue (owner, Nervous, MCP
   expect(h.cases()).toEqual([]);
 });
 
-it('revoked standing grant: the gated case stays gated, the Run is untouched; N27: a Run without frozen bounds opens no case', async () => {
+it('S6R-6: a direct continuation without the standing grant ends the case consistently — escalated with a hold, no new Attempt; N27: a Run without frozen bounds opens no case', async () => {
   const h = await harness(), gated = await h.app.assess(command(h.caseId)), run = await h.store.loadRun('s', 'run');
   h.state.document = grant(['fence-attempt']);
-  await expect(h.app.continueLostTask(command(h.caseId, { evidenceDigest: gated.evidenceDigest, causeClass: 'infra-transient' }))).rejects.toMatchObject({ code: 'RECOVERY_NOT_APPROVED' });
-  expect(await h.store.loadRun('s', 'run')).toEqual(run); expect(h.cases()).toEqual([{ state: 'gated', revision: 1 }]);
+  expect(await h.app.continueLostTask(command(h.caseId, { evidenceDigest: gated.evidenceDigest, causeClass: 'infra-transient' })))
+    .toMatchObject({ kind: 'escalated', case: { state: 'escalated', decision: { action: 'escalate-human', code: 'continuation-not-approved' } } });
+  expect(h.cases()).toEqual([{ state: 'escalated', revision: 2 }]);
+  expect(h.holds).toEqual([expect.objectContaining({ commandId: `recovery-hold:${h.caseId}`, holdReason: `recovery:continuation-not-approved:${h.caseId.slice(0, 12)}` })]);
+  const after = await h.store.loadRun('s', 'run');
+  expect(after!.bindings).toEqual(run!.bindings); expect(after!.previousBindings ?? []).toEqual(run!.previousBindings ?? []); // no new Attempt
+  expect(h.events().filter(event => event.action === 'continue-lost-task')).toEqual([]);
+  // The grant restored later never revives the closed case: a continuation of it is stale.
+  h.state.document = grant();
+  await expect(h.app.continueLostTask(command(h.caseId, { evidenceDigest: gated.evidenceDigest, causeClass: 'infra-transient' }))).rejects.toMatchObject({ code: 'RECOVERY_STALE' });
   const off = await harness({ recovery: null });
   await expect(off.app.assess(command(off.caseId))).rejects.toMatchObject({ code: 'RECOVERY_OFF' });
   expect(off.cases()).toEqual([]);

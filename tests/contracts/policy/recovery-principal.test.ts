@@ -81,7 +81,13 @@ it('S6R-5: the recovery decision seal comes only from the recovery principal; th
   const mcp = { id: 'mcp', issuer: 'host/mcp', subject: '1000', assurance: 'token-verified' as const, scopeIds: ['s'] };
   const config = { schemaVersion: 1, revision: 'p', restrictions: [], grants: [{ id: 'cfg', effect: 'allow', actions: ['write'], scopes: 'all', principals: [{ issuer: mcp.issuer, subject: mcp.subject }],
     resource: { kind: 'config', ids: 'all' } }] };
-  for (const key of ['runRuntime.recovery.mode', 'runRuntime.recovery', 'runRuntime'])
+  // S6R-6: the Nervous mode (fence, stop, release a worker) is protected like the recovery mode: no AI switches it.
+  for (const key of ['runRuntime.recovery.mode', 'runRuntime.recovery', 'runRuntime.nervous.mode', 'runRuntime.nervous', 'runRuntime'])
     expect(evaluatePolicy(config, { principal: mcp, scopeId: 's', action: 'write', resource: { kind: 'config', id: `project:${key}` } }), key).toMatchObject({ decision: 'deny', reason: 'AI_NON_DELEGABLE' });
   expect(evaluatePolicy(config, { principal: mcp, scopeId: 's', action: 'write', resource: { kind: 'config', id: 'project:runRuntime.pollIntervalMs' } })).toMatchObject({ decision: 'allow' });
+  expect(evaluatePolicy(config, { principal: mcp, scopeId: 's', action: 'write', resource: { kind: 'config', id: 'global:runRuntime.nervous.mode' } })).toMatchObject({ decision: 'deny', reason: 'AI_NON_DELEGABLE' });
+  // A person may still switch it (the owner's own grant).
+  const person = { ...owner, id: 'owner', assurance: 'os-user' as const, scopeIds: ['s'] };
+  expect(evaluatePolicy({ ...config, grants: [{ ...config.grants[0]!, principals: [owner] }] }, { principal: person, scopeId: 's', action: 'write', resource: { kind: 'config', id: 'project:runRuntime.nervous.mode' } }))
+    .toMatchObject({ decision: 'allow' });
 });
