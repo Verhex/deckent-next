@@ -3,7 +3,7 @@ import { encodeCommandProjection, proposeMemoryEntry, verifyMemoryEntry, retireM
 import { sha256 } from '#platform/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
 import { memoryProposeCommandSchema, memoryVerifyCommandSchema, memoryRetireCommandSchema, memoryInspectQuerySchema, memoryListQuerySchema, memorySearchQuerySchema,
-  memoryExtractCommandSchema, MemoryJournalError, type MemoryAction, type MemoryHeld, type MemoryInspection, type MemoryJournalDependencies, type MemoryJournalStore, type MemoryListing,
+  memoryExtractCommandSchema, memoryReviewQuerySchema, memorySourceQuerySchema, MemoryJournalError, type MemoryAction, type MemoryHeld, type MemoryInspection, type MemoryJournalDependencies, type MemoryJournalStore, type MemoryListing,
   type MemoryMutationResult, type MemorySearchResult, type MemorySupport, type MemoryDistilOutcome, type MemoryReview, type MemorySourceEntries, type MemoryPurgeResult,
   type MemoryPurgeReplay, type MemoryContestResolveResult } from './contract.js';
 import { distilSource } from './distil.js';
@@ -168,15 +168,13 @@ export class MemoryJournalApplication {
   }
   /** S4B-4 review card read (candidates, contested and stale entries with evidence and evaluator records), through the source filter. */
   async review(input: unknown, credential?: unknown): Promise<MemoryReview> {
-    const scopeId = (input as { scopeId?: unknown } | null)?.scopeId;
-    return this.read(typeof scopeId === 'string' ? scopeId : '', credential, (store, principal) => reviewMemory(this.deps, store, principal, input,
-      (...args) => this.visible(...args)));
+    const query = memoryReviewQuerySchema.parse(input);
+    return this.read(query.scopeId, credential, (store, principal) => reviewMemory(this.deps, store, principal, query, (...args) => this.visible(...args)));
   }
   /** S4B-4 §6.5: the entries derived from one Run or Attempt (`retire --source`, `purge --source`), through the source filter. */
   async sourceEntries(input: unknown, credential?: unknown): Promise<MemorySourceEntries> {
-    const scopeId = (input as { scopeId?: unknown } | null)?.scopeId;
-    return this.read(typeof scopeId === 'string' ? scopeId : '', credential, (store, principal) => memorySourceEntries(this.deps, store, principal, input,
-      (...args) => this.visible(...args)));
+    const query = memorySourceQuerySchema.parse(input);
+    return this.read(query.scopeId, credential, (store, principal) => memorySourceEntries(this.deps, store, principal, query, (...args) => this.visible(...args)));
   }
   /** S4B-4 §6.6 (A11): a person's purge of one entry — keyed tombstone, purge journal, evaluator invocation content. */
   async purge(input: unknown, credential?: unknown): Promise<MemoryPurgeResult> {
