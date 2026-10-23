@@ -1,11 +1,14 @@
 import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
 import data from './pricing.json' with { type: 'json' };
+import { catalogTariffSealSchema } from '#domain/index.js';
 const rate = z.string().regex(/^(0|[1-9]\d*)(\.\d{1,4})?$/);
 const rates = z.object({ input: rate, cachedInput: rate, output: rate }).strict();
 const cacheRates = rates.extend({ cacheWrite: rate }).strict();
 const common = { kind: z.literal('vendor-published'), currency: z.literal('USD'), modelId: z.string().min(1).max(256), endpoint: z.string().url(),
-  source: z.object({ url: z.string().url().startsWith('https://'), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict() };
+  // M4: `catalog` seals the registered catalog row `models connect` took a model's tariff from (absent on the shipped rows below).
+  source: z.object({ url: z.string().url().startsWith('https://'), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    catalog: catalogTariffSealSchema.optional() }).strict() };
 export const openAiCompatiblePublishedTariffSchema = z.discriminatedUnion('version', [
   z.object({ ...common, version: z.literal(1), vendor: z.enum(['openai', 'deepseek', 'zai']), usdPerMTok: rates,
     offPeakUsdPerMTok: rates.optional(), schedule: z.literal('provider-tier-required').optional() }).strict(),
@@ -23,6 +26,12 @@ export function lookupOpenAiCompatibleTariff(endpoint: string, modelId: string):
   const row = catalog.rows.find(value => value.endpoint === endpoint && value.modelId === modelId);
   return row ? openAiCompatiblePublishedTariffSchema.parse(structuredClone(row)) : null;
 }
+/**
+ * A shipped row is the authority for its exact endpoint and model: the profile's tariff must equal it. Without one (M4), only a tariff
+ * `models connect` sealed from a registered catalog row for exactly this endpoint and model is admitted; an unsealed one stays unverified.
+ */
 export function verifiedOpenAiCompatibleTariff(input: OpenAiCompatiblePublishedTariff, endpoint: string, modelId: string): boolean {
-  return isDeepStrictEqual(input, lookupOpenAiCompatibleTariff(endpoint, modelId));
+  const shipped = lookupOpenAiCompatibleTariff(endpoint, modelId);
+  if (shipped) return isDeepStrictEqual(input, shipped);
+  return input.source.catalog !== undefined && input.endpoint === endpoint && input.modelId === modelId;
 }

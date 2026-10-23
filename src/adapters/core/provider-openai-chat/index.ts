@@ -13,7 +13,7 @@ export { createOpenAiChatStream, OPENAI_CHAT_STREAM_TOKEN_WIRE_BYTES, OPENAI_CHA
 export { extractOpenAiChatTextFromInvocation, openAiChatMessageFromInvocation, openAiChatNativeMessages, openAiChatPromptUpperBound, openAiChatStoppedAtLength,
   openAiChatUsageFromInvocation } from './internal/invocation.js';
 
-export { lookupOpenAiCompatibleTariff } from './internal/pricing-catalog.js';
+export { lookupOpenAiCompatibleTariff, openAiCompatiblePublishedTariffSchema } from './internal/pricing-catalog.js';
 export type { OpenAiCompatiblePublishedTariff } from './internal/pricing-catalog.js';
 export { createOpenAiChatPricedNative } from './internal/priced-native.js';
 export { mapOpenAiErrorResponse, openAiProviderRefusal, type OpenAiProviderError, type OpenAiProviderRefusal } from './internal/error-mapping.js';

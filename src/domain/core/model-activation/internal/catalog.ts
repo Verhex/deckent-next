@@ -2,7 +2,7 @@ import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { counterSchema, createImmutableJsonObjectSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { PROVIDER_CATALOG_WIRE_LIMITS, ProviderCatalogError, catalogChannelSchema, catalogModelSchema, exactModelIdSchema,
-  parseProviderCatalogDocument, reportedNameConflict, type ProviderCatalogDocument } from '#domain/core/provider-catalog/index.js';
+  parseProviderCatalogDocument, reportedNameConflict, connectTermsMisplaced, type ProviderCatalogDocument } from '#domain/core/provider-catalog/index.js';
 import { modelActivationActorSchema, modelActivationAuthorizationSchema } from './contract.js';
 
 /**
@@ -99,6 +99,7 @@ function assertMergedChannel(channel: ModelCatalogChannelRecord['channel'], mode
     aliases.add(alias);
   }
   if (channel.kind !== 'native-cli' && models.some(model => model.minCliVersion !== null)) throw new ModelCatalogError('MODEL_CATALOG_INVALID');
+  if (connectTermsMisplaced(channel, models)) throw new ModelCatalogError('MODEL_CATALOG_INVALID');
   // A session-start name preserved on one model and newly written on another would make the start-name verdict ambiguous.
   if (reportedNameConflict(channel, models)) throw new ModelCatalogError('MODEL_CATALOG_ALIAS_CONFLICT');
 }

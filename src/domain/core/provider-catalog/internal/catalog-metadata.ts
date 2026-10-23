@@ -21,6 +21,7 @@ export const channelReportedNamesSchema = z.array(reportedModelNameSchema).max(5
 const reportedNameSchema = z.object({ name: reportedModelNameSchema, cliVersion: z.string().trim().min(1).max(128).regex(/^[\w .()+-]+$/),
   source: text, observedAt: z.union([day, z.string().datetime({ offset: true })]) }).strict().readonly();
 const support = z.enum(['supported', 'unsupported', 'unknown']);
+const connectTermSchema = z.record(z.string(), z.unknown()).refine(term => Object.keys(term).length > 0).readonly();
 const decimal = z.string().regex(/^(0|[1-9]\d*)(\.\d+)?$/).max(64);
 export const modelMetadataSchema = z.object({ channelModelId: exact, vendorId: identitySchema, canonicalModelId: exact,
   displayName: text, description: z.string().max(4096).optional(), family: identitySchema.optional(),
@@ -35,4 +36,12 @@ export const modelMetadataSchema = z.object({ channelModelId: exact, vendorId: i
   /** Native CLI channels only (owner K1/K2 2026-10-22): the names the CLI reports for this model at session start; one name belongs to one model. */
   reportedNames: z.array(reportedNameSchema).min(1).max(16).readonly().optional(),
   /** `provider`: the entry leaves the model choice to the provider (Cursor `auto`); absent = an exact model. Never a match claim. */
-  selection: z.literal('provider').optional() });
+  selection: z.literal('provider').optional(),
+  /** HTTP API channels only (M4, owner 2026-10-23: a new model is a data update, never a code change): the invocation adapter's own terms for
+   * this exact model — `tariff`, its published price document, and `route`, its wire route — checked by that adapter's schema when the model is
+   * connected. The adapter's shipped tables stay first for every model they list; a missing or malformed term is a typed refusal, never a
+   * guessed price. Bounded by the document envelope; never activation, tier or role. */
+  connect: z.object({ tariff: connectTermSchema.optional(), route: connectTermSchema.optional() }).strict()
+    .refine(terms => terms.tariff !== undefined || terms.route !== undefined).readonly().optional() });
+/** The ledger row a connected profile's tariff was taken from (M4): the catalog channel and the row's revision, sealed into the tariff's source. */
+export const catalogTariffSealSchema = z.object({ channelId: identitySchema, modelRevision: z.number().int().positive().safe() }).strict().readonly();
