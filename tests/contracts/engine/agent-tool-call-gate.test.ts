@@ -176,7 +176,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
   };
   const versioned = { ...descriptor, precondition: 'record-version' as const };
   const app = (call: Partial<AgentToolCallAdmission>) => new EffectApplication({ resolve: async () => versioned }, { resolve: () => target }, store, f.gate(call),
-    f.sessions, new OperationPolicyAuthorization({ load: async () => gated }), f.clock);
+    f.sessions, new OperationPolicyAuthorization({ load: async () => gated }), f.clock, { producer: { kind: 'principal' } });
   try {
     const lapsing = f.request(subjectAt(1), 10_000);
     await f.decide(lapsing.pointer.approvalId, 'allow');

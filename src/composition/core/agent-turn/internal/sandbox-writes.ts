@@ -1,4 +1,4 @@
-import type { EffectCommand } from '#domain/index.js';
+import { PRINCIPAL_EFFECT_PRODUCER, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization } from '#engine/index.js';
 import { prepareProductDirectory, sha256, SystemTrustedClock } from '#platform/index.js';
 import { applySandboxWriteSet, classifySandboxWritePath, createLocalPeerSession, ensureWorkspaceParents, openSqliteAttemptStore, EMPTY_DIRECTORY_VERSION,
@@ -43,7 +43,7 @@ export async function settleSandboxWriteSet(input: { readonly directory: Sandbox
         const { sessions, store: attempts } = await lazy();
         await new EffectApplication({ async resolve(ref) {
           return ref.id === WORKSPACE_FILE_WRITE_OPERATION.operation.id && ref.version === WORKSPACE_FILE_WRITE_OPERATION.operation.version ? WORKSPACE_FILE_WRITE_OPERATION : null;
-        } }, { resolve: kind => kind === WORKSPACE_FILE_TARGET_KIND ? target : null }, attempts, gate, sessions, new OperationPolicyAuthorization(context.policy), clock).execute(command);
+        } }, { resolve: kind => kind === WORKSPACE_FILE_TARGET_KIND ? target : null }, attempts, gate, sessions, new OperationPolicyAuthorization(context.policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER }).execute(command);
       } });
   } finally {
     (store as { close(): void } | null)?.close();

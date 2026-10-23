@@ -42,7 +42,9 @@ export class DispatchApplication {
     // A throw or unknown result deliberately leaves the durable claim unresolved. No retry launch.
     const observation = this.resources?.start(request, this.supervisor);
     let result;
-    try { result = sandboxResultSchema.parse(await this.supervisor.execute(request, signal)); }
+    // S6R-1: the created container id is durable before the worker starts; a refusal (fenced, conflicting) starts nothing.
+    const hooks = this.store.retainDispatchContainer ? { created: async (id: string) => { await this.store.retainDispatchContainer!(claim, id); } } : undefined;
+    try { result = sandboxResultSchema.parse(await this.supervisor.execute(request, signal, hooks)); }
     finally { observation?.stop(); }
     if (result.worker) await this.store.retainDispatchWorker?.(claim, result.worker);
     if (result.result.kind !== 'exited') return Object.freeze({ kind: 'unresolved', record: grant.record });
@@ -105,4 +107,11 @@ export class DispatchApplication {
     // Artifact verification is mandatory; releasing the container never deletes the durable fence.
     return this.supervisor.release(request);
   }
+}
+/** S6R-1: whether a live sample of a granted, unsettled dispatch should go through `reconcile` — an exit to settle, or the first sample of a
+ * running worker whose incarnation (container id + StartedAt) is not retained yet. Missing/created/unknown never do (they keep custody). */
+export function dispatchNeedsObservation(state: 'missing' | 'created' | 'running' | 'paused' | 'exited' | 'unknown',
+  record: Pick<DispatchRecord, 'launch' | 'terminal' | 'worker'>): boolean {
+  if (record.launch !== 'granted' || record.terminal) return false;
+  return state === 'exited' || ((state === 'running' || state === 'paused') && !record.worker);
 }

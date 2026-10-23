@@ -29,6 +29,9 @@ export type SandboxResult = z.infer<typeof sandboxResultSchema>;
 export function sandboxInterruptCause(stop: 'deadline' | 'signal', reason?: unknown): NonNullable<SandboxResult['interruptCause']> {
   return stop === 'deadline' ? 'deadline' : reason === 'inactivity' ? 'inactivity' : 'cancel';
 }
+/** S6R-1: launch progress the application makes durable. `created` receives the container's immutable id once it exists and its mounts are
+ * checked, before anything starts; when it throws, the supervisor starts nothing (the created container stays as evidence). */
+export interface SupervisorLaunchHooks { created(containerId: string): Promise<void> }
 export type SupervisorTermination = Readonly<{ worker: import('#domain/index.js').WorkerIncarnation } & ({ kind: 'worker-absent' } | { kind: 'supervisor-exit'; result: import('#domain/index.js').ProcessExitCause })>;
 export interface ExecutionSupervisor {
   /** Exact retained incarnation lookup; missing names/PIDs cannot certify termination. */
@@ -39,7 +42,7 @@ export interface ExecutionSupervisor {
   recoverOutput(request: SandboxRequest): Promise<Readonly<{ stdout: string; stderr: string; completeness: 'partial' }>>;
   /** Read-only daemon evidence; never creates, starts, kills or releases a process. */
   observe(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container' | 'worker'>>;
-  execute(request: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult>;
+  execute(request: SandboxRequest, signal?: AbortSignal, hooks?: SupervisorLaunchHooks): Promise<SandboxResult>;
   /** Release only after the application durably records terminal evidence. Absent = already released; a removal whose absence is not
    * observed afterwards is `SUPERVISOR_RELEASE_UNCONFIRMED` (retryable), never success. `removed`/`absent` tell an executed removal from
    * an already absent container; an adapter that cannot tell returns nothing. */

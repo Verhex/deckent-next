@@ -156,7 +156,7 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
     const generic = new EffectApplication({ async resolve(ref) { return ref.id === 'policy.administer' ? POLICY_ADMINISTER_OPERATION : null; } },
       { resolve: kind => kind === AUTHORITY_DOCUMENT_TARGET_KIND ? target : null }, f.effects,
       new OperationApprovalBroker(f.journal.store, f.integrity, f.source, f.clock, { requestTtlMs: 60_000, defaultAdmitWithinMs: 60_000 }), f.sessions,
-      new OperationPolicyAuthorization(f.source), f.clock);
+      new OperationPolicyAuthorization(f.source), f.clock, { producer: { kind: 'principal' } });
     await expect(generic.submit('execute', f.command('g1', addRead('share', f.me)))).rejects.toMatchObject({ code: 'OPERATION_SURFACE_RESTRICTED' });
     expect(f.journal.store.list('s', null, 10)).toEqual([]);
     expect(await f.effects.loadEffect('s', 'g1')).toBeNull();

@@ -2,7 +2,7 @@ export { dispatchClaimSchema, dispatchAdmissionSchema, dispatchTerminalSchema, D
 export type { DispatchClaim, DispatchAdmission, SupervisorProfileValidator, LaunchRequest, LaunchDecision, DispatchTerminal, DispatchRecord, DispatchStore, RunBoundDispatchStore } from './internal/port.js';
 export { decideDispatchLaunch, validateLaunchRequest } from './internal/launch.js';
 export type { DispatchLaunchState, DispatchLaunchTransition } from './internal/launch.js';
-export { DispatchApplication } from './internal/application.js';
+export { DispatchApplication, dispatchNeedsObservation } from './internal/application.js';
 export { inactivityVerdict, inactivityWatch } from './internal/inactivity.js';
 export type { InactivityVerdict, GatewayActivityCounters } from './internal/inactivity.js';
 export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutcome } from './internal/application.js';
@@ -16,7 +16,7 @@ export { dispatchReleaseReceiptId, lostDispatchWriteSchema, encodeLostDispatchWr
 export type { LostDispatchRelease, LostDispatchWrite, LostDispatchStore, LostDispatchAudit, LostDispatchReceipt } from './internal/fence-write.js';
 export { LostDispatchApplication } from './internal/fence-application.js';
 export type { LostDispatchObserver } from './internal/fence-application.js';
-export { DispatchPreparationGuard, DISPATCH_PREPARATION_INSTANCE, dispatchPreparationRecordSchema } from './internal/preparation.js';
-export type { DispatchPreparationContext, DispatchPreparationInstance, DispatchPreparationPark, DispatchPreparationPhase, DispatchPreparationRecord } from './internal/preparation.js';
+export { DispatchPreparationGuard, DISPATCH_PREPARATION_INSTANCE, dispatchPreparationRecordSchema, dispatchLauncherEvidenceSchema, readDispatchLauncherEvidence } from './internal/preparation.js';
+export type { DispatchLauncherEvidence, DispatchPreparationContext, DispatchPreparationInstance, DispatchPreparationPark, DispatchPreparationPhase, DispatchPreparationRecord } from './internal/preparation.js';
 export { assertTaskEnvironment, environmentProbeRegistry, registerEnvironmentProbeKind, EnvironmentProbeRegistry } from './internal/environment.js';
 export type { EnvironmentProbe, EnvironmentProbes } from './internal/environment.js';

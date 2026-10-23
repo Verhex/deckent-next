@@ -6,7 +6,7 @@ import { attemptIdentitySchema, environmentRequirementsSchema, type AttemptIdent
 import { DockerSupervisor, GitWorkspaceBroker, GitRunWorkspaceProvider, FileArtifactStore, openSqliteAttemptStore, resolveGitWorkTarget,
   validateDockerSupervisorProfile, resolveDockerTaskProfile, resolveDockerReadOnlyMounts, readLocalNativeCredential, openNativeConnection, scanWorkerTree, workerTreeViews, openSqliteAuditStore, openLocalIntegrityAuthority,
   gitQueueCandidateSource, applyAcceptedPredecessorPatches, startWorkerObservation, openWorkerEventSink, selectWorkTarget, sealAttemptWorkerEvents, nativeCodingEnvironmentProbes, type WorkerEventSealing } from '#adapters/index.js';
-import { authenticate, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
+import { authenticate, AuditApplication, enforceAdmittedWorkerTreeGate, DispatchApplication, dispatchNeedsObservation, DispatchPolicyAuthorization, RunWorkspaceAcquisitionApplication, selectReservedTaskProfile,
   RunStoreError, DispatchError, DispatchPreparationGuard, inactivityWatch, HandoffError, recordHandoffRefusal, recordAttemptClosure, classifyLaunchRefusal, prepareTaskStart, recordAttemptHandoffStart, workTargetAttemptAuthorization, assertTaskEnvironment, environmentProbeRegistry } from '#engine/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { parkConfiguredRunProgression } from '#composition/core/runs/index.js';
@@ -26,7 +26,9 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
     const policy = createLayoutPolicySource(layout, os.uid, config.inspection.policyMaxBytes), authorization = workTargetAttemptAuthorization(new DispatchPolicyAuthorization(policy), policy, selectWorkTarget(config.execution)?.id ?? null);
     await authorization.authorizeIdentity('execute', identity, await authenticate(verifier, undefined, identity.scopeId));
     const audit = async (event: unknown) => { const ledger = await openSqliteAuditStore(await path(), config.storage.sqlite); try { new AuditApplication(ledger, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true)).record(event); } finally { ledger.close(); } };
-    const preparation = new DispatchPreparationGuard(jsonRecordDirectory(join(await prepareProductDirectory(layout, 'crashes'), 'dispatch-preparation')), { identity, principal, policyRevision: document.revision, bound: config.runRuntime.maxPreparationAborts,
+    const crashes = await prepareProductDirectory(layout, 'crashes');
+    const preparation = new DispatchPreparationGuard(jsonRecordDirectory(join(crashes, 'dispatch-preparation')), { identity, principal, policyRevision: document.revision, bound: config.runRuntime.maxPreparationAborts,
+      launchers: jsonRecordDirectory(join(crashes, 'dispatch-launcher')),
       now: Date.now, record: audit, parked: async commandId => !!await store.loadRunReceipt(identity.scopeId, commandId), loadRun: () => store.loadRun(identity.scopeId, identity.runId), park: command => parkConfiguredRunProgression(projectRoot, command, options) });
     const store = await openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid', { validate: validateDockerSupervisorProfile });
     // Set immediately before the dispatch application may claim; a refusal after this point is never a pre-launch refusal.
@@ -103,9 +105,9 @@ export async function executeConfiguredTask(projectRoot: string, input: AttemptI
           let record = await store.loadBoundDispatch(identity); if (!record) return null;
           const activity = await supervisor.inspectActivity(request).catch(() => ({ handle: null, state: 'unknown' as const }));
           // Supervisor observation must also settle a missed exit while the execute controller is
-          // still waiting. Reconciliation reauthorizes and uses the same atomic terminal writer.
-          // Missing/unknown workers retain their fence and slots (MARK-LOST-ATOMIC / KARAR 12).
-          if (activity.state === 'exited' && record.launch === 'granted' && !record.terminal) {
+          // still waiting, and retain the incarnation at the first running sample (S6R-1). Reconciliation reauthorizes and uses the
+          // same atomic writers. Missing/unknown workers retain their fence and slots (MARK-LOST-ATOMIC / KARAR 12).
+          if (dispatchNeedsObservation(activity.state, record)) {
             const reconciled = await app.reconcile(request).catch(() => null);
             if (reconciled) record = reconciled.record;
           }

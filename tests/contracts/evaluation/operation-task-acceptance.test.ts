@@ -21,7 +21,7 @@ const intent = (compensable = false) => effectRecordSchema.parse({ sequence: 1, 
   command: { schemaVersion: 1, commandId: 'operation', scopeId: 's', operation: { id: 'record.read', version: 1 },
     target: { kind: 'record', id: 'item' }, idempotencyKey: 'key', input: null, expectedVersion: null },
   descriptor: { schemaVersion: 1, operation: { id: 'record.read', version: 1 }, targetKind: 'record', effectClass: compensable ? 'write' : 'read', approval: 'policy', precondition: 'none', compensation: compensable ? { id: 'record.undo', version: 1 } : null, inputMaxBytes: 1024 },
-  actor, inputDigest: 'a'.repeat(64), idempotencyKeyHash: 'b'.repeat(64) } }).intent;
+  actor, inputDigest: 'a'.repeat(64), idempotencyKeyHash: 'b'.repeat(64), producer: { kind: 'principal' } } }).intent;
 /** Real application + ledger with test-only dispatch/target records. No external target or worker execution is claimed. */
 async function fixture(state: EffectRecord['state'] | 'missing' = 'settled', compensable = false,
   binding: { startedAt?: number; observedAt?: number; effectActor?: typeof actor; capacity?: number; extraCriterion?: boolean } = {}) {
