@@ -103,6 +103,31 @@ describe('DeliverySummary projector', () => {
     expect(Array.from(summary.outcome.summary)).toHaveLength(240);
     expect(summary.target).toEqual({ state: 'available', id: 'refs/heads/bell', protected: false });
   });
+  // REVISE 2734 R4: the projector and the envelope schema count one unit (code points) and the cut falls on a grapheme boundary.
+  it('bounds by code point like the schema and never splits a surrogate pair or a combining sequence at the limit', () => {
+    const emoji = '\u{1F600}', a = (count: number) => 'a'.repeat(count);
+    const outcome = (text: string) => { const value = projectDeliverySummary(facts({ report: report(text) })).outcome; if (value.state !== 'available') throw new Error('expected outcome'); return value; };
+    // 239 ASCII + one astral emoji = 240 code points (241 UTF-16 units): within the bound, kept whole.
+    expect(outcome(a(239) + emoji)).toEqual({ state: 'available', claim: true, summary: a(239) + emoji, truncated: false });
+    const cut = outcome(a(239) + emoji + emoji);
+    expect(cut).toMatchObject({ summary: a(239) + emoji, truncated: true });
+    expect(cut.summary).not.toMatch(/\p{Cs}/u);
+    expect(outcome(a(240) + emoji)).toMatchObject({ summary: a(240), truncated: true });
+    // A letter and its combining mark, or a regional-indicator flag, straddling the limit stay together: the cut falls before the cluster.
+    expect(outcome(`${a(239)}é tail`)).toMatchObject({ summary: a(239), truncated: true });
+    expect(outcome(`${a(239)}\u{1F1F9}\u{1F1F7}`)).toMatchObject({ summary: a(239), truncated: true });
+    const summary = projectDeliverySummary(facts({ run: run({ title: null, task: a(239) + emoji + emoji }), target: { id: a(255) + emoji + emoji, protected: false },
+      change: change([a(511) + emoji + emoji]) }));
+    expect(summary.title).toEqual({ source: 'instruction', text: a(239) + emoji });
+    expect(summary.target).toMatchObject({ id: a(255) + emoji });
+    expect(summary.change).toMatchObject({ topPaths: [a(511) + emoji] });
+  });
+  it('the envelope schema counts the same unit as the projector', () => {
+    const base = projectDeliverySummary(facts()), fits = (text: string) => deliverySummarySchema.safeParse({ ...base, title: { source: 'work-input', text } }).success;
+    expect(fits('a'.repeat(239) + '\u{1F600}')).toBe(true);
+    expect(fits('a'.repeat(241))).toBe(false);
+    expect(fits('a'.repeat(240) + '\u{1F600}')).toBe(false);
+  });
   it('fills the workspace change section from the patch and its K6 scope classification', () => {
     const file = (text: string) => ({ mode: '100644' as const, text, digest: 'd'.repeat(64) });
     const patch = { changes: [{ path: 'src/a.ts', before: file('a\nb\n'), after: file('a\nc\nd\n') }, { path: 'docs/x.md', before: null, after: file('x\n') }] };

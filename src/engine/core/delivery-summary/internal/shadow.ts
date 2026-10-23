@@ -11,12 +11,18 @@ import type { DeliverySummary } from './contract.js';
  * comparison joins it to the `target-batch-decision` audit by commandId.
  */
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
-export const autonomyShadowId = (commandId: string, revision: number) => `autonomy-shadow:${commandId}:${revision}`;
+/** Record id of one ticket revision. The queue key is scope + commandId and one store serves every scope of the product layout (REVISE 2734 R2). */
+export const autonomyShadowId = (scopeId: string, commandId: string, revision: number) => `autonomy-shadow:${scopeId}:${commandId}:${revision}`;
+/** The id ad02fc7ea wrote (no scope); such a line stays readable and counts for the scope its own `scopeId` field names. */
+const legacyAutonomyShadowId = (commandId: string, revision: number) => `autonomy-shadow:${commandId}:${revision}`;
+/** True when two records describe the same ticket revision; stores deduplicate by these fields, never by the id text. */
+export const sameAutonomyShadowTicket = (left: AutonomyShadowRecord, right: AutonomyShadowRecord) =>
+  left.scopeId === right.scopeId && left.commandId === right.commandId && left.revision === right.revision;
 export const autonomyShadowRecordSchema = z.object({ schemaVersion: z.literal(1), id: z.string().min(1), at: counterSchema, actor: z.literal('system'),
   scopeId: identitySchema, commandId: identitySchema, revision: counterSchema,
   rule: z.object({ id: identitySchema, version: z.number().int().positive().safe(), digest }).strict(),
   verdict: z.enum(['would-deliver', 'would-hold']), reasons: z.array(z.enum(AUTONOMY_HOLD_REASONS)).max(AUTONOMY_HOLD_REASONS.length), summaryDigest: digest }).strict()
-  .refine(value => value.id === autonomyShadowId(value.commandId, value.revision) && new Set(value.reasons).size === value.reasons.length
+  .refine(value => (value.id === autonomyShadowId(value.scopeId, value.commandId, value.revision) || value.id === legacyAutonomyShadowId(value.commandId, value.revision)) && new Set(value.reasons).size === value.reasons.length
     && (value.verdict === 'would-deliver') === (value.reasons.length === 0)).readonly();
 export type AutonomyShadowRecord = z.infer<typeof autonomyShadowRecordSchema>;
 
@@ -29,12 +35,13 @@ export const autonomyShadowDigest = (record: AutonomyShadowRecord) => sha256(rec
 /** Pure: the record of one ticket revision. Same ticket, summary and time give the same record; the id never depends on time. */
 export function autonomyShadowRecord(ticket: Readonly<{ scopeId: string; commandId: string; revision: number }>, summary: DeliverySummary, at: number): AutonomyShadowRecord {
   const evaluation = evaluateAutonomy(autonomyFacts(summary));
-  return autonomyShadowRecordSchema.parse({ schemaVersion: 1, id: autonomyShadowId(ticket.commandId, ticket.revision), at, actor: 'system', scopeId: ticket.scopeId,
+  return autonomyShadowRecordSchema.parse({ schemaVersion: 1, id: autonomyShadowId(ticket.scopeId, ticket.commandId, ticket.revision), at, actor: 'system', scopeId: ticket.scopeId,
     commandId: ticket.commandId, revision: ticket.revision, rule: { ...evaluation.rule }, verdict: evaluation.verdict, reasons: [...evaluation.reasons],
     summaryDigest: deliverySummaryDigest(summary) });
 }
 
-/** Bounded append-only store port. `append` is idempotent by id (a record id is written once); `latest` answers the highest revision of a ticket. */
+/** Bounded append-only store port. `append` is idempotent per ticket revision (scope, commandId, revision: written once); `latest` answers the
+ * highest revision of one scope's ticket. */
 export interface AutonomyShadowStore {
   append(record: AutonomyShadowRecord): Promise<'written' | 'exists'>;
   latest(scopeId: string, commandId: string): Promise<AutonomyShadowRecord | null>;

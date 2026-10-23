@@ -1155,8 +1155,9 @@ operation, subject, target (id, protected), title (work-input title, else first 
 (a claim, never acceptance), acceptance (verdict, criteria count, evidence kind and whether it is independent), tests (worker-reported
 claim versus the system's verification Run phase), model verdict, risk class and flags, the typed `yes`/`no` action keys, and a `change`
 section filled by the target's adapter (Git workspace: files, +/−, top paths, out-of-scope; an ERP adapter fills its own). Each optional
-section is `available | withheld | unavailable`; one engine application builds it from authorized reads, strings are bounded and redacted,
-and surfaces only render it. It is a read projection: never on the protocol wire (runtime protocol v29 and ledger v59 unchanged), never an
+section is `available | withheld | unavailable`; one engine application builds it from authorized reads, strings are redacted (patterns and
+the scope config's known secrets, before bounding) and bounded by code point, the unit the envelope schema counts, cut at a grapheme boundary;
+one card whose request, read or projection fails shows "not available" alone, never blanking the other cards. Surfaces only render it. It is a read projection: never on the protocol wire (runtime protocol v29 and ledger v59 unchanged), never an
 authority or acceptance input. The queue commit title is the work-input title, else the task id; a candidate bound before alpha.53 is
 replayed once with its task-id title when the current title does not match.
 
@@ -1164,7 +1165,8 @@ Rule `autonomy@1` (asset `assets/delivery-summary/autonomy-1.json`: operations, 
 eligible model verdicts, size bucket, out-of-scope bound; data, not code) evaluates generic facts of a summary to `would-deliver` or
 `would-hold` plus typed reasons. Owner Q1 2026-10-23: eligible model verdicts are `verified` and `start-name-matched`; provider-chosen,
 unverified and substituted hold. The queue service evaluates it as actor `system` (no principal grant) once per ticket revision that
-reaches awaiting-confirmation and appends a record (`autonomy-shadow:<commandId>:<revision>`, per-line sha256, summary digest, idempotent)
+reaches awaiting-confirmation and appends a record (`autonomy-shadow:<scopeId>:<commandId>:<revision>`, per-line sha256, summary digest, idempotent per scope, commandId and
+revision; a line written by ad02fc7ea without the scope stays readable as the scope its own field names and never blocks another scope)
 to the bounded append-only store `state/autonomy-shadow` (`autonomy-shadow.jsonl`; limits: 4096 entries, 1 MiB file, 4096 bytes per line)
 outside the audit chain, so an older binary's audit verification is unaffected. It is advice only: deliver, adopt, rollback, consent
 digests and queue state never read it, deleting or altering records changes none of them, and it must never appear on the y/N consent prompt

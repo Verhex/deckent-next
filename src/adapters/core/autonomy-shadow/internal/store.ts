@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { open, rename, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { autonomyShadowDigest, autonomyShadowRecordSchema, type AutonomyShadowRecord, type AutonomyShadowStore } from '#engine/index.js';
+import { autonomyShadowDigest, autonomyShadowRecordSchema, sameAutonomyShadowTicket, type AutonomyShadowRecord, type AutonomyShadowStore } from '#engine/index.js';
 import { withConfigWriteLock } from '#platform/index.js';
 import limits from './limits.json' with { type: 'json' };
 
@@ -38,7 +38,8 @@ async function readStoreFile(path: string, bound: number): Promise<Read> {
 
 /**
  * Bounded append-only JSONL store of autonomy shadow records (OTONOM-TESLIM, alpha.53 law-audit fold 1), under the product state directory and
- * outside the audit chain. One writer turn at a time (file lock); idempotent by record id within the retained files; mode 0600; no link followed.
+ * outside the audit chain. One writer turn at a time (file lock); idempotent per ticket revision (scope, commandId, revision) within the retained
+ * files, so an old-format line never blocks another scope; mode 0600; no link followed.
  * `directory` answers null when the store does not exist yet: a reader then sees no record and creates nothing.
  */
 export class FileAutonomyShadowStore implements AutonomyShadowStore {
@@ -65,7 +66,7 @@ export class FileAutonomyShadowStore implements AutonomyShadowStore {
     const { active, previous } = this.files(root);
     return withConfigWriteLock(active, async () => {
       const older = await readStoreFile(previous, this.bound()), current = await readStoreFile(active, this.bound());
-      if ([...older.records, ...current.records].some(row => row.id === record.id)) return 'exists' as const;
+      if ([...older.records, ...current.records].some(row => sameAutonomyShadowTicket(row, record))) return 'exists' as const;
       const rotate = current.entries > 0 && (current.bytes + Buffer.byteLength(line) > this.limits.maxFileBytes || current.entries >= this.limits.maxFileEntries);
       if (rotate) await rename(active, previous);
       const handle = await open(active, constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);

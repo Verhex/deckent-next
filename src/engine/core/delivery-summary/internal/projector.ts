@@ -26,10 +26,25 @@ export type DeliverySummaryFacts = Readonly<{
   topPaths?: number; known?: KnownSecretSnapshot; risk?: DeliveryRiskData;
 }>;
 
-const codePoints = (value: string, max: number) => { const chars = Array.from(value); return { text: chars.slice(0, max).join(''), truncated: chars.length > max }; };
+const GRAPHEMES = new Intl.Segmenter('und', { granularity: 'grapheme' });
+/**
+ * Bound by code points, the unit the envelope schema counts (REVISE 2734 R4), cutting at the last grapheme boundary that fits so neither a
+ * surrogate pair nor a base letter and its combining marks (or a flag pair) is split; a first cluster longer than the bound is cut by code point.
+ */
+function bounded(value: string, max: number) {
+  if (value.length <= max) return { text: value, truncated: false }; // UTF-16 length bounds the code point count from above
+  let points = 0, end = 0;
+  for (const { segment, index } of GRAPHEMES.segment(value)) {
+    const size = Array.from(segment).length;
+    if (points + size > max) break;
+    points += size; end = index + segment.length;
+  }
+  if (end === 0) end = Array.from(value).slice(0, max).join('').length; // one cluster longer than the bound: cut by code point
+  return { text: value.slice(0, end), truncated: end < value.length };
+}
 /** Neutralise terminal controls, redact (known secrets + record patterns) before bounding, so a cut never exposes half a secret. */
 function safe(value: string, max: number, known: KnownSecretSnapshot) {
-  return codePoints(redactForRecord(terminalSafeText(value), known).replace(/[\p{Cc}\p{Cf}]/gu, ' ').trim(), max);
+  return bounded(redactForRecord(terminalSafeText(value), known).replace(/[\p{Cc}\p{Cf}]/gu, ' ').trim(), max);
 }
 function evidenceOf(run: RunSnapshot, taskId: string) {
   const task = run.graph.tasks.find(row => row.id === taskId), seen = new Map<string, DeliverySummary['acceptance']['evidence'][number]>();

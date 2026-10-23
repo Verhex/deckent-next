@@ -8,5 +8,5 @@ export { evaluateAutonomy, autonomyFacts, autonomyRuleDigest, autonomyRuleDataSc
 export type { AutonomyFacts, AutonomyEvaluation, AutonomyHoldReason, AutonomyRuleData } from './internal/rule.js';
 export { DeliverySummaryApplication, deliverySummaryRequestSchema, readSystemDeliverySummary } from './internal/application.js';
 export type { DeliverySummaryRequest, DeliverySummaryPorts, DeliveryChangeSource, SystemDeliverySummaryRequest } from './internal/application.js';
-export { autonomyShadowId, autonomyShadowRecordSchema, autonomyShadowRecord, autonomyShadowDigest, deliverySummaryDigest } from './internal/shadow.js';
+export { autonomyShadowId, autonomyShadowRecordSchema, autonomyShadowRecord, autonomyShadowDigest, deliverySummaryDigest, sameAutonomyShadowTicket } from './internal/shadow.js';
 export type { AutonomyShadowRecord, AutonomyShadowStore } from './internal/shadow.js';
