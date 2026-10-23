@@ -41,6 +41,9 @@ function exclusionLines(exclusions: Exclusions, locale: Locale, verbose: boolean
     : t('cli.run.inspect.exclusions', { count: exclusions.count }, locale)];
 }
 
+/** f3: what happens to a lost worker's task follows the recovery mode the Run froze at admission (absent: none frozen, recovery off). */
+const unresolvedRecoveryText = (mode: RunView['recoveryMode'], locale: Locale) => mode === 'live' ? t('recovery.unresolved.live', {}, locale)
+  : mode === 'shadow' ? t('recovery.unresolved.shadow', {}, locale) : t('recovery.unresolved.off', {}, locale);
 function taskLines(run: RunView, task: TaskView, models: InspectData['models'], locale: Locale, verbose: boolean): string[] {
   const brief = renderBriefLines(task.taskBrief, task.resultBrief, locale);
   // With a result, the brief's last line is its delivery line: it closes the task block (request → result → acceptance evidence → delivery).
@@ -60,7 +63,7 @@ function taskLines(run: RunView, task: TaskView, models: InspectData['models'], 
       ? t('cli.run.inspect.workspaceStartedFromPatch', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale)
       : t('cli.run.inspect.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale))),
     ...(task.configExclusions ? exclusionLines(task.configExclusions, locale, verbose) : []),
-    ...(task.unresolvedEffects ? [t('cli.run.inspect.unresolved', {}, locale)] : []),
+    ...(task.unresolvedEffects ? [t('cli.run.inspect.unresolved', {}, locale), unresolvedRecoveryText(run.recoveryMode, locale)] : []),
     ...(verbose && task.acceptance ? [renderAcceptanceLine(task.acceptance, locale)] : []),
     ...(verbose ? [t('cli.run.inspect.profile', { profile: task.profile.id, version: task.profile.version, criteria: task.acceptanceCriteria.join(', ') }, locale)] : []),
   ];

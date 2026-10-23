@@ -39,5 +39,8 @@
   "recovery.state.automatic": "A lost worker's task may continue in a new attempt within its limits.",
   "recovery.state.person": "Without the standing grant every lost-worker case goes to a person.",
   "recovery.state.partial": "Scopes without the standing grant send every lost-worker case to a person.",
-  "recovery.state.unknown": "The standing grant could not be read; lost-worker cases go to a person until it can."
+  "recovery.state.unknown": "The standing grant could not be read; lost-worker cases go to a person until it can.",
+  "recovery.unresolved.off": "  Automatic recovery was off when this Run was admitted: nothing is retried and no new attempt starts on its own; a person decides.",
+  "recovery.unresolved.shadow": "  Recovery runs in shadow mode for this Run: a recovery decision is recorded for review, but nothing continues on its own; a person decides.",
+  "recovery.unresolved.live": "  Automatic recovery is on for this Run: once the worker is proven lost, no outside work is left open and the owner's standing grant allows it, Deckent may continue this task with a new attempt within the limits frozen for this Run; otherwise a person decides."
 }
