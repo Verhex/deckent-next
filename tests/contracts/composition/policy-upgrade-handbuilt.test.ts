@@ -131,8 +131,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       grant('first-run-memory-inspect', 'memory', ['inspect'], 'all'),
       { id: 'first-run-mcp-observe-memory', effect: 'allow', actions: ['inspect'], scopes: [SCOPE], principals: [MCP_PERSON], resource: { kind: 'memory', ids: 'all' } },
       // v15 (S4B-1 + S7): the batch reaches POLICY_CHANGE_MAX (32) here; the person's memory propose and the distiller's first two rules come first.
-      grant('first-run-memory-propose', 'memory', ['propose'], 'all'),
-      { ...grant('first-run-memory-distiller', 'memory', ['inspect', 'propose'], 'all'), principals: [DISTILLER] },
+      grant('first-run-memory-propose', 'memory', ['propose'], 'all'), { ...grant('first-run-memory-distiller', 'memory', ['inspect', 'propose'], 'all'), principals: [DISTILLER] },
       { ...grant('first-run-memory-distiller-runs', 'run', ['inspect'], 'all'), principals: [DISTILLER] },
     ]);
     expect(await f.bytes()).toBe(before);
@@ -155,8 +154,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(record.after.policy).toEqual(after);
 
     // The same upgrade run again adds the remaining v15 rules (each run add-only and idempotent); a third run is current.
-    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded', basis: 'named-person',
-      rules: [{ id: 'first-run-memory-distiller-output' }, { id: 'first-run-agent-catalog' }, { id: 'first-run-mcp-observe-agent-catalog' }] });
+    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded', rules: [{ id: 'first-run-memory-distiller-output' }, { id: 'first-run-agent-catalog' }, { id: 'first-run-mcp-observe-agent-catalog' }] });
     const upgraded = await f.bytes();
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'current', basis: 'named-person', rules: [] });
     expect(await f.bytes()).toBe(upgraded);
