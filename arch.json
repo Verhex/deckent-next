@@ -1197,7 +1197,8 @@
         "src/platform/core/common",
         "src/engine/core/run-proposal",
         "src/surfaces/core/terminal-conversation",
-        "src/surfaces/core/terminal-host"
+        "src/surfaces/core/terminal-host",
+        "src/domain/core/run"
       ],
       "plan": "SURFACES"
     },
@@ -3993,7 +3994,8 @@
       "termanswer",
       "quotaask",
       "headless",
-      "recovery"
+      "recovery",
+      "brainwait"
     ]
   },
   "literals": {

@@ -109,6 +109,10 @@ describe('the model cannot reach a config write', () => {
       // POLICY-V12: `init policy --apply|--upgrade` writes a missing `service.identity` through the same governed writer (the person's own config
       // grant, digest CAS, audited). Reached only from the human CLI entry (asserted below): no SDK export, no MCP tool, no agent unit.
       'src/composition/core/installation/internal/policy-template.ts',
+      // M2 (alpha.55): `deckent models roles set` writes `model_roles` on the global layer through the same governed writer (`submit('set')`:
+      // policy, approval card, sealed config-change audit, compare-and-set on the card's digest) after the terminal witness; MCP is refused
+      // before anything is read, and only the human CLI host names the write (asserted below).
+      'src/composition/core/model-activation/internal/model-roles.ts',
       'src/composition/core/model-connect/internal/connect.ts',
       'src/composition/core/native-coding/internal/template.ts', // RUN-HAZIR-B: human coding CLI only, through the governed writer
       // I-S3 (alpha.48): `deckent init` applies the language and the team/enterprise profile selection through the same governed writer;
@@ -126,6 +130,14 @@ describe('the model cannot reach a config write', () => {
     // The governed models.connect route is not reachable from the agent loop either: no agent unit names it.
     expect(files('src').filter(path => /agent-turn|agent-tool/.test(path) && /\.(ts|tsx)$/.test(path))
       .filter(path => /connectConfiguredModel|connectModel|model-connect/.test(readFileSync(path, 'utf8')))).toEqual([]);
+    // M2: the tier/role write is composed only by the human CLI host; no MCP, agent or SDK unit names it (the SDK exports the read view only).
+    expect(files('src').filter(path => /\.(ts|tsx)$/.test(path) && !path.replaceAll('\\', '/').startsWith('src/composition/core/model-activation/'))
+      .filter(path => /assignConfiguredModelRole/.test(readFileSync(path, 'utf8'))).map(path => path.replaceAll('\\', '/')).sort())
+      .toEqual(['src/composition/core/cli/internal/host.ts', 'src/composition/index.ts']);
+    expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path.replaceAll('\\', '/')) && /\.(ts|tsx)$/.test(path))
+      .filter(path => /assignConfiguredModelRole|assignModelRole/.test(readFileSync(path, 'utf8')))).toEqual([]);
+    expect(readFileSync('src/index.ts', 'utf8')).not.toMatch(/assignConfiguredModelRole|assignModelRole/);
+    expect(readFileSync('src/composition/core/model-activation/internal/model-roles.ts', 'utf8')).toMatch(/assertAuthorityWitness\('models\.roles\.set'/);
     // Coding-template configuration remains internal to the human CLI; neither agent nor MCP dispatch can reach it.
     expect(files('src').filter(path => /agent-turn|agent-tool|\/mcp\//.test(path) && /\.(ts|tsx)$/.test(path))
       .filter(path => /configureNativeCodingTemplate|configureCodingTemplate|native-coding/.test(readFileSync(path, 'utf8')))).toEqual([]);

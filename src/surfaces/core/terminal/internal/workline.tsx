@@ -13,6 +13,7 @@ import { AssistantLive, openAssistantStream, renderAssistantStream, renderComple
 import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import type { RunProposalResult } from '#engine/index.js';
+import type { BrainPlanProgress } from '#domain/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, type LedgerRow, notice } from '#surfaces/core/terminal-ledger/index.js';
 import { useConversationSession, type ConversationSessionLabels, type ConversationSessionPort } from './workline-sessions.js';
 import { freshContextHistory } from '#surfaces/core/terminal-conversation/index.js';
@@ -83,7 +84,9 @@ export type WorklineErrorText = (error: unknown) => string;
 
 export interface WorklineProps {
   readonly doPlan?: { readonly planning: string; readonly cancelHint: string; readonly requestHint: string;
-    readonly plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelPanelReference) => Promise<RunProposalResult>;
+    /** f3 (owner Q-H4): the shown texts of a quota wait — the window body, its cancel hint and the strip's local reset time. */
+    readonly quotaWait?: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => Readonly<{ body: string; hint: string; untilText: string }>;
+    readonly plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelPanelReference, observe?: (progress: BrainPlanProgress) => void) => Promise<RunProposalResult>;
     readonly lines: (result: RunProposalResult) => readonly string[] };
   readonly labels: WorklineLabels;
   /** Trusted persistent identities from CLI composition; session identity is generated once by the local adapter. */
@@ -226,6 +229,8 @@ export function WorklineApp(props: WorklineProps) {
   // A chat turn is running: Esc cancels it now (TL-A D5).
   const [turnRunning, setTurnRunning] = useState(false);
   const [planning, setPlanning] = useState(false);
+  // f3 (owner Q-H4): the /do window's quota-wait texts while planning waits for the reset; null while it plans.
+  const [planWait, setPlanWait] = useState<Readonly<{ body: string; hint: string }> | null>(null);
   const [doRunning, setDoRunning] = useState(false);
   // TERMINAL-SABIT slice 2: the running /do as the strip shows it (title, phase, approval expiry); the panel runs one line at a time.
   const [activeDo, setActiveDo] = useState<ActiveDo | null>(null);
@@ -442,7 +447,13 @@ export function WorklineApp(props: WorklineProps) {
       const show = (body: readonly string[]) => panel.pick(execution, { kind: 'window', title: '/do', body,
         hints: labels.work?.jobs?.hints ?? props.doPlan!.cancelHint, confirm: false }, ['close']);
       if (!slash.args.trim()) { await show([props.doPlan.requestHint]); return true; }
-      const commandId = globalThis.crypto.randomUUID(), plan = () => props.doPlan!.plan(slash.args, commandId, execution.signal, sessionModel.pinned() ?? undefined);
+      const observe = (progress: BrainPlanProgress) => {
+        if (progress.kind === 'planning' || !props.doPlan!.quotaWait) { setPlanWait(null); setActiveDo(current => current && { ...current, phase: 'planning', untilText: undefined }); return; }
+        const shown = props.doPlan!.quotaWait(progress);
+        setPlanWait({ body: shown.body, hint: shown.hint }); setActiveDo(current => current && { ...current, phase: 'quota-wait', untilText: shown.untilText });
+      };
+      const commandId = globalThis.crypto.randomUUID(), plan = () => props.doPlan!.plan(slash.args, commandId, execution.signal, sessionModel.pinned() ?? undefined,
+        props.doPlan!.quotaWait ? observe : undefined);
       setDoRunning(true); setPlanning(true);
       setActiveDo({ title: redactForRecord(slash.args.trim(), props.knownSecrets), phase: 'planning', sinceMs: Date.now() });
       try {
@@ -466,7 +477,7 @@ export function WorklineApp(props: WorklineProps) {
         if (!execution.signal.aborted) await show([errorText(error)]);
         else if ((error as { code?: unknown })?.code !== 'BRAIN_CANCELLED') push([notice('error', errorText(error))]);
       }
-      finally { setPlanning(false); setDoRunning(false); setActiveDo(null); }
+      finally { setPlanning(false); setPlanWait(null); setDoRunning(false); setActiveDo(null); }
       return true;
     }
     if (slash.command === 'deliver') {
@@ -690,7 +701,7 @@ export function WorklineApp(props: WorklineProps) {
     {fullscreenMode ? null : liveNode}
     <WindowOpeningContext.Provider value={doRunning || state.approval ? 'background' : 'foreground'}>
     {work.region}
-    {planning && props.doPlan ? <Window title={[span('/do')]} body={[{ spans: [span(props.doPlan.planning)] }]} hints={props.doPlan.cancelHint}
+    {planning && props.doPlan ? <Window title={[span('/do')]} body={[{ spans: [span(planWait?.body ?? props.doPlan.planning)] }]} hints={planWait?.hint ?? props.doPlan.cancelHint}
       position={labels.work?.window.position ?? ''} onClose={cancel} onInput={(input, key) => { if (key.ctrl && input === 'c') { cancel(); return true; } return false; }} /> : null}
     </WindowOpeningContext.Provider>
     {/* One window is visible at a time: a decision card, picker, approval or settings window takes the screen from the live window, which returns when it is answered. */}

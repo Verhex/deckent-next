@@ -44,4 +44,4 @@ export type { OperationEvidenceBinding } from './internal/operation-binding.js';
 export { runProposalSchema, proposalPermissionSchema, runProposalBindingSchema, runDeliveryIntentSchema, deriveProposalPermissions, advisoryProposalPermissions, isRecognisedProposalPermission } from './internal/proposal.js';
 export type { RunProposal, ProposalPermission, RunProposalBinding, RunDeliveryIntent, ProposalPermissionCatalog } from './internal/proposal.js';
 export { brainPlanCommandSchema, brainPlanCommandInputSchema, brainContributionSchema } from './internal/brain.js';
-export type { BrainPlanCommand, BrainContribution } from './internal/brain.js';
+export type { BrainPlanCommand, BrainContribution, BrainAttemptLink, BrainPlanObserver, BrainPlanProgress } from './internal/brain.js';

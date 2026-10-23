@@ -3,6 +3,8 @@
   "maxCompletionTokens": null,
   "reasoning": "model-default",
   "reasoningModes": ["model-default", "off"],
+  "quotaWait": { "maxWaitMs": 900000, "marginMs": 15000, "maxAttempts": 2 },
+  "quotaWaitCeilingMs": 86400000,
   "selected": {
     "id": "run-proposal",
     "version": 4

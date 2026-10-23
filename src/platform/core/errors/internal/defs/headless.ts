@@ -24,7 +24,8 @@ export const headlessErrors: ErrorDefinitions = Object.freeze({
   HEADLESS_KIND_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_KIND_UNAVAILABLE', p, l) }) },
   HEADLESS_GUARD_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_GUARD_FAILED', p, l) }) },
   HEADLESS_CREDITS_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_CREDITS_REQUIRED', p, l) }) },
-  // S9 card texts reused read-only: a known reset time names when to ask again; nothing waits or retries on its own.
+  // S9 card texts reused read-only: a known reset time names when to ask again. f3: a Brain plan whose reset is within brain_planner.quotaWait waits
+  // visibly first (new derived attempt); this refusal means no wait applied or the attempts are spent. Nothing retries on its own.
   HEADLESS_QUOTA_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: `${t('error.HEADLESS_QUOTA_EXHAUSTED', p, l)} ${typeof p['resetsAtMs'] === 'number'
     ? t('quotaask.card.resetKnown', { time: clockText(p['resetsAtMs']) }, l) : t('quotaask.card.resetUnknown', {}, l)}` }) },
 });

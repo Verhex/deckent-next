@@ -119,7 +119,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
       restartPrompt: t('terminal.window.restartPrompt', {}, locale),
       restartKept: t('terminal.window.restartKept', {}, locale) },
     activeWork: { title: t('terminal.activeWork.title', {}, locale), focused: t('terminal.activeWork.focused', {}, locale), doTitle: t('terminal.activeWork.doTitle', {}, locale),
-      planning: t('terminal.activeWork.planning', {}, locale), waiting: t('terminal.activeWork.waiting', {}, locale), expired: t('terminal.activeWork.expired', {}, locale),
+      planning: t('terminal.activeWork.planning', {}, locale), waiting: t('terminal.activeWork.waiting', {}, locale), expired: t('terminal.activeWork.expired', {}, locale), quotaWait: t('brainwait.activeWork', {}, locale),
       evaluating: t('terminal.activeWork.evaluating', {}, locale), needsYou: t('terminal.activeWork.needsYou', {}, locale), more: t('terminal.activeWork.more', {}, locale),
       deliveryWaiting: t('terminal.activeWork.deliveryWaiting', {}, locale) },
     live: { monitorTitle: t('terminal.live.monitorTitle', {}, locale), runsTitle: t('terminal.live.runsTitle', {}, locale), tasksTitle: t('terminal.live.tasksTitle', {}, locale),

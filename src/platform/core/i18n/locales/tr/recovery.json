@@ -39,5 +39,8 @@
   "recovery.state.automatic": "Kaybolan bir worker'ın görevi sınırları içinde yeni bir denemeyle sürebilir.",
   "recovery.state.person": "Kalıcı onay olmadan her kaybolan worker vakası bir kişiye gider.",
   "recovery.state.partial": "Kalıcı onayı olmayan kapsamlarda her kaybolan worker vakası bir kişiye gider.",
-  "recovery.state.unknown": "Kalıcı onay okunamadı; okunana kadar kaybolan worker vakaları bir kişiye gider."
+  "recovery.state.unknown": "Kalıcı onay okunamadı; okunana kadar kaybolan worker vakaları bir kişiye gider.",
+  "recovery.unresolved.off": "  Bu Run kabul edildiğinde otomatik kurtarma kapalıydı: hiçbir şey kendiliğinden yeniden denenmez ve yeni deneme başlamaz; bir kişi karar verir.",
+  "recovery.unresolved.shadow": "  Bu Run için kurtarma gölge kipinde: bir kurtarma kararı incelemek için kaydedilir ama hiçbir şey kendiliğinden devam etmez; bir kişi karar verir.",
+  "recovery.unresolved.live": "  Bu Run için otomatik kurtarma açık: worker'ın kaybolduğu kanıtlandığında, açık dış iş kalmadığında ve sahibin kalıcı izni buna olanak verdiğinde Deckent bu görevi bu Run için dondurulan sınırlar içinde yeni bir denemeyle sürdürebilir; aksi halde bir kişi karar verir."
 }

@@ -260,6 +260,7 @@
   "monitor.config.name.cli": "Command line",
   "monitor.config.name.mcp": "MCP connections",
   "monitor.config.name.inspection": "Inspection and monitor",
+  "monitor.config.name.memoryAutomation": "Memory automation",
   "monitor.config.hint": "Tab/←→ tabs · ↑↓ select · Enter details · a all/changed · / search · ? help · q quit",
   "monitor.config.help": "{index}                Settings: changed settings by section; a shows all, / searches, Enter explains one",
   "monitor.legend.next": "next step: a command that answers the problem above it",
