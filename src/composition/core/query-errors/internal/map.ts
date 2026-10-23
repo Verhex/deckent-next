@@ -43,7 +43,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
     || error instanceof ModelActivationError || error instanceof ModelActivationStoreError || error instanceof ModelCatalogError || error instanceof ModelRoleError) return registeredFailure(error.code);
   if (error instanceof WorkerModelAdmissionError) { const d = error.detail; return registeredFailure(error.code, { params: { taskId: d.taskId,
     channelId: d.channelId ?? '-', modelId: d.modelId ?? '-', minCliVersion: d.minCliVersion ?? '-', cliVersion: d.cliVersion ?? 'unparsed',
-    ...(d.workClass !== undefined ? { workClass: d.workClass, skipped: d.skipped ?? '-' } : {}) } }); }
+    ...(d.workClass !== undefined ? { workClass: d.workClass, skipped: d.skipped ?? '-', ...(d.skippedMore ? { skippedMore: d.skippedMore } : {}) } : {}) } }); }
   if (error instanceof AgentTurnStoreError) return registeredFailure(error.code);
   // E1: the bounded cause of an unavailable image probe (deadline|exit|signal|parse) travels as a param; Docker's text never does.
   if (error instanceof DockerImageProbeError && error.probeCause) return registeredFailure(error.code, { params: { cause: error.probeCause } });

@@ -18,7 +18,7 @@ export interface WorkerModelAdmissionDetail {
   readonly taskId: string; readonly channelId: string | null; readonly modelId: string | null;
   readonly exactModelId?: string; readonly minCliVersion?: string; readonly cliVersion?: string | null;
   /** ATAMA-1 refusals: the WorkClass whose candidate list was read and each skipped candidate with its typed reason (bounded by the list). */
-  readonly workClass?: string; readonly skipped?: string;
+  readonly workClass?: string; readonly skipped?: string; readonly skippedMore?: number;
 }
 /** Admission that passes with a visible caveat (WORKER-AUTO-REFRESH, owner K2): the pinned worker CLI is older than the model's minimum while
  * a worker image refresh is in flight, so the Run is admitted on the newest image it can use today. Never raised when no refresh runs. */

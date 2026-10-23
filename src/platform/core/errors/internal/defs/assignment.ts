@@ -11,13 +11,18 @@ const brainTierRefusal = (p: Parameters<typeof t>[1], l: Parameters<typeof t>[2]
     default: return t('error.BRAIN_TIER_REFUSED', p, l);
   }
 };
+/** The refusal's skipped list with a localized "+N more" tail when the bounded text left candidates out. */
+const withMore = (p: Parameters<typeof t>[1], l: Parameters<typeof t>[2]) => {
+  const more = Number(p?.['skippedMore'] ?? 0);
+  return more > 0 ? { ...p, skipped: `${String(p?.['skipped'] ?? '-')}; ${t('assignment.refusal.skippedMore', { count: more }, l)}` } : p;
+};
 /** Error codes owned by the `assignment` family (ATAMA-1 system worker assignment; i18n `locales/<locale>/assignment.json`). */
 export const assignmentErrors: ErrorDefinitions = Object.freeze({
   // The detail (task, class, each skipped candidate with its reason) is response-only on a proposal; a replay renders the plain text.
   WORKER_ASSIGNMENT_NO_CANDIDATES: { category: 'error', render: (p, l) => ({ message: p['workClass'] === undefined ? t('error.WORKER_ASSIGNMENT_NO_CANDIDATES', {}, l)
     : t('error.WORKER_ASSIGNMENT_NO_CANDIDATES.detail', p, l) }) },
   WORKER_ASSIGNMENT_NONE: { category: 'error', render: (p, l) => ({ message: p['workClass'] === undefined ? t('error.WORKER_ASSIGNMENT_NONE', {}, l)
-    : t('error.WORKER_ASSIGNMENT_NONE.detail', p, l) }) },
+    : t('error.WORKER_ASSIGNMENT_NONE.detail', withMore(p, l), l) }) },
   // M3: a WorkClass list whose selectors expand to more models than the registry bound (work-class-limits.json); nothing is truncated.
   WORKER_ASSIGNMENT_EXPANSION_LIMIT: { category: 'error', render: (p, l) => ({ message: p['workClass'] === undefined ? t('error.WORKER_ASSIGNMENT_EXPANSION_LIMIT', {}, l)
     : t('error.WORKER_ASSIGNMENT_EXPANSION_LIMIT.detail', p, l) }) },

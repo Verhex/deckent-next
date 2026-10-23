@@ -29,7 +29,7 @@ const result = (registry: WorkClassRegistry | undefined, proposal: RunProposalRe
     ...(error instanceof DeckentError && proposal.reason === 'RUN_PROPOSAL_BUDGET_EXCEEDED' && error.code === proposal.reason && error.params ? { reasonParams: error.params } : {}),
     // ATAMA-1: which task, which WorkClass list and why each listed worker was skipped; response-only, like the budget detail.
     ...(error instanceof WorkerModelAdmissionError && error.code === proposal.reason && error.detail.workClass !== undefined
-      ? { reasonParams: { taskId: error.detail.taskId, workClass: error.detail.workClass, skipped: error.detail.skipped ?? '-' } } : {}),
+      ? { reasonParams: { taskId: error.detail.taskId, workClass: error.detail.workClass, skipped: error.detail.skipped ?? '-', ...(error.detail.skippedMore ? { skippedMore: error.detail.skippedMore } : {}) } } : {}),
     ...(unrecognised.length ? { unrecognisedPermissions: unrecognised } : {}) });
 };
 /** The graph a proposal's Run is admitted with: the author's graph plus the system order edges (one definition for admission and store). */

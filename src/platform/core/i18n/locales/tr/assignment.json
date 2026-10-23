@@ -27,5 +27,6 @@
   "assignment.config.modelRoles": "Model kademe/rol kaydının kurulum ek katmanları: Brain, çalışan, kurtarma kararı ve hafıza değerlendirici rollerini hangi tam katalog modellerinin üstlenebileceği ve tarihli istisnalar. Yalnız global katman.",
   "error.MODEL_ROLE_CATALOG_UNKNOWN": "Bu tam model, bu kapsamın görebildiği model kataloğunda yok; bu yüzden ona kademe ya da rol verilemez. Hiçbir şey değişmedi; modeli listeleyen kataloğu kaydedin (deckent models catalog register) ve kanal ile model kimliğini deckent models roles ile denetleyin.",
   "error.MODEL_ROLE_COMMAND_INVALID": "Kademe/rol isteği geçerli değil (bilinmeyen kademe, iki kez yazılmış rol ya da bozuk bir model_roles bölümü). Hiçbir şey değişmedi; deckent models roles --help ile denetleyin.",
-  "error.MODEL_ROLE_STALE": "Model kademe/rol kaydı kart gösterildikten sonra değişti. Hiçbir şey değişmedi; güncel durumu görmek için komutu yeniden çalıştırın."
+  "error.MODEL_ROLE_STALE": "Model kademe/rol kaydı kart gösterildikten sonra değişti. Hiçbir şey değişmedi; güncel durumu görmek için komutu yeniden çalıştırın.",
+  "assignment.refusal.skippedMore": "+{count} daha"
 }

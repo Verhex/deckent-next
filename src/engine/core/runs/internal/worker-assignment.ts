@@ -15,7 +15,9 @@ const ROLE_REFUSED = 'WORKER_MODEL_ROLE_REFUSED';
 type Tried = Readonly<{ index: number; channelId: string; modelId: string; effort: ReasoningEffort | undefined;
   selector?: Readonly<{ roleRevision: string; expanded: number; position: number; expansionDigest: string }> }>;
 const tierRank = (tier: typeof MODEL_TIERS[number]) => MODEL_TIERS.indexOf(tier);
-const skippedText = (skipped: readonly WorkerAssignmentSkip[]) => skipped.map(row => `${row.channelId}/${row.modelId}: ${row.reason}`).join('; ');
+/** Refusal text: the first `refusalSkippedShown` skipped candidates (registry bound); `more` counts the rest, rendered by the error catalog. The sealed list is unchanged. */
+const skippedText = (skipped: readonly WorkerAssignmentSkip[]) => skipped.slice(0, WORK_CLASS_LIMITS.refusalSkippedShown).map(row => `${row.channelId}/${row.modelId}: ${row.reason}`).join('; ');
+const skippedMore = (skipped: readonly WorkerAssignmentSkip[]) => Math.max(0, skipped.length - WORK_CLASS_LIMITS.refusalSkippedShown);
 /**
  * ATAMA-1 (owner ASS1, A5): the system — never the Brain — picks the worker of a task whose work input leaves the model open. The task's
  * WorkClass names one ordered candidate list; each candidate is tried in order through the SAME admission check a pinned model gets (catalog
@@ -33,7 +35,7 @@ export async function assignTaskWorker(task: Readonly<{ id: string; kind: string
   compile: (template: ExecutionProfileDefinition, input: WorkInput, evidence?: CatalogPinModelEvidence) => ExecutionProfileDefinition,
   context: WorkerAssignmentContext): Promise<PendingWorkerAssignment> {
   const refuse = (code: 'WORKER_ASSIGNMENT_NO_CANDIDATES' | 'WORKER_ASSIGNMENT_NONE', workClass: string | null, skipped: readonly WorkerAssignmentSkip[] = []): never => {
-    throw new WorkerModelAdmissionError(code, Object.freeze({ taskId: task.id, channelId: null, modelId: null, workClass: workClass ?? '-', skipped: skippedText(skipped) || '-' }));
+    throw new WorkerModelAdmissionError(code, Object.freeze({ taskId: task.id, channelId: null, modelId: null, workClass: workClass ?? '-', skipped: skippedText(skipped) || '-', ...(skippedMore(skipped) > 0 ? { skippedMore: skippedMore(skipped) } : {}) }));
   };
   let resolved;
   try { resolved = resolveTaskWorkClass(task.kind, task.workClass ?? input.workClass, registry); }

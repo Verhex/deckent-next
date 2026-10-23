@@ -27,5 +27,6 @@
   "assignment.config.modelRoles": "Installation overlays of the model tier/role registry: which exact catalog models may serve the Brain, worker, recovery-decision and memory-evaluator roles, and dated exceptions. Global layer only.",
   "error.MODEL_ROLE_CATALOG_UNKNOWN": "That exact model is not in the model catalog this scope can see, so it cannot be given a tier or role. Nothing was changed; register the catalog that lists it (deckent models catalog register) and check the channel and model id with deckent models roles.",
   "error.MODEL_ROLE_COMMAND_INVALID": "The tier/role request is not valid (unknown tier, a role named twice, or a malformed model_roles section). Nothing was changed; check deckent models roles --help.",
-  "error.MODEL_ROLE_STALE": "The model tier/role registry changed after the card was shown. Nothing was changed; run the command again to see the current state."
+  "error.MODEL_ROLE_STALE": "The model tier/role registry changed after the card was shown. Nothing was changed; run the command again to see the current state.",
+  "assignment.refusal.skippedMore": "+{count} more"
 }
