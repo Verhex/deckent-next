@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { lstat, open, realpath, stat, unlink } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
-import type { ProjectInstructionSource, ProjectInstructionView } from '#engine/index.js';
+import type { CommittedInstructionSource, ProjectInstructionSource, ProjectInstructionView } from '#engine/index.js';
 import REGISTRY from './registry.json' with { type: 'json' };
 
 export const PROJECT_INSTRUCTION_REGISTRY = REGISTRY;
@@ -43,11 +43,14 @@ async function readIdentifiedFile(root: string, name: string, maxBytes: number):
   } finally { await handle.close(); }
 }
 
-/** The file a trust card showed: its path and identity. */
-export type ExpectedInstructionFile = Readonly<{ path: string; dev: number; ino: number }>;
+/** The file a trust card showed: its path and, for a working-tree read, its identity (null for a committed blob, bound by path and digest). */
+export type ExpectedInstructionFile = Readonly<{ path: string; dev: number | null; ino: number | null }>;
 /** Trust lives in a private user-global managed directory, never a workspace-controlled record. */
-/** `files` narrows the candidates (a worker selection reads exactly one file); the default keeps the terminal's DECKENT.md → AGENTS.md order. */
-export async function openProjectInstructionReader(rootInput: string, trustDirectory: string | null, known?: KnownSecretSnapshot, files: readonly string[] = REGISTRY.files) {
+/** `files` narrows the candidates (a worker selection reads exactly one file); the default keeps the terminal's DECKENT.md → AGENTS.md order.
+ * `committed` (alpha.54 R1: a work target's base ref) reads each file from that ref's commit instead of the working tree; the trust key
+ * stays this folder + content digest, so a record made from a working-tree read of the same bytes is honoured. */
+export async function openProjectInstructionReader(rootInput: string, trustDirectory: string | null, known?: KnownSecretSnapshot, files: readonly string[] = REGISTRY.files,
+  committed?: CommittedInstructionSource) {
   const root = await realpath(rootInput), identity = await stat(root);
   const rootDigest = instructionDigest(`${root}\0${identity.dev}\0${identity.ino}`);
   const sessionTrusted = new Set<string>();
@@ -63,11 +66,12 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
       const currentRoot = await stat(root);
       if (currentRoot.dev !== identity.dev || currentRoot.ino !== identity.ino) throw new Error('unsafe');
       for (const name of files) {
-        const read = await readIdentifiedFile(root, name, REGISTRY.maxBytes);
+        const read = committed ? await committed.read(name, REGISTRY.maxBytes) : await readIdentifiedFile(root, name, REGISTRY.maxBytes);
         if (read === null) continue;
         const { bytes } = read;
-        const source: ProjectInstructionSource = { path: join(root, name), bytes: bytes.length, digest: instructionDigest(bytes), content: redactForRecord(bytes.toString('utf8'), known),
-          identity: { dev: read.dev, ino: read.ino } };
+        const source: ProjectInstructionSource = { path: committed ? `${committed.ref}:${name}` : join(root, name), bytes: bytes.length, digest: instructionDigest(bytes),
+          content: redactForRecord(bytes.toString('utf8'), known),
+          identity: 'commit' in read ? { kind: 'ref', ref: committed!.ref, commit: read.commit, blobOid: read.blobOid } : { kind: 'file', dev: read.dev, ino: read.ino } };
         if (Buffer.byteLength(source.content) > REGISTRY.maxBytes) return { status: 'blocked', reason: 'size' };
         // Only an owner-private, no-follow record counts; an absent/invalid cache asks again.
         let trusted = sessionTrusted.has(source.digest);
@@ -90,8 +94,8 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
     }
   };
   // REVISE 2734 R1: a writer that names the exact file it showed acts only when the read just before the write is that file (path + identity).
-  const sameFile = (source: ProjectInstructionSource, expected?: ExpectedInstructionFile) => !expected
-    || (source.path === expected.path && source.identity.dev === expected.dev && source.identity.ino === expected.ino);
+  const sameFile = ({ path, identity }: ProjectInstructionSource, expected?: ExpectedInstructionFile) => !expected || (path === expected.path
+    && (identity.kind === 'file' ? identity.dev === expected.dev && identity.ino === expected.ino : expected.dev === null && expected.ino === null));
   return { root, identity: { dev: identity.dev, ino: identity.ino }, inspect: load, async trust(digest: string, expected?: ExpectedInstructionFile): Promise<ProjectInstructionView> {
     const current = await load();
     if (current.status !== 'trust-required' && current.status !== 'ready') return current;

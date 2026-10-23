@@ -72,6 +72,8 @@
   "cli.coding.instructions.state.trusted": "Trusted: workers here get this file as project context ({source}).",
   "cli.coding.instructions.state.untrusted": "Not trusted for this content: workers run without it ({source}).",
   "cli.coding.instructions.state.absent": "No {file} here: workers run without project instructions ({source}).",
+  "cli.coding.instructions.state.absentAtRef": "No {file} committed on {ref}: workers run without project instructions ({source}). Uncommitted files are not used.",
+  "cli.coding.instructions.revision": "Committed on {ref} at {commit}; uncommitted changes in this folder are not used.",
   "cli.coding.instructions.state.blocked": "Left out ({reason}): {file} is not a plain readable file within the size limit.",
   "cli.coding.instructions.state.noExecution": "Off: no Git execution is configured, so workers get no instruction file.",
   "cli.coding.instructions.state.sourceNone": "Off: execution.workerInstructions.source is none for this project.",

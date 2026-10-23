@@ -12,8 +12,9 @@ export type WorkTargetSettings = z.infer<typeof WORK_TARGET_SETTINGS>;
 export type WorkTargetDeclaration = WorkTargetSettings['targets'][number];
 /** The configured execution section as far as work-target resolution reads it. */
 export interface WorkTargetExecution { readonly git: Pick<GitSettings, 'gitExecutable' | 'timeoutMs' | 'outputBytes'>; readonly workTargets?: WorkTargetSettings | undefined }
-/** Where coding work runs. `id` null = no configured target: the project root and its checkout HEAD, exactly as before work targets. */
-export interface ResolvedGitWorkTarget { readonly id: string | null; readonly git: Readonly<{ sourceRoot: string; baseRef?: string }> }
+/** Where coding work runs. `id` null = no configured target: the project root and its checkout HEAD, exactly as before work targets.
+ * `baseCommit`: the commit the target's base ref named at this check (null without a target). */
+export interface ResolvedGitWorkTarget { readonly id: string | null; readonly git: Readonly<{ sourceRoot: string; baseRef?: string }>; readonly baseCommit: string | null }
 
 /** The single selection of the target a Run uses (slice 1: the one configured target), without touching the filesystem. */
 export function selectWorkTarget(execution: Pick<WorkTargetExecution, 'workTargets'> | null | undefined): WorkTargetDeclaration | null {
@@ -53,10 +54,10 @@ async function observe(git: WorkTargetExecution['git'], target: WorkTargetDeclar
 export async function resolveGitWorkTarget(projectRoot: string, execution: WorkTargetExecution | null | undefined,
   layout: { readonly root: string; readonly bootstrapConfigPath: string }): Promise<ResolvedGitWorkTarget> {
   const target = selectWorkTarget(execution);
-  if (!target || !execution) return Object.freeze({ id: null, git: Object.freeze({ sourceRoot: projectRoot }) });
+  if (!target || !execution) return Object.freeze({ id: null, git: Object.freeze({ sourceRoot: projectRoot }), baseCommit: null });
   const project = await canonical(projectRoot) ?? projectRoot;
   // Product data: the layout root and the directory of the fixed resources (the project's configuration directory).
   const roots = await Promise.all([layout.root, dirname(layout.bootstrapConfigPath)].map(async root => await canonical(root) ?? root));
-  assertWorkTarget(await observe(execution.git, target), { projectRoot: project, projectCommonDirectory: await commonDirectory(execution.git, project), dataRoots: roots });
-  return Object.freeze({ id: target.id, git: Object.freeze({ sourceRoot: target.path, baseRef: target.baseRef }) });
+  const baseCommit = assertWorkTarget(await observe(execution.git, target), { projectRoot: project, projectCommonDirectory: await commonDirectory(execution.git, project), dataRoots: roots });
+  return Object.freeze({ id: target.id, git: Object.freeze({ sourceRoot: target.path, baseRef: target.baseRef }), baseCommit });
 }
