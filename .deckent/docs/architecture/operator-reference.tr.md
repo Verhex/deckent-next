@@ -46,8 +46,8 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   `service.identity` ayarlarsa yeniden başlatmadan önce [Runtime servisi](#runtime-servisi) bölümüne bakın.
 - `deckent init` rehberli kurulumdur: planı ve eksik kalanı, her adımın tam komutuyla gösterir;
   `deckent init --yes --scope <id>` yeni bir ilk kurulum policy'si kurar, dili ayarlar ve son kontrolü çalıştırır.
-- `deckent init --preview`, Deckent'in kendi terminal ajanının okuduğu proje talimat dosyası `DECKENT.md`'yi (ve
-  `AGENTS.md`/`CLAUDE.md` köprülerini) önizler. Docker kodlama işçileri onu okumaz; onlar
+- `deckent init --preview`, Deckent'in kendi terminal ajanının okuduğu proje talimat dosyası `DECKENT.md`'yi ve
+  algıladığı host aracı köprülerini önizler. Docker kodlama işçileri onu okumaz; onlar
   [Kodlama işçisinin talimatları ve keşif](#kodlama-işçisinin-talimatları-ve-keşif) bölümündeki işçi dosyasını alır.
 - `deckent doctor` neyin hazır olduğunu söyler, kurulum başlayamıyorsa sıfır dışı kodla çıkar.
   `deckent init preview --profile <dosya>` bir kurulum profili dosyasını önizler (ileri düzey).

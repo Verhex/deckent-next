@@ -45,8 +45,8 @@ one section; other sections link to it.
   apply sets `service.identity`, see [Runtime service](#runtime-service) before restarting.
 - `deckent init` is the guided setup: it shows the plan and what is still missing, with the exact command for each step;
   `deckent init --yes --scope <id>` installs a fresh first-run policy, sets the language and runs the final check.
-- `deckent init --preview` previews the project instruction file `DECKENT.md` that Deckent's own terminal agent reads (and the
-  bridges to `AGENTS.md`/`CLAUDE.md`). Docker coding workers do not read it; they get the worker file described in
+- `deckent init --preview` previews the project instruction file `DECKENT.md` that Deckent's own terminal agent reads, and which
+  host-tool bridges it detects. Docker coding workers do not read it; they get the worker file described in
   [Worker instructions and discovery](#worker-instructions-and-discovery).
 - `deckent doctor` reports what is ready and exits non-zero if setup cannot start. `deckent init preview --profile <file>`
   previews an installation profile file (advanced).
