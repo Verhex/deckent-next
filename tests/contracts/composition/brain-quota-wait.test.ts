@@ -15,6 +15,9 @@ import { clearConfigCache } from '#platform/index.js';
 import { proposalFixture } from '../support/run-proposal.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { assistantLine, initLine, rateLimitLine, resultLine, uiLine, writeFakeCli, type FakeStep } from '../../fixtures/native-headless/stream.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
+// S3-5: every headless CLI spawn runs in the bubblewrap realm; a host without one is covered by the real-sandbox guard, not silently here.
+const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 
 const MODEL = 'vendor/model', cleanups: (() => Promise<void>)[] = [], roots: string[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0)) await close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -27,7 +30,7 @@ const quota = (resetsAt: number | undefined): FakeStep[] => [uiLine(), initLine(
 const inSeconds = (seconds: number) => Math.ceil(Date.now() / 1000) + seconds;
 async function fixture(stepsByCall: FakeStep[][], quotaWait?: Record<string, number>) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'deckent-brain-quota-'))); roots.push(root);
-  const bin = join(root, 'bin'), configDir = join(root, 'login'), logPath = join(root, 'cli.jsonl');
+  const bin = join(root, 'bin'), configDir = join(root, 'login'), logPath = join(configDir, '.claude.json'); // S3-5: the isolated CLI's own state file
   await mkdir(bin); await mkdir(configDir, { mode: 0o700 });
   const executable = await writeFakeCli(bin, { logPath, steps: stepsByCall.at(-1)!, stepsByCall, initCwd: 'actual' });
   const f = await brainProviderFixture({ noCharge: true, headless: { executable, configDir, stateDir: join(root, 'state') } }); cleanups.push(f.close);
@@ -37,7 +40,7 @@ async function fixture(stepsByCall: FakeStep[][], quotaWait?: Record<string, num
 }
 const short = { maxWaitMs: 5_000, marginMs: 0, maxAttempts: 2 };
 
-describe.skipIf(process.platform !== 'linux')('f3 Q-H4 Brain quota: short visible wait, then a new derived attempt', () => {
+describe.skipIf(process.platform !== 'linux' || !sandbox)('f3 Q-H4 Brain quota: short visible wait, then a new derived attempt', () => {
   it('waits visibly until the reset and plans once more under a derived command id that seals the refused call; a replay sends nothing', async () => {
     const h = await fixture([quota(inSeconds(1)), answer()], short), seen: BrainPlanProgress[] = [];
     const result = await planRun(h.f.project, command, h.f.options, undefined, progress => { seen.push(progress); });

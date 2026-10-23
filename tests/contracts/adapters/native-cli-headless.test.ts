@@ -7,13 +7,16 @@ import { NATIVE_CLI_HEADLESS_ADAPTER } from '#adapters/core/native-cli-headless/
 import { PINNED, assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, fullHelp, type FakeScenario, type FakeStep } from '../../fixtures/native-headless/stream.js';
 import { PROMPT, binding, cleanupConnections, connection, request } from '../../fixtures/native-headless/connection.js';
 import registry from '../../../assets/native-coding/commands.json' with { type: 'json' };
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
+// S3-5: every headless CLI spawn runs in the bubblewrap realm; a host without one is covered by the real-sandbox guard, not silently here.
+const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 
 afterEach(cleanupConnections);
 const happy = (text = '{"ok":true}'): FakeStep[] => [uiLine(), initLine(), assistantLine(text), rateLimitLine(), resultLine(text)].map(line => ({ line }));
 const body = (result: unknown) => JSON.parse(Buffer.from((result as { evidence: { body: { data: string } } }).evidence.body.data, 'base64').toString('utf8'));
 const DENIED = headless.env.deny;
 
-describe.skipIf(process.platform !== 'linux')('S3-2 headless native port with a fake CLI (no real CLI, no model call)', () => {
+describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless native port with a fake CLI (no real CLI, no model call)', () => {
   it('runs one guarded turn: built env, prompt never in argv, stdin message, 0600 prompt file removed, chat-shaped counters without cost', async () => {
     const saved = Object.fromEntries(DENIED.map(name => [name, process.env[name]]));
     for (const name of DENIED) process.env[name] = `leak-${name}`;
@@ -102,7 +105,7 @@ describe.skipIf(process.platform !== 'linux')('S3-2 headless native port with a 
   });
 });
 
-describe.skipIf(process.platform !== 'linux')('S3-2 headless guards and typed refusals (fake CLI)', () => {
+describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-2 headless guards and typed refusals (fake CLI)', () => {
   it.each([
     ['N2 an API key source', initLine({ apiKeySource: 'ANTHROPIC_API_KEY' }), 'invalid-response', { refusal: 'guard', field: 'apiKeySource' }],
     ['N3 a tool', initLine({ tools: ['Bash'] }), 'invalid-response', { refusal: 'guard', field: 'tools' }],

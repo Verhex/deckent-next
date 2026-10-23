@@ -4,14 +4,13 @@ import type { ModelConnectCommand } from '#domain/index.js';
 import { ModelConnectError, type ConnectedAdapter } from '#engine/index.js';
 import { headlessConnectionAdapter, headlessConsent, prepareHeadlessConnection, readProviderConnectSeed, shellSandboxCapabilities, type ProviderConnectKind } from '#adapters/index.js';
 import { globalStateRoot, normalizeGlobalScopePlatform, resolveGlobalScopePaths, type ConfigLoadOptions } from '#platform/index.js';
-import { snapshotConfiguredConfig } from '#composition/core/config/index.js';
 
 /**
- * S3-3: the CLI kind's connect ports. The preview switch is read from the user layer only (`models.headless.preview`, protected); the adapter part
- * is prepared once per command after the engine's person and preview checks (executable, login dir, uid, preflight; no model call), and the
- * consent is the person's own choice on each written layer. State lives under the person's global state dir, one fixed dir per connection.
+ * S3-3: the CLI kind's connect ports. The adapter part is prepared once per command after the engine's person check (S3-5: the isolation realm
+ * first, then executable, login dir, uid, preflight inside the realm; no model call), and the consent is the person's own choice on each written
+ * layer. State lives under the person's global state dir, one fixed dir per connection.
  */
-export function headlessConnectPorts(projectRoot: string, command: ModelConnectCommand, options: ConfigLoadOptions, person: () => Promise<Readonly<{ issuer: string; subject: string }>>) {
+export function headlessConnectPorts(command: ModelConnectCommand, options: ConfigLoadOptions, person: () => Promise<Readonly<{ issuer: string; subject: string }>>) {
   const env = options.env ?? process.env;
   let prepared: Promise<Readonly<{ base: Awaited<ReturnType<typeof prepareHeadlessConnection>>; protocol: Readonly<{ family: string; version: string }> }>> | undefined;
   const prepare = (kind: ProviderConnectKind, nativeId: string) => prepared ??= (async () => {
@@ -24,7 +23,6 @@ export function headlessConnectPorts(projectRoot: string, command: ModelConnectC
       isolation: async () => (await shellSandboxCapabilities(globalStateRoot(env))).bubblewrap }) };
   })();
   return {
-    previewEnabled: async () => ((await snapshotConfiguredConfig(projectRoot, options)).global as { models?: { headless?: { preview?: unknown } } }).models?.headless?.preview === true,
     async adapter(kind: ProviderConnectKind, value: Readonly<{ nativeId: string; existing?: Record<string, unknown> | null }>): Promise<ConnectedAdapter> {
       const { base, protocol } = await prepare(kind, value.nativeId), consent = headlessConsent(value.existing as never, command.delegate, await person(), Date.now());
       return { ...headlessConnectionAdapter({ ...base, delegatedUse: consent }, protocol), cli: { configDir: base.configDir, delegate: consent?.classes ?? [] } };

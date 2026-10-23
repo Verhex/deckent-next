@@ -10,6 +10,7 @@ import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } f
 import seed from '../../../assets/model-catalog/claude-cli-subscription.json' with { type: 'json' };
 import { writeFakeCli } from '../../fixtures/native-headless/stream.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
 // The MCP actor holds the same grants, so the refusal below is the person-only rule itself, not a missing grant.
 const both = [...me, { issuer: `${me[0]!.issuer}/mcp`, subject: me[0]!.subject }];
@@ -18,7 +19,8 @@ const grants = [{ id: 'config', effect: 'allow', actions: ['write'], scopes: 'al
 const nativeId = seed.recommendedActivations[0]!.modelIds[0]!;
 type Profile = { schemaVersion: number; billingAxis?: string; adapter: { id: string; definition: Record<string, unknown> } };
 async function harness(preview: boolean | null, auth?: Record<string, unknown>) {
-  const f = await runtime({ extraGrants: grants, noServer: true }), configDir = join(f.data, 'claude-login'), bin = join(f.data, 'bin'), logPath = join(f.data, 'cli.jsonl');
+  // S3-5: the CLI runs isolated, so the fake logs into its own state file in the login dir (the one place it may write).
+  const f = await runtime({ extraGrants: grants, noServer: true }), configDir = join(f.data, 'claude-login'), bin = join(f.data, 'bin'), logPath = join(configDir, '.claude.json');
   await mkdir(configDir, { mode: 0o700 }); await mkdir(bin);
   const executable = await writeFakeCli(bin, { logPath, ...(auth ? { auth } : {}) }), options = { env: f.env };
   if (preview !== null) await createConfiguredConfigApplication(f.project, options).submit('set', { keyPath: 'models.headless.preview', value: preview, layer: 'global',
@@ -31,12 +33,13 @@ async function harness(preview: boolean | null, auth?: Record<string, unknown>) 
   return { f, configDir, executable, connect, profile, spawns };
 }
 
-describe.skipIf(process.platform !== 'linux')('S3-3 models connect claude-cli-subscription (fake CLI, no model call)', () => {
-  it('N23: refuses the kind typed while the owner has not turned the preview on, before any spawn', async () => {
+const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
+describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 models connect claude-cli-subscription (fake CLI, no model call)', () => {
+  it('S3-5: the kind needs no preview switch any more: it connects wherever its isolation realm works, the retired key set or not', async () => {
     for (const preview of [null, false]) {
       const h = await harness(preview);
-      await expect(h.connect('c-1')).rejects.toMatchObject({ code: 'HEADLESS_KIND_UNAVAILABLE' });
-      expect(await h.spawns()).toEqual([]); expect(await h.profile()).toBeUndefined();
+      await expect(h.connect('c-1')).resolves.toMatchObject({ status: 'connected' });
+      expect(await h.spawns()).toEqual(expect.arrayContaining(['version', 'help', 'auth'])); expect(await h.profile()).toBeDefined();
     }
   });
   it('N19: an MCP actor can neither connect the person\'s login nor change its consent', async () => {

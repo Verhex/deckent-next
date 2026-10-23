@@ -9,6 +9,8 @@ import { openSqliteModelInvocationStore } from '#adapters/core/sqlite-model-invo
 import { isNativeCliHeadlessAdapter, NATIVE_CLI_HEADLESS_ADAPTER } from '#adapters/core/native-cli-headless/index.js';
 import { binding as definition, cleanupConnections, connection, request } from '../../fixtures/native-headless/connection.js';
 import { assistantLine, initLine, rateLimitLine, resultLine, uiLine } from '../../fixtures/native-headless/stream.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
+const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 
 afterEach(cleanupConnections);
 const sqlite = { journalMode: 'delete' as const, durability: 'full' as const, busyTimeoutMs: 2000 };
@@ -34,7 +36,7 @@ async function fixture(lines = steps('{"ok":true}')) {
 }
 const calls = async (c: Awaited<ReturnType<typeof connection>>) => (await c.log()).filter(entry => entry.mode === 'call').length;
 
-it('records a subscription receipt without money, replays it without a second spawn (N16), and keeps model and token counters after purge (N17)', async () => {
+it.skipIf(!sandbox)('records a subscription receipt without money, replays it without a second spawn (N16), and keeps model and token counters after purge (N17)', async () => {
   const { c, app, path, command } = await fixture();
   const first = await app.invoke(command);
   expect(first).toMatchObject({ replayed: false, receipt: { profile: { billingAxis: 'subscription', adapter: { id: 'native-cli-headless' } }, outcome: { state: 'responded' } },
@@ -50,7 +52,7 @@ it('records a subscription receipt without money, replays it without a second sp
     expect(JSON.stringify(usage)).not.toMatch(/cost|usd/iu);
   } finally { db.close(); }
 });
-it('records an in-run guard refusal as a rejected receipt with the typed body, and a preflight refusal before any claim', async () => {
+it.skipIf(!sandbox)('records an in-run guard refusal as a rejected receipt with the typed body, and a preflight refusal before any claim', async () => {
   const guarded = await fixture([{ line: initLine({ apiKeySource: 'ANTHROPIC_API_KEY' }) }, { line: resultLine('x') }]);
   const rejected = await guarded.app.invoke(guarded.command);
   expect(rejected).toMatchObject({ receipt: { outcome: { state: 'rejected', evidence: { reason: 'invalid-response' } } } });
@@ -59,7 +61,7 @@ it('records an in-run guard refusal as a rejected receipt with the typed body, a
   const db = new DatabaseSync(refused.path, { readOnly: true });
   try { expect(db.prepare('SELECT COUNT(*) AS n FROM model_invocations').get()).toMatchObject({ n: 0 }); } finally { db.close(); }
 });
-it('N22: only this exact adapter id and version select the headless branch; any other version stays unavailable, as alpha.54 resolves this id', () => {
+it.skipIf(!sandbox)('N22: only this exact adapter id and version select the headless branch; any other version stays unavailable, as alpha.54 resolves this id', () => {
   expect(isNativeCliHeadlessAdapter(NATIVE_CLI_HEADLESS_ADAPTER)).toBe(true);
   for (const adapter of [{ ...NATIVE_CLI_HEADLESS_ADAPTER, version: 2 }, { id: 'native-cli-headless-next', version: 1 }]) expect(isNativeCliHeadlessAdapter(adapter)).toBe(false);
 });
