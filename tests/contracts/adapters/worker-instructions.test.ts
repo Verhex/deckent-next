@@ -1,14 +1,17 @@
+import { execFile } from 'node:child_process';
 import { chmod, mkdir, mkdtemp, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
-import { compileNativeCodingWorkInput, nativeCodingRefusalCode, openProjectInstructionReader, openWorkerInstructionTrust, workerInstructionFile, workerInstructionSelection } from '#adapters/index.js';
+import { compileNativeCodingWorkInput, gitRefFileSource, nativeCodingRefusalCode, openProjectInstructionReader, openWorkerInstructionTrust, PROJECT_INSTRUCTION_REGISTRY,
+  workerInstructionFile, workerInstructionSelection } from '#adapters/index.js';
 
 /** DECKENT-MD-WORKERS (owner Q3 2026-10-23): per-project worker instruction source, digest-bound, consent consumed never granted. */
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const DIGEST = 'ab'.repeat(32);
-const source = (content: string) => ({ path: '/p/.deckent/worker-instructions.md', bytes: Buffer.byteLength(content), digest: DIGEST, content });
+const source = (content: string) => ({ path: '/p/.deckent/worker-instructions.md', bytes: Buffer.byteLength(content), digest: DIGEST, content, identity: { kind: 'file' as const, dev: 1, ino: 2 } });
 
 describe('worker instruction source selection', () => {
   it('maps each selection to exactly one root file from registry data and never to CLAUDE.md', () => {
@@ -91,6 +94,69 @@ describe('worker instruction source selection', () => {
     const root = await mkdtemp(join(tmpdir(), 'worker-instructions-')), outside = await mkdtemp(join(tmpdir(), 'worker-outside-')); roots.push(root, outside);
     await writeFile(join(outside, 'worker-instructions.md'), 'planted'); await symlink(outside, join(root, '.deckent'));
     expect(await (await openProjectInstructionReader(root, null, undefined, [workerInstructionFile('worker-md')])).inspect()).toEqual({ status: 'blocked', reason: 'unsafe' });
+  });
+});
+
+/** alpha.54 R1 (owner Q5 2026-10-23): with a work target, workers read the file committed on its base ref, never the working tree. */
+describe.skipIf(process.platform === 'win32')('worker instruction file read from the work target ref', () => {
+  const exec = promisify(execFile), GIT = { gitExecutable: '/usr/bin/git', timeoutMs: 10_000, outputBytes: 65_536 }, REF = 'refs/heads/main', FILE = '.deckent/worker-instructions.md';
+  const git = async (root: string, ...args: string[]) => (await exec('/usr/bin/git', ['-C', root, '-c', 'user.name=T', '-c', 'user.email=t@example.invalid', ...args])).stdout.trim();
+  async function repository(files: Record<string, string> = { [FILE]: 'committed' }) {
+    const root = await mkdtemp(join(tmpdir(), 'worker-ref-')); roots.push(root);
+    await git(root, 'init', '-q', '-b', 'main');
+    for (const [name, text] of Object.entries(files)) { await mkdir(join(root, name, '..'), { recursive: true }); await writeFile(join(root, name), text); }
+    await git(root, 'add', '-A'); await git(root, 'commit', '-q', '--allow-empty', '-m', 'base');
+    return root;
+  }
+  const commit = async (root: string, message = 'next') => { await git(root, 'add', '-A'); await git(root, 'commit', '-q', '--allow-empty', '-m', message); return git(root, 'rev-parse', REF); };
+  const committed = (root: string, ref = REF) => gitRefFileSource(GIT, root, ref, () => git(root, 'rev-parse', '--verify', `${ref}^{commit}`));
+  const reader = (root: string, trust: string | null = null, file = FILE, ref = REF) => openProjectInstructionReader(root, trust, undefined, [file], committed(root, ref));
+
+  it('reads the ref content: a modified, uncommitted or detached working tree is never what workers get', async () => {
+    const root = await repository(), head = await git(root, 'rev-parse', REF);
+    await writeFile(join(root, FILE), 'dirty, not committed');
+    const view = await (await reader(root)).inspect();
+    expect(view).toMatchObject({ status: 'trust-required', source: { content: 'committed', bytes: 9, path: `${REF}:${FILE}`,
+      identity: { kind: 'ref', ref: REF, commit: head, blobOid: await git(root, 'rev-parse', `${REF}:${FILE}`) } } });
+    // A detached HEAD with other committed bytes: the configured ref still wins.
+    await git(root, 'checkout', '-q', '--detach'); await writeFile(join(root, FILE), 'detached'); await commit(root);
+    expect(await git(root, 'rev-parse', REF)).toBe(head);
+    expect(await (await reader(root)).inspect()).toMatchObject({ source: { content: 'committed', identity: { commit: head } } });
+    // Present in the working tree but not committed on the ref: absent.
+    const fresh = await repository({ 'note.txt': 'x' }); await mkdir(join(fresh, '.deckent')); await writeFile(join(fresh, FILE), 'untracked');
+    expect(await (await reader(fresh)).inspect()).toEqual({ status: 'absent' });
+    // A ref that names no commit is unreadable, never absent.
+    expect(await (await reader(root, null, FILE, 'refs/heads/missing')).inspect()).toEqual({ status: 'blocked', reason: 'unreadable' });
+  });
+
+  it('refuses a symlink, submodule or file .deckent and a non-regular entry at the ref; the size comes from the tree before any read', async () => {
+    const outside = await repository({ 'worker-instructions.md': 'planted' });
+    const linked = await repository({ 'note.txt': 'x' }); await symlink(outside, join(linked, '.deckent')); await commit(linked);
+    const plain = await repository({ '.deckent': 'a file' });
+    const sub = await repository({ 'note.txt': 'x' });
+    await git(sub, 'update-index', '--add', '--cacheinfo', `160000,${await git(outside, 'rev-parse', 'HEAD')},.deckent`); await git(sub, 'commit', '-q', '-m', 'gitlink');
+    const fileLink = await repository({ '.deckent/target.md': 'x' }); await symlink('target.md', join(fileLink, FILE)); await commit(fileLink);
+    const tree = await repository({ 'AGENTS.md/inner.md': 'x' });
+    for (const [root, file] of [[linked, FILE], [plain, FILE], [sub, FILE], [fileLink, FILE], [tree, 'AGENTS.md']] as const) {
+      expect(await (await reader(root, null, file)).inspect(), `${root} ${file}`).toEqual({ status: 'blocked', reason: 'unsafe' });
+    }
+    const large = await repository({ [FILE]: 'x'.repeat(PROJECT_INSTRUCTION_REGISTRY.maxBytes + 1) });
+    expect(await (await reader(large)).inspect()).toEqual({ status: 'blocked', reason: 'size' });
+    expect(await (await reader(await repository({ 'AGENTS.md': 'agents' }), null, 'AGENTS.md')).inspect()).toMatchObject({ source: { content: 'agents', path: `${REF}:AGENTS.md` } });
+  });
+
+  it('trust stays folder + content: an alpha.53 worktree trust record is honoured, the ref advancing with the same bytes stays trusted, other bytes do not', async () => {
+    const root = await repository(), home = await mkdtemp(join(tmpdir(), 'worker-home-')); roots.push(home); await chmod(home, 0o700);
+    const env = { HOME: home };
+    const legacy = await openWorkerInstructionTrust(root, env, undefined, FILE), shown = await legacy.inspect(); // alpha.53: the working-tree read
+    if (shown.status !== 'trust-required') throw new Error(shown.status);
+    await legacy.trust(shown.source.digest);
+    const atRef = await openWorkerInstructionTrust(root, env, undefined, FILE, committed(root));
+    expect(await atRef.inspect()).toMatchObject({ status: 'ready', source: { digest: shown.source.digest, identity: { kind: 'ref' } } });
+    await writeFile(join(root, 'other.txt'), 'unrelated'); const advanced = await commit(root);
+    expect(await atRef.inspect()).toMatchObject({ status: 'ready', source: { identity: { commit: advanced } } });
+    await writeFile(join(root, FILE), 'changed on the branch'); await commit(root);
+    expect(await atRef.inspect()).toMatchObject({ status: 'trust-required', source: { content: 'changed on the branch' } });
   });
 });
 

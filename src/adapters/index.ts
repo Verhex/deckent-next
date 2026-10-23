@@ -15,7 +15,7 @@ export type { GitWorkspaceOptions, GitWorkspaceLease } from '#adapters/core/git-
 export { gitSourcePreimageSchema, gitSourceBaseSchema, fingerprintGitSource } from '#adapters/core/git-workspace/index.js';
 export type { GitSourcePreimage, GitSourceBase } from '#adapters/core/git-workspace/index.js';
 export { GitRunWorkspaceProvider } from '#adapters/core/git-workspace/index.js';
-export { resolveGitWorkTarget, selectWorkTarget } from '#adapters/core/git-workspace/index.js';
+export { gitRefFileSource, resolveGitWorkTarget, selectWorkTarget, workTargetRefFileSource } from '#adapters/core/git-workspace/index.js';
 export type { ResolvedGitWorkTarget, WorkTargetDeclaration, WorkTargetExecution, WorkTargetSettings } from '#adapters/core/git-workspace/index.js';
 export { scanWorkerTree, workerTreeViews, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
 export type { WorkerTreeGateOptions, WorkerTreeView } from '#adapters/core/worker-tree-gate/index.js';

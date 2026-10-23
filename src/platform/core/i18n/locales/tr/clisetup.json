@@ -72,6 +72,8 @@
   "cli.coding.instructions.state.trusted": "Güvenilir: buradaki worker'lar bu dosyayı proje bağlamı olarak alır ({source}).",
   "cli.coding.instructions.state.untrusted": "Bu içerik güvenilir değil: worker'lar dosya olmadan çalışır ({source}).",
   "cli.coding.instructions.state.absent": "Burada {file} yok: worker'lar proje talimatı olmadan çalışır ({source}).",
+  "cli.coding.instructions.state.absentAtRef": "{ref} üzerinde commit edilmiş {file} yok: worker'lar proje talimatı olmadan çalışır ({source}). Commit edilmemiş dosyalar kullanılmaz.",
+  "cli.coding.instructions.revision": "{ref} üzerinde {commit} commit'indeki sürüm; bu klasörde commit edilmemiş değişiklikler kullanılmaz.",
   "cli.coding.instructions.state.blocked": "Dışarıda bırakıldı ({reason}): {file} boyut sınırı içinde okunabilen düz bir dosya değil.",
   "cli.coding.instructions.state.noExecution": "Kapalı: Git yürütmesi tanımlı değil; worker'lar talimat dosyası almaz.",
   "cli.coding.instructions.state.sourceNone": "Kapalı: bu projede execution.workerInstructions.source değeri none.",

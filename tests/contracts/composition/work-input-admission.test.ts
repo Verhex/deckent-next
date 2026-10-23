@@ -1,9 +1,11 @@
 import { expectEmptyCostObservation } from '../support/run-cost-observation.js';
 import { runRefusalEvidence, expectOnlyUnappliedRunDecisions } from '../support/run-refusal-evidence.js';
+import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { chmod, mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import { applyModelCatalog, createConfiguredRuntimeClient, createRun, inspectRun, reserveRunTasks, startConfiguredRuntimeService } from '../../../src/index.js';
 import { inspectMonitor } from '#composition/index.js';
@@ -482,7 +484,8 @@ describe.skipIf(process.platform === 'win32')('worker instruction snapshot throu
         .map(row => (JSON.parse(row.record) as { event: { subject: { action: string; resource: object; basisDigest: string; verdict: { decision: string } } } }).event.subject)
         .filter(subject => subject.action.startsWith('worker-instructions-')); } finally { db.close(); } };
     expect(await status()).toMatchObject({ target: null, source: 'worker-md', state: 'absent', off: null });
-    const forged = { target: null, root: f.project, rootDev: 0, rootIno: 0, source: 'worker-md', file: '.deckent/worker-instructions.md', path: file, fileDev: 0, fileIno: 0, digest: 'ab'.repeat(32) };
+    const forged = { target: null, root: f.project, rootDev: 0, rootIno: 0, source: 'worker-md', file: '.deckent/worker-instructions.md', ref: null, path: file, commit: null, blobOid: null,
+      fileDev: 0, fileIno: 0, digest: 'ab'.repeat(32) };
     await expect(change('trust', forged)).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_UNAVAILABLE', params: { reason: 'absent' } });
     await writeFile(file, 'Run npm test before reporting.\nKeep changes small.');
     const shown = await status();
@@ -550,28 +553,34 @@ describe.skipIf(process.platform === 'win32')('worker instruction snapshot throu
   });
 });
 
-/** REVISE 2734 R1: the writer acts only on the exact place the card showed (canonical root + identity, source, file + identity, digest);
- * any other place is a typed refusal before a decision is sealed or a trust record changes. */
+/** REVISE 2734 R1: the writer acts only on the exact place the card showed (canonical root + identity, source, file, digest);
+ * any other place is a typed refusal before a decision is sealed or a trust record changes. alpha.54 R1 (owner Q5): with a work target the
+ * file is the one committed on its base ref (`<ref>:<file>`; commit shown and sealed, not compared); the working tree is never read. */
 describe.skipIf(process.platform === 'win32')('R1: the trust card binds the exact folder and file it showed', () => {
   const execution = () => ({ execution: { docker: { executable: '/usr/bin/docker', imageId: docker.imageId }, git: { gitExecutable: '/usr/bin/git' } } });
   const home = async () => { const path = await mkdtemp(join(tmpdir(), 'dn-worker-home-')); roots.push(path); await chmod(path, 0o700); return path; };
-  const name = '.deckent/worker-instructions.md', TEXT = 'Run npm test before reporting.';
+  const name = '.deckent/worker-instructions.md', TEXT = 'Run npm test before reporting.', REF = 'refs/heads/main', exec = promisify(execFile);
+  const git = async (root: string, ...args: string[]) => (await exec('/usr/bin/git', ['-C', root, '-c', 'user.name=T', '-c', 'user.email=t@example.invalid', ...args])).stdout.trim();
+  const commit = async (root: string) => { await git(root, 'add', '-A'); await git(root, 'commit', '-q', '--allow-empty', '-m', 'next'); return git(root, 'rev-parse', REF); };
   async function bound() {
     const f = await seeded(registry, undefined, execution(), await home());
     const policy = join(f.project, 'd', 'policy.json'), document = JSON.parse(await readFile(policy, 'utf8'));
     await writeFile(policy, JSON.stringify({ ...document, grants: [...document.grants, { id: 'config', effect: 'allow', actions: ['write'], scopes: ['s'],
       principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'config', ids: 'all' } }] }), { mode: 0o600 });
-    const folder = async (label: string) => { const root = join(f.project, label); await mkdir(join(root, '.deckent'), { recursive: true }); await writeFile(join(root, name), TEXT); return root; };
-    const setTarget = async (path: string | null, workerInstructions?: object) => {
+    // A work target is a Git repository with the file committed on its base ref.
+    const folder = async (label: string) => { const root = join(f.project, label); await mkdir(join(root, '.deckent'), { recursive: true }); await writeFile(join(root, name), TEXT);
+      await git(root, 'init', '-q', '-b', 'main'); await commit(root); return root; };
+    const setTarget = async (path: string | null, workerInstructions?: object, baseRef = REF) => {
       const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
       const { workTargets: _targets, workerInstructions: _instructions, ...rest } = config.execution; void _targets; void _instructions;
       await writeFile(configPath, JSON.stringify({ ...config, execution: { ...rest, ...(workerInstructions ? { workerInstructions } : {}),
-        ...(path === null ? {} : { workTargets: { schemaVersion: 1, targets: [{ id: 'n1', kind: 'git', path, baseRef: 'refs/heads/main' }] } }) } })); clearConfigCache();
+        ...(path === null ? {} : { workTargets: { schemaVersion: 1, targets: [{ id: 'n1', kind: 'git', path, baseRef }] } }) } })); clearConfigCache();
     };
     const status = async () => (await inspectConfiguredWorkerInstructions(f.project, f.options)).targets[0]!;
     // What the CLI sends from the card it showed: the row's host-made binding.
     const change = (action: 'trust' | 'revoke', row: Awaited<ReturnType<typeof status>>) => changeConfiguredWorkerInstructionTrust(f.project,
       { scopeId: 's', action, binding: row.binding! }, f.options, { attest: async () => true });
+    // Trust is folder + content: the working-tree reader sees the same record the ref read uses (the fixtures keep both bytes equal).
     const stateAt = async (root: string, file = name) => (await (await openHostProjectInstructionReader(root, f.options.env, undefined, [file])).inspect()).status;
     const sealed = () => { const db = new DatabaseSync(f.path, { readOnly: true }); try {
       return (db.prepare("SELECT record FROM audit_events WHERE kind = 'authority-decision'").all() as { record: string }[]).filter(row => row.record.includes('worker-instructions-')).length;
@@ -596,18 +605,51 @@ describe.skipIf(process.platform === 'win32')('R1: the trust card binds the exac
   });
   it('the project switches the worker source to a byte-identical AGENTS.md: refused', async () => {
     const { setTarget, status, change, stateAt, sealed, A } = await bound();
-    await writeFile(join(A, 'AGENTS.md'), TEXT); await setTarget(A); const card = await status();
+    await writeFile(join(A, 'AGENTS.md'), TEXT); await commit(A); await setTarget(A); const card = await status();
     await setTarget(A, { schemaVersion: 1, source: 'agents-md' }); expect((await status()).digest).toBe(card.digest);
     await expect(change('trust', card)).rejects.toMatchObject(refused);
     expect([await stateAt(A, 'AGENTS.md'), sealed()]).toEqual(['trust-required', 0]);
   });
-  it('the file is replaced by another file with identical bytes (new inode): refused', async () => {
-    const { setTarget, status, change, stateAt, sealed, A } = await bound();
-    await setTarget(A); const card = await status();
-    await writeFile(join(A, '.deckent/replacement.md'), TEXT); await rename(join(A, '.deckent/replacement.md'), join(A, name));
+  it('without a work target the file is replaced by another file with identical bytes (new inode): refused', async () => {
+    const { f, status, change, stateAt, sealed } = await bound();
+    await writeFile(join(f.project, name), TEXT); const card = await status(); expect(card).toMatchObject({ target: null, ref: null, commit: null });
+    await writeFile(join(f.project, '.deckent/replacement.md'), TEXT); await rename(join(f.project, '.deckent/replacement.md'), join(f.project, name));
     expect((await status()).digest).toBe(card.digest);
     await expect(change('trust', card)).rejects.toMatchObject(refused);
-    expect([await stateAt(A), sealed()]).toEqual(['trust-required', 0]);
+    expect([await stateAt(f.project), sealed()]).toEqual(['trust-required', 0]);
+  });
+  it('a dirty working-tree edit is never what workers get; the ref advancing with the same bytes keeps the card; other committed bytes are refused', async () => {
+    const { setTarget, status, change, stateAt, sealed, A } = await bound();
+    await setTarget(A); const card = await status(), first = await git(A, 'rev-parse', REF);
+    await writeFile(join(A, name), 'Uncommitted edit.');
+    expect(await status()).toMatchObject({ state: 'untrusted', digest: card.digest, commit: first, preview: [TEXT] });
+    await writeFile(join(A, name), TEXT); await writeFile(join(A, 'other.txt'), 'unrelated'); const advanced = await commit(A);
+    expect(await status()).toMatchObject({ digest: card.digest, commit: advanced });
+    expect(await change('trust', card)).toMatchObject({ trusted: true, changed: true }); expect(sealed()).toBe(1);
+    await writeFile(join(A, name), 'Other committed instructions.'); await commit(A);
+    expect((await status()).state).toBe('untrusted');
+    const error = await change('revoke', card).catch((caught: unknown) => caught as { code: string; params?: { reason?: string } });
+    expect(error).toMatchObject({ code: 'WORKER_INSTRUCTIONS_CHANGED' }); expect(error.params?.reason).toBeUndefined(); // content, not place
+    expect([await stateAt(A), sealed()]).toEqual(['trust-required', 1]);
+  });
+  it('admission snapshots the committed content and names ref@commit; an uncommitted edit never reaches the worker prompt', async () => {
+    const { f, setTarget, status, change, A } = await bound();
+    const policy = join(f.project, 'd', 'policy.json'), document = JSON.parse(await readFile(policy, 'utf8'));
+    await writeFile(policy, JSON.stringify({ ...document, grants: [...document.grants, { id: 'target', effect: 'allow', actions: ['use'], scopes: ['s'],
+      principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'work-target', ids: 'all' } }] }), { mode: 0o600 });
+    await setTarget(A); const card = await status(); await change('trust', card);
+    await writeFile(join(A, name), 'Uncommitted edit.');
+    expect((await createRun(f.project, run('at-ref', 'coding', workInput()), f.options)).warnings).toEqual([]);
+    const task = (f.snapshotProfile('at-ref').tasks[0]!.profile.parameters['nativeSubscription'] as { promptDelivery: { task: string } }).promptDelivery.task;
+    expect(task).toContain(`Project instructions from ${REF}:${name} at commit ${card.commit} (sha256 ${card.digest})`);
+    expect(task).toContain(TEXT); expect(task).not.toContain('Uncommitted edit.');
+  });
+  it('another base ref of the same target with byte-identical content is another place', async () => {
+    const { setTarget, status, change, sealed, A } = await bound();
+    await git(A, 'branch', 'other'); await setTarget(A); const card = await status();
+    await setTarget(A, undefined, 'refs/heads/other'); expect(await status()).toMatchObject({ digest: card.digest, ref: 'refs/heads/other', path: `refs/heads/other:${name}` });
+    await expect(change('trust', card)).rejects.toMatchObject(refused);
+    expect(sealed()).toBe(0);
   });
   it('revoke has the same binding: a revoke card for folder A never removes the trust of folder B', async () => {
     const { f, setTarget, status, change, stateAt, sealed, A, B } = await bound();
@@ -621,10 +663,11 @@ describe.skipIf(process.platform === 'win32')('R1: the trust card binds the exac
     await expect(change('revoke', card)).rejects.toMatchObject(refused);
     expect([await stateAt(A), await stateAt(B), sealed()]).toEqual(['ready', 'ready', 1]);
   });
-  it('the card carries the host-made canonical place: target, real root and its identity, source, file, path and its identity, digest', async () => {
+  it('the card carries the host-made canonical place: target, real root and its identity, source, file, ref, path, commit and blob, digest', async () => {
     const { status, setTarget, A } = await bound();
     await setTarget(A); const card = await status();
     expect(card.binding).toEqual({ target: 'n1', root: A, rootDev: expect.any(Number), rootIno: expect.any(Number), source: 'worker-md', file: name,
-      path: join(A, name), fileDev: expect.any(Number), fileIno: expect.any(Number), digest: card.digest });
+      ref: REF, path: `${REF}:${name}`, commit: await git(A, 'rev-parse', REF), blobOid: await git(A, 'rev-parse', `${REF}:${name}`), fileDev: null, fileIno: null, digest: card.digest });
+    expect(card).toMatchObject({ ref: REF, commit: card.binding!.commit, path: `${REF}:${name}` });
   });
 });

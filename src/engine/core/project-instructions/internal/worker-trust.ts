@@ -15,23 +15,27 @@ export interface WorkerInstructionTrustRequest {
 }
 /**
  * The canonical place a trust card shows, made by the host from one read (never typed by a caller): the configured work target (null: the
- * project root), its real root and that directory's identity, the selected source and file, the read file's path and identity, and the
- * content digest. The writer acts only when the place it reads again just before sealing and writing is this exact binding.
+ * project root), its real root and that directory's identity, the selected source and file, where it was read and the content digest.
+ * With a work target (alpha.54 R1, owner Q5) the file comes from the target's base `ref`: `path` is `<ref>:<file>`, `commit` and `blobOid` are
+ * shown and sealed but never compared (the branch may advance with the same bytes); without one it is the working-tree file and its identity.
+ * The writer acts only when the place it reads again just before sealing and writing is this binding's place with this digest.
  */
 export interface WorkerInstructionBinding {
   readonly target: string | null; readonly root: string; readonly rootDev: number; readonly rootIno: number;
-  readonly source: string; readonly file: string; readonly path: string; readonly fileDev: number; readonly fileIno: number; readonly digest: string;
+  readonly source: string; readonly file: string; readonly ref: string | null; readonly path: string; readonly commit: string | null; readonly blobOid: string | null;
+  readonly fileDev: number | null; readonly fileIno: number | null; readonly digest: string;
 }
 /** The reader's canonical root and its identity, pinned when the reader opened. */
 export interface WorkerInstructionRoot { readonly root: string; readonly identity: Readonly<{ dev: number; ino: number }> }
 export function workerInstructionBinding(place: WorkerInstructionPlace, located: WorkerInstructionRoot, view: ProjectInstructionView): WorkerInstructionBinding | null {
   if (place.file === null || (view.status !== 'ready' && view.status !== 'trust-required')) return null;
-  const { path, digest, identity } = view.source;
+  const { path, digest, identity } = view.source, ref = identity.kind === 'ref' ? identity : null, file = identity.kind === 'file' ? identity : null;
   return { target: place.target, root: located.root, rootDev: located.identity.dev, rootIno: located.identity.ino, source: place.source, file: place.file,
-    path, fileDev: identity.dev, fileIno: identity.ino, digest };
+    ref: ref?.ref ?? null, path, commit: ref?.commit ?? null, blobOid: ref?.blobOid ?? null, fileDev: file?.dev ?? null, fileIno: file?.ino ?? null, digest };
 }
-const BINDING_PLACE = ['target', 'root', 'rootDev', 'rootIno', 'source', 'file', 'path', 'fileDev', 'fileIno'] as const;
-/** `place`: another folder, source, file or file identity than the card showed; `content`: the same place with other bytes; null: identical. */
+const BINDING_PLACE = ['target', 'root', 'rootDev', 'rootIno', 'source', 'file', 'ref', 'path', 'fileDev', 'fileIno'] as const;
+/** `place`: another folder, source, file, ref or working-tree file identity than the card showed; `content`: the same place with other bytes
+ * (a ref that advanced to other bytes included); null: identical (a ref that advanced with the same bytes included). */
 export function workerInstructionBindingChange(shown: WorkerInstructionBinding, current: WorkerInstructionBinding | null): 'place' | 'content' | null {
   if (current === null || BINDING_PLACE.some(key => shown[key] !== current[key])) return 'place';
   return shown.digest === current.digest ? null : 'content';
@@ -62,7 +66,7 @@ export async function decideWorkerInstructionTrust(request: WorkerInstructionTru
   const envelope = commandEnvelopeSchema.parse({ schemaVersion: 1, commandId: request.commandId, scopeId,
     principalRef: { id: principal.id, issuer: principal.issuer, subject: principal.subject }, idempotencyKeyHash: hash('worker-instructions-trust-command:1', request.commandId) });
   const record = ports.record({ kind: 'authority-decision', schemaVersion: 1, envelope, action: ACTIONS[request.action], resource: RESOURCE,
-    inputDigest: hash('worker-instructions-trust:2', { action: request.action, ...request.binding }),
+    inputDigest: hash('worker-instructions-trust:3', { action: request.action, ...request.binding }),
     basisDigest: request.binding.digest, policyDigest: hash('policy:1', ports.policy),
     verdict: { decision: verdict.decision, revision: verdict.revision, reason: verdict.reason, ...(verdict.ruleId === undefined ? {} : { ruleId: verdict.ruleId }) } }, ports.now());
   if (verdict.decision === 'require-approval') throw ErrorRegistry.createError('POLICY_APPROVAL_UNSUPPORTED');
@@ -75,6 +79,8 @@ export async function decideWorkerInstructionTrust(request: WorkerInstructionTru
 export interface WorkerInstructionPlace {
   /** The configured work target id (null: the project root) and the folder workers read the file from. */
   readonly target: string | null; readonly root: string;
+  /** The work target's base ref the file is read from (alpha.54 R1); null: the project root's working tree. */
+  readonly ref: string | null;
   readonly source: string; readonly file: string | null; readonly explicit: boolean;
   /** Null when the mechanism is on; otherwise why it is an explicit no-op. */
   readonly off: 'no-execution' | 'source-none' | null;
@@ -84,6 +90,8 @@ export interface WorkerInstructionStatus extends WorkerInstructionPlace {
   readonly state: 'off' | 'absent' | 'blocked' | 'untrusted' | 'trusted';
   readonly reason: 'size' | 'unsafe' | 'unreadable' | null;
   readonly path: string | null; readonly bytes: number | null; readonly digest: string | null; readonly preview: readonly string[];
+  /** With a work target: the commit its base ref named at this read (null otherwise). */
+  readonly commit: string | null;
   /** What a trust/revoke card hands to the writer (null when there is no file to trust). */
   readonly binding: WorkerInstructionBinding | null;
 }
@@ -93,12 +101,13 @@ export interface WorkerInstructionTrustResult {
 }
 const PREVIEW = Object.freeze({ lines: 12, chars: 160 });
 export function workerInstructionStatus(place: WorkerInstructionPlace, view: ProjectInstructionView | null, located: WorkerInstructionRoot | null): WorkerInstructionStatus {
-  const none = { reason: null, path: null, bytes: null, digest: null, preview: [], binding: null };
+  const none = { reason: null, path: null, bytes: null, digest: null, preview: [], binding: null, commit: null };
   if (view === null) return { ...place, ...none, state: 'off' };
   if (view.status === 'absent') return { ...place, ...none, state: 'absent' };
   if (view.status === 'blocked') return { ...place, ...none, state: 'blocked', reason: view.reason };
-  const { path, bytes, digest, content } = view.source, lines = content.split(/\r?\n/u);
+  const { path, bytes, digest, content, identity } = view.source, lines = content.split(/\r?\n/u);
   while (lines.length && !lines.at(-1)!.trim()) lines.pop(); // trailing blank lines say nothing on the card
   return { ...place, state: view.status === 'ready' ? 'trusted' : 'untrusted', reason: null, path, bytes, digest,
+    commit: identity.kind === 'ref' ? identity.commit : null,
     binding: located ? workerInstructionBinding(place, located, view) : null, preview: lines.slice(0, PREVIEW.lines).map(line => [...line].slice(0, PREVIEW.chars).join('')) };
 }

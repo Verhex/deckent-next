@@ -1,8 +1,16 @@
 /** Instruction content is model context, never permission, policy or execution authority. */
 export interface ProjectInstructionSource {
   readonly path: string; readonly bytes: number; readonly digest: string; readonly content: string;
-  /** The verified identity of the file that was read (no-follow, single link): a byte-identical replacement is a different file. */
-  readonly identity: Readonly<{ dev: number; ino: number }>;
+  /** What was read: a working-tree file's verified identity (no-follow, single link: a byte-identical replacement is a different file),
+   * or the committed blob a work target's ref named (alpha.54 R1: the commit is shown and sealed, the content digest is what trust binds). */
+  readonly identity: ProjectInstructionIdentity;
+}
+export type ProjectInstructionIdentity = Readonly<{ kind: 'file'; dev: number; ino: number }> | Readonly<{ kind: 'ref'; ref: string; commit: string; blobOid: string }>;
+/** A committed source of instruction files (a Git work target's base ref): `read` resolves the ref's commit again on every call and returns the
+ * bounded blob of `name`, null when the commit has no such entry; it throws `unsafe` (link, submodule, non-tree parent) or `size` (above `maxBytes`). */
+export interface CommittedInstructionSource {
+  readonly ref: string;
+  read(name: string, maxBytes: number): Promise<Readonly<{ commit: string; blobOid: string; bytes: Buffer }> | null>;
 }
 export type ProjectInstructionView =
   | Readonly<{ status: 'absent' }>
