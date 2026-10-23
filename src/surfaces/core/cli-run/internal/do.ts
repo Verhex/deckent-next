@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { brainPlanCommandSchema } from '#domain/index.js';
 import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
-import { emit, loadConfig, resolveLocale, ErrorRegistry, type Locale } from '#platform/index.js';
+import { emit, loadConfig, resolveLocale, ErrorRegistry, clockText, t, type Locale } from '#platform/index.js';
+import type { BrainPlanProgress } from '#domain/index.js';
 import { cliUsage } from '#surfaces/core/cli-kit/index.js';
 import type { RunCommandContext } from './context.js';
 export async function doCommand(argv: readonly string[], context: RunCommandContext, initialLocale: Locale = resolveLocale(undefined, context.env)) {
@@ -20,6 +21,11 @@ export async function doCommand(argv: readonly string[], context: RunCommandCont
   const scopeId = values.get('--scope') ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
   const intent = values.get('--request'); if (!scopeId || !intent) throw cliUsage('do', undefined, locale);
   const command = brainPlanCommandSchema.parse({ schemaVersion: 1, commandId: values.get('--command-id') ?? randomUUID(), scopeId, intent });
-  const result = await context.planRun(root, command, options, context.signal);
+  // f3 (owner Q-H4): a quota wait is shown on stderr (stdout keeps the one result, --json included); Ctrl+C cancels it through the signal.
+  const stderr = context.stderr ?? process.stderr;
+  const observe = (progress: BrainPlanProgress) => { stderr.write(`${progress.kind === 'quota-wait'
+    ? t('brainwait.cli', { time: clockText(progress.untilMs), attempt: progress.attempt, maxAttempts: progress.maxAttempts }, locale)
+    : t('brainwait.resumed', { attempt: progress.attempt }, locale)}\n`); };
+  const result = await context.planRun(root, command, options, context.signal, observe);
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: value => brainProposalLines(value, locale).join('\n') });
 }

@@ -43,6 +43,11 @@
       "tokenFramingAllowance": 1024
     },
     "maxCompletionTokens": null,
+    "quotaWait": {
+      "marginMs": 15000,
+      "maxAttempts": 2,
+      "maxWaitMs": 900000
+    },
     "reasoning": "model-default",
     "schemaVersion": 1,
     "selected": {

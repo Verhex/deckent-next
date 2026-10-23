@@ -30,6 +30,8 @@ export type FakeStep = { line: Line | string } | { sleepMs: number } | { floodBy
 export interface FakeScenario {
   readonly logPath: string; readonly version?: string; readonly help?: string; readonly probeRefusal?: string | null; readonly systemProbeRefusal?: string | null;
   readonly auth?: Record<string, unknown>; readonly authExit?: number; readonly steps?: readonly FakeStep[]; readonly initCwd?: 'actual';
+  /** The Nth model call (0-based) replays `stepsByCall[N]` when present, else `steps` (a quota refusal then an answer, for example). */
+  readonly stepsByCall?: readonly (readonly FakeStep[])[];
 }
 /** Help text naming every listed flag the registry needs, the way the CLI's help lists options (the hidden ones are absent, as in CLI 2.1.309). */
 export function fullHelp(): string {
@@ -59,9 +61,11 @@ if (argv[0] === '--max-turns') { log({ mode: 'probe' }); if (s.probeRefusal) pro
 if (argv[0] === 'auth') { log({ mode: 'auth' }); process.stdout.write(JSON.stringify({ ...s.auth, configDirectory: s.auth.configDirectory ?? process.env.CLAUDE_CONFIG_DIR })); process.exit(s.authExit); }
 const chunks = []; process.stdin.on('data', chunk => chunks.push(chunk)); process.stdin.on('end', async () => {
   const promptFile = argv[argv.indexOf(${JSON.stringify(headless.systemPromptFlag)}) + 1];
+  const index = fs.existsSync(s.logPath) ? fs.readFileSync(s.logPath, 'utf8').split('\\n').filter(line => line.includes('"mode":"call"')).length : 0;
+  const steps = (s.stepsByCall ?? [])[index] ?? s.steps;
   log({ mode: 'call', stdin: Buffer.concat(chunks).toString('utf8'), system: fs.readFileSync(promptFile, 'utf8'), systemMode: fs.statSync(promptFile).mode & 0o777,
     entries: fs.readdirSync('.').sort() });
-  for (const step of s.steps) {
+  for (const step of steps) {
     if (step.line !== undefined) { const line = typeof step.line === 'string' ? step.line : JSON.stringify(step.line.subtype === 'init' && s.initCwd === 'actual' && step.line.cwd === '/run/dir' ? { ...step.line, cwd: process.cwd() } : step.line); process.stdout.write(line + '\\n'); }
     else if (step.sleepMs !== undefined) await new Promise(resolve => setTimeout(resolve, step.sleepMs));
     else if (step.floodBytes !== undefined) process.stdout.write('x'.repeat(step.floodBytes));

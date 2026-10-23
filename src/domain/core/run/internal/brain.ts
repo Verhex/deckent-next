@@ -11,6 +11,13 @@ export const brainPlanCommandSchema = z.object({ schemaVersion: z.literal(1), co
 }).strict().readonly();
 export type BrainPlanCommand = z.infer<typeof brainPlanCommandSchema>;
 export const brainPlanCommandInputSchema = createImmutableJsonObjectSchema(protocol.commandLimits).pipe(brainPlanCommandSchema);
+/** f3 (owner Q-H4): the refused planning call a later attempt descends from (its command id and recorded invocation id). */
+export type BrainAttemptLink = Readonly<{ commandId: string; invocationId: string }>;
+/** Planning progress a surface shows while one plan command runs: a quota wait (until when, the next attempt, after which refused call), then
+ * planning again. Progress only: it carries no authority and changes nothing. */
+export type BrainPlanProgress = Readonly<{ kind: 'quota-wait'; attempt: number; maxAttempts: number; resetsAtMs: number; untilMs: number; after: BrainAttemptLink }>
+  | Readonly<{ kind: 'planning'; attempt: number }>;
+export type BrainPlanObserver = (progress: BrainPlanProgress) => void;
 /** Bounded, redacted contribution attribution; the invocation retains its own immutable receipt. */
 const contributionShape = z.object({
   template: z.object({ id: identitySchema, version: z.number().int().positive().safe(), digest }).strict().readonly(),

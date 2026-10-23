@@ -1,0 +1,7 @@
+{
+  "brainwait.window": "The subscription quota is used up. Brain waits until {time} (the quota reset), then plans once more as a new call: attempt {attempt} of {maxAttempts}. Nothing is sent before then and no Run exists yet.",
+  "brainwait.cancelHint": "Esc / Ctrl+C: stop waiting and cancel planning (no Run is created)",
+  "brainwait.activeWork": "quota wait · plans again at {time}",
+  "brainwait.cli": "Subscription quota used up: waiting until {time}, then planning once more as a new call (attempt {attempt} of {maxAttempts}). Ctrl+C cancels; no Run exists yet.",
+  "brainwait.resumed": "Quota reset reached: planning again (attempt {attempt})."
+}
