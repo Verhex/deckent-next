@@ -1,4 +1,4 @@
-import { CORE_MODEL_ROLES, decideRoleModel, eligibleRoleModels, mergeModelRoleRegistries, modelRoleConfigSchema, parseProviderCatalog, roleModelKey, type ModelActivationRecord,
+import { CORE_MODEL_ROLES, decideRoleModel, eligibleRoleModels, mergeModelRoleRegistries, modelInvocationProfileSchema, modelRoleConfigSchema, parseProviderCatalog, roleModelKey, type ModelActivationRecord,
   type ModelReference, type ModelRolePolicy, type RoleModelDecision, type RoleModelRow, type RoleModelTarget } from '#domain/index.js';
 
 /**
@@ -46,4 +46,10 @@ export async function inspectRoleModelsInScope(sources: RoleModelSources, roleId
   const measured = policy.models.filter(row => row.measured !== undefined && row.roles.includes(roleId));
   const models: readonly RoleModelRow[] = eligibleRoleModels(policy, roleId, { today, active: await activeKeys(scopeId, [...listed, ...measured], ports) });
   return Object.freeze({ schemaVersion: 1 as const, scopeId, role: roleId, revision: policy.revision, models });
+}
+/** A role target's invocable path (S4B-3, S6R-5): the declared reference that has an invocation profile in the scope for this (channel, exact model); none: null. */
+export function roleModelInvocationReference(sources: RoleModelSources, profiles: unknown, scopeId: string, target: { readonly channelId: string; readonly modelId: string }): ModelReference | null {
+  const held = ((profiles as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value));
+  const references = sources.providerCatalog === undefined ? [] : roleModelPorts(sources).references(target);
+  return references.find(reference => held.some(profile => profile.scopeId === scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference))) ?? null;
 }

@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { rm } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
-import { RECOVERY_DECISION_SEED, RECOVERY_POLICY_SEED, freezeRecoveryPolicy, loadRecoveryPolicy, nervousPrincipalRef, recoveryPrincipal, type VerifiedPrincipal } from '#domain/index.js';
+import { RECOVERY_DECISION_SEED, RECOVERY_POLICY_SEED, effectRecordSchema, freezeRecoveryPolicy, loadRecoveryPolicy, nervousPrincipalRef, recoveryPrincipal, type VerifiedPrincipal } from '#domain/index.js';
 import { AuditApplication, RecoveryApplication, RecoveryDecisionApplication, prepareTaskStart, recoveryContinuationApproval, recoveryDecisionCommandId,
   type RecoveryModelRequest, type RecoveryModelResult, type RecoveryModelRow } from '#engine/index.js';
 import { openSqliteRecoveryStore, type SqliteAttemptStore } from '#adapters/index.js';
@@ -29,13 +29,14 @@ async function harness(input: { policy?: unknown; rows?: readonly RecoveryModelR
   const cases = openSqliteRecoveryStore(f.path, LEDGER_OPTIONS); closers.push(() => cases.close());
   const audit = await openSqliteAuditStore(f.path, LEDGER_OPTIONS); closers.push(() => audit.close());
   const state = { document: input.document === undefined ? standing as unknown : input.document, principal: recovery as VerifiedPrincipal, answer: input.answer ?? {} as Answer,
-    rows: input.rows ?? [metered], crash: false };
+    rows: input.rows ?? [metered], crash: false, crashAssess: false };
   const holds: unknown[] = [], calls: RecoveryModelRequest[] = [];
   const ledger = new AuditApplication(audit, lostIntegrity), verifier = { async verify() { return state.principal; } };
   const approval = async (scopeId: string) => recoveryContinuationApproval(state.document, owner, scopeId, 30);
   const app = new RecoveryApplication({ store: cases, detections: ledger, recorder: target => new AuditApplication(target, lostIntegrity), approval,
     hold: async command => { holds.push(command); return null; }, policyRevision: 'owner-policy', now: () => 30, timeoutMs: 1000 }, verifier);
-  const make = () => new RecoveryDecisionApplication({ recovery: { prepare: (...args) => app.prepare(...args), assess: (...args) => app.assess(...args), escalate: (...args) => app.escalate(...args),
+  const make = () => new RecoveryDecisionApplication({ recovery: { prepare: (...args) => app.prepare(...args), escalate: (...args) => app.escalate(...args),
+    assess: async (...args) => { if (state.crashAssess) { state.crashAssess = false; throw new Error('CRASH_BEFORE_ASSESS'); } return app.assess(...args); },
     continueLostTask: async (...args) => { if (state.crash) { state.crash = false; throw new Error('CRASH_AFTER_SEAL'); } return app.continueLostTask(...args); } },
   store: cases, seals: ledger, approval, owner: { issuer: owner.issuer, subject: owner.subject }, policyRevision: 'owner-policy', registry: input.registry ?? RECOVERY_DECISION_SEED, now: () => 40,
   models: { rows: async () => state.rows, invoke: async request => { calls.push(request); const given = state.answer;
@@ -101,6 +102,16 @@ it('N1: an unsettled effect — the model is never called; the escalation is sea
   expect(h.sealed()).toEqual([expect.objectContaining({ action: 'escalate-human', code: 'effects-open', model: null, mode: 'live' })]);
   expect(h.lifecycle()).toEqual(['hold', 'release-worker-custody', 'recovery-decision']);
   expect(h.holds).toEqual([expect.objectContaining({ commandId: `recovery-hold:${h.caseId}` })]);
+});
+
+it('a sealed gate escalation whose evidence then changed (crash before the case was written) still goes to a person, without a model call', async () => {
+  const h = await harness(), open = await h.store.claimEffect(effectIntent('open-3', { producer: { kind: 'attempt', identity: h.identity } }));
+  h.state.crashAssess = true;
+  await expect(decide(h)).rejects.toThrow('CRASH_BEFORE_ASSESS');
+  expect(h.sealed()).toEqual([expect.objectContaining({ code: 'effects-open', model: null })]); expect(h.cases()).toEqual([]);
+  await h.store.saveEffect(open, effectRecordSchema.parse({ ...open, state: 'refused', refusal: 'EFFECT_REJECTED' })); // the effect settles: the gate would pass now
+  expect(await decide(h)).toMatchObject({ kind: 'escalated', case: { state: 'escalated', decision: { code: 'effects-open' } } });
+  expect(h.calls).toEqual([]); expect(h.sealed()).toHaveLength(1); expect(h.holds).toHaveLength(1);
 });
 
 it.each([

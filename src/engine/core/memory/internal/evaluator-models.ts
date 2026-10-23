@@ -1,5 +1,5 @@
-import { canonicalModelMaker, composeMemoryAutomation, modelInvocationProfileSchema, type ModelReference } from '#domain/index.js';
-import { inspectRoleModelsInScope, roleModelPorts, type ModelCatalogReader, type RoleModelSources } from '#engine/core/model-activation/index.js';
+import { canonicalModelMaker, composeMemoryAutomation, type ModelReference } from '#domain/index.js';
+import { inspectRoleModelsInScope, roleModelInvocationReference, type ModelCatalogReader, type RoleModelSources } from '#engine/core/model-activation/index.js';
 import type { MemoryEvaluatorRow } from './contract.js';
 
 /** The S2 role a memory evaluator model must hold (registry data; the role registry restricts V5 to its rows). */
@@ -19,11 +19,8 @@ export async function memoryCatalogFacts(catalog: ModelCatalogReader): Promise<R
   return facts;
 }
 /** The declared reference that has an invocation profile in the scope for this (channel, exact model): the only invocable path (none: null). */
-export function memoryEvaluatorReference(sources: RoleModelSources, profiles: unknown, scopeId: string, target: { readonly channelId: string; readonly modelId: string }): ModelReference | null {
-  const held = ((profiles as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value));
-  const references = sources.providerCatalog === undefined ? [] : roleModelPorts(sources).references(target);
-  return references.find(reference => held.some(profile => profile.scopeId === scopeId && JSON.stringify(profile.reference) === JSON.stringify(reference))) ?? null;
-}
+export const memoryEvaluatorReference = (sources: RoleModelSources, profiles: unknown, scopeId: string, target: { readonly channelId: string; readonly modelId: string }): ModelReference | null =>
+  roleModelInvocationReference(sources, profiles, scopeId, target);
 /** The scope's evaluator rows today: active `memory-evaluator` role rows (S2), each with its catalog maker and billing and whether it is invocable. */
 export async function memoryEvaluatorRows(sources: RoleModelSources, profiles: unknown, scopeId: string, facts: ReadonlyMap<string, MemoryCatalogFact>, nowMs: number): Promise<readonly MemoryEvaluatorRow[]> {
   const listed = await inspectRoleModelsInScope(sources, MEMORY_EVALUATOR_ROLE, scopeId, nowMs);

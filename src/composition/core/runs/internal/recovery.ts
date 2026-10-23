@@ -1,5 +1,5 @@
 import type { VerifiedPrincipal } from '#domain/index.js';
-import { AuditApplication, RecoveryApplication, RecoveryDecisionApplication, memoryCatalogFacts, recoveryContinuationApproval, recoveryDecisionPrincipal, recoveryDecisionRegistry,
+import { AuditApplication, RecoveryApplication, RecoveryDecisionApplication, memoryCatalogFacts, memoryCatalogKey, recoveryContinuationApproval, recoveryDecisionPrincipal, recoveryDecisionRegistry,
   recoveryModelReference, recoveryModelRows, type MemoryCatalogFact, type RecoveryDecisionOutcome, type RecoveryModelPorts, type RoleModelSources } from '#engine/index.js';
 import { extractOpenAiChatTextFromInvocation, openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteModelActivationReader, openSqliteModelCatalogReader, openSqliteModelInvocationReader,
   openSqliteRecoveryStore } from '#adapters/index.js';
@@ -25,7 +25,7 @@ async function claimedInvocation(c: Context, path: string, scopeId: string, comm
 function recoveryModelPorts(projectRoot: string, options: ConfigLoadOptions, c: Context, path: string, principal: VerifiedPrincipal, facts: ReadonlyMap<string, MemoryCatalogFact>,
   roles: RoleModelSources): RecoveryModelPorts {
   const profiles = c.config['provider_invocation_profiles'];
-  const rows: RecoveryModelPorts['rows'] = scopeId => recoveryModelRows(roles, profiles, scopeId, facts, Date.now());
+  const rows: RecoveryModelPorts['rows'] = scopeId => recoveryModelRows(roles, profiles, scopeId, (channelId, modelId) => facts.get(memoryCatalogKey(channelId, modelId))?.billing ?? null, Date.now());
   return { rows, async invoke(request) {
       // The exact row must still be an active, invocable role row just before the call (the role registry restricts the recovery principal's grant).
       const current = (await rows(request.scopeId)).some(row => row.channelId === request.row.channelId && row.modelId === request.row.modelId && row.invocable);

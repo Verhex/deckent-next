@@ -99,8 +99,13 @@ export class RecoveryDecisionApplication {
       if (!run) throw new RecoveryError('RECOVERY_CORRUPT');
       subject = await this.seal(current, 'live', await this.choose(current, run, 'live'));
     }
-    if (subject.evidenceDigest !== current.evidenceDigest) throw new RecoveryError('RECOVERY_STALE');
     const echo = { ...ref, evidenceDigest: current.evidenceDigest };
+    // A sealed escalation of other evidence (a gate refusal sealed, then a crash before `assess`, then the evidence changed) still hands the case to a
+    // person — never a model call for a case already sealed to a human. A sealed continuation of other evidence is never applied.
+    if (subject.evidenceDigest !== current.evidenceDigest) {
+      if (subject.action !== 'escalate-human' || subject.code === null) throw new RecoveryError('RECOVERY_STALE');
+      return Object.freeze({ kind: 'escalated' as const, case: await this.ports.recovery.escalate({ ...echo, code: subject.code }, credential), replay: true });
+    }
     if (subject.action === 'continue-new-attempt') {
       const outcome = await this.ports.recovery.continueLostTask({ ...echo, causeClass: subject.causeClass, note: subject.note }, credential);
       return outcome.kind === 'continued' ? Object.freeze({ kind: 'continued' as const, case: outcome.case, run: outcome.run, replay: sealed !== null })
