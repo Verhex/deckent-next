@@ -47,11 +47,11 @@ it('a standing moves forward by exactly one revision with its key fixed, is neve
     expect(() => db.exec("INSERT INTO agent_standings(scope_id,agent_id,revision,work_class,standing,standing_revision,record) VALUES('s','b',1,'feature','promoted',1,'{}')")).toThrow(/CHECK/);
     db.exec("UPDATE agent_standings SET standing='active',standing_revision=2");
     for (const sql of ["UPDATE agent_standings SET standing='candidate',standing_revision=4", "UPDATE agent_standings SET work_class='docs',standing_revision=3",
-      "UPDATE agent_standings SET revision=2,standing_revision=3", 'DELETE FROM agent_standings']) expect(() => db.exec(sql)).toThrow(/AGENT_STANDING_APPEND_ONLY/);
+      "UPDATE agent_standings SET revision=2,standing_revision=3", 'DELETE FROM agent_standings']) expect(() => db.exec(sql)).toThrow(/AGENT_CATALOG_APPEND_ONLY/);
     db.prepare("INSERT INTO agent_standing_revisions(scope_id,agent_id,revision,work_class,standing_revision,record) VALUES('s','a',1,'feature',1,'{}')").run();
     db.prepare("INSERT INTO agent_standing_receipts(scope_id,command_id,record) VALUES('s','c','{}')").run();
     for (const sql of ["UPDATE agent_standing_revisions SET record='x'", 'DELETE FROM agent_standing_revisions', "UPDATE agent_standing_receipts SET record='x'", 'DELETE FROM agent_standing_receipts'])
-      expect(() => db.exec(sql)).toThrow(/AGENT_STANDING_APPEND_ONLY/);
+      expect(() => db.exec(sql)).toThrow(/AGENT_CATALOG_APPEND_ONLY/);
   } finally { db.close(); }
 });
 it('the v67 → v66 down step is exact for a ledger without standing rows; negative: an existing standing table is refused, never adopted', async () => {

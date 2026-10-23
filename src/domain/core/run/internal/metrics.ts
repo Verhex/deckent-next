@@ -25,6 +25,9 @@ const legacyMetricsSchema = z.object({ schemaVersion: z.literal(1), ...common,
     z.object({ kind: z.literal('run'), status: z.literal('incomplete') }).strict(),
   ]).readonly(),
 }).strict().refine(consistent).readonly();
+/** S8-1b (S8-DESIGN §4 fold B): why a failed task row failed, from the sealed evaluation, dispatch and lifecycle write only. The first three are
+ * attributable to the worker/agent; every other value is its own bucket that no aggregation rule reads (a crash never counts against an agent). */
+export const FAILURE_CAUSES = ['criteria-failed', 'worker-report-failed', 'human-rejected', 'infra', 'model', 'dependency', 'policy', 'operator', 'unattributed'] as const;
 /** What the verdict rests on (law 1): the installed evaluators' evidence kinds plus a human decision; `unknown` for an unlisted evaluator. */
 export const METRIC_EVIDENCE_KINDS = ['exit-code', 'human-decision', 'operation-record', 'unknown'] as const;
 const label = z.string().min(1).max(64);
@@ -46,7 +49,11 @@ const currentMetricsSchema = z.object({ schemaVersion: z.literal(2), ...common,
   assignment: z.object({ candidatePolicy: assignmentPolicyReferenceSchema, candidateIndex: counterSchema,
     workClassRevision: identitySchema, catalogRevision: identitySchema, modelRevision: counterSchema.positive(), activationRevision: counterSchema.positive(),
     effortSource: assignmentEffortSourceSchema }).strict().readonly().optional(),
-}).strict().refine(value => consistent(value) && new Set(value.evidenceKinds).size === value.evidenceKinds.length
+  /** S8-1b: the agent revision of the Run's frozen task (never the live catalog); absent without an agent and on earlier rows. */
+  agent: z.object({ agentId: identitySchema, revision: counterSchema.positive() }).strict().readonly().optional(),
+  failureCause: z.enum(FAILURE_CAUSES).optional(),
+}).strict().refine(value => consistent(value) && (value.failureCause === undefined || (value.outcome.kind === 'task' && value.outcome.status === 'failed'))
+  && new Set(value.evidenceKinds).size === value.evidenceKinds.length
   && value.evidenceKinds.every((kind, index) => index === 0 || value.evidenceKinds[index - 1]! < kind)).readonly();
 export const deckentMetricsSchema = z.union([legacyMetricsSchema, currentMetricsSchema]);
 export type DeckentMetrics = z.infer<typeof deckentMetricsSchema>;

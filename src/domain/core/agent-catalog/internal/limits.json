@@ -9,5 +9,6 @@
   "sourceRefMaxBytes": 512,
   "signatureMaxBytes": 4096,
   "pageMax": 50,
-  "historyMax": 64
+  "historyMax": 64,
+  "promptReservedTaskBytes": 12288
 }

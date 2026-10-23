@@ -49,6 +49,8 @@ export const runProposalBindingSchema = z.object({ schemaVersion: z.literal(1), 
   /** The approved intent and the human who granted it (the verified human proposer); the service acts as that human's service principal. */
   delivery: runDeliveryIntentSchema.unwrap().extend({ grantedBy: proposalActorSchema }).strict().readonly().optional(),
   admission: z.object({ registryRevision: identitySchema, registryDigest: digest, standingAdmission: z.boolean(),
+    /** S8-1b: the agents the system selected when the proposal was recorded (re-derived at admission; a changed active agent needs the card). */
+    agents: z.array(z.object({ taskId: identitySchema, agentId: identitySchema, revision: counterSchema.positive(), standing: z.enum(['active', 'candidate']) }).strict().readonly()).max(256).readonly().optional(),
     budgetSemantics: z.enum(['admission-check-only', 'not-metered']).optional(), spendingDigest: digest.optional(),
     budget: z.object({ budgetId: identitySchema, budgetRevision: counterSchema.positive(), checkpointDigest: digest,
       remainingMinorUnits: counterSchema, checkedAt: counterSchema, source: z.literal('configured').optional() }).strict().readonly().nullable(),

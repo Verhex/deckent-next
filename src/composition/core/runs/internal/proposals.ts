@@ -3,7 +3,7 @@ import { userInfo } from 'node:os';
 import type { RunProposal } from '#domain/index.js';
 import { SystemTrustedClock, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import { openSqliteRunProposalStore, openSqliteRunProposalReader, openSqliteModelCatalogReader, extractOpenAiChatTextFromInvocation } from '#adapters/index.js';
-import { assertRunProposalSource, configuredProposalRegistry, RunProposalApplication, RunProposalInspectionApplication, RunPolicyAuthorization, parseRunProposal,
+import { agentSelectionSummary, assertRunProposalSource, configuredProposalRegistry, RunProposalApplication, RunProposalInspectionApplication, RunPolicyAuthorization, parseRunProposal,
   runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { readConfiguredRunBudget, classifyConfiguredRunSpending } from './budget.js';
@@ -14,12 +14,12 @@ import { withConfiguredRunAdmission } from './create.js';
 export async function proposeConfiguredRun(projectRoot: string, input: RunProposal, options: ConfigLoadOptions = {}) {
   try {
     const proposal = parseRunProposal(input), context = await loadConfiguredScopeContext(projectRoot, proposal.scopeId, options, 'write');
-    const result = await withConfiguredRunAdmission(projectRoot, context, options, async (runs, authority) => {
+    const result = await withConfiguredRunAdmission(projectRoot, context, options, async (runs, authority, _warnings, agents) => {
       const store = await openSqliteRunProposalStore(await context.path(), context.config.storage.sqlite);
       try {
         return await new RunProposalApplication(store, { verify: async () => context.principal }, authority, runs, {
           registry: configuredProposalRegistry(context.config.admission), clock: new SystemTrustedClock(),
-          loadBudget: scopeId => readConfiguredRunBudget(projectRoot, scopeId, options),
+          loadBudget: scopeId => readConfiguredRunBudget(projectRoot, scopeId, options), selectAgents: async value => agentSelectionSummary(await agents(value.graph, context.config.admission?.registry, value.scopeId)),
           classifySpending: value => classifyConfiguredRunSpending(projectRoot, value, options,
             async () => openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs })),
           async verifySource(value) {

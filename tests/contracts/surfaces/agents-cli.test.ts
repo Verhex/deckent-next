@@ -103,3 +103,15 @@ it('reads: the list, one agent with its pinned skills, the skills list and one s
   const json = capture(); await agentsCommand(['agents', 'skill', 'invoice-match', '--scope', 'scope', '--json'], { ...base, stdout: json.sink });
   expect(JSON.parse(json.text())).toMatchObject({ status: 'ok', item: { skillId: 'invoice-match', contentDigest: d('a') } });
 });
+it('S8-1a: inspect names the standing per bound work class (EN/TR); an agent defined before standings existed says none is recorded', async () => {
+  const f = await project(), base = { root: f.root, env: f.env, ...handlers([]) };
+  const standing = { schemaVersion: 1 as const, scopeId: 'scope', agentId: 'invoice-auditor', revision: 1, workClass: 'feature', standing: 'candidate' as const, standingRevision: 1,
+    basis: { kind: 'definition' as const, decidedBy: author, atMs: 1, commandId: 'a1', suggestionId: null, reasonCode: null } };
+  const inspectAgent = async () => ({ schemaVersion: 1 as const, status: 'ok' as const, item: agent, history: [agent], standings: [standing, { ...standing, workClass: 'docs', standing: 'active' as const }] });
+  const tr = capture(); await agentsCommand(['agents', 'inspect', 'invoice-auditor', '--scope', 'scope', '--lang', 'tr'], { ...base, inspectAgent, stdout: tr.sink });
+  expect(tr.text()).toContain('İş türüne göre durum: feature aday, docs terfili');
+  const en = capture(); await agentsCommand(['agents', 'inspect', 'invoice-auditor', '--scope', 'scope', '--lang', 'en'], { ...base, inspectAgent, stdout: en.sink });
+  expect(en.text()).toContain('Standing per work class: feature candidate, docs promoted');
+  const legacy = capture(); await agentsCommand(['agents', 'inspect', 'invoice-auditor', '--scope', 'scope', '--lang', 'en'], { ...base, inspectAgent: handlers([], agent).inspectAgent, stdout: legacy.sink });
+  expect(legacy.text()).toContain('none recorded');
+});

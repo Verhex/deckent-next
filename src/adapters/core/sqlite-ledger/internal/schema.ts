@@ -15,7 +15,10 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 66;
+export const CURRENT_LEDGER_VERSION = 67;
+// S8-1a agent standing (lane v67 after s6r4's v66; lead renumbers): current standing per (agent revision, WorkClass), forward-only and undeletable, append-only
+// history and S8-4 command receipts. Additive; pre-v67 agents have no standing row (not selectable until revised). Downgrade = restore the pre-switch backup.
+export const AGENT_STANDING_LEDGER_VERSION = 67;
 // S6R-4 recovery cases (lane v66 after s4b1's v65; the lead renumbers at landing): one additive table, a case per lost Attempt and Nervous rule
 // (open → gated → decided → applied | escalated), moved only forward by one revision under compare-and-swap; a closed case is final and no row is
 // deleted. No earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v66).
@@ -75,6 +78,14 @@ export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const append = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;`).join('');
 const memoryAppend = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;`).join('');
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  [AGENT_STANDING_LEDGER_VERSION]: `CREATE TABLE agent_standings(scope_id TEXT NOT NULL,agent_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),work_class TEXT NOT NULL,
+    standing TEXT NOT NULL CHECK(standing IN('candidate','active','redesign-required','retired')),standing_revision INTEGER NOT NULL CHECK(standing_revision>0),record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,agent_id,revision,work_class)); CREATE INDEX agent_standings_class ON agent_standings(scope_id,work_class,standing,agent_id);
+    CREATE TRIGGER agent_standings_forward_only BEFORE UPDATE ON agent_standings WHEN NEW.scope_id IS NOT OLD.scope_id OR NEW.agent_id IS NOT OLD.agent_id OR NEW.revision IS NOT OLD.revision
+      OR NEW.work_class IS NOT OLD.work_class OR NEW.standing_revision IS NOT OLD.standing_revision+1 BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;
+    CREATE TABLE agent_standing_revisions(scope_id TEXT NOT NULL,agent_id TEXT NOT NULL,revision INTEGER NOT NULL,work_class TEXT NOT NULL,standing_revision INTEGER NOT NULL,record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,agent_id,revision,work_class,standing_revision)); CREATE TABLE agent_standing_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id));
+    ${append('agent_standings', 'DELETE')}${append('agent_standing_revisions', 'UPDATE', 'DELETE')}${append('agent_standing_receipts', 'UPDATE', 'DELETE')} PRAGMA user_version=67;`,
   [RECOVERY_CASES_LEDGER_VERSION]: `CREATE TABLE recovery_cases(scope_id TEXT NOT NULL,case_id TEXT NOT NULL,run_id TEXT NOT NULL,task_id TEXT NOT NULL,attempt_id TEXT NOT NULL,
     state TEXT NOT NULL CHECK(state IN('open','gated','decided','applied','escalated')),revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,case_id));
     CREATE INDEX recovery_cases_task ON recovery_cases(scope_id,run_id,task_id,state);
@@ -354,7 +365,7 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === 54) { migrateQuotaWaits(db); continue; }
     const sql = migrations[next];
     if (!sql) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
-    if (next === RUN_PROPOSAL_LEDGER_VERSION || next === MEMORY_AUTOMATION_LEDGER_VERSION || next === RECOVERY_CASES_LEDGER_VERSION) {
+    if (next === RUN_PROPOSAL_LEDGER_VERSION || next === MEMORY_AUTOMATION_LEDGER_VERSION || next === RECOVERY_CASES_LEDGER_VERSION || next === AGENT_STANDING_LEDGER_VERSION) {
       // A previous version cannot contain proposal objects. Refuse a contradictory
       // schema; never silently adopt an existing table or bypass append-only triggers.
       try { db.exec(sql); } catch { throw new AttemptStoreError('ATTEMPT_STORE_VERSION'); }

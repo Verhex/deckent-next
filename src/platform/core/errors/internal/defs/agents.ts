@@ -21,4 +21,7 @@ export const agentsErrors: ErrorDefinitions = Object.freeze({
   SKILL_IMPORT_PIN_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.SKILL_IMPORT_PIN_MISMATCH', p, l) }) },
   SKILL_IMPORT_UNSIGNED: { category: 'error', render: (p, l) => ({ message: t('error.SKILL_IMPORT_UNSIGNED', p, l) }) },
   SKILL_IMPORT_SIGNATURE_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.SKILL_IMPORT_SIGNATURE_UNVERIFIED', p, l) }) },
+  AGENT_PROMPT_TOO_LARGE: { category: 'usage', render: (p, l) => ({ message: t('error.AGENT_PROMPT_TOO_LARGE', p, l) }) },
+  AGENT_STANDING_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_STANDING_REFUSED', p, l) }) },
+  AGENT_STANDING_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_STANDING_CONFLICT', p, l) }) },
 });

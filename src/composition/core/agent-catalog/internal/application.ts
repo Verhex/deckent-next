@@ -4,7 +4,7 @@ import { AgentCatalogApplication, AgentCatalogPolicyAuthorization, registeredWor
   agentListQuerySchema as listAgents, skillDefineCommandSchema as defineSkill, skillImportCommandSchema as importSkill, skillInspectQuerySchema as inspectSkill,
   skillListQuerySchema as listSkills, assertAuthorityWitness, type AuthorityWitness } from '#engine/index.js';
 import { executionRegistrySchema } from '#domain/index.js';
-import { openSqliteAgentCatalogStore, openLocalIntegrityAuthority, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer } from '#adapters/index.js';
+import { openSqliteAgentCatalogStore, openLocalIntegrityAuthority, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, NATIVE_PROMPT_LIMITS } from '#adapters/index.js';
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -24,7 +24,7 @@ const bind = <A extends keyof typeof schemas>(action: A) => async (root: string,
     return await new AgentCatalogApplication({ verifier: { verify: async () => context.principal }, authorize: (...args) => new AgentCatalogPolicyAuthorization(source).authorize(...args),
       openStore: async access => openSqliteAgentCatalogStore(await context.path(), config.storage.sqlite, await openLocalIntegrityAuthority(layout, config.approvals.keyFile, access === 'write'), access),
       workClassIds: async () => registeredWorkClassIds(config.admission ? executionRegistrySchema.parse(config.admission.registry).workClasses : undefined),
-      now: () => clock.sample().wallMs, eventId: randomUUID })[action](parsed) as Awaited<ReturnType<AgentCatalogApplication[A]>>;
+      promptCompositionMaxBytes: NATIVE_PROMPT_LIMITS.compositionMaxBytes, now: () => clock.sample().wallMs, eventId: randomUUID })[action](parsed) as Awaited<ReturnType<AgentCatalogApplication[A]>>;
   } catch (error) { throw queryFailure(error); }
 };
 export const listConfiguredAgents = bind('listAgents'), inspectConfiguredAgent = bind('inspectAgent'), listConfiguredSkills = bind('listSkills'), inspectConfiguredSkill = bind('inspectSkill');

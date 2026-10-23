@@ -54,7 +54,8 @@ export type SkillDefinition = z.infer<typeof skillDefinitionSchema>;
 /** What a signature check answered; anything but `valid` refuses the import (no verifier wired is `unavailable`). */
 export type SkillSignatureVerdict = 'valid' | 'invalid' | 'unknown-key' | 'unavailable';
 export type AgentCatalogErrorCode = 'AGENT_DEFINITION_INVALID' | 'SKILL_DEFINITION_INVALID' | 'AGENT_ORG_CYCLE' | 'AGENT_ORG_DEPTH' | 'AGENT_PARENT_NOT_FOUND'
-  | 'AGENT_SKILL_NOT_PINNED' | 'AGENT_WORK_CLASS_UNKNOWN' | 'SKILL_IMPORT_UNPINNED' | 'SKILL_IMPORT_PIN_MISMATCH' | 'SKILL_IMPORT_UNSIGNED' | 'SKILL_IMPORT_SIGNATURE_UNVERIFIED';
+  | 'AGENT_SKILL_NOT_PINNED' | 'AGENT_WORK_CLASS_UNKNOWN' | 'SKILL_IMPORT_UNPINNED' | 'SKILL_IMPORT_PIN_MISMATCH' | 'SKILL_IMPORT_UNSIGNED' | 'SKILL_IMPORT_SIGNATURE_UNVERIFIED'
+  | 'AGENT_STANDING_REFUSED' | 'AGENT_STANDING_CONFLICT' | 'AGENT_PROMPT_TOO_LARGE';
 export class AgentCatalogError extends Error {
   constructor(readonly code: AgentCatalogErrorCode) { super(code); this.name = 'AgentCatalogError'; }
 }

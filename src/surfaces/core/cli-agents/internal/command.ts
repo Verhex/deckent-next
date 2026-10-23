@@ -56,7 +56,7 @@ export async function agentsCommand(argv: readonly string[], context: AgentsComm
       : await context.inspectSkill?.(root, { schemaVersion: 1, scopeId, skillId: id }, options);
     if (!result) throw ErrorRegistry.createError('AGENT_CATALOG_UNAVAILABLE');
     show(result, () => result.status === 'not-found' ? t('agents.notFound', { id: safeCell(result.id) }, locale)
-      : 'agentId' in result.item ? agentView(result.item, result.history as never, locale) : skillView(result.item, result.history as never, locale));
+      : 'agentId' in result.item ? agentView(result.item, result.history as never, locale, 'standings' in result ? result.standings : []) : skillView(result.item, result.history as never, locale));
     return;
   }
   const listing = args.action === 'skills' ? await context.listSkills?.(root, { schemaVersion: 1, scopeId, limit: limits.list.limit }, options)

@@ -1,19 +1,20 @@
 import { createRequire } from 'node:module';
 import { isDeepStrictEqual } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
-import { agentDefinitionSchema, checkAgentOrgTree, encodeCommandProjection, AgentCatalogError, skillDefinitionSchema, AGENT_CATALOG_LIMITS, type AgentDefinition, type SkillDefinition } from '#domain/index.js';
+import { agentDefinitionSchema, agentStandingSchema, checkAgentOrgTree, encodeCommandProjection, AgentCatalogError, skillDefinitionSchema, AGENT_CATALOG_LIMITS, type AgentDefinition,
+  type AgentStanding, type SkillDefinition } from '#domain/index.js';
 import { AuditApplication, AgentCatalogStoreError, type AgentCatalogChange, type AgentCatalogReceipt, type AgentCatalogStore } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { openSqliteLedger, requireLedgerVersion, AGENT_CATALOG_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { openSqliteLedger, requireLedgerVersion, AGENT_STANDING_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 
 const SEAL = 'agent-catalog-store:1';
-const corrupt = () => new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT');
+const corrupt = () => new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT'), STANDING = 'agent_id,revision,work_class,standing,standing_revision,record';
 type Kind = 'agent' | 'skill';
 const TABLE = { agent: { current: 'agent_definitions', revisions: 'agent_definition_revisions', id: 'agent_id' },
   skill: { current: 'skill_definitions', revisions: 'skill_definition_revisions', id: 'skill_id' } } as const;
 /**
- * Core SQLite adapter of the DB-neutral agent catalog port, on the shared ledger (v64). Every row is sealed with the installation integrity key and
+ * Core SQLite adapter of the DB-neutral agent catalog port, on the shared ledger (v64; standings v67, which every read requires). Every row is sealed with the installation integrity key and
  * cross-checked against its columns on read; revisions and receipts are append-only and current rows undeletable (ledger triggers). An agent
  * commit re-checks the scope's org tree (`checkAgentOrgTree`) over the rows it holds inside the same BEGIN IMMEDIATE transaction.
  */
@@ -69,6 +70,20 @@ class SqliteAgentCatalogStore implements AgentCatalogStore {
     return receipt;
   }
   async receipt(scopeId: string, commandId: string) { return this.read(() => this.loadReceipt(scopeId, commandId)); }
+  /** S8-1a/b (v67): a sealed standing row, cross-checked against its columns. */
+  private standing(row: Record<string, unknown>, scopeId: string): AgentStanding {
+    const parsed = agentStandingSchema.safeParse(this.open(row['record']));
+    if (!parsed.success || parsed.data.scopeId !== scopeId || parsed.data.agentId !== row['agent_id'] || parsed.data.revision !== row['revision'] || parsed.data.workClass !== row['work_class']
+      || parsed.data.standing !== row['standing'] || parsed.data.standingRevision !== row['standing_revision']) throw corrupt();
+    return parsed.data;
+  }
+  async standings(scopeId: string, agentId: string, revision: number) { return this.read(() => this.db.prepare(`SELECT ${STANDING} FROM agent_standings WHERE scope_id=? AND agent_id=?
+    AND revision=? ORDER BY work_class LIMIT ?`).all(scopeId, agentId, revision, AGENT_CATALOG_LIMITS.workClassesPerAgentMax).map(row => this.standing(row, scopeId))); }
+  async eligibleAgents(scopeId: string, workClass: string, limit: number) {
+    return this.read(() => this.db.prepare(`SELECT ${STANDING.split(',').map(c => `s.${c}`).join(',')},d.revision AS d_revision,d.parent_id,d.record AS d_record FROM agent_standings s JOIN agent_definitions d
+      ON d.scope_id=s.scope_id AND d.agent_id=s.agent_id AND d.revision=s.revision WHERE s.scope_id=? AND s.work_class=? AND s.standing IN('active','candidate') ORDER BY s.agent_id LIMIT ?`)
+      .all(scopeId, workClass, limit).map(row => ({ standing: this.standing(row, scopeId), agent: this.row('agent', { agent_id: row['agent_id'], revision: row['d_revision'], parent_id: row['parent_id'], record: row['d_record'] }, scopeId) })));
+  }
   async commit(change: AgentCatalogChange) {
     const next = change.kind === 'agent' ? agentDefinitionSchema.parse(change.next) : skillDefinitionSchema.parse(change.next), { receipt } = change;
     const id = 'agentId' in next ? next.agentId : next.skillId;
@@ -111,6 +126,12 @@ class SqliteAgentCatalogStore implements AgentCatalogStore {
     if ('agentId' in next) this.db.prepare('INSERT INTO agent_definition_revisions(scope_id,agent_id,revision,record) VALUES(?,?,?,?)').run(next.scopeId, receipt.itemId, next.revision, record);
     else this.db.prepare('INSERT INTO skill_definition_revisions(scope_id,skill_id,revision,content_digest,record) VALUES(?,?,?,?,?)')
       .run(next.scopeId, receipt.itemId, next.revision, next.contentDigest, record);
+    for (const row of change.kind === 'agent' ? change.standings.map(value => agentStandingSchema.parse(value)) : []) {
+      if (row.scopeId !== next.scopeId || row.agentId !== receipt.itemId || row.revision !== next.revision || row.standingRevision !== 1) throw corrupt();
+      const sealed = this.seal(row);
+      this.db.prepare('INSERT INTO agent_standings(scope_id,agent_id,revision,work_class,standing,standing_revision,record) VALUES(?,?,?,?,?,?,?)').run(row.scopeId, row.agentId, row.revision, row.workClass, row.standing, 1, sealed);
+      this.db.prepare('INSERT INTO agent_standing_revisions(scope_id,agent_id,revision,work_class,standing_revision,record) VALUES(?,?,?,?,?,?)').run(row.scopeId, row.agentId, row.revision, row.workClass, 1, sealed);
+    }
     this.db.prepare('INSERT INTO agent_catalog_receipts(scope_id,command_id,kind,item_id,revision,record) VALUES(?,?,?,?,?,?)')
       .run(receipt.scopeId, receipt.commandId, kind, receipt.itemId, receipt.revision, this.seal(receipt));
     return { replayed: false, item: next };
@@ -123,5 +144,5 @@ export function openSqliteAgentCatalogStore(path: string, options: SqliteLedgerO
   if (access === 'write') return new SqliteAgentCatalogStore(openSqliteLedger(path, options, 'forbid'), integrity);
   const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   const db = new NativeDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
-  try { requireLedgerVersion(db, AGENT_CATALOG_LEDGER_VERSION); return new SqliteAgentCatalogStore(db, integrity); } catch (error) { db.close(); throw error; }
+  try { requireLedgerVersion(db, AGENT_STANDING_LEDGER_VERSION); return new SqliteAgentCatalogStore(db, integrity); } catch (error) { db.close(); throw error; }
 }

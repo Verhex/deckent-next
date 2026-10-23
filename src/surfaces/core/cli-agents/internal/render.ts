@@ -1,5 +1,5 @@
 import { t, type Locale } from '#platform/index.js';
-import type { AgentContent, AgentDefinition, SkillDefinition } from '#domain/index.js';
+import type { AgentContent, AgentDefinition, AgentStanding, SkillDefinition } from '#domain/index.js';
 import { cliTableStyle, formatAgo, renderCliTable, safeCell } from '#surfaces/core/cli-human/index.js';
 import type { AgentsCommandContext } from './context.js';
 
@@ -31,9 +31,14 @@ export function skillTable(items: readonly SkillDefinition[], locale: Locale, co
 }
 const revisions = (history: readonly (AgentDefinition | SkillDefinition)[], locale: Locale) => [t('agents.view.history', {}, locale),
   ...history.map(row => t('agents.view.revision', { revision: row.revision, by: who(row.provenance.author, locale), at: formatAgo(row.provenance.definedAtMs, Date.now(), locale) }, locale))];
-export function agentView(item: AgentDefinition, history: readonly AgentDefinition[], locale: Locale): string {
+/** S8-1a: what the system may select the agent for — its standing per bound WorkClass (one fixed label per standing, EN/TR). */
+const standingLabel = (standing: AgentStanding['standing'], locale: Locale) => standing === 'active' ? t('agent.standing.active', {}, locale)
+  : standing === 'candidate' ? t('agent.standing.candidate', {}, locale) : standing === 'retired' ? t('agent.standing.retired', {}, locale) : t('agent.standing.redesign-required', {}, locale);
+const standingLine = (standings: readonly AgentStanding[], locale: Locale) => standings.length ? t('agents.inspect.standings', { standings: standings
+  .map(row => `${safeCell(row.workClass)} ${standingLabel(row.standing, locale)}`).join(', ') }, locale) : t('agents.inspect.standingNone', {}, locale);
+export function agentView(item: AgentDefinition, history: readonly AgentDefinition[], locale: Locale, standings: readonly AgentStanding[] = []): string {
   return [...agentLines(item.agentId, item.content, locale), t('agents.view.identity', { revision: item.revision, skillSet: item.skillSetDigest.slice(0, 12) }, locale),
-    t('agents.view.tier', {}, locale), ...revisions(history, locale)].join('\n');
+    t('agents.view.tier', {}, locale), standingLine(standings, locale), ...revisions(history, locale)].join('\n');
 }
 export function skillView(item: SkillDefinition, history: readonly SkillDefinition[], locale: Locale): string {
   return [`${safeCell(item.skillId)} · ${safeCell(item.content.name)}`, safeCell(item.content.text), t('agents.skill.view.pin', { revision: item.revision, digest: item.contentDigest }, locale),

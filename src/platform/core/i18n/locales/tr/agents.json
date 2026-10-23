@@ -68,5 +68,15 @@
   "error.SKILL_IMPORT_UNPINNED": "Reddedildi: dışarıdan gelen bir skill içerik özetini (sabitleme) belirtmeli.",
   "error.SKILL_IMPORT_PIN_MISMATCH": "Reddedildi: skill'in içeriği sabitlemesiyle uyuşmuyor.",
   "error.SKILL_IMPORT_UNSIGNED": "Reddedildi: dışarıdan gelen bir skill imzalı olmalı.",
-  "error.SKILL_IMPORT_SIGNATURE_UNVERIFIED": "Reddedildi: skill'in imzası tam bu içerik için güvenilen bir anahtarla doğrulanamadı."
+  "error.SKILL_IMPORT_SIGNATURE_UNVERIFIED": "Reddedildi: skill'in imzası tam bu içerik için güvenilen bir anahtarla doğrulanamadı.",
+  "error.AGENT_PROMPT_TOO_LARGE": "Ajanın personası ve sabitlenmiş skill'leri işçi isteminde görevin yanına sığmıyor. Hiçbir şey kaydedilmedi ya da çalıştırılmadı, başka bir ajan da seçilmedi. Personayı kısaltın ya da daha az veya daha kısa skill sabitleyin.",
+  "error.AGENT_STANDING_REFUSED": "Bu ajan durumu değişikliğine mevcut durumdan ya da bu kimlikle izin verilmiyor. Hiçbir şey değişmedi.",
+  "error.AGENT_STANDING_CONFLICT": "Ajanın durumu gösterildikten sonra değişti. Hiçbir şey değişmedi; yeniden bakıp güncel duruma göre karar verin.",
+  "agent.card.selected": "  ajan: {agentId} (sürüm {revision}, {standing})",
+  "agent.standing.active": "terfili",
+  "agent.standing.candidate": "aday",
+  "agents.inspect.standings": "İş türüne göre durum: {standings}",
+  "agents.inspect.standingNone": "İş türüne göre durum: kayıt yok (durumlardan önce tanımlandı; açmak için ajanı revize edin)",
+  "agent.standing.redesign-required": "yeniden tasarım gerekli",
+  "agent.standing.retired": "emekli"
 }

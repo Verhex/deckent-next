@@ -35,7 +35,7 @@ async function fixture() {
 }
 
 it('backs up v58 and records v59 without reading or rewriting a byte; every v58 Run and attempt record still parses through the stores', async () => {
-  const f = await fixture(); expect(ENVIRONMENT_READINESS_LEDGER_VERSION).toBe(59); expect(CURRENT_LEDGER_VERSION).toBe(66);
+  const f = await fixture(); expect(ENVIRONMENT_READINESS_LEDGER_VERSION).toBe(59); expect(CURRENT_LEDGER_VERSION).toBe(67);
   expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-21T00:00:00Z'));
   expect(upgrade?.from).toBe(58); expect(upgrade?.to).toBe(CURRENT_LEDGER_VERSION);

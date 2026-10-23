@@ -1,9 +1,8 @@
 import { advisoryProposalPermissions, dependencyTaskId, getPolicyVocabulary, isConflictEdge, isRecognisedProposalPermission, resolveTaskWorkClass,
-  type PolicyDecision, type ProposalPermissionCatalog, type WorkClassRegistry, type WorkerAssignment } from '#domain/index.js';
+  type PolicyDecision, type ProposalPermissionCatalog, type TaskAgentSeal, type WorkClassRegistry, type WorkerAssignment } from '#domain/index.js';
 import { currencyAmountText, redactForRecord, terminalSafeText, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import type { BoundRunAdmission } from './admission.js';
 import type { RunCreate } from './store.js';
-
 import limits from './approval-summary-limits.json' with { type: 'json' };
 
 // Versioned display bounds only; neither the DAG nor permissions are shortened for admission.
@@ -13,12 +12,13 @@ const field = (raw: string, max: number, known?: KnownSecretSnapshot): string =>
 };
 
 /** ATAMA-1: the worker the system chose for a task (sealed in the admission input the person approves) and the listed ones it skipped. */
-function assignmentRows(assignment: WorkerAssignment | undefined, locale: Locale, known?: KnownSecretSnapshot): string[] {
-  if (!assignment) return [];
+function assignmentRows(assignment: WorkerAssignment | undefined, locale: Locale, known?: KnownSecretSnapshot, agent?: TaskAgentSeal): string[] {
+  const chosen = agent ? [t('agent.card.selected', { agentId: field(agent.agentId, limits.assignmentChars, known), revision: agent.revision, standing: agent.standing === 'active' ? t('agent.standing.active', {}, locale) : t('agent.standing.candidate', {}, locale) }, locale)] : []; // S8-1b
+  if (!assignment) return chosen;
   const worker = t('assignment.card.worker', { modelId: field(assignment.modelId, limits.assignmentChars, known), channelId: field(assignment.channelId, limits.assignmentChars, known),
     effort: assignment.effort.level ?? t('assignment.effort.cliDefault', {}, locale), workClass: field(assignment.workClass, limits.workClassChars, known),
     policy: field(`${assignment.candidatePolicy.id}@${assignment.candidatePolicy.version}`, limits.workClassChars, known), position: assignment.candidateIndex + 1 }, locale), sel = 'selector' in assignment ? assignment.selector : undefined;
-  return [worker, ...(sel ? [t('assignment.card.selector', { position: sel.position + 1, expanded: sel.expanded, revision: field(sel.roleRevision, limits.workClassChars, known) }, locale)] : []),
+  return [...chosen, worker, ...(sel ? [t('assignment.card.selector', { position: sel.position + 1, expanded: sel.expanded, revision: field(sel.roleRevision, limits.workClassChars, known) }, locale)] : []),
     ...(assignment.skipped.length ? [t('assignment.card.skipped', { skipped: field(assignment.skipped.map(row => `${row.modelId} (${row.reason})`).join(', '), limits.assignmentChars, known) }, locale)] : [])];
 }
 /** One catalog for the person's refusal and the model's 'unrecognised (advisory)' marker, so the two paths cannot diverge (accept_mark). */
@@ -37,7 +37,7 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
     title: field(task.workInput?.title ?? task.workInput?.task ?? task.id, limits.titleChars, known),
     kind: field(task.kind, limits.taskKindChars, known), workClass: field(create.execution.tasks.find(row => row.taskId === task.id)?.acceptance?.workClass
       ?? task.workClass ?? task.workInput?.workClass ?? unknown, limits.workClassChars, known),
-  }, locale), ...assignmentRows(create.execution.tasks.find(row => row.taskId === task.id)?.assignment, locale, known)].join('\n'));
+  }, locale), ...assignmentRows(create.execution.tasks.find(row => row.taskId === task.id)?.assignment, locale, known, create.execution.tasks.find(row => row.taskId === task.id)?.agent)].join('\n'));
   const catalog = runProposalPermissionCatalog(registry); // accept_mark (owner 2026-10-18): an unrecognised model entry is marked, never refused.
   const permissionRows = (permissions ?? []).slice(0, limits.permissionRows).map(permission => {
     const params = { kind: field(permission.kind, limits.permissionKindChars, known), action: field(permission.action, limits.permissionActionChars, known), resource: field(permission.resourceId, limits.permissionResourceChars, known) };

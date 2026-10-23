@@ -39,7 +39,8 @@ const compiler = { capability: nativeWorkerEffortCapability, bind: bindNativeWor
 async function reader(): Promise<ModelCatalogReader> {
   const document = parseProviderCatalogDocument(await seedCatalog()), provider = document.providers[0]!;
   const models: ModelCatalogModelRecord[] = provider.models.map(model => ({ schemaVersion: 1, channelId: SEED_CHANNEL, modelId: model.nativeId, revision: 7, providerVersion: provider.version, model, catalogRevision: document.revision }));
-  return { async channels() { return []; }, async channel() { return null; }, async models(id) { return id === SEED_CHANNEL ? models : []; },
+  const channel = { schemaVersion: 1 as const, channelId: SEED_CHANNEL, revision: 3, providerVersion: provider.version, channel: provider.channel, catalogRevision: document.revision };
+  return { async channels() { return [channel]; }, async channel(id) { return id === SEED_CHANNEL ? channel : null; }, async models(id) { return id === SEED_CHANNEL ? models : []; },
     async activation(scopeId, channelId, modelId) { return { schemaVersion: 1, scopeId, channelId, modelId, revision: 5, state: 'active' }; }, close() {} };
 }
 async function fixture(extra: Partial<AgentCatalogDependencies> = {}) {
@@ -62,7 +63,9 @@ async function fixture(extra: Partial<AgentCatalogDependencies> = {}) {
     try { return await store.standings('s', agentId, revision); } finally { store.close(); } };
   return { path, app, skill, agent, select, admit, standings };
 }
-const composition = (profile: ExecutionProfileDefinition) => (profile.parameters as { invocation: { composition: { persona?: { id: string; version: number; text: string }; skills: { id: string; version: number; text: string }[] } } }).invocation.composition;
+/** The compiled native prompt: its sealed segments (kind, id, version) and the rendered text after the core part. */
+const prompt = (profile: ExecutionProfileDefinition) => { const delivery = (profile.parameters as { nativeSubscription: { promptDelivery: { task: string; segments: { kind: string; id: string; version: number }[] } } }).nativeSubscription.promptDelivery;
+  return { text: delivery.task, persona: delivery.segments.filter(row => row.kind === 'persona').map(({ id, version }) => ({ id, version })), skills: delivery.segments.filter(row => row.kind === 'skill').map(({ id, version }) => ({ id, version })) }; };
 
 describe('S8-1a: definition opens the standing rows and bounds the prompt', () => {
   it('a defined agent has a candidate standing per bound WorkClass; inspect shows them', async () => {
@@ -85,7 +88,7 @@ describe('S8-1b: system agent selection, prompt parts and the frozen seal', () =
     expect((await f.select()).size).toBe(0);
     const execution = await f.admit();
     expect(execution.tasks[0]).not.toHaveProperty('agent');
-    expect(composition(execution.tasks[0]!.profile)).not.toHaveProperty('persona');
+    expect(prompt(execution.tasks[0]!.profile)).toMatchObject({ persona: [], skills: [] });
   });
   it('a candidate agent of the WorkClass is chosen, its persona and pinned skills become the persona/skill parts, and the seal carries digests and pins', async () => {
     const f = await fixture(), k = await f.skill('tdd', 'Önce başarısız testi yaz.'), a = await f.agent('auditor', [k]);
@@ -94,8 +97,8 @@ describe('S8-1b: system agent selection, prompt parts and the frozen seal', () =
       skills: [{ skillId: 'tdd', revision: 1, digest: skillContentDigest({ name: 'tdd', text: 'Önce başarısız testi yaz.' }) }], standing: 'candidate', standingRevision: 1,
       selection: { eligible: 1, position: 0, reason: 'first-candidate' } });
     expect(a.skillSetDigest).toBe(skillSetDigest(task.agent!.skills));
-    expect(composition(task.profile).persona).toEqual({ id: 'auditor', version: 1, text: a.content.persona });
-    expect(composition(task.profile).skills).toEqual([{ id: 'tdd', version: 1, text: 'Önce başarısız testi yaz.' }]);
+    expect(prompt(task.profile)).toMatchObject({ persona: [{ id: 'auditor', version: 1 }], skills: [{ id: 'tdd', version: 1 }] });
+    expect(prompt(task.profile).text).toContain(a.content.persona); expect(prompt(task.profile).text).toContain('Önce başarısız testi yaz.');
     // Model independence: the worker was assigned from the WorkClass list exactly as without an agent; the seal names no model.
     expect(readWorkerModelPin(task.profile.parameters)!.pin.modelId).toBe(task.assignment!.modelId);
     expect(JSON.stringify(task.agent)).not.toContain(task.assignment!.modelId);
@@ -146,9 +149,9 @@ describe('S8-1b: system agent selection, prompt parts and the frozen seal', () =
   it('the agent persona and skills replace a template\'s own persona/skill parts (the sealed agent is the persona)', async () => {
     const f = await fixture(); await f.agent('auditor');
     const execution = await f.admit(graph(), { persona: { id: 'template-persona', version: 1, text: 'Şablon personası.' }, skills: [{ id: 'template-skill', version: 1, text: 'Şablon becerisi.' }] });
-    expect(composition(execution.tasks[0]!.profile)).toMatchObject({ persona: { id: 'auditor' }, skills: [] });
+    expect(prompt(execution.tasks[0]!.profile)).toEqual({ text: expect.not.stringContaining('Şablon'), persona: [{ id: 'auditor', version: 1 }], skills: [] });
     const plain = await (await fixture()).admit(graph(), { persona: { id: 'template-persona', version: 1, text: 'Şablon personası.' } });
-    expect(composition(plain.tasks[0]!.profile).persona).toMatchObject({ id: 'template-persona' });
+    expect(prompt(plain.tasks[0]!.profile).persona).toEqual([{ id: 'template-persona', version: 1 }]);
   });
   it('negative: a frozen agent seal whose WorkClass differs from the task\'s is a Run integrity failure', async () => {
     const f = await fixture(); await f.agent('auditor');
