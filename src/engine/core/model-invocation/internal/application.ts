@@ -20,6 +20,7 @@ import { ModelInvocationStoreError, type ModelInvocationAdmission, type ModelInv
 import type { ProviderSpendMeasurement } from '#engine/core/provider-spend/index.js';
 import { observeModelInvocationSpending, observeModelInvocationPartialSpending } from './measurement.js';
 import { assertModelInvocableNow, refuseInactiveModel, type ModelInvocableNowChecks } from './invocable-now.js';
+import { assertSubscriptionDelegation } from './delegation.js';
 import type { ModelInvocationPurgeResult, ModelInvocationPurgeStore } from './port.js';
 
 export interface ModelInvocationAuthorizer {
@@ -170,6 +171,7 @@ export class ModelInvocationApplication {
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     modelActivationAuthorizationSchema.parse(await this.authorization.authorize('invoke', { scopeId: command.scopeId, reference: command.reference }, principal));
     const { binding, activation, profile, native } = await this.admittedTarget(command, checks ? 'invocable-now' : true);
+    assertSubscriptionDelegation(principal, profile);
     if (checks) await assertModelInvocableNow(activation, profile, binding.definition, binding.catalogRevision, checks);
     await this.natives.admit?.(profile, signal);
     await acquireModelInvocationEvidence(this.natives, { profile, definition: binding.definition, native }, signal);
@@ -202,6 +204,7 @@ export class ModelInvocationApplication {
     modelActivationAuthorizationSchema.parse(await this.authorization.authorize('invoke',
       { scopeId: command.scopeId, reference: command.reference }, principal));
     const { binding, profile, native } = await this.admittedTarget(command, true);
+    assertSubscriptionDelegation(principal, profile);
     if (!native.measure) return null;
     const prepared = await native.prepare(profile, binding.definition, command.nativeRequest, signal);
     if (signal?.aborted) throw new ModelInvocationStoreError('MODEL_INVOCATION_UNAVAILABLE');
@@ -231,6 +234,7 @@ export class ModelInvocationApplication {
         return checkInvocationResultDelivery(publicResult(true, prior), delivery);
       }
       const { binding, activation, profile, native } = await this.admittedTarget(command);
+      assertSubscriptionDelegation(principal, profile);
       if (!this.spending && !(profile.schemaVersion === 2 && profile.billingAxis === 'subscription')) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
       await this.natives.admit?.(profile, signal);
       await acquireModelInvocationEvidence(this.natives, { profile, definition: binding.definition, native }, signal);

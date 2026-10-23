@@ -94,7 +94,8 @@ function firstTariff<T extends Tariff>(shipped: T | null | undefined, listed: T 
 export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ endpoint: string; credentialRef: string | null; nativeId: string;
   maxOutputTokens: number; currency: string; existing?: JsonObject | null; catalog?: ConnectCatalogRow | null }>): ConnectionAdapter {
   const connect = kind.connect;
-  if (!connect) throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID');
+  // A CLI kind's adapter part is built by its own connect step (executable, login dir, uid, preflight), never here.
+  if (!connect || connect.chatPath === null) throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID');
   const route = connect.protocolRoutes?.find(row => row.modelId === input.nativeId)
     ?? (connect.adapter === OPENAI_CHAT_HTTP_ADAPTER_ID && !connect.metadataPricing ? catalogRoute(providerProtocolRouteSchema, input.catalog, input.nativeId) : undefined);
   // A reconnect is not the migration selection: existing definitions keep their wire choice.
@@ -156,6 +157,7 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
  */
 export function providerConnectModelPriced(kind: ProviderConnectKind, nativeId: string, address: string | null = kind.endpoint.default): boolean {
   const connect = kind.connect, base = address === null ? null : providerEndpoint(address);
+  if (connect?.chatPath === null) return true; // a subscription CLI: quota only, no price to verify
   if (!connect || !base?.ok) return false;
   if (connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID) return anthropicPublishedTariff(nativeId) !== undefined;
   if (connect.metadataPricing) return connect.metadataPricing.routes.some(route => route.modelId === nativeId);
@@ -165,5 +167,5 @@ export function providerConnectModelPriced(kind: ProviderConnectKind, nativeId: 
 /** The protocol family a model connected to this kind must speak (its adapter's), or null when the kind connects no model. */
 export function providerConnectFamily(kind: ProviderConnectKind): string | null {
   if (!kind.connect) return null;
-  return kind.connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID ? anthropicMessagesProtocol.family : OPENAI_CHAT_COMPLETIONS_FAMILY;
+  return kind.connect.protocolFamily ?? kind.connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID ? anthropicMessagesProtocol.family : OPENAI_CHAT_COMPLETIONS_FAMILY;
 }

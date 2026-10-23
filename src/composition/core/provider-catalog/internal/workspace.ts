@@ -12,7 +12,7 @@ export async function openConfiguredProviderWorkspaces(root: string, scopeId: st
       return { ...current, identity: JSON.stringify([current.layout, current.installationId, current.projectId]),
         profiles: ((current.config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value)) }; },
     eligible: profile => PROVIDER_CONNECT_KINDS.some(kind => kind.connect?.workspaceList && kind.connect.adapter === profile.adapter.id
-      && kind.endpoint.default !== null && new URL(kind.connect.chatPath, kind.endpoint.default).href === profile.adapter.definition['endpoint']),
+      && kind.endpoint.default !== null && new URL(kind.connect.chatPath!, kind.endpoint.default).href === profile.adapter.definition['endpoint']),
     authorize: async (profile, current) => { await new ModelInvocationPolicyAuthorization({ async load() { return current.document; } }).authorize('invoke', { scopeId, reference: profile.reference }, current.principal); },
     async credential(profile, current) { const name = (profile.adapter.definition['authentication'] as { credentialRef?: string } | undefined)?.credentialRef;
       return name ? projectCredentialResolver(current, scopeId, options).resolve(name) : undefined; },

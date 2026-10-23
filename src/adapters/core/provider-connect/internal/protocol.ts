@@ -17,7 +17,7 @@ export function providerProfileProtocolOffer(profile: unknown): Readonly<{ next:
   if (!original || !isDeepStrictEqual(original, tariff)) return null;
   const route = PROVIDER_CONNECT_KINDS.flatMap(kind => {
     if (kind.connect?.adapter !== OPENAI_CHAT_HTTP_ADAPTER_ID || kind.endpoint.default === null) return [];
-    const expected = new URL(kind.connect.chatPath, kind.endpoint.default).href;
+    const expected = new URL(kind.connect.chatPath!, kind.endpoint.default).href;
     return expected === definition.endpoint ? kind.connect.protocolRoutes ?? [] : [];
   }).find(row => row.modelId === tariff.modelId);
   if (!route) return null;

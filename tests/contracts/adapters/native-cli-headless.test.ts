@@ -27,8 +27,8 @@ describe.skipIf(process.platform !== 'linux')('S3-2 headless native port with a 
       expect(JSON.stringify(result)).not.toMatch(/cost|usd/iu);
       expect(deltas).toEqual([{ kind: 'text', text: '{"ok":true}' }]);
       const entries = await c.log(), callEntry = entries.find(entry => entry.mode === 'call')!;
-      expect(entries.map(entry => entry.mode)).toEqual(['version', 'help', 'probe', 'auth', 'call']);
-      for (const entry of entries) {
+      expect(entries.map(entry => entry.mode)).toEqual(['version', 'help', 'probe-system', 'probe', 'auth', 'call']);
+      for (const entry of entries.filter(item => !item.mode.startsWith('probe'))) {
         // N24/N25/N1: every spawn has the same built environment, HOME = cwd = the connection's run dir, no deny name, no inherited variable.
         expect(Object.keys(entry.env).sort()).toEqual([...Object.keys(headless.env.fixed), ...headless.env.runDir, headless.env.configDir].sort());
         expect(entry.env.HOME).toBe(c.runDir); expect(entry.cwd).toBe(c.runDir); expect(entry.env[headless.env.configDir]).toBe(c.configDir);
@@ -81,10 +81,27 @@ describe.skipIf(process.platform !== 'linux')('S3-2 headless native port with a 
     await expect(c.port.preflight(c.profile)).rejects.toMatchObject({ code, ...(check ? { params: { check } } : {}) });
     expect((await c.log()).some(entry => entry.mode === 'call' || entry.argv.includes('login'))).toBe(false);
   });
-  it('skips the parser probe when the help lists the turn flag', async () => {
-    const c = await connection({ help: fullHelp() + '  --max-turns <turns>\n', steps: happy() });
+  it('proves help-hidden flags only by the parser refusal, each in an empty temporary config dir, never the login dir (lead real-CLI finding)', async () => {
+    // CLI 2.1.309: --help lists neither the turn bound nor the system prompt file option; the fixture help omits both the same way.
+    const hidden = headless.preflight.hiddenFlags.map(row => row.flag);
+    expect(hidden).toEqual(expect.arrayContaining(['--max-turns', headless.systemPromptFlag]));
+    for (const flag of hidden) expect(fullHelp().split(/\s+/u)).not.toContain(flag);
+    const c = await connection({ steps: happy() });
     await expect(c.call()).resolves.toMatchObject({ native: { object: 'chat.completion' } });
-    expect((await c.log()).map(entry => entry.mode)).not.toContain('probe');
+    const probes = (await c.log()).filter(entry => entry.mode.startsWith('probe'));
+    expect(probes.map(entry => entry.mode)).toEqual(['probe-system', 'probe']);
+    for (const probe of probes) {
+      const dir = probe.env[headless.env.configDir]!;
+      expect(dir).not.toBe(c.configDir); expect(dir.startsWith(join(c.root, 'state', 'probe-'))).toBe(true);
+      expect(probe.env.HOME).toBe(dir); expect(probe.cwd).toBe(dir); expect(existsSync(dir)).toBe(false);
+      expect(Object.keys(probe.env).some(name => DENIED.includes(name))).toBe(false);
+    }
+    expect(probes[0]!.entries).toEqual([]);
+  });
+  it('closes typed when the system prompt file option is unknown to the parser', async () => {
+    const c = await connection({ systemProbeRefusal: null, steps: happy() });
+    await expect(c.port.preflight(c.profile)).rejects.toMatchObject({ code: 'HEADLESS_PREFLIGHT_FAILED', params: { check: 'flags' } });
+    expect((await c.log()).some(entry => entry.mode === 'call')).toBe(false);
   });
 });
 

@@ -25,7 +25,7 @@ async function settledSpend(p: Pass, scopeId: string, commandId: string, billing
   } catch { return { invocationId: null, spend: { state: 'unknown' as const } }; } finally { reader.close(); }
 }
 const scopeRows = (c: Context, roles: RoleModelSources, facts: ReadonlyMap<string, MemoryCatalogFact>, scopeId: string) =>
-  memoryEvaluatorRows(roles, c.config['provider_invocation_profiles'], scopeId, facts, Date.now());
+  memoryEvaluatorRows(roles, c.config['provider_invocation_profiles'], scopeId, facts, Date.now(), c.principal);
 /** The evaluator's model ports: active `memory-evaluator` role rows (S2) with catalog makers; one call under the evaluator's own principal. */
 function evaluatorPorts(projectRoot: string, options: ConfigLoadOptions, p: Pass): MemoryEvaluatorPorts {
   const profiles = p.c.config['provider_invocation_profiles'], rows = (scopeId: string) => scopeRows(p.c, p.roles, p.facts, scopeId);

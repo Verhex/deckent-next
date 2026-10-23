@@ -2,7 +2,7 @@ import type { ConfigLoadOptions } from '#platform/index.js';
 import type { ModelCatalogInspection, ModelInvocationDeliveryFinding, ModelRoleInspection, ModelRoleQuery, RecoveryModeState } from '#engine/index.js';
 import type { ModelCatalogQuery } from '#domain/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
-import type { ExecutionEnvironmentDoctorView, InstallationBindingReport, InstallationStartabilityView, RecoveryFilesDoctorView, ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
+import type { DoctorCheckFacts, ExecutionEnvironmentDoctorView, InstallationBindingReport, InstallationStartabilityView, RecoveryFilesDoctorView, ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
 import type { AdminCommandContext } from '#surfaces/core/cli-admin/index.js';
 import type { ApprovalCommandContext } from '#surfaces/core/cli-approval/index.js';
 
@@ -13,6 +13,8 @@ export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandC
   inspectModelCatalog?: (root: string, query: ModelCatalogQuery, options: ConfigLoadOptions) => Promise<ModelCatalogInspection>;
   // M2: the same read view as `deckent models roles` (catalog models with no tier/role row: "new model: role pending"); read-soft.
   inspectModelRoles?: (root: string, query: ModelRoleQuery, options: ConfigLoadOptions) => Promise<ModelRoleInspection>;
+  /** S3-3 doctor line: the scope's subscription Brain logins from the profiles section and their last preflight records (read-soft, no spawn). */
+  readHeadlessLogins?: (profiles: unknown, scopeId: string) => Promise<NonNullable<DoctorCheckFacts['headlessLogins']>>;
   inspectInstallationStartability?: (root: string, options: ConfigLoadOptions) => Promise<InstallationStartabilityView>;
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
   // Doctor-only, read-soft, network-free (SESSION-RESULT-LIMIT-2026-09-28): [] when unwired or nothing is unfit.

@@ -4,7 +4,7 @@ import type { JsonObject, ModelInvocationCancellationCommand, ModelInvocationCom
 import { agentTurnAdmission, modelInvocationRequestDigest, type AgentTurnAdmission, type ModelInvocationResult } from '#engine/index.js';
 import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, readTerminalChatConfig, effectiveTerminalOutputCap,
-  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, openAiChatProtocol, type TerminalModelSource } from '#adapters/index.js';
+  OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, openAiChatProtocol, nativeCliHeadless, type TerminalModelSource } from '#adapters/index.js';
 import { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 import { configuredTerminalModel } from '#composition/core/config/index.js';
 export type TerminalChatMessage = Readonly<{ role: 'system' | 'user' | 'assistant'; content: string }>;
@@ -56,14 +56,16 @@ export async function prepareTerminalChatCommand(input: TerminalChatTurnInput, s
   const chat = { ...configuredChat, maxCompletionTokens: settings.maxCompletionTokens ?? effectiveTerminalOutputCap(config, input.scopeId, reference) };
   const binding = await inspectModelBinding(input.projectRoot, reference, input.options);
   if (binding.status !== 'declared') throw ErrorRegistry.createError('TERMINAL_CHAT_MODEL_NOT_DECLARED', { params: { model: describeModel(reference) } });
-  if (settings.reasoning === 'off' && !binding.definition.model.protocols.some(protocol => protocol.family === openAiChatProtocol.family
+  // S3-4: a CLI headless step has no thinking switch; Brain `reasoning: off` there means no effort flag (the CLI's own default), never a refusal.
+  const cliStep = binding.definition.model.protocols.some(protocol => nativeCliHeadless(protocol.family) !== null), thinkingOff = settings.reasoning === 'off' && !cliStep;
+  if (thinkingOff && !binding.definition.model.protocols.some(protocol => protocol.family === openAiChatProtocol.family
     && protocol.version === openAiChatProtocol.version && protocol.capabilities.some(capability => capability.id === OPENAI_CHAT_ENABLE_THINKING_CAPABILITY
       && capability.version === 1 && capability.state === 'supported'))) throw ErrorRegistry.createError('MODEL_INVOCATION_REASONING_UNSUPPORTED');
   const nativeRequest = {
     model: binding.definition.model.nativeId,
     messages: input.messages.map(message => ({ role: message.role, content: message.content })),
     max_completion_tokens: chat.maxCompletionTokens,
-    ...(settings.reasoning === 'off' ? { chat_template_kwargs: { enable_thinking: false } } : {}),
+    ...(thinkingOff ? { chat_template_kwargs: { enable_thinking: false } } : {}),
     ...(streamed ? { stream: true, stream_options: { include_usage: true } } : { stream: false }),
   } as unknown as JsonObject;
   const command: ModelInvocationCommand = { schemaVersion: 1, commandId: randomUUID(), scopeId: input.scopeId,

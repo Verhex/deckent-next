@@ -9,5 +9,21 @@
   "error.HEADLESS_PREFLIGHT_FAILED.state-dir": "Deckent'in abonelik Brain'i için özel çalışma dizini yalnız size ait değil (sahip ya da izinler). Kanal kapalı kalıyor; hiçbir model çağrılmadı.",
   "error.HEADLESS_PREFLIGHT_FAILED.spawn": "Claude CLI denetimini zamanında bitirmedi ya da başlatılamadı. Kanal kapalı kalıyor; hiçbir model çağrılmadı, başka bir model seçilmedi.",
   "error.HEADLESS_LOGIN_REQUIRED": "Claude CLI bir Claude aboneliğiyle (claude.ai) girişli değil. `claude auth login` komutunu kendiniz çalıştırın; Deckent girişi hiçbir zaman açmaz ve okumaz. Hiçbir şey gönderilmedi, başka bir model seçilmedi.",
-  "error.HEADLESS_REQUEST_INVALID": "Bu istek tek, araçsız bir abonelik Brain turu olarak çalışamaz (tam olarak bir talimat ve bir mesaj, sabitlenmiş model ve desteklenen bir çaba düzeyi gerekir). Hiçbir şey gönderilmedi."
+  "error.HEADLESS_REQUEST_INVALID": "Bu istek tek, araçsız bir abonelik Brain turu olarak çalışamaz (tam olarak bir talimat ve bir mesaj, sabitlenmiş model ve desteklenen bir çaba düzeyi gerekir). Hiçbir şey gönderilmedi.",
+  "error.HEADLESS_DELEGATION_REFUSED": "Bu abonelik Brain'i yalnız sahibi için bağlı: bir AI ya da MCP aktörü veya arka plan rolü (kurtarma kararı, hafıza değerlendirici) onu yalnız sahibin bağlantıdaki açık onayıyla kullanabilir. Hiçbir şey gönderilmedi, başka bir model seçilmedi. Sahip onayı `deckent models connect claude-cli-subscription ... --delegate ai,system` ile verir ya da `--delegate none` ile geri alır.",
+  "error.HEADLESS_PERSON_REQUIRED": "Abonelik Brain'ini yalnız Claude girişinin sahibi olan kişi bağlayabilir ya da onayını değiştirebilir; bir AI veya MCP aktörü bunu yapamaz. Hiçbir şey değiştirilmedi.",
+  "error.HEADLESS_KIND_UNAVAILABLE": "Abonelik Brain'i bu kurulumda kullanılamıyor. Yalıtım inene kadar yalnız sahibin kendi kurulumu için önizlemedir: sahip onu kullanıcı katmanındaki `models.headless.preview` kurulum ayarıyla açar. Hiçbir şey değiştirilmedi.",
+  "error.HEADLESS_GUARD_FAILED": "Claude CLI izin verilenden farklı başladı ({field}), bu yüzden sonucu kullanılmadan durduruldu. Hiçbir şey kabul edilmedi, başka bir model seçilmedi; kanal denetimi bir sonraki çağrıda yeniden koşar.",
+  "error.HEADLESS_CREDITS_REQUIRED": "Claude aboneliği bu istek için ek kredi istiyor. Deckent hiçbir zaman kullanım satın almaz: hiçbir şey kabul edilmedi, başka bir model seçilmedi. Claude hesabınızda karar verip yeniden deneyin.",
+  "error.HEADLESS_QUOTA_EXHAUSTED": "Claude aboneliğinin kullanım sınırı doldu, bu adım çalışmadı. Başka bir model seçilmedi ve hiçbir şey kendiliğinden yeniden denenmiyor; sıfırlanmadan sonra yeni bir istek gönderin.",
+  "tui.provider.kind.claudeCliSubscription": "Claude aboneliği (kendi claude CLI'niz, önizleme)",
+  "headless.connect.login": "Kullanılan Claude girişi: {dir} (CLI onu kendisi okur; Deckent hiçbir zaman açmaz).",
+  "headless.connect.delegated": "Sizin dışınızda, onayınızla bu girişi şunlar kullanabilir: {classes}.",
+  "headless.connect.personOnly": "Bu girişi yalnız siz kullanabilirsiniz: --delegate ile onay verene kadar AI/MCP aktörleri ve arka plan rolleri reddedilir.",
+  "headless.help.connect": "Abonelik Brain'i (claude-cli-subscription, önizleme, yalnız sahip): anahtar ve adres yok;\nbağlanan CLI kendi Claude girişinizi kullanır. [--executable <mutlak yol>] (varsayılan: PATH'te ilk)\n[--config-dir <mutlak dizin>] (varsayılan: ~/.claude) [--delegate none|ai|system|ai,system] (sizin\ndışınızda kimin kullanabileceği; verilmezse önceki seçiminiz kalır). Kurulum sahibi önce kullanıcı\nkatmanında models.headless.preview=true ayarlar.",
+  "doctor.headless.login": "Brain girişi: {method}{plan}, dizin {dir}, kanal {state}, onay {consent}",
+  "doctor.headless.loginUnknown": "Brain girişi: henüz denetlenmedi (dizin {dir}); ilk çağrı ya da yeniden bağlama denetimi koşar",
+  "doctor.headless.open": "açık",
+  "doctor.headless.closed": "kapalı",
+  "doctor.headless.none": "yok (yalnız siz)"
 }

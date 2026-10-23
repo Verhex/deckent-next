@@ -11,7 +11,7 @@ export async function listProviderWorkspaces(profile: unknown, key: string, opti
   const parsed = modelInvocationProfileSchema.parse(profile); if (parsed.adapter.id !== ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID) throw new Error('MODEL_CONNECT_DEFINITION_INVALID');
   const definition = parseAnthropicMessagesDefinition(parsed.adapter.definition);
   const kind = PROVIDER_CONNECT_KINDS.find(row => row.connect?.workspaceList && row.endpoint.default !== null
-    && new URL(row.connect.chatPath, row.endpoint.default).href === definition.endpoint);
+    && new URL(row.connect.chatPath!, row.endpoint.default).href === definition.endpoint);
   if (!kind) throw new Error('MODEL_CONNECT_DEFINITION_INVALID'); return listKindProviderWorkspaces(kind, definition.endpoint, key, options);
 }
 export async function listKindProviderWorkspaces(kind: ProviderConnectKind, endpoint: string, key: string, options: { fetch?: ProviderProbeFetch; signal?: AbortSignal } = {}): Promise<readonly ProviderWorkspace[]> {

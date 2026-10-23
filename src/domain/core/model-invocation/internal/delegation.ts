@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
+import { isAiPrincipal, isMcpPrincipal, isWorkloadPrincipalRef } from '#domain/core/principal/index.js';
 
 /** The principal classes that may spend a connection (S3-DESIGN §10, owner Q-H3 2026-10-23): the person who connected it, an AI/MCP actor, a system workload. */
 export const DELEGATION_PRINCIPAL_CLASSES = Object.freeze(['person', 'ai', 'system'] as const);
@@ -28,4 +29,12 @@ export function subscriptionDelegationRefusal(input: Readonly<{ billing: string 
   if (input.billing !== 'subscription' || !consent.success || consent.data.consentedBy.issuer !== input.owner.issuer || consent.data.consentedBy.subject !== input.owner.subject
     || !consent.data.classes.includes(input.principalClass)) return 'HEADLESS_DELEGATION_REFUSED';
   return null;
+}
+/** Who spends (owner Q-H3): a verified os-user person, a composition-root workload (recovery, evaluator, auditor, ...) or any other AI actor (MCP, token). */
+export function delegationPrincipalClass(actor: Readonly<{ issuer: string; assurance?: string }>): DelegationPrincipalClass {
+  return !isAiPrincipal(actor) ? 'person' : isWorkloadPrincipalRef(actor) && !isMcpPrincipal(actor) ? 'system' : 'ai';
+}
+/** The person an actor acts for: a workload or MCP identity's issuer without its suffix (same subject); anyone else is their own. */
+export function delegationOwner(actor: Readonly<{ issuer: string; subject: string }>): Readonly<{ issuer: string; subject: string }> {
+  return Object.freeze({ issuer: isWorkloadPrincipalRef(actor) ? actor.issuer.slice(0, actor.issuer.lastIndexOf('/')) : actor.issuer, subject: actor.subject });
 }

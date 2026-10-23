@@ -1,4 +1,4 @@
-import { t, type Locale } from '#platform/index.js';
+import { clockText, t, type Locale } from '#platform/index.js';
 import type { ENVIRONMENT_TIMED_OUT_CODE, WorkerPhase } from '#domain/index.js';
 import type { MONITOR_ENVIRONMENT_DETAIL, WorkerProcessState } from '#engine/index.js';
 import type { MonitorDeliveryState, MonitorDeliveryOutlook, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState, MonitorTask, StopCause } from '#engine/index.js';
@@ -25,13 +25,8 @@ export const forText = (now: number, since: number | null, locale: Locale) => si
 export const expiryText = (now: number, at: number | null, locale: Locale) => at === null ? t('monitor.time.unknown', {}, locale)
   : at > now ? t('monitor.time.expiresIn', { duration: durationText(at - now, locale) }, locale)
     : t('monitor.time.expired', { duration: durationText(now - at, locale) }, locale);
-/** A moment in the machine's local time zone: `2026-10-08 00:30:00+03` (`Z` at UTC, `+0530` for a half-hour zone), so the person reads their own clock and the offset says which. */
-export function clockText(ms: number): string {
-  const date = new Date(ms), pad = (value: number) => String(value).padStart(2, '0');
-  const east = -date.getTimezoneOffset(), minutes = Math.abs(east) % 60;
-  const zone = east === 0 ? 'Z' : `${east < 0 ? '-' : '+'}${pad(Math.floor(Math.abs(east) / 60))}${minutes ? pad(minutes) : ''}`;
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}${zone}`;
-}
+/** One local-clock format for every surface (platform; the subscription quota refusal names the same time). */
+export { clockText };
 
 export function runStateLabel(state: MonitorRunState, locale: Locale): string {
   const labels: Record<MonitorRunState, string> = { parked: t('monitor.state.parked', {}, locale), incomplete: t('monitor.state.incomplete', {}, locale), progressing: t('monitor.state.progressing', {}, locale), waiting: t('monitor.state.waiting', {}, locale),

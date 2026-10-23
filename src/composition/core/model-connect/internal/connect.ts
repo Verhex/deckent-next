@@ -10,6 +10,8 @@ import { queryFailure } from '#composition/core/query-errors/index.js';
 import { configuredModelInvocationDeliverySurfaces } from '#composition/core/model-invocation/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
+import { headlessConnectPorts } from './headless.js';
+import { modelConnectCommandSchema } from '#domain/index.js';
 /** Code-only host ports: secret names, service status and a validated registry overlay; never config/env. */
 export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
 /** Shared model-connect composition over existing config/catalog/activation/audit owners. Seedless discovery keeps credentials in its adapter. */
@@ -20,15 +22,17 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const config = createConfiguredConfigApplication(projectRoot, options);
     const principal = typeof scopeId === 'string' ? () => resolveConfiguredConfigPrincipal(projectRoot, scopeId, options) : () => { throw new ModelConnectError('MODEL_CONNECT_INVALID'); };
     const scope = () => loadConfiguredScopeContext(projectRoot, String(scopeId), options, 'write');
-        let effective: Record<string, unknown> = {};
+    let effective: Record<string, unknown> = {};
+    const parsed = modelConnectCommandSchema.safeParse(input), cli = parsed.success ? headlessConnectPorts(projectRoot, parsed.data, options, principal) : null;
     const app = new ModelConnectApplication({
       kind: id => { const kind = kindOf(id); return kind && { id: kind.id, available: kind.available, endpoint: kind.endpoint, keyRequired: kind.key?.required ?? false, connect: kind.connect }; },
+      ...(cli ? { previewEnabled: cli.previewEnabled } : {}),
       defaults: registry.profileDefaults,
       endpoint: text => { const checked = providerEndpoint(text); return checked.ok ? checked.base : null; },
       secretName: (id, base) => { const kind = kindOf(id); return kind ? providerConnectSecretName(kind, base) : null; },
       seed: readProviderConnectSeed,
       discover: (id, base, nativeId) => discoverConfiguredConnectionModel(projectRoot, String(scopeId), id, base, nativeId, options, host),
-      adapter: (id, value) => connectionAdapter(kindOf(id)!, value),
+      adapter: (id, value) => kindOf(id)?.connect?.chatPath === null && cli ? cli.adapter(kindOf(id)!, value) : connectionAdapter(kindOf(id)!, { ...value, endpoint: value.endpoint ?? '' }),
       principal,
       async layers() {
         const snapshot = await snapshotConfiguredConfig(projectRoot, options); effective = snapshot.effective as never;

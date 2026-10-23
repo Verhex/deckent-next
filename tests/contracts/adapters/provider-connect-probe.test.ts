@@ -30,16 +30,17 @@ describe('provider connection check', () => {
 
   it('lists the vendor rows, the generic and local rows and ChatGPT login as not available yet, each with its own store name (T4-B, Jev da5312fb)', () => {
     expect(PROVIDER_CONNECT_KINDS.map(kind => [kind.id, kind.available])).toEqual([['anthropic-api', true], ['openai-api', true], ['deepseek-api', true], ['zai-api', true],
-      ['zai-cn-api', true], ['openrouter', true], ['openai-compatible', true], ['local-openai', true], ['chatgpt-login', false]]);
+      ['zai-cn-api', true], ['openrouter', true], ['openai-compatible', true], ['local-openai', true], ['claude-cli-subscription', true], ['chatgpt-login', false]]);
     const fixed = PROVIDER_CONNECT_KINDS.filter(item => item.available && item.key?.secretName).map(kind => kind.key!.secretName!);
     // Every vendor keeps its own key: connecting one never overwrites another's.
     expect(new Set(fixed).size).toBe(fixed.length);
     for (const name of fixed) expect(name).toMatch(/^DECKENT_[A-Z_]+$/u);
-    // Z.ai documents no free read (no models list): its rows have no probe; every other available row has one.
-    expect(PROVIDER_CONNECT_KINDS.filter(kind => kind.available && kind.probe === null).map(kind => kind.id)).toEqual(['zai-api', 'zai-cn-api']);
+    // Z.ai documents no free read (no models list): its rows have no probe; the subscription CLI row has no key to check (its preflight proves the
+    // login without a model call); every other available row has one.
+    expect(PROVIDER_CONNECT_KINDS.filter(kind => kind.available && kind.probe === null).map(kind => kind.id)).toEqual(['zai-api', 'zai-cn-api', 'claude-cli-subscription']);
     for (const kind of PROVIDER_CONNECT_KINDS.filter(item => item.available && item.probe)) expect(kind.probe!.path).toMatch(/^\/(v1\/models|models|api\/v1\/key)/u);
     expect(PROVIDER_CONNECT_KINDS.filter(kind => kind.connect?.seed).map(kind => [kind.id, kind.connect!.seed]))
-      .toEqual([['anthropic-api', 'anthropic-api'], ['openai-api', 'openai-api'], ['deepseek-api', 'deepseek-api'], ['zai-api', 'zai-api'], ['zai-cn-api', 'zai-cn-api'], ['openrouter', 'openrouter-api']]);
+      .toEqual([['anthropic-api', 'anthropic-api'], ['openai-api', 'openai-api'], ['deepseek-api', 'deepseek-api'], ['zai-api', 'zai-api'], ['zai-cn-api', 'zai-cn-api'], ['openrouter', 'openrouter-api'], ['claude-cli-subscription', 'claude-cli-subscription']]);
   });
 
   it('the generic row derives one key name per endpoint host, shown before saving; vendor rows keep their fixed name', () => {
@@ -58,7 +59,11 @@ describe('provider connection check', () => {
   });
 
   it('every packaged seed parses; each model builds a valid profile adapter with its published tariff, or is refused when no verified price exists', async () => {
-    for (const kind of PROVIDER_CONNECT_KINDS.filter(item => item.connect?.seed)) {
+    // A CLI kind (no address, no key) builds its adapter part in its own connect step (model-connect-headless.test.ts); here it is refused.
+    for (const kind of PROVIDER_CONNECT_KINDS.filter(item => item.connect?.seed && item.connect.chatPath === null)) {
+      expect(() => connectionAdapter(kind, { endpoint: '', credentialRef: null, nativeId: 'x', maxOutputTokens: 1, currency: 'USD' })).toThrow('MODEL_CONNECT_DEFINITION_INVALID');
+    }
+    for (const kind of PROVIDER_CONNECT_KINDS.filter(item => item.connect?.seed && item.connect.chatPath !== null)) {
       const seed = await readProviderConnectSeed(kind.connect!.seed!), checked = providerEndpoint(kind.endpoint.default!);
       if (!checked.ok) throw new Error(kind.id);
       for (const model of seed.providers.flatMap(provider => provider.models)) {

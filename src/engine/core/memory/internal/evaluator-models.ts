@@ -1,4 +1,5 @@
-import { canonicalModelMaker, composeMemoryAutomation, type ModelReference } from '#domain/index.js';
+import { canonicalModelMaker, composeMemoryAutomation, delegatedUseOf, modelInvocationProfileSchema, subscriptionDelegationRefusal, type ModelReference } from '#domain/index.js';
+import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { inspectRoleModelsInScope, roleModelInvocationReference, type ModelCatalogReader, type RoleModelSources } from '#engine/core/model-activation/index.js';
 import type { MemoryEvaluatorRow } from './contract.js';
 
@@ -21,11 +22,18 @@ export async function memoryCatalogFacts(catalog: ModelCatalogReader): Promise<R
 /** The declared reference that has an invocation profile in the scope for this (channel, exact model): the only invocable path (none: null). */
 export const memoryEvaluatorReference = (sources: RoleModelSources, profiles: unknown, scopeId: string, target: { readonly channelId: string; readonly modelId: string }): ModelReference | null =>
   roleModelInvocationReference(sources, profiles, scopeId, target);
-/** The scope's evaluator rows today: active `memory-evaluator` role rows (S2), each with its catalog maker and billing and whether it is invocable. */
-export async function memoryEvaluatorRows(sources: RoleModelSources, profiles: unknown, scopeId: string, facts: ReadonlyMap<string, MemoryCatalogFact>, nowMs: number): Promise<readonly MemoryEvaluatorRow[]> {
+/** The scope's evaluator rows today: active `memory-evaluator` role rows (S2), each with its catalog maker and billing and whether it is invocable:
+ * a profile serves it here and, for a subscription profile, it carries `owner`'s delegated-use consent for system roles (owner Q-H3; the invocation
+ * application applies the same rule at the call). */
+export async function memoryEvaluatorRows(sources: RoleModelSources, profiles: unknown, scopeId: string, facts: ReadonlyMap<string, MemoryCatalogFact>, nowMs: number,
+  owner: Readonly<{ issuer: string; subject: string }>): Promise<readonly MemoryEvaluatorRow[]> {
   const listed = await inspectRoleModelsInScope(sources, MEMORY_EVALUATOR_ROLE, scopeId, nowMs);
-  return listed.models.filter(row => row.active).map(row => { const fact = facts.get(memoryCatalogKey(row.channelId, row.modelId));
-    return { channelId: row.channelId, modelId: row.modelId, maker: fact?.maker ?? null, billing: fact?.billing ?? null, invocable: memoryEvaluatorReference(sources, profiles, scopeId, row) !== null }; });
+  const held = ((profiles as { profiles?: unknown[] } | undefined)?.profiles ?? []).map(value => modelInvocationProfileSchema.parse(value));
+  return listed.models.filter(row => row.active).map(row => { const fact = facts.get(memoryCatalogKey(row.channelId, row.modelId)), billing = fact?.billing ?? null;
+    const reference = memoryEvaluatorReference(sources, profiles, scopeId, row);
+    const profile = reference && held.find(value => value.scopeId === scopeId && JSON.stringify(value.reference) === JSON.stringify(reference));
+    const consented = !!profile && subscriptionDelegationRefusal({ billing: modelInvocationBillingAxis(profile), principalClass: 'system', owner, consent: delegatedUseOf(profile.adapter.definition) }) === null;
+    return { channelId: row.channelId, modelId: row.modelId, maker: fact?.maker ?? null, billing, invocable: reference !== null && consented }; });
 }
 /** Whether a scope's evaluator pass is due: at most one per `evaluation.passIntervalMs` (the reconciliation loop polls far more often). */
 export const memoryEvaluationDue = (overlay: unknown, lastMs: number | undefined, nowMs: number) =>
