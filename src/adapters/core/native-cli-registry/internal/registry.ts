@@ -35,7 +35,11 @@ const positive = z.number().int().positive().safe(), names = z.array(z.string().
 export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), revision: argument, source: argument,
   args: z.array(z.string().refine(value => !value.includes('\0'))).readonly(), maxTurns: positive, systemPromptFlag: flag, systemPromptFile: z.string().regex(/^[a-z][a-z0-9.-]*$/),
   forbiddenFlags: z.array(flag).min(1).readonly(),
-  preflight: z.object({ versionArgs: argumentsSchema, versionPattern: argument, helpArgs: argumentsSchema, authStatusArgs: argumentsSchema }).strict().readonly(),
+  /** `hiddenFlags`: options the CLI accepts but its help does not list, each proven by the parser refusing a bad value (every fragment must appear);
+   * `max-turns-capability` = the capability's own hidden-help probe (one source). Every other required flag must be listed by help. */
+  preflight: z.object({ versionArgs: argumentsSchema, versionPattern: argument, helpArgs: argumentsSchema, authStatusArgs: argumentsSchema, hiddenFlagsSource: argument,
+    hiddenFlags: z.array(z.object({ flag, probe: z.union([z.literal('max-turns-capability'), z.object({ args: argumentsSchema, refusal: z.array(argument).min(1).readonly() }).strict().readonly()]) })
+      .strict().readonly()).max(8).readonly() }).strict().readonly(),
   auth: z.object({ authMethods: words, apiProviders: words, configDirectoryMatch: z.boolean() }).strict().readonly(),
   env: z.object({ fixed: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string().refine(value => !value.includes('\0'))).readonly(), runDir: names,
     configDir: z.string().regex(/^[A-Z][A-Z0-9_]*$/), deny: names.refine(value => value.length > 0) }).strict().readonly(),

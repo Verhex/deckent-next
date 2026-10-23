@@ -28,13 +28,14 @@ export const happyLines = (text: string) => [uiLine(), initLine(), assistantLine
 /** One scripted step of the fake CLI's `-p` call. */
 export type FakeStep = { line: Line | string } | { sleepMs: number } | { floodBytes: number } | { hang: true; ignoreInterrupt?: boolean } | { exit: number };
 export interface FakeScenario {
-  readonly logPath: string; readonly version?: string; readonly help?: string; readonly probeRefusal?: string | null;
+  readonly logPath: string; readonly version?: string; readonly help?: string; readonly probeRefusal?: string | null; readonly systemProbeRefusal?: string | null;
   readonly auth?: Record<string, unknown>; readonly authExit?: number; readonly steps?: readonly FakeStep[]; readonly initCwd?: 'actual';
 }
-/** Help text naming every flag the registry needs, the way the CLI's help lists options. */
+/** Help text naming every listed flag the registry needs, the way the CLI's help lists options (the hidden ones are absent, as in CLI 2.1.309). */
 export function fullHelp(): string {
+  const hidden = new Set(headless.preflight.hiddenFlags.map(row => row.flag));
   const flags = new Set([...headless.args.filter(arg => arg.startsWith('--')), headless.systemPromptFlag, registry.adapters.claude.modelFlag,
-    ...registry.adapters.claude.capabilities.reasoningEffort.requiredFlags]);
+    ...registry.adapters.claude.capabilities.reasoningEffort.requiredFlags].filter(name => !hidden.has(name)));
   return `Usage: cli [options]\n${[...flags].map(flag => `  ${flag} <value>  option`).join('\n')}\n`;
 }
 /**
@@ -45,6 +46,7 @@ export function fullHelp(): string {
 export async function writeFakeCli(dir: string, scenario: FakeScenario): Promise<string> {
   const path = join(dir, 'fake-cli');
   const config = { version: '9.1.0', help: fullHelp(), probeRefusal: registry.adapters.claude.capabilities.maxTurns.hiddenHelpProbe.refusal,
+    systemProbeRefusal: `option '${headless.systemPromptFlag} <file>' argument missing`,
     auth: { loggedIn: true, authMethod: 'claude.ai', apiProvider: 'firstParty', subscriptionType: 'fixture', email: 'person@example.invalid', orgId: 'org-fixture',
       orgName: 'Fixture Org' }, authExit: 0, steps: [], ...scenario };
   const script = `#!${process.execPath}
@@ -52,6 +54,7 @@ const fs = require('node:fs'); const s = ${JSON.stringify(config)}; const argv =
 const log = entry => fs.appendFileSync(s.logPath, JSON.stringify({ argv, env: { ...process.env }, cwd: process.cwd(), ...entry }) + '\\n');
 if (argv[0] === '--version') { log({ mode: 'version' }); process.stdout.write(s.version + ' (fixture)\\n'); process.exit(0); }
 if (argv[0] === '--help') { log({ mode: 'help' }); process.stdout.write(s.help); process.exit(0); }
+if (argv[0] === '--print' && argv.length === 2 && argv[1] === ${JSON.stringify(headless.systemPromptFlag)}) { log({ mode: 'probe-system', entries: fs.readdirSync('.') }); process.stderr.write('error: ' + (s.systemProbeRefusal ?? "unknown option '" + argv[1] + "'") + '\\n'); process.exit(1); }
 if (argv[0] === '--max-turns') { log({ mode: 'probe' }); if (s.probeRefusal) process.stderr.write('error: ' + s.probeRefusal + '\\n'); process.exit(s.probeRefusal ? 1 : 0); }
 if (argv[0] === 'auth') { log({ mode: 'auth' }); process.stdout.write(JSON.stringify({ ...s.auth, configDirectory: s.auth.configDirectory ?? process.env.CLAUDE_CONFIG_DIR })); process.exit(s.authExit); }
 const chunks = []; process.stdin.on('data', chunk => chunks.push(chunk)); process.stdin.on('end', async () => {

@@ -234,6 +234,11 @@
           "helpArgs": [
             "--help"
           ],
+          "hiddenFlags": [
+            { "flag": "--max-turns", "probe": "max-turns-capability" },
+            { "flag": "--system-prompt-file", "probe": { "args": ["--print", "--system-prompt-file"], "refusal": ["option '--system-prompt-file", "argument missing"] } }
+          ],
+          "hiddenFlagsSource": "lead real-CLI preflight 2026-10-23 (CLI 2.1.309): --help lists neither --max-turns nor --system-prompt-file (only the prose '--system-prompt[-file]'); HEADLESS-0 used both. Hidden flags are proven by the parser's refusal of a bad value, spawned with an empty temporary config dir (never the person's login).",
           "authStatusArgs": [
             "auth",
             "status",

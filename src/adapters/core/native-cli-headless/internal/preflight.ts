@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runNodeProcess, type ProcessEvidence } from '#adapters/core/process-runner/index.js';
 import { compareToolchainVersions } from '#engine/index.js';
@@ -50,9 +50,9 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
     await writeFile(temporary, JSON.stringify({ schemaVersion: 1, checkedAtMs: now(), executable, version: null, flagSetDigest, revision: headless.revision, ...body }), { mode: 0o600, flag: 'wx' });
     await rename(temporary, target);
   };
-  const run = async (args: readonly string[]): Promise<ProcessEvidence & { stdout: string; stderr: string }> => {
+  const run = async (args: readonly string[], cwd = runDir, spawnEnv = env): Promise<ProcessEvidence & { stdout: string; stderr: string }> => {
     // No emptying here: another process's preflight must never remove an in-flight call's prompt file (only `send` empties, under maxInFlight).
-    const result = await runNodeProcess({ schemaVersion: 1, requestId: randomUUID(), executable: executable, args: [...args], cwd: runDir, env,
+    const result = await runNodeProcess({ schemaVersion: 1, requestId: randomUUID(), executable: executable, args: [...args], cwd, env: spawnEnv,
       timeoutMs: headless.limits.preflightTimeoutMs, outputBytes: headless.limits.preflightOutputBytes }, signal);
     if (result.reason !== 'exit') refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'spawn' });
     return { ...result, stdout: Buffer.from(result.stdoutBase64, 'base64').toString('utf8'), stderr: Buffer.from(result.stderrBase64, 'base64').toString('utf8') };
@@ -60,10 +60,18 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
   try {
     const versionRun = await run(headless.preflight.versionArgs), version = new RegExp(headless.preflight.versionPattern, 'u').exec(versionRun.stdout.trim())?.[1] ?? null;
     if (versionRun.exitCode !== 0 || version === null || compareToolchainVersions(version, definition.minCliVersion) < 0) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'version' });
-    const help = (await run(headless.preflight.helpArgs)).stdout.split(/[\s,=]+/u), probe = command.capabilities.maxTurns?.hiddenHelpProbe;
+    const help = (await run(headless.preflight.helpArgs)).stdout.split(/[\s,=]+/u), hidden = new Map(headless.preflight.hiddenFlags.map(row => [row.flag, row.probe]));
+    // A hidden flag is proven by the parser refusing a bad value, in an empty temporary config dir: the probe never sees the person's login.
+    const accepted = async (probe: NonNullable<ReturnType<typeof hidden.get>>) => {
+      const capability = command.capabilities.maxTurns?.hiddenHelpProbe, shape = probe === 'max-turns-capability' ? capability && { args: capability.args, refusal: [capability.refusal] } : probe;
+      if (!shape) return false;
+      const empty = await mkdtemp(join(definition.stateDir, 'probe-'));
+      try { const output = await run(shape.args, empty, buildHeadlessEnv(headless, empty, empty)); return shape.refusal.every(text => `${output.stderr}\n${output.stdout}`.includes(text)); }
+      finally { await rm(empty, { recursive: true, force: true }); }
+    };
     for (const flag of headlessRequiredFlags(entry)) {
-      if (help.includes(flag)) continue;
-      if (!(flag === command.capabilities.maxTurns?.flag && probe && (await run(probe.args)).stderr.includes(probe.refusal))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'flags' });
+      const probe = hidden.get(flag);
+      if (probe === undefined ? !help.includes(flag) : !(await accepted(probe))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'flags' });
     }
     const auth = authStatus((await run(headless.preflight.authStatusArgs)).stdout);
     if (!auth || typeof auth.loggedIn !== 'boolean') refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'auth-status' });
