@@ -143,6 +143,8 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
         value.reason, value.status, Buffer.from(JSON.stringify({ ...value.body, egress }), 'utf8'), true) });
       const stopped = refusal as Refusal | null, finished = result as Extract<ClaudeStreamLine, { kind: 'result' }> | null;
       if (stopped) return settle(stopped);
+      // f5: a realm bound (CPU time, tasks, data size) ended the turn: typed, never an unknown outcome or a retry.
+      if (evidence.limit) return settle(reject('response-limit', { refusal: 'resource-limit', field: evidence.limit }));
       if (evidence.reason === 'output-limit' || evidence.reason === 'line-limit') return settle(reject('response-limit', { refusal: 'response-limit' }));
       // A provider refusal inside the run ends with an error result and a non-zero exit; it is still a complete, typed rejection.
       const mapped = finished && evidence.reason === 'exit' ? resultRefusal(finished, prepared) : null;

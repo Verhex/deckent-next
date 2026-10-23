@@ -18,7 +18,17 @@ const isolation = (p: Params, l: Locale) => {
     case 'user-namespace': return t('error.HEADLESS_ISOLATION_UNAVAILABLE.user-namespace', p, l);
     case 'realm': return t('error.HEADLESS_ISOLATION_UNAVAILABLE.realm', p, l);
     case 'gateway': return t('error.HEADLESS_ISOLATION_UNAVAILABLE.gateway', p, l);
+    case 'limits': return t('error.HEADLESS_ISOLATION_UNAVAILABLE.limits', p, l);
     default: return t('error.HEADLESS_ISOLATION_UNAVAILABLE', p, l);
+  }
+};
+/** f5: which realm bound stopped the CLI selects the sentence; a bound this release does not know keeps the generic one. */
+const limit = (p: Params, l: Locale) => {
+  switch (p['limit']) {
+    case 'cpu-time': return t('error.HEADLESS_LIMIT_REACHED.cpu-time', p, l);
+    case 'processes': return t('error.HEADLESS_LIMIT_REACHED.processes', p, l);
+    case 'memory': return t('error.HEADLESS_LIMIT_REACHED.memory', p, l);
+    default: return t('error.HEADLESS_LIMIT_REACHED', p, l);
   }
 };
 /** Error codes owned by the `headless` family (S3 subscription Brain through the person's own CLI; i18n `locales/<locale>/headless.json`). */
@@ -32,6 +42,7 @@ export const headlessErrors: ErrorDefinitions = Object.freeze({
   HEADLESS_DELEGATION_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_DELEGATION_REFUSED', p, l) }) },
   HEADLESS_PERSON_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_PERSON_REQUIRED', p, l) }) },
   HEADLESS_GUARD_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_GUARD_FAILED', p, l) }) },
+  HEADLESS_LIMIT_REACHED: { category: 'error', render: (p, l) => ({ message: limit(p, l) }) },
   HEADLESS_CREDITS_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_CREDITS_REQUIRED', p, l) }) },
   // S9 card texts reused read-only: a known reset time names when to ask again. f3: a Brain plan whose reset is within brain_planner.quotaWait waits
   // visibly first (new derived attempt); this refusal means no wait applied or the attempts are spent. Nothing retries on its own.

@@ -29,7 +29,8 @@ export function headlessFlagSetDigest(entry: HeadlessEntry): string {
   const { headless } = entry;
   return createHash('sha256').update(JSON.stringify({ revision: headless.revision, args: headless.args, maxTurns: headless.maxTurns, flags: headlessRequiredFlags(entry),
     forbidden: headless.forbiddenFlags, env: { fixed: headless.env.fixed, runDir: headless.env.runDir, configDir: headless.env.configDir },
-    isolation: { ...headless.isolation, source: undefined, configVisibleSource: undefined } })).digest('hex');
+    isolation: { ...headless.isolation, source: undefined, configVisibleSource: undefined,
+      limits: { ...headless.isolation.limits, boundsSource: undefined, limiterSource: undefined } } })).digest('hex');
 }
 /** The call argv: no prompt and no secret (system prompt by 0600 file, user message by stdin); a forbidden flag or alias refuses. */
 export function headlessArgv({ command, headless }: HeadlessEntry, runDir: string, model: string, effortArgs: readonly string[]): readonly string[] {

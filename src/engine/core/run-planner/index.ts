@@ -111,6 +111,7 @@ function brainRejection(evidence: Readonly<{ adapter: ModelInvocationResponseEvi
     case 'login-required': return create('HEADLESS_LOGIN_REQUIRED');
     case 'guard': case 'model-mismatch': return create('HEADLESS_GUARD_FAILED', { params: { field: body.field ?? body.refusal } });
     case 'invalid-output': return create('BRAIN_OUTPUT_INVALID', { params: { stage: body.subtype ?? 'result' } });
+    case 'resource-limit': return create('HEADLESS_LIMIT_REACHED', { params: { limit: body.field ?? 'unknown' } });
     default: return create('BRAIN_PROVIDER_REJECTED', { params: { reason: body?.refusal ?? evidence.reason, status: evidence.httpStatus ?? 'unknown' } });
   }
 }

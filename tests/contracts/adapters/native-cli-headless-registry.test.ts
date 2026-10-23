@@ -41,6 +41,9 @@ describe('S3-1 headless registry data', () => {
     ['a visible login entry that climbs out', (h: Record<string, unknown>) => { (h.isolation as Record<string, unknown>).configVisible = ['..']; }],
     ['a proxy variable that is a deny name', (h: Record<string, unknown>) => { (h.env as { deny: string[] }).deny = [...(h.env as { deny: string[] }).deny, 'HTTPS_PROXY']; }],
     ['a relative realm shell', (h: Record<string, unknown>) => { (h.isolation as Record<string, unknown>).shell = 'sh'; }],
+    ['f5 a relative limiter', (h: Record<string, unknown>) => { ((h.isolation as Record<string, unknown>).limits as Record<string, unknown>).limiter = 'prlimit'; }],
+    ['f5 no CPU time bound', (h: Record<string, unknown>) => { delete ((h.isolation as Record<string, unknown>).limits as Record<string, unknown>).cpuSeconds; }],
+    ['f5 two bounds sharing one exit code', (h: Record<string, unknown>) => { ((h.isolation as Record<string, unknown>).limits as Record<string, unknown>).exits = { 'cpu-time': 201, processes: 201, memory: 203 }; }],
   ])('refuses a registry with %s', (_label, change) => {
     const asset = structuredClone(registry) as unknown as { adapters: { claude: { headless: Record<string, unknown> } } };
     change(asset.adapters.claude.headless);

@@ -59,6 +59,7 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-4 Brain through th
     ['N2 an API key source', lines(draft, {}, { apiKeySource: 'ANTHROPIC_API_KEY' }), 'HEADLESS_GUARD_FAILED', { field: 'apiKeySource' }],
     ['N4 another model in the result', [uiLine(), initLine({ model: MODEL }), resultLine(draft, {}, 'other-model')].map(line => ({ line })), 'HEADLESS_GUARD_FAILED', { field: 'modelUsage' }],
     ['N14 the turn limit', lines('', { is_error: true, subtype: 'error_max_turns' }), 'BRAIN_OUTPUT_INVALID', { stage: 'error_max_turns' }],
+    ['f5 a realm bound (CPU time)', [{ line: uiLine() }, { line: initLine({ model: MODEL }) }, { bound: { lower: ['--cpu=1:2'], burn: 'cpu' } }], 'HEADLESS_LIMIT_REACHED', { limit: 'cpu-time' }],
   ] as const)('names %s typed, sends once and never retries', async (_label, steps, code, params) => {
     const h = await fixture([...steps]);
     for (let attempt = 0; attempt < 2; attempt++) await expect(planRun(h.f.project, command, h.f.options)).rejects.toMatchObject({ code, ...(params ? { params } : {}) });

@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { bubblewrapObservation } from '#adapters/index.js';
 import { readHeadlessRejection } from '#domain/index.js';
 import { prepareHeadlessConnection, readHeadlessLogins } from '#adapters/core/native-cli-headless/index.js';
-import { assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
+import { assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, type BoundProbe, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
 import { cleanupConnections, connection, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
@@ -100,9 +100,35 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI
     expect(r.limits['core file size']).toBe('0');
     expect(r.limits['file size']).toBe(String(headless.isolation.limits.fileSizeBlocks * 512));
     expect(r.limits['open files']).toBe(String(headless.isolation.limits.openFiles));
+    // f5: CPU time (soft:hard), the realm's tasks and the data size come from the registry through the limiter.
+    const caps = headless.isolation.limits;
+    expect(r.limits['cpu time']).toBe(`${caps.cpuSeconds}:${caps.cpuSeconds + caps.cpuGraceSeconds}`);
+    expect(r.limits['processes']).toBe(String(caps.processes)); expect(r.limits['data size']).toBe(String(caps.dataBytes));
     if (existsSync('/usr/bin/unshare')) expect(r.userns).not.toBe(0);
     expect(r.tty).toMatch(/^error:/u);
   });
+  // f5: a bound that stops the CLI is a typed rejected receipt naming it; a crash away from every bound stays an unknown outcome.
+  const bounded = (probe: BoundProbe): FakeStep[] => [{ line: initLine() }, { bound: probe }];
+  const limitOf = async (probe: BoundProbe) => {
+    const c = await connection(), result = await c.call(bounded(probe));
+    expect(result).toMatchObject({ kind: 'rejected', evidence: { reason: 'response-limit' } });
+    return readHeadlessRejection((result as { evidence: Parameters<typeof readHeadlessRejection>[0] }).evidence);
+  };
+  it('f5: the CPU time bound stops a spinning CLI at the soft limit (SIGXCPU) and, when it ignores that, at the hard one', async () => {
+    expect(await limitOf({ lower: ['--cpu=1:2'], burn: 'cpu' })).toMatchObject({ refusal: 'resource-limit', field: 'cpu-time' });
+    expect(await limitOf({ lower: ['--cpu=1:2'], burn: 'cpu-ignore' })).toMatchObject({ refusal: 'resource-limit', field: 'cpu-time' });
+  }, 30_000);
+  it('f5: the realm task bound refuses one more process and the CLI that aborts on it is named', async () => {
+    expect(await limitOf({ burn: 'processes' })).toMatchObject({ refusal: 'resource-limit', field: 'processes' });
+  }, 30_000);
+  it('f5: the data size bound refuses memory and the CLI that aborts on it is named', async () => {
+    expect(await limitOf({ lower: ['--data=+134217728'], burn: 'memory' })).toMatchObject({ refusal: 'resource-limit', field: 'memory' });
+  }, 30_000);
+  it('f5 negative: a crash away from every bound, or a CLI exit with a reserved code, is never named a bound (unknown outcome)', async () => {
+    const c = await connection();
+    await expect(c.call(bounded({ burn: 'abort' }))).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
+    await expect(c.call([{ line: initLine() }, { exit: headless.isolation.limits.exits['cpu-time'] }])).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
+  }, 30_000);
   it('keeps SIGINT first through the realm: a cancelled turn is interrupted inside the sandbox, then the outcome is unknown', async () => {
     const c = await connection({ steps: [{ line: initLine() }, { hang: true }] }), controller = new AbortController();
     await c.port.preflight(c.profile);

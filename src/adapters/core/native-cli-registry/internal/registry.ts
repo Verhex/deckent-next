@@ -57,7 +57,13 @@ export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), r
   isolation: z.object({ source: argument, shell: z.string().startsWith('/'), socketPath: z.string().regex(/^\/run\/[a-z][a-z0-9.-]*\.sock$/),
     proxy: z.object({ host: z.literal('127.0.0.1'), port: z.number().int().min(1024).max(65535), env: proxyNames.refine(value => value.length > 0), clear: proxyNames }).strict().readonly(),
     configVisible: z.array(z.string().regex(/^[A-Za-z0-9._-]+$/).refine(value => value !== '.' && value !== '..')).readonly(), configVisibleSource: argument,
-    configMaxEntries: positive, limits: z.object({ tmpfsBytes: positive, fileSizeBlocks: positive, fileSizeBlocksSource: argument, openFiles: positive }).strict().readonly() }).strict().readonly(),
+    configMaxEntries: positive, limits: z.object({ tmpfsBytes: positive, fileSizeBlocks: positive, fileSizeBlocksSource: argument, openFiles: positive,
+      /** f5: per-process CPU (soft; hard = soft + grace) and data bounds, the realm's task bound, set by `limiter` (absolute, util-linux prlimit) inside the
+       * realm; the relay samples every `sampleMs` and names a bound that stopped the CLI by its reserved exit code (`attributionPermille` of a bound). */
+      // `attributionPermille` is a share of a bound (at most the whole of it); the exit codes are distinct.
+      cpuSeconds: positive, cpuGraceSeconds: positive, processes: positive, dataBytes: positive, sampleMs: positive, attributionPermille: positive,
+      exits: z.object({ 'cpu-time': positive, processes: positive, memory: positive }).strict().refine(value => new Set(Object.values(value)).size === Object.keys(value).length).readonly(),
+      boundsSource: argument, limiter: z.string().startsWith('/'), limiterSource: argument }).strict().readonly() }).strict().readonly(),
 }).strict().refine(value => {
   const built = [...Object.keys(value.env.fixed), ...value.env.runDir, value.env.configDir, ...value.isolation.proxy.env, ...value.isolation.proxy.clear];
   return new Set(built).size === built.length && !built.some(name => value.env.deny.includes(name))

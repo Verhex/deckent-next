@@ -29,7 +29,11 @@ export const happyLines = (text: string) => [uiLine(), initLine(), assistantLine
 /** S3-5 `isolation`: what the CLI process can reach from inside its realm; each answer is logged (`mode: 'isolation'`), the turn goes on. */
 export interface IsolationProbe { readonly read?: readonly string[]; readonly list?: readonly string[]; readonly write?: readonly string[]; readonly replace?: readonly string[];
   readonly exists?: readonly string[]; readonly connect?: readonly { host: string; port: number }[]; readonly proxy?: readonly string[] }
-export type FakeStep = { line: Line | string } | { sleepMs: number } | { floodBytes: number } | { hang: true; ignoreInterrupt?: boolean } | { exit: number } | { isolation: IsolationProbe };
+/** f5 bound probes: `lower` lowers this process's own limits with the registry's limiter (`--pid self`), then `burn` spins the CPU (optionally ignoring
+ * SIGXCPU), starts sleeping children until the realm refuses one, or allocates until memory is refused, and aborts like a crashed CLI. */
+export type BoundProbe = { lower?: readonly string[]; burn: 'cpu' | 'cpu-ignore' | 'processes' | 'memory' | 'abort' };
+export type FakeStep = { line: Line | string } | { sleepMs: number } | { floodBytes: number } | { hang: true; ignoreInterrupt?: boolean } | { exit: number } | { isolation: IsolationProbe }
+  | { bound: BoundProbe };
 export interface FakeScenario {
   readonly logPath: string; readonly version?: string; readonly help?: string; readonly probeRefusal?: string | null; readonly systemProbeRefusal?: string | null;
   readonly auth?: Record<string, unknown>; readonly authExit?: number; readonly steps?: readonly FakeStep[]; readonly initCwd?: 'actual';
@@ -71,7 +75,7 @@ async function isolation(p) {
     write: each(p.write, file => { fs.writeFileSync(file, 'SANDBOX-WRITE'); return 'written'; }),
     replace: each(p.replace, file => { fs.writeFileSync(file + '.tmp-fixture', 'SANDBOX-REPLACE'); fs.renameSync(file + '.tmp-fixture', file); return 'replaced'; }),
     homeSsh: fs.existsSync(require('node:path').join(require('node:os').userInfo().homedir, '.ssh')),
-    limits: Object.fromEntries(fs.readFileSync('/proc/self/limits', 'utf8').split('\\n').map(row => /^Max (core file size|file size|open files)\\s+(\\S+)/u.exec(row)).filter(Boolean).map(m => [m[1], m[2]])) };
+    limits: Object.fromEntries(fs.readFileSync('/proc/self/limits', 'utf8').split('\\n').map(row => /^Max (core file size|file size|open files|cpu time|processes|data size)\\s+(\\S+)\\s+(\\S+)/u.exec(row)).filter(Boolean).map(m => [m[1], m[1] === 'cpu time' ? m[2] + ':' + m[3] : m[2]])) };
   try { fs.openSync('/dev/tty', 'r'); r.tty = 'open'; } catch (error) { r.tty = 'error:' + error.code; }
   try { r.userns = require('node:child_process').spawnSync('/usr/bin/unshare', ['-U', 'true']).status; } catch { r.userns = null; }
   const attempt = (open, sent) => new Promise(resolve => { let reached = false, data = ''; const socket = open(); const done = value => { socket.destroy(); resolve(value); };
@@ -82,6 +86,19 @@ async function isolation(p) {
   let proxy = null; try { proxy = new URL(process.env.HTTPS_PROXY); } catch { /* No proxy in this realm. */ }
   r.proxy = await Promise.all((p.proxy ?? []).map(target => proxy ? attempt(() => net.connect(Number(proxy.port), proxy.hostname), 'CONNECT ' + target + ' HTTP/1.1\\r\\nHost: ' + target + '\\r\\n\\r\\n') : 'no-proxy'));
   return r;
+}
+async function bound(p) {
+  const child = require('node:child_process');
+  // '--data=+N': this process's current data size plus N bytes (its own baseline is unknown to the test).
+  const data = () => Number(/^VmData:\\s+(\\d+)/mu.exec(fs.readFileSync('/proc/self/status', 'utf8'))[1]) * 1024;
+  const lower = (p.lower ?? []).map(arg => arg.startsWith('--data=+') ? '--data=' + (data() + Number(arg.slice(8))) : arg);
+  if (lower.length) child.spawnSync(${JSON.stringify(headless.isolation.limits.limiter)}, ['--pid', String(process.pid), ...lower]);
+  log({ mode: 'bound', burn: p.burn });
+  if (p.burn === 'cpu-ignore') process.on('SIGXCPU', () => {});
+  if (p.burn.startsWith('cpu')) for (;;) Math.sqrt(Math.random());
+  if (p.burn === 'processes') { for (let i = 0; i < 4096; i++) if (!await new Promise(resolve => { const c = child.spawn('/bin/sleep', ['30'], { stdio: 'ignore' }); c.on('spawn', () => resolve(true)); c.on('error', () => resolve(false)); })) break; }
+  if (p.burn === 'memory') { const kept = []; try { for (let i = 0; i < 4096; i++) kept.push(Buffer.alloc(8 * 1048576, 1)); } catch { /* Refused: abort like a crashed CLI. */ } }
+  process.abort();
 }
 const chunks = []; process.stdin.on('data', chunk => chunks.push(chunk)); process.stdin.on('end', async () => {
   const promptFile = argv[argv.indexOf(${JSON.stringify(headless.systemPromptFlag)}) + 1];
@@ -96,6 +113,7 @@ const chunks = []; process.stdin.on('data', chunk => chunks.push(chunk)); proces
     else if (step.hang) { if (step.ignoreInterrupt) process.on('SIGINT', () => log({ mode: 'interrupted' })); else process.on('SIGINT', () => { log({ mode: 'interrupted' }); process.exit(130); }); setInterval(() => {}, 1000); return; }
     else if (step.exit !== undefined) process.exit(step.exit);
     else if (step.isolation !== undefined) log({ mode: 'isolation', results: await isolation(step.isolation) });
+    else if (step.bound !== undefined) await bound(step.bound);
   }
 });
 `;
