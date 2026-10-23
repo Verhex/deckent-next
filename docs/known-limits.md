@@ -41,11 +41,12 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   the project instructions and the final check, each through its existing command. Since alpha.54 it also builds the worker image from
   the installed package after a card that names its size and time limit (or adopts an image you name with `deckent init --image-id
   sha256:<id>`), writes the execution settings from the Docker and Git paths it found, declares the first work kind `coding` on the
-  coding CLI you pick with the pool `workers` and one running slot, and sets up that pool, each after its own card. *Impact:* without a
-  terminal, and with `--yes`, none of these four steps runs: the summary (and `deckent init --json`, `firstJob`) lists the missing
+  coding CLI you pick with the pool `workers` and one running slot, and sets up that pool, each after its own card. *Impact:* each of these
+  steps waits for a person's card, and `--yes` never builds, adopts or declares anything: the summary (and `deckent init --json`, `firstJob`) lists the missing
   first-job steps in order with their exact commands (`deckent init`, `deckent init registry`, `deckent init pool`) and doctor names the
   first one. Another kind, pool name or capacity still needs `deckent init registry` with its own flags. The image build needs Docker
-  and the network, and a running service reads the new `execution` and `admission` settings only after `deckent runtime restart`.
+  and the network, and a running service reads the new `execution` settings and pool capacity only after `deckent runtime restart` (the admission
+  registry is read on every request).
   `deckent doctor` checks read-only (`docker image inspect`, no container) that the configured image is on this Docker. A delivery
   clone is not a setup stage. The profile you choose (solo, team, enterprise or custom) is saved in your user's global configuration
   (`identity.profile`; distribution stays `deckent identity distribute`); the next `deckent init` reads it back and shows the stage done,

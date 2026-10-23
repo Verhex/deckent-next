@@ -40,11 +40,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   kontrolü, her birini kendi mevcut komutuyla uygular. alpha.54'ten beri ayrıca, boyutu ve süre sınırını söyleyen bir karttan sonra
   worker imajını kurulu paketten derler (ya da `deckent init --image-id sha256:<kimlik>` ile verdiğiniz imajı benimser), bulduğu
   Docker ve Git yollarından yürütme ayarlarını yazar, seçtiğiniz kodlama CLI'ı üzerinde `coding` ilk iş türünü `workers` havuzu ve
-  bir çalışma yuvasıyla tanımlar ve o havuzu kurar; her biri kendi kartından sonra. *Etki:* terminal yoksa ve `--yes` ile bu dört
-  adımın hiçbiri çalışmaz: özet (ve `deckent init --json`, `firstJob`) ilk iş için eksik adımları sırayla ve tam komutlarıyla
+  bir çalışma yuvasıyla tanımlar ve o havuzu kurar; her biri kendi kartından sonra. *Etki:* bu adımların her biri bir kişinin
+  kartını bekler ve `--yes` hiçbir zaman derlemez, benimsemez ya da tanımlamaz: özet (ve `deckent init --json`, `firstJob`) ilk iş için eksik adımları sırayla ve tam komutlarıyla
   listeler (`deckent init`, `deckent init registry`, `deckent init pool`), doctor ilkini gösterir. Başka bir iş türü, havuz adı ya da
   kapasite hâlâ kendi bayraklarıyla `deckent init registry` ister. İmaj derlemesi Docker ve ağ ister; çalışan servis yeni `execution`
-  ve `admission` ayarlarını ancak `deckent runtime restart` sonrasında okur. `deckent doctor` yapılandırılan imajın bu Docker'da
+  ayarlarını ve havuz kapasitesini ancak `deckent runtime restart` sonrasında okur (kabul kaydı her istekte okunur). `deckent doctor` yapılandırılan imajın bu Docker'da
   olduğunu salt okunur denetler (`docker image inspect`, konteyner yok). Teslim klonu kurulum aşaması değildir.
   Seçtiğiniz profil (tek kullanıcı, ekip, kurum ya da özel) kullanıcınızın genel yapılandırmasına kaydedilir
   (`identity.profile`; dağıtım `deckent identity distribute` olarak kalır); sonraki `deckent init` onu geri okur ve aşamayı tamam
