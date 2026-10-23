@@ -310,7 +310,8 @@
         "src/adapters/core/mcp-client",
         "src/adapters/core/local-runtime-socket",
         "src/composition/core/setup",
-        "src/composition/core/memory"
+        "src/composition/core/memory",
+        "src/composition/core/agent-catalog"
       ],
       "plan": "SURFACES"
     },
@@ -398,7 +399,8 @@
         "src/composition/core/run-planner",
         "src/composition/core/audit",
         "src/platform/core/crash-reporting",
-        "src/composition/core/memory"
+        "src/composition/core/memory",
+        "src/composition/core/agent-catalog"
       ],
       "plan": "SURFACES"
     },
@@ -461,7 +463,9 @@
         "src/domain/core/task-graph",
         "src/engine/core/memory",
         "src/domain/core/memory",
-        "src/engine/core/nervous"
+        "src/engine/core/nervous",
+        "src/engine/core/agent-catalog",
+        "src/domain/core/agent-catalog"
       ],
       "plan": "FOUNDATION"
     },
@@ -1267,7 +1271,8 @@
         "src/platform/core/config-fields",
         "src/surfaces/core/monitor",
         "src/surfaces/core/config",
-        "src/surfaces/core/cli-memory"
+        "src/surfaces/core/cli-memory",
+        "src/surfaces/core/cli-agents"
       ],
       "plan": "SURFACES"
     },
@@ -1354,7 +1359,8 @@
         "src/domain/core/run",
         "src/engine/core/effect",
         "src/engine/core/run-proposal",
-        "src/engine/core/memory"
+        "src/engine/core/memory",
+        "src/engine/core/agent-catalog"
       ],
       "plan": "SURFACES"
     },
@@ -3597,6 +3603,71 @@
         "src/platform/core/integrity"
       ],
       "plan": "EXECUTION"
+    },
+    "src/domain/core/agent-catalog": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/principal"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/engine/core/agent-catalog": {
+      "dependencies": [
+        "src/domain/core/command",
+        "src/domain/core/agent-catalog",
+        "src/domain/core/audit",
+        "src/domain/core/principal",
+        "src/domain/core/primitives",
+        "src/domain/core/run",
+        "src/platform/core/integrity",
+        "src/engine/core/authentication",
+        "src/domain/core/policy",
+        "src/engine/core/policy"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/agent-catalog-store": {
+      "dependencies": [
+        "src/domain/core/command",
+        "src/domain/core/agent-catalog",
+        "src/engine/core/audit",
+        "src/engine/core/agent-catalog",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/sqlite-ledger",
+        "src/platform/core/integrity"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/composition/core/agent-catalog": {
+      "dependencies": [
+        "src/engine/core/agent-catalog",
+        "src/engine/core/runtime",
+        "src/domain/core/run",
+        "src/adapters/core/agent-catalog-store",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/local-principal",
+        "src/platform/core/clock",
+        "src/platform/core/config",
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/surfaces/core/cli-agents": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/config",
+        "src/platform/core/i18n",
+        "src/domain/core/agent-catalog",
+        "src/engine/core/agent-catalog",
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/cli-approval",
+        "src/surfaces/core/cli-terminal"
+      ],
+      "plan": "LEARNING"
     }
   },
   "composition": {
@@ -3707,7 +3778,8 @@
       "termrun",
       "delivery",
       "memory",
-      "assignment"
+      "assignment",
+      "agents"
     ]
   },
   "literals": {

@@ -27,6 +27,7 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   inventory: lazyFunction(cliRun, 'inventoryCommand'), paths: runKernelCommand, runtime: lazyFunction(admin, 'runtimeCommand'), coding: lazyFunction(admin, 'codingCommand'),
   inference: lazyFunction(models, 'inferenceCommand'), operation: lazyFunction(admin, 'operationCommand'), decide: lazyFunction(() => import('#surfaces/core/cli-decision/index.js'), 'decisionCommand'),
   memory: lazyFunction(() => import('#surfaces/core/cli-memory/index.js'), 'memoryCommand'),
+  agents: lazyFunction(() => import('#surfaces/core/cli-agents/index.js'), 'agentsCommand'),
   policy: async (argv, context) => (argv[1] === 'scopes' ? (await approval()).policyScopesCommand : argv[1] === 'status' || argv[1] === 'mcp' || argv[1] === 'grants' || argv[1] === 'revoke' || argv[1] === 'upgrade' || ['delegations', 'delegate', 'undelegate'].includes(argv[1] ?? '') ? (await approval()).policyGrantsCommand : runKernelCommand)(argv, context),
 });
 

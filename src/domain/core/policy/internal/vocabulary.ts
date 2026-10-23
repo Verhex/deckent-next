@@ -9,6 +9,9 @@ export const policyResources = Object.freeze({
   // S4 memory journal v1: the resource id is the scope. `inspect` reads (list, search, one entry with history); propose/verify/retire are the
   // application's transitions (no surface writes in v1). Verify additionally needs a human or an independent evaluation record (domain rule).
   memory: Object.freeze({ kind: 'memory' as const, actions: Object.freeze(['inspect', 'propose', 'verify', 'retire'] as const) }),
+  // S7 agent/skill catalog core: the resource id is the scope. `inspect` reads agents and skills; `define` creates or revises an agent or a person's
+  // own skill; `import` brings a skill from elsewhere (always also behind the pinned + signed floor, which no grant relaxes).
+  agentCatalog: Object.freeze({ kind: 'agent-catalog' as const, actions: Object.freeze(['inspect', 'define', 'import'] as const) }),
   approval: Object.freeze({ kind: 'approval' as const, actions: Object.freeze(['inspect', 'decide', 'renew'] as const) }),
   task: Object.freeze({ kind: 'task' as const, actions: Object.freeze(['execute'] as const) }),
   attempt: Object.freeze({ kind: 'attempt' as const, actions: Object.freeze(['execute', 'release', 'reconcile', 'recover-output', 'cancel', 'evaluate', 'read-output', 'prepare-integration', 'deliver-integration', 'adopt-integration', 'rollback-integration'] as const) }),

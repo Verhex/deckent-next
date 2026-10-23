@@ -20,6 +20,7 @@ import { releaseConfiguredQuota, applyConfiguredRunLifecycle, applyConfiguredPoo
 import { recordConfiguredMcpIngress } from './ingress.js';
 import { inspectConfiguredDecision } from '#composition/core/decision/index.js';
 import { inspectConfiguredMemory, listConfiguredMemory, searchConfiguredMemory } from '#composition/core/memory/index.js';
+import { listConfiguredAgents, inspectConfiguredAgent, listConfiguredSkills, inspectConfiguredSkill } from '#composition/core/agent-catalog/index.js';
 import { inspectConfiguredPolicyAdministration } from '#composition/core/approvals/index.js';
 import { verifyConfiguredAudit } from '#composition/core/audit/index.js';
 import { inspectMonitor } from '#composition/core/monitor/index.js';
@@ -35,6 +36,8 @@ import { inspectMonitor } from '#composition/core/monitor/index.js';
     recordModelIngress: (notice, input) => recordConfiguredMcpIngress(root, notice, input),
     applyRunControl: command => applyConfiguredRunLifecycle(root, command),
     inspectDecision: query => inspectConfiguredDecision(root, query, { heal: false }),
+    listAgents: query => listConfiguredAgents(root, query, { heal: false }), inspectAgent: query => inspectConfiguredAgent(root, query, { heal: false }),
+    listSkills: query => listConfiguredSkills(root, query, { heal: false }), inspectSkill: query => inspectConfiguredSkill(root, query, { heal: false }),
     listMemory: query => listConfiguredMemory(root, query, { heal: false }), searchMemory: query => searchConfiguredMemory(root, query, { heal: false }), inspectMemory: query => inspectConfiguredMemory(root, query, { heal: false }),
     inspectPolicyAdministration: query => inspectConfiguredPolicyAdministration(root, query, { heal: false }),
     verifyAudit: query => verifyConfiguredAudit(root, query),

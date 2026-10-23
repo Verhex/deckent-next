@@ -38,7 +38,10 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 63;
+export const CURRENT_LEDGER_VERSION = 64;
+// S7 agent/skill catalog (lane v64 after s6r1's v63; the lead renumbers at landing): additive tables only, append-only revisions and receipts; an existing
+// table is refused, never adopted; no earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v64).
+export const AGENT_CATALOG_LEDGER_VERSION = 64;
 // S6R-1 effect producer (v63 after s1's v62): every new effect intent records its producer (Attempt | principal) in the record; the step adds
 // only the producer-Attempt index (migration-v63.ts). Older intents stay as written. Downgrade = restore the pre-switch backup.
 export const EFFECT_PRODUCER_LEDGER_VERSION = 63;
@@ -82,7 +85,16 @@ export const DECISION_PORT_LEDGER_VERSION = 46;
 export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
+const append = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;`).join('');
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  [AGENT_CATALOG_LEDGER_VERSION]: `CREATE TABLE agent_definitions(scope_id TEXT NOT NULL,agent_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),parent_id TEXT,seq INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,agent_id));
+    CREATE TABLE agent_definition_revisions(scope_id TEXT NOT NULL,agent_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,agent_id,revision));
+    CREATE TABLE skill_definitions(scope_id TEXT NOT NULL,skill_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),seq INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,skill_id));
+    CREATE TABLE skill_definition_revisions(scope_id TEXT NOT NULL,skill_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),content_digest TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,skill_id,revision));
+    CREATE TABLE agent_catalog_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN('agent','skill')),item_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id));
+    CREATE INDEX agent_definitions_recent ON agent_definitions(scope_id,seq DESC); CREATE INDEX skill_definitions_recent ON skill_definitions(scope_id,seq DESC);
+    ${append('agent_definitions', 'DELETE')}${append('skill_definitions', 'DELETE')}${append('agent_definition_revisions', 'UPDATE', 'DELETE')}
+    ${append('skill_definition_revisions', 'UPDATE', 'DELETE')}${append('agent_catalog_receipts', 'UPDATE', 'DELETE')} PRAGMA user_version=64;`,
   [WORKER_ASSIGNMENT_LEDGER_VERSION]: 'PRAGMA user_version=62;',
   [MEMORY_JOURNAL_LEDGER_VERSION]: `CREATE TABLE memory_entries(id INTEGER PRIMARY KEY,scope_id TEXT NOT NULL,entry_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),
     state TEXT NOT NULL CHECK(state IN('candidate','verified','retired')),seq INTEGER NOT NULL,record TEXT NOT NULL,UNIQUE(scope_id,entry_id));

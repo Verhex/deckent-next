@@ -29,6 +29,9 @@ Başlarken:
   memory      Kapsamın hafıza dergisini oku ve düzenle: bilgiler ve dersler
       search | inspect | propose | verify | retire
       [--scope <id>] [--state <ad>] [--json]
+  agents      Kapsamın ajanlarını ve skill'lerini oku ve tanımla
+      inspect | skills | skill | define | define-skill
+      [--scope <id>] [--json]
 
 İş yürütme:
   do          Brain ve mevcut onay kapılarıyla bir isteği planla

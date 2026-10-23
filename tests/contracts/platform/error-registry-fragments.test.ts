@@ -21,7 +21,7 @@ describe('error registry family fragments', () => {
   });
   it('registers one frozen fragment per lane family, in a fixed order, and every fragment code is a registered code', () => {
     expect(ERROR_DEFINITION_FRAGMENTS.map(([family]) => family)).toEqual(
-      ['cli', 'clirun', 'clitask', 'cliapproval', 'clisetup', 'cliadmin', 'climodels', 'clidoctor', 'monitor', 'setup', 'security', 'memory', 'assignment']);
+      ['cli', 'clirun', 'clitask', 'cliapproval', 'clisetup', 'cliadmin', 'climodels', 'clidoctor', 'monitor', 'setup', 'security', 'memory', 'assignment', 'agents']);
     for (const [, fragment] of ERROR_DEFINITION_FRAGMENTS) {
       expect(Object.isFrozen(fragment)).toBe(true);
       for (const code of Object.keys(fragment)) expect(ErrorRegistry.has(code)).toBe(true);
