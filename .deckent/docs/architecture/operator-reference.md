@@ -366,3 +366,224 @@ content for that folder: a card at your own terminal shows the path, size, SHA-2
 audit log. A changed file is untrusted again. Until it is trusted, workers get the task text only and Run creation warns
 `WORKER_INSTRUCTIONS_WITHHELD`; a file that does not fit the prompt bounds refuses the Run (`WORKER_INSTRUCTIONS_TOO_LARGE`).
 Delivery refuses a worker change to those instruction paths unless the task scope names them (`PATCH_INSTRUCTION_SURFACE_WRITE`).
+
+## Source build and sandbox posture
+
+- A fresh source build needs Docker to build and stage the locked bubblewrap (currently 0.13.0); it downloads the locked
+  source and verifies the source and binary digests. A verified staged bundle can be reused offline. System bubblewrap,
+  when selected, must be 0.12.0 or newer. A C build toolchain is required for the native sandbox helper.
+- Use a fresh `--out` directory for another `build-bwrap` run. The build ends with `bubblewrap=present` or
+  `bubblewrap=staged from …`. On Linux a build that cannot stage the locked bubblewrap stops with `BUBBLEWRAP_BUILD_REQUIRED`
+  instead of finishing; start Docker and run it again, or use `DECKENT_BWRAP_BUILD=<verified build-bwrap output> npm run build`.
+  Only off Linux does it print `bubblewrap=absent (not Linux)`, which means there is no bubblewrap sandbox; inspect the
+  sandbox posture with `deckent doctor`.
+- The very first `doctor`, before any service has run, can report Landlock instead of bubblewrap (`doctor --verbose` names the
+  reason): `doctor` only measures, and the runtime service places the bundled bubblewrap under `.deckent/bin` when it measures
+  the host. Start the service (`deckent`) and run `doctor` again.
+- **Ubuntu 24.04 and later.** The kernel may restrict unprivileged user namespaces, which bubblewrap needs. Check with
+  `sysctl kernel.apparmor_restrict_unprivileged_userns`: `1` means restricted; on WSL a missing key (`cannot stat`) means there
+  is no restriction. Deckent then reports the restriction, falls back to Landlock visibly, and refuses full-access shell calls
+  because they need the open bubblewrap sandbox. An administrator can install bubblewrap root-owned as `/usr/local/bin/bwrap`
+  together with an AppArmor profile that allows `userns` for it.
+- After `npm link`, work in your own project folder, outside the Deckent source checkout. Long paths and spaces work: the local
+  socket uses a short private directory per installation. `deckent init preview --profile <file>` previews an installation
+  profile file (advanced).
+
+## Provider connection details
+
+- `deckent init policy --scope <id> --apply` installs the first-run policy, writes the default terminal scope
+  (`terminal.scopeId`) and chat limits, and initializes cancellation settings and an empty migrated ledger. On Linux, WSL and
+  macOS a fresh installation starts on the encrypted key store. Reuse the same scope id in later commands; for an existing
+  installation use its configured scope id.
+- `/provider` offers Anthropic API, OpenAI API, DeepSeek API, Z.ai GLM, Zhipu GLM China, OpenRouter, a local server such as
+  vLLM, Ollama or LM Studio, and an OpenAI-compatible endpoint with published pricing. A key the free check rejects is never
+  stored. Where a provider has no free check, the key is kept unverified and the first turn shows any rejection.
+- **Connect a model:** providers with a packaged catalog offer those models; for a provider without one, choose an address,
+  then select an exact ID from its bounded `/v1/models` list. Deckent stores that ID unchanged. Local loopback models are
+  free-measured; a remote model without a verified published price is listed but locked, with the reason and the next step
+  (Zhipu GLM China stays locked because its prices are in CNY). OpenRouter offers model connections; paid calls still
+  require verified pricing and routing.
+- **Secret names** per connection kind: `DECKENT_ANTHROPIC_KEY`, `DECKENT_OPENAI_KEY`, `DECKENT_DEEPSEEK_KEY`,
+  `DECKENT_GLM_KEY`, `DECKENT_GLM_CN_KEY` or `DECKENT_OPENROUTER_KEY` (`/provider` stores under the same name). A local server
+  uses the optional `DECKENT_LOCAL_ENDPOINT_KEY`; an OpenAI-compatible endpoint uses a name derived from its host,
+  `DECKENT_OAICOMPAT_<HOST>`. `--model` takes an exact API model ID; the packaged catalogs are in
+  `assets/model-catalog/<connection>.json` in the source checkout, and `/model` lists them in the terminal.
+- **Vaults:** `secret set --main` stores in the installation vault, `--project` in the project's own vault (names listed in a
+  `.deck` file, references only). A main key is used in a project only after a grant: the terminal chat asks once on a solo
+  installation, or run `deckent secret grant NAME --scope <id>`; `deckent secret list --all` shows every vault.
+- **Model choice:** `/model` locks a model with its reason (no budget, not connected, key missing, not activated). **This
+  session only** pins it for the session; **This session, and make it my default** also writes `terminal.defaultModel`. When the
+  project names its own model, the window says which setting chose the model in use.
+- **Budget window:** 5, 10, 25, 50 or 100 USD, or another whole-dollar amount from 1 to 1000 with the arrow keys, then a confirm
+  step; afterwards the first `/provider` row reads **Change budget**. Local loopback models and subscription models run without a
+  budget. `/usage` shows reasoning tokens as *not measured* when the provider did not report them; open a budget there to read
+  its spend account (limit, reserved, settled).
+- **Subscriptions today:** a Claude Code worker runs with your own Claude login; a subscription-backed Brain is being prepared
+  (not available yet); terminal chat with a Claude subscription is not supported for now, so use an Anthropic API key for chat.
+  Sign in with ChatGPT is listed in `/provider` as not available yet.
+- **Prompt cache:** new Anthropic profiles use the 5-minute prompt cache and existing ones change only by your choice; `/usage`
+  shows the live account in USD, cache reads and writes, and the estimated net benefit.
+
+## First job setup in detail
+
+- **Before you start:** your installation needs the current first-run policy. A fresh `deckent init policy --scope <id> --apply`
+  has it; an older one upgrades with `deckent init policy --scope <id> --upgrade --preview`, then `--apply --expect <value>` with
+  the exact value the preview printed. The value binds the policy revision and the runtime service identity, so a change of either
+  in between is refused and asks for a new preview. `--modes none` removes the full-auto/full-access grant (the very next call no
+  longer has the mode; the stored choice stays and the terminal says it is not granted).
+- **Worker image:** `npm run worker:image -- <new receipt path>` runs in the Deckent source checkout, needs Docker and writes a
+  new receipt file. It prints one JSON line with the immutable image id, for example
+  `{"imageId":"sha256:f296…5250","tag":"deckent/worker:r4-20260930","imageVersion":"r4-20260930","receipt":"…","activation":"not-activated"}`.
+  Nothing is activated; the `execution` setting names the image.
+- **`execution` values:** the README example uses the limits of the live installation (2 GiB memory, 512 pids, 1 CPU,
+  20-minute deadline, bounded logs and output). Saving prints
+  `Saved execution in project. Apply: restart. Backup: …/.deckent/config.json.bak.<time>.…` and
+  `Restart required: the running service started with the previous configuration. Restart it with `deckent runtime restart` (or /service-restart in the terminal).`
+- **Registry and pool:** `deckent init registry` writes the first admission registry and pool settings from the coding CLI it
+  detects. Preview detects the CLI's exact version in a temporary, network-free container and shows the proposed versioned
+  profile and kind without writing anything; apply repeats the detection and writes through config policy, revision checks and
+  audit. An existing registry is never overwritten (typed refusal); add another kind with
+  `deckent coding template --provider <id> --kind <kind> --preview|--apply`. `deckent config explain admission` shows the result.
+  Without `--discovery` the worker runs with repository instruction files hidden (`disabled`); a CLI without a verified way to
+  hide them needs `--discovery repository`. Workers see a project instruction snapshot only after
+  `deckent coding instructions trust --scope <id>` at your own terminal.
+- **Restart:** `deckent runtime restart` answers `Runtime service restarted (pid …, instance …).` A fresh `init policy --apply`
+  (first-run policy v12 and later) already names the service (`service.identity`) and lets only the installing person stop it.
+  On an older first-run installation run the upgrade first; if it says it set the service identity, stop the running service
+  once by hand (see [Runtime service](#runtime-service)) before `runtime restart` works.
+- **Plan card:** the `/do` card's Risk and Undo lines read "not classified by the tool" and "not declared by the tool"; it expires
+  after `approvals.requestTtlMs` (10 minutes). After `y`: `Run <run-id> admitted. Follow /tasks or /monitor.`
+- **Delivery and adoption lines:** `/deliver` is titled "/deliver · tasks awaiting delivery"; it checks the patch against the
+  current source and ends with `Delivered: commit <commit> → refs/deckent/deliveries/<digest>`. Adoption asks
+  `Adopt commit <commit> into a branch? This moves the branch and needs its own y.` and ends with
+  `Adopted: refs/heads/deckent/first-job <from> → <to>`; `main` is not offered while it is checked out here. Your checkout, index
+  and working files are unchanged.
+
+## Delivery queue: inspect and undo
+
+A registered integration target uses the service queue (in live use since 1.0.0-alpha.43; beta acceptance pending). `/deliver`
+prepares on the current base; after a base/target refusal, `r` offers re-preparation. Inspect last-known state with `r`; publish
+and adopt each show their exact frozen batch and ask a separate `y/N`. `/runs` details show authorized scope position,
+responsibility and outcome. Main/default/protected/checked-out/foreign targets remain refused even when allow-listed.
+Conflicting paths require a new Attempt; no user branch is rebased or merged.
+
+```sh
+deckent task integration-queue-list --scope my-project --json
+deckent task integration-queue-inspect --scope my-project --command-id <ticket> --json
+deckent task integration-queue-confirm --scope my-project --command-id <ticket>
+deckent task integration-queue-rollback --scope my-project --source-command-id <ticket> --command-id undo-1
+deckent task integration-queue-confirm --scope my-project --command-id undo-1
+```
+
+The rollback card covers one settled item. A failure stops the batch suffix and keeps the adopted prefix; unknown effects hold
+that target for reconciliation. Legacy direct integration commands keep historical receipts, but cannot write through an
+activated queue generation. Queue bounds/TTL come from `targetQueue`; a verification profile and policy are required. The queue
+has settled real deliveries in live use; that is not evidence of packaged, hosted, platform or N1 load acceptance, which the beta
+acceptance still has to show. Since alpha.53 the queue list, inspect, enqueue and rollback views and the `/deliver` window show
+the delivery summary above the unchanged consent card, and an advisory rule (`autonomy@1`) records `would-deliver` or
+`would-hold` per ticket without acting ([known limits](../../../docs/known-limits.md)).
+
+```text
+Source <source> · affected files match base · proposal <proposal>
+Candidate prepared: <path>
+Delivered commit <commit> at <ref>. Source HEAD, index and working files are unchanged.
+Adopted: <ref> moved from <from> to <to> (sequence 1). Basis: recorded Task acceptance, not verification; checkout, index and working files are unchanged.
+Rolled back: <ref> moved from <to> to <from> (sequence 2). Checkout, index and working files are unchanged.
+```
+
+## Runtime service
+
+- **Start.** `deckent` starts it in the background when none is running and reuses a running one. Its output goes to
+  `.deckent/state/runtime-service.log` (under your data root if you moved it). `deckent runtime serve` runs it in the foreground
+  instead; Ctrl+C stops it.
+- **Idle stop.** A service the terminal started stops itself after 15 minutes without work (`service.idleShutdown.afterMs`); the
+  next `deckent` starts it again. A service you started with `runtime serve` never stops by itself. `deckent-mcp` does not start
+  the service.
+- **Restart and stop.** `deckent runtime restart` stops the service through the governed stop and starts the current build and
+  configuration; `deckent runtime shutdown` only stops it. `deckent runtime describe` shows the running one. Both need the
+  service's identity (`deckent config explain service.identity`) and your `shutdown` rule on it, which the first-run policy gives
+  the installing person only; by default the local MCP actor cannot stop the service (a policy that grants it the `service` MCP
+  group can).
+- **Older installations.** A first-run policy older than v12 has neither the service identity nor the `shutdown` rule, so
+  `runtime restart` and `runtime shutdown` are refused. Upgrade it with `deckent init policy --scope <id> --upgrade --preview`,
+  then `--apply --expect <value>` (see [First job setup in detail](#first-job-setup-in-detail)); if the apply sets
+  `service.identity`, stop a service that is already running once by hand (Ctrl+C on `runtime serve`) before `runtime restart`
+  works.
+
+## Sandbox views
+
+- In standard, careful and full auto, sandboxed shell commands get a **closed view**: the project is writable within the call's
+  approval rules, `.git` is read-only, HOME is hidden and network access is off. Approved commands still cannot write Deckent
+  authority files. Landlock also refuses permission and ownership changes, and cannot add or remove entries in directories
+  holding protected paths.
+- Full access requires a usable **open bubblewrap sandbox**: network and HOME are available, while Deckent state, configuration,
+  credential patterns and host Docker/session D-Bus sockets remain masked or read-only. Without an open sandbox, full-access
+  shell calls are refused, including an explicit `host` realm.
+- Closed modes retain the visible `prefer-sandbox` host fallback; that fallback has no enforced filesystem boundary, so use
+  `require-sandbox` when confinement is required.
+- The shared credential registry covers gh, Docker, kube, Codex, Git credentials and common cloud CLIs. HOME masking is bounded
+  (depth 3, 20,000 entries); custom locations, arbitrary filenames and aliases outside those masks need separate isolation.
+- Full auto still asks before `find -delete`, file truncation (`>`, `>|`) and moves (`mv`); appends (`>>`) remain modifications.
+- The hard floor (Deckent configuration, policy, approvals, audit, secrets and the MCP registry) is enforced in every sandbox
+  mode.
+
+## Secret stores and strict install
+
+| Store (`secrets.store`) | On disk | Who can read the key |
+|---|---|---|
+| `core.secret-store.env@1` (when no store is selected) | nothing; read from the environment | every program that inherits that environment |
+| `core.secret-store.file@1` | plain text, a 0600 file | Deckent and other programs running as your user |
+| `core.secret-store.encrypted-file@1` (recommended; fresh installs start here) | encrypted (AES-256-GCM); the unlock key sits in the same folder, no passphrase | Deckent; other programs running as your user can still open it |
+
+Provider calls resolve keys inside the runtime; keys are not placed in prompts or the shell environment. Supported sandbox views
+hide the store; a host realm or fallback has no filesystem confinement. A provider answer that echoes a stored key is refused.
+`deckent doctor` shows which store is active; `deckent doctor --verbose` also says who can read it. When a provider refuses a key
+(401/403) or a limit is reached, the terminal says so in plain words.
+
+**Strict install**, for keys no other program on the machine should read. Fresh Linux/WSL/macOS installations select the
+encrypted store through `init policy --apply` and Docker `init apply` when the installed policy permits the switch; existing
+installations keep their selection.
+
+1. Move your keys into the encrypted store: `deckent secret store` lists the registered stores to pick from; leaving env lists
+   config reference names missing in the target and asks yes/no (scripts require `--confirm-env-missing`); `doctor` shows the
+   same names; it copies every key, checks it, selects the new store and then removes the old copy (a move to a weaker store
+   asks first).
+2. Keep other AI tools out of Deckent's state folder, e.g. `Read` deny rules for the store files in Claude Code's
+   `~/.claude/settings.json`. This stops their file tools and common shell commands, not every script.
+3. Planned: run the Deckent service under its own OS user (or the macOS Keychain) so no program of your account can read the
+   keys.
+
+The file stores are not available on native Windows yet.
+
+## Spend settlement
+
+Each scope has one shared budget in USD for every API provider. Before a paid call, Deckent reserves the most it could cost at
+the dearest price tier that can apply; afterwards it settles the call from the usage the provider itself reported in its final
+answer, multiplied by the verified published price. OpenRouter calls are the exception: they settle from the cost OpenRouter
+reports in its answer. Where a provider does not say which price tier it used (DeepSeek), the call settles at the published peak
+price and is labelled an upper bound. Before the first paid OpenRouter call, check https://openrouter.ai/settings/plugins that no
+plugin is enabled with "Prevent overrides", and set an OpenRouter credit limit no higher than your Deckent budget; Deckent cannot
+see either setting. Commands: `deckent models create-budget|revise-budget [--unfreeze]` and `deckent models reconcile-spending`.
+
+## Distribution extension entry
+
+The public extension entry lets a CLI distribution register effect adapters, secret-store adapters and secret helpers,
+approval-assurance producers, MCP capability groups and provider no-charge certifications. Since alpha.20 that distribution can
+also start the service and MCP entry with its registrations; automatic service start and restart replay the distribution's
+entry (checked by the manual `npm run smoke:dist`, not in CI). Core's bare executables do not discover those modules.
+
+## MCP permission groups
+
+In `/policy` (**MCP permissions**) pool control, catalog registration and global model configuration are marked **all scopes**.
+Revoking a group preserves other grants, which may still allow a tool. "Dogfood worker" is a proposed work-only preset; its exact
+N1 MCP usage is unverified. Revoke uses the same two steps as grant (`deckent policy mcp revoke … --preview`, then `--apply
+--expect <digest>`).
+
+## Everyday commands in detail
+
+- `deckent run hold|resume|close` and `deckent pool hold|resume` pause, resume or close work; `deckent identity profiles` shows
+  the identity profiles; `deckent init` prepares project instructions (`DECKENT.md`) after a preview.
+- `deckent backup create|verify|restore` writes verifiable recovery sets, on a schedule if you choose, with retention; a restore
+  runs only while the service is stopped. Only the authority key inside a set is encrypted with your passphrase; the ledger and
+  the state archive are plain files, so keep sets on storage you trust (full-set encryption is not available yet). See
+  [Installation recovery sets](#installation-recovery-sets).
