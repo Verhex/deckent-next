@@ -1,6 +1,6 @@
 {
-  "memory.help.summary": "Kapsamın hafıza dergisini oku: düzenlenmiş bilgiler ve dersler",
-  "memory.help.detail": "deckent memory [--scope <id>] [--state candidate,verified,retired] [--json]\n  Kapsamın hafıza kayıtlarını en son değişen önce listeler (--state başka durum söylemezse aday ve doğrulanmış).\ndeckent memory search <kelimeler...> [--scope <id>] [--state ...] [--json]\n  Bütün kelimeleri içeren kayıtları bulur (büyük/küçük harf ve aksan yok sayılır).\ndeckent memory inspect <kayıt-id> [--scope <id>] [--json]\n  Bir kaydı kaynağı, doğrulaması ve bütün sürümleriyle gösterir.\nBu sürüm yalnız okur. Bir kayıt yalnız bir kişinin incelemesiyle ya da bağımsız bir değerlendirme kaydıyla doğrulanır, AI kendisi asla doğrulamaz; hiçbir şey silinmez (emekliye ayrılan kayıt geçmişini korur).",
+  "memory.help.summary": "Kapsamın hafıza dergisini oku ve düzenle: bilgiler ve dersler",
+  "memory.help.detail": "deckent memory [--scope <id>] [--state candidate,verified,retired] [--json]\n  Kapsamın hafıza kayıtlarını en son değişen önce listeler (--state başka durum söylemezse aday ve doğrulanmış).\ndeckent memory search <kelimeler...> [--scope <id>] [--state ...] [--json]\n  Bütün kelimeleri içeren kayıtları bulur (büyük/küçük harf ve aksan yok sayılır).\ndeckent memory inspect <kayıt-id> [--scope <id>] [--json]\n  Bir kaydı kaynağı, doğrulaması ve bütün sürümleriyle gösterir.\ndeckent memory propose --input <dosya> [--scope <id>]\n  JSON dosyasındaki bilgiyi ya da dersi senin adınla aday olarak önerir.\ndeckent memory verify <kayıt-id> --note <metin> [--scope <id>]\n  Kendi incelemenden sonra bir adayı doğrular.\ndeckent memory retire <kayıt-id> --reason <metin> [--superseded-by <kayıt-id>] [--scope <id>]\n  Bir kaydı emekliye ayırır; kayıt ve sürümleri okunabilir kalır.\nÖnerme, doğrulama ve emekliye ayırma yalnız kendi terminalinde, her biri tek kartla çalışır; AI araçları, borular ve --json reddedilir. Bir kayıt yalnız bir kişinin incelemesiyle ya da bağımsız bir değerlendirme kaydıyla doğrulanır, AI kendisi asla doğrulamaz; hiçbir şey silinmez.",
   "memory.help.action.search": "bütün kelimeleri içeren kayıtları bul",
   "memory.help.action.inspect": "bir kaydı geçmişiyle göster",
   "memory.column.id": "ID",
@@ -53,5 +53,20 @@
   "error.MEMORY_EVALUATION_UNAVAILABLE": "Bu doğrulama için bir değerlendirme kaydı bulunamadı; hiçbir şey doğrulanmadı.",
   "error.MEMORY_EVALUATION_NOT_PASSED": "Değerlendirme kaydı geçmedi; hiçbir şey doğrulanmadı.",
   "error.MEMORY_EVALUATION_OTHER_CONTENT": "Değerlendirme kaydı başka bir içeriği değerlendirmiş; hiçbir şey doğrulanmadı.",
-  "error.MEMORY_QUERY_INVALID": "Arama en az bir kelime ister ve boyut sınırını aşmamalı."
+  "error.MEMORY_QUERY_INVALID": "Arama en az bir kelime ister ve boyut sınırını aşmamalı.",
+  "memory.help.action.propose": "JSON dosyasından bilgi ya da ders öner (kişinin kartı)",
+  "memory.help.action.verify": "kendi incelemenden sonra bir adayı doğrula (kişinin kartı)",
+  "memory.help.action.retire": "bir kaydı emekliye ayır; geçmişi kalır (kişinin kartı)",
+  "memory.card.apply": "Uygula",
+  "memory.card.cancel": "Vazgeç",
+  "memory.cancelled": "Vazgeçildi; hiçbir şey değişmedi.",
+  "memory.card.propose.title": "Bu hafıza kaydı önerilsin mi?",
+  "memory.card.propose.body": "Senin adınla aday olarak kaydedilir; yalnız bir incelemeden sonra doğrulanır.",
+  "memory.card.verify.title": "Bu hafıza kaydı doğrulansın mı?",
+  "memory.card.verify.body": "Bu kaydı kendin incelediğini onaylıyorsun. Notun: {note}",
+  "memory.card.retire.title": "Bu hafıza kaydı emekliye ayrılsın mı?",
+  "memory.card.retire.body": "Neden: {reason} · yerine geçen: {replacement}. Kayıt ve sürümleri okunabilir kalır; hiçbir şey silinmez.",
+  "memory.done.proposed": "{id} aday olarak önerildi.",
+  "memory.done.verified": "{id} kaydı artık doğrulandı (sürüm {revision}).",
+  "memory.done.retired": "{id} kaydı emekliye ayrıldı (sürüm {revision}); geçmişi korunur."
 }

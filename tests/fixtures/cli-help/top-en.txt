@@ -26,8 +26,8 @@ Observe:
   workers     List or watch workers (without an action: list)
       list | watch
       [--scope <id>] [--all | --since <12h>] [--verbose] [--limit <n>]
-  memory      Read the scope's memory journal: curated facts and lessons
-      search | inspect
+  memory      Read and curate the scope's memory journal: facts and lessons
+      search | inspect | propose | verify | retire
       [--scope <id>] [--state <name>] [--json]
 
 Execute work:

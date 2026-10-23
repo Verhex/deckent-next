@@ -35,13 +35,15 @@ async function fixture(actions = ['inspect', 'propose', 'verify', 'retire'], mcp
 const lesson = { kind: 'lesson', title: 'Siparişsiz fatura onaya düşer', body: 'Eşleşmeyen irsaliye ERP kaydına yazılmaz, onay kuyruğuna gider.', tags: ['erp'],
   lesson: { source: 'run r1 task t1', cause: 'sipariş yok', correction: 'onaya yönlendir', evidence: 'attempt a1 kabul edildi' } };
 const propose = (commandId: string) => ({ schemaVersion: 1, commandId, scopeId: 'scope', content: lesson, origin: { kind: 'run', ref: 'r1/t1' } });
+/** The person's terminal witness (Core composes the controlling terminal; the test process has none). */
+const person = { attest: async () => true };
 const out = () => { let text = ''; return { sink: { write(chunk: string) { text += chunk; } }, text: () => text }; };
 
 it('a proposal becomes verified by a person, and the CLI lists, searches and inspects it without writing the ledger', async () => {
   const f = await fixture();
   const proposed = await proposeConfiguredMemory(f.project, propose('m1'), f.options);
   expect(proposed.entry).toMatchObject({ state: 'candidate', provenance: { author: { ai: false }, origin: { kind: 'run', ref: 'r1/t1' } } });
-  await verifyConfiguredMemory(f.project, { schemaVersion: 1, commandId: 'v1', scopeId: 'scope', entryId: 'm1', expectedRevision: 1, basis: { kind: 'human-review', note: 'r1 kanıtı okundu' } }, f.options);
+  await verifyConfiguredMemory(f.project, { schemaVersion: 1, commandId: 'v1', scopeId: 'scope', entryId: 'm1', expectedRevision: 1, basis: { kind: 'human-review', note: 'r1 kanıtı okundu' } }, f.options, person);
   const before = await readFile(f.ledger), context = { root: f.project, env: f.options.env, listMemory: listConfiguredMemory, searchMemory: searchConfiguredMemory, inspectMemory: inspectConfiguredMemory };
   const listed = out(); await memoryCommand(['memory', '--scope', 'scope', '--lang', 'en'], { ...context, stdout: listed.sink });
   expect(listed.text()).toContain('Siparişsiz fatura onaya düşer'); expect(listed.text()).toContain('verified');
@@ -59,7 +61,12 @@ it('the MCP read tools answer inside the granted scope only, and the MCP actor i
   await proposeConfiguredMemory(f.project, propose('m1'), f.options);
   const asMcp = <T>(work: () => Promise<T>) => withMcpPrincipal(work);
   await expect(asMcp(() => verifyConfiguredMemory(f.project, { schemaVersion: 1, commandId: 'v1', scopeId: 'scope', entryId: 'm1', expectedRevision: 1,
-    basis: { kind: 'human-review', note: 'ai self check' } }, f.options))).rejects.toMatchObject({ code: 'MEMORY_VERIFIER_NOT_HUMAN' });
+    basis: { kind: 'human-review', note: 'ai self check' } }, f.options, person))).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  // Off a person's terminal (no witness) verify and retire are refused before anything is read; the candidate is unchanged.
+  for (const write of [() => verifyConfiguredMemory(f.project, { schemaVersion: 1, commandId: 'v2', scopeId: 'scope', entryId: 'm1', expectedRevision: 1, basis: { kind: 'human-review', note: 'x' } }, f.options),
+    () => retireConfiguredMemory(f.project, { schemaVersion: 1, commandId: 'r2', scopeId: 'scope', entryId: 'm1', expectedRevision: 1, reason: 'x', supersededBy: null }, f.options, { attest: async () => false })])
+    await expect(write()).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  expect(await inspectConfiguredMemory(f.project, { schemaVersion: 1, scopeId: 'scope', entryId: 'm1' }, f.options)).toMatchObject({ status: 'ok', entry: { revision: 1, state: 'candidate' } });
   const mcp = createMcpServer({ inspectRun: async () => ({}), inspectInventory: async () => ({}),
     listMemory: query => asMcp(() => listConfiguredMemory(f.project, query, f.options)), searchMemory: query => asMcp(() => searchConfiguredMemory(f.project, query, f.options)),
     inspectMemory: query => asMcp(() => inspectConfiguredMemory(f.project, query, f.options)) }, { maxConcurrentCalls: 2, responseMaxBytes: 65536 }, 'en');
@@ -95,7 +102,7 @@ it('inspect accepts the short id the list shows (unique prefix over the scope), 
 it('retiring keeps the entry and its revisions; retired entries appear only when asked for', async () => {
   const f = await fixture();
   await proposeConfiguredMemory(f.project, propose('m1'), f.options);
-  await retireConfiguredMemory(f.project, { schemaVersion: 1, commandId: 'r1', scopeId: 'scope', entryId: 'm1', expectedRevision: 1, reason: 'yanlış', supersededBy: null }, f.options);
+  await retireConfiguredMemory(f.project, { schemaVersion: 1, commandId: 'r1', scopeId: 'scope', entryId: 'm1', expectedRevision: 1, reason: 'yanlış', supersededBy: null }, f.options, person);
   expect(await listConfiguredMemory(f.project, { schemaVersion: 1, scopeId: 'scope', limit: 5 }, f.options)).toMatchObject({ status: 'ok', entries: [] });
   expect(await listConfiguredMemory(f.project, { schemaVersion: 1, scopeId: 'scope', states: ['retired'], limit: 5 }, f.options)).toMatchObject({ status: 'ok', entries: [{ entryId: 'm1' }] });
   const view = await inspectConfiguredMemory(f.project, { schemaVersion: 1, scopeId: 'scope', entryId: 'm1' }, f.options);

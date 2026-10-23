@@ -1,6 +1,6 @@
 {
-  "memory.help.summary": "Read the scope's memory journal: curated facts and lessons",
-  "memory.help.detail": "deckent memory [--scope <id>] [--state candidate,verified,retired] [--json]\n  Lists the scope's memory entries, most recently changed first (candidate and verified unless --state names others).\ndeckent memory search <words...> [--scope <id>] [--state ...] [--json]\n  Finds entries that contain every word (case and accents ignored).\ndeckent memory inspect <entry-id> [--scope <id>] [--json]\n  Shows one entry with its source, verification and every revision.\nThis version only reads. An entry becomes verified only through a person's review or an independent evaluation record, never by the AI itself; nothing is ever deleted (a retired entry keeps its history).",
+  "memory.help.summary": "Read and curate the scope's memory journal: facts and lessons",
+  "memory.help.detail": "deckent memory [--scope <id>] [--state candidate,verified,retired] [--json]\n  Lists the scope's memory entries, most recently changed first (candidate and verified unless --state names others).\ndeckent memory search <words...> [--scope <id>] [--state ...] [--json]\n  Finds entries that contain every word (case and accents ignored).\ndeckent memory inspect <entry-id> [--scope <id>] [--json]\n  Shows one entry with its source, verification and every revision.\ndeckent memory propose --input <file> [--scope <id>]\n  Proposes the fact or lesson in the JSON file as a candidate under your name.\ndeckent memory verify <entry-id> --note <text> [--scope <id>]\n  Verifies a candidate after your own review.\ndeckent memory retire <entry-id> --reason <text> [--superseded-by <entry-id>] [--scope <id>]\n  Retires an entry; it and its revisions stay readable.\nPropose, verify and retire run only on your own terminal, each on one card; AI tools, pipes and --json are refused. An entry becomes verified only through a person's review or an independent evaluation record, never by the AI itself; nothing is ever deleted.",
   "memory.help.action.search": "find entries containing every word",
   "memory.help.action.inspect": "show one entry with its history",
   "memory.column.id": "ID",
@@ -53,5 +53,20 @@
   "error.MEMORY_EVALUATION_UNAVAILABLE": "No evaluation record could be resolved for this verification; nothing was verified.",
   "error.MEMORY_EVALUATION_NOT_PASSED": "The evaluation record did not pass; nothing was verified.",
   "error.MEMORY_EVALUATION_OTHER_CONTENT": "The evaluation record judged other content; nothing was verified.",
-  "error.MEMORY_QUERY_INVALID": "The search needs at least one word and must stay within its size limit."
+  "error.MEMORY_QUERY_INVALID": "The search needs at least one word and must stay within its size limit.",
+  "memory.help.action.propose": "propose a fact or lesson from a JSON file (a person's card)",
+  "memory.help.action.verify": "verify a candidate after your own review (a person's card)",
+  "memory.help.action.retire": "retire an entry; its history stays (a person's card)",
+  "memory.card.apply": "Apply",
+  "memory.card.cancel": "Cancel",
+  "memory.cancelled": "Cancelled; nothing was changed.",
+  "memory.card.propose.title": "Propose this memory entry?",
+  "memory.card.propose.body": "It is saved as a candidate under your name; it becomes verified only after a review.",
+  "memory.card.verify.title": "Verify this memory entry?",
+  "memory.card.verify.body": "You confirm that you reviewed this entry yourself. Your note: {note}",
+  "memory.card.retire.title": "Retire this memory entry?",
+  "memory.card.retire.body": "Reason: {reason} · replaced by: {replacement}. The entry and its revisions stay readable; nothing is deleted.",
+  "memory.done.proposed": "Proposed {id} as a candidate.",
+  "memory.done.verified": "Entry {id} is now verified (revision {revision}).",
+  "memory.done.retired": "Entry {id} is retired (revision {revision}); its history is kept."
 }

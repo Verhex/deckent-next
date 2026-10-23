@@ -3559,7 +3559,9 @@
         "src/platform/core/config",
         "src/composition/core/scoped-request",
         "src/composition/core/policy",
-        "src/composition/core/query-errors"
+        "src/composition/core/query-errors",
+        "src/engine/core/runtime",
+        "src/adapters/core/local-principal"
       ],
       "plan": "MEMORY"
     },
