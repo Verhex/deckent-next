@@ -107,8 +107,10 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
   it('sets up an empty folder stage by stage through each owner; the final check runs the human doctor between windows; a re-run reads done', async () => {
     await access(cli);
     const f = await fixture();
+    // A Docker that never answers (any host, any CI): the execution stages stay blocked, so this flow never offers a real worker-image build (BR1).
     const run = await f.pty('full-init', [process.execPath, cli, 'init'], [['Enter confirm', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'], ['> 6. Permissions', '1\r'],
-      ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 5. Who uses this installation · ready', '1\r'], ['> 9. Model connection', '2\r'], ['> 11. Project instructions', '2\r'], ['> 12. Final check', '1\r'], ['Final check: applied; observed again.', '1\r']]);
+      ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 5. Who uses this installation · ready', '1\r'], ['> 11. Model connection', '2\r'], ['> 13. Project instructions', '2\r'], ['> 14. Final check', '1\r'], ['Final check: applied; observed again.', '1\r']],
+      { DOCKER_HOST: 'unix:///nonexistent/docker.sock' });
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.status, run.output.slice(-2000)).toBe(0);
     // The human doctor ran on the plain terminal between two windows (its summary line, then the window again).
@@ -116,7 +118,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(doctor).toBeGreaterThan(0);
     expect(run.output.indexOf('Deckent setup', doctor)).toBeGreaterThan(doctor);
     const summary = screen(run.output);
-    for (const line of ['2. Language · done', '6. Permissions · done', '3. Folder and scope · done · This folder already uses the scope "erp-demo"', '11. Project instructions · skipped'])
+    for (const line of ['2. Language · done', '6. Permissions · done', '3. Folder and scope · done · This folder already uses the scope "erp-demo"', '13. Project instructions · skipped', '9. Worker image · blocked'])
       expect(summary).toContain(line);
     expect(summary).toContain('core:policy: applied'); expect(summary).toContain('core:language: applied'); expect(summary).toContain('core:final-check: applied');
     // SOLO-PROFILE (owner 2026-10-20): the solo choice is saved like any profile (the user's global layer) and doctor no longer asks for one.
@@ -125,10 +127,10 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     // I-S7: the summary ends with what the first job still needs, in order, each with its exact command (configuration and ledger reads only).
     const firstJob = summary.slice(summary.indexOf('Before the first job (/do), still to do, in this order:'));
     expect(firstJob.length).toBeLessThan(summary.length);
-    for (const command of ['$ npm run worker:image -- <receipt.json>', "$ deckent config set execution '{", '$ deckent init registry --scope erp-demo --provider',
-      '$ deckent init pool --scope erp-demo --preview']) expect(firstJob).toContain(command);
-    expect(firstJob.indexOf('worker:image')).toBeLessThan(firstJob.indexOf('config set execution'));
-    expect(firstJob.indexOf('config set execution')).toBeLessThan(firstJob.indexOf('init registry'));
+    // BR1: the worker image and execution settings are `deckent init` itself; no source-checkout command, no hand JSON.
+    for (const command of ['$ deckent init registry --scope erp-demo --provider', '$ deckent init pool --scope erp-demo --preview']) expect(firstJob).toContain(command);
+    expect(firstJob).toMatch(/^\s*1\. Build or adopt the worker image.*\n\s*\$ deckent init\s*$/mu);
+    expect(firstJob).not.toMatch(/worker:image|config set execution/u);
     expect(firstJob.indexOf('init registry')).toBeLessThan(firstJob.indexOf('init pool'));
     // No hand-written JSON: the folder holds the installation the owners wrote; nothing else (no DECKENT.md: the bridges were declined).
     expect((await readdir(f.root)).sort()).toEqual(['.deckent']);
@@ -242,7 +244,7 @@ printf 'fake-sudo ran: %s\\n' "\${*:2}"
     // PATH without any docker; the caller's environment carries a secret that must never reach sudo.
     const run = await f.pty('docker-handoff', [process.execPath, driver, f.root, work, sudo], [['Enter confirm', '1\r'], ['Apply now', '1\r'], ['> 5. Who uses', '1\r'],
       ['> 5. Who uses this installation · ready', '1\r'], ['> 8. Execution environment', '1\r'], ['Apply now', '1\r'], ['apt-get install -y docker-ce', 'y'], ['[fake-sudo] password for fake:', `${SUDO_ANSWER}\r`],
-      ['> 9. Model connection', '\u001b']], { PATH: join(work, 'bin'), TMPDIR: work, DECKENT_SECRET_PASSPHRASE: 'must-not-reach-sudo' }); // ggignore: fixed fake values the test proves never reach sudo (secret-scanner false positive)
+      ['> 9. Worker image', '\u001b']], { PATH: join(work, 'bin'), TMPDIR: work, DECKENT_SECRET_PASSPHRASE: 'must-not-reach-sudo' }); // ggignore: fixed fake values the test proves never reach sudo (secret-scanner false positive)
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.output).toContain('DRIVER-STATUS=closed');
     // Order on the terminal: the window offers the stage → the window closes → the card → sudo's own prompt → re-detection → the window again.

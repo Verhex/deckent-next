@@ -25,4 +25,6 @@ export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandC
   inspectInstallationBinding?: (root: string, options: ConfigLoadOptions) => Promise<InstallationBindingReport | null>;
   // PRE-34: the execution environment (Docker) as `deckent init` detects and decides it; doctor-only, read-only, bounded by the detection deadline.
   inspectExecutionEnvironment?: (env: NodeJS.ProcessEnv) => Promise<ExecutionEnvironmentDoctorView>;
+  /** BR1 1c: whether this Docker's daemon has the image (read-only `image inspect`, never a pull or a container). */
+  inspectWorkerImage?: (input: Readonly<{ executable: string; imageId: string; timeoutMs?: number; outputBytes?: number }>) => Promise<'present' | 'missing' | 'unknown'>;
 }

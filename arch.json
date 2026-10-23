@@ -2272,7 +2272,10 @@
     "src/adapters/core/worker-image": {
       "dependencies": [
         "src/platform/core/errors",
-        "src/adapters/core/process-runner"
+        "src/adapters/core/process-runner",
+        "src/engine/core/setup",
+        "src/engine/core/toolchain-currency",
+        "src/adapters/core/docker-supervisor"
       ],
       "plan": "PROVIDERS"
     },
@@ -3393,7 +3396,9 @@
         "src/platform/core/errors",
         "src/platform/core/integrity",
         "src/domain/core/audit",
-        "src/domain/core/policy"
+        "src/domain/core/policy",
+        "src/engine/core/toolchain-currency",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "INSTALLATION"
     },
@@ -3446,7 +3451,9 @@
         "src/surfaces/core/cli-observe",
         "src/composition/core/installation",
         "src/composition/core/config",
-        "src/composition/core/agent-turn"
+        "src/composition/core/agent-turn",
+        "src/adapters/core/worker-image",
+        "src/platform/core/host"
       ],
       "plan": "INSTALLATION"
     },
@@ -3470,7 +3477,8 @@
         "src/surfaces/core/cli-models",
         "src/surfaces/core/cli-observe",
         "src/surfaces/core/doctor",
-        "src/surfaces/core/cli-admin"
+        "src/surfaces/core/cli-admin",
+        "src/engine/core/installation"
       ],
       "plan": "INSTALLATION"
     },

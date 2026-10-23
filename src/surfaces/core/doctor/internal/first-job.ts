@@ -2,9 +2,9 @@ import { nativeCliIds } from '#domain/index.js';
 import { MESSAGE_REGISTRY, t, terminalSafeText, type Locale, type MessageKey } from '#platform/index.js';
 import registry from './first-job.json' with { type: 'json' };
 
-/** What settles each first-job step, read from configuration and the pool ledger only (I-S7): an execution section names a worker image,
- * an admission registry is authored, the pool's ledger row exists. Image presence on the host is not read here: the registry preview checks
- * it, and that preview starts a container, so it never runs from an observation, a pipe, `--json` or `--yes`. */
+/** What settles each first-job step (I-S7): an execution section names a worker image the daemon has (BR1: a read-only `image inspect` by the
+ * caller; `missing` unsettles it), an admission registry is authored, the pool's ledger row exists. The registry preview, which starts a
+ * container, never runs from an observation, a pipe, `--json` or `--yes`. */
 export type FirstJobFacts = Readonly<{ execution: boolean; registry: boolean; pool: boolean }>;
 export type FirstJobStep = Readonly<{ id: string; title: MessageKey; argv: readonly string[] }>;
 type Fact = keyof FirstJobFacts;

@@ -1,8 +1,9 @@
 {
-  "$comment": "Detection bounds (I-S2): one shared deadline for the whole probe, one per command, output bytes per command, PATH directories scanned, registry entries.",
+  "$comment": "Detection bounds (I-S2): one shared deadline for the whole probe, one per command, output bytes per command, PATH directories scanned, registry entries. `workerImageGigabytes` is the size (decimal GB) the worker-image question names (BR1): measured 2026-10-23 as 3.31 GB for deckent/worker r22–r27 (`docker image ls`), an estimate shown to the person, never a limit.",
   "totalTimeoutMs": 10000,
   "commandTimeoutMs": 5000,
   "outputBytes": 1048576,
   "pathDirectories": 256,
-  "runtimes": 16
+  "runtimes": 16,
+  "workerImageGigabytes": 3.31
 }

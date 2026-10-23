@@ -30,6 +30,8 @@ export interface DoctorCheckFacts {
   readonly toolchainUpdateEnabled: boolean;
   /** PRE-34: the configured worker image (evidence when the refresh marker names no version); null when no execution section sets one. */
   readonly imageId?: string | null;
+  /** BR1 1c: whether the daemon has the configured image (read-only `image inspect`); null when not checked (no image, Docker not ready). */
+  readonly workerImage?: 'present' | 'missing' | 'unknown' | null;
   /** PRE-34: the execution environment as `deckent init` decides it (same detection and setup decision; read-only); null when it could not be asked. */
   readonly executionEnvironment?: ExecutionEnvironmentDoctorView | null;
   /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
@@ -129,6 +131,10 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
     : row('work', 'work.image', 'ok', image.status === 'updating' ? t('doctor.check.image.updating', {}, l)
       : image.imageVersion || shortImageId(f.imageId) ? t('doctor.check.image.current', { version: image.imageVersion ?? shortImageId(f.imageId)! }, l) : t('doctor.check.image.currentUnnamed', {}, l)));
   rows.push(executionRow(f, l));
+  const worker = f.workerImage && f.imageId ? { image: shortImageId(f.imageId) ?? '-' } : null;
+  if (worker) rows.push(f.workerImage === 'present' ? row('work', 'work.workerImage', 'ok', t('doctor.check.workerImage.ok', worker, l))
+    : f.workerImage === 'missing' ? row('work', 'work.workerImage', 'error', t('doctor.check.workerImage.missing', worker, l), 'deckent init')
+      : row('work', 'work.workerImage', 'untested', t('doctor.check.workerImage.unknown', worker, l)));
   for (const finding of r.modelInvocationDelivery ?? []) rows.push(row('work', 'work.delivery', 'warning', t('doctor.check.delivery', { profile: finding.profileId, model: finding.reference.modelId }, l),
     finding.surface === 'mcp' ? 'deckent config set mcp.responseMaxBytes' : 'deckent config set service.responseMaxBytes'));
   if (f.retiringModels === null) rows.push(row('work', 'work.models', 'untested', t('doctor.check.models.unknown', {}, l)));
