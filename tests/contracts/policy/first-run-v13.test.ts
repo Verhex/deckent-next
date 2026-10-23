@@ -133,7 +133,7 @@ it('live and N1 shapes (2026-10-19, hand-built): the named person gets only v13+
       'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory',
       // v15 (S4B-1 + S7 + S4B-3): the memory distiller's D1–D4, the agent catalog rules, the person's review and the memory evaluator's V1–V5.
       'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog',
-      'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model']);
+      'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-memory-purge-content']);
     for (const rule of plan.rules) expect(rule.principals, rule.id).toEqual([rule.id.startsWith('first-run-mcp-observe-') ? mcpPrincipalRef(shapePerson)
       : rule.id.startsWith('first-run-memory-distiller') ? memoryDistillerPrincipalRef(shapePerson) : rule.id.startsWith('first-run-memory-evaluator') ? memoryEvaluatorPrincipalRef(shapePerson) : shapePerson]);
     expect(plan.rules.filter(rule => rule.scopes !== 'all').every(rule => rule.scopes !== 'all' && rule.scopes.length === 1 && rule.scopes[0] === 'live')).toBe(true);

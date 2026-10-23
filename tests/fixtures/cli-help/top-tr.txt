@@ -27,7 +27,7 @@ Başlarken:
       list | watch
       [--scope <id>] [--all | --since <12h>] [--verbose] [--limit <n>]
   memory      Kapsamın hafıza dergisini oku ve düzenle: bilgiler ve dersler
-      search | inspect | propose | verify | retire
+      search | inspect | propose | verify | retire | review | purge
       [--scope <id>] [--state <ad>] [--json]
   agents      Kapsamın ajanlarını ve skill'lerini oku ve tanımla
       inspect | skills | skill | define | define-skill

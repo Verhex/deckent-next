@@ -1,6 +1,6 @@
 {
-  "memory.help.action.review": "adayları, itirazları ve bayat kayıtları tek tek kartla incele (kişinin kartları)",
-  "memory.help.action.purge": "bir kaydın içeriğini ya da bir Run'dan gelen tüm kayıtları sil (kişinin kartı)",
+  "memory.help.action.review": "adayları, itirazları ve bayat kayıtları incele (kişinin kartları)",
+  "memory.help.action.purge": "bir kaydın ya da bir Run'ın kayıtlarının içeriğini sil (kişinin kartı)",
   "memory.review.title": "{scope} kapsamında hafıza incelemesi: bakılacak {items} kayıt ve {contests} itiraz.",
   "memory.review.none": "İncelenecek bir şey yok: bu kapsamda aday, itirazlı ya da bayat kayıt yok.",
   "memory.review.incomplete": "Yalnız en yeni kayıtlar okundu; bunlardan eski kayıtlar bu incelemede yok.",
