@@ -169,7 +169,10 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
    * trigger allows exactly this rewrite of the same revision), the current row likewise, the search row deleted. */
   async tombstone(record: MemoryPurgeRecord, event: AuditEvent) {
     const value = memoryPurgeRecordSchema.parse(record);
-    return this.read(() => this.write(() => {
+    // Freed cells and pages are zeroed (not left as readable bytes in the file), and the search index is merged so no deleted token stays in a
+    // segment; after the commit a checkpoint drops the older page images from the WAL (best effort: a concurrent reader may keep them until the next one).
+    this.db.exec('PRAGMA secure_delete=ON');
+    const result = await this.read(() => this.write(() => {
       const prior = this.purge(value.scopeId, value.purgeId);
       if (prior) { if (!isDeepStrictEqual(prior, value)) throw new MemoryJournalError('MEMORY_COMMAND_CONFLICT'); return { replayed: true, revisions: 0 }; }
       this.audit.record(event);
@@ -185,11 +188,14 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
         this.db.prepare('UPDATE memory_entries SET record=? WHERE scope_id=? AND entry_id=? AND revision=?')
           .run(this.seal(tombstoneMemoryRevision(current.entry, value)), value.scopeId, value.entryId, current.entry.revision);
         this.db.prepare('DELETE FROM memory_search WHERE rowid=?').run(current.id);
+        this.db.exec("INSERT INTO memory_search(memory_search) VALUES('optimize')");
       }
       this.db.prepare('INSERT INTO memory_purges(scope_id,purge_id,entry_id,content_digest,record) VALUES(?,?,?,?,?)')
         .run(value.scopeId, value.purgeId, value.entryId, value.contentDigest, this.seal(value));
       return { replayed: false, revisions };
     }));
+    try { this.db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch { /* best effort; the purge itself is committed */ }
+    return result;
   }
   private purge(scopeId: string, purgeId: string): MemoryPurgeRecord | null {
     const row = this.db.prepare('SELECT entry_id,content_digest,record FROM memory_purges WHERE scope_id=? AND purge_id=?').get(scopeId, purgeId);

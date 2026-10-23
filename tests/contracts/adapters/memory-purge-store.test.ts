@@ -56,6 +56,9 @@ describe('purge (A11): a person only, every revision tombstoned with a keyed dig
       raw(f.path, 'SELECT * FROM memory_search')]);
     for (const word of ['Ayşe', 'Yılmaz', '0555', 'Tedarikçi', 'crm']) expect(dump).not.toContain(word);
     expect(raw(f.path, 'SELECT count(*) AS n FROM memory_search')).toEqual([{ n: 0 }]);
+    // WAL mode: after the purge's checkpoint neither the database file nor its WAL holds the text or its folded search tokens.
+    const bytes = Buffer.concat([await readFile(f.path), await readFile(`${f.path}-wal`).catch(() => Buffer.alloc(0))]);
+    for (const word of ['Ayşe', 'ayse', 'yilmaz', '0555', 'tedarikci']) expect(bytes.includes(Buffer.from(word)), word).toBe(false);
     expect(await readFile(f.journalFile, 'utf8')).not.toContain('Ayşe');
     const inspected = await app.inspect({ schemaVersion: 1, scopeId: 's', entryId: entry.entryId });
     expect(inspected).toMatchObject({ status: 'ok', entry: { content: { purged: true } } });
