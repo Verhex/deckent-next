@@ -11,7 +11,7 @@ import { effectIntent, releasedLostTask } from '../support/lost-task.js';
 // it requires. Nothing here calls a model; S6R-5 adds the chooser.
 const roots: string[] = [], stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-const policy = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED));
+const policy = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live');
 const timing = { now: 30, timeoutMs: 1000 };
 const clear = (identity: AttemptIdentity) => assessRecoveryEffectGate(identity, [], policy);
 const continuation = (identity: AttemptIdentity, overrides: Partial<Parameters<typeof continueLostTask>[3]> = {}) =>

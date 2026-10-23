@@ -42,11 +42,11 @@ export async function loseAttempt(store: SqliteAttemptStore, root: string, ident
   return { claim, worker, run: released.receipt.snapshot };
 }
 /** Seals the Nervous detection of one lost Attempt (what S6R-2/3 writes) and returns its case id. */
-export async function sealDetection(path: string, identity: AttemptIdentity, ruleId = 'launcher-dead-orphan') {
+export async function sealDetection(path: string, identity: AttemptIdentity, ruleId = 'launcher-dead-orphan', integrity = lostIntegrity) {
   const caseId = nervousCaseId(identity.scopeId, ruleId, { kind: 'attempt', identity });
   const store = await openSqliteAuditStore(path, LEDGER_OPTIONS);
   try {
-    new AuditApplication(store, lostIntegrity).record({ schemaVersion: 1, eventId: `recovery-detection:${caseId}`, scopeId: identity.scopeId,
+    new AuditApplication(store, integrity).record({ schemaVersion: 1, eventId: `recovery-detection:${caseId}`, scopeId: identity.scopeId,
       principal: nervousPrincipalRef(owner), policyRevision: 'fixture-policy', atMs: 5, subject: { kind: 'recovery-detection', caseId,
         rule: { id: ruleId, version: 1, status: 'live' }, registryRevision: 'core-2026-10-23', action: 'stop-orphan', disposition: 'execute',
         target: { runId: identity.runId, taskId: identity.taskId, attemptId: identity.attemptId, generation: identity.generation },

@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { applyAttemptObservation, createAttempt, createRun, executionRegistrySchema, observeRunAttempt, recoverStalledTask, reserveRunTasks, resolveTaskDecision, runSnapshotSchema,
+import { RECOVERY_POLICY_SEED, freezeRecoveryPolicy, loadRecoveryPolicy, applyAttemptObservation, createAttempt, createRun, executionRegistrySchema, observeRunAttempt, recoverStalledTask, reserveRunTasks, resolveTaskDecision, runSnapshotSchema,
   type AttemptIdentity, type RunSnapshot } from '#domain/index.js';
 import { proposeTaskEvaluationCommit } from '#engine/core/task-evaluation/index.js';
 import { DispatchApplication, RunReservationApplication, TaskEvaluationApplication, deriveRunBlocker, projectRunView, reservationRefusalOutcome, inactivityVerdict, inactivityWatch, resolveExecutionRegistry, sandboxInterruptCause, type ExecutionSupervisor } from '#engine/index.js';
@@ -111,6 +111,20 @@ describe('the one retry owner (domain) through the evaluation transition the sto
     expect(exhausted.snapshot.progress[0]!.decision).toBeUndefined();
     expect(exhausted.snapshot.state).not.toMatchObject({ reason: 'evaluation-not-ready' });
     expect(exhausted.snapshot.previousBindings).toHaveLength(1);
+  });
+  it('S6R-5 (lead on s6r4 Q2; N25): stall shares the Run\'s total Attempt ceiling with lost continuation — at the ceiling the task fails as today', () => {
+    const f = evaluated(), recovery = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live');
+    const capped = (maxAttemptsPerTask: number) => runSnapshotSchema.parse({ ...f.run, execution: { ...f.run.execution, recovery: { ...recovery, maxAttemptsPerTask } } });
+    // The first Attempt stalls: a retry would be the 2nd Attempt — within a ceiling of 2, past a ceiling of 1.
+    expect(recoverStalledTask(capped(2), f.run.revision, id(), 'inactivity', { now: 100, backoffMs: 0, timeoutMs: 1000 }).outcome).toBe('retry');
+    const stopped = recoverStalledTask(capped(1), f.run.revision, id(), 'inactivity', { now: 100, backoffMs: 0, timeoutMs: 1000 });
+    expect(stopped.outcome).toBe('exhausted');
+    expect(stopped.snapshot.progress[0]).toMatchObject({ phase: 'failed', notAcceptedReason: 'worker-stalled' });
+    // A lost continuation earlier in the task counts too (stall + lost + retry share the total).
+    const lostBefore = runSnapshotSchema.parse({ ...capped(2), previousBindings: [{ identity: id(1, 'old'), observedRevision: 1, observedKind: 'lost', recoveryDecisionId: 'd'.repeat(64) }] });
+    expect(recoverStalledTask(lostBefore, f.run.revision, id(), 'inactivity', { now: 100, backoffMs: 0, timeoutMs: 1000 }).outcome).toBe('exhausted');
+    // A Run without frozen recovery keeps today's per-path bound alone.
+    expect(recoverStalledTask(f.run, f.run.revision, id(), 'inactivity', { now: 100, backoffMs: 0, timeoutMs: 1000 }).outcome).toBe('retry');
   });
   it('maxRetries 0 fails at once; an unresolved effect, a missing frozen policy or a live Run refuse the transition', () => {
     const f = evaluated(), none = runSnapshotSchema.parse({ ...f.run, execution: { ...f.run.execution, tasks: f.run.execution.tasks.map(task => ({ ...task, stall: { ...task.stall!, maxRetries: 0 } })) } });

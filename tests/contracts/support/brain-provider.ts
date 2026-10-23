@@ -29,7 +29,7 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
   const counterBodies: string[] = [];
   const draft = proposalFixture('business');
   const { graph, budgetCeiling, requiredPermissions } = draft;
-  let output = options.response ?? JSON.stringify({ graph, budgetCeiling, requiredPermissions });
+  let output: string | ((body: string) => string) = options.response ?? JSON.stringify({ graph, budgetCeiling, requiredPermissions });
   let posts = 0;
   const transport = vi.spyOn(httpTransport, 'sendNativeJsonHttp').mockImplementation(async (request, sendOptions, signal) => {
     if (request.definition.endpoint === 'https://127.0.0.1:1234/tokenize' && sendOptions.parseResponse) {
@@ -47,7 +47,7 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
       else signal?.addEventListener('abort', () => reject(new Error('FIXTURE_ABORTED')), { once: true });
     });
     const parsed = sendOptions.parseResponse(Buffer.from(JSON.stringify({ id: 'fixture', object: 'chat.completion', created: 1, model: 'vendor/model',
-      choices: [{ index: 0, finish_reason: options.finishReason ?? 'stop', message: { role: 'assistant', content: output } }],
+      choices: [{ index: 0, finish_reason: options.finishReason ?? 'stop', message: { role: 'assistant', content: typeof output === 'function' ? output(request.body) : output } }],
       usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } })));
     if (!('response' in parsed)) throw new Error('FIXTURE_RESPONSE_INVALID');
     return parsed.response;
@@ -118,6 +118,6 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     for (const modelId of [null, workerModel.nativeId]) await applyModelCatalog(project, { schemaVersion: 1, commandId: 'worker-activate-' + modelId,
       scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 }, loadOptions);
   }
-  return { project, data, path, options: loadOptions, reference, config, bodies, counterBodies, get posts() { return posts; }, setOutput(value: string) { output = value; },
+  return { project, data, path, options: loadOptions, reference, config, bodies, counterBodies, get posts() { return posts; }, setOutput(value: string | ((body: string) => string)) { output = value; },
     async close() { clearConfigCache(); transport.mockRestore(); await rm(root, { recursive: true, force: true }); } };
 }
