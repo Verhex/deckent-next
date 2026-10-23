@@ -114,6 +114,6 @@ export function assertLostDispatchReleaseAudit(input: unknown, snapshot: RunSnap
 export function assertLostDispatchReleaseReplay(receipt: LostDispatchReceipt, write: LostDispatchRelease, record: DispatchRecord, fence: import('#domain/index.js').DispatchFence, audit: unknown) {
   let sealed; try { sealed = auditRecordSchema.parse(JSON.parse(String(audit))); } catch { throw new DispatchError('DISPATCH_CORRUPT'); }
   assertLostDispatchReleaseAudit(sealed, receipt.snapshot, receipt.command, { ...write, now: sealed.event.atMs });
-  const snapshot = releaseWorkerCustody(receipt.snapshot, receipt.snapshot.revision, { identity: write.identity, owner: write.owner, launch: record.launch, lost: true, worker: record.worker ?? null }, fence, write.proof);
+  const snapshot = releaseWorkerCustody(receipt.snapshot, receipt.snapshot.revision, { identity: write.identity, owner: write.owner, launch: record.launch, lost: true, worker: record.worker ?? null, containerId: record.containerId ?? null }, fence, write.proof);
   if (snapshot.revision !== receipt.snapshot.revision) throw new DispatchError('DISPATCH_CORRUPT');
 }

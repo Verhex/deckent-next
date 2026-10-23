@@ -17,5 +17,5 @@ export function assessLostDispatch(recordInput: DispatchRecord, attemptInput: At
   const record = dispatchRecordSchema.parse(recordInput), attempt = attemptSnapshotSchema.parse(attemptInput);
   if (!sameAttemptIdentity(record.request.identity, attempt.identity)) throw new DispatchError('DISPATCH_CONFLICT');
   return decideDispatchLoss({ identity: attempt.identity, owner: record.owner, launch: record.launch,
-    lost: attempt.lastObservation?.result.kind === 'unknown', worker }, fence, proof, action);
+    lost: attempt.lastObservation?.result.kind === 'unknown', worker, containerId: record.containerId ?? null }, fence, proof, action);
 }

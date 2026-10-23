@@ -138,7 +138,13 @@ export class DockerSupervisor implements ExecutionSupervisor {
     if (!inspection) return { kind: 'worker-absent' as const, worker: expected };
     const observed = this.result(expected.id, inspection);
     if (!observed.worker || observed.worker.id !== expected.id || observed.worker.startedAt !== expected.startedAt) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
-    return observed.result.kind === 'exited' ? { kind: 'supervisor-exit' as const, worker: observed.worker, result: observed.result } : null;
+    // The proof carries the domain exit cause only (S6R-3: the adapter's `kind` field made every Docker exit proof a mismatch).
+    return observed.result.kind === 'exited' ? { kind: 'supervisor-exit' as const, worker: observed.worker, result: { exitCode: observed.result.exitCode } } : null;
+  }
+  /** S6R-3: only Docker's explicit missing-object answer for the created id is absence; the request label still binds an existing container. */
+  async observeCreatedAbsence(input: SandboxRequest, containerId: string) {
+    if (!/^[a-f0-9]{64}$/.test(containerId)) throw new SupervisorError('SUPERVISOR_REQUEST_INVALID');
+    return await this.inspect(containerId, this.identity(input).digest) === null ? Object.freeze({ kind: 'created-container-absent' as const, containerId }) : null;
   }
   async execute(input: SandboxRequest, signal?: AbortSignal, hooks?: SupervisorLaunchHooks): Promise<SandboxResult> {
     const { request, digest, handle } = this.identity(input);

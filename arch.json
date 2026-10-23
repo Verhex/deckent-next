@@ -3607,6 +3607,7 @@
         "src/domain/core/attempt",
         "src/domain/core/audit",
         "src/domain/core/command",
+        "src/domain/core/policy",
         "src/domain/core/primitives",
         "src/domain/core/principal",
         "src/engine/core/audit",

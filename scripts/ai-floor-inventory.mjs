@@ -36,6 +36,10 @@ export const floorFamilies = [
     whyEn: 'Verified memory needs a person or an independent evaluation record, never the AI itself (law-audit fold 6); retiring is the same knowledge change; purging content is a person\'s act (S4B A11); a contest stays floored until S4B-3 relaxes it for the evaluator alone.',
     whyTr: 'Doğrulanmış hafıza bir kişi ya da bağımsız değerlendirme kaydı ister, AI kendisi asla (kanun denetimi madde 6); emekliye ayırmak da aynı bilgi değişikliğidir; içerik silme (purge) insanındır (S4B A11); itiraz S4B-3 yalnız değerlendirici için gevşetene dek tabandadır.',
     routes: ['verify', 'retire', 'contest', 'purge'].map(action => ['memory', 'fixture-target', action]) },
+  { id: 'recovery', en: 'Standing approval of a Nervous stop action', tr: 'Nervous durdurma eylemi için kalıcı onay',
+    whyEn: 'The recovery broker applies a sealed Nervous proposal only under the owner\'s standing grant (K-B, S6R-3); no AI holds it, Nervous itself only proposes.',
+    whyTr: 'Kurtarma aracısı mühürlü Nervous önerisini yalnız sahibin kalıcı izniyle uygular (K-B, S6R-3); bu izni hiçbir AI taşımaz, Nervous yalnız önerir.',
+    routes: ['fixture-target', 'fence-attempt', 'stop-orphan', 'hand-to-human'].flatMap(id => ['apply', 'future-action'].map(action => ['recovery-action', id, action])) },
 ];
 export const protectedPaths = ['policy', 'approvals', 'identity', 'security', 'storage', 'service', 'paths', 'shell', 'network', 'layout', 'execution',
   'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit', 'memory', 'memoryAutomation',

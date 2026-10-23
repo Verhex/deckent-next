@@ -4,7 +4,7 @@
     "src/platform/core/common/internal/constants.ts": "68e0b420d5b07cbf302b05b7e9149640e6f4fb1792b98bef9a29717ec2880b45",
     "src/platform/core/config-fields/internal/fields-models.ts": "2116e548fb83ef9b5ae51b93fb889e724aa42d6e84a978cac2eab3b00815a1cb",
     "src/platform/core/config-fields/internal/fields-setup.ts": "bfb8d883744c1586bcc7e11de80586f3fcf892da42963e3ac292ecb6ea7cd768",
-    "src/platform/core/config-fields/internal/fields.ts": "d12d791aaa592689803cb9c31aa88de949d1df72f51c3be06ae1fd34f21fad5a",
+    "src/platform/core/config-fields/internal/fields.ts": "411026ae6b8c12068b9480b4ae6caa52f761b89b83b25101c332b6d10a591d82",
     "src/platform/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
   },
   "fields": {
@@ -54,6 +54,7 @@
       "shadow"
     ],
     "runRuntime": [
+      "live",
       "off",
       "shadow"
     ],

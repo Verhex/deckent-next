@@ -164,7 +164,7 @@ it('writes nothing but its own detection record, attributed to the Nervous workl
   const calls: unknown[] = [], executors = Object.fromEntries(RECOVERY_ACTIONS.map(action => [action, async (proposal: unknown) => { calls.push([action, proposal]); }]));
   const h = await harness({ executors, approval: { schemaVersion: 1, decisionRef: 's6r-kayip-calisan-2026-10-23', approvedBy: { ...context.owner, assurance: 'os-user' }, approvedAtMs: 1, scopeIds: ['s'], actions: [...RECOVERY_ACTIONS] },
     rules: { ...seed, rules: seed.rules.map(entry => ({ ...entry, status: 'live' })) } });
-  await h.app.observeAttempts('s', [signal({ launcher: { basis: 'dead', phase: 'dispatch' } }), signal({ identity: identity(2), activity: 'missing', launcher: { basis: 'dead', phase: null } })], context);
+  await h.app.observeAttempts('s', [signal({ launcher: { basis: 'dead', phase: 'dispatch' } }), signal({ identity: identity(2), activity: 'missing', launcher: { basis: 'dead', phase: 'dispatch' } })], context);
   expect(calls).toEqual([]);
   const all = h.audit.list('s', 0, 1000).map((record: AuditRecord) => record.event);
   expect(all.map(event => event.subject.kind)).toEqual(['recovery-detection', 'recovery-detection']);

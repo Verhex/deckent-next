@@ -13,6 +13,8 @@ export const runSafetyHoldSourceSchema = z.enum(['nervous', 'auditor']);
  */
 export const RECOVERY_ACTIONS = Object.freeze(['fence-attempt', 'hold-run', 'stop-orphan', 'restart-component', 'alert-brain', 'hand-to-human'] as const);
 export const recoveryActionSchema = z.enum(RECOVERY_ACTIONS);
+/** A Nervous rule's measurement state: `provisional` thresholds are unmeasured (shadow only); only a `live` rule may execute (S6R-3). */
+export const NERVOUS_RULE_STATUSES = Object.freeze(['provisional', 'live'] as const);
 /** S6R-2: what Nervous saw of a worker (`control-failed`: the daemon did not answer) and of its launcher (`dead`: another instance whose process is gone). */
 export const NERVOUS_ACTIVITY_STATES = Object.freeze(['missing', 'created', 'running', 'paused', 'exited', 'unknown', 'control-failed'] as const);
 export const NERVOUS_LAUNCHER_BASES = Object.freeze(['same-process', 'alive', 'dead', 'none', 'unreadable'] as const);
@@ -282,10 +284,10 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    * canonical digest. Written only by the Nervous principal.
    */
   z.object({ kind: z.literal('recovery-detection'), caseId: digest, rule: z.object({ id: identitySchema, version: counterSchema.positive(),
-    status: z.enum(['provisional', 'live']) }).strict(), registryRevision: identitySchema, action: recoveryActionSchema,
+    status: z.enum(NERVOUS_RULE_STATUSES) }).strict(), registryRevision: identitySchema, action: recoveryActionSchema,
     disposition: z.enum(['shadow-only', 'proposal-only', 'execute']),
     target: z.object({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, generation: counterSchema.positive().nullable() }).strict().nullable(),
-    evidence: recoveryEvidenceSchema, evidenceDigest: digest }).strict(),
+    evidence: recoveryEvidenceSchema, evidenceDigest: digest, standingRef: identitySchema.optional() }).strict(),
 ]);
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,

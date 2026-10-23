@@ -36,6 +36,8 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   // Proposing a candidate and every read stay policy decisions.
   if (resource.kind === 'memory' && ['verify', 'retire', 'purge', 'contest'].includes(action)) return true;
   if (resource.kind === 'secret') return true;
+  // S6R-3: a standing approval of a Nervous stop action is the owner's; no AI holds it (Nervous itself proposes, the broker applies).
+  if (resource.kind === 'recovery-action') return true;
   if (resource.kind === 'approval' && action === 'decide' && AUTHORITY_APPROVAL_IDS.includes(resource.id)) return true;
   if (resource.kind === 'audit' && !['inspect', 'verify'].includes(action)) return true;
   if (resource.kind === 'agent-tool-call' && ['edit-authority', 'edit-floor'].includes(resource.id)) return true;

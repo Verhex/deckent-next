@@ -101,7 +101,7 @@ export class SqliteRunJournal {
       if (!fence || write.proof.receiptId !== commandId) throw new DispatchError('DISPATCH_CONFLICT');
       const replay = this.receipt(scopeId, runId, commandId, command);
       if (replay) { assertLostDispatchReleaseReplay(replay, write, dispatch, { identity: write.identity, owner: write.owner, receiptId: fence.receiptId }, this.db.prepare('SELECT record FROM audit_events WHERE scope_id=? AND event_id=?').get(scopeId, commandId)?.record); return replay; }
-      const snapshot = releaseWorkerCustody(run, write.expectedRunRevision, { identity: write.identity, owner: write.owner, launch: dispatch.launch, lost: fence.snapshot.lastObservation?.result.kind === 'unknown', worker: dispatch.worker ?? null },
+      const snapshot = releaseWorkerCustody(run, write.expectedRunRevision, { identity: write.identity, owner: write.owner, launch: dispatch.launch, lost: fence.snapshot.lastObservation?.result.kind === 'unknown', worker: dispatch.worker ?? null, containerId: dispatch.containerId ?? null },
         { identity: write.identity, owner: write.owner, receiptId: fence.receiptId }, write.proof);
       const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?').run(snapshot.revision, JSON.stringify(snapshot), scopeId, runId, write.expectedRunRevision);
       if (updated.changes !== 1) throw new DispatchError('DISPATCH_CONFLICT');

@@ -16,7 +16,7 @@ export { dispatchReleaseReceiptId, lostDispatchWriteSchema, encodeLostDispatchWr
 export type { LostDispatchRelease, LostDispatchWrite, LostDispatchStore, LostDispatchAudit, LostDispatchReceipt } from './internal/fence-write.js';
 export { LostDispatchApplication } from './internal/fence-application.js';
 export type { LostDispatchObserver } from './internal/fence-application.js';
-export { DispatchPreparationGuard, DISPATCH_PREPARATION_INSTANCE, dispatchPreparationRecordSchema, dispatchLauncherEvidenceSchema, readDispatchLauncherEvidence, readDispatchPreparationRecord } from './internal/preparation.js';
+export { DispatchPreparationGuard, DISPATCH_PREPARATION_INSTANCE, dispatchPreparationRecordSchema, dispatchLauncherEvidenceSchema, readDispatchLauncherEvidence, readDispatchPreparationRecord, removeDispatchLaunchRecord } from './internal/preparation.js';
 export type { DispatchLauncherEvidence, DispatchPreparationContext, DispatchPreparationInstance, DispatchPreparationPark, DispatchPreparationPhase, DispatchPreparationRecord } from './internal/preparation.js';
 export { assertTaskEnvironment, environmentProbeRegistry, registerEnvironmentProbeKind, EnvironmentProbeRegistry } from './internal/environment.js';
 export type { EnvironmentProbe, EnvironmentProbes } from './internal/environment.js';
