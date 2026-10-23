@@ -9,7 +9,7 @@ const keyed = 'f'.repeat(64);
 const entry = proposeMemoryEntry({ scopeId: 's', entryId: 'e1', commandId: 'e1', content: { kind: 'fact', title: 'Telefon', body: 'Ayşe 0555', tags: ['crm'], lesson: null },
   contentDigest: 'a'.repeat(64), author: person, origin: { kind: 'human', ref: null }, atMs: 10 });
 const record = parseMemoryPurgeRecord({ schemaVersion: 1, purgeId: 'p1', scopeId: 's', entryId: 'e1', contentDigest: keyed, digestKind: 'keyed', reasonCode: 'personal-data',
-  by: { issuer: person.issuer, subject: person.subject }, evaluationRecordIds: [], invocationIds: [], atMs: 20 });
+  by: { issuer: person.issuer, subject: person.subject }, decision: { revision: 'r1', ruleId: 'first-run-memory-purge' }, evaluationRecordIds: [], invocationIds: [], atMs: 20 });
 
 describe('tombstone', () => {
   it('keeps no title, body, tag or lesson field; any extra field is refused; only the keyed kind exists', () => {
