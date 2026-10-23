@@ -1,20 +1,22 @@
 import { createRequire } from 'node:module';
 import { isDeepStrictEqual } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
-import { agentDefinitionSchema, agentStandingSchema, catalogActionBytes, checkAgentOrgTree, encodeCommandProjection, requireActionSigner, signerKeySchema, AgentCatalogError,
+import { agentDefinitionSchema, agentStandingSchema, catalogActionBytes, catalogActionSchema, checkAgentOrgTree, encodeCommandProjection, requireActionSigner, signerKeySchema, AgentCatalogError,
   skillDefinitionSchema, AGENT_CATALOG_LIMITS, SIGNATURE_LABELS, type AgentDefinition, type AgentStanding, type SignerKey, type SkillDefinition } from '#domain/index.js';
-import { AuditApplication, AgentCatalogStoreError, skillSignatureMessage, type AgentCatalogChange, type AgentCatalogReceipt, type AgentCatalogStore, type SignerChange } from '#engine/index.js';
+import { AuditApplication, AgentCatalogStoreError, catalogEvolutionActions, catalogSuggestionIdOf, catalogSuggestionSchema, catalogSuggestionStateSchema, skillSignatureMessage, type AgentCatalogChange,
+  type AgentCatalogReceipt, type AgentCatalogStore, type CatalogEvolutionChange, type CatalogSuggestion, type CatalogSuggestionState, type SignerChange, type StoredCatalogSuggestion } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { openSqliteLedger, requireLedgerVersion, SIGNER_KEY_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { openSqliteLedger, requireLedgerVersion, CATALOG_SUGGESTION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import { sha256, signatureMessage, verifyEd25519, type IntegrityAuthority } from '#platform/index.js';
 
 const SEAL = 'agent-catalog-store:1';
 const corrupt = () => new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT'), STANDING = 'agent_id,revision,work_class,standing,standing_revision,record';
+const SUGGESTION = 'suggestion_id,kind,key_digest,state,state_revision,record,state_record';
 type Kind = 'agent' | 'skill';
 const TABLE = { agent: { current: 'agent_definitions', revisions: 'agent_definition_revisions', id: 'agent_id' },
   skill: { current: 'skill_definitions', revisions: 'skill_definition_revisions', id: 'skill_id' } } as const;
 /**
- * Core SQLite adapter of the DB-neutral agent catalog port, on the shared ledger (v64; standings v67; signer keys v68, which every read requires). Every row is sealed with the installation integrity key and
+ * Core SQLite adapter of the DB-neutral agent catalog port, on the shared ledger (v64; standings v67; signer keys v68; suggestions v70, which every read requires). Every row is sealed with the installation integrity key and
  * cross-checked against its columns on read; revisions and receipts are append-only and current rows undeletable (ledger triggers). An agent
  * commit re-checks the scope's org tree (`checkAgentOrgTree`) over the rows it holds inside the same BEGIN IMMEDIATE transaction.
  */
@@ -211,7 +213,120 @@ class SqliteAgentCatalogStore implements AgentCatalogStore {
     }
     this.db.prepare('INSERT INTO agent_catalog_receipts(scope_id,command_id,kind,item_id,revision,record) VALUES(?,?,?,?,?,?)')
       .run(receipt.scopeId, receipt.commandId, kind, receipt.itemId, receipt.revision, this.seal(receipt));
+    // S8-4: a define from a draft decides its suggestion in this same transaction (a person's card: no signature).
+    if (change.suggestion) { this.moveSuggestion(next.scopeId, change.suggestion.previous, change.suggestion.next); if (change.suggestion.event) this.audit.record(change.suggestion.event); }
     return { replayed: false, item: next };
+  }
+  /** S8-3/S8-4 (v70): a sealed suggestion row and its sealed current state, cross-checked against the columns and the content-derived id. */
+  private suggestionRow(row: Record<string, unknown>, scopeId: string): StoredCatalogSuggestion {
+    const record = catalogSuggestionSchema.safeParse(this.open(row['record'])), state = catalogSuggestionStateSchema.safeParse(this.open(row['state_record']));
+    if (!record.success || !state.success) throw corrupt();
+    const { suggestionId, ...content } = record.data;
+    if (record.data.scopeId !== scopeId || suggestionId !== row['suggestion_id'] || record.data.kind !== row['kind'] || record.data.keyDigest !== row['key_digest'] || catalogSuggestionIdOf(content) !== suggestionId
+      || state.data.scopeId !== scopeId || state.data.suggestionId !== suggestionId || state.data.state !== row['state'] || state.data.revision !== row['state_revision']) throw corrupt();
+    return { record: record.data, state: state.data };
+  }
+  private loadSuggestion(scopeId: string, suggestionId: string) {
+    const row = this.db.prepare(`SELECT ${SUGGESTION} FROM catalog_suggestions WHERE scope_id=? AND suggestion_id=?`).get(scopeId, suggestionId);
+    return row ? this.suggestionRow(row, scopeId) : null;
+  }
+  async suggestion(scopeId: string, suggestionId: string) { return this.read(() => this.loadSuggestion(scopeId, suggestionId)); }
+  async suggestions(scopeId: string, query: { readonly keyDigest?: string; readonly open?: boolean; readonly limit: number }) {
+    return this.read(() => this.db.prepare(`SELECT ${SUGGESTION} FROM catalog_suggestions WHERE scope_id=?${query.keyDigest ? ' AND key_digest=?' : ''}${query.open ? " AND state='open'" : ''}
+      ORDER BY seq DESC LIMIT ?`).all(scopeId, ...(query.keyDigest ? [query.keyDigest] : []), query.limit).map(row => this.suggestionRow(row, scopeId)));
+  }
+  async suggestionHistory(scopeId: string, suggestionId: string) {
+    return this.read(() => this.db.prepare('SELECT revision,record FROM catalog_suggestion_states WHERE scope_id=? AND suggestion_id=? ORDER BY revision LIMIT ?')
+      .all(scopeId, suggestionId, AGENT_CATALOG_LIMITS.historyMax).map(row => {
+        const state = catalogSuggestionStateSchema.safeParse(this.open(row['record']));
+        if (!state.success || state.data.scopeId !== scopeId || state.data.suggestionId !== suggestionId || state.data.revision !== row['revision']) throw corrupt();
+        return state.data;
+      }));
+  }
+  async standingReceipt(scopeId: string, commandId: string) {
+    return this.read(() => {
+      const row = this.db.prepare('SELECT record FROM agent_standing_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
+      const receipt = row ? this.open(row['record']) as { scopeId: string; commandId: string; digest: string; keyId: string | null } : null;
+      if (receipt && (receipt.scopeId !== scopeId || receipt.commandId !== commandId)) throw corrupt();
+      return receipt && { digest: receipt.digest, keyId: receipt.keyId };
+    });
+  }
+  async signedStandings(scopeId: string, keyId: string, limit: number) {
+    return this.read(() => this.db.prepare(`SELECT ${STANDING} FROM agent_standings WHERE scope_id=? AND json_extract(record,'$.value.basis.signed.keyId')=? ORDER BY agent_id,revision,work_class LIMIT ?`)
+      .all(scopeId, keyId, limit).map(row => this.standing(row, scopeId)));
+  }
+  /** One `open` state moved once (compare-and-set on the stored state), with its kept history row. */
+  private moveSuggestion(scopeId: string, previous: CatalogSuggestionState, nextInput: CatalogSuggestionState) {
+    const next = catalogSuggestionStateSchema.parse(nextInput), stored = this.loadSuggestion(scopeId, next.suggestionId);
+    if (!stored || next.scopeId !== scopeId || !isDeepStrictEqual(stored.state, previous) || stored.state.state !== 'open' || next.revision !== stored.state.revision + 1 || next.state === 'open')
+      throw new AgentCatalogError('CATALOG_SUGGESTION_STALE');
+    const record = this.seal(next);
+    this.db.prepare('UPDATE catalog_suggestions SET state=?,state_revision=?,state_record=? WHERE scope_id=? AND suggestion_id=?').run(next.state, next.revision, record, scopeId, next.suggestionId);
+    this.db.prepare('INSERT INTO catalog_suggestion_states(scope_id,suggestion_id,revision,record) VALUES(?,?,?,?)').run(scopeId, next.suggestionId, next.revision, record);
+    return stored.record;
+  }
+  async commitEvolution(change: CatalogEvolutionChange) { return this.transaction(() => this.applyEvolution(change)); }
+  /**
+   * S8-3/S8-4: receipt replay or conflict; CAS on every standing and suggestion state; a new suggestion's id must be its content digest and its opening
+   * state present; then (AI/system) the signatures: exactly the actions `catalogEvolutionActions` derives from these rows, each by an active `action`
+   * key bound to the change's principal, verified over `catalog-action:1`, and every signature mark on a row names one of them. A person's change carries none.
+   */
+  private applyEvolution(change: CatalogEvolutionChange) {
+    const { receipt, scopeId } = change;
+    if (receipt) {
+      const prior = this.db.prepare('SELECT record FROM agent_standing_receipts WHERE scope_id=? AND command_id=?').get(receipt.scopeId, receipt.commandId);
+      if (prior) { if ((this.open(prior['record']) as { digest: string }).digest !== receipt.digest) throw new AgentCatalogStoreError('AGENT_CATALOG_COMMAND_CONFLICT'); return { replayed: true }; }
+    }
+    for (const row of change.standings) {
+      const next = agentStandingSchema.parse(row.next), stored = this.db.prepare(`SELECT ${STANDING} FROM agent_standings WHERE scope_id=? AND agent_id=? AND revision=? AND work_class=?`)
+        .get(scopeId, next.agentId, next.revision, next.workClass);
+      if (!stored || next.scopeId !== scopeId || !isDeepStrictEqual(this.standing(stored, scopeId), row.previous) || next.standingRevision !== row.previous.standingRevision + 1)
+        throw new AgentCatalogError('AGENT_STANDING_CONFLICT');
+    }
+    const records = new Map<string, CatalogSuggestion>();
+    for (const input of change.suggestions) {
+      const record = catalogSuggestionSchema.parse(input), { suggestionId, ...content } = record;
+      if (record.scopeId !== scopeId || catalogSuggestionIdOf(content) !== suggestionId || this.loadSuggestion(scopeId, suggestionId) || records.has(suggestionId)
+        || !change.states.some(row => row.previous === null && row.next.suggestionId === suggestionId && row.next.state === 'open' && row.next.revision === 1)) throw corrupt();
+      records.set(suggestionId, record);
+    }
+    for (const row of change.states) if (row.previous) { const stored = this.loadSuggestion(scopeId, row.next.suggestionId); if (stored) records.set(stored.record.suggestionId, stored.record); }
+    else if (!records.has(row.next.suggestionId)) throw corrupt();
+    this.verifyEvolution(change, records);
+    for (const event of change.events) { if (event.principal.issuer !== change.principal.issuer || event.principal.subject !== change.principal.subject) throw corrupt(); this.audit.record(event); }
+    for (const row of change.standings) {
+      const next = agentStandingSchema.parse(row.next), sealed = this.seal(next);
+      this.db.prepare('UPDATE agent_standings SET standing=?,standing_revision=?,record=? WHERE scope_id=? AND agent_id=? AND revision=? AND work_class=?')
+        .run(next.standing, next.standingRevision, sealed, scopeId, next.agentId, next.revision, next.workClass);
+      this.db.prepare('INSERT INTO agent_standing_revisions(scope_id,agent_id,revision,work_class,standing_revision,record) VALUES(?,?,?,?,?,?)')
+        .run(scopeId, next.agentId, next.revision, next.workClass, next.standingRevision, sealed);
+    }
+    // N26: at most one current revision is `active` per WorkClass — of two promotions computed on the same state, the second is refused here.
+    for (const workClass of new Set(change.standings.filter(row => row.next.standing === 'active').map(row => row.next.workClass)))
+      if (Number(this.db.prepare(`SELECT count(*) AS n FROM agent_standings s JOIN agent_definitions d ON d.scope_id=s.scope_id AND d.agent_id=s.agent_id AND d.revision=s.revision
+        WHERE s.scope_id=? AND s.work_class=? AND s.standing='active'`).get(scopeId, workClass)?.['n']) > 1) throw new AgentCatalogError('AGENT_STANDING_CONFLICT');
+    for (const row of change.states) {
+      if (row.previous) { this.moveSuggestion(scopeId, row.previous, row.next); continue; }
+      const record = records.get(row.next.suggestionId)!, state = this.seal(catalogSuggestionStateSchema.parse(row.next));
+      this.db.prepare(`INSERT INTO catalog_suggestions(scope_id,suggestion_id,kind,key_digest,state,state_revision,seq,record,state_record)
+        VALUES(?,?,?,?,'open',1,(SELECT coalesce(max(seq),0)+1 FROM catalog_suggestions WHERE scope_id=?),?,?)`).run(scopeId, record.suggestionId, record.kind, record.keyDigest, scopeId, this.seal(record), state);
+      this.db.prepare('INSERT INTO catalog_suggestion_states(scope_id,suggestion_id,revision,record) VALUES(?,?,1,?)').run(scopeId, record.suggestionId, state);
+    }
+    if (receipt) this.db.prepare('INSERT INTO agent_standing_receipts(scope_id,command_id,record) VALUES(?,?,?)')
+      .run(receipt.scopeId, receipt.commandId, this.seal({ ...receipt, keyId: change.signed[0]?.keyId ?? null }));
+    return { replayed: false };
+  }
+  private verifyEvolution(change: CatalogEvolutionChange, records: ReadonlyMap<string, CatalogSuggestion>) {
+    const marks = [...change.standings.map(row => row.next.basis.signed), ...change.states.map(row => row.next.signed)].filter(mark => mark !== undefined), b64 = (value: string) => Buffer.from(value, 'base64');
+    if (!change.principal.ai) { if (change.signed.length || marks.length) throw new AgentCatalogError('CATALOG_SIGNATURE_INVALID'); return; }
+    const expected = catalogEvolutionActions(change, records).map(action => catalogActionSchema.parse(action));
+    if (!expected.length || !isDeepStrictEqual(expected, change.signed.map(row => catalogActionSchema.parse(row.action)))) throw new AgentCatalogError('CATALOG_SIGNATURE_REQUIRED');
+    for (const row of change.signed) {
+      const key = requireActionSigner(this.loadSigner(change.scopeId, row.keyId), change.scopeId, change.principal);
+      if (!verifyEd25519(b64(key.publicKey), signatureMessage(SIGNATURE_LABELS.catalogAction, catalogActionBytes(row.action)), b64(row.signature))) throw new AgentCatalogError('CATALOG_SIGNATURE_INVALID');
+    }
+    const valid = new Set(change.signed.map(row => JSON.stringify([row.keyId, sha256(row.signature)])));
+    if (marks.some(mark => !valid.has(JSON.stringify([mark.keyId, mark.signatureDigest])))) throw new AgentCatalogError('CATALOG_SIGNATURE_INVALID');
   }
   close() { this.db.close(); }
 }
@@ -221,5 +336,5 @@ export function openSqliteAgentCatalogStore(path: string, options: SqliteLedgerO
   if (access === 'write') return new SqliteAgentCatalogStore(openSqliteLedger(path, options, 'forbid'), integrity);
   const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   const db = new NativeDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
-  try { requireLedgerVersion(db, SIGNER_KEY_LEDGER_VERSION); return new SqliteAgentCatalogStore(db, integrity); } catch (error) { db.close(); throw error; }
+  try { requireLedgerVersion(db, CATALOG_SUGGESTION_LEDGER_VERSION); return new SqliteAgentCatalogStore(db, integrity); } catch (error) { db.close(); throw error; }
 }

@@ -57,9 +57,10 @@ export function requireActionSigner(row: SignerKey | null, scopeId: string, prin
 }
 
 export const CATALOG_ACTIONS = ['define', 'import', 'promote', 'demote', 'restore', 'retire', 'dismiss', 'suggest', 'narrow'] as const;
-/** `catalog-action:1`: the exact command a signature covers — built by the application from the typed command, never by the model. */
+/** `catalog-action:1`: the exact command a signature covers — built by the application from the typed command, never by the model (S8-3: a WorkClass or
+ * lesson-audience suggestion names its `work-class` target). */
 export const catalogActionSchema = z.object({ scopeId: identitySchema, action: z.enum(CATALOG_ACTIONS),
-  target: z.object({ kind: z.enum(['agent', 'skill']), id: identitySchema, revision: counterSchema.positive(), workClass: identitySchema.optional() }).strict(),
+  target: z.object({ kind: z.enum(['agent', 'skill', 'work-class']), id: identitySchema, revision: counterSchema.positive(), workClass: identitySchema.optional() }).strict(),
   expectedRevision: counterSchema.positive().nullable(), contentDigest: digest.nullable(), toStanding: identitySchema.nullable(), suggestionId: digest.nullable(),
   commandId: identitySchema, principal: ref }).strict().readonly();
 export type CatalogAction = z.infer<typeof catalogActionSchema>;

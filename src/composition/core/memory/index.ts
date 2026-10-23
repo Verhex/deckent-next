@@ -3,5 +3,5 @@ export { inspectConfiguredMemory, listConfiguredMemory, searchConfiguredMemory, 
 export { replayConfiguredMemoryPurges, countConfiguredMemoryPurgesPending } from './internal/purge.js';
 export { prepareConfiguredMemoryExtraction, attemptReportClaimReader } from './internal/extraction.js';
 export { prepareConfiguredMemoryEvaluation, inspectConfiguredMemoryEvaluators } from './internal/evaluation.js';
-export { memoryPurgeJournalOf } from './internal/journal.js';
+export { memoryPurgeJournalOf, memoryJournalFor } from './internal/journal.js';
 export { prepareConfiguredPlanningMemory, type PlanningMemory, type PlanningMemorySent } from './internal/planning.js';

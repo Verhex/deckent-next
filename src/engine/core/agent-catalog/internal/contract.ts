@@ -3,6 +3,7 @@ import { agentContentSchema, catalogIdSchema, catalogSignatureSchema, clientComm
   skillSourceRefSchema, SIGNER_PURPOSES, AGENT_CATALOG_LIMITS, type AgentDefinition, type AgentStanding, type AuditEvent, type CatalogAction, type SignerKey, type SkillDefinition,
   type VerifiedPrincipal } from '#domain/index.js';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
+import type { CatalogEvolutionChange, CatalogLessonRef, CatalogSuggestion, CatalogSuggestionState, StoredCatalogSuggestion } from './suggestions.js';
 
 const scoped = { schemaVersion: z.literal(1), scopeId: identitySchema };
 const limit = z.number().int().min(1).max(AGENT_CATALOG_LIMITS.pageMax);
@@ -10,8 +11,10 @@ const limit = z.number().int().min(1).max(AGENT_CATALOG_LIMITS.pageMax);
 const expectedRevision = counterSchema.positive().nullable();
 /** S8-5 `signed`: an externally held AI/system key's signature over the `catalog-action:1` bytes (host-custody principals are signed by the signer service). */
 const signed = catalogSignatureSchema.optional();
-export const agentDefineCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, agentId: catalogIdSchema, expectedRevision, content: agentContentSchema, signed }).strict();
-export const skillDefineCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, skillId: catalogIdSchema, expectedRevision, content: skillContentSchema, signed }).strict();
+/** S8-4 `fromSuggestion`: the open suggestion this define decides (a person's draft card; the revision names it in `provenance.origin`). */
+const fromSuggestion = z.string().regex(/^[a-f0-9]{64}$/).optional();
+export const agentDefineCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, agentId: catalogIdSchema, expectedRevision, content: agentContentSchema, signed, fromSuggestion }).strict();
+export const skillDefineCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, skillId: catalogIdSchema, expectedRevision, content: skillContentSchema, signed, fromSuggestion }).strict();
 /** An import bundle: the bytes, the publisher's pin and signature. Nullable pin and signature reach the floor, which refuses them with their own code. */
 export const skillImportCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, skillId: catalogIdSchema, expectedRevision, content: skillContentSchema,
   source: z.object({ ref: skillSourceRefSchema }).strict(), pin: z.string().regex(/^[a-f0-9]{64}$/).nullable(), signature: skillSignatureSchema.nullable(), signed }).strict();
@@ -67,10 +70,13 @@ export interface AgentCatalogReceipt { readonly scopeId: string; readonly comman
  * purpose `action` and bound to the event's principal, and the Ed25519 signature covers exactly `catalog-action:1` of this change. (An import row's
  * skill signature is verified there too, against an active `import` key.) */
 export interface SignedCatalogAction { readonly action: CatalogAction; readonly keyId: string; readonly signature: string }
+/** S8-4: the suggestion a define from a draft decides, moved in the same transaction (compare-and-set on its state). */
+type DecidedSuggestion = { readonly previous: CatalogSuggestionState; readonly next: CatalogSuggestionState; readonly record: CatalogSuggestion; readonly event?: AuditEvent };
 export type AgentCatalogChange = { readonly kind: 'agent'; readonly previous: AgentDefinition | null; readonly next: AgentDefinition; readonly receipt: AgentCatalogReceipt; readonly event: AuditEvent;
     /** S8-1a: the new revision's opening standing per bound WorkClass, written in the same transaction (rows of earlier revisions stay as they are). */
-    readonly standings: readonly AgentStanding[]; readonly signed?: SignedCatalogAction }
-  | { readonly kind: 'skill'; readonly previous: SkillDefinition | null; readonly next: SkillDefinition; readonly receipt: AgentCatalogReceipt; readonly event: AuditEvent; readonly signed?: SignedCatalogAction };
+    readonly standings: readonly AgentStanding[]; readonly signed?: SignedCatalogAction; readonly suggestion?: DecidedSuggestion }
+  | { readonly kind: 'skill'; readonly previous: SkillDefinition | null; readonly next: SkillDefinition; readonly receipt: AgentCatalogReceipt; readonly event: AuditEvent; readonly signed?: SignedCatalogAction;
+    readonly suggestion?: DecidedSuggestion };
 /** One signer-row change (add or revoke), applied atomically: receipt replay or conflict, compare-and-set on `previous`, the row, its revision, the audit event. */
 export interface SignerChange { readonly previous: SignerKey | null; readonly next: SignerKey; readonly event: AuditEvent;
   readonly receipt: { readonly scopeId: string; readonly commandId: string; readonly keyId: string; readonly revision: number; readonly digest: string } }
@@ -98,6 +104,15 @@ export interface AgentCatalogStore {
   signerReceipt(scopeId: string, commandId: string): Promise<SignerChange['receipt'] | null>;
   signedRows(scopeId: string, keyId: string): Promise<number>;
   commitSigner(change: SignerChange): Promise<{ readonly replayed: boolean; readonly item: SignerKey }>;
+  /** S8-3/S8-4 (v70): one suggestion with its current state; the scope's suggestions newest first (of one key, or only open ones), at most `limit`. */
+  suggestion(scopeId: string, suggestionId: string): Promise<StoredCatalogSuggestion | null>;
+  suggestions(scopeId: string, query: { readonly keyDigest?: string; readonly open?: boolean; readonly limit: number }): Promise<readonly StoredCatalogSuggestion[]>;
+  suggestionHistory(scopeId: string, suggestionId: string): Promise<readonly CatalogSuggestionState[]>;
+  /** The receipt of a standing or suggestion card command (its digest), and the current standings whose basis a key signed (a revoke card's list). */
+  standingReceipt(scopeId: string, commandId: string): Promise<{ readonly digest: string; readonly keyId: string | null } | null>;
+  signedStandings(scopeId: string, keyId: string, limit: number): Promise<readonly AgentStanding[]>;
+  /** One standing/suggestion change, atomically: receipt replay or conflict, CAS on every previous row, AI/system signatures verified in the transaction. */
+  commitEvolution(change: CatalogEvolutionChange): Promise<{ readonly replayed: boolean }>;
   close(): void;
 }
 /** One entry of the append-only, HMAC-chained revocation log beside the ledger (never backed up, never restored over): a person's revoke. */
@@ -115,11 +130,14 @@ export interface SignerKeyCustody {
   /** Signs only the `catalog-action:1` bytes of `action` (never arbitrary bytes) with the key file of `keyId`; refuses a file whose key is not that id. */
   signAction(keyId: string, action: CatalogAction): Promise<string>;
 }
-export type AgentCatalogAction = 'inspect' | 'define' | 'import';
+export type AgentCatalogAction = 'inspect' | 'define' | 'import' | 'promote' | 'demote' | 'restore' | 'retire' | 'dismiss' | 'suggest' | 'narrow';
 export type SignerAction = 'inspect' | 'enrol' | 'add' | 'revoke' | 'repair';
 export interface AgentCatalogDependencies {
   readonly verifier: PrincipalVerifier;
-  readonly authorize: (action: AgentCatalogAction, scopeId: string, principal: VerifiedPrincipal) => Promise<{ revision: string; ruleId: string }>;
+  /** `resourceId` (S8-4): a standing or suggestion action names its WorkClass, `<scopeId>/<workClass>` (absent: the scope). */
+  readonly authorize: (action: AgentCatalogAction, scopeId: string, principal: VerifiedPrincipal, resourceId?: string) => Promise<{ revision: string; ruleId: string }>;
+  /** S8-4 (N23): which lesson refs this reader may read through the memory read filter (absent: none — every ref is withheld). */
+  readonly lessonReadable?: (principal: VerifiedPrincipal, scopeId: string, refs: readonly CatalogLessonRef[]) => Promise<readonly boolean[]>;
   /** S8-5: `skill-signer`/<action> on the scope (absent: signer cards are unavailable). */
   readonly authorizeSigner?: (action: SignerAction, scopeId: string, principal: VerifiedPrincipal) => Promise<{ revision: string; ruleId: string }>;
   /** S8-5: host-custody keys and the revocation log (absent: no AI/system principal can sign — every unsigned AI write is refused). */

@@ -61,6 +61,8 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
   ['Auditor park resume', 'run-hold', 'auditor', 'resume'],
   // S8-5 (N22): signer keys are a person's — enrol, add, revoke and repair are refused for every AI principal.
   ...(['enrol', 'add', 'revoke', 'repair'] as const).map(action => [`signer key ${action}`, 'skill-signer', 's', action] as [string, string, string, string]),
+  // S8-3 (§9): only the catalog aggregator suggests or narrows; every other AI is refused whatever is granted.
+  ...(['suggest', 'narrow'] as const).map(action => [`catalog ${action}`, 'agent-catalog', 's', action] as [string, string, string, string]),
 ];
 const grantAll = (kind: string, principal: VerifiedPrincipal) => ({ id: `all-${kind}`, effect: 'allow' as const, actions: 'all' as const, scopes: 'all' as const,
   principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind, ids: 'all' as const } });

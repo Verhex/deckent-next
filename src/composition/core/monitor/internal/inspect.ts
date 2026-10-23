@@ -11,6 +11,7 @@ import { contextDispatchAuthorization } from '#composition/core/policy/index.js'
 import { inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
+import { inspectConfiguredCatalogMonitor } from '#composition/core/agent-catalog/index.js';
 const DENIED = new Set(['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN', 'APPROVAL_DENIED']); const granted = (check: () => Promise<unknown>) => check().then(() => true, (error: unknown) => { if (DENIED.has(queryFailure(error).code)) return false; throw error; });
 async function authorizeSurfaceRead(root: string, scopeId: string, options: ConfigLoadOptions) { try {
       const c = await loadConfiguredScopeContext(root, scopeId, { ...options, force: true }, 'read'), auth = contextDispatchAuthorization(c, c.document);
@@ -83,6 +84,12 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
           if (entry.state === 'pending') pendingRoles.add(JSON.stringify([entry.channelId, entry.modelId])); } catch { /* read-soft, as the doctor row */ }
       }
       if (pendingRoles.size) modelDiagnostics.push(`model-roles-pending:${pendingRoles.size}`);
+      // S8-4: the catalog lines, summed across scopes ("öneri bekliyor (N)", "imzalayan iptal edildi", "imza anahtarı yok"); a scope that cannot read adds nothing.
+      const catalog = new Map<string, number>();
+      for (const scopeId of modelScopes) for (const line of await (await recall(target.path))(`catalog\0${scopeId}`, () => inspectConfiguredCatalogMonitor(target.path, scopeId, options)).catch(() => [] as readonly string[])) {
+        const [code, count] = line.split(':') as [string, string | undefined]; catalog.set(code, (catalog.get(code) ?? 0) + (count === undefined ? 0 : Number(count)));
+      }
+      for (const [code, count] of catalog) modelDiagnostics.push(count ? `${code}:${count}` : code);
       const effective = { ...reading, runs: reading.runs.map(run => ({ ...run, costComparison: { registry: installedConfig.admission?.registry, policy: installedConfig.resourceObservation.recommendation } })), pools: reading.pools.map(pool => ({ ...pool,
         capacity: { executionSlots: pool.executionSlots, inFlightSlots: pool.inFlightSlots }, executionSlots: Math.min(pool.executionSlots, ceiling), inFlightSlots: Math.min(pool.inFlightSlots, ceiling) })),
         ...(reading.map ? { map: { ...reading.map, models } } : {}), diagnostics: [...reading.diagnostics, ...modelDiagnostics] };

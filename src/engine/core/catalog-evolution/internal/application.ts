@@ -1,9 +1,8 @@
-import { AGENT_CATALOG_LIMITS, CatalogEvolutionError, composeCatalogEvolutionRegistry, encodeDeckentJson, roleModelKey, type AgentDefinition, type CatalogEvolutionRegistry, type JsonValue } from '#domain/index.js';
-import { sha256 } from '#platform/index.js';
+import { AGENT_CATALOG_LIMITS, CatalogEvolutionError, composeCatalogEvolutionRegistry, roleModelKey, type AgentDefinition, type CatalogEvolutionRegistry } from '#domain/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
-import { agentStatsQuerySchema, catalogEvolutionPassSchema, type AgentStatsKey, type AgentStatsView, type CatalogEvolutionDependencies, type CatalogEvolutionKeyRecord,
-  type CatalogEvolutionPass, type KeyStats, type ModelFacts } from './contract.js';
+import { agentStatsQuerySchema, type AgentStatsKey, type AgentStatsView, type CatalogEvolutionDependencies, type CatalogEvolutionPass, type KeyStats, type ModelFacts } from './contract.js';
 import { catalogEntries, effortRatioMicro, keyStats, rollupStats, type CatalogEntries } from './aggregate.js';
+import { catalogRegistryRef as registryRef, runCatalogEvolutionPass } from './pass.js';
 
 /** Read-time model display facts (§4: display only, never a branch): the catalog's canonical maker and the S2 tier registry row, null when absent. */
 export function catalogModelFacts(makers: ReadonlyMap<string, { readonly maker: string | null }>, makerKey: (channelId: string, modelId: string) => string,
@@ -14,11 +13,10 @@ export function catalogModelFacts(makers: ReadonlyMap<string, { readonly maker: 
 
 type Catalog = Awaited<ReturnType<CatalogEvolutionDependencies['openCatalog']>>;
 const LABELS = Object.freeze({ relation: 'association-not-causation', rate: 'acceptance-rate-not-accuracy' } as const);
-const registryRef = (registry: CatalogEvolutionRegistry) => ({ revision: registry.revision, digest: sha256(encodeDeckentJson(registry as unknown as JsonValue)) });
 
 /**
- * S8-2 catalog evolution (S8-DESIGN §4): agent, skill and WorkClass statistics from sealed metrics v2 rows, and the aggregator pass off the hot path.
- * Nothing here calls a model, changes a standing, writes a suggestion or reads a model id as a branch: models are display data. Statistics are
+ * S8-2/S8-3 catalog evolution (S8-DESIGN §4, §6): agent, skill and WorkClass statistics from sealed metrics v2 rows, and the aggregator pass off the hot
+ * path, whose only writes are the catalog's signed suggestions and rule narrowing. Nothing here calls a model or reads a model id as a branch. Statistics are
  * associations ("ilişki, nedensellik değil") and acceptance rates ("kabul oranı, doğruluk değil"); only attributable failures enter n.
  */
 export class CatalogEvolutionApplication {
@@ -91,35 +89,6 @@ export class CatalogEvolutionApplication {
       .map(row => stats(entry => entry.workClass === workClass && entry.agent?.agentId === row.agentId && entry.agent.revision === row.revision)), registry)));
   }
 
-  /**
-   * One bounded pass of a scope (§4, F8 pattern): the rows after the durable position in a page of `passPageRows`, at most `maxKeysPerPass` touched
-   * keys (the position stops before the row that would exceed it, never skipping a row), each key's statistics over the rows up to that position,
-   * one compare-and-set record. No new row: no write. Registry unavailable: nothing is written (`CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE`).
-   */
-  async runPass(scopeId: string, mode: 'shadow' | 'on'): Promise<CatalogEvolutionPass | null> {
-    const registry = composeCatalogEvolutionRegistry(this.deps.overlay), asOfMs = this.deps.now(), store = await this.deps.openStore('write');
-    try {
-      const previousPosition = (await store.lastPass(scopeId))?.position ?? 0, page = await store.rowsAfter(scopeId, previousPosition, registry.pass.passPageRows);
-      if (!page.length) return null;
-      const touched = new Map<string, Omit<CatalogEvolutionKeyRecord, 'decided' | 'n' | 'successes' | 'wilson' | 'inputDigest'>>();
-      let position = previousPosition, skippedKeys = 0;
-      for (const row of page) {
-        const workClass = row.metric.workClass, agent = row.metric.schemaVersion === 2 ? row.metric.agent : undefined;
-        const keys = workClass === null ? [] : [{ kind: 'work-class' as const, workClass }, ...agent ? [{ kind: 'agent' as const, agentId: agent.agentId, revision: agent.revision, workClass }] : []];
-        const fresh = keys.filter(key => !touched.has(JSON.stringify(key)));
-        if (position !== previousPosition && touched.size + fresh.length > registry.pass.maxKeysPerPass) break;
-        for (const key of fresh) { if (touched.size < registry.pass.maxKeysPerPass) touched.set(JSON.stringify(key), key); else skippedKeys++; }
-        position = row.position;
-      }
-      const rows = await store.recentRows(scopeId, registry.stats.readRowsMax, position), entries = catalogEntries(scopeId, rows);
-      const keys = [...touched.values()].map(key => {
-        const stats = keyStats(entries, registry, asOfMs, row => row.workClass === key.workClass && (key.kind === 'work-class' || (row.agent !== null && row.agent.agentId === key.agentId && row.agent.revision === key.revision)));
-        return { ...key, decided: stats.decided, n: stats.n, successes: stats.successes, wilson: stats.wilson, inputDigest: stats.window.inputDigest };
-      });
-      const record = catalogEvolutionPassSchema.parse({ schemaVersion: 1, scopeId, mode, previousPosition, position, asOfMs, registry: registryRef(registry), rowsRead: rows.length,
-        truncated: rows.length >= registry.stats.readRowsMax, keys, skippedKeys });
-      await store.recordPass(record, previousPosition);
-      return record;
-    } finally { store.close(); }
-  }
+  /** One bounded, incremental aggregator pass of a scope (`runCatalogEvolutionPass`). */
+  runPass(scopeId: string, mode: 'shadow' | 'on'): Promise<CatalogEvolutionPass | null> { return runCatalogEvolutionPass(this.deps, scopeId, mode); }
 }

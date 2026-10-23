@@ -41,7 +41,7 @@ describe('initial standings at definition', () => {
   it('negative: never inherits from redesign-required or retired', () => {
     const first = define(null), rows = initialAgentStandings(first, null, false);
     const narrowed = rows.map(row => agentStandingSchema.parse({ ...row, standing: 'redesign-required', standingRevision: 2,
-      basis: { kind: 'rule', decidedBy: aiActor, atMs: 9, commandId: null, suggestionId: d('f'), reasonCode: 'D1' } }));
+      basis: { kind: 'rule', decidedBy: aiActor, atMs: 9, commandId: null, suggestionId: d('f'), reasonCode: 'D1', signed: { keyId: d('e'), signatureDigest: d('f') } } }));
     expect(initialAgentStandings(define(first), { definition: first, standings: narrowed }, false).every(row => row.standing === 'candidate')).toBe(true);
   });
 });
@@ -66,11 +66,14 @@ describe('standing transitions (pure table; S8-4 cards and S8-5 signed AI comman
     expect(() => transitionAgentStanding(start(), { action: 'promote', expectedStandingRevision: 2, actor: card, atMs: 10, commandId: 'k', suggestionId: null }))
       .toThrow(expect.objectContaining({ code: 'AGENT_STANDING_CONFLICT' }));
   });
-  it('negative: an AI principal moves no standing (the signed path is S8-5); narrowing needs a sealed rule suggestion; demote of a candidate is refused', () => {
+  it('negative: an AI principal moves no standing unsigned (S8-4 signed path: agent-standing-signed.test.ts); narrowing needs a sealed rule suggestion and its signature; demote of a candidate is refused', () => {
     for (const action of ['promote', 'demote', 'restore', 'retire'] as const)
       expect(() => transitionAgentStanding(start(), { action, expectedStandingRevision: 1, actor: aiActor, atMs: 10, commandId: 'k', suggestionId: null })).toThrow(expect.objectContaining({ code: 'AGENT_STANDING_REFUSED' }));
     expect(() => transitionAgentStanding(start(), { action: 'narrow', expectedStandingRevision: 1, actor: card, atMs: 10, commandId: 'k', suggestionId: null })).toThrow(expect.objectContaining({ code: 'AGENT_STANDING_REFUSED' }));
-    expect(transitionAgentStanding(start(), { action: 'narrow', expectedStandingRevision: 1, actor: aiActor, atMs: 10, commandId: null, suggestionId: d('f'), reasonCode: 'D1' })[0])
+    expect(() => transitionAgentStanding(start(), { action: 'narrow', expectedStandingRevision: 1, actor: aiActor, atMs: 10, commandId: null, suggestionId: d('f'), reasonCode: 'D1' }))
+      .toThrow(expect.objectContaining({ code: 'AGENT_STANDING_REFUSED' }));
+    expect(transitionAgentStanding(start(), { action: 'narrow', expectedStandingRevision: 1, actor: aiActor, atMs: 10, commandId: null, suggestionId: d('f'), reasonCode: 'D1',
+      signed: { keyId: d('e'), signatureDigest: d('f') } })[0])
       .toMatchObject({ standing: 'redesign-required', basis: { kind: 'rule', suggestionId: d('f'), reasonCode: 'D1' } });
     expect(() => transitionAgentStanding(start(), { action: 'demote', expectedStandingRevision: 1, actor: card, atMs: 10, commandId: 'k', suggestionId: null })).toThrow(expect.objectContaining({ code: 'AGENT_STANDING_REFUSED' }));
   });
