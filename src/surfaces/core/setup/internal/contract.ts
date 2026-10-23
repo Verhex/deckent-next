@@ -1,6 +1,7 @@
 import type { ConfigLoadOptions } from '#platform/index.js';
 import type { ModelCatalogQuery } from '#domain/index.js';
-import type { IdentityProfileListing, ModelCatalogInspection, ProjectInstructionPort, SetupObservation, SetupStage, SetupStageRegistry } from '#engine/index.js';
+import type { CodingTemplateResult, IdentityProfileListing, InitialRegistryRequest, InstallationPoolResult, ModelCatalogInspection, ProjectInstructionPort, SetupObservation, SetupStage,
+  SetupStageRegistry } from '#engine/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { CliCardIo } from '#surfaces/core/cli-human/index.js';
 import type { PoolCapacityInspectHandler } from '#surfaces/core/cli-admin/index.js';
@@ -38,6 +39,11 @@ export interface SetupCommandContext extends CliBaseContext {
   openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;
   /** I-D2 (composition/core/setup): the person's foreground Docker install; `present|printed|declined|succeeded|failed|uncertain`. */
   installExecutionEnvironment?: (root: string, scopeId: string, io: CliCardIo) => Promise<string>;
+  /** BR1 1b: `init registry`'s and `init pool`'s owners (the CLI host's), run only as foreground stages after the window's Apply and a card. */
+  initializeNativeCodingRegistry?: (root: string, input: InitialRegistryRequest, options: ConfigLoadOptions) => Promise<CodingTemplateResult>;
+  installConfiguredExecutionPool?: (root: string, scopeId: string, apply: boolean) => Promise<InstallationPoolResult>;
+  /** BR1 (composition/core/setup): the person's worker image, built after a card or adopted (`imageId`); `present|declined|built|adopted`. */
+  prepareWorkerImage?: (root: string, io: CliCardIo, request?: Readonly<{ imageId?: string }>) => Promise<string>;
   /** The first-run policy upgrade (`init policy --upgrade`): preview (`apply: false`) gives `expect`; the apply needs the terminal witness. */
   upgradePolicyTemplateInstallation?: (root: string, scopeId: string, apply: boolean, expect?: string) => Promise<Readonly<{ status: string; expect?: string | null;
     rules?: readonly unknown[] }>>;

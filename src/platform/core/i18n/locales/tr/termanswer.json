@@ -1,0 +1,14 @@
+{
+  "terminal.runAnswer.key": "a cevapla",
+  "terminal.runAnswer.title": "{run} işine cevap verilsin mi: {title}?",
+  "terminal.runAnswer.question": "İşçi soruyor: {question}",
+  "terminal.runAnswer.detail": "Cevabınız bekleyen görevi sizin sözlerinizle sürdürür; başka bir şey değişmez. Servis cevap veren kişi olarak sizi kaydeder.",
+  "terminal.runAnswer.prompt": "Tab cevabı yaz · y gönder · n koru · Enter/Esc koru (varsayılan)",
+  "terminal.runAnswer.reason.label": "Cevap:",
+  "terminal.runAnswer.reason.hint": "Cevabı yazın · Enter ya da Tab bitir · Esc geri · yalnız y ile gönderilir",
+  "terminal.runAnswer.reason.empty": "(henüz cevap yok: yazmak için Tab)",
+  "terminal.runAnswer.empty": "{run} işi: cevap yazılmadı; hiçbir şey gönderilmedi.",
+  "terminal.runAnswer.none": "{run} işi artık cevap beklemiyor; hiçbir şey gönderilmedi.",
+  "terminal.runAnswer.reread": "İş bu arada değişti ve yeniden okundu; soruyu ve cevabı bir kez daha kontrol edin.",
+  "terminal.runAnswer.result": "{run} işi için cevap kaydedildi, şimdi {state} (revizyon {revision}). Komut {command}"
+}

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 3,
-  "revision": "codex-cli-subscription-2026-10-02",
+  "revision": "codex-cli-subscription-2026-10-23",
   "providers": [
     {
       "id": "codex-cli-subscription",
@@ -104,7 +104,15 @@
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
             "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
             "clientVersion": "0.159.2"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "gpt-6.1-sol",
+              "cliVersion": "0.163.0",
+              "source": "codex rollout turn_context.model",
+              "observedAt": "2026-10-23"
+            }
+          ]
         },
         {
           "id": "gpt-6-astra",
@@ -185,7 +193,15 @@
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
             "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
             "clientVersion": "0.159.2"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "gpt-6-astra",
+              "cliVersion": "0.163.0",
+              "source": "codex rollout turn_context.model",
+              "observedAt": "2026-10-23"
+            }
+          ]
         },
         {
           "id": "gpt-6-sol",
@@ -266,7 +282,15 @@
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
             "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
             "clientVersion": "0.159.2"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "gpt-6-sol",
+              "cliVersion": "0.163.0",
+              "source": "codex rollout turn_context.model",
+              "observedAt": "2026-10-23"
+            }
+          ]
         },
         {
           "id": "gpt-6-luna",
@@ -345,7 +369,15 @@
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
             "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
             "clientVersion": "0.159.2"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "gpt-6-luna",
+              "cliVersion": "0.163.0",
+              "source": "codex rollout turn_context.model",
+              "observedAt": "2026-10-23"
+            }
+          ]
         },
         {
           "id": "gpt-5.6-sol",
@@ -426,7 +458,15 @@
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
             "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
             "clientVersion": "0.159.2"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "gpt-5.6-sol",
+              "cliVersion": "0.163.0",
+              "source": "codex rollout turn_context.model",
+              "observedAt": "2026-10-23"
+            }
+          ]
         },
         {
           "id": "gpt-5.6-terra",
@@ -507,7 +547,15 @@
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
             "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
             "clientVersion": "0.159.2"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "gpt-5.6-terra",
+              "cliVersion": "0.163.0",
+              "source": "codex rollout turn_context.model",
+              "observedAt": "2026-10-23"
+            }
+          ]
         },
         {
           "id": "gpt-5.6-luna",
@@ -586,7 +634,15 @@
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
             "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
             "clientVersion": "0.159.2"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "gpt-5.6-luna",
+              "cliVersion": "0.163.0",
+              "source": "codex rollout turn_context.model",
+              "observedAt": "2026-10-23"
+            }
+          ]
         },
         {
           "id": "gpt-5.5",
@@ -664,7 +720,15 @@
             "fetchedOn": "2026-10-02T09:55:06.402418791Z",
             "etag": "W/\"68d0325e0ba896149560f296a9aac9fe\"",
             "clientVersion": "0.159.2"
-          }
+          },
+          "reportedNames": [
+            {
+              "name": "gpt-5.5",
+              "cliVersion": "0.163.0",
+              "source": "codex rollout turn_context.model",
+              "observedAt": "2026-10-23"
+            }
+          ]
         }
       ]
     }

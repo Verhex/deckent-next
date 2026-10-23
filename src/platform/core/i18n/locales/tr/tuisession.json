@@ -1,0 +1,9 @@
+{
+  "terminal.slash.rename": "Bu konuşmaya ad ver, /resume ile bulunsun",
+  "terminal.slash.renameArgument": "<başlık>",
+  "terminal.session.rename.usage": "Komuttan sonra bir ad yazın, örneğin /rename sürüm notları.",
+  "terminal.session.rename.done": "Konuşmanın adı değişti; /resume yeni adı gösterir.",
+  "terminal.session.rename.nothingSaved": "Adlandırılacak bir şey yok: konuşma ilk yanıttan sonra kaydedilir. Önce bir mesaj gönderin, sonra /rename çalıştırın.",
+  "terminal.session.filter.prompt": "Süzmek için yazın: {text}",
+  "terminal.session.filter.none": "Süzgece uyan kayıtlı konuşma yok."
+}

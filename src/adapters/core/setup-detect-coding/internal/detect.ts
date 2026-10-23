@@ -40,7 +40,7 @@ export async function detectCodingFacts(input: Readonly<{ root: string; env: Det
     hosts.push({ id, cli: !executable ? 'unknown' : await ports.find(executable, input.env, limits.pathDirectories, signal) ? 'found' : 'absent',
       login: login === 'file' ? 'found' : login === 'absent' ? 'absent' : 'unknown' });
   }
-  return { schemaVersion: 1, git: gitPath ? 'found' : signal.aborted ? 'unknown' : 'absent', gitVersion, repository,
+  return { schemaVersion: 1, git: gitPath ? 'found' : signal.aborted ? 'unknown' : 'absent', gitPath, gitVersion, repository,
     commits: !head ? 'not-run' : head.code === 0 ? 'present' : head.code === 1 ? 'none' : 'unknown',
     productSource: repository === 'present' && await ports.selfSource(root), workTargets: { configured: targets.length, present: present.filter(Boolean).length }, hosts };
 }

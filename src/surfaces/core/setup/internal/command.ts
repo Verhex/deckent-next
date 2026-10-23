@@ -13,18 +13,20 @@ export type SetupFormat = 'json' | 'plain' | 'interactive';
 export function setupFormat(context: SetupCommandContext, json: boolean): SetupFormat {
   return registry.formats[cliMode(context, json).reason] as SetupFormat;
 }
-export type SetupFlags = Readonly<{ json: boolean; yes: boolean; scope?: string; lang?: string }>;
+/** `imageId` (BR1, owner Q2): adopt this existing image as the worker image instead of building one (a person confirms it on a card). */
+export type SetupFlags = Readonly<{ json: boolean; yes: boolean; scope?: string; lang?: string; imageId?: string }>;
 export function parseSetupFlags(argv: readonly string[]): SetupFlags {
-  let json = false, yes = false, scope: string | undefined, lang: string | undefined;
+  let json = false, yes = false, scope: string | undefined, lang: string | undefined, imageId: string | undefined;
   for (let index = 1; index < argv.length; index++) {
     const flag = argv[index], value = () => { const next = argv[++index]; if (!next || next.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE'); return next; };
     if (flag === '--json' && !json) json = true;
     else if (flag === '--yes' && !yes) yes = true;
     else if (flag === '--scope' && scope === undefined) scope = value();
     else if (flag === '--lang' && lang === undefined) lang = value();
+    else if (flag === '--image-id' && imageId === undefined && /^sha256:[a-f0-9]{64}$/u.test(argv[index + 1] ?? '')) imageId = value();
     else if (flag !== '--no-color') throw ErrorRegistry.createError('CLI_USAGE');
   }
-  return { json, yes, ...(scope === undefined ? {} : { scope }), ...(lang === undefined ? {} : { lang }) };
+  return { json, yes, ...(scope === undefined ? {} : { scope }), ...(lang === undefined ? {} : { lang }), ...(imageId === undefined ? {} : { imageId }) };
 }
 
 /** The answers a call brings without a window: `--scope` answers the folder stage (never derived); without a person the profile is solo
@@ -32,6 +34,8 @@ export function parseSetupFlags(argv: readonly string[]): SetupFlags {
 export function unattendedAnswers(observation: SetupObservation, flags: SetupFlags, person: boolean): Readonly<Record<string, unknown>> {
   const values: Record<string, unknown> = {};
   if (flags.scope !== undefined) values['core:folder'] = flags.scope;
+  // Only where the execution family is observed (the composed CLI); it is never applied by `--yes` (family stages are not auto-eligible).
+  if (flags.imageId !== undefined && observation.families?.['execution'] !== undefined) values['execution:worker'] = { imageId: flags.imageId };
   const solo = observation.profile.available.find(entry => entry.id === 'core:solo');
   if (!person && solo) values['core:profile'] = { id: solo.id, version: solo.version };
   if (flags.yes) {

@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Text, useInput, usePaste, useWindowSize } from 'ink';
 import { slashCommandRow, useWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
-import { mentionText, paletteCommand, type ComposerMentionPort, type PastePolicy } from './assist.js';
+import { cleanText, mentionText, paletteCommand, type ComposerMentionPort, type PastePolicy } from './assist.js';
 import { composerKey } from './keys.js';
 import { COMPOSER_LIMITS, composerMenu, EMPTY_COMPOSER, exitArmed, reduceComposer, searchMatches, type ComposerHistoryEntry, type ComposerHistoryPort, type ComposerKey, type ComposerMenu } from './reducer.js';
 import { caretRow, displayWidth, graphemes, layoutRows } from './text.js';
@@ -36,7 +36,8 @@ export interface ComposerProps {
   /** Total visible rows, including the frame. The full draft remains editable behind this caret-following viewport. */
   readonly maxRows?: number | undefined;
   /** `mentions`: the draft's `@path` tokens outside paste chips (attached by the owner through the service, never read here). */
-  readonly onSubmit: (text: string, mentions: readonly string[]) => void;
+  /** `entry`: the draft as typed (chips unexpanded), before `historyText`. */
+  readonly onSubmit: (text: string, mentions: readonly string[], entry: ComposerHistoryEntry) => void;
   readonly onCancel: () => void;
   readonly onExit: () => void;
   /** Persistent history; load/append failures never block input (history is a convenience, not a submit precondition). */
@@ -45,6 +46,10 @@ export interface ComposerProps {
    *  a rich terminal keeps only `/command`, never a typed slash argument). The submitted text itself is unchanged. */
   readonly historyText?: (text: string) => string;
   readonly mentions?: ComposerMentionPort;
+  /** T3 (Alt+Up on an empty draft): the owner takes its last queued message out of the queue and returns it, or null when none is left. */
+  readonly onWithdraw?: () => ComposerHistoryEntry | null;
+  /** T4 (Ctrl+G): the owner opens the text in the person's editor; the edited text replaces the draft, null keeps it. One editor at a time. */
+  readonly onEditor?: (text: string) => Promise<string | null>;
   /** Quiet time after the last key before `mentions` is asked (default 60 ms); earlier lookups are aborted. */
   readonly mentionDelayMs?: number;
   /** 'marker' draws `|` before the caret for terminals where inverse video is suppressed (no colour tier). */
@@ -96,12 +101,14 @@ export function Composer(props: ComposerProps): ReactNode {
   const latest = useRef(props);
   latest.current = props;
   const lookup = useRef<AbortController | null>(null);
+  const editing = useRef(false);
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clock = () => (latest.current.now ?? Date.now)();
 
   const dispatch = useCallback((key: ComposerKey): void => {
-    const { busy, policy, onSubmit, onCancel, onExit, history, mentions, historyText } = latest.current;
-    const result = reduceComposer(current.current, key, { now: clock(), busy, pasteChip: latest.current.labels.pasteChip, ...(policy ? { policy } : {}) });
+    const { busy, policy, onSubmit, onCancel, onExit, history, mentions, historyText, onWithdraw, onEditor } = latest.current;
+    const result = reduceComposer(current.current, key, { now: clock(), busy, pasteChip: latest.current.labels.pasteChip, ...(policy ? { policy } : {}),
+      ...(onEditor ? { editor: true } : {}) });
     // Exit before any state update: a render scheduled beside unmount can keep the TTY referenced.
     if (result.intents.some(intent => intent.type === 'exit')) { onExit(); return; }
     // The remembered form of a submitted line (recall and persistent history) is the owner's; the in-memory entry is replaced in place.
@@ -116,10 +123,19 @@ export function Composer(props: ComposerProps): ReactNode {
     setState(next);
     for (const intent of result.intents) {
       if (intent.type === 'cancel') onCancel();
+      else if (intent.type === 'withdraw') { const entry = onWithdraw?.(); if (entry) dispatch({ type: 'restore', entry }); }
+      else if (intent.type === 'editor' && onEditor && !editing.current) {
+        editing.current = true;
+        onEditor(intent.text).then(text => {
+          // Editors end the file with a newline; the draft does not keep it.
+          if (text !== null) { const body = cleanText(text).replace(/\n+$/u, ''); dispatch({ type: 'restore', entry: { text: body, pastes: [] } }); }
+        }, ignore).finally(() => { editing.current = false; });
+      }
       else if (intent.type === 'submit') {
         const entry = remembered.get(intent.entry) ?? intent.entry;
         void (async () => history?.append(entry))().catch(ignore);
-        onSubmit(intent.text, intent.mentions);
+        // The owner gets the draft as typed (T3 gives it back on Alt+Up); only recall and history keep the remembered form.
+        onSubmit(intent.text, intent.mentions, intent.entry);
       } else if (intent.type === 'mention' && mentions) {
         lookup.current?.abort();
         if (lookupTimer.current) clearTimeout(lookupTimer.current);

@@ -3,7 +3,7 @@
 ## Supported versions
 
 Security fixes target `main` and the current `1.0.0-alpha.N` pre-release line (currently
-`1.0.0-alpha.53`; see [CHANGELOG.md](CHANGELOG.md)). Older alpha snapshots are not maintained
+`1.0.0-alpha.54`; see [CHANGELOG.md](CHANGELOG.md)). Older alpha snapshots are not maintained
 separately; reproduce against current main/current alpha when possible. Pre-release support
 does not imply production or platform acceptance.
 
@@ -40,7 +40,7 @@ piped or redirected decisions refuse without settlement. Hard-floor allow also r
 turn's process-bound capability. This attests terminal interaction, not human presence: a process under
 the same OS account can allocate a PTY or access the owner's files/socket directly. Protect separate
 trust domains with OS identities and enforced sandbox boundaries; no same-account process isolation
-or automation approval exception is claimed by this change.
+or automation approval exception is claimed.
 
 ## Policy administration continuity
 

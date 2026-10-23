@@ -1,0 +1,9 @@
+{
+  "terminal.slash.rename": "Name this conversation so /resume can find it",
+  "terminal.slash.renameArgument": "<title>",
+  "terminal.session.rename.usage": "Type a name after the command, for example /rename release notes.",
+  "terminal.session.rename.done": "Conversation renamed; /resume shows the new name.",
+  "terminal.session.rename.nothingSaved": "Nothing to name yet: this conversation is saved after its first answer. Send a message first, then run /rename.",
+  "terminal.session.filter.prompt": "Type to filter: {text}",
+  "terminal.session.filter.none": "No saved conversation matches the filter."
+}

@@ -14,8 +14,9 @@ const modelText = z.string().min(1).max(256);
  */
 const legacyTaskEvaluationModelSchema = z.object({ provider: workerProviderSchema, requested: workerModelPinSchema,
   init: modelText.nullable(), usage: z.array(modelText).max(16).readonly().nullable(),
-  // The two session-start-name verdicts (owner K1/K2 2026-10-22) appear only on records of a `session-start-name` provider.
-  verdict: z.enum(['verified', 'substituted', 'unverified', 'start-name-matched', 'provider-chosen']),
+  // The two session-start-name verdicts (owner K1/K2 2026-10-22) appear only on records of a `session-start-name` provider, the two
+  // client-reported verdicts (owner Q4 2026-10-23) only on records of a `client-reported` provider.
+  verdict: z.enum(['verified', 'substituted', 'unverified', 'start-name-matched', 'provider-chosen', 'client-reported', 'client-reported-mismatch']),
   unexpected: z.array(modelText).max(17).readonly(), evidence: z.enum(['sealed', 'absent']) }).strict();
 /** Additive evidence contract. Missing capability is migrated only while reading pre-stamping records. */
 export const taskEvaluationModelSchema = legacyTaskEvaluationModelSchema.extend({ evidenceCapability: modelUsageEvidenceSchema.optional() }).transform(model =>
@@ -41,10 +42,14 @@ export const taskEvaluationSchema = z.object({ schemaVersion: z.literal(1), eval
  * 'verified' verdict is held; attempts without per-model evidence stay accepted by their criteria, visibly unverified.
  * Session-start-name evidence (owner K1/K2 2026-10-22): a matched start name or a provider-chosen entry is accepted by its criteria with the
  * verdict visible (neither claims per-model usage); a start name that maps to another model fails like any substitution; a missing or
- * unrecorded start name is held — the CLI reported evidence the catalog cannot place, so it is never silently accepted. */
+ * unrecorded start name is held — the CLI reported evidence the catalog cannot place, so it is never silently accepted.
+ * Client-reported evidence (owner Q4 2026-10-23, worker-forgeable): a client-reported name is accepted by its criteria with the label visible; a
+ * differing name is held for a human (never a fail on a forgeable name); a missing name stays accepted-unverified, as before the capability. */
 export function taskModelConclusion(model: TaskEvaluationModel | undefined): 'fail' | 'unknown' | null {
   if (!model) return null;
   if (model.verdict === 'substituted') return 'fail';
+  if (model.verdict === 'client-reported-mismatch') return 'unknown';
+  if (model.evidenceCapability === 'client-reported') return null;
   if (model.evidenceCapability === 'session-start-name') return model.verdict === 'unverified' ? 'unknown' : null;
   return model.evidenceCapability === 'session-events' && model.verdict !== 'verified' ? 'unknown' : null;
 }

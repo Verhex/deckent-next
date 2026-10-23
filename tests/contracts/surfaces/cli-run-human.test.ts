@@ -178,6 +178,18 @@ it('TTY cancel and close: a yes sends one command with a system command id at th
   }
 });
 
+it('run list names a hold laid over another park beside the park\'s own reason (EN and TR), not as a bare park', async () => {
+  registerProviderConfig();
+  const root = await project({ terminal: { scopeId: 's' } });
+  const held = { ...view([{ phase: 'active' }]), runId: OTHER, state: { kind: 'parked', reason: 'quota-exhausted', since: 1, deadline: 2, operatorHold: { schemaVersion: 1, note: 'wait' } } };
+  const s = store([held]);
+  for (const [locale, words] of [['en', 'parked (provider quota exhausted, also held by an operator)'], ['tr', 'bekletildi: sağlayıcı kotası doldu, ayrıca operatör tarafından bekletiliyor']] as const) {
+    const out = sinks();
+    await runList(new Map(), false, { ...s.context, root, env: { HOME: join(root, 'h'), NO_COLOR: '1' }, locale, stdin: { isTTY: false }, stdout: out.stdout } as never, locale);
+    expect(out.out.join('')).toContain(words);
+  }
+});
+
 it('the TTY control offer equals the terminal /runs keys for hold, resume and close in every Run state', () => {
   const states = [{ kind: 'running' }, { kind: 'terminal', outcome: 'failed', reason: 'completed' },
     ...['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready']

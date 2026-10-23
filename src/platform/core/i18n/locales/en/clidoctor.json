@@ -180,11 +180,13 @@
   "doctor.check.toolchains.disabled": "{provider}: version check is off here or has nothing to compare",
   "doctor.firstJob.header": "Before the first job (/do), still to do, in this order:",
   "doctor.firstJob.ready": "Worker image, registry and pool are set up: ready for the first job.",
-  "doctor.firstJob.workerImage": "Build a worker image in the Deckent source checkout (needs Docker; it prints the image id)",
-  "doctor.firstJob.execution": "Tell Deckent where work runs: that image id and the docker and git paths (command -v docker, command -v git)",
+  "doctor.firstJob.execution": "Build or adopt the worker image and write the execution settings (deckent init asks on a card first)",
   "doctor.firstJob.registry": "Declare the first work kind and its worker pool: preview, then the same command with --apply",
   "doctor.firstJob.pool": "Set up the worker pool: preview, then the same command with --apply",
   "doctor.firstJob.next": "{step}: {command}",
   "doctor.check.pool.missing": "The worker pool is configured but not set up yet: Runs cannot start workers",
-  "doctor.poolReadiness.status.missing": "configured, not set up yet"
+  "doctor.poolReadiness.status.missing": "configured, not set up yet",
+  "doctor.check.workerImage.ok": "Worker image {image} is on this Docker",
+  "doctor.check.workerImage.missing": "The configured worker image {image} is not on this Docker: Runs cannot start workers",
+  "doctor.check.workerImage.unknown": "Whether worker image {image} is on this Docker could not be checked"
 }

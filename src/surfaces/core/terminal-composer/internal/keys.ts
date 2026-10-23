@@ -10,7 +10,9 @@ const CTRL: Readonly<Record<string, ComposerKey>> = {
   a: { type: 'move', to: 'home' }, e: { type: 'move', to: 'end' }, b: { type: 'move', to: 'left' }, f: { type: 'move', to: 'right' },
   p: { type: 'move', to: 'up' }, n: { type: 'move', to: 'down' }, w: { type: 'delete', span: 'spaceWordBack' }, s: { type: 'stash' },
   u: { type: 'delete', span: 'toStart' }, k: { type: 'delete', span: 'toEnd' }, y: { type: 'yank' }, c: { type: 'interrupt' },
-  d: { type: 'eof' }, r: { type: 'search' }, g: { type: 'escape' },
+  d: { type: 'eof' }, r: { type: 'search' },
+  // T4: Ctrl+G opens the draft in the person's editor (Claude Code, Codex); a composer without an editor keeps it the Esc it was.
+  g: { type: 'editor' },
 };
 const META: Readonly<Record<string, ComposerKey>> = {
   b: { type: 'move', to: 'wordLeft' }, f: { type: 'move', to: 'wordRight' }, d: { type: 'delete', span: 'wordForward' },
@@ -29,6 +31,8 @@ export function composerKey(input: string, key: Key): ComposerKey | null {
   if (key.leftArrow) return { type: 'move', to: word ? 'wordLeft' : 'left' };
   if (key.rightArrow) return { type: 'move', to: word ? 'wordRight' : 'right' };
   // Ctrl+Up / Ctrl+Down jump between the person's messages in the full-window conversation (harness gap 4); plain arrows stay composer keys.
+  // T3: Alt+Up takes the last queued message back into an empty draft (Codex); Ink reports ESC[1;3A and ESC ESC[A with `meta`.
+  if (key.upArrow && key.meta && !key.ctrl) return { type: 'withdraw' };
   if (key.upArrow && !key.ctrl) return { type: 'move', to: 'up' };
   if (key.downArrow && !key.ctrl) return { type: 'move', to: 'down' };
   // Ctrl+Home / Ctrl+End scroll the full-window conversation (TERMINAL-SABIT-DUZEN); plain Home/End stay line moves.

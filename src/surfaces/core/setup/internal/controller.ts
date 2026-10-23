@@ -1,5 +1,5 @@
 import { t, type Locale } from '#platform/index.js';
-import type { SetupObservation, SetupPlan, SetupStage, SetupStageRegistry } from '#engine/index.js';
+import { WORK_KIND_STAGE_ID, WORK_PROVIDERS, type SetupObservation, type SetupPlan, type SetupStage, type SetupStageRegistry } from '#engine/index.js';
 import type { SetupWindowModel } from '#surfaces/core/project-instructions/index.js';
 import { firstJobCommand, firstJobSteps, firstJobTitle, type FirstJobFacts } from '#surfaces/core/doctor/index.js';
 import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from './contract.js';
@@ -23,6 +23,8 @@ export function stageChoices(stage: SetupStage | null, observation: SetupObserva
   if (stage.state === 'ready') return [{ id: 'apply', label: t('setup.window.apply', {}, locale), action: 'apply' }, later];
   // A model is connected by `models connect` itself (its own connection and model picker), so the window offers to start it.
   if (stage.id === 'core:model') return [{ id: 'connect', label: t('setup.window.connect', {}, locale), action: 'apply' }, later];
+  // BR1 1b: the first work kind's coding CLI, from the native CLI registry (the card shows the kind, pool and slots before anything is written).
+  if (stage.id === WORK_KIND_STAGE_ID) return [...WORK_PROVIDERS.slice(0, registry.windowOptionRows - 1).map((id): Choice => ({ id, label: id, answer: id, action: 'answer' })), later];
   if (stage.id === 'core:language') return [...['en', 'tr'].map((code): Choice => ({ id: code, label: languageName(code, locale), answer: code, action: 'answer' })), later];
   // The default (solo, INIT-D4) comes first; the other registered profiles follow in registry order.
   if (stage.id === 'core:profile') return [...[...observation.profile.available].sort((a, b) => Number(b.id === 'core:solo') - Number(a.id === 'core:solo'))

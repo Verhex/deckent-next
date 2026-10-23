@@ -12,9 +12,19 @@ export async function startTestErp() {
   const idempotency = new Map<string, string>();
   const writes: { operation: string; key: string; before: typeof record; after: typeof record; input: unknown }[] = [];
   const requests: { method: string; path: string; key: string | null; ifMatch: string | null }[] = [];
-  const faults = { advanceBeforeWrite: false, loseResponseAfterWrite: false, lookupUnavailable: false };
+  // replyLate (BETA-RAKIP-3): the next operation request is held after its body arrives, past the client deadline, until releaseLate();
+  // it is then processed as usual (replay check, If-Match, write) and its reply goes to a client that already gave up.
+  const faults = { advanceBeforeWrite: false, loseResponseAfterWrite: false, lookupUnavailable: false, replyLate: false };
+  type LateReply = { key: string; status: number; clientGone: boolean };
+  let late: { res: ServerResponse; key: string; release: () => void; replied: Promise<LateReply>; resolve: (reply: LateReply) => void } | null = null;
   const send = (res: ServerResponse, status: number, version?: string, body: unknown = {}) => {
+    if (late?.res === res) { const reply = { key: late.key, status, clientGone: res.socket?.destroyed ?? true }; late.resolve(reply); late = null; }
     res.writeHead(status, { 'content-type': 'application/json', ...(version ? { etag: version } : {}) }); res.end(JSON.stringify(body));
+  };
+  const hold = async (res: ServerResponse, key: string) => {
+    let release!: () => void, resolve!: (reply: LateReply) => void;
+    const gate = new Promise<void>(done => { release = done; }), replied = new Promise<LateReply>(done => { resolve = done; });
+    late = { res, key, release, replied, resolve }; await gate;
   };
   const read = async (req: IncomingMessage) => {
     const chunks: Buffer[] = []; let bytes = 0;
@@ -40,6 +50,7 @@ export async function startTestErp() {
       }
       if (req.method !== 'POST' || parts.length !== 3 || parts[0] !== 'records' || parts[1] !== config.recordId || parts[2] !== 'operations') return send(res, 404);
       const body = await read(req);
+      if (faults.replyLate) { faults.replyLate = false; await hold(res, key); }
       if (!key) return send(res, 400);
       const replay = idempotency.get(key);
       if (replay) return send(res, 200, replay);
@@ -67,6 +78,10 @@ export async function startTestErp() {
     throw error;
   }
   const baseUrl = `http://${config.http.host}:${(server.address() as AddressInfo).port}`;
-  return { baseUrl, faults, writes, requests, etag, idempotency, current: () => ({ ...record }),
+  const releaseLate = () => {
+    if (!late) throw new Error('no operation request is held');
+    const { release, replied } = late; release(); return replied;
+  };
+  return { baseUrl, faults, writes, requests, etag, idempotency, current: () => ({ ...record }), heldLate: () => late !== null, releaseLate,
     close: () => new Promise<void>(resolve => { server.closeAllConnections(); server.close(() => resolve()); }) };
 }

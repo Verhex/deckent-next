@@ -2,8 +2,9 @@ import { z } from 'zod';
 import type { SetupDecision, SetupFamilyPackage, SetupStageContext } from '#engine/index.js';
 
 const state = z.enum(['present', 'none', 'unknown', 'not-run']), count = z.number().int().nonnegative().max(64), cli = z.enum(['found', 'absent', 'unknown']);
-/** The coding/git family's facts (I-S2); locale-free and secret-free: sign-ins are present or absent, never read. */
-export const codingFactsSchema = z.object({ schemaVersion: z.literal(1), git: cli, gitVersion: z.string().regex(/^[0-9A-Za-z.+~_-]{1,64}$/u).nullable(),
+/** The coding/git family's facts (I-S2); locale-free and secret-free: sign-ins are present or absent, never read. `gitPath` (BR1): the Git the
+ * execution settings name, the first on PATH. */
+export const codingFactsSchema = z.object({ schemaVersion: z.literal(1), git: cli, gitPath: z.string().min(1).max(4096).nullable().default(null), gitVersion: z.string().regex(/^[0-9A-Za-z.+~_-]{1,64}$/u).nullable(),
   repository: state, commits: state, productSource: z.boolean(), workTargets: z.object({ configured: count, present: count }).strict(),
   hosts: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), cli, login: cli }).strict()).max(16) }).strict();
 export type CodingFacts = z.infer<typeof codingFactsSchema>;

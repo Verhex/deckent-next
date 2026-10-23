@@ -8,6 +8,7 @@ import type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunLifecy
 import { renderWorkerTranscript, type WorkerObservationHandler, type InventoryQueryHandler, type WorkerTranscriptHandler } from '#surfaces/core/monitor/index.js';
 import type { WorklineApproval, WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 
+import { ticketSummaryBlock, queueSummaryRequest, DELIVERY_RENDER_LIMITS, type DeliverySummaryReader } from '#surfaces/core/delivery-summary/index.js';
 import { withSurfaceSnapshot } from '#surfaces/core/terminal-admin/index.js';
 
 const approvalPageSchema = z.array(approvalRecordSchema);
@@ -53,6 +54,8 @@ export function createWorklineLedgerPorts(input: {
   readonly approvalPageSize?: number;
   readonly inspectWorkers?: WorkerObservationHandler;
   readonly inspectRun?: RunQueryHandler;
+  /** The queue rows' summaries of a Run window, from the delivery card's reader; absent: the rows show without them. */
+  readonly describeQueueSummaries?: DeliverySummaryReader;
   readonly inspectInventory?: InventoryQueryHandler;
   readonly inspectWorkerTranscript?: WorkerTranscriptHandler;
   readonly listApprovals?: (input: unknown) => Promise<unknown>; readonly decideApproval?: (input: unknown) => Promise<unknown>;
@@ -80,6 +83,10 @@ export function createWorklineLedgerPorts(input: {
     ...(workerHeartbeatMs === undefined ? {} : { workerHeartbeatMs }),
     async listWorkers() { return inspectWorkers(root, { schemaVersion: 1, scopeId, after: null, limit: 20 }, options); },
     async inspectRun(runId: string) { return (await inspectRun(root, { schemaVersion: 1, scopeId, runId }, options)).run; },
+    ...(input.describeQueueSummaries ? { async queueSummaryLines(views) {
+      const read = await input.describeQueueSummaries!(root, views.map(view => queueSummaryRequest(view, DELIVERY_RENDER_LIMITS.cardTopPaths)), options).catch(() => null);
+      return views.map((_, index) => ticketSummaryBlock(read?.[index] ?? null, undefined, locale));
+    } } : {}),
     ...(input.inspectSurfaceRunIds ? { listRunIds: input.inspectSurfaceRunIds } : inspectInventory ? {
       async listRunIds() {
         const page = await inspectInventory(root, { schemaVersion: 1, scopeId, after: null, limit: 50 }, options);
@@ -141,6 +148,14 @@ export function createWorklineLedgerPorts(input: {
         const params = { run: shortId(runId), command: commandId, revision: run?.revision ?? '—', state: run ? runStateWord(run.state, locale) : '—' };
         return action === 'hold' ? t('terminal.runControl.result.hold', params, locale)
           : action === 'resume' ? t('terminal.runControl.result.resume', params, locale) : t('terminal.runControl.result.close', params, locale);
+      },
+      // BR2 (K7 port): the same in-process lifecycle command as `deckent run resume --task --answer` (CLI `run-control.ts`); no service protocol change
+      // and no MCP surface (answering is a human decision). The answer is the person's own text; the schema bounds it.
+      async answerTask(runId: string, taskId: string, answer: string, expectedRevision: number) {
+        const commandId = `terminal-run-answer-${randomUUID()}`;
+        const command = runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId, action: 'answer', taskId, answer, expectedRevision });
+        const result = await applyRunLifecycle(root, command, options), run = result?.lifecycle.run;
+        return t('terminal.runAnswer.result', { run: shortId(runId), command: commandId, revision: run?.revision ?? '—', state: run ? runStateWord(run.state, locale) : '—' }, locale);
       },
     } : {}),
   }, input.inspectSurfaceAccess);

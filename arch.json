@@ -262,6 +262,7 @@
         "src/adapters/core/provider-connect",
         "src/adapters/core/agent-workspace-floor",
         "src/adapters/core/terminal-history",
+        "src/adapters/core/terminal-editor",
         "src/adapters/core/workspace-write",
         "src/engine/core/runtime",
         "src/adapters/core/contract",
@@ -1164,7 +1165,18 @@
         "src/surfaces/core/terminal-delivery",
         "src/platform/core/common",
         "src/engine/core/run-proposal",
-        "src/surfaces/core/terminal-conversation"
+        "src/surfaces/core/terminal-conversation",
+        "src/surfaces/core/terminal-host"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-host": {
+      "dependencies": [
+        "src/platform/core/redaction",
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/terminal-window"
       ],
       "plan": "SURFACES"
     },
@@ -2242,6 +2254,10 @@
       ],
       "plan": "SURFACES"
     },
+    "src/adapters/core/terminal-editor": {
+      "dependencies": [],
+      "plan": "SURFACES"
+    },
     "src/adapters/core/runtime-launcher": {
       "dependencies": [],
       "plan": "SURFACES"
@@ -2272,7 +2288,10 @@
     "src/adapters/core/worker-image": {
       "dependencies": [
         "src/platform/core/errors",
-        "src/adapters/core/process-runner"
+        "src/adapters/core/process-runner",
+        "src/engine/core/toolchain-currency",
+        "src/adapters/core/docker-supervisor",
+        "src/engine/core/worker-setup"
       ],
       "plan": "PROVIDERS"
     },
@@ -3397,9 +3416,19 @@
       ],
       "plan": "INSTALLATION"
     },
+    "src/engine/core/worker-setup": {
+      "dependencies": [
+        "src/engine/core/setup",
+        "src/engine/core/toolchain-currency",
+        "src/platform/core/errors",
+        "src/domain/core/provider-catalog"
+      ],
+      "plan": "INSTALLATION"
+    },
     "src/adapters/core/setup-detect-execution": {
       "dependencies": [
-        "src/engine/core/setup"
+        "src/engine/core/setup",
+        "src/engine/core/worker-setup"
       ],
       "plan": "INSTALLATION"
     },
@@ -3446,7 +3475,10 @@
         "src/surfaces/core/cli-observe",
         "src/composition/core/installation",
         "src/composition/core/config",
-        "src/composition/core/agent-turn"
+        "src/composition/core/agent-turn",
+        "src/adapters/core/worker-image",
+        "src/platform/core/host",
+        "src/engine/core/worker-setup"
       ],
       "plan": "INSTALLATION"
     },
@@ -3470,7 +3502,9 @@
         "src/surfaces/core/cli-models",
         "src/surfaces/core/cli-observe",
         "src/surfaces/core/doctor",
-        "src/surfaces/core/cli-admin"
+        "src/surfaces/core/cli-admin",
+        "src/engine/core/installation",
+        "src/engine/core/worker-setup"
       ],
       "plan": "INSTALLATION"
     },
@@ -3544,9 +3578,9 @@
       "domain": 10000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 29900,
+      "adapters": 30600,
       "surfaces": 45000,
-      "composition": 7950
+      "composition": 8200
     },
     "totalSrcLines": 200000,
     "testCases": 8000,
@@ -3618,7 +3652,13 @@
       "security",
       "terminal",
       "termrun",
-      "delivery"
+      "delivery",
+      "tuicopy",
+      "tuinotify",
+      "tuiqueue",
+      "tuieditor",
+      "tuisession",
+      "termanswer"
     ]
   },
   "literals": {

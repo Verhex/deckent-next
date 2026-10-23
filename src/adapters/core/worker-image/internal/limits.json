@@ -1,0 +1,8 @@
+{
+  "$comment": "BR1 worker-image setup reads: receipt names listed and receipts parsed (newest first), bytes per receipt, and the read-only image inspect probe's own deadline and output bound when no execution settings give them.",
+  "receiptScan": 1024,
+  "receipts": 64,
+  "receiptBytes": 1048576,
+  "probeTimeoutMs": 5000,
+  "probeOutputBytes": 65536
+}

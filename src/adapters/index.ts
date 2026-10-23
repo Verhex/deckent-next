@@ -1,4 +1,4 @@
-export { readIdentityProfileConfig, registerProviderConfig, providerSpendingSchema, providerSpendingBudgetFor, providerSpendingConfiguredBudget, providerSpendAuditConfigSchema, readTerminalChatConfig, effectiveTerminalOutputCap, resolveTerminalModel, type TerminalModelChoice, type TerminalModelSource, readTerminalConfig, readTerminalFetchConfig, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_THEMES, type TerminalChatConfig, type TerminalFetchConfig, type TerminalScratchConfig, type TerminalShellConfig, readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig,
+export { readIdentityProfileConfig, registerProviderConfig, providerSpendingSchema, providerSpendingBudgetFor, providerSpendingConfiguredBudget, providerSpendAuditConfigSchema, readTerminalChatConfig, effectiveTerminalOutputCap, resolveTerminalModel, type TerminalModelChoice, type TerminalModelSource, readTerminalConfig, readTerminalFetchConfig, readTerminalResponseStyle, readTerminalScratchConfig, readTerminalShellConfig, terminalConfigSchema, TERMINAL_BANNERS, TERMINAL_RESPONSE_STYLES, TERMINAL_THEMES, type TerminalChatConfig, type TerminalFetchConfig, type TerminalResponseStyle, type TerminalScratchConfig, type TerminalShellConfig, readOperationsConfig, operationsConfigSchema, registerOperationAdapterModule, resolveOperationCatalog, resolveOperationTargets, type OperationsConfig,
   openConfiguredSecretStore, readSecretsConfig, registerSecretStoreBackend, secretsConfigSchema, type SecretsConfig, createInstallationSecretStoreSelection, createInstallationSecretCustody, SECRET_CUSTODY_WAIT_MS, isRegisteredSecretStore,
   openRegisteredSecretStore, registeredSecretStores, registerSecretGrantStore, installationSecretRoot, openProjectVaultStore, openSecretGrantStore } from '#adapters/core/contract/index.js';
 export { openSqliteAttemptStore, openSqliteInventoryReader, inventoryReadsPerCall, upgradeExistingProductLedger, type LedgerUpgrade } from '#adapters/core/attempt-store/index.js';
@@ -15,7 +15,7 @@ export type { GitWorkspaceOptions, GitWorkspaceLease } from '#adapters/core/git-
 export { gitSourcePreimageSchema, gitSourceBaseSchema, fingerprintGitSource } from '#adapters/core/git-workspace/index.js';
 export type { GitSourcePreimage, GitSourceBase } from '#adapters/core/git-workspace/index.js';
 export { GitRunWorkspaceProvider } from '#adapters/core/git-workspace/index.js';
-export { resolveGitWorkTarget, selectWorkTarget } from '#adapters/core/git-workspace/index.js';
+export { gitRefFileSource, resolveGitWorkTarget, selectWorkTarget, workTargetRefFileSource } from '#adapters/core/git-workspace/index.js';
 export type { ResolvedGitWorkTarget, WorkTargetDeclaration, WorkTargetExecution, WorkTargetSettings } from '#adapters/core/git-workspace/index.js';
 export { scanWorkerTree, workerTreeViews, WORKER_TREE_DENY, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
 export type { WorkerTreeGateOptions, WorkerTreeView } from '#adapters/core/worker-tree-gate/index.js';
@@ -50,6 +50,7 @@ export * from '#adapters/core/npm-registry/index.js';
 export * from '#adapters/core/inference-metrics/index.js';
 export * from '#adapters/core/runtime-launcher/index.js';
 export * from '#adapters/core/terminal-history/index.js';
+export * from '#adapters/core/terminal-editor/index.js';
 export * from '#adapters/core/worker-image/index.js';
 export type { NativeJsonHttpAuthentication } from '#adapters/core/provider-http-json/index.js';
 
@@ -107,6 +108,6 @@ export { SqliteTargetQueue } from '#adapters/core/target-queue-store/index.js';
 
 export { GIT_QUEUE_DISPLAY, GitQueueTarget, gitQueueCandidateSource } from '#adapters/core/git-patch/index.js';
 export { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-export { detectExecutionFacts, executionSetupFamily, type ExecutionDetectPorts } from '#adapters/core/setup-detect-execution/index.js';
+export { detectExecutionFacts, executionSetupFamily, WORKER_IMAGE_ESTIMATED_GB, type ExecutionDetectPorts, type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
 export { detectCodingFacts, codingSetupFamily } from '#adapters/core/setup-detect-coding/index.js';
 export * from '#adapters/core/execution-env-docker/index.js';
