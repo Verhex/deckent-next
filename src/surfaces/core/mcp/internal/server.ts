@@ -27,7 +27,9 @@ import { quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseR
 import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
 import { memoryListQuerySchema, memorySearchQuerySchema, memoryInspectQuerySchema, type MemoryListQuery, type MemoryListing, type MemorySearchQuery, type MemorySearchResult, type MemoryInspectQuery, type MemoryInspection } from '#engine/index.js';
 import { agentListQuerySchema, agentInspectQuerySchema, skillListQuerySchema, skillInspectQuerySchema, type AgentListQuery, type AgentListing, type AgentInspectQuery,
-  type AgentInspection, type SkillListQuery, type SkillListing, type SkillInspectQuery, type SkillInspection, agentStatsQuerySchema, type AgentStatsQuery, type AgentStatsView } from '#engine/index.js';
+  type AgentInspection, type SkillListQuery, type SkillListing, type SkillInspectQuery, type SkillInspection, agentStatsQuerySchema, type AgentStatsQuery, type AgentStatsView,
+  suggestionListQuerySchema, suggestionInspectQuerySchema, agentDefineCommandSchema, skillDefineCommandSchema, skillImportCommandSchema, standingChangeCommandSchema, suggestionDismissCommandSchema,
+  type CatalogSuggestionListing, type CatalogSuggestionInspection } from '#engine/index.js';
 import { policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/index.js';
 import { modelRoleQuerySchema, type ModelRoleInspection, type ModelRoleQuery } from '#engine/index.js';
 export interface McpApplications {
@@ -47,6 +49,12 @@ export interface McpApplications {
   /** S8-2 agent statistics: the same `agent-catalog`/`inspect` read; numbers are associations and acceptance rates (labels on the view). */
   inspectAgentStats?(query: AgentStatsQuery): Promise<AgentStatsView>;
   listSkills?(query: SkillListQuery): Promise<SkillListing>; inspectSkill?(query: SkillInspectQuery): Promise<SkillInspection>;
+  /** S8-3/S8-4: the catalog's sealed suggestions (refs, digests, counts; never draft or lesson text; lesson refs only where the MCP actor may read them). */
+  listAgentSuggestions?(query: unknown): Promise<CatalogSuggestionListing>; inspectAgentSuggestion?(query: unknown): Promise<CatalogSuggestionInspection>;
+  /** S8-4 the signed AI command path: define, import, standing and dismiss only with the MCP actor's own active key and a policy grant (a standing action:
+   * a grant naming that WorkClass); verified again at commit. AI grants are empty by default. */
+  signedDefineAgent?(command: unknown): Promise<unknown>; signedDefineSkill?(command: unknown): Promise<unknown>; signedImportSkill?(command: unknown): Promise<unknown>;
+  signedChangeStanding?(command: unknown): Promise<unknown>; signedDismissSuggestion?(command: unknown): Promise<unknown>;
   renewApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   listApprovals?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   inspectApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
@@ -140,9 +148,21 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   for (const [name, description, schema, invoke] of [['list_agents', t('mcp.tool.listAgents', {}, locale), agentListQuerySchema, applications.listAgents],
     ['inspect_agent', t('mcp.tool.inspectAgent', {}, locale), agentInspectQuerySchema, applications.inspectAgent], ['list_skills', t('mcp.tool.listSkills', {}, locale), skillListQuerySchema, applications.listSkills],
     ['inspect_skill', t('mcp.tool.inspectSkill', {}, locale), skillInspectQuerySchema, applications.inspectSkill],
-    ['inspect_agent_stats', t('mcp.tool.inspectAgentStats', {}, locale), agentStatsQuerySchema, applications.inspectAgentStats]] as const) {
+    ['inspect_agent_stats', t('mcp.tool.inspectAgentStats', {}, locale), agentStatsQuerySchema, applications.inspectAgentStats],
+    ['list_agent_suggestions', t('mcp.tool.listAgentSuggestions', {}, locale), suggestionListQuerySchema, applications.listAgentSuggestions],
+    ['inspect_agent_suggestion', t('mcp.tool.inspectAgentSuggestion', {}, locale), suggestionInspectQuerySchema, applications.inspectAgentSuggestion]] as const) {
     if (invoke) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name, description, schema,
       invoke: input => (invoke as (query: unknown) => Promise<unknown>).call(applications, schema.parse(input)) });
+  }
+  // S8-4: the signed catalog writes (one typed command each, the same schemas as the person's cards; the signature is made by the host signer for the MCP actor's
+  // own enrolled key, or carried in `signed` from its external key).
+  for (const [name, description, schema, invoke] of [['define_agent', t('mcp.tool.signedDefineAgent', {}, locale), agentDefineCommandSchema, applications.signedDefineAgent],
+    ['define_skill', t('mcp.tool.signedDefineSkill', {}, locale), skillDefineCommandSchema, applications.signedDefineSkill],
+    ['import_skill', t('mcp.tool.signedImportSkill', {}, locale), skillImportCommandSchema, applications.signedImportSkill],
+    ['change_agent_standing', t('mcp.tool.signedChangeStanding', {}, locale), standingChangeCommandSchema, applications.signedChangeStanding],
+    ['dismiss_agent_suggestion', t('mcp.tool.signedDismissSuggestion', {}, locale), suggestionDismissCommandSchema, applications.signedDismissSuggestion]] as const) {
+    if (invoke) definitions.push({ readOnly: false, destructive: false, idempotent: true, openWorld: false, name, description, schema,
+      invoke: input => (invoke as (command: unknown) => Promise<unknown>).call(applications, schema.parse(input)) });
   }
   if (applications.inspectPolicyAdministration) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_policy_administration',
     description: t('mcp.tool.policyAdministration', {}, locale), schema: policyAdministrationQuerySchema,

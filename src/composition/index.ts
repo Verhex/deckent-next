@@ -33,6 +33,7 @@ export * from '#composition/core/toolchains/index.js';
 export { configuredApproval } from '#composition/core/approvals/index.js';
 export * from '#composition/core/decision/index.js';
 export * from '#composition/core/memory/index.js';
+export * from '#composition/core/memory-rollout/index.js';
 export * from '#composition/core/agent-catalog/index.js';
 
 export { executeConfiguredBackup } from '#composition/core/backup/index.js';

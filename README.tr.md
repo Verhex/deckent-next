@@ -28,7 +28,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> Bu README yayımlanmış son sürümü anlatır: **ön sürüm `1.0.0-alpha.54`**. [CHANGELOG.md](CHANGELOG.md) tüm
+> Bu README yayımlanmış son sürümü anlatır: **ön sürüm `1.0.0-alpha.55`**. [CHANGELOG.md](CHANGELOG.md) tüm
 > sürümleri en yenisi başta listeler. Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için,
 > büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil).
 
@@ -304,7 +304,7 @@ izin verir; bunları gizlemek için bayrağı vermeyin (varsayılan). Her değer
    (işçinin kendi raporu iddia olarak işaretlenir), risk ve evet ya da hayırın ne yapacağı. Ardından değişen dosyaları
    listeler. `y` değişikliği yalnız `refs/deckent/deliveries/` altındaki ayrı bir referansa yazar; hiçbir dala, index'e ya da
    çalışma dosyalarınıza dokunmaz.
-5. **Bir dala alın**, isterseniz ayrı bir `y` ile. Deckent yalnız izin verdiğiniz ve kimsenin checkout etmediği bir dalı
+5. **Dalı ilerletin**, isterseniz ayrı bir `y` ile. Deckent yalnız izin verdiğiniz ve kimsenin checkout etmediği bir dalı
    ilerletir; bu yüzden önce bir dal açın:
 
    ```sh
@@ -313,7 +313,7 @@ izin verir; bunları gizlemek için bayrağı vermeyin (varsayılan). Her değer
    ```
 
    Sonuca `git log deckent/first-job` ile bakın ve birleştirmeyi kendiniz yapın. Proje teslim kuyruğunu (servisin dal başına
-   teslim kuyruğu) kullanıyorsa bir dala alma kendi onayıyla geri alınabilir; komutları
+   teslim kuyruğu) kullanıyorsa dalı ilerletme kendi onayıyla geri alınabilir; komutları
    [işletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md#teslim-kuyruğu-inceleme-ve-geri-alma) gösterir.
 
 <img src=".github/assets/screenshots/tr/16-gorevler.png" alt="Henüz iş olmayan canlı /tasks penceresi" width="880">
@@ -476,7 +476,7 @@ anlatır.
 - **Terminalde ajanla çalışın**: akışlı turlar, dosya düzenleme ve sandbox'lı kabuk, onay ve izleme pencereleri, izin
   modları, MCP araçları, konuşma sıkıştırma; Türkçe ve İngilizce.
 - **İşi sade sözlerle isteyin**: `/do` işi kabul ölçütleriyle planlar, siz onaylarsınız, bir kodlama işçisi (Claude Code,
-  Codex ya da Cursor) işi Docker içinde yapar; `/deliver` sonucu Git'e yazar ve yalnız siz seçerseniz bir dala alır.
+  Codex ya da Cursor) işi Docker içinde yapar; `/deliver` sonucu Git'e yazar ve yalnız siz seçerseniz dalı ilerletir.
 - **İşleri yönetin**: Run'lar, görevler ve denemeler (bir görevin her denenişi) başlatılır, sıralanır, durdurulur, sürdürülür, iptal edilir ve
   kurtarılır; hepsi kalıcı bir SQLite defterine yazılır.
 - **Model seçin ve maliyeti tutun**: kendi anahtarınızı bağlayın, modeli oturum için ya da varsayılan olarak seçin, yerel
@@ -485,6 +485,11 @@ anlatır.
   kalıcı izinler ve doğrulayabileceğiniz bir denetim izi.
 - **İşletin**: salt okunur görünüm için `deckent monitor`, sağlık için `deckent doctor`, ayarlar için `deckent config`;
   isterseniz zamanlanmış, doğrulanabilir kurtarma setleri için `deckent backup create|verify|restore`.
+- **Siz açana kadar kapalı çekirdek katmanlar**: sistem her iş türü için işçi modelini görebildiğiniz bir listeden seçer;
+  hafıza kabul edilen işten dolar ve onu siz ya da bağımsız bir değerlendirici doğrular; kaybolan işçiler tespit edilir ve
+  belirli sınırlar içinde yeni bir denemede sürdürülebilir; Brain bir korumalı alan içinde kendi Claude aboneliğinizle
+  planlayabilir; ajanlar ve skill'ler sürümlüdür ve onlara yapılan her AI değişikliği imzalıdır. Her katman kapalı başlar ve
+  yalnız ne yapacağını kaydeden bir gölge kipi vardır ([bilinen sınırlar](docs/known-limits.tr.md#çekirdek-katmanlar)).
 
 ### Henüz olmayanlar
 
@@ -494,12 +499,13 @@ anlatır.
   koordine eden daha uzun süreçler planlanıyor.
 - **ERP ya da CRM bağlayıcısı yok.** Operasyon sözleşmesi ve genel bir HTTP hedefi var; ürün bağlayıcıları yok.
 - **Teslim hiçbir zaman kendiliğinden olmaz.** Bir kural kuyruktaki her iş için teslim *edip etmeyeceğini* kaydeder ama yalnız
-  tavsiye verir; her teslim, dala alma ve geri alma sizin `y`'nizi bekler.
+  tavsiye verir; her teslim, dalı ilerletme ve geri alma sizin `y`'nizi bekler.
 - **Kodlama görevleri işçinin çıkış koduyla kabul edilir.** İçerik henüz bağımsız olarak doğrulanmıyor ve pencere bunu söyler.
-- **Abonelikler kısmi.** Claude Code işçisi kendi Claude girişinizle çalışır; Claude aboneliğiyle terminalde sohbet,
-  abonelikli Brain (`/do`'nun arkasındaki planlayıcı, bkz. [Yol haritası](#yol-haritası)) ve ChatGPT ile giriş henüz yok.
+- **Abonelikler kısmi.** Claude Code işçisi kendi Claude girişinizle çalışır; Brain (`/do`'nun arkasındaki planlayıcı) da
+  Deckent'in bubblewrap korumalı alanının çalıştığı yerde (Linux ve WSL) Claude aboneliğinizi kullanabilir. Claude aboneliğiyle
+  terminalde sohbet ve ChatGPT ile giriş henüz yok (bkz. [Yol haritası](#yol-haritası)).
 - **Platformlar.** Native Windows desteklenmiyor. macOS'ta yerel runtime servisi henüz çalışmıyor (soketi yalnız Linux'ta
-  var); bu yüzden sohbet, işler ve yedekleme orada kullanılamaz. Teslim, dala alma, geri alma ve anahtar izni yalnız Linux'ta
+  var); bu yüzden sohbet, işler ve yedekleme orada kullanılamaz. Teslim, dalı ilerletme, geri alma ve anahtar izni yalnız Linux'ta
   (WSL dahil) bulunan bir terminal tanığı ister, diğer sistemlerde reddedilir. arm64 paketlenmiyor. Docker işçisi host
   çekirdeğini paylaşır; sanal makine değildir.
 - **Kurtarma setleri tamamen şifreli değil.** Setin içinde yalnız yetki anahtarı parolanızla şifrelenir; setleri güvendiğiniz
@@ -510,12 +516,14 @@ Açık, denenmemiş ya da kısmi her maddeyi etkisi ve varsa çözüm yoluyla [b
 
 ## Yol haritası
 
-Tarih sözü verilmez; sıra verilir. Önce Deckent'in işi kendi başına yürütmesini sağlayan çekirdek katmanlar gelir. Beta bu
-katmanları gerçek kullanımla sağlamlaştırır; masaüstü uygulamasının geliştirilmesi de betayla birlikte başlar.
+Tarih sözü verilmez; sıra verilir. Önce Deckent'in işi kendi başına yürütmesini sağlayan çekirdek katmanlar gelir: alpha.55
+onları kod olarak getirir, her biri bir kişi açana kadar kapalıdır, betadan önce açılıp gerçek kullanımda kanıtlanırlar.
+Sonraki sürüm imzalı ajanlar ve skill'ler için Deckent Hub'ı ekler. Beta katmanları gerçek kullanımla sağlamlaştırır; masaüstü
+uygulamasının geliştirilmesi de betayla birlikte başlar.
 
 ```mermaid
 flowchart LR
-  N["Şimdi · alpha.54<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>yedek ve denetim"] --> C["Betadan önce · çekirdek katmanlar<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
+  N["Şimdi · alpha.55<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>çekirdek katmanlar kodda, varsayılan kapalı"] --> C["Betadan önce · çekirdek katmanlar açılır<br/>imzalı ajanlar ve skill'ler için Deckent Hub<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
   C --> B["Beta<br/>npm paketi<br/>katmanlar gerçek kullanım ve testlerle gelişir<br/>paralelde masaüstü uygulaması geliştirmesi"]
   B --> E["Enterprise · ayrı dağıtım<br/>SSO · filo · merkezi policy<br/>ERP bağlayıcıları"]
 ```

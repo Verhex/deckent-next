@@ -141,6 +141,8 @@ export const CLI_CATALOG = [
     // S4B-4: the person's review card (candidates, contests, stale entries) and the purge card.
     action('review', 'observe', 'memory.help.action.review', 'memory.help.detail'),
     action('purge', 'observe', 'memory.help.action.purge', 'memory.help.detail', { requires: ['<id> | --source <run>[/<attempt>]'] }),
+    // S4B-7: the read-only rollout status (phase, exit criteria with numbers, the next person action).
+    action('rollout', 'observe', 'memory.help.action.rollout', 'memory.help.detail'),
   ] },
   // S7 agent/skill catalog core: reads (agents by default, inspect, skills, skill) and a person's terminal-card writes (define, define-skill).
   { name: 'agents', group: 'observe', summary: 'agents.help.summary', detail: 'agents.help.detail', args: '[--scope <id>] [--json]', bare: 'handler', children: [
@@ -155,6 +157,15 @@ export const CLI_CATALOG = [
     action('revoke-signer', 'observe', 'agentsign.help.action.revoke-signer', 'agentsign.help.detail', { requires: ['<key-id>'] }),
     action('repair-signers', 'observe', 'agentsign.help.action.repair-signers', 'agentsign.help.detail'),
     action('import-skill', 'observe', 'agentsign.help.action.import-skill', 'agentsign.help.detail', { requires: ['--input <file>'] }),
+    // S8-2 statistics read; S8-3/S8-4 suggestions (read) and the person's standing, dismiss and reset cards.
+    action('stats', 'observe', 'agentstats.help.action.stats', 'agentstats.help'),
+    action('suggestions', 'observe', 'agentsevo.help.action.suggestions', 'agentsevo.help'),
+    action('promote', 'observe', 'agentsevo.help.action.promote', 'agentsevo.help', { requires: ['<agent-id>', '--work-class <id>'] }),
+    action('demote', 'observe', 'agentsevo.help.action.demote', 'agentsevo.help', { requires: ['<agent-id>', '--work-class <id>'] }),
+    action('restore', 'observe', 'agentsevo.help.action.restore', 'agentsevo.help', { requires: ['<agent-id>', '--work-class <id>'] }),
+    action('retire', 'observe', 'agentsevo.help.action.retire', 'agentsevo.help', { requires: ['<agent-id>', '--work-class <id>'] }),
+    action('dismiss', 'observe', 'agentsevo.help.action.dismiss', 'agentsevo.help', { requires: ['<suggestion-id>'] }),
+    action('standing', 'observe', 'agentsevo.help.action.standing', 'agentsevo.help', { requires: ['reset', '--work-class <id>'] }),
   ] },
   { name: 'models', group: 'models', summary: 'cli.help.summary.models', detail: 'cli.help.models', args: '[--scope <id>] [--declared] [--catalog] [--verbose]', bare: 'handler', children: [
     action('binding', 'models', 'cli.help.action.binding', 'cli.help.modelsBinding', { requires: MODEL }),

@@ -7,6 +7,7 @@ import { readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { cliTableStyle, renderCliTable, safeCell, scopeNotice, type CliCardRequest, type ScopeResolution } from '#surfaces/core/cli-human/index.js';
 import { sinksOf } from '#surfaces/core/cli-approval/index.js';
 import type { AgentsCommandContext } from './context.js';
+import { revokedPromotionsCard } from './evolution.js';
 
 /** S8-5 `deckent agents` signer actions (S8-DESIGN §8): the list reads; every other action is one person's card at their own terminal. */
 export const SIGNER_ACTIONS = ['signers', 'enrol-signer', 'add-signer', 'revoke-signer', 'repair-signers', 'import-skill'] as const;
@@ -72,7 +73,8 @@ export async function signersCommand(action: SignerAction, args: { readonly id?:
     const done = await need(context.revokeSigner)(io.root, { ...base, keyId: row.keyId }, io.options);
     const params = { keyId: row.keyId, count: done.signedRows ?? row.signedRows };
     if (done.logged === false) emit(t('agentsign.done.revokeUnlogged', params, locale), { level: 'warning', ...sinks }); else emit(t('agentsign.done.revoke', params, locale), sinks);
-    return;
+    // S8-4 (owner Q-S13): the promotions this key signed stay in effect until a person demotes them — offered here in one step.
+    return revokedPromotionsCard(row.keyId, context, io);
   }
   if (action === 'repair-signers') {
     if (!await card(t('agentsign.card.repair.title', {}, locale), t('agentsign.card.repair.body', {}, locale).split('\n'))) return cancelled();

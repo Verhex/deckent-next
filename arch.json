@@ -313,7 +313,8 @@
         "src/surfaces/core/cli",
         "src/surfaces/core/cli-kit",
         "src/surfaces/core/config-window",
-        "src/surfaces/core/effect-confirmation"
+        "src/surfaces/core/effect-confirmation",
+        "src/composition/core/memory-rollout"
       ],
       "plan": "SURFACES"
     },
@@ -2676,6 +2677,7 @@
         "src/composition/core/model-activation",
         "src/composition/core/model-invocation",
         "src/engine/core/policy",
+        "src/composition/core/agent-catalog",
         "src/platform/core/managed-files",
         "src/adapters/core/brain-wait-store"
       ],
@@ -2781,7 +2783,8 @@
         "src/adapters/core/contract",
         "src/platform/core/errors",
         "src/composition/core/model-invocation",
-        "src/engine/core/model-invocation"
+        "src/engine/core/model-invocation",
+        "src/composition/core/memory-rollout"
       ],
       "plan": "CONFIG-SURFACE"
     },
@@ -3648,7 +3651,8 @@
         "src/engine/core/provider-spend",
         "src/domain/core/model-invocation",
         "src/engine/core/model-activation",
-        "src/engine/core/dispatch"
+        "src/engine/core/dispatch",
+        "src/platform/core/config-fields"
       ],
       "plan": "MEMORY"
     },
@@ -3702,6 +3706,25 @@
         "src/engine/core/run-proposal",
         "src/adapters/core/audit-store",
         "src/platform/core/errors"
+      ],
+      "plan": "MEMORY"
+    },
+    "src/composition/core/memory-rollout": {
+      "dependencies": [
+        "src/engine/core/memory",
+        "src/engine/core/audit",
+        "src/adapters/core/memory-journal-store",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/sqlite-model-activation",
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/platform/core/clock",
+        "src/platform/core/config",
+        "src/platform/core/errors",
+        "src/domain/core/principal",
+        "src/platform/core/host"
       ],
       "plan": "MEMORY"
     },
@@ -3792,7 +3815,13 @@
         "src/engine/core/model-activation",
         "src/engine/core/memory",
         "src/adapters/core/catalog-evolution-store",
-        "src/adapters/core/sqlite-model-activation"
+        "src/adapters/core/sqlite-model-activation",
+        "src/composition/core/memory",
+        "src/engine/core/policy",
+        "src/domain/core/principal",
+        "src/domain/core/primitives",
+        "src/domain/core/memory",
+        "src/platform/core/errors"
       ],
       "plan": "LEARNING"
     },
@@ -3918,7 +3947,9 @@
         "src/domain/core/provider-catalog",
         "src/platform/core/integrity",
         "src/engine/core/authentication",
-        "src/engine/core/agent-catalog"
+        "src/engine/core/agent-catalog",
+        "src/domain/core/command",
+        "src/domain/core/memory"
       ],
       "plan": "LEARNING"
     },
@@ -4052,6 +4083,7 @@
       "memory",
       "memory-automation",
       "memory-review",
+      "memory-rollout",
       "assignment",
       "agents",
       "agentsign",
@@ -4065,7 +4097,8 @@
       "headless",
       "recovery",
       "brainwait",
-      "agentstats"
+      "agentstats",
+      "agentsevo"
     ]
   },
   "literals": {

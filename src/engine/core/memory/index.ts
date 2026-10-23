@@ -9,3 +9,8 @@ export { MEMORY_EVALUATOR_ROLE, memoryCatalogFacts, memoryCatalogKey, memoryEval
 export type { MemoryCatalogFact, MemoryEvaluatorPrice } from './internal/evaluator-models.js';
 export { selectMemoryContext, memoryContextTasks, memoryPlanningRequest, MEMORY_CONTEXT_HEADER, type MemoryContextRequest, type MemoryContextSelection, type MemoryContextTaskPart, type MemoryContextEntryRef,
   type MemoryPlanningRequest, type MemoryPlanningRow, type MemoryPlanningSelection } from './internal/context.js';
+export { MEMORY_ROLLOUT, MEMORY_ROLLOUT_METRICS, MEMORY_ROLLOUT_SECTIONS, MEMORY_INJECTION_CORPUS, memoryCorpusContent, memoryRolloutCriterionMet, memoryRolloutView, memoryRolloutGated,
+  measureMemoryRollout } from './internal/rollout.js';
+export type { MemoryRolloutMetric, MemoryRolloutSection, MemoryRolloutModes, MemoryRolloutRegistry, MemoryRolloutCriterion, MemoryRolloutMeasure, MemoryRolloutMeasures,
+  MemoryRolloutCriterionView, MemoryRolloutPhaseView, MemoryRolloutView, MemoryRolloutPorts, MemoryRolloutRetention, MemoryRolloutStatus } from './internal/rollout.js';
+export { screenMemoryCandidate } from './internal/distil.js';

@@ -8,17 +8,18 @@ import type { MemoryCommandContext } from './context.js';
 import { memoryWrite } from './write.js';
 import { memoryPurge, memoryRetireSource, memoryReview } from './review.js';
 import { evaluatorLines, table, view } from './render.js';
+import { memoryRollout } from './rollout.js';
 import limits from './limits.json' with { type: 'json' };
 
-export interface Parsed { action: 'search' | 'inspect' | 'propose' | 'verify' | 'retire' | 'review' | 'purge' | null; words: string[]; states?: MemoryState[]; scope?: string;
+export interface Parsed { action: 'search' | 'inspect' | 'propose' | 'verify' | 'retire' | 'review' | 'purge' | 'rollout' | null; words: string[]; states?: MemoryState[]; scope?: string;
   language?: string; input?: string; note?: string; reason?: string; supersededBy?: string; source?: { runId: string; attemptId: string | null }; json: boolean; help: boolean }
 const VALUED: Readonly<Record<string, 'scope' | 'language' | 'input' | 'note' | 'reason' | 'supersededBy' | 'source'>> = { '--scope': 'scope', '--lang': 'language', '--input': 'input',
   '--note': 'note', '--reason': 'reason', '--superseded-by': 'supersededBy', '--source': 'source' };
-const ACTIONS = ['search', 'inspect', 'propose', 'verify', 'retire', 'review', 'purge'];
+const ACTIONS = ['search', 'inspect', 'propose', 'verify', 'retire', 'review', 'purge', 'rollout'];
 /** Which flags and how many words each action takes (null: the bare list). S4B-4: `retire` and `purge` take one id or `--source <run>[/<attempt>]`. */
 const SHAPE = { list: { words: [0, 0], flags: ['--state'] }, search: { words: [1, Infinity], flags: ['--state'] }, inspect: { words: [1, 1], flags: [] },
   propose: { words: [0, 0], flags: ['--input'] }, verify: { words: [1, 1], flags: ['--note'] }, retire: { words: [0, 1], flags: ['--reason', '--superseded-by', '--source'] },
-  review: { words: [0, 0], flags: ['--note', '--reason'] }, purge: { words: [0, 1], flags: ['--source'] } } as const;
+  review: { words: [0, 0], flags: ['--note', '--reason'] }, purge: { words: [0, 1], flags: ['--source'] }, rollout: { words: [0, 0], flags: [] } } as const;
 /** `<runId>` or `<runId>/<attemptId>` (ids as the Run inspection shows them). */
 function source(value: string): NonNullable<Parsed['source']> {
   const [runId, attemptId, extra] = value.split('/');
@@ -85,6 +86,11 @@ export async function memoryCommand(argv: readonly string[], context: MemoryComm
   if (args.action === 'purge') return memoryPurge(args, context, io);
   if (args.action === 'retire' && args.source) return memoryRetireSource(args, context, io);
   if (writing) return memoryWrite(args, context, io);
+  // S4B-7: the read-only rollout status (a pipe, an AI tool and --json may read it; it enables nothing).
+  if (args.action === 'rollout') {
+    if (!context.inspectMemoryRollout) throw ErrorRegistry.createError('MEMORY_UNAVAILABLE');
+    return memoryRollout(args, context, { root, options, locale, scopeId: scope.scopeId, notice: scopeNotice(scope, locale), held: code => heldNext(code, locale) });
+  }
   const base = { schemaVersion: 1 as const, scopeId: scope.scopeId, ...(args.states ? { states: args.states } : {}) };
   const lines = [scopeNotice(scope, locale)];
   const finish = (result: { readonly status: string }): ExitCode | undefined => {

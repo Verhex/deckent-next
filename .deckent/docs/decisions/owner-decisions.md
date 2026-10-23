@@ -808,3 +808,62 @@ Madde madde owner yanıtları (hepsi "evet"):
   `memory-evaluator` rolü ve katalogdaki üretici alanından (`vendorId`) gelir. Yeni bir model yalnız veri güncellemesiyle (registry + katalog) uygun olur.
   Owner'a gösterilen maliyet ya da uygunluk metni sabit fiyat yazmaz; güncel registry ve katalogdan hesaplanır. Uygun ve etkin bir farklı-üretici
   satırı yoksa değerlendirici çalışmaz ve kayıtlar aday kalır.
+
+<a id="cekirdek-katmanlar-2026-10-23"></a>
+
+## Owner kararları — 2026-10-23: headless abonelik Brain'i (S3), ajan evrimi ve imza anahtarları (S8), Deckent Hub = alpha.56, MVP yok, paket tavanları, model bağımsızlığı
+
+Kaynak: ana oturum (lead 4d4830b2) AskUserQuestion turları, 2026-10-23; tasarımlar dış `proof/ORCHESTRATION-2026-10-23/S3-DESIGN.md` (rev 2, kanun denetimi PASS), `S8-DESIGN.md` (rev 5.1) ve `S8-HUB-DESIGN.md` (rev 3.1; ikisinin son kanun denetimi PASS); ölçüm dış `proof/HEADLESS-0-2026-10-23/RESULT.md`. Bu bölüm yalnız owner'ın seçimlerini ve lead'in açıkça benimsediği önerileri tutar; bir kabul ya da beta kararı değildir. Uygulama alpha.55'tedir (CHANGELOG alpha.55 satırı, [çekirdek katmanlar modülü](../architecture/modules/core-layers.md)).
+
+<a id="headless-brain-2026-10-23"></a>
+
+### Headless abonelik Brain'i (S3): Q-H1…Q-H5 ve HEADLESS-0
+
+Brain planlamayı kişinin kendi Claude aboneliğiyle, resmî ve değiştirilmemiş `claude -p` üzerinden yapabilsin diye owner beş soruyu cevapladı. Cevaplar:
+
+- **Q-H1 giriş dizini:** standart `~/.claude` (Max). Bilinen risk: Brain'in giriş yenilemesi ve kota, owner'ın kendi oturumlarıyla ortaktır.
+- **Q-H2 ilk ölçüm:** HEADLESS-0'ı lead owner'ın makinesinde, owner'ın girişiyle, araçsız ve repo dışında koştu.
+- **Q-H3 arka plan ve AI kullanımı:** evet. Arka plan rolleri (kurtarma kararı, hafıza değerlendirici) ve AI/MCP üzerinden gelen planlama (`plan_run`) aboneliği yalnız bağlantıda bir kez verilen, geri alınabilir açık onayla kullanır; onayı yalnız kişi yazar. Kişi kendi `/do`'sunu her zaman kullanır.
+- **Q-H4 kota dolunca:** bekleme penceresi kısaysa Brain görünür ve iptal edilebilir biçimde bekler; değilse sıfırlanma saatiyle tipli ret ve kart gelir. Dürüst sınır: Deckent kredi satın almaz ve `credits_required`'da durur; hesapta ek kullanım açıksa CLI onu çekebilir ve Deckent bunu göremez.
+- **Q-H5 CLI güncellenince:** soru sorulmadı, lead önerileni benimsedi: model çağırmayan ön kontrol kendiliğinden yeniden koşar; yeni sürüm katalogdaki `minCliVersion` aralığındaysa ve ön kontrol geçerse kanal açık kalır, değilse kanal kapanır ve owner'a söylenir.
+- **HEADLESS-0 sonucu (dört deneme, hepsi başarılı, hepsinde `apiKeySource none`, araç ve MCP yok, tur başına 1,7–3,6 s):** `--safe-mode` tek başına kişinin kendi eklentilerini yüklediği için `--restricted` zorunludur; dar HOME (`HOME=<çalışma dizini>` ve `CLAUDE_CONFIG_DIR=<giriş dizini>`) girişi koruduğu için gerçek HOME istisnası (Q-H6) sorulmadı; `--restricted` altında da görünen yerleşik eklenti adları kodda değil registry verisinde bir izin listesidir.
+- **HEADLESS-S3 kuralı (owner 2026-10-23):** abonelik Brain'i resmî, değiştirilmemiş `claude -p` ile, kişinin kendi işletim sistemi kullanıcısının süreçlerinde ve kendi girişiyle çalışır; Deckent kimlik dosyasını açmaz, okumaz, kopyalamaz; ortamdaki hiçbir anahtar sürece ulaşmaz. Çağrı araçsız, MCP'siz, tek tur ve tekrarsızdır; sürüm, bayrak ve giriş türü ön kontrolü ya da çalışma bekçileri tutmazsa kanal tipli retle kapanır, API'ye sessiz geçiş yoktur. Giriş dizini Q-H1, AI/MCP ve sistem rolleri Q-H3, kota Q-H4, sürüm değişimi Q-H5'e göredir; HOME dardır. Müşteride varsayılan API anahtarlı Brain'dir; abonelik seçeneği yalnız bubblewrap + ağ geçidi yalıtımının (S3-5) çalıştığı kurulumda açılır, yalıtımsız yol yoktur.
+
+<a id="ajan-evrimi-2026-10-23"></a>
+
+### Ajan seçimi, durum, istatistik ve imza anahtarları (S8): birinci ve ikinci tur
+
+Owner çekirdek vizyonda (Paperclip benzeri, yaratılabilen ajanlar ve org ağacı) ajanların sonuçlarıyla iyileşmesini istedi. Birinci tur (14:29Z) ve ikinci tur (15:09Z) cevapları:
+
+- **Önerildiği gibi kabul:** Q-S1 ajanı sistem seçer (Brain ya da model seçmez); Q-S2 terfi kart kuralıyla olur; Q-S3 terfili ajan düşük riskli işte kartsız, aday ajan her zaman Run kartıyla; Q-S5 ölçümle onaylanmış (calibrated) kuralda otomatik daraltma; Q-S7 taslak kart anında üretilir; Q-S8 eşikler önce N1'de ölçülür; Q-S11 sıra gölge → kartlar → daraltma, müşteride varsayılan kapalı.
+- **Q-S6 alternatifi:** ajanın yeni sürümü önceki sürümün terfisini devralır ("terfi önceki sürümden taşındı"); yalnız aynı iş türünde, kendi sonuçlarıyla yeniden denetlenir; AI'ın yazdığı sürüm kendi terfi iznini ve imzasını ister.
+- **Q-S4, Q-S9, Q-S10 yerine owner'ın kuralı:** "AI ve sistem yetkilere sahip olsun, imzalayarak yapsın." Her AI ve sistem kimliği kendi imza anahtarını alır; imza satırlarını yalnız kişi ekler ve iptal eder; etkin anahtar ve politika izniyle AI/sistem tanım yapabilir, terfi ettirip geri alabilir; her eylem imzalanır, yazma anında doğrulanır ve mühürlenir; iptal bekleyen imzalı eylemleri hemen durdurur; imzasız AI eylemi yoktur; anahtar argv, env, log ya da modele ulaşmaz. İmza anahtarları alpha.55'te (S8-5).
+- **Q-S12 alternatifi (ikinci tur):** izinli ve imzalı başka bir AI, AI'ın yazdığı bir sürümü terfi ettirebilir ya da geri getirebilir. Öz-onay yasağı korunur: hiçbir AI kendi sürümünü ya da kendi önerisini terfi ettirmez. Tek AI kimliği olan kurulumda bu alternatif fiilen kapalıdır; ikinci, ayrı anahtarlı ve izinli bir AI kimliği gerekir.
+- **Q-S13 alternatifi (ikinci tur):** imza anahtarı iptal edilince mevcut terfiler ve kayıtlar kalır; yalnız o anahtarla yeni, bekleyen ya da yeniden oynatılan eylemler durur; inceleme "imzalayan iptal edildi" der; HMAC zincirli `revocations.log` kalır. Owner'ın kabul ettiği sınır: iptal edilen (ele geçirilmiş olabilecek) anahtarın verdiği terfiler, bir kişi geri alana kadar ajanı düşük riskli işte kartsız seçilebilir tutar; iptal kartı bu terfileri tek adımlık geri alma ile listeler.
+- **Güncellenen kural metni (ORG/A4/A5 ve AJAN-ORG):** sistem her görev için işin türüne bağlı ajanı deterministik seçer; ajanı, sürümünü ve skill seti özetini Run kabulünde mühürler; model seçimi WorkClass listesinde kalır. Mühürlü metriklerden ajan, skill ve iş türü başına sonuçlar Wilson aralığıyla toplanır; yalnız işçiye ya da değerlendiriciye bağlanabilen başarısızlıklar sayılır ve her sonuç "ilişki, nedensellik değil" olarak gösterilir. Tier boş kalır (A4); kapsamlar arası öğrenme yoktur.
+
+<a id="deckent-hub-2026-10-23"></a>
+
+### Deckent Hub: ikinci tur cevapları ve alpha.56
+
+- **Merkezî Deckent Hub (owner):** Verhex'in işlettiği, ClawHub benzeri bir hub: kişi ve kurum yayıncı profilleri, profillerden hızlı kurulum, gelen skill'leri Verhex moderasyon ekibi inceler; hub'ın imzalı moderasyon onayı kurulum güveni için yeterlidir (H-Q1'in yerini alır), kurulum daha fazlasını sabitleyebilir; her kurulum ayrıca hub olabilir.
+- **Cevaplar:** H-Q2 alternatifi (aynı yayıncı anahtarıyla gelen güncelleme terfiyi taşır; AI yayıncı anahtarları yine `candidate` başlar); H-Q4 evet (her kurulum hub olabilir, varsayılan kapalı, dışa açık dinlemede TLS); H-Q5 alternatifi (iptal listesi bayatlarsa kurulu öğeler de seçimden çekilir, taze doğrulanmış liste geri getirir); H-Q6 evet (skill'ler MCP Skills eklentisiyle); H-Q11 evet (hub yönetimi ve moderasyon rolleri yalnız kişinin); H-Q12 alternatifi (aynalar kapalı); H-Q13 evet (ilk hub komutunda bağlanma kartı, o zamana kadar ağ trafiği yok); H-Q14 kök anahtar beş kişiden üçünün imzasıyla, ilk moderasyon ekibi en az üç kişi (ikisi kıdemli).
+- **Lead'in önerildiği gibi tuttukları (owner açıkça cevaplamadı):** H-Q3 (yayın dışarı veri çıkışıdır, hedef ve içerik özeti görünür, sır bulunursa reddedilir), H-Q8 (hub'a kullanım ya da başarı verisi gitmez), H-Q9 (AI inceleyici imzası yalnız güvenilen AI anahtarından sayılır, insan incelemesinin yerine geçmez), H-Q10 (hafıza derslerinden türeyen içeriği yalnız kişi, tam metni görerek yayınlar).
+- **Açık:** H-Q7 alan adı ve H-Q14'teki isimler ile hukuki iletişim adresi owner'ın 2026-10-26 (Pazartesi) kararıdır; o güne kadar registry'de yer tutucu durur.
+- **Zamanlama:** owner önce "Hub tasarımı şimdi, kod betadan sonra" dedi; aynı gün MVP kuralıyla (aşağıda) Hub'ı mevcut programa aldı; 20:12Z'de Hub'ın ayrı sürüm **alpha.56** olmasını kabul etti. alpha.55 Hub kodu içermez; S8-HUB tasarımı alpha.56'nın girdisidir. Owner 2026-10-24'te kapsamlı denemesini yapar; alpha.56 planı ondan sonra gözden geçirilir.
+
+<a id="mvp-yok-2026-10-23"></a>
+
+### MVP yok
+
+Owner: "MVP tasarlamıyoruz, sistem mimarisi ve ürün tasarlıyoruz." Kural (her şerit için bağlayıcı): karar verilmiş iş eksiksiz kurulur (gerçek bağlantı, tüm durumlar, testler, EN/TR metinler, belge bilgisi) ve evrimleşecek biçimde tasarlanır (sürümlü sözleşmeler, registry'ler). Karar verilmiş bir parça lead'e söylenmeden "sonraya" bırakılmaz.
+
+### Paket satır tavanları (alpha.55)
+
+Çekirdek katmanlar paket satır bütçelerini aştığı için owner 2026-10-23'te tavanları adım adım yükseltti: adapters 30600 ve composition 8200 (`392bbedcf`, alpha.54'te de `d72f2ba8c`), composition 9000 (08:28Z, `0a9c4b4b8`), adapters 32000 (alpha.54 main birleşmesi, `1764a2538`), adapters 33500 (20:28Z, `54f7f21d6`) ve composition 9800 (20:39Z, `67170359b`). Tavanlar `arch.json`'dadır ve alpha.54 ile alpha.55 main'de buluşunca yeniden ölçülür.
+
+<a id="model-bagimsizligi-2026-10-23"></a>
+
+### Model bağımsızlığı (genel kural)
+
+Owner: "model bağımsız … tüm işlerimiz bu şekilde." Her mekanizma parametriktir: yeni bir model yalnız veri güncellemesiyle (katalog satırı ve model rol/tier satırı) çalışır; mantıkta model kimliği ya da model ailesi adı yazılmaz. Model rol/tier registry'si (`model_roles`) tier ve rolün tek sahibidir; tier ve rol katalog satırına yazılmaz. Kesin model kimlikleri kabulde sabitlenir ve mühürlenir. Yukarıdaki değerlendirici kuralı bu genel kuralın bir uygulamasıdır. alpha.55'te: kaynak koddaki string'lerde model ailesi adı denetimi (G5), API kanallarının fiyat ve rota bilgisinin katalog verisinden gelmesi (M4), yeni bir model için tier ve rol kartı (M2) ve WorkClass aday listelerinde rol seçicileri (M3).

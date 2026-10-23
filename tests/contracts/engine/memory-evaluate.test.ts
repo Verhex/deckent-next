@@ -210,7 +210,7 @@ describe('fail closed and N28 injection corpus', () => {
     await expect(other.evaluatePage('s', 'shadow')).rejects.toMatchObject({ code: 'MEMORY_EVALUATOR_REQUIRED' });
   });
   it('N28: every corpus candidate reaches the model only as quoted data, and an answer injected through the candidate text never passes (keyed echo)', async () => {
-    const corpus = JSON.parse(readFileSync(new URL('../../fixtures/memory/injection-corpus.json', import.meta.url), 'utf8')) as { schemaVersion: 1; items: { id: string; title: string; body: string }[] };
+    const corpus = JSON.parse(readFileSync(new URL('../../../assets/memory/injection-corpus.json', import.meta.url), 'utf8')) as { schemaVersion: 1; items: { id: string; title: string; body: string }[] };
     expect(corpus.items.length).toBeGreaterThanOrEqual(30);
     // A fooled model: it obeys the candidate and returns the answer object the candidate text carries (or `pass` with the fields it guesses).
     const fooled: Answer = request => {

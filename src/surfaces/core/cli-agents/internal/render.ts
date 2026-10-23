@@ -39,11 +39,18 @@ const revisions = (history: readonly (AgentDefinition | SkillDefinition)[], loca
 /** S8-1a: what the system may select the agent for — its standing per bound WorkClass (one fixed label per standing, EN/TR). */
 const standingLabel = (standing: AgentStanding['standing'], locale: Locale) => standing === 'active' ? t('agent.standing.active', {}, locale)
   : standing === 'candidate' ? t('agent.standing.candidate', {}, locale) : standing === 'retired' ? t('agent.standing.retired', {}, locale) : t('agent.standing.redesign-required', {}, locale);
-const standingLine = (standings: readonly AgentStanding[], locale: Locale) => standings.length ? t('agents.inspect.standings', { standings: standings
-  .map(row => `${safeCell(row.workClass)} ${standingLabel(row.standing, locale)}`).join(', ') }, locale) : t('agents.inspect.standingNone', {}, locale);
+/** S8-4: why a standing holds — carried from the previous revision, set by a signed AI ("yazan AI: X, terfi eden AI: Y"), or narrowed by a rule. */
+const basisNote = (row: AgentStanding, author: AgentDefinition['provenance']['author'], locale: Locale) => row.basis.kind === 'inherited'
+  ? ` (${t('agentsevo.view.inherited', { from: row.basis.fromRevision ?? '-' }, locale)})`
+  : row.basis.kind === 'signed' ? ` (${t('agentsevo.view.signedBy', { by: safeCell(`${row.basis.decidedBy.issuer}:${row.basis.decidedBy.subject}`), author: who(author, locale) }, locale)})`
+    : row.basis.kind === 'rule' ? ` (${t('agentsevo.view.narrowed', { id: (row.basis.suggestionId ?? '').slice(0, 12) }, locale)})` : '';
+const standingLine = (standings: readonly AgentStanding[], author: AgentDefinition['provenance']['author'], locale: Locale) => standings.length ? t('agents.inspect.standings', { standings: standings
+  .map(row => `${safeCell(row.workClass)} ${standingLabel(row.standing, locale)}${basisNote(row, author, locale)}`).join(', ') }, locale) : t('agents.inspect.standingNone', {}, locale);
 export function agentView(item: AgentDefinition, history: readonly AgentDefinition[], locale: Locale, standings: readonly AgentStanding[] = [], signers: Signers = {}): string {
+  // Q-S6 guard: an AI-authored revision never carries a promotion over; say so where it could have.
+  const noCarry = item.provenance.author.ai && item.revision > 1 && standings.some(row => row.basis.kind === 'definition') ? [t('agentsevo.view.aiNoCarry', {}, locale)] : [];
   return [...agentLines(item.agentId, item.content, locale), t('agents.view.identity', { revision: item.revision, skillSet: item.skillSetDigest.slice(0, 12) }, locale),
-    t('agents.view.tier', {}, locale), standingLine(standings, locale), ...revisions(history, locale, signers)].join('\n');
+    t('agents.view.tier', {}, locale), standingLine(standings, item.provenance.author, locale), ...noCarry, ...revisions(history, locale, signers)].join('\n');
 }
 export function skillView(item: SkillDefinition, history: readonly SkillDefinition[], locale: Locale, signers: Signers = {}): string {
   return [`${safeCell(item.skillId)} · ${safeCell(item.content.name)}`, safeCell(item.content.text), t('agents.skill.view.pin', { revision: item.revision, digest: item.contentDigest }, locale),

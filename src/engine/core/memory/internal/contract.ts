@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { clientCommandIdSchema, identitySchema, counterSchema, memoryAudienceSchema, memoryContentSchema, memoryOriginSchema, memoryVerificationBasisSchema, MEMORY_LIMITS, MEMORY_STATES,
   MEMORY_PURGE_REASONS, MEMORY_CONTEST_DECISIONS, type AuditEvent, type MemoryContest, type MemoryContestResolution, type MemoryEntry, type MemoryEvaluationRecord, type MemoryEvaluationRef,
   type MemoryModelRef, type MemoryPurgeRecord, type MemoryResolvedEvaluation, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
-import type { KnownSecretSnapshot } from '#platform/index.js';
+import { MEMORY_AUTOMATION_MODES, type KnownSecretSnapshot } from '#platform/index.js';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 
 const scoped = { schemaVersion: z.literal(1), scopeId: identitySchema };
@@ -47,6 +47,9 @@ export const memoryContestResolveCommandSchema = z.object({ ...scoped, commandId
 /** S4B-4 review card: candidates, contested and stale entries of the scope with their evidence and evaluator verdicts (bounded page). */
 export const memoryReviewQuerySchema = z.object({ ...scoped, limit }).strict();
 /** S4B-4 (§6.5 bulk response): the entries derived from one Run (or one Attempt of it), for `retire --source` and `purge --source`. */
+/** S4B-7: the rollout status of one scope under the installation's current switch modes (trusted composition reads them from config). */
+const rolloutMode = z.enum(MEMORY_AUTOMATION_MODES);
+export const memoryRolloutQuerySchema = z.object({ ...scoped, modes: z.object({ extraction: rolloutMode, verification: rolloutMode, context: rolloutMode }).strict() }).strict();
 export const memorySourceQuerySchema = z.object({ ...scoped, source: z.object({ runId: identitySchema, attemptId: identitySchema.nullable() }).strict(), limit }).strict();
 export type MemoryPurgeCommand = z.infer<typeof memoryPurgeCommandSchema>;
 export type MemoryContestResolveCommand = z.infer<typeof memoryContestResolveCommandSchema>;

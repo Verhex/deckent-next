@@ -34,6 +34,9 @@ export interface ConfigAuthorityPort {
   audit(event: AuditEvent): Promise<void>;
   /** T3 L2: the approval-aware write path of `submit`; absent, `submit` behaves as `set`/`unset`. */
   readonly approvals?: ConfigApprovalPort;
+  /** S4B-7: a check of the effective configuration before and after one change (a protected switch whose measured preconditions must hold);
+   * it throws to refuse. Run by preview, before an approval is opened, and again under the layer lock before the write. Absent: no check. */
+  readonly precondition?: (input: ConfigWriteInput, before: DeckentConfig, after: DeckentConfig) => Promise<void>;
 }
 /** The policy decision of one config write (`deny` is thrown, never returned); `ruleId` names the rule that decided. */
 export interface ConfigAuthorization { readonly decision: 'allow' | 'require-approval'; readonly revision: string; readonly ruleId: string | null }

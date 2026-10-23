@@ -73,8 +73,16 @@ export const recoveryPrincipal = (owner: { readonly issuer: string; readonly sub
   return verifiedPrincipalSchema.parse({ id: `${ref.subject}@${ref.issuer}`, ...ref, assurance: 'workload-verified', scopeIds: [...scopeIds] });
 };
 
-/** A reference that names a non-person actor by its transport identity (MCP, auditor, Nervous, memory distiller or evaluator, recovery): never an installing person. */
-export const isWorkloadPrincipalRef = (ref: { readonly issuer: string }) =>
-  isMcpPrincipal(ref) || isAuditorPrincipal(ref) || isNervousPrincipal(ref) || isMemoryDistillerPrincipal(ref) || isMemoryEvaluatorPrincipal(ref) || isRecoveryPrincipal(ref);
+/** S8-3 (S8-DESIGN §3, §9): the catalog aggregator's workload identity (composition root only, same precedent); held to `CATALOG_AGGREGATOR_ALLOWED_PAIRS`, it writes only signed. */
+export const catalogAggregatorPrincipalRef = (owner: { readonly issuer: string; readonly subject: string }) =>
+  Object.freeze({ issuer: identitySchema.parse(`${owner.issuer}/catalog-aggregator`), subject: identitySchema.parse(owner.subject) });
+export const isCatalogAggregatorPrincipal = (actor: { readonly issuer: string }) => actor.issuer.endsWith('/catalog-aggregator');
+export const catalogAggregatorPrincipal = (owner: { readonly issuer: string; readonly subject: string }, scopeIds: readonly string[]): VerifiedPrincipal => {
+  const ref = catalogAggregatorPrincipalRef(owner);
+  return verifiedPrincipalSchema.parse({ id: `${ref.subject}@${ref.issuer}`, ...ref, assurance: 'workload-verified', scopeIds: [...scopeIds] });
+};
+/** A reference that names a non-person actor by its transport identity (MCP, auditor, Nervous, memory distiller or evaluator, recovery, catalog aggregator): never an installing person. */
+export const isWorkloadPrincipalRef = (ref: { readonly issuer: string }) => isMcpPrincipal(ref) || isAuditorPrincipal(ref) || isNervousPrincipal(ref) || isMemoryDistillerPrincipal(ref)
+  || isMemoryEvaluatorPrincipal(ref) || isRecoveryPrincipal(ref) || isCatalogAggregatorPrincipal(ref);
 /** Transport identity dominates assurance: a forged legacy MCP, auditor, Nervous, memory-distiller/evaluator or recovery os-user is still AI. */
 export const isAiPrincipal = (actor: { readonly issuer: string; readonly assurance?: string }) => isWorkloadPrincipalRef(actor) || actor.assurance !== 'os-user';

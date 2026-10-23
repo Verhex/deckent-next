@@ -9,7 +9,7 @@ type Refusal = MemoryExtractionReceipt['refused'][number];
 const texts = (content: unknown): string[] => typeof content === 'string' ? [content] : Array.isArray(content) ? content.flatMap(texts)
   : content && typeof content === 'object' ? Object.values(content).flatMap(texts) : [];
 /** §4.5 screening, fail closed and before any write: a known or pattern secret refuses; a hidden-character payload is quarantined (refused). */
-function screen(content: unknown, known: MemoryJournalDependencies['knownSecrets']): Refusal['code'] | null {
+export function screenMemoryCandidate(content: unknown, known: MemoryJournalDependencies['knownSecrets']): Refusal['code'] | null {
   if (!memoryContentSchema.safeParse(content).success) return 'MEMORY_ENTRY_INVALID';
   const fields = texts(content);
   if (fields.some(text => hasSecret(text, known))) return 'MEMORY_CANDIDATE_SECRET';
@@ -41,7 +41,7 @@ export async function distilSource(deps: MemoryJournalDependencies, input: unkno
   const { bounds } = automation, refused: Refusal[] = [];
   let written = 0, proposed = 0, supported = 0, shadow = 0;
   for (const candidate of distilMemoryCandidates(source)) {
-    const at = { ruleId: candidate.ruleId, claimIndex: candidate.claimIndex }, code = screen(candidate.content, deps.knownSecrets);
+    const at = { ruleId: candidate.ruleId, claimIndex: candidate.claimIndex }, code = screenMemoryCandidate(candidate.content, deps.knownSecrets);
     if (code) { refused.push({ ...at, code }); continue; }
     const taken = written + shadow;
     if (taken >= bounds.perAttempt || counts.run + taken >= bounds.perRun || counts.scope + taken >= bounds.perScopePerDay) { refused.push({ ...at, code: 'MEMORY_EXTRACTION_BOUND' }); continue; }

@@ -1,4 +1,4 @@
-import { isMcpPrincipal, isWorkloadPrincipalRef, mcpPrincipalRef, memoryDistillerPrincipalRef, memoryEvaluatorPrincipalRef, recoveryPrincipalRef } from '#domain/core/principal/index.js';
+import { catalogAggregatorPrincipalRef, isMcpPrincipal, isWorkloadPrincipalRef, mcpPrincipalRef, memoryDistillerPrincipalRef, memoryEvaluatorPrincipalRef, recoveryPrincipalRef } from '#domain/core/principal/index.js';
 import { IDENTITY_MAX_LENGTH, identitySchema } from '#domain/core/primitives/index.js';
 import { bindingsFileSchema, policyFileSchema, policyGrantSchema, type PolicyFile, type PolicyGrant } from './schema.js';
 import { policyResources } from './vocabulary.js';
@@ -212,13 +212,15 @@ export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mc
   memoryPropose: 'first-run-memory-propose', distillerMemory: 'first-run-memory-distiller', distillerRuns: 'first-run-memory-distiller-runs', distillerOutput: 'first-run-memory-distiller-output',
   agentCatalog: 'first-run-agent-catalog', observeAgentCatalog: 'first-run-mcp-observe-agent-catalog',
   memoryReview: 'first-run-memory-review', evaluatorMemory: 'first-run-memory-evaluator', evaluatorRuns: 'first-run-memory-evaluator-runs', evaluatorModel: 'first-run-memory-evaluator-model',
-  memoryPurge: 'first-run-memory-purge', recoveryModel: 'first-run-recovery-model', signers: 'first-run-skill-signers', catalogImport: 'first-run-agent-catalog-import' });
+  memoryPurge: 'first-run-memory-purge', recoveryModel: 'first-run-recovery-model', signers: 'first-run-skill-signers', catalogImport: 'first-run-agent-catalog-import',
+  aggregatorCatalog: 'first-run-catalog-aggregator', aggregatorRuns: 'first-run-catalog-aggregator-runs', aggregatorMemory: 'first-run-catalog-aggregator-memory' });
 /** The v15 delta (S4B-1 + S7, owner 2026-10-23): what `policy upgrade --template current --rollback` removes. It never removes earlier versions' rules: the
  * v14 memory reads stay once added, like every older version's administration or observation authority. */
 export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze([FIRST_RUN_UPGRADE_RULE_IDS.memoryPropose, FIRST_RUN_UPGRADE_RULE_IDS.distillerMemory, FIRST_RUN_UPGRADE_RULE_IDS.distillerRuns,
   FIRST_RUN_UPGRADE_RULE_IDS.distillerOutput, FIRST_RUN_UPGRADE_RULE_IDS.agentCatalog, FIRST_RUN_UPGRADE_RULE_IDS.observeAgentCatalog, FIRST_RUN_UPGRADE_RULE_IDS.memoryReview, FIRST_RUN_UPGRADE_RULE_IDS.evaluatorMemory,
   FIRST_RUN_UPGRADE_RULE_IDS.evaluatorRuns, FIRST_RUN_UPGRADE_RULE_IDS.evaluatorModel, FIRST_RUN_UPGRADE_RULE_IDS.memoryPurge, FIRST_RUN_UPGRADE_RULE_IDS.recoveryModel,
-  FIRST_RUN_UPGRADE_RULE_IDS.signers, FIRST_RUN_UPGRADE_RULE_IDS.catalogImport]);
+  FIRST_RUN_UPGRADE_RULE_IDS.signers, FIRST_RUN_UPGRADE_RULE_IDS.catalogImport, FIRST_RUN_UPGRADE_RULE_IDS.aggregatorCatalog, FIRST_RUN_UPGRADE_RULE_IDS.aggregatorRuns,
+  FIRST_RUN_UPGRADE_RULE_IDS.aggregatorMemory]);
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
 const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'] as const;
@@ -427,7 +429,7 @@ function v14Rules(person: Person, scopes: readonly string[]): readonly PolicyGra
  * of exactly the evaluator calls its entry's sealed evaluation records name, under that same memory/purge decision: no model-invocation grant.
  */
 /* S8-5 (S8-DESIGN §9): the named person also manages signer keys (`skill-signer` inspect/enrol/add/revoke/repair; floored for every AI) and imports
- * signed skills (`agent-catalog`/import, always behind the pinned + signed floor (d)); no AI principal gets any signer or catalog-write grant here. */
+ * signed skills (`agent-catalog`/import, behind floor (d)); no AI principal gets a signer grant, only the aggregator its signed suggest/narrow (S8-3). */
 function v15Rules(person: Person, scopes: readonly string[]): readonly PolicyGrant[] {
   const ids = FIRST_RUN_UPGRADE_RULE_IDS, vocabulary = policyResources;
   const rule = (id: string, principal: Person, kind: string, actions: readonly string[]) => policyGrantSchema.parse({ id, effect: 'allow', actions: [...actions], scopes: [...scopes],
@@ -436,14 +438,18 @@ function v15Rules(person: Person, scopes: readonly string[]): readonly PolicyGra
   if (isMcpPrincipal(person)) return [observe];
   const distiller = memoryDistillerPrincipalRef(person);
   return [rule(ids.memoryPropose, person, vocabulary.memory.kind, ['propose']), rule(ids.distillerMemory, distiller, vocabulary.memory.kind, ['inspect', 'propose']), rule(ids.distillerRuns, distiller, vocabulary.run.kind, ['inspect']),
-    rule(ids.distillerOutput, distiller, vocabulary.attempt.kind, ['read-output']), rule(ids.agentCatalog, person, vocabulary.agentCatalog.kind, ['inspect', 'define']), observe,
+    rule(ids.distillerOutput, distiller, vocabulary.attempt.kind, ['read-output']), rule(ids.agentCatalog, person, vocabulary.agentCatalog.kind, ['inspect', 'define', 'promote', 'demote', 'restore', 'retire', 'dismiss', 'suggest', 'narrow']), observe,
     rule(ids.memoryReview, person, vocabulary.memory.kind, ['verify', 'contest']), ...evaluatorRules(memoryEvaluatorPrincipalRef(person), rule),
     rule(ids.memoryPurge, person, vocabulary.memory.kind, ['retire', 'purge']),
     // S6R-5: the recovery principal (`<person>/recovery`, composition root only) invokes its `recovery-decision` role model; its floor refuses every
     // other pair, the role registry restricts which rows, and a continuation still needs the person's own standing grant (`recovery-action`).
     rule(ids.recoveryModel, recoveryPrincipalRef(person), vocabulary.modelInvocation.kind, ['invoke']),
     // S8-5 (S8-DESIGN §9): the named person manages signer keys and imports signed skills (the pinned + signed floor still holds for every import).
-    rule(ids.signers, person, vocabulary.skillSigner.kind, ['inspect', 'enrol', 'add', 'revoke', 'repair']), rule(ids.catalogImport, person, vocabulary.agentCatalog.kind, ['import'])];
+    rule(ids.signers, person, vocabulary.skillSigner.kind, ['inspect', 'enrol', 'add', 'revoke', 'repair']), rule(ids.catalogImport, person, vocabulary.agentCatalog.kind, ['import']),
+    // S8-3 (§9): the catalog aggregator (`<person>/catalog-aggregator`, composition root only) gets exactly its floor's list; it writes only signed by its own key.
+    // The person holds suggest/narrow above only so the delegation bound lets them grant or revoke these (the application refuses a person both).
+    ...[[ids.aggregatorCatalog, vocabulary.agentCatalog.kind, ['inspect', 'suggest', 'narrow']], [ids.aggregatorRuns, vocabulary.run.kind, ['inspect']], [ids.aggregatorMemory, vocabulary.memory.kind, ['inspect']]]
+      .map(([id, kind, actions]) => rule(id as string, catalogAggregatorPrincipalRef(person), kind as string, actions as string[]))];
 }
 function evaluatorRules(evaluator: Person, rule: (id: string, principal: Person, kind: string, actions: readonly string[]) => PolicyGrant): readonly PolicyGrant[] {
   const ids = FIRST_RUN_UPGRADE_RULE_IDS, vocabulary = policyResources;

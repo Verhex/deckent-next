@@ -8,7 +8,7 @@ const MEMORY_EVALUATION_RECORD_MODES = Object.freeze(['shadow', 'live'] as const
 const MEMORY_CONTEXT_RECORD_MODES = Object.freeze(['shadow', 'on'] as const);
 /** S6R-5: the recovery decision modes that seal (the recovery domain's frozen Run modes; `off` decides nothing, so it is never recorded). */
 const RECOVERY_DECISION_RECORD_MODES = Object.freeze(['shadow', 'live'] as const);
-const digest = z.string().regex(/^[a-f0-9]{64}$/);
+const digest = z.string().regex(/^[a-f0-9]{64}$/), signedRef = z.object({ keyId: digest, signatureDigest: digest }).strict().optional();
 /** The MCP registry scopes (the adapter's own list; the audit contract stays dependency-free). */
 const MCP_REGISTRY_SCOPES = ['managed', 'local', 'project', 'user'] as const;
 /** S5b: the safety hold sources (Nervous pause, Auditor park) a Run hold and its audit name; the Run contract reuses this one list. */
@@ -127,7 +127,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    * admitting principal may not read. */
   z.object({ kind: z.literal('memory-context'), runId: identitySchema, taskId: identitySchema, mode: z.enum(MEMORY_CONTEXT_RECORD_MODES), delivered: z.boolean(),
     entries: z.array(z.object({ entryId: identitySchema, revision: counterSchema.positive(), contentDigest: digest, basis: z.enum(['human-review', 'independent-evaluation']) }).strict())
-      .min(1).max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), partDigest: digest, withheld: counterSchema }).strict(),
+      .min(1).max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), partDigest: digest, withheld: counterSchema, /** S4B-7: whether the part fit the prompt (sealed in both modes). */ fit: z.boolean().optional() }).strict(),
   /** S4B-6 (§7.2, §9): the memory block of one Brain planning request, sealed before the first prompt leaves the machine (`shadow`: computed,
    * never sent). `runId` is the Brain's Run id, `contextDigest` the planning context digest the stored proposal's contribution carries: the event
    * of a plan that was then refused stays (the effect may have happened) and is recognised by a digest no stored proposal names. Keyed digests
@@ -139,7 +139,13 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('agent-catalog'), item: z.enum(['agent', 'skill']), action: z.enum(['define', 'import']), id: identitySchema, commandId: identitySchema,
     revision: counterSchema.positive(), contentDigest: digest, skillSetDigest: digest.nullable(),
     /** S8-5: an AI/system write — the action key and the digest of the signature verified in the commit transaction. */
-    signed: z.object({ keyId: digest, signatureDigest: digest }).strict().optional() }).strict(),
+    signed: signedRef }).strict(),
+  /** S8-3/S8-4: one standing change of one agent revision for one WorkClass (a person's card, a signed AI command, the aggregator's rule narrowing). */
+  z.object({ kind: z.literal('agent-standing'), action: z.enum(['promote', 'demote', 'restore', 'retire', 'narrow']), agentId: identitySchema, revision: counterSchema.positive(),
+    workClass: identitySchema, from: identitySchema, to: identitySchema, standingRevision: counterSchema.positive(), suggestionId: digest.nullable(), commandId: identitySchema, signed: signedRef }).strict(),
+  /** S8-3: one catalog suggestion written or moved: refs, digests and counts only, never persona, skill, lesson or draft text (N28). */
+  z.object({ kind: z.literal('catalog-suggestion'), action: z.enum(['suggest', 'supersede', 'decide', 'dismiss']), suggestionId: digest, suggestionKind: identitySchema, keyDigest: digest,
+    inputDigest: digest, ruleId: identitySchema, ruleVersion: counterSchema.positive(), state: z.enum(['open', 'decided', 'dismissed', 'superseded']), signed: signedRef }).strict(),
   /** S8-5: a person's signer-key change (or the startup re-revocation from the append-only log); public facts only, never key material. */
   z.object({ kind: z.literal('skill-signer'), action: z.enum(['enrol', 'add', 'revoke']), keyId: digest, purpose: z.enum(['action', 'import', 'publish', 'hub']),
     custody: z.enum(['host', 'external']), commandId: identitySchema, revision: counterSchema.positive(), basis: z.enum(['person-card', 'revocation-log']) }).strict(),

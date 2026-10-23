@@ -515,6 +515,46 @@ ve görevi kabul ya da reddetmek ayrı kararlardır, buradaki tuşlar değildir.
   `identity preview` `IDENTITY_PROFILE_NOT_SELECTED` bildirir; terminalde `identity distribute --scope <id> [--apply]` ok tuşlu
   kartlarla ve bir önizleme kartıyla seçilir.
 
+## Çekirdek katmanlar: hafıza, ajanlar, model rolleri, kurtarma
+
+alpha.55 bu komutları ekler. Her çekirdek katman kapalı başlar; anahtarı yalnız bir kişinin yazdığı korumalı yapılandırmadır ve yeni
+kimlikler haklarını politika şablonu v15'ten alır (`deckent policy upgrade --template current --scope <id> --preview`, sonra
+`--apply`). Davranış ve sınırlar: [core layers](modules/core-layers.md).
+
+- **Model rolleri.** `deckent models roles [show]` kapsamın gördüğü her katalog modelini üreticisi, tier'ı, rolleri ve durumuyla
+  listeler; satırı olmayan model beklemededir ve hiçbir rol onu kullanamaz. `deckent models roles set --channel <id> --model <tam kimlik>
+  --tier worker|frontier (--roles <rol,rol> | --no-roles)` kendi terminalinizde tek bir kart açar ve global `model_roles` katmanına
+  karşılaştır-ve-yaz ile tek satır yazar. Terminal `/roles` penceresi, MCP `inspect_model_roles` ve SDK `inspectModelRoles` aynı okumayı
+  gösterir; `deckent doctor` bekleyen satırları söyler.
+- **Hafıza.** `deckent memory` kayıtları listeler (`search <sözcükler>`, `inspect <id>`); `propose --input <dosya>`, `verify <id> --note
+  <metin>`, `retire <id> | --source <run>[/<deneme>] --reason <metin>`, `review` ve `purge <id> | --source <run>[/<deneme>]` kendi
+  terminalinizdeki kartlardır (AI araçları, borular ve `--json` reddedilir). `deckent memory` ayrıca kapsama hizmet edecek
+  değerlendiriciyi ve cevaplarının bir günde en çok neye mal olabileceğini söyler; `deckent memory rollout [--scope <id>] [--json]`
+  aşamayı, her ölçütü sayılarıyla ve sıradaki `deckent config set memoryAutomation.<anahtar>.mode '"<kip>"' --scope <id>` komutunu gösterir.
+- **Ajanlar ve skill'ler.** `deckent agents` ajanları listeler (`inspect <id>`, `skills`, `skill <id>`, `stats [<id>]`); `define --input
+  <dosya>` ve `define-skill --input <dosya>` kendi terminalinizdeki kartlardır. MCP `list_agents`, `inspect_agent`, `list_skills`,
+  `inspect_skill` ve `inspect_agent_stats` salt okunurdur.
+- **Ajan önerileri ve durum.** `deckent agents suggestions [list | show <öneri-kimliği>]` mühürlü önerileri listeler;
+  `promote|demote|restore|retire <ajan-kimliği> --work-class <id> [--suggestion <id>]`, `dismiss <öneri-kimliği>`,
+  `standing reset --work-class <id>` ve `define|define-skill --from-suggestion <id> --id <yeni kimlik>` kendi terminalinizdeki
+  kartlardır (taslak kart anında, okuyabildiklerinizden üretilir). MCP `list_agent_suggestions` ve `inspect_agent_suggestion` salt
+  okunurdur; imzalı yazma araçları (`define_agent`, `define_skill`, `import_skill`, `change_agent_standing`, `dismiss_agent_suggestion`)
+  yalnız kendi etkin imza anahtarı ve kapsamlı izni olan bir AI kimliği için çalışır.
+- **İmza anahtarları.** `deckent agents signers` anahtarları listeler; `enrol-signer --principal <issuer:subject> --label <metin>` bir AI
+  ya da sistem kimliği için host'ta tutulan bir eylem anahtarı üretir, `add-signer --input <dosya>` dış bir açık anahtarı kaydeder,
+  `revoke-signer <anahtar-kimliği>` anahtarın yeni, bekleyen ve yeniden oynatılan eylemlerini hemen durdurur, `repair-signers` bozuk bir
+  iptal günlüğünü onarır ve `import-skill --input <dosya>` kapsamın bir içe aktarma anahtarıyla imzalı, sabitlenmiş bir skill'i içe aktarır.
+  Hepsi kendi terminalinizdeki kartlardır.
+- **Abonelik Brain'i.** `deckent models connect claude-cli-subscription … [--executable <mutlak yol>] [--config-dir <mutlak dizin>]
+  [--delegate none|ai|system|ai,system]` Brain planlaması için kendi Claude girişinizi (varsayılan `~/.claude`) bağlar; kullanılabilir bir
+  bubblewrap korumalı alanı yoksa reddedilir. `--delegate`, AI ya da MCP üzerinden planlama ve arka plan rolleri (kurtarma kararı,
+  hafıza değerlendirici) için onayınızdır; verilmezse önceki seçiminiz kalır. `deckent doctor` her bağlantı için bir Brain girişi satırı gösterir.
+- **Kota sorusu.** Kota beklemesi biten bir işçi Run'ı size sorar: `deckent run resume --quota wait` beklemeyi sürdürür,
+  `deckent run resume --quota next-candidate` WorkClass listesindeki sıradaki adayı kullanır; Run'ı kapatmak ayrı bir seçimdir.
+- **Kurtarma.** `deckent doctor` (`work.recovery` satırı) ve izleyici Nervous ve kurtarma kiplerini ve owner'ın `recovery-action`/`apply`
+  `continue-new-attempt` izninin olup olmadığını gösterir (`deckent policy grants`); izin yoksa her kaybolan işçi vakası bir kişiye gider.
+  `deckent run inspect` Run'ın dondurduğu kurtarma kipini söyler ve bekletme nedenlerini sözcüklerle gösterir.
+
 ## Kurulum kurtarma setleri
 
 `deckent backup create|verify|restore` tek bir yönetilen sözleşmeyi kullanır. Kurulum sahibinin kurulum geneli `backup` policy
