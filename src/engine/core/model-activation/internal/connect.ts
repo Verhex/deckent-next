@@ -56,7 +56,9 @@ export interface ModelConnectPorts {
 }
 /** `billingAxis: subscription` only from a CLI kind's own adapter step (a trusted transport fact, never inferred from tariff data). */
 export type ConnectedAdapter = Readonly<{ adapter: Readonly<{ id: string; version: number; definition: JsonObject }>; protocol: Readonly<{ family: string; version: string }>;
-  tariff: 'published' | 'unmetered'; billingAxis?: 'subscription'; cli?: ModelConnectResult['cli'] }>;
+  tariff: 'published' | 'unmetered'; billingAxis?: 'subscription'; cli?: ModelConnectResult['cli'];
+  /** The adapter's own concurrency bound (a CLI kind with one run dir: 1); absent = the registry default. */
+  maxInFlight?: number }>;
 export class ModelConnectError extends Error {
   constructor(readonly code: 'MODEL_CONNECT_INVALID' | 'MODEL_CONNECT_NOT_CONNECTABLE' | 'MODEL_CONNECT_ENDPOINT_FIXED' | 'MODEL_CONNECT_ENDPOINT_INVALID'
     | 'MODEL_CONNECT_MODEL_UNKNOWN' | 'MODEL_CONNECT_DECLARATION_CONFLICT' | 'MODEL_CONNECT_KEY_NAME_UNAVAILABLE' | 'MODEL_CONNECT_PRICE_REQUIRED'
@@ -166,7 +168,7 @@ export class ModelConnectApplication {
     const profileId = [command.connection, target.reference.providerId, target.reference.modelId, String(target.reference.modelVersion)].join('.');
     const build = (version: number, responseMaxBytes: number, shaped: ConnectedAdapter, contextWindow: unknown, known: Record<string, unknown> | undefined) => {
       const value = { schemaVersion: 1, id: profileId, version, scopeId, reference: target.reference,
-      bindingDigest: binding.binding.digest, protocol: shaped.protocol, adapter: shaped.adapter, allocation: { id: profileId, maxCalls: null, maxInFlight: ports.defaults.maxInFlight },
+      bindingDigest: binding.binding.digest, protocol: shaped.protocol, adapter: shaped.adapter, allocation: { id: profileId, maxCalls: null, maxInFlight: shaped.maxInFlight ?? ports.defaults.maxInFlight },
       limits: { requestMaxBytes: ports.defaults.requestMaxBytes, responseMaxBytes, timeoutMs: ports.defaults.timeoutMs },
       ...(contextWindow === null || contextWindow === undefined ? {} : { contextWindowTokens: contextWindow }) };
       // Reconnect preserves authored v1 and an explicit v2 path; new profiles take the validated transport's actual axis.

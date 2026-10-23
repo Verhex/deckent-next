@@ -40,6 +40,8 @@ export function headlessConsent(existing: JsonObject | null | undefined, classes
 }
 /** The adapter part of a subscription profile (profile v2, `billingAxis: subscription`, no tariff, no key). */
 export const headlessConnectionAdapter = (definition: NativeCliHeadlessDefinition, protocol: Readonly<{ family: string; version: string }>) => Object.freeze({
+  // One run dir per connection that `send` empties: calls on one connection never overlap (registry bound).
+  maxInFlight: nativeCliHeadless(protocol.family)?.headless.connect.maxInFlight ?? 1,
   adapter: { id: NATIVE_CLI_HEADLESS_ADAPTER.id, version: NATIVE_CLI_HEADLESS_ADAPTER.version, definition: nativeCliHeadlessDefinitionSchema.parse(definition) as unknown as JsonObject },
   protocol: { family: protocol.family, version: protocol.version }, tariff: 'unmetered' as const, billingAxis: 'subscription' as const });
 /** Doctor (read-soft, no spawn): each subscription connection of the scope with its last preflight record's state and login kind (`unknown`: none yet). */

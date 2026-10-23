@@ -52,7 +52,7 @@ describe.skipIf(process.platform !== 'linux')('S3-3 models connect claude-cli-su
     expect(await h.spawns()).toEqual(expect.arrayContaining(['version', 'help', 'auth']));
     expect(await h.spawns()).not.toContain('call');
     const profile = (await h.profile())!;
-    expect(profile).toMatchObject({ schemaVersion: 2, billingAxis: 'subscription', adapter: { id: 'native-cli-headless', definition: { schemaVersion: 1, executable: h.executable,
+    expect(profile).toMatchObject({ schemaVersion: 2, billingAxis: 'subscription', allocation: { maxCalls: null, maxInFlight: 1 }, adapter: { id: 'native-cli-headless', definition: { schemaVersion: 1, executable: h.executable,
       configDir: h.configDir, ownerUid: process.getuid!(), delegatedUse: null } } });
     expect(String(profile.adapter.definition['stateDir'])).toContain(join('headless', ''));
     const granted = await h.connect('c-2', { delegate: ['system', 'ai'] });
