@@ -10,7 +10,7 @@ import { distilSource } from './distil.js';
 import type { MemoryReportClaims } from './source.js';
 import { assertNoPendingMemoryPurge, memorySourceEntries, purgeMemoryEntry, replayMemoryPurges, resolveMemoryContest, reviewMemory } from './purge.js';
 import { rederiveMemorySourceModels } from './evaluate.js';
-import { selectMemoryContext, type MemoryContextRequest, type MemoryContextSelection } from './context.js';
+import { selectMemoryContext, selectMemoryPlanningContext, type MemoryContextRequest, type MemoryContextSelection, type MemoryPlanningRequest, type MemoryPlanningSelection } from './context.js';
 import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
 
 const DEFAULT_STATES: readonly MemoryState[] = Object.freeze(['candidate', 'verified']);
@@ -92,15 +92,23 @@ export class MemoryJournalApplication {
    * S4B-5 (§7.1, §7.3): the worker memory of one Run admission, read as the admitting principal. A refusal of its `memory/inspect` is a withheld
    * part (the Run goes on without memory, visibly); an unreadable policy, store, key or index, or a purge the ledger lacks, is a typed hold.
    */
-  async contextFor(request: MemoryContextRequest, credential?: unknown): Promise<MemoryContextSelection> {
+  contextFor(request: MemoryContextRequest, credential?: unknown): Promise<MemoryContextSelection> {
+    return this.contextRead(request.scopeId, credential, (store, principal, revision) => selectMemoryContext(this.deps, store, principal, revision, request, (...args) => this.visible(...args)));
+  }
+  /** S4B-6 (§7.2, §7.3): the planning memory of one Brain request, read as the requesting person under the same rules as `contextFor`. */
+  planningContextFor(request: MemoryPlanningRequest, credential?: unknown): Promise<MemoryPlanningSelection> {
+    return this.contextRead(request.scopeId, credential, (store, principal, revision) => selectMemoryPlanningContext(this.deps, store, principal, revision, request, (...args) => this.visible(...args)));
+  }
+  private async contextRead<T>(scopeId: string, credential: unknown, select: (store: MemoryJournalStore, principal: VerifiedPrincipal, policyRevision: string) => Promise<T>)
+    : Promise<T | MemoryHeld | { readonly schemaVersion: 1; readonly status: 'withheld'; readonly reason: 'policy' }> {
     let admitted;
-    try { admitted = await this.admit('inspect', request.scopeId, credential); }
+    try { admitted = await this.admit('inspect', scopeId, credential); }
     catch (error) { if (error instanceof PolicyAuthorizationError && error.code !== 'POLICY_UNAVAILABLE') return { schemaVersion: 1, status: 'withheld', reason: 'policy' }; throw error; }
     let store: MemoryJournalStore;
     try { store = await this.deps.openStore('read'); } catch (error) { return held(error); }
     try {
-      await assertNoPendingMemoryPurge(this.deps, store, request.scopeId);
-      return await selectMemoryContext(this.deps, store, admitted.principal, admitted.authorization.revision, request, (...args) => this.visible(...args));
+      await assertNoPendingMemoryPurge(this.deps, store, scopeId);
+      return await select(store, admitted.principal, admitted.authorization.revision);
     } catch (error) { return held(error); } finally { store.close(); }
   }
   async propose(input: unknown, credential?: unknown): Promise<MemoryMutationResult> {

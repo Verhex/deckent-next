@@ -30,6 +30,8 @@ export const memoryErrors: ErrorDefinitions = Object.freeze({
   MEMORY_EVALUATOR_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_EVALUATOR_REQUIRED', p, l) }) },
   // S4B-5 (texts in the `memory-automation` family): a failed memory read at Run admission holds the Run, with the next step.
   MEMORY_CONTEXT_HELD: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_CONTEXT_HELD', p, l), suggestion: t('memory.held.next.MEMORY_CONTEXT_HELD', p, l) }) },
+  // S4B-6 (texts in the `memory-automation` family): a failed memory read for a Brain planning request refuses it before any model call.
+  BRAIN_MEMORY_CONTEXT_HELD: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_MEMORY_CONTEXT_HELD', p, l), suggestion: t('memory.held.next.BRAIN_MEMORY_CONTEXT_HELD', p, l) }) },
   // S4B-4 (texts in the `memory-review` family).
   MEMORY_PURGE_REPLAY_HELD: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_PURGE_REPLAY_HELD', p, l), suggestion: t('memory.held.next.MEMORY_PURGE_REPLAY_HELD', p, l) }) },
   MEMORY_PERSON_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_PERSON_REQUIRED', p, l) }) },

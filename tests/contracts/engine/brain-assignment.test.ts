@@ -13,10 +13,10 @@ const work = (extra: object = {}) => ({ schemaVersion: 2, task: 'Append done', s
 const draft = (workInput?: object) => { const { graph, budgetCeiling, requiredPermissions } = proposalFixture('feature');
   return { graph: { ...graph, tasks: [{ ...graph.tasks[0]!, kind: 'coding', ...(workInput ? { workInput } : {}) }] }, budgetCeiling, requiredPermissions }; };
 
-it('selects template v3 by default; v1 and v2 stay available with their exact bytes', () => {
-  expect(selectedBrainTemplate({})).toMatchObject({ id: 'run-proposal', version: 3, modelAssignment: 'system' });
+it('selects template v4 (S4B-6, system assignment + context v3) by default; v1–v3 stay available with their exact bytes', () => {
+  expect(selectedBrainTemplate({})).toMatchObject({ id: 'run-proposal', version: 4, modelAssignment: 'system', contextVersion: 3 });
   const config = brainPlannerConfigSchema.parse({});
-  expect(config.templates.map(row => [row.version, row.modelAssignment ?? null])).toEqual([[1, null], [2, null], [3, 'system']]);
+  expect(config.templates.map(row => [row.version, row.modelAssignment ?? null])).toEqual([[1, null], [2, null], [3, 'system'], [4, 'system']]);
   expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 2 } }).modelAssignment).toBe('brain');
   expect(brainAssignsWorkers({})).toBe(false); expect(brainAssignsWorkers({ selected: { id: 'run-proposal', version: 2 } })).toBe(true);
 });

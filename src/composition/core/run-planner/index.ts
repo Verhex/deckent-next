@@ -1,6 +1,6 @@
 import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, type BrainPlanCommand,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { BrainPlanApplication, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
+import { BrainPlanApplication, brainRunId, brainTakesMemory, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -11,6 +11,7 @@ import { inspectConfiguredRunProposal, proposeConfiguredRun, readConfiguredRunBu
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
+import { prepareConfiguredPlanningMemory } from '#composition/core/memory/index.js';
 import { gateConfiguredBrainModel } from './internal/model-roles.js';
 export { inspectConfiguredRoleModels } from './internal/model-roles.js';
 /** SDK application contract. CLI/MCP/Terminal use the same application with the existing runtime invocation transport. */
@@ -69,14 +70,19 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
           const profile = template ? registry.profiles.find(value => value.id === row.profile.id && value.version === row.profile.version) : undefined;
           return { kind: row.kind, profile: row.profile, type: template ? 'template' as const : 'prepared' as const,
             ...(template ? { provider: template.provider, turnLimit: nativeCodingTemplateTurnLimit(profile!) } : {}) }; });
+        // S4B-6: verified memory under the worker's rules (off: nothing read); sealed before the counter's or the model's first HTTP effect.
+        const memory = await prepareConfiguredPlanningMemory(context, { scopeId: command.scopeId, runId: brainRunId(command), commandId: command.commandId, intent: command.intent,
+          takesMemory: brainTakesMemory(context.config['brain_planner']), workClasses: registry.workClasses });
         const prompt = prepareBrainRegistryPrompt(command, registry, budget,
-          context.config['brain_planner'], getConfigKnownSecrets(context.config), { kinds, workerModels });
+          context.config['brain_planner'], getConfigKnownSecrets(context.config), { kinds, workerModels, memory: memory.block });
         const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: prompt.messages, options }, false, selected.command.reference, prompt.invocationSettings);
         assertBrainContextFits(prepared.command, context.config['brain_planner'], null, null); // complete byte guard before even the counter's HTTP effect
+        await memory.seal(prompt.memory, prompt.contextDigest);
         const measured = await measureConfiguredModel(root, prepared.command, options, signal);
         if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED');
         assertBrainContextFits(prepared.command, context.config['brain_planner'], profile?.contextWindowTokens ?? null, measured);
-        return { invocation: prepared.command, prompt, kinds: registry.kinds.map(row => row.kind) };
+        const note = memory.note();
+        return { invocation: prepared.command, prompt, kinds: registry.kinds.map(row => row.kind), ...(note ? { planningMemory: note } : {}) };
       },
     }).plan(input, undefined, signal);
   } catch (error) { throw queryFailure(error); }

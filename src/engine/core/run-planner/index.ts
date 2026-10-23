@@ -2,24 +2,26 @@ import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js
 import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
   type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
 import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext, assertBrainLeavesAssignment,
-  prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainRegistryContext } from '#capabilities/index.js';
+  prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainMemoryContext, type BrainRegistryContext } from '#capabilities/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { modelInvocationRequestDigest, refuseInactiveModel, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { composeModelRolePolicy, decideRoleModelInScope, roleModelPorts, type RoleModelSources } from '#engine/core/model-activation/index.js';
-import type { RunProposalQuery, RunProposalResult } from '#engine/core/run-proposal/index.js';
+import type { PlanningMemoryNote, RunProposalQuery, RunProposalResult } from '#engine/core/run-proposal/index.js';
 export const brainRunId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-run:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export const brainInvocationCommandId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-invocation:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: ExecutionRegistry,
   budget: { currency: string; limitMinorUnits: number } | null, config: unknown, known?: KnownSecretSnapshot,
-  selections?: Readonly<{ kinds: BrainRegistryContext['kinds']; workerModels: BrainRegistryContext['workerModels'] }>) {
+  selections?: Readonly<{ kinds: BrainRegistryContext['kinds']; workerModels: BrainRegistryContext['workerModels']; memory?: BrainMemoryContext | null }>) {
   // The context bound measures the same WorkClass view the prompt carries (brainWorkClassView: no scoring, admission or worker lists).
   const workClasses = mergeWorkClassRegistries(CORE_WORK_CLASSES, registry.workClasses ? [registry.workClasses] : []);
   const settings = brainPlannerConfigSchema.parse(config), limits = settings.context;
   // ATAMA-1: a system-assignment template offers the model no worker models at all; the system assigns them at admission.
-  const offerModels = selectedBrainTemplate(settings).modelAssignment !== 'system';
+  const template = selectedBrainTemplate(settings), offerModels = template.modelAssignment !== 'system';
   const order = <T>(rows: readonly T[], key: (row: T) => string) => [...rows].sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
-  const context = boundBrainContext(command.scopeId, brainWorkClassView(workClasses), { schemaVersion: 2, registryRevision: registry.revision,
+  // S4B-6: a template written for context v3 gets the memory block (null: none supplied); an earlier one keeps the v2 shape byte for byte.
+  const version = template.contextVersion === 3 ? { schemaVersion: 3 as const, memory: selections?.memory ?? null } : { schemaVersion: 2 as const };
+  const context = boundBrainContext(command.scopeId, brainWorkClassView(workClasses), { ...version, registryRevision: registry.revision,
     kinds: order(selections?.kinds ?? registry.kinds.map(row => ({ kind: row.kind, profile: row.profile, type: 'prepared' as const })), row => row.kind),
     workerModels: order(offerModels ? selections?.workerModels ?? [] : [], row => JSON.stringify([row.profile.id, row.profile.version, row.channelId, row.modelId])),
     evaluators: order(registry.evaluators.map(row => ({ id: row.id, version: row.version, parameters: prepareBrainEvaluatorParameters(row) })), row => JSON.stringify([row.id, row.version])),
@@ -29,7 +31,10 @@ export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: 
   const prompt = prepareBrainPrompt(command, workClasses, context, config, known);
   const bytes = new TextEncoder().encode(JSON.stringify(prompt.messages)).length;
   if (bytes > limits.requestMaxBytes) throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: limits.requestMaxBytes, observed: bytes, unit: 'bytes' } });
-  return { ...prompt, invocationSettings: { ...(settings.maxCompletionTokens === null ? {} : { maxCompletionTokens: settings.maxCompletionTokens }),
+  // The memory that actually went into the prompt (after the planning byte bound), for the seal and the card; null: no memory block.
+  const memory = 'memory' in context && context.memory && version.schemaVersion === 3 && version.memory
+    ? { entries: context.memory.entries, omitted: context.memory.omitted, truncated: context.truncation.omittedMemory ?? 0 } : null;
+  return { ...prompt, memory, invocationSettings: { ...(settings.maxCompletionTokens === null ? {} : { maxCompletionTokens: settings.maxCompletionTokens }),
     ...(settings.reasoning === 'off' ? { reasoning: settings.reasoning } : {}) } };
 }
 /** Provider count when available; UTF-8 bytes plus configured framing is a conservative tagged estimate otherwise. */
@@ -47,7 +52,8 @@ export function assertBrainContextFits(command: ModelInvocationCommand, config: 
       unit: measurement ? 'tokens' : 'estimated-tokens' } });
   }
 }
-export interface BrainPreparation { readonly invocation: ModelInvocationCommand; readonly prompt: ReturnType<typeof prepareBrainPrompt>; readonly kinds?: readonly string[] }
+export interface BrainPreparation { readonly invocation: ModelInvocationCommand; readonly prompt: ReturnType<typeof prepareBrainPrompt>; readonly kinds?: readonly string[];
+  /** S4B-6: the planning call's memory note for the card (response-only). */ readonly planningMemory?: PlanningMemoryNote }
 export interface BrainPlanPorts {
   readonly knownSecrets?: KnownSecretSnapshot | undefined;
   inspect(query: RunProposalQuery): Promise<RunProposalResult | null>;
@@ -76,6 +82,8 @@ export async function assertBrainModelRole(sources: RoleModelSources, command: M
   if (decision.reason === 'not-active') refuseInactiveModel(command, record);
   throw ErrorRegistry.createError('BRAIN_TIER_REFUSED', { params: { ...target, reason: decision.reason } });
 }
+/** S4B-6: whether the configured Brain template is written for context v3 (memory); an earlier one never reads memory. */
+export const brainTakesMemory = (config: unknown) => selectedBrainTemplate(config).contextVersion === 3;
 /** Whether the configured Brain template leaves worker assignment to the system (callers then skip the worker-model catalog read). */
 export const brainAssignsWorkers = (config: unknown) => selectedBrainTemplate(config).modelAssignment !== 'system';
 /** One model step; no tool loop, retry, Run writer or approval decision. */
@@ -136,6 +144,7 @@ export class BrainPlanApplication {
         inputSummary: prompt.intent.slice(0, limit), outputSummary: redactForRecord(JSON.stringify(draft), this.ports.knownSecrets).slice(0, limit),
         usage: usage.success ? { inputTokens: usage.data.prompt_tokens, outputTokens: usage.data.completion_tokens, totalTokens: usage.data.total_tokens } : null } } };
     assertActive(signal);
-    return this.ports.propose(proposal);
+    const recorded = await this.ports.propose(proposal);
+    return prepared.planningMemory ? { ...recorded, planningMemory: prepared.planningMemory } : recorded;
   }
 }

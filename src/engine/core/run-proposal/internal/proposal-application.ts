@@ -22,7 +22,12 @@ export interface RunProposalResult { readonly schemaVersion: 1; readonly proposa
   readonly reasonParams?: Readonly<Record<string, string | number>>;
   /** Advisory entries this installation's vocabulary and registry do not recognise, each once (accept_mark, owner 2026-10-18). Response-only and
    * derived from the current registry: never stored, never evaluated, never a grant; absent when every entry is recognised. */
-  readonly unrecognisedPermissions?: readonly ProposalPermission[] }
+  readonly unrecognisedPermissions?: readonly ProposalPermission[];
+  /** S4B-6: the project memory of the planning call that recorded this proposal (response-only, never stored; a replay carries none). `selected`:
+   * entries sealed for the call (sent with `on`, only sealed with `shadow`); `omitted`: left out by the size limits; `withheld`: from work the
+   * person may not read; `reason`: why no memory was read at all. Absent when memory is off. */
+  readonly planningMemory?: PlanningMemoryNote }
+export type PlanningMemoryNote = Readonly<{ mode: 'shadow' | 'on'; selected: number; omitted: number; withheld: number; reason: 'policy' | 'contests' | 'template' | null }>;
 const result = (registry: WorkClassRegistry | undefined, proposal: RunProposalRecord, run: RunView | null = null, error?: unknown): RunProposalResult => {
   const unrecognised = unrecognisedRunProposalPermissions(proposal.proposal, registry);
   return Object.freeze({ schemaVersion: 1, proposal, run, budgetSemantics: proposal.binding.admission?.budgetSemantics ?? 'admission-check-only', runtimeTotalSpendEnforced: false,

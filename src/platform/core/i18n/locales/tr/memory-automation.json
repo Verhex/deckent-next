@@ -30,5 +30,14 @@
   "run.warning.MEMORY_CONTEXT_WITHHELD.sources": "Uyarı: {taskId} görevi: {count} hafıza kaydı işçi isteminin dışında bırakıldı; okuyamadığınız bir işten ya da kullanamadığınız bir çalışma hedefinden geliyorlar.",
   "run.warning.MEMORY_CONTEXT_WITHHELD.budget": "Uyarı: {taskId} görevi: işçi isteminde proje hafızasına yer kalmadı; işçi hafızasız çalışır.",
   "run.warning.MEMORY_CONTEXT_WITHHELD.contests": "Uyarı: bu Run'daki işçiler proje hafızası almıyor: denetlenebilecekten fazla açık hafıza itirazı var; deckent memory review ile çözün.",
-  "inspect.context.memory": "Hafıza: {value} (doğrulanmış kayıtlar, veri olarak gönderilir; hiçbir yetki vermez)"
+  "inspect.context.memory": "Hafıza: {value} (doğrulanmış kayıtlar, veri olarak gönderilir; hiçbir yetki vermez)",
+  "error.BRAIN_MEMORY_CONTEXT_HELD": "Planlama reddedildi: proje hafızası okunamadı ({reason}). Hiçbir model çağrılmadı ve hiçbir öneri kaydedilmedi.",
+  "memory.held.next.BRAIN_MEMORY_CONTEXT_HELD": "deckent doctor çalıştırıp hafıza deposunu onarın ya da bir kişi kendi terminalinde memoryAutomation.context.mode ayarını off yapsın; sonra planı yeniden isteyin.",
+  "brain.memory.sent": "Hafıza: {count} doğrulanmış kayıt planlamaya veri olarak gitti; hiçbir yetki vermez.",
+  "brain.memory.shadow": "Hafıza (gölge): {count} doğrulanmış kayıt planlamaya gidecekti; hiçbir şey gönderilmedi.",
+  "brain.memory.omitted": "Hafıza: {count} kayıt daha planlama boyut sınırları nedeniyle dışarıda kaldı.",
+  "brain.memory.withheld.sources": "Hafıza: {count} kayıt planlamadan gizlendi: okuyamadığınız bir işten ya da kullanamadığınız bir çalışma hedefinden geliyorlar.",
+  "brain.memory.withheld.policy": "Hafıza: planlama proje hafızası almadı: bu kapsamın hafızasını okuma yetkiniz yok.",
+  "brain.memory.withheld.contests": "Hafıza: planlama proje hafızası almadı: denetlenebilecekten fazla açık hafıza itirazı var; deckent memory review ile çözün.",
+  "brain.memory.withheld.template": "Hafıza: seçili planlama şablonu proje hafızası almıyor; hiçbir kayıt okunmadı ya da gönderilmedi."
 }

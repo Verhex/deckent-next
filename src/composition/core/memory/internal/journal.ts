@@ -8,12 +8,13 @@ import type { loadConfiguredScopeContext } from '#composition/core/scoped-reques
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 
 type Context = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
-/** The journal application over one scope context: keyed digests, the source filter, the purge journal and (write) the evaluator-content purge. */
-export async function memoryJournalFor(context: Context, mode: 'read' | 'write') {
+/** The journal application over one scope context: keyed digests, the source filter, the purge journal and (write) the evaluator-content purge.
+ * `key` (S4B-6): a read that already holds the installation key (it seals with it) uses it for the keyed digests too. */
+export async function memoryJournalFor(context: Context, mode: 'read' | 'write', key?: IntegrityAuthority) {
   const { layout, config } = context, clock = new SystemTrustedClock();
   const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes), policy = new MemoryPolicyAuthorization(source);
   // A write opens (or creates) the key first; a read opens it inside the store, so a missing key is a typed hold, never an empty answer.
-  const integrity = mode === 'write' ? await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true) : null;
+  const integrity = key ?? (mode === 'write' ? await openLocalIntegrityAuthority(layout, config.approvals.keyFile, true) : null);
   const readKey = () => integrity ? Promise.resolve(integrity) : openLocalIntegrityAuthority(layout, config.approvals.keyFile, false);
   return new MemoryJournalApplication({ verifier: { verify: async () => context.principal }, authorize: (...args) => policy.authorize(...args), readFilter: (...args) => policy.readFilter(...args),
     openStore: async access => openSqliteMemoryJournalStore(await context.path(), config.storage.sqlite, await readKey(), access),

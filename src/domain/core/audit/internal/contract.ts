@@ -126,6 +126,13 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('memory-context'), runId: identitySchema, taskId: identitySchema, mode: z.enum(MEMORY_CONTEXT_RECORD_MODES), delivered: z.boolean(),
     entries: z.array(z.object({ entryId: identitySchema, revision: counterSchema.positive(), contentDigest: digest, basis: z.enum(['human-review', 'independent-evaluation']) }).strict())
       .min(1).max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), partDigest: digest, withheld: counterSchema }).strict(),
+  /** S4B-6 (§7.2, §9): the memory block of one Brain planning request, sealed before the first prompt leaves the machine (`shadow`: computed,
+   * never sent). `runId` is the Brain's Run id, `contextDigest` the planning context digest the stored proposal's contribution carries: the event
+   * of a plan that was then refused stays (the effect may have happened) and is recognised by a digest no stored proposal names. Keyed digests
+   * and ids only, never entry text; `omitted` counts entries the bounds left out, `withheld` those from work the person may not read. */
+  z.object({ kind: z.literal('brain-memory-context'), runId: identitySchema, commandId: identitySchema, mode: z.enum(MEMORY_CONTEXT_RECORD_MODES), delivered: z.boolean(),
+    entries: z.array(z.object({ entryId: identitySchema, revision: counterSchema.positive(), contentDigest: digest, basis: z.enum(['human-review', 'independent-evaluation']) }).strict())
+      .min(1).max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), memoryDigest: digest, contextDigest: digest, omitted: counterSchema, withheld: counterSchema }).strict(),
   /** S7 agent/skill catalog: one definition or import of one row (persona and skill text are never recorded, only their digests). */
   z.object({ kind: z.literal('agent-catalog'), item: z.enum(['agent', 'skill']), action: z.enum(['define', 'import']), id: identitySchema, commandId: identitySchema,
     revision: counterSchema.positive(), contentDigest: digest, skillSetDigest: digest.nullable() }).strict(),
