@@ -3,6 +3,7 @@ import { counterSchema, identitySchema } from '#domain/core/primitives/index.js'
 import { attemptIdentitySchema, attemptSnapshotSchema, sameAttemptIdentity, type AttemptIdentity } from '#domain/core/attempt/index.js';
 import { checkedRun, runSnapshotSchema, RunError, type RunSnapshot } from './contract.js';
 import { reconcileRunLifecycle } from './lifecycle.js';
+import { readRunHold, runHoldOverlay } from './hold.js';
 import { projectRunAttempt } from './reduce.js';
 import registry from './environment-requirements.json' with { type: 'json' };
 const limits = registry.limits;
@@ -28,7 +29,7 @@ export function observeRunAttemptClosure(input: unknown, expectedRevision: numbe
   const task = run.progress.find(row => row.taskId === attempt.identity.taskId), binding = run.bindings.find(row => sameAttemptIdentity(row.identity, attempt.identity));
   if (!task || !binding || binding.observedKind !== null || task.phase !== 'active' || task.unresolvedEffects || run.state.kind === 'terminal') throw new RunError('RUN_ATTEMPT_CONFLICT');
   const prior = run.state.kind === 'parked' ? run.state : null;
-  const hold = prior?.reason === 'operator-hold' ? { operatorHold: { schemaVersion: 1 as const, note: prior.note! } } : prior?.operatorHold ? { operatorHold: prior.operatorHold } : {};
+  const held = prior ? readRunHold(prior) : null, hold = held ? runHoldOverlay(held) : {};
   // The first unmet requirement keeps naming the park; a later refusal of another task joins it.
   const state = run.cancelRequested ? run.state : prior?.reason === 'environment-not-ready' ? prior : { kind: 'parked' as const, reason: 'environment-not-ready' as const, failureCode: result.requirement,
     since: counterSchema.parse(now), deadline: counterSchema.parse(now + counterSchema.positive().parse(timeoutMs)), ...hold };

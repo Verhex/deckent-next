@@ -8,16 +8,16 @@ import { openSqliteLedger, CURRENT_LEDGER_VERSION, MEMORY_JOURNAL_LEDGER_VERSION
 import { openSqliteMemoryJournalStore, upgradeExistingProductLedger } from '#adapters/index.js';
 import { MemoryJournalApplication } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
-import { DOWNGRADE_TO_V59_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
+import { DOWNGRADE_TO_V60_LEDGER_SQL } from '../../fixtures/ledger-previous.js';
 
-// S4 memory journal v1 on the Core SQLite adapter: additive ledger step (lane v60; the lead renumbers at landing), sealed rows, append-only
+// S4 memory journal v1 on the Core SQLite adapter: additive ledger step v61 (after S0's v60), sealed rows, append-only
 // revisions and receipts, FTS5 index over the domain-folded text, scope-filtered in SQL and re-checked above the port.
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const options = { busyTimeoutMs: 1000, journalMode: 'wal' as const, durability: 'full' as const };
 const integrity = createHmacIntegrity('memory-key', randomBytes(32));
 const human = { id: 'h', issuer: 'local-os', subject: 'uid:1000', assurance: 'os-user' as const, scopeIds: ['s', 'other'] };
-async function ledger() { const root = await mkdtemp(join(tmpdir(), 'dn-memory-v60-')); roots.push(root); const path = join(root, 'ledger.db'), backups = join(root, 'backups');
+async function ledger() { const root = await mkdtemp(join(tmpdir(), 'dn-memory-v61-')); roots.push(root); const path = join(root, 'ledger.db'), backups = join(root, 'backups');
   await mkdir(backups); openSqliteLedger(path, options).close(); return { path, backups }; }
 function app(path: string, key = integrity) {
   return new MemoryJournalApplication({ verifier: { verify: async () => human }, authorize: async () => ({ revision: 'p', ruleId: 'r' }),
@@ -26,15 +26,15 @@ function app(path: string, key = integrity) {
 const content = (title: string) => ({ kind: 'fact', title, body: 'İrsaliyesiz fatura onaya düşer; sipariş eşleştirme zorunlu.', tags: ['erp'], lesson: null });
 const propose = (commandId: string, scopeId: string, title = 'Fatura eşleştirme İstanbul') => ({ schemaVersion: 1, commandId, scopeId, content: content(title), origin: { kind: 'human', ref: null } });
 
-describe('ledger v60 memory journal migration', () => {
-  it('pins the lane version: v60 is the memory journal and the current ledger', () => {
-    expect(MEMORY_JOURNAL_LEDGER_VERSION).toBe(60); expect(CURRENT_LEDGER_VERSION).toBe(60);
+describe('ledger v61 memory journal migration', () => {
+  it('pins the version: v61 is the memory journal and the current ledger', () => {
+    expect(MEMORY_JOURNAL_LEDGER_VERSION).toBe(61); expect(CURRENT_LEDGER_VERSION).toBe(61);
   });
-  it('backs up v59 and adds only the memory tables; an older reader refuses the upgraded ledger', async () => {
-    const f = await ledger(); const db = new DatabaseSync(f.path); db.exec(DOWNGRADE_TO_V59_LEDGER_SQL); db.close();
+  it('backs up v60 and adds only the memory tables; an older reader refuses the upgraded ledger', async () => {
+    const f = await ledger(); const db = new DatabaseSync(f.path); db.exec(DOWNGRADE_TO_V60_LEDGER_SQL); db.close();
     expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
     const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-23T00:00:00Z'));
-    expect(upgrade).toMatchObject({ from: 59, to: 60 });
+    expect(upgrade).toMatchObject({ from: 60, to: 61 });
     const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true }), current = new DatabaseSync(f.path, { readOnly: true });
     try {
       expect(backup.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'memory%'").all()).toEqual([]);
@@ -43,11 +43,11 @@ describe('ledger v60 memory journal migration', () => {
         'memory_entries_no_delete', 'memory_entries_recent', 'memory_entry_revisions', 'memory_entry_revisions_no_delete', 'memory_entry_revisions_no_update', 'memory_search']);
     } finally { backup.close(); current.close(); }
   });
-  it('refuses a v59 ledger holding a foreign same-name table and rolls the version back', async () => {
-    const f = await ledger(); const db = new DatabaseSync(f.path); db.exec(DOWNGRADE_TO_V59_LEDGER_SQL); db.exec('CREATE TABLE memory_entries(x TEXT)'); db.close();
+  it('refuses a v60 ledger holding a foreign same-name table and rolls the version back', async () => {
+    const f = await ledger(); const db = new DatabaseSync(f.path); db.exec(DOWNGRADE_TO_V60_LEDGER_SQL); db.exec('CREATE TABLE memory_entries(x TEXT)'); db.close();
     await expect(upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-23T00:00:00Z'))).rejects.toThrow();
     const check = new DatabaseSync(f.path, { readOnly: true });
-    try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(59); expect(check.prepare("SELECT name FROM sqlite_master WHERE name='memory_search'").all()).toEqual([]); }
+    try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(60); expect(check.prepare("SELECT name FROM sqlite_master WHERE name='memory_search'").all()).toEqual([]); }
     finally { check.close(); }
   });
 });
@@ -88,9 +88,9 @@ describe('SQLite memory journal store', () => {
     expect(await memory.inspect({ schemaVersion: 1, scopeId: 's', entryId: 'm1' })).toEqual({ schemaVersion: 1, status: 'held', code: 'MEMORY_CORRUPT' });
   });
   it('a read on a ledger older than the journal holds (read-only open never migrates)', async () => {
-    const f = await ledger(); const db = new DatabaseSync(f.path); db.exec(DOWNGRADE_TO_V59_LEDGER_SQL); db.close();
+    const f = await ledger(); const db = new DatabaseSync(f.path); db.exec(DOWNGRADE_TO_V60_LEDGER_SQL); db.close();
     expect(await app(f.path).list({ schemaVersion: 1, scopeId: 's', limit: 10 })).toEqual({ schemaVersion: 1, status: 'held', code: 'MEMORY_UNAVAILABLE' });
-    const check = new DatabaseSync(f.path, { readOnly: true }); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(59); } finally { check.close(); }
+    const check = new DatabaseSync(f.path, { readOnly: true }); try { expect(check.prepare('PRAGMA user_version').get()?.user_version).toBe(60); } finally { check.close(); }
   });
   it('the full-text index survives a VACUUM (the backup path uses VACUUM INTO): hits stay bound to the entries they index', async () => {
     const f = await ledger(), memory = app(f.path);

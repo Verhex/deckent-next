@@ -23,7 +23,16 @@ export const PREVIOUS_LEDGER_VERSION = 50;
  * repositories' rows of one target at the same sequence, makes it fail, as it must; restoring the pre-switch backup is the real path. */
 /** v59 → v58 (PRE-7): v59 widened only record vocabularies (environment park, `not-run` acceptance), so the version alone goes back —
  * exact for a ledger that holds none of them; restoring the pre-switch backup is the real path. */
-export const DOWNGRADE_TO_V59_LEDGER_SQL = 'DROP TABLE memory_search; DROP TABLE memory_command_receipts; DROP TABLE memory_entry_revisions; DROP TABLE memory_entries; PRAGMA user_version=59;';
+/** v61 → v60 (S4 memory journal): the additive memory tables are dropped; restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V60_LEDGER_SQL = 'DROP TABLE memory_search; DROP TABLE memory_command_receipts; DROP TABLE memory_entry_revisions; DROP TABLE memory_entries; PRAGMA user_version=60;';
+/** v60 → v59 (ATAMA-0): the metrics table back to the producer-only key without `superseded_by`; rowids kept. Two outcome kinds of one producer
+ * make it fail, as they must; restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V59_LEDGER_SQL = `${DOWNGRADE_TO_V60_LEDGER_SQL} CREATE TABLE acceptance_metrics_v59(scope_id TEXT NOT NULL, producer_command_id TEXT NOT NULL, run_id TEXT NOT NULL,
+    task_id TEXT NOT NULL, attempt_id TEXT NOT NULL, outcome_kind TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(scope_id,producer_command_id));
+  INSERT INTO acceptance_metrics_v59(rowid,scope_id,producer_command_id,run_id,task_id,attempt_id,outcome_kind,record)
+    SELECT rowid,scope_id,producer_command_id,run_id,task_id,attempt_id,outcome_kind,record FROM acceptance_metrics ORDER BY rowid;
+  DROP TABLE acceptance_metrics; ALTER TABLE acceptance_metrics_v59 RENAME TO acceptance_metrics;
+  CREATE INDEX acceptance_metrics_attempt ON acceptance_metrics(scope_id,run_id,task_id,attempt_id,outcome_kind); PRAGMA user_version=59;`;
 export const DOWNGRADE_TO_V58_LEDGER_SQL = `${DOWNGRADE_TO_V59_LEDGER_SQL} PRAGMA user_version=58;`;
 export const DOWNGRADE_TO_V57_LEDGER_SQL = `${DOWNGRADE_TO_V58_LEDGER_SQL} CREATE TABLE workspace_adoptions_v57(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,target_ref TEXT NOT NULL,
     sequence INTEGER NOT NULL CHECK(sequence>0),kind TEXT NOT NULL CHECK(kind IN('adopt','rollback')),intent TEXT NOT NULL,

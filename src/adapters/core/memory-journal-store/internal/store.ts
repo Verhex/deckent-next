@@ -10,7 +10,7 @@ import type { IntegrityAuthority } from '#platform/index.js';
 const SEAL = 'memory-journal-store:1';
 const corrupt = () => new MemoryJournalError('MEMORY_CORRUPT');
 /**
- * Core SQLite adapter of the DB-neutral memory journal port, on the shared ledger (lane v60). Every row is sealed with the installation integrity
+ * Core SQLite adapter of the DB-neutral memory journal port, on the shared ledger (v61). Every row is sealed with the installation integrity
  * key and cross-checked against its columns on read. The FTS5 table indexes the domain-folded text (`memoryIndexText`) under the entry's explicit `id` (stable across VACUUM);
  * it is a derived index, never the record: hits are re-read and re-verified from `memory_entries` by the engine.
  */

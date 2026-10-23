@@ -1,19 +1,41 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { deckentMetricsSchema, encodeDeckentJson, type JsonValue, type RunSnapshot, type OperationEvidenceBinding } from '#domain/index.js';
-import { deriveAcceptanceMetric, selectRunAcceptanceEvaluations, RunStoreError } from '#engine/index.js';
+import { deriveAcceptanceMetrics, selectRunAcceptanceEvaluations, RunStoreError } from '#engine/index.js';
 
-/** Caller owns the producer transaction; there is no independent metrics commit or public submission path. */
+/** Caller owns the producer transaction; there is no independent metrics commit or public submission path.
+ * A producer's rows replace the current row of their (Task, Attempt, outcome kind); replay of the same producer is byte-identical. */
 export function recordAcceptanceMetric(db: DatabaseSync, producerCommandId: string, snapshot: RunSnapshot): void {
   const receipt = db.prepare('SELECT command,snapshot FROM run_receipts WHERE scope_id=? AND command_id=?').get(snapshot.identity.scopeId, producerCommandId);
   if (!receipt || receipt.snapshot !== JSON.stringify(snapshot)) throw new RunStoreError('RUN_STORE_CONFLICT');
-  const metric = deriveAcceptanceMetric(String(receipt.command), snapshot); if (!metric) return;
-  const bytes = encodeDeckentJson(metric as unknown as JsonValue), id = metric.identity;
-  const record = encodeDeckentJson({ schemaVersion: 1, metric: metric as unknown as JsonValue, digest: createHash('sha256').update(bytes, 'utf8').digest('hex') });
-  const previous = db.prepare('SELECT record FROM acceptance_metrics WHERE scope_id=? AND producer_command_id=?').get(id.scopeId, producerCommandId);
-  if (previous) { if (previous.record !== record) throw new RunStoreError('RUN_COMMAND_CONFLICT'); return; }
-  db.prepare('INSERT INTO acceptance_metrics(scope_id,producer_command_id,run_id,task_id,attempt_id,outcome_kind,record) VALUES(?,?,?,?,?,?,?)')
-    .run(id.scopeId, producerCommandId, id.runId, id.taskId, id.attemptId, metric.outcome.kind, record);
+  const command = String(receipt.command), decided = decidedAttempt(command, snapshot);
+  const prior = decided ? db.prepare(`SELECT record FROM acceptance_metrics WHERE scope_id=? AND run_id=? AND task_id=? AND attempt_id=? AND outcome_kind='task'
+    AND superseded_by IS NULL`).get(decided.scopeId, decided.runId, decided.taskId, decided.attemptId) : undefined;
+  for (const metric of deriveAcceptanceMetrics(command, snapshot, prior ? parseMetricRecord(prior.record) : null)) {
+    const bytes = encodeDeckentJson(metric as unknown as JsonValue), id = metric.identity, kind = metric.outcome.kind;
+    const record = encodeDeckentJson({ schemaVersion: 1, metric: metric as unknown as JsonValue, digest: createHash('sha256').update(bytes, 'utf8').digest('hex') });
+    const previous = db.prepare('SELECT record FROM acceptance_metrics WHERE scope_id=? AND producer_command_id=? AND outcome_kind=?').get(id.scopeId, producerCommandId, kind);
+    if (previous) { if (previous.record !== record) throw new RunStoreError('RUN_COMMAND_CONFLICT'); continue; }
+    db.prepare(`UPDATE acceptance_metrics SET superseded_by=? WHERE scope_id=? AND run_id=? AND task_id=? AND attempt_id=? AND outcome_kind=? AND superseded_by IS NULL`)
+      .run(producerCommandId, id.scopeId, id.runId, id.taskId, id.attemptId, kind);
+    db.prepare('INSERT INTO acceptance_metrics(scope_id,producer_command_id,run_id,task_id,attempt_id,outcome_kind,record) VALUES(?,?,?,?,?,?,?)')
+      .run(id.scopeId, producerCommandId, id.runId, id.taskId, id.attemptId, kind, record);
+  }
+}
+/** The bound Attempt of a human accept/reject; any other producer carries no prior row. */
+function decidedAttempt(command: string, snapshot: RunSnapshot) {
+  let payload: Record<string, unknown>; try { payload = JSON.parse(command) as Record<string, unknown>; } catch { return undefined; }
+  if (payload['operation'] !== 'run-lifecycle' || (payload['action'] !== 'accept' && payload['action'] !== 'reject')) return undefined;
+  return snapshot.bindings.find(row => row.identity.taskId === payload['taskId'])?.identity;
+}
+/** Digest-checked retained metric record; a tampered row is corruption, never a silent default. */
+function parseMetricRecord(value: unknown) {
+  try {
+    const record = JSON.parse(String(value)) as { metric: unknown; digest: string };
+    const metric = deckentMetricsSchema.parse(record.metric);
+    if (createHash('sha256').update(encodeDeckentJson(metric as unknown as JsonValue)).digest('hex') !== record.digest) throw new Error();
+    return metric;
+  } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); }
 }
 
 type EvaluationRow = { readonly commandId: string; readonly command: string };
@@ -40,13 +62,12 @@ export function readRunAcceptanceMetrics(db: DatabaseSync, snapshot: RunSnapshot
       WHERE m.scope_id=? AND m.run_id=? AND m.attempt_id=? AND m.outcome_kind=? AND json_valid(r.snapshot)
       AND json_type(r.snapshot,'$.revision')='integer' AND json_extract(r.snapshot,'$.revision')<=? ORDER BY m.rowid DESC LIMIT 1`)
       .all(snapshot.identity.scopeId, snapshot.identity.runId, binding.identity.attemptId, 'task', snapshot.revision);
-    return records.flatMap(row => { try {
-      const record = JSON.parse(String(row.record)) as { metric: unknown; digest: string };
-      const metric = deckentMetricsSchema.parse(record.metric);
+    return records.map(row => {
+      const metric = parseMetricRecord(row.record);
       if (metric.identity.scopeId !== binding.identity.scopeId || metric.identity.runId !== binding.identity.runId || metric.identity.taskId !== binding.identity.taskId
-        || metric.identity.attemptId !== binding.identity.attemptId || createHash('sha256').update(encodeDeckentJson(metric as unknown as JsonValue)).digest('hex') !== record.digest) throw new Error();
-      return [metric];
-    } catch { throw new RunStoreError('RUN_STORE_CORRUPT'); } });
+        || metric.identity.attemptId !== binding.identity.attemptId) throw new RunStoreError('RUN_STORE_CORRUPT');
+      return metric;
+    });
   });
 }
 

@@ -32,7 +32,7 @@ export type { SupervisorProfile, SupervisorProfileSource } from '#engine/core/su
 export { proposeTaskEvaluationCommit, taskEvaluationCommitSchema, assertTaskEvaluationCustody, criterionEvidenceDigest, bindUsedOperationEvidence } from '#engine/core/task-evaluation/index.js';
 export { selectEvaluationEffectEvidence, assertEvaluationEffectEvidence, assertEvaluationDigestEvidence } from '#engine/core/task-evaluation/index.js';
 export type { TaskEvaluationCommit, TaskEvaluationStore } from '#engine/core/task-evaluation/index.js';
-export { deriveAcceptanceMetric, selectRunAcceptanceEvaluations, TaskEvaluationApplication, taskEvaluationCommandSchema, describeTaskEvaluationReceipt } from '#engine/core/task-evaluation/index.js';
+export { deriveAcceptanceMetrics, selectRunAcceptanceEvaluations, TaskEvaluationApplication, taskEvaluationCommandSchema, describeTaskEvaluationReceipt } from '#engine/core/task-evaluation/index.js';
 export type { TaskEvaluationCommand, TaskEvaluationAuthorization, TaskTerminalEvaluator, UnknownEvaluationPolicy } from '#engine/core/task-evaluation/index.js';
 
 export { parseRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';

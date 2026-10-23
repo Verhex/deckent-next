@@ -1,6 +1,9 @@
 export { parkRunQuota, resetRunQuota, releaseRunQuota } from './internal/quota.js';
 export type { RunQuotaWait } from './internal/quota.js';
-export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError, STALL_CAUSES } from './internal/contract.js';
+export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError, STALL_CAUSES, RUN_HOLD_SOURCES, safetyHoldSourceSchema } from './internal/contract.js';
+export type { RunHoldSource, SafetyHoldSource } from './internal/contract.js';
+export { readRunHold } from './internal/hold.js';
+export type { RunHold } from './internal/hold.js';
 export { recoverStalledTask } from './internal/stall.js';
 export { observeRunAttemptClosure, settleEnvironmentProbe, holdEnvironmentProbes, releaseEnvironmentProbes, environmentRequirementSchema, environmentRequirementsSchema } from './internal/environment.js';
 export type { EnvironmentRequirement } from './internal/environment.js';
@@ -18,11 +21,11 @@ export type { RunExecutionSnapshot, TaskStallPolicy } from './internal/registry.
 export { reconcileRunLifecycle, advanceRunLifecycle, expireParkedRun, closeParkedRun, resumeParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from './internal/lifecycle.js';
 export type { RunLifecycleTiming, TaskDecisionReason } from './internal/lifecycle.js';
 
-export { workClassRegistrySchema, workClassAcceptanceProfileSchema, mergeWorkClassRegistries, resolveTaskWorkClass, evidenceExtensionSchema, CORE_WORK_CLASSES, selectWorkerEffort, WorkerEffortError, WorkClassRegistryError } from './internal/work-class.js';
+export { workClassRegistrySchema, workClassAcceptanceProfileSchema, coreEvidenceTypeSchema, mergeWorkClassRegistries, resolveTaskWorkClass, evidenceExtensionSchema, CORE_WORK_CLASSES, selectWorkerEffort, WorkerEffortError, WorkClassRegistryError } from './internal/work-class.js';
 export type { WorkClassRegistry, WorkClassAcceptanceProfile, WorkClassPolicy } from './internal/work-class.js';
 export { holdRun, answerTaskInput, parkRunProgression } from './internal/lifecycle.js';
-export { deckentMetricsSchema, deriveDeckentMetrics } from './internal/metrics.js';
-export type { DeckentMetrics, DeckentMetricsMeasurements } from './internal/metrics.js';
+export { deckentMetricsSchema, deriveDeckentMetrics, measuredCostSchema, METRIC_EVIDENCE_KINDS } from './internal/metrics.js';
+export type { DeckentMetrics, CurrentDeckentMetrics, DeckentMetricsMeasurements } from './internal/metrics.js';
 
 export { freezeTaskAcceptance, assertAcceptanceCriteria, frozenWorkClassProfileSchema, taskAcceptanceReferenceSchema, acceptanceCriterionSchema, AcceptanceProfileError } from './internal/acceptance.js';
 export type { FrozenWorkClassProfile, TaskAcceptanceReference } from './internal/acceptance.js';

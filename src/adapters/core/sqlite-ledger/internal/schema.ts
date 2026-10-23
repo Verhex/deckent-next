@@ -37,16 +37,19 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 60;
-// S4 memory journal v1 (lane v60; the lead renumbers at landing): additive tables (current entry, append-only revisions and receipts, FTS5 index
-// keyed by the entry's explicit `id`, which VACUUM never renumbers). No earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v60).
-export const MEMORY_JOURNAL_LEDGER_VERSION = 60;
+export const CURRENT_LEDGER_VERSION = 61;
+// S4 memory journal v1 (v61 after S0's v60 on a55/integrate): additive tables (current entry, append-only revisions and receipts, FTS5 index
+// keyed by the entry's explicit `id`, which VACUUM never renumbers). No earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v61).
+export const MEMORY_JOURNAL_LEDGER_VERSION = 61;
 // PRE-7 ORTAM-HAZIR: environment park + `not-run` acceptance vocabularies (Run park reason and its requirement as failure code, a
 // `launch-refused` previous binding, the launch refusal's `requirement` and `probe`, a binding's probe custody `probes`, report evidence `not-run`,
 // task reason `acceptance-check-not-run`).
 // Additive: every v58 record already parses under the widened contracts, so no row is read or rewritten; the version step alone keeps an
 // older build (which refuses a newer ledger) from reading the new vocabulary. Downgrade = restore the pre-switch backup.
 export const ENVIRONMENT_READINESS_LEDGER_VERSION = 59;
+// ATAMA-0 metrics v2: the producer key gains the outcome kind (one producer may record a human decision and a Run observation) and
+// `superseded_by` makes one current row per (Task, Attempt, outcome kind) a storage invariant. v1 rows are kept byte for byte and in order.
+export const METRICS_V2_LEDGER_VERSION = 60;
 // BENIMSEME-DEPO-KIMLIGI: adoptions numbered per (repository, target); pre-v58 rows stamped 'pre-v58'; settled 2 = released as not applied.
 export const ADOPTION_REPOSITORY_LEDGER_VERSION = 58;
 export const MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION = 55;
@@ -85,6 +88,17 @@ const migrations: Readonly<Record<number, string>> = Object.freeze({
     CREATE TRIGGER memory_command_receipts_no_update BEFORE UPDATE ON memory_command_receipts BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
     CREATE TRIGGER memory_command_receipts_no_delete BEFORE DELETE ON memory_command_receipts BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
     CREATE VIRTUAL TABLE memory_search USING fts5(text,tokenize='unicode61 remove_diacritics 2');
+    PRAGMA user_version=61;`,
+  // Table rebuild (primary key change); rowids are kept so "latest" stays the producer order. Downgrade = restore the pre-switch backup.
+  60: `CREATE TABLE acceptance_metrics_v60(scope_id TEXT NOT NULL,producer_command_id TEXT NOT NULL,run_id TEXT NOT NULL,task_id TEXT NOT NULL,
+    attempt_id TEXT NOT NULL,outcome_kind TEXT NOT NULL,record TEXT NOT NULL,superseded_by TEXT,PRIMARY KEY(scope_id,producer_command_id,outcome_kind));
+    INSERT INTO acceptance_metrics_v60(rowid,scope_id,producer_command_id,run_id,task_id,attempt_id,outcome_kind,record)
+      SELECT rowid,scope_id,producer_command_id,run_id,task_id,attempt_id,outcome_kind,record FROM acceptance_metrics ORDER BY rowid;
+    UPDATE acceptance_metrics_v60 AS m SET superseded_by=(SELECT n.producer_command_id FROM acceptance_metrics_v60 n WHERE n.scope_id=m.scope_id AND n.run_id=m.run_id
+      AND n.task_id=m.task_id AND n.attempt_id=m.attempt_id AND n.outcome_kind=m.outcome_kind AND n.rowid>m.rowid ORDER BY n.rowid LIMIT 1);
+    DROP TABLE acceptance_metrics; ALTER TABLE acceptance_metrics_v60 RENAME TO acceptance_metrics;
+    CREATE INDEX acceptance_metrics_attempt ON acceptance_metrics(scope_id,run_id,task_id,attempt_id,outcome_kind);
+    CREATE UNIQUE INDEX acceptance_metrics_current ON acceptance_metrics(scope_id,run_id,task_id,attempt_id,outcome_kind) WHERE superseded_by IS NULL;
     PRAGMA user_version=60;`,
   59: 'PRAGMA user_version=59;',
   // Table rebuild (UNIQUE and CHECK change): every row is kept byte for byte with repository 'pre-v58'. Downgrade = restore the pre-switch backup.

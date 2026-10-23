@@ -87,6 +87,8 @@ it('derives the pinned criterion, commits once, and replays without reevaluation
     terminal: { exitCode: 0, interrupted: false },
   });
   expect(f.state.evaluations).toBe(1);
+  // ATAMA-0: a plain verdict rests on the verified retained dispatch output, so the row names that evidence type (an acceptance profile reads it).
+  expect(JSON.parse(first.command).evaluation.criteria[0]).toMatchObject({ verdict: 'pass', evidenceIds: ['dispatch-output'], evidenceTypes: ['retained-artifact'] });
   expect(await f.app.execute(command)).toEqual(first); expect(f.state.evaluations).toBe(1);
   f.state.allow = false;
   await expect(f.app.execute(command)).rejects.toThrow('POLICY_DENIED'); expect(f.state.evaluations).toBe(1);
