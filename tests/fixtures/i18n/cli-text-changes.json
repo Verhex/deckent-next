@@ -1220,7 +1220,7 @@
     },
     "doctor.firstJob.execution": {
       "before": "İşin nerede çalışacağını söyleyin: o imaj kimliği ile docker ve git yolları (command -v docker, command -v git)",
-      "after": "Worker imajını derleyin ya da benimseyin ve çalıştırma ayarlarını yazın (deckent init önce kartta sorar)"
+      "after": "Worker imajını derleyin ya da hazır imajı kullanın ve çalıştırma ayarlarını yazın (deckent init önce kartta sorar)"
     },
     "cli.coding.instructions.help": {
       "before": "deckent coding instructions [status] [--json] [--lang en|tr]\nÇalışma hedefinin worker talimat dosyasını gösterir (execution.workerInstructions; çalışma hedefi tanımlı değilse proje kökü): yol, boyut, SHA-256 ve worker'ların dosyayı şu an alıp almadığı.\ndeckent coding instructions trust|revoke [--target <id>] --scope <id> [--lang en|tr]\nDosyanın yalnızca şu anki içeriğine o klasör için güvenir (ya da güveni geri alır). Kendi terminalinizdeki kart yolu, boyutu, SHA-256 değerini ve ilk satırları gösterir; yapay zekâ araçları, MCP, boru (pipe) ve --json reddedilir. Karar execution.workerInstructions için config yazma iznine göre verilir ve denetim kaydına yazılır. Değişen dosya yeniden güvenilmez olur.",
@@ -1229,6 +1229,66 @@
     "error.WORKER_INSTRUCTIONS_CHANGED.place": {
       "before": "Worker'ların okuduğu klasör ya da dosya kartta gösterilen değil (çalışma hedefi, klasörü, worker kaynağı ya da dosya değiştirildi). İncelemek için komutu yeniden çalıştırın. Hiçbir şey değiştirilmedi.",
       "after": "Worker'ların okuduğu klasör, ref ya da dosya kartta gösterilen değil (çalışma hedefi, klasörü, temel ref'i, worker kaynağı ya da dosya değiştirildi). İncelemek için komutu yeniden çalıştırın. Hiçbir şey değiştirilmedi."
+    },
+    "terminal.slash.deliver": {
+      "before": "Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim et; seçilen doğrulama işiyle dala al",
+      "after": "Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim et; seçilen doğrulama işiyle dalı ilerlet"
+    },
+    "terminal.delivery.adoptionLater": {
+      "before": "Teslimden sonra dala alma ayrı bir seçimdir: {targets}",
+      "after": "Teslimden sonra dalı ilerletme ayrı bir seçimdir: {targets}"
+    },
+    "terminal.delivery.adoptPrompt": {
+      "before": "{commit} commit'i bir dala alınsın mı? Bu dalı ilerletir ve ayrı bir y ister.",
+      "after": "{commit} commit'i için bir dal ilerletilsin mi? Bu, dalı commit'e taşır ve ayrı bir y ister."
+    },
+    "terminal.delivery.adoptHints": {
+      "before": "y seçili dala al (yapılandırılmış doğrulama sonra seçilir) · ↑↓ dal · n/Esc dala almadan bitir",
+      "after": "y seçili dalı ilerlet (yapılandırılmış doğrulama sonra seçilir) · ↑↓ dal · n/Esc dalı ilerletmeden bitir"
+    },
+    "terminal.delivery.adopting": {
+      "before": "Dala alınıyor…",
+      "after": "Dal ilerletiliyor…"
+    },
+    "terminal.delivery.adopted": {
+      "before": "Dala alındı: {target} {from} → {to} · {verification} · dala alma komutu {command}",
+      "after": "Dal ilerletildi: {target} {from} → {to} · {verification} · dalı ilerletme komutu {command}"
+    },
+    "terminal.delivery.verifyWithout": {
+      "before": "{mark} Doğrulamasız dala al (bu kurulum izin veriyor; doğrulanmadı olarak kaydedilir)",
+      "after": "{mark} Doğrulamasız dalı ilerlet (bu kurulum izin veriyor; doğrulanmadı olarak kaydedilir)"
+    },
+    "terminal.delivery.verifyCheck": {
+      "before": "Dala alma, seçilen işin tam olarak bu teslim commit'ini güncel profil ve kurulumun ölçütleriyle doğruladığını denetler; değilse reddedilir ve dal taşınmaz.",
+      "after": "Dalı ilerletme, seçilen işin tam olarak bu teslim commit'ini güncel profil ve kurulumun ölçütleriyle doğruladığını denetler; değilse reddedilir ve dal taşınmaz."
+    },
+    "terminal.delivery.verifyHints": {
+      "before": "↑↓ seç · y seçimle dala al · r yeniden oku · n/Esc geri",
+      "after": "↑↓ seç · y seçimle dalı ilerlet · r yeniden oku · n/Esc geri"
+    },
+    "terminal.delivery.summaryAdopted": {
+      "before": "{target} dalına alındı: {from} → {to} ({verification}). Dala alma komutu {command} (deckent task integration-rollback --adoption-command-id), teslim komutu {delivery}.",
+      "after": "{target} dalı ilerletildi: {from} → {to} ({verification}). Dalı ilerletme komutu {command} (deckent task integration-rollback --adoption-command-id), teslim komutu {delivery}."
+    },
+    "terminal.delivery.summaryAdoptFailed": {
+      "before": "Dala alma yapılmadı; teslim {ref} referansında kalıyor — {reason}",
+      "after": "Dal ilerletilmedi; teslim {ref} referansında kalıyor — {reason}"
+    },
+    "terminal.delivery.summaryNotAdopted": {
+      "before": "Dala alınmadı; teslim {ref} referansında kalıyor.",
+      "after": "Dal ilerletilmedi; teslim {ref} referansında kalıyor."
+    },
+    "terminal.delivery.next.ADOPTION_TARGET_DENIED": {
+      "before": "Sonraki adım: teslim kendi referansında kalır. Burada dala almak için dalı execution.adoption.targets'a ekle (/config).",
+      "after": "Sonraki adım: teslim kendi referansında kalır. Burada dalı ilerletmek için dalı execution.adoption.targets'a ekle (/config)."
+    },
+    "terminal.delivery.next.ADOPTION_NOT_VERIFIED": {
+      "before": "Sonraki adım: teslim kendi referansında kalır, dal taşınmadı. Bu kurulum dalı yalnız teslim commit'inin kabul edilmiş bir doğrulama işi ile taşır: bu pencerede seçin (dalda y) ya da komut satırından dala alın: `deckent task integration-adopt --scope {scope} --run {run} --task {task} --attempt {attempt} --generation {generation} --layout-revision {layout} --command-id <new-id> --delivery-command-id {delivery} --target {target} --verification-run <run>`",
+      "after": "Sonraki adım: teslim kendi referansında kalır, dal taşınmadı. Bu kurulum dalı yalnız teslim commit'inin kabul edilmiş bir doğrulama işi ile taşır: bu pencerede seçin (dalda y) ya da komut satırından dalı ilerletin: `deckent task integration-adopt --scope {scope} --run {run} --task {task} --attempt {attempt} --generation {generation} --layout-revision {layout} --command-id <new-id> --delivery-command-id {delivery} --target {target} --verification-run <run>`"
+    },
+    "setup.execution.workerNone": {
+      "before": "Henüz worker imajı yok: Run'lar ve /do bir imaj ister. Terminalde deckent init imajı bir karttan sonra derler ya da --image-id ile verdiğiniz imajı benimser.",
+      "after": "Henüz worker imajı yok: Run'lar ve /do bir imaj ister. Terminalde deckent init imajı bir karttan sonra derler ya da --image-id ile verdiğiniz imajı kullanır."
     }
   }
 }
