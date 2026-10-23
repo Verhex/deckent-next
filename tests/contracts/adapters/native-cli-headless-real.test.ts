@@ -1,16 +1,21 @@
 // Lead-only acceptance against the real CLI (S3-2, S3-5): skipped unless DECKENT_HEADLESS_REAL_CLI names the absolute executable. Every spawn runs
-// in the bubblewrap realm (this host's measured launcher under a temporary state root). Preflight makes no model call; DECKENT_HEADLESS_REAL_SEND=1
+// in the bubblewrap realm (this host's measured launcher under a temporary state root); the login dir is the Brain's own (s3c) unless
+// DECKENT_HEADLESS_CONFIG_DIR names another. Preflight makes no model call; DECKENT_HEADLESS_REAL_SEND=1
 // adds exactly one tiny one-turn call on the person's own subscription. Nothing personal is stored here; the printed line holds durations only.
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parseModelBindingDefinition, parseModelInvocationProfile } from '#domain/index.js';
-import { createNativeCliHeadlessPort, NATIVE_CLI_HEADLESS_ADAPTER } from '#adapters/core/native-cli-headless/index.js';
+import { createNativeCliHeadlessPort, NATIVE_CLI_HEADLESS_ADAPTER, nativeCliHeadless } from '#adapters/core/native-cli-headless/index.js';
+import { productResourcePath, resolveProductLayout } from '#platform/index.js';
 import catalog from '../../../assets/model-catalog/claude-cli-subscription.json' with { type: 'json' };
 import { testIsolation } from '../../fixtures/native-headless/connection.js';
 
 const executable = process.env.DECKENT_HEADLESS_REAL_CLI, roots: string[] = [];
+/** s3c: the person's Brain-own login dir (layout `headlessLogins` under the default global state root of the real home, registry CLI id), signed in by
+ * `deckent models login`. The test runner points the global root at a temporary one, so the real home is named here. */
+const ownedDir = (family: string) => join(productResourcePath(resolveProductLayout({ projectRoot: homedir() }), 'headlessLogins'), nativeCliHeadless(family)!.id);
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 describe.skipIf(!executable)('S3-2 real CLI acceptance (lead only)', () => {
   it('preflights the real CLI without a model call and, when asked, runs one guarded turn', async () => {
@@ -23,7 +28,7 @@ describe.skipIf(!executable)('S3-2 real CLI acceptance (lead only)', () => {
     const profile = parseModelInvocationProfile({ schemaVersion: 2, billingAxis: 'subscription', id: 'real', version: 1, scopeId: 'scope',
       reference: { providerId: provider.id, providerVersion: provider.version, modelId: model.id, modelVersion: model.version }, bindingDigest: 'a'.repeat(64),
       protocol: { family, version: 'v1' }, adapter: { ...NATIVE_CLI_HEADLESS_ADAPTER, definition: { schemaVersion: 1, executable: await realpath(executable!),
-        configDir: await realpath(process.env.DECKENT_HEADLESS_CONFIG_DIR ?? join(homedir(), '.claude')), stateDir: join(root, 'state'), ownerUid: process.getuid!(),
+        configDir: await realpath(process.env.DECKENT_HEADLESS_CONFIG_DIR ?? ownedDir(family)), stateDir: join(root, 'state'), ownerUid: process.getuid!(),
         minCliVersion: model.minCliVersion ?? '0.0.0', delegatedUse: null } },
       allocation: { id: 'real', maxCalls: 1, maxInFlight: 1 }, limits: { requestMaxBytes: 65_536, responseMaxBytes: 65_536, timeoutMs: 60_000 } });
     const port = createNativeCliHeadlessPort({ now: Date.now, isolation: testIsolation });
