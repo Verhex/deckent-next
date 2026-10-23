@@ -444,6 +444,12 @@ describe('SELF-SOURCE-FLOOR session effect integration', () => {
     expect(result).toEqual({ status: 'ok', text: 'checked' });
     // Only the shell call and the ordinary-write relaxation were audited; neither refused write reached an effect.
     expect(f.events()).toBe(2);
+    // S5 D1: each entry the decision still asks for (the self-source floor, the configuration file) is an effect-stage refusal of the turn's
+    // `policy-turn` record; the allowed ordinary write is not (it has its own relaxation event).
+    expect(await f.decisions.flush()).toBe(true);
+    const turn = f.auditRecords().find(record => record.event.subject.kind === 'policy-turn')!.event.subject as unknown as { refused: { calls: { cell: string; decision: string; stage: string; call: unknown }[] } };
+    expect(turn.refused.calls).toEqual([expect.objectContaining({ cell: 'edit-self-source', decision: 'require-approval', stage: 'effect', call: { round: 1, index: 0, callId: 'shell-call' } }),
+      expect.objectContaining({ cell: 'edit-authority', decision: 'require-approval', stage: 'effect' })]);
   });
 
   it('requires POSIX private audit keyring — a session-lowered self-source shell write-set entry records its sealed use before its effect', async context => { privateAudit(context);
@@ -671,6 +677,15 @@ describe('policy-turn record of refused and silently allowed calls (S5 D1)', () 
     expect(policyTurns(allowed)[0]).toMatchObject({ refused: { count: 0, calls: [] }, allowed: { count: 2, calls: [
       { tool: { name: 'edit_file', version: 1 }, cell: 'edit', call: { round: 1, index: 0, callId: 'call_1' } },
       { tool: { name: 'read_file', version: 1 }, cell: 'read', call: { round: 1, index: 1, callId: 'call_2' }, revision: expect.stringContaining('p-read') }] } });
+  });
+
+  it('requires POSIX private audit keyring — a policy deny after the owner approved a card is an effect-stage refusal on the cell the call was planned as', async context => { privateAudit(context);
+    const f = await fixture([snapshot('require-approval', 'ask')]);
+    expect(await f.decisions.authorize(edit, args, { round: 1, index: 0, callId: 'c0' })).toBe('require-approval');
+    f.decisions.refusedAfterApproval(edit, args, { round: 1, index: 0, callId: 'c0' }, 'p-after');
+    await f.decisions.flush();
+    expect(policyTurns(f)[0]).toMatchObject({ refused: { count: 2, calls: [{ stage: 'cell', decision: 'require-approval' },
+      { cell: 'edit', decision: 'deny', stage: 'effect', revision: 'p-after', call: { round: 1, index: 0, callId: 'c0' } }] } });
   });
 
   it('requires POSIX private audit keyring — a turn that decided nothing writes nothing; an unavailable audit is reported, never thrown, and changes no decision', async context => { privateAudit(context);

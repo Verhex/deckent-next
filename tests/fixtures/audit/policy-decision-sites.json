@@ -33,7 +33,7 @@
     "src/engine/core/policy/internal/model-activation.ts": { "sites": 2, "class": "unsealed", "note": "activate/deactivate; inspect is a read-gate" },
     "src/engine/core/policy/internal/model-invocation.ts": { "sites": 1, "class": "unsealed", "note": "invoke/purge/cancel; inspect is a read-gate" },
     "src/engine/core/policy/internal/permission-mode-admin.ts": { "sites": 1, "class": "sealed", "kind": "permission-mode-change" },
-    "src/engine/core/policy/internal/permission-mode.ts": { "sites": 3, "class": "sealed", "kind": "policy-turn", "note": "agent tool call decisions: refusals and plain allows in policy-turn; relaxations keep their own events" },
+    "src/engine/core/policy/internal/permission-mode.ts": { "sites": 3, "class": "sealed", "kind": "policy-turn", "note": "agent tool call decisions incl. shell write-set entries: refusals (policy/cell/effect stage) and plain allows in policy-turn; relaxations keep their own events; MCP-proposal tool calls (proposals.apply) are not noted as allows" },
     "src/engine/core/policy/internal/pool.ts": { "sites": 2, "class": "partial", "kind": "pool-hold", "note": "hold/resume/capacity/quota sealed; pool/use at reservation unsealed" },
     "src/engine/core/policy/internal/provider-spend.ts": { "sites": 1, "class": "unsealed", "note": "audit/reconcile/budget-revision; inspect is a read-gate" },
     "src/engine/core/policy/internal/run.ts": { "sites": 1, "class": "unsealed", "note": "run cancel/reserve; inspect is a read-gate" },
