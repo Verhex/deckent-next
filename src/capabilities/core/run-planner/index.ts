@@ -80,7 +80,7 @@ function supportsTurnLimit(context: unknown): boolean {
 export function prepareBrainPrompt(command: BrainPlanCommand, policy: WorkClassPolicy, context: unknown, configInput: unknown, known?: KnownSecretSnapshot) {
   const config = brainPlannerConfigSchema.parse(configInput), chosenTemplate = selectedBrainTemplate(config), intent = redactForRecord(command.intent, known);
   const modelAssignment = chosenTemplate.modelAssignment ?? 'brain';
-  const projected = JSON.stringify(redactJson({ scopeId: command.scopeId, workClasses: policy, context }, known));
+  const projected = JSON.stringify(redactJson({ scopeId: command.scopeId, workClasses: brainWorkClassView(policy), context }, known));
   const bytes = new TextEncoder().encode(projected).length;
   if (bytes > config.context.maxBytes) throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: config.context.maxBytes, observed: bytes, unit: 'bytes' } });
   return Object.freeze({ template: { id: chosenTemplate.id, version: chosenTemplate.version,
@@ -96,6 +96,18 @@ const FENCED = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/u;
 function unfence(text: string): string {
   const match = FENCED.exec(text.trim());
   return match ? match[1]! : text;
+}
+/** The WorkClass vocabulary the Brain plans with: class ids (and parent), the default effort a v1/v2 template may name, the criterion and
+ * evidence types a declared criterion acceptance may use, the kind bindings, evidence extensions and advisory permission vocabulary. The
+ * acceptance scoring (rubric weights, ceiling rules, thresholds), the proposal-admission risk/standing grant, the silence policy and the
+ * worker candidate lists never enter the planning context: the plan is judged by them, so it must not be written against them. */
+export function brainWorkClassView(policy: WorkClassPolicy) {
+  return { revision: policy.revision,
+    classes: policy.classes.map(row => ({ id: row.id, defaultEffort: row.defaultEffort, ...('parentClassId' in row && row.parentClassId !== undefined ? { parentClassId: row.parentClassId } : {}),
+      ...('acceptanceProfile' in row ? { acceptance: { criterionTypes: row.acceptanceProfile.criterionTypes, evidenceTypes: row.acceptanceProfile.evidenceTypes } } : {}) })),
+    bindings: policy.bindings.map(row => ({ kind: row.kind, classId: row.classId })),
+    ...(policy.evidenceExtensions?.length ? { evidenceExtensions: policy.evidenceExtensions } : {}),
+    ...(policy.proposalPermissions?.length ? { proposalPermissions: policy.proposalPermissions } : {}) };
 }
 /** Each failure stage is explicit and contains no provider text or secret-bearing parse diagnostics. */
 /** `requireCurrentGraph` is for a NEW model reply only. Verifying a stored proposal's model contribution keeps reading every graph

@@ -1,26 +1,24 @@
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
-import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand, type WorkClassPolicy,
+import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
   type RunProposal, type VerifiedPrincipal } from '#domain/index.js';
 import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext, assertBrainLeavesAssignment,
-  prepareBrainEvaluatorParameters, selectedBrainTemplate, type BrainRegistryContext } from '#capabilities/index.js';
+  prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainRegistryContext } from '#capabilities/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { modelInvocationRequestDigest, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import type { RunProposalQuery, RunProposalResult } from '#engine/core/run-proposal/index.js';
-const without = <T extends object>(value: T, key: string): T => Object.fromEntries(Object.entries(value).filter(([name]) => name !== key)) as T;
 export const brainRunId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-run:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export const brainInvocationCommandId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-invocation:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: ExecutionRegistry,
   budget: { currency: string; limitMinorUnits: number } | null, config: unknown, known?: KnownSecretSnapshot,
   selections?: Readonly<{ kinds: BrainRegistryContext['kinds']; workerModels: BrainRegistryContext['workerModels'] }>) {
-  // ATAMA-1: the Brain chooses a WorkClass, never its worker: the candidate lists stay out of the planning context (bytes and temptation).
-  const merged = mergeWorkClassRegistries(CORE_WORK_CLASSES, registry.workClasses ? [registry.workClasses] : []);
-  const workClasses: WorkClassPolicy = without({ ...merged, classes: merged.classes.map(row => without(row, 'candidatePolicyId')) }, 'candidatePolicies');
+  // The context bound measures the same WorkClass view the prompt carries (brainWorkClassView: no scoring, admission or worker lists).
+  const workClasses = mergeWorkClassRegistries(CORE_WORK_CLASSES, registry.workClasses ? [registry.workClasses] : []);
   const settings = brainPlannerConfigSchema.parse(config), limits = settings.context;
   // ATAMA-1: a system-assignment template offers the model no worker models at all; the system assigns them at admission.
   const offerModels = selectedBrainTemplate(settings).modelAssignment !== 'system';
   const order = <T>(rows: readonly T[], key: (row: T) => string) => [...rows].sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
-  const context = boundBrainContext(command.scopeId, workClasses, { schemaVersion: 2, registryRevision: registry.revision,
+  const context = boundBrainContext(command.scopeId, brainWorkClassView(workClasses), { schemaVersion: 2, registryRevision: registry.revision,
     kinds: order(selections?.kinds ?? registry.kinds.map(row => ({ kind: row.kind, profile: row.profile, type: 'prepared' as const })), row => row.kind),
     workerModels: order(offerModels ? selections?.workerModels ?? [] : [], row => JSON.stringify([row.profile.id, row.profile.version, row.channelId, row.modelId])),
     evaluators: order(registry.evaluators.map(row => ({ id: row.id, version: row.version, parameters: prepareBrainEvaluatorParameters(row) })), row => JSON.stringify([row.id, row.version])),

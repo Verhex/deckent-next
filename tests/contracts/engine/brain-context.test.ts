@@ -55,3 +55,14 @@ it('enforces byte limits even without a declared window or a provider counter', 
   expect(() => prepareBrainRegistryPrompt(command, registry, null, { context: { ...brainPlannerConfigSchema.parse({}).context, maxBytes: 1 } }))
     .toThrow(expect.objectContaining({ code: 'BRAIN_CONTEXT_TOO_LARGE' }));
 });
+// Root cause of the 4000-byte failure: s0 put every class's full acceptance profile (rubric weights, ceiling rules, decision thresholds) and
+// its proposal-admission risk into the planning context, ~2 KB the Brain must not plan against. The Brain sees what it may declare (criterion
+// and evidence types per class) and the class/binding vocabulary; scoring internals, standing-admission data and worker lists stay out.
+it('the planning context names each class with its declarable criterion and evidence types, never its scoring, admission or worker data', () => {
+  const content = prepareBrainRegistryPrompt(command, fixture, null, {}).messages[1]!.content, view = JSON.parse(content).context.workClasses;
+  expect(view.classes.find((row: { id: string }) => row.id === 'feature')).toEqual({ id: 'feature', defaultEffort: 'xhigh',
+    acceptance: { criterionTypes: ['completion'], evidenceTypes: ['retained-artifact'] } });
+  expect(view.bindings).toContainEqual({ kind: 'coding', classId: 'feature' });
+  for (const hidden of ['rubric', 'ceilingRules', 'decisionThresholds', 'proposalAdmission', 'standingAdmission', 'candidatePolic', 'inactivity'])
+    expect(content, hidden).not.toContain(hidden);
+});
