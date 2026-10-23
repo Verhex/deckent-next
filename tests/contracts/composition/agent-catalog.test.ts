@@ -15,7 +15,7 @@ import { createMcpServer } from '#surfaces/core/mcp/index.js';
 
 // S7 agent/skill catalog through the real composition (policy file, integrity key, SQLite ledger): a person creates and revises on their own
 // terminal card (the default card, AJAN-ORG S6); the AI (MCP actor) or a caller without the terminal witness is refused before anything is read,
-// whatever policy grants; MCP has read tools only. Core composes no skill-signature trust, so every import fails closed (floor d).
+// whatever policy grants; MCP has read tools only. An import verifies only against an `import` signer row a person registered (S8-5), so here it fails closed (floor d).
 beforeEach(context => {
   if (process.platform === 'win32') context.skip('LOCAL_OS_PRINCIPAL_UNSUPPORTED: configured policy/integrity flows require a verified POSIX UID');
 });
@@ -74,7 +74,7 @@ it('negative: AI create without the card — the MCP actor and a caller without 
   expect(rows(f.ledger)).toEqual([0, 0, 0]);
 });
 
-it('negative: Core composes no signature trust — a pinned, signed import fails closed for the person on their own terminal', async () => {
+it('negative: no import key is registered — a pinned, signed import fails closed for the person on their own terminal', async () => {
   const f = await fixture();
   await expect(importConfiguredSkill(f.project, signedImport, f.options, person)).rejects.toMatchObject({ code: 'SKILL_IMPORT_SIGNATURE_UNVERIFIED' });
   await expect(importConfiguredSkill(f.project, { ...signedImport, commandId: 'i2', signature: null }, f.options, person)).rejects.toMatchObject({ code: 'SKILL_IMPORT_UNSIGNED' });
