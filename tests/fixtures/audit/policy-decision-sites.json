@@ -27,6 +27,7 @@
     "src/engine/core/identity-profile/internal/application.ts": { "sites": 1, "class": "read-gate", "note": "scope/inspect draft preview" },
     "src/engine/core/identity-profile/internal/distribution.ts": { "sites": 2, "class": "unsealed", "note": "pre-checks before administration.submit" },
     "src/engine/core/installation/internal/application.ts": { "sites": 2, "class": "unsure", "note": "checks an authored profile's policy (profile validation or gate)" },
+    "src/engine/core/memory/internal/authorization.ts": { "sites": 1, "class": "unsealed", "note": "memory propose/verify/retire gate (S4); an allowed transition is sealed as memory-journal, a refusal is not yet; inspect is a read-gate" },
     "src/engine/core/policy/internal/administration-status.ts": { "sites": 1, "class": "read-gate", "note": "scope/inspect" },
     "src/engine/core/policy/internal/agent-tool.ts": { "sites": 1, "class": "sealed", "kind": "policy-turn", "note": "tool-list exposure is a filter; revalidation after an approved card is noted in policy-turn (stage effect)" },
     "src/engine/core/policy/internal/authorize.ts": { "sites": 2, "class": "unsealed", "note": "attempt actions; scope/inspect is a read-gate" },
