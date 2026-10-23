@@ -72,11 +72,14 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
 export async function indexMonitorInstall(config: ResolvedConfig): Promise<MonitorLedgerIndex> {
   return indexMonitorLedger(await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
 }
-/** MON-CPU-FIX: the viewer and the stat identity of the install's ledger (database and WAL), policy and bindings — nothing is opened or read.
+/** MON-CPU-FIX: the viewer and the stat identity of the install's ledger (database and WAL), policy, bindings and both config layer files (the
+ * paths the config loader stamps) — nothing is opened or read. The config files stand in for the composed config object: a forced config read
+ * (the role and config-file readers) replaces that object without any change, so its identity is no source stamp.
  * `changedAtMs` is the newest change; a caller trusts the stamp only once that change is older than the file timestamp granularity. */
-export async function stampMonitorInstall(config: ResolvedConfig) {
-  const layout = config.productLayout, ledger = await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']);
-  const stats = await Promise.all([ledger, `${ledger}-wal`, productResourcePath(layout, 'policy'), productResourcePath(layout, 'bindings')]
+export async function stampMonitorInstall(config: ResolvedConfig, options: { readonly env?: Environment; readonly platform?: string } = {}) {
+  const layout = config.productLayout, ledger = await inspectProductFile(layout, 'ledger', ['-wal', '-shm', '-journal']), platform = options.platform ?? process.platform;
+  const configs = [await resolveGlobalConfigReadPath(options.env, platform), productResourcePath(resolveProductLayout({ projectRoot: config.projectRoot, platform: platform === 'win32' ? 'win32' : 'posix' }), 'config')];
+  const stats = await Promise.all([ledger, `${ledger}-wal`, productResourcePath(layout, 'policy'), productResourcePath(layout, 'bindings'), ...configs]
     .map(path => lstat(path, { bigint: true }).catch((error: { code?: unknown }) => { if (error?.code === 'ENOENT') return null; throw error; })));
   return Object.freeze({ stamp: JSON.stringify([readLocalOsIdentity(), ...stats.map(stat => stat && `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`)]),
     changedAtMs: Math.max(...stats.map(stat => stat ? Number(stat.ctimeNs / 1_000_000n) : 0)) });

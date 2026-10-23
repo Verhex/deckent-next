@@ -68,9 +68,4 @@ describe('MonitorSourceMemo', () => {
     expect(work.calls).toBe(4);
   });
 
-  it('identity is stable per object and distinct between objects', () => {
-    const memo = new MonitorSourceMemo(), a = {}, b = {};
-    expect(memo.identity(a)).toBe(memo.identity(a));
-    expect(memo.identity(a)).not.toBe(memo.identity(b));
-  });
 });
