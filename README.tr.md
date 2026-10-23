@@ -304,7 +304,7 @@ izin verir; bunları gizlemek için bayrağı vermeyin (varsayılan). Her değer
    (işçinin kendi raporu iddia olarak işaretlenir), risk ve evet ya da hayırın ne yapacağı. Ardından değişen dosyaları
    listeler. `y` değişikliği yalnız `refs/deckent/deliveries/` altındaki ayrı bir referansa yazar; hiçbir dala, index'e ya da
    çalışma dosyalarınıza dokunmaz.
-5. **Bir dala alın**, isterseniz ayrı bir `y` ile. Deckent yalnız izin verdiğiniz ve kimsenin checkout etmediği bir dalı
+5. **Dalı ilerletin**, isterseniz ayrı bir `y` ile. Deckent yalnız izin verdiğiniz ve kimsenin checkout etmediği bir dalı
    ilerletir; bu yüzden önce bir dal açın:
 
    ```sh
@@ -313,7 +313,7 @@ izin verir; bunları gizlemek için bayrağı vermeyin (varsayılan). Her değer
    ```
 
    Sonuca `git log deckent/first-job` ile bakın ve birleştirmeyi kendiniz yapın. Proje teslim kuyruğunu (servisin dal başına
-   teslim kuyruğu) kullanıyorsa bir dala alma kendi onayıyla geri alınabilir; komutları
+   teslim kuyruğu) kullanıyorsa dalı ilerletme kendi onayıyla geri alınabilir; komutları
    [işletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md#teslim-kuyruğu-inceleme-ve-geri-alma) gösterir.
 
 <img src=".github/assets/screenshots/tr/16-gorevler.png" alt="Henüz iş olmayan canlı /tasks penceresi" width="880">
@@ -476,7 +476,7 @@ anlatır.
 - **Terminalde ajanla çalışın**: akışlı turlar, dosya düzenleme ve sandbox'lı kabuk, onay ve izleme pencereleri, izin
   modları, MCP araçları, konuşma sıkıştırma; Türkçe ve İngilizce.
 - **İşi sade sözlerle isteyin**: `/do` işi kabul ölçütleriyle planlar, siz onaylarsınız, bir kodlama işçisi (Claude Code,
-  Codex ya da Cursor) işi Docker içinde yapar; `/deliver` sonucu Git'e yazar ve yalnız siz seçerseniz bir dala alır.
+  Codex ya da Cursor) işi Docker içinde yapar; `/deliver` sonucu Git'e yazar ve yalnız siz seçerseniz dalı ilerletir.
 - **İşleri yönetin**: Run'lar, görevler ve denemeler (bir görevin her denenişi) başlatılır, sıralanır, durdurulur, sürdürülür, iptal edilir ve
   kurtarılır; hepsi kalıcı bir SQLite defterine yazılır.
 - **Model seçin ve maliyeti tutun**: kendi anahtarınızı bağlayın, modeli oturum için ya da varsayılan olarak seçin, yerel
@@ -499,13 +499,13 @@ anlatır.
   koordine eden daha uzun süreçler planlanıyor.
 - **ERP ya da CRM bağlayıcısı yok.** Operasyon sözleşmesi ve genel bir HTTP hedefi var; ürün bağlayıcıları yok.
 - **Teslim hiçbir zaman kendiliğinden olmaz.** Bir kural kuyruktaki her iş için teslim *edip etmeyeceğini* kaydeder ama yalnız
-  tavsiye verir; her teslim, dala alma ve geri alma sizin `y`'nizi bekler.
+  tavsiye verir; her teslim, dalı ilerletme ve geri alma sizin `y`'nizi bekler.
 - **Kodlama görevleri işçinin çıkış koduyla kabul edilir.** İçerik henüz bağımsız olarak doğrulanmıyor ve pencere bunu söyler.
 - **Abonelikler kısmi.** Claude Code işçisi kendi Claude girişinizle çalışır; Brain (`/do`'nun arkasındaki planlayıcı) da
   Deckent'in bubblewrap korumalı alanının çalıştığı yerde (Linux ve WSL) Claude aboneliğinizi kullanabilir. Claude aboneliğiyle
   terminalde sohbet ve ChatGPT ile giriş henüz yok (bkz. [Yol haritası](#yol-haritası)).
 - **Platformlar.** Native Windows desteklenmiyor. macOS'ta yerel runtime servisi henüz çalışmıyor (soketi yalnız Linux'ta
-  var); bu yüzden sohbet, işler ve yedekleme orada kullanılamaz. Teslim, dala alma, geri alma ve anahtar izni yalnız Linux'ta
+  var); bu yüzden sohbet, işler ve yedekleme orada kullanılamaz. Teslim, dalı ilerletme, geri alma ve anahtar izni yalnız Linux'ta
   (WSL dahil) bulunan bir terminal tanığı ister, diğer sistemlerde reddedilir. arm64 paketlenmiyor. Docker işçisi host
   çekirdeğini paylaşır; sanal makine değildir.
 - **Kurtarma setleri tamamen şifreli değil.** Setin içinde yalnız yetki anahtarı parolanızla şifrelenir; setleri güvendiğiniz
