@@ -115,7 +115,7 @@ it.each(['en', 'tr'] as const)('returned durable Run identity leads the summary 
       reference: { providerId: 'fixture-api', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 }, responseDigest: 'a'.repeat(64) } } } },
     planningSpending: { class: 'metered', currency: 'USD', amountMinorUnits: 2, evidence: 'measured-tariff' } };
   const lines = brainProposalLines(accepted, locale);
-  expect(lines[0]).toBe(locale === 'en' ? 'Run r admitted. Follow /tasks or /monitor.' : 'Run r kabul edildi. /tasks veya /monitor ile izleyin.');
+  expect(lines[0]).toBe(locale === 'en' ? 'Run r admitted. Follow /tasks or /monitor.' : 'Run r başlatıldı. /tasks veya /monitor ile izleyin.');
   expect(lines.join('\n')).toContain('fixture-api/fixture-model');
   expect(brainProposalLines(pending, locale)[0]).not.toBe(lines[0]);
 });

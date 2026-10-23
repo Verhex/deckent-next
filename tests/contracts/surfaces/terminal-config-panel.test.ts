@@ -61,7 +61,7 @@ describe('/config window port', () => {
     const field = (key: string) => view.fields.find(item => item.key === key)!;
     expect(field('terminal.theme')).toMatchObject({ choices: [{ label: 'auto', value: 'auto' }, { label: 'dark', value: 'dark' }, { label: 'light', value: 'light' }], free: false,
       locks: { project: { blocked: null, note: null }, global: { blocked: null, note: null } }, unsettable: false });
-    expect(field('max_workers')).toMatchObject({ free: false, unsettable: true, apply: 'yeniden', locks: { project: { blocked: null, note: 'onay ister (kural company-config-approval)' } } });
+    expect(field('max_workers')).toMatchObject({ free: false, unsettable: true, apply: 'yeniden başlatınca', locks: { project: { blocked: null, note: 'onay ister (kural company-config-approval)' } } });
     expect(field('max_workers').locks.global.blocked).toContain('bu katmanda değiştirmenize izin vermiyor');
     expect(field('language').locks.project.blocked).toContain('policy');
     expect(field('secrets.token')).toMatchObject({ sensitive: true, locks: { project: { blocked: 'Sırlar buradan değil, deckent secret ile değiştirilir.' } } });
