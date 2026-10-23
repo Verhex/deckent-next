@@ -1771,15 +1771,15 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 
 - `src/domain/core/approval/index.ts`: `d9920351b89a86cc6d62984cbeb7bbd8c28fbfd2a31935f08c9aa05db00ebb4b`
 - `src/domain/core/approval/internal/contract.ts`: `10a07d273d83e76858c4ef935d84f8db0ac52ccd5007ba1254ebf3b77fc023fa`
-- `src/domain/core/policy/index.ts`: `071da82f0de2d48450fc316fbc6574cc210e3aab89320887eb1b42009d5173eb`
+- `src/domain/core/policy/index.ts`: `e7cf3e5bd69cf0ca6b4cad488a2cb8f2a10dd30f8a1381e231f55118396bdb8d`
 - `src/domain/core/policy/internal/administer.ts`: `7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004`
 - `src/domain/core/policy/internal/administration.ts`: `c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b`
-- `src/domain/core/policy/internal/ai-floor.ts`: `2be801bfd8199a75287ba439852351169aceb71178118a179de637177f0cb964`
+- `src/domain/core/policy/internal/ai-floor.ts`: `eb49e3f49448676d214145566a13b0111c0499826869c06eba414f543ec103d9`
 - `src/domain/core/policy/internal/decision-step.ts`: `70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe`
 - `src/domain/core/policy/internal/delegations.ts`: `c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
 - `src/domain/core/policy/internal/evaluate.ts`: `61b1172eabcab5da8a7a0935bc2d0bf523d5327a4c95e96b4a70ec7b191714f2`
-- `src/domain/core/policy/internal/first-run-template.ts`: `004c293f1d388db6b8c51ce7c4d0dffc846af8cbe9cbdfee50d934df4a1d6cbc`
+- `src/domain/core/policy/internal/first-run-template.ts`: `a4ee1404be7fb24a90586accb4276b9fb45beed4a8675d706ab2df68a65a8b92`
 - `src/domain/core/policy/internal/mcp-capabilities.ts`: `c864257ab5ce5852f0799805d358f7b8790ec54fe8656157a1e4addd8cdeafb4`
 - `src/domain/core/policy/internal/mcp-grant.ts`: `8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a`
 - `src/domain/core/policy/internal/mode.ts`: `b1f9479911852c8b3842c6b2135156534e16a8e2016e3c7120c2b4f627f4c444`
@@ -1795,5 +1795,5 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/primitives/internal/json.ts`: `51c0ef2cee02728e7cf4a51bd26c6b472c7c3b54a9c49b65ad55221c6aae171f`
 - `src/domain/core/primitives/internal/project-identity.ts`: `9064bacf688c1269071d7d0bbb87bee94863e9ab663b74bd80e764eb948c137b`
 - `src/domain/core/primitives/internal/values.ts`: `8fb9eb5396a3a5f2fc5a631c30e4fbd824936e30187b7827b2bc87d48b16490a`
-- `src/domain/core/principal/index.ts`: `3aa0617eb41200ec006d25a2da46a8d1c9a7b737c9b8ff5381cd0cf491600a5d`
-- `src/domain/core/principal/internal/principal.ts`: `ca567ea1e97055942203df1688cf71be29be16a927ce8accce9e140bcbf58bdf`
+- `src/domain/core/principal/index.ts`: `513dad17a0fac81ce826eb687f3d42eff679e133e104ef92afdff964ced0781c`
+- `src/domain/core/principal/internal/principal.ts`: `1838dbeb01e3e53eaf6be0b22a4b661314a56399070824a6d80eca6707a27374`

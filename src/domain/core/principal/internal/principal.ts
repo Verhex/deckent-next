@@ -47,9 +47,21 @@ export const memoryDistillerPrincipal = (owner: { readonly issuer: string; reado
   return verifiedPrincipalSchema.parse({ id: `${ref.subject}@${ref.issuer}`, ...ref, assurance: 'workload-verified', scopeIds: [...scopeIds] });
 };
 
-/** A reference that names a non-person actor by its transport identity (MCP, auditor, Nervous, memory distiller): never an installing person. */
+/**
+ * S4B-3 (owner S-M3/S-M4 2026-10-23, S4B-DESIGN §5 A4): the independent memory evaluator's workload identity, issued only by the composition root
+ * (same auditor/OG5 precedent). Its floor is the exact allow-list `MEMORY_EVALUATOR_ALLOWED_PAIRS` (V1–V5); it never proposes, so the proposing
+ * AI never verifies its own entry. A forged `os-user` evaluator is still it, and still AI.
+ */
+export const memoryEvaluatorPrincipalRef = (owner: { readonly issuer: string; readonly subject: string }) =>
+  Object.freeze({ issuer: identitySchema.parse(`${owner.issuer}/memory-evaluator`), subject: identitySchema.parse(owner.subject) });
+export const isMemoryEvaluatorPrincipal = (actor: { readonly issuer: string }) => actor.issuer.endsWith('/memory-evaluator');
+export const memoryEvaluatorPrincipal = (owner: { readonly issuer: string; readonly subject: string }, scopeIds: readonly string[]): VerifiedPrincipal => {
+  const ref = memoryEvaluatorPrincipalRef(owner);
+  return verifiedPrincipalSchema.parse({ id: `${ref.subject}@${ref.issuer}`, ...ref, assurance: 'workload-verified', scopeIds: [...scopeIds] });
+};
+
+/** A reference that names a non-person actor by its transport identity (MCP, auditor, Nervous, memory distiller or evaluator): never an installing person. */
 export const isWorkloadPrincipalRef = (ref: { readonly issuer: string }) =>
-  isMcpPrincipal(ref) || isAuditorPrincipal(ref) || isNervousPrincipal(ref) || isMemoryDistillerPrincipal(ref);
-/** Transport identity dominates assurance: a forged legacy MCP, auditor, Nervous or memory-distiller os-user is still AI. */
-export const isAiPrincipal = (actor: { readonly issuer: string; readonly assurance?: string }) =>
-  isMcpPrincipal(actor) || isAuditorPrincipal(actor) || isNervousPrincipal(actor) || isMemoryDistillerPrincipal(actor) || actor.assurance !== 'os-user';
+  isMcpPrincipal(ref) || isAuditorPrincipal(ref) || isNervousPrincipal(ref) || isMemoryDistillerPrincipal(ref) || isMemoryEvaluatorPrincipal(ref);
+/** Transport identity dominates assurance: a forged legacy MCP, auditor, Nervous or memory-distiller/evaluator os-user is still AI. */
+export const isAiPrincipal = (actor: { readonly issuer: string; readonly assurance?: string }) => isWorkloadPrincipalRef(actor) || actor.assurance !== 'os-user';

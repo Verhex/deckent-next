@@ -1,4 +1,4 @@
-import { isAiPrincipal, isAuditorPrincipal, isMemoryDistillerPrincipal, isNervousPrincipal } from '#domain/core/principal/index.js';
+import { isAiPrincipal, isAuditorPrincipal, isMemoryDistillerPrincipal, isMemoryEvaluatorPrincipal, isNervousPrincipal } from '#domain/core/principal/index.js';
 /** S5 (AUDITOR-MODEL Q4): the only actions the auditor principal may ever be granted. A security invariant, never policy data. */
 export const AUDITOR_READ_ACTIONS = Object.freeze(['inspect', 'list', 'verify'] as const);
 /** S6 Nervous (K-B): the only actions the Nervous principal may ever be granted; it writes no state (the broker applies proposals). */
@@ -6,6 +6,10 @@ export const NERVOUS_READ_ACTIONS = Object.freeze(['inspect', 'list'] as const);
 /** S4B-1 (owner S-M1/S-M2, S4B-DESIGN §5 A3, approved verbatim): the memory distiller's exact (resource kind, action) allow-list D1–D4. Every other
  * pair is refused whatever a policy grants; inside the list a grant still decides each call. */
 export const MEMORY_DISTILLER_ALLOWED_PAIRS = Object.freeze([['memory', 'inspect'], ['memory', 'propose'], ['attempt', 'read-output'], ['run', 'inspect']] as const);
+/** S4B-3 (owner S-M3 2026-10-23, S4B-DESIGN §5 A5, approved verbatim): the memory evaluator's exact allow-list V1–V5 — read memory, verify a
+ * candidate, open a contest, read Runs, invoke its model. No propose, retire, purge or raw worker output (`attempt/read-output`). */
+export const MEMORY_EVALUATOR_ALLOWED_PAIRS = Object.freeze([['memory', 'inspect'], ['memory', 'verify'], ['memory', 'contest'], ['run', 'inspect'], ['model-invocation', 'invoke']] as const);
+const pairIn = (pairs: readonly (readonly [string, string])[], kind: string, action: string) => pairs.some(([allowedKind, allowed]) => allowedKind === kind && allowed === action);
 /**
  * Approval cards whose decision widens authority: identity profile distribution, MCP capability grants and the first-run template
  * upgrade/rollback (each also needs `policy.administer`, floored below; deciding the card is a second, independent route).
@@ -18,23 +22,26 @@ const AUTHORITY_APPROVAL_IDS = Object.freeze(['identity-profile', 'policy-mcp-ca
  * authority approval cards, audit baselines and security configuration (incl. `execution.secretGate` exclusions). Owner 2026-10-19 (I-POL v13):
  * host changes outside the sandbox — installing an execution environment (Docker group membership is root-equivalent) and repairing the
  * installation itself — are never an AI's, whatever a policy grants; the person runs them at a terminal. S4: memory verify/retire likewise (S4B-1:
- * purge and contest too; the memory distiller is held to its exact allow-list).
+ * purge and contest too; the memory distiller is held to its exact allow-list; S4B-3: the evaluator to its own, and only it may verify/contest).
  */
 export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assurance?: string }, resource: { readonly kind: string; readonly id: string }, action: string): boolean {
   if (!isAiPrincipal(actor)) return false;
   // The auditor reads and writes nothing else: every other action (any resource, any extension's future action) is refused whatever is granted.
   if (isAuditorPrincipal(actor) && !(AUDITOR_READ_ACTIONS as readonly string[]).includes(action)) return true;
   if (isNervousPrincipal(actor) && !(NERVOUS_READ_ACTIONS as readonly string[]).includes(action)) return true;
-  if (isMemoryDistillerPrincipal(actor) && !MEMORY_DISTILLER_ALLOWED_PAIRS.some(([kind, allowed]) => kind === resource.kind && allowed === action)) return true;
+  if (isMemoryDistillerPrincipal(actor) && !pairIn(MEMORY_DISTILLER_ALLOWED_PAIRS, resource.kind, action)) return true;
+  if (isMemoryEvaluatorPrincipal(actor) && !pairIn(MEMORY_EVALUATOR_ALLOWED_PAIRS, resource.kind, action)) return true;
   if (resource.kind === 'operation' && resource.id === 'policy.administer' && ['execute', 'compensate'].includes(action)) return true;
   if (['authority-document', 'authenticator', 'approval-assurance'].includes(resource.kind) && !['inspect', 'list'].includes(action)) return true;
   if (resource.kind === 'backup' && action === 'restore') return true;
   if (resource.kind === 'execution-environment' && action === 'install' || resource.kind === 'installation' && action === 'repair') return true;
   if (resource.kind === 'permission-mode' && action === 'set') return true;
   // S4 (law-audit fold 6, lead 2026-10-23): verified memory needs a human or an independent evaluation record, never the AI itself; retiring is the
-  // same knowledge change. S4B-1 (A11): purging content is a person's act; a contest stays floored until S4B-3 relaxes it for the evaluator alone.
+  // same knowledge change. S4B-1 (A11): purging content is a person's act. S4B-3 (A5 amendment, verbatim): `memory`/`verify` stays refused for every
+  // AI principal except the memory evaluator principal (the domain accepts it only with an independent-evaluation record it produced, on a model
+  // independent of the source worker model re-derived from the sealed Run); `contest` likewise only for it; retire and purge for every AI.
   // Proposing a candidate and every read stay policy decisions.
-  if (resource.kind === 'memory' && ['verify', 'retire', 'purge', 'contest'].includes(action)) return true;
+  if (resource.kind === 'memory' && ['verify', 'retire', 'purge', 'contest'].includes(action) && !(isMemoryEvaluatorPrincipal(actor) && ['verify', 'contest'].includes(action))) return true;
   if (resource.kind === 'secret') return true;
   if (resource.kind === 'approval' && action === 'decide' && AUTHORITY_APPROVAL_IDS.includes(resource.id)) return true;
   if (resource.kind === 'audit' && !['inspect', 'verify'].includes(action)) return true;
