@@ -1,6 +1,8 @@
 {
-  "error.WORKER_ASSIGNMENT_NO_CANDIDATES": "Task {taskId}: work class {workClass} declares no worker candidate list, so the system cannot choose a model for it. Name the model in the work input, or add a candidate list to the work class registry. No Run was created.",
-  "error.WORKER_ASSIGNMENT_NONE": "Task {taskId}: no listed worker of work class {workClass} can run in this scope ({skipped}). No other model is chosen. Activate one of the listed models in the model catalog, then plan again. No Run was created.",
+  "error.WORKER_ASSIGNMENT_NO_CANDIDATES": "The task's work class declares no worker candidate list, so the system cannot choose a model for it. Name the model in the work input, or add a candidate list to the work class registry. No Run was created.",
+  "error.WORKER_ASSIGNMENT_NO_CANDIDATES.detail": "Task {taskId}: work class {workClass} declares no worker candidate list, so the system cannot choose a model for it. Name the model in the work input, or add a candidate list to the work class registry. No Run was created.",
+  "error.WORKER_ASSIGNMENT_NONE": "No listed worker of the task's work class can run in this scope. No other model is chosen. Activate one of the listed models in the model catalog, then plan again. No Run was created.",
+  "error.WORKER_ASSIGNMENT_NONE.detail": "Task {taskId}: no listed worker of work class {workClass} can run in this scope ({skipped}). No other model is chosen. Activate one of the listed models in the model catalog, then plan again. No Run was created.",
   "error.WORKER_MODEL_UNASSIGNED": "A task's work input names no model and the system has not assigned one at this step. Nothing ran. Plan again, or name the model in the work input.",
   "error.BRAIN_ASSIGNMENT_REFUSED": "The model plan names a worker model or reasoning effort. The system chooses workers from each task's work class, so the plan was refused. No proposal or Run was created; plan again.",
   "error.WORK_CLASS_CANDIDATES_NOT_REGISTERED": "A work class names a worker candidate list that the work class registry does not declare. Correct the registry; no Run was created.",

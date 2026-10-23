@@ -3368,7 +3368,8 @@
         "src/platform/core/integrity",
         "src/domain/core/task-graph",
         "src/platform/core/redaction",
-        "src/capabilities/core/run-planner"
+        "src/capabilities/core/run-planner",
+        "src/engine/core/model-activation"
       ],
       "plan": "CONTRACT"
     },

@@ -3,10 +3,11 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { applyModelCatalog, createRun } from '../../../src/index.js';
+import { applyModelCatalog, createRun, proposeRun } from '../../../src/index.js';
+import { brainProposalLines } from '#surfaces/core/run-planning/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { classifyConfiguredRunSpending } from '../../../src/composition/core/runs/index.js';
-import { openSqliteModelCatalogReader } from '#adapters/index.js';
+import { openSqliteModelCatalogReader, readLocalOsIdentity } from '#adapters/index.js';
 import { readWorkerModelPin } from '#domain/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
@@ -42,7 +43,7 @@ async function seeded() {
   ] }), { mode: 0o600 });
   let sequence = 0;
   const catalog = (command: Record<string, unknown>) => applyModelCatalog(project, { schemaVersion: 1, commandId: `catalog-${++sequence}`, scopeId: 's', ...command }, options);
-  const activate = (modelId: string | null) => catalog({ action: 'activate', channelId: SEED_CHANNEL, modelId, expectedRevision: 0 });
+  const activate = (modelId: string | null, action = 'activate', expectedRevision = 0) => catalog({ action, channelId: SEED_CHANNEL, modelId, expectedRevision });
   await catalog({ action: 'register', catalog: await seedCatalog() });
   await activate(null); await activate('claude-sonnet-5-5');
   const read = <T>(sql: string, ...args: string[]) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(...args) as T[]; } finally { db.close(); } };
@@ -87,4 +88,27 @@ it('once the scope activates Opus, feature work is assigned to it; spending clas
   expect(basis.semantics).toBe('not-metered');
   // Without a catalog reader the unassigned input is the typed refusal, never a guessed worker.
   await expect(classifyConfiguredRunSpending(f.project, proposal as never, f.options)).rejects.toMatchObject({ code: 'WORKER_MODEL_UNASSIGNED' });
+});
+
+const proposal = (runId: string, workClass: string) => { const { graph } = run(runId, workClass);
+  return { schemaVersion: 1 as const, commandId: `propose-${runId}`, proposalId: `proposal-${runId}`, scopeId: 's', runId, proposer: (({ id, issuer, subject }) => ({ id, issuer, subject }))(readLocalOsIdentity()), source: { kind: 'human' as const }, budgetCeiling: { currency: 'USD', limitMinorUnits: 0 }, requiredPermissions: [], graph }; };
+it('a proposal no listed worker can run is rejected with the task, class and every skipped candidate on its response and card (EN/TR)', async () => {
+  const f = await seeded(), result = await proposeRun(f.project, proposal('none', 'feature'), f.options);
+  expect(result.proposal).toMatchObject({ status: 'rejected', reason: 'WORKER_ASSIGNMENT_NONE' });
+  expect(result.reasonParams).toEqual({ taskId: 't', workClass: 'feature', skipped: expect.stringContaining('claude-opus-5-5: WORKER_MODEL_NOT_ACTIVE') });
+  expect(brainProposalLines(result, 'en').join('\n')).toContain('Task t: no listed worker of work class feature can run in this scope (claude-cli-subscription/claude-opus-5-5: WORKER_MODEL_NOT_ACTIVE;');
+  expect(brainProposalLines(result, 'tr').join('\n')).toContain('Görev t: feature iş sınıfının listesindeki hiçbir çalışan bu kapsamda çalışamıyor');
+  // A replay renders the stored code with the plain text (the detail is response-only), never placeholders.
+  const replay = await proposeRun(f.project, proposal('none', 'feature'), f.options);
+  expect(replay.reasonParams).toBeUndefined(); expect(brainProposalLines(replay, 'en').join('\n')).toContain("No listed worker of the task's work class can run in this scope");
+  expect(brainProposalLines(replay, 'en').join('\n')).not.toContain('{');
+  expect(f.runs()).toBe(0);
+});
+it('a pending proposal whose assignment would change is parked as stale on resubmission, never re-assigned to the next listed model', async () => {
+  const f = await seeded(); await f.activate('claude-opus-5-5'); await f.activate('claude-fable-5-1');
+  const first = await proposeRun(f.project, proposal('deep', 'design'), f.options);
+  expect(first.proposal.status).toBe('pending');
+  await f.activate('claude-opus-5-5', 'deactivate', 1);
+  const again = await proposeRun(f.project, proposal('deep', 'design'), f.options);
+  expect(again.proposal).toMatchObject({ status: 'parked', reason: 'RUN_PROPOSAL_BASIS_STALE' }); expect(f.runs()).toBe(0);
 });
