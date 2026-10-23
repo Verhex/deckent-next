@@ -18,7 +18,8 @@ interface BrainRegistryContextBase {
 export type BrainRegistryContext = BrainRegistryContextBase & ({ readonly schemaVersion: 2 } | { readonly schemaVersion: 3; readonly memory: BrainMemoryContext | null });
 type Truncation = { reason: 'none' | 'count' | 'bytes'; omittedKinds: number; omittedEvaluators: number; omittedModels: number; omittedMemory?: number };
 /** Counts and byte limit apply to the complete context envelope. No raw JSON substring cuts. Under the byte limit memory entries leave first
- * (advisory data; kinds, evaluators and models make the plan valid), counted in `truncation.omittedMemory`; then the largest list loses its last row. */
+ * (advisory data; kinds, evaluators and models make the plan valid), counted in `truncation.omittedMemory`; then the largest list loses its last row,
+ * but a list keeps its first row: a context without any kind or evaluator it was offered can plan nothing valid, so that is a typed refusal instead. */
 export function boundBrainContext(scopeId: string, workClasses: unknown, input: BrainRegistryContext, limits: BrainPlannerConfig['context']) {
   const memory = input.schemaVersion === 3 && input.memory ? { entries: [...input.memory.entries], omitted: input.memory.omitted } : null;
   const truncation: Truncation = { reason: 'none', omittedKinds: 0, omittedEvaluators: 0, omittedModels: 0, ...(input.schemaVersion === 3 ? { omittedMemory: 0 } : {}) };
@@ -36,7 +37,7 @@ export function boundBrainContext(scopeId: string, workClasses: unknown, input: 
   while (bytes() > limits.maxBytes) {
     truncation.reason = 'bytes';
     if (memory?.entries.length) { memory.entries.pop(); update(); continue; }
-    const rows = [context.workerModels, context.evaluators, context.kinds].filter(list => list.length);
+    const rows = [context.workerModels, context.evaluators, context.kinds].filter(list => list.length > 1);
     if (!rows.length) throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: limits.maxBytes, observed: bytes(), unit: 'bytes' } });
     rows.sort((a, b) => JSON.stringify(b).length - JSON.stringify(a).length)[0]!.pop();
     update();

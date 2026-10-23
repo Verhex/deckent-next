@@ -27,6 +27,13 @@ it.each([{}, { context: { ...brainPlannerConfigSchema.parse({}).context, maxKind
     contextBytes: new TextEncoder().encode(JSON.stringify(context)).length, messagesBytes: new TextEncoder().encode(JSON.stringify(prompt.messages)).length,
     truncation: context.context.truncation, contextDigest: prompt.contextDigest }));
 });
+// fs1 (alpha.55): the vocabulary's new resources grew the fixed part (permissions ~2 KB), so at 4000 bytes the kinds and the one evaluator list tied
+// and the evaluator went first. A list now keeps its first row; a bound that cannot hold one kind and one evaluator is a typed refusal, never a context
+// the Brain cannot plan a valid Run from.
+it('negative: a byte bound below one kind and one evaluator refuses typed instead of dropping the last evaluator', () => {
+  const tight = { context: { ...brainPlannerConfigSchema.parse({}).context, maxBytes: 3500 } };
+  expect(() => prepareBrainRegistryPrompt(command, registry, null, tight)).toThrow(expect.objectContaining({ code: 'BRAIN_CONTEXT_TOO_LARGE', params: expect.objectContaining({ limit: 3500, unit: 'bytes' }) }));
+});
 // Model pins are offered only by a template that lets the Brain pin (v2); v3 (ATAMA-1) offers none (brain-assignment.test.ts).
 it('preserves template metadata, model pins and both evaluator schemas without execution parameters', () => {
   const model = { profile: { id: 'template', version: 1 }, channelId: 'subscription-channel', modelId: 'exact-native-model', auxiliaryModelIds: ['exact-helper'],
