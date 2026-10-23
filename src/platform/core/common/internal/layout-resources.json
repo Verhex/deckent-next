@@ -32,7 +32,8 @@
     "treeScanCache": "state/tree-scan-cache",
     "autonomyShadow": "state/autonomy-shadow",
     "memoryPurges": "state/memory-purges",
-    "signers": "signers"
+    "signers": "signers",
+    "brainWaits": "state/brain-waits"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal", "projectIdentity"],

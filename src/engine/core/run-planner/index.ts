@@ -1,7 +1,7 @@
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
   type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, readHeadlessRejection,
-  type ModelInvocationResponseEvidence, type BrainPlanObserver } from '#domain/index.js';
+  type ModelInvocationResponseEvidence, type BrainPlanObserver, type BrainQuotaWaitStore } from '#domain/index.js';
 import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext, assertBrainLeavesAssignment,
   prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainMemoryContext, type BrainRegistryContext } from '#capabilities/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
@@ -74,6 +74,8 @@ export interface BrainPlanPorts {
   remainingBudget?(scopeId: string): Promise<Readonly<{ currency: string; remainingMinorUnits: number }> | null>;
   /** Wall clock of the quota wait (tests pin it); absent: Date.now. */
   now?(): number;
+  /** f4: keeps an active quota wait visible to surfaces that did not start it (monitor, MCP). Best effort: a store failure never changes planning. */
+  readonly quotaWaits?: BrainQuotaWaitStore;
 }
 const assertActive = (signal?: AbortSignal) => { if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED'); };
 /** The tier/role registry role a Brain model must hold (owner BRAIN1: frontier only). */
@@ -153,8 +155,14 @@ export class BrainPlanApplication {
       const untilMs = observe && prepared.quotaWait ? brainQuotaWaitUntil(body, receipt.outcome.observedAtMs, now(), attempt, prepared.quotaWait) : null;
       if (untilMs === null || typeof body?.resetsAtMs !== 'number') throw brainRejection(receipt.outcome.evidence, data);
       const after = { commandId: invocation.commandId, invocationId: receipt.claim.invocationId };
-      observe!({ kind: 'quota-wait', attempt: attempt + 1, maxAttempts: prepared.quotaWait!.maxAttempts, resetsAtMs: body.resetsAtMs, untilMs, after });
-      await waitUntil(untilMs, now, signal);
+      const waits = this.ports.quotaWaits;
+      await waits?.begin({ schemaVersion: 1, scopeId: command.scopeId, commandId: command.commandId, attempt: attempt + 1, maxAttempts: prepared.quotaWait!.maxAttempts,
+        sinceMs: now(), resetsAtMs: body.resetsAtMs, untilMs, after }).catch(() => undefined);
+      // f4: the record lives exactly as long as the wait: reset reached, cancelled or failed, it is removed.
+      try {
+        observe!({ kind: 'quota-wait', attempt: attempt + 1, maxAttempts: prepared.quotaWait!.maxAttempts, resetsAtMs: body.resetsAtMs, untilMs, after });
+        await waitUntil(untilMs, now, signal);
+      } finally { await waits?.end(command.scopeId, command.commandId).catch(() => undefined); }
       assertActive(signal);
       invocation = { ...prepared.invocation, commandId: brainQuotaAttemptCommandId(command, attempt + 1, after) };
       observe!({ kind: 'planning', attempt: attempt + 1 });
