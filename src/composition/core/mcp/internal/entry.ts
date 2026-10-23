@@ -6,7 +6,7 @@ import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
-import { resolveLocale, isMainModule, DeckentError, formatHumanError, t } from '#platform/index.js';
+import { resolveLocale, isMainModule, DeckentError, formatHumanError, loadConfigLanguage, t, type Locale } from '#platform/index.js';
 import { withMcpPrincipal, createBoundedMcpTransport } from '#adapters/index.js';
 import { loadMcpSurface } from '#surfaces/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
@@ -64,10 +64,15 @@ import { inspectMonitor } from '#composition/core/monitor/index.js';
   if (values.project !== undefined && !values.project.trim()) throw new Error('MCP_PROJECT_INVALID');
   return main(resolve(values.project ?? process.cwd()));
 }
+/** Presentation only (like the CLI host): the `--project` directory's configured `language`, read without healing or locks; unreadable or absent → undefined. */
+export async function mcpConfigLanguage(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): Promise<Locale | undefined> {
+  const at = argv.indexOf('--project'), project = at >= 0 && argv[at + 1] && !argv[at + 1]!.startsWith('-') ? argv[at + 1]! : undefined;
+  try { return await loadConfigLanguage(resolve(project ?? process.cwd()), { env }); } catch { return undefined; }
+}
 /** Start-up failure on stderr (stdout carries the protocol): `MCP_START_FAILED`, then a typed Deckent error's localized message and code (identity or configuration that could not load); any other error stays the bare line. */
-export const mcpStartFailureText = (error: unknown, env: NodeJS.ProcessEnv = process.env): string => 'MCP_START_FAILED\n' + (error instanceof DeckentError ? `${formatHumanError(error, { locale: resolveLocale(undefined, env), env, isTTY: false })}\n` : '');
+export const mcpStartFailureText = (error: unknown, env: NodeJS.ProcessEnv = process.env, configLanguage?: Locale): string => 'MCP_START_FAILED\n' + (error instanceof DeckentError ? `${formatHumanError(error, { locale: resolveLocale(undefined, env, configLanguage), env, isTTY: false })}\n` : '');
 /** `--help`/`-h` anywhere is a request for usage, answered before the strict option parser (which would reject it as unknown). */
 export const mcpHelpRequested = (argv: readonly string[]): boolean => argv.some(argument => argument === '--help' || argument === '-h');
-export const mcpHelpText = (env: NodeJS.ProcessEnv = process.env): string => `${t('mcp.help.text', {}, resolveLocale(undefined, env))}\n`;
-if (isMainModule(import.meta) && mcpHelpRequested(process.argv.slice(2))) process.stdout.write(mcpHelpText());
-else if (isMainModule(import.meta)) void run().catch((error: unknown) => { process.stderr.write(mcpStartFailureText(error)); process.exitCode = 1; });
+export const mcpHelpText = (env: NodeJS.ProcessEnv = process.env, configLanguage?: Locale): string => `${t('mcp.help.text', {}, resolveLocale(undefined, env, configLanguage))}\n`;
+if (isMainModule(import.meta) && mcpHelpRequested(process.argv.slice(2))) void mcpConfigLanguage(process.argv.slice(2)).then(language => process.stdout.write(mcpHelpText(process.env, language)));
+else if (isMainModule(import.meta)) void run().catch(async (error: unknown) => { process.stderr.write(mcpStartFailureText(error, process.env, await mcpConfigLanguage(process.argv.slice(2)))); process.exitCode = 1; });

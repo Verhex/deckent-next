@@ -191,6 +191,7 @@
     },
     "src/adapters/core/git-workspace": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/attempt",
         "src/engine/core/workspaces",
         "src/platform/core/config-fields"
@@ -544,7 +545,9 @@
         "src/adapters/core/target-queue-store",
         "src/adapters/core/sqlite-ledger",
         "src/engine/core/effect",
-        "src/engine/core/run-proposal"
+        "src/engine/core/run-proposal",
+        "src/adapters/core/project-instructions",
+        "src/engine/core/project-instructions"
       ],
       "plan": "EXECUTION"
     },
@@ -625,7 +628,8 @@
         "src/adapters/core/file-artifacts",
         "src/adapters/core/git-patch",
         "src/adapters/core/target-queue-store",
-        "src/engine/core/workspace-patch"
+        "src/engine/core/workspace-patch",
+        "src/adapters/core/autonomy-shadow"
       ],
       "plan": "EXECUTION"
     },
@@ -1006,7 +1010,8 @@
         "src/domain/core/policy",
         "src/platform/core/config",
         "src/surfaces/core/terminal-delivery",
-        "src/surfaces/core/effect-confirmation"
+        "src/surfaces/core/effect-confirmation",
+        "src/surfaces/core/delivery-summary"
       ],
       "plan": "SURFACES"
     },
@@ -1069,7 +1074,8 @@
         "src/domain/core/attempt",
         "src/engine/core/effect",
         "src/engine/core/runs",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/engine/core/delivery-summary"
       ],
       "plan": "SURFACES"
     },
@@ -1127,6 +1133,7 @@
         "src/engine/core/runs",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-window",
+        "src/surfaces/core/cli-human",
         "src/surfaces/core/terminal-picker",
         "src/platform/core/common",
         "src/domain/core/agent-turn",
@@ -1301,7 +1308,9 @@
         "src/engine/core/effect",
         "src/engine/core/workspace-patch",
         "src/surfaces/core/terminal-delivery",
-        "src/engine/core/run-proposal"
+        "src/engine/core/run-proposal",
+        "src/surfaces/core/delivery-summary",
+        "src/engine/core/delivery-summary"
       ],
       "plan": "SURFACES"
     },
@@ -1912,6 +1921,7 @@
     },
     "src/adapters/core/native-connection": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/worker-event",
         "src/domain/core/provider-catalog",
         "src/adapters/core/native-cli-registry"
@@ -1938,12 +1948,15 @@
         "src/engine/core/runs",
         "src/engine/core/policy",
         "src/capabilities/core/evaluation-evidence",
-        "src/engine/core/audit"
+        "src/engine/core/audit",
+        "src/engine/core/delivery-summary",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "ISOLATION"
     },
     "src/adapters/core/git-patch": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/attempt",
         "src/engine/core/dispatch",
         "src/engine/core/workspaces",
@@ -1982,7 +1995,8 @@
         "src/adapters/core/local-principal",
         "src/adapters/core/git-workspace",
         "src/capabilities/core/evaluation-evidence",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/engine/core/delivery-summary"
       ],
       "plan": "ISOLATION"
     },
@@ -2788,6 +2802,7 @@
     },
     "src/adapters/core/native-cli-registry": {
       "dependencies": [
+        "src/domain/core/primitives",
         "src/domain/core/provider-catalog"
       ],
       "plan": "HARDCODE-P1"
@@ -2886,20 +2901,28 @@
       "plan": "SURFACES"
     },
     "src/engine/core/project-instructions": {
-      "dependencies": [],
+      "dependencies": [
+        "src/domain/core/command",
+        "src/domain/core/policy",
+        "src/domain/core/audit",
+        "src/domain/core/principal",
+        "src/platform/core/errors"
+      ],
       "plan": "SURFACES"
     },
     "src/adapters/core/project-instructions": {
       "dependencies": [
         "src/engine/core/project-instructions",
-        "src/platform/core/redaction"
+        "src/platform/core/redaction",
+        "src/platform/core/host",
+        "src/platform/core/managed-files",
+        "src/platform/core/config"
       ],
       "plan": "SURFACES"
     },
     "src/composition/core/project-instructions": {
       "dependencies": [
         "src/platform/core/config",
-        "src/platform/core/host",
         "src/platform/core/managed-files",
         "src/platform/core/clock",
         "src/composition/core/root",
@@ -2933,6 +2956,18 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-theme",
         "src/engine/core/setup"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/delivery-summary": {
+      "dependencies": [
+        "src/engine/core/delivery-summary",
+        "src/platform/core/i18n",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/surfaces/core/cli-human",
+        "src/platform/core/config",
+        "src/engine/core/effect"
       ],
       "plan": "SURFACES"
     },
@@ -3090,6 +3125,13 @@
       ],
       "plan": "KAYNAK-KALITE"
     },
+    "src/adapters/core/autonomy-shadow": {
+      "dependencies": [
+        "src/engine/core/delivery-summary",
+        "src/platform/core/config"
+      ],
+      "plan": "CONTRACT"
+    },
     "src/composition/core/resource-observation": {
       "dependencies": [
         "src/adapters/core/resource-trace",
@@ -3172,12 +3214,15 @@
         "src/engine/core/effect",
         "src/surfaces/core/cli-kit",
         "src/surfaces/core/cli-human",
-        "src/surfaces/core/effect-confirmation"
+        "src/surfaces/core/effect-confirmation",
+        "src/surfaces/core/delivery-summary",
+        "src/engine/core/delivery-summary"
       ],
       "plan": "SURFACES"
     },
     "src/surfaces/core/cli-run": {
       "dependencies": [
+        "src/engine/core/model-activation",
         "src/surfaces/core/cli-terminal",
         "src/surfaces/core/cli-kit",
         "src/domain/core/run",
@@ -3220,7 +3265,9 @@
         "src/surfaces/core/cli-human",
         "src/surfaces/core/effect-confirmation",
         "src/surfaces/core/terminal-delivery",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/engine/core/delivery-summary",
+        "src/surfaces/core/delivery-summary"
       ],
       "plan": "SURFACES"
     },
@@ -3266,7 +3313,8 @@
         "src/engine/core/secret-store",
         "src/surfaces/core/cli-human",
         "src/platform/core/config-fields",
-        "src/engine/core/config"
+        "src/engine/core/config",
+        "src/engine/core/project-instructions"
       ],
       "plan": "SURFACES"
     },
@@ -3333,7 +3381,8 @@
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-theme",
         "src/surfaces/core/terminal-render",
-        "src/surfaces/core/terminal-window"
+        "src/surfaces/core/terminal-window",
+        "src/capabilities/core/evaluation-evidence"
       ],
       "plan": "SURFACES"
     },
@@ -3445,6 +3494,22 @@
         "src/platform/core/output"
       ],
       "plan": "SECURITY"
+    },
+    "src/engine/core/delivery-summary": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/attempt",
+        "src/domain/core/run",
+        "src/domain/core/worker-event",
+        "src/domain/core/principal",
+        "src/capabilities/core/evaluation-evidence",
+        "src/platform/core/redaction",
+        "src/platform/core/output",
+        "src/engine/core/dispatch",
+        "src/engine/core/worker-observation",
+        "src/engine/core/runs"
+      ],
+      "plan": "CONTRACT"
     }
   },
   "composition": {
@@ -3479,7 +3544,7 @@
       "domain": 10000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 29650,
+      "adapters": 29900,
       "surfaces": 45000,
       "composition": 7950
     },
@@ -3551,7 +3616,9 @@
       "monitor",
       "setup",
       "security",
-      "terminal"
+      "terminal",
+      "termrun",
+      "delivery"
     ]
   },
   "literals": {
@@ -3596,7 +3663,8 @@
       "CHANGELOG.md",
       "docs/policy-and-ai.md",
       "docs/policy-and-ai.tr.md",
-      "docs/reports/ai-floor-compliance.md"
+      "docs/reports/ai-floor-compliance.md",
+      ".deckent/worker-instructions.md"
     ],
     "pointerFiles": {
       "CLAUDE.md": 70,

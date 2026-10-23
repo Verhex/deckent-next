@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { t, type Locale } from '#platform/index.js';
-import type { EffectConfirmationView, QueueConsent } from '#engine/index.js';
+import type { DeliverySummary, EffectConfirmationView, QueueConsent, TargetQueueView } from '#engine/index.js';
+import { consentSummaryLines, renderDeliverySummary, ticketSummaryBlock } from '#surfaces/core/delivery-summary/index.js';
 import { renderQueueConsent, renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 import type { CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import type { DeliveryPreview, DeliveryTarget, TerminalDeliveryPort } from '#surfaces/core/terminal-delivery/index.js';
@@ -28,10 +29,10 @@ export function deliveryConsentCard(view: EffectConfirmationView, locale: Locale
   return { title, body: [...body, view.operation === 'deliver-integration' ? t('cli.task.menu.confirm.deliver', { ref: view.resource }, locale)
     : t('cli.task.menu.confirm.move', { ref: view.resource }, locale)], options: yesNo(locale) };
 }
-/** The queue's exact batch card (`queue.confirm.card`, as `task integration-queue-confirm` shows it) on the CLI card. */
-export function queueConsentCard(view: Omit<QueueConsent, 'capability'>, locale: Locale): CliCardRequest {
+/** The queue's exact batch card (`queue.confirm.card`, as `task integration-queue-confirm` shows it) on the CLI card; the tickets' summary goes ABOVE its body. */
+export function queueConsentCard(view: Omit<QueueConsent, 'capability'>, locale: Locale, summaries: readonly (DeliverySummary | null)[] = []): CliCardRequest {
   const [title = '', ...body] = renderQueueConsent(view, locale).split('\n');
-  return { title, body: [...body, view.operation === 'adopt' ? t('cli.task.menu.confirm.move', { ref: view.target.id }, locale)
+  return { title, body: [...consentSummaryLines(summaries, locale), ...body, view.operation === 'adopt' ? t('cli.task.menu.confirm.move', { ref: view.target.id }, locale)
     : t('cli.task.menu.confirm.deliver', { ref: view.target.id }, locale)], options: yesNo(locale) };
 }
 
@@ -43,6 +44,8 @@ function previewCard(preview: DeliveryPreview, locale: Locale): CliCardRequest {
     ...files.items.map(file => `${file.path} | +${file.added} -${file.removed}`), ...(files.omitted ? [t('cli.task.menu.deliver.moreFiles', { count: files.omitted }, locale)] : []),
     t('cli.task.menu.deliver.base', { base: preview.base, source: preview.source }, locale),
     ...(preview.outOfScope.length ? [t('cli.task.menu.deliver.outOfScope', { count: preview.outOfScope.length, paths: preview.outOfScope.join(', ') }, locale)] : []),
+    // TESLIM-KARTI-OZET: what the worker claims, what acceptance rests on, model and risk (the card above already names the files).
+    ...(preview.summary === undefined ? [] : preview.summary ? renderDeliverySummary(preview.summary, locale, { omit: ['title', 'operation', 'change'] }) : ticketSummaryBlock(null, undefined, locale)),
     preview.queueTarget ? t('cli.task.menu.deliver.queue', { target: preview.queueTarget }, locale)
       : preview.adoptionTargets.length ? t('cli.task.menu.deliver.targets', { targets: preview.adoptionTargets.join(', ') }, locale) : t('cli.task.menu.deliver.refOnly', {}, locale),
   ], options: [{ id: 'deliver', label: t('cli.task.menu.deliver.go', {}, locale), key: 'y' }, { id: 'diff', label: t('cli.task.menu.action.diff', {}, locale), key: 'd' },
@@ -64,12 +67,14 @@ export async function deliverTask(port: TerminalDeliveryPort, target: DeliveryTa
   while ((choice = await ask(previewCard(preview, locale))) === 'diff') await io.diff(preview);
   if (choice !== 'deliver') { print(t('cli.task.menu.deliver.left', {}, locale)); return; }
   if (preview.queueTarget && port.queue) {
-    let view = await port.queue.prepareCurrent(target, `cli-queue-${randomUUID()}`);
-    print(renderQueueStatus(view, locale));
+    const queue = port.queue, status = async (view: TargetQueueView) => print([...ticketSummaryBlock(queue.summary ? await queue.summary(view) : undefined, undefined, locale),
+      renderQueueStatus(view, locale)].join('\n'));
+    let view = await queue.prepareCurrent(target, `cli-queue-${randomUUID()}`);
+    await status(view);
     if (view.state !== 'awaiting-confirmation') return;
-    await port.queue.confirm(target.scopeId, view.commandId, async consent => await ask(queueConsentCard(consent, locale)) === 'yes');
-    view = await port.queue.inspect(target.scopeId, view.commandId) ?? view;
-    print(renderQueueStatus(view, locale)); return;
+    await queue.confirm(target.scopeId, view.commandId, async (consent, summaries) => await ask(queueConsentCard(consent, locale, summaries)) === 'yes');
+    view = await queue.inspect(target.scopeId, view.commandId) ?? view;
+    await status(view); return;
   }
   const delivered = await port.deliver(preview, { candidate: `cli-candidate-${randomUUID()}`, delivery: `cli-delivery-${randomUUID()}` }, answer);
   print(t('cli.task.integration.delivered', { ref: delivered.ref, commit: delivered.commit }, locale));

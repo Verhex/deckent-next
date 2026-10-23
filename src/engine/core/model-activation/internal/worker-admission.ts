@@ -19,9 +19,14 @@ export interface WorkerModelAdmissionDetail {
 }
 /** Admission that passes with a visible caveat (WORKER-AUTO-REFRESH, owner K2): the pinned worker CLI is older than the model's minimum while
  * a worker image refresh is in flight, so the Run is admitted on the newest image it can use today. Never raised when no refresh runs. */
-export interface WorkerAdmissionWarning {
+export interface WorkerImageRefreshingWarning {
   readonly code: 'WORKER_IMAGE_REFRESHING'; readonly taskId: string; readonly modelId: string; readonly minCliVersion: string; readonly cliVersion: string | null;
 }
+/** DECKENT-MD-WORKERS: the project's selected worker instruction file was left out of the compiled prompts, with its reason. */
+export interface WorkerInstructionsWithheldWarning {
+  readonly code: 'WORKER_INSTRUCTIONS_WITHHELD'; readonly source: string; readonly reason: 'absent' | 'untrusted' | 'unsafe' | 'unreadable'; readonly digest: string | null;
+}
+export type WorkerAdmissionWarning = WorkerImageRefreshingWarning | WorkerInstructionsWithheldWarning;
 export type WorkerAdmissionOptions = Readonly<{ imageRefreshInProgress?: boolean }>;
 export class WorkerModelAdmissionError extends Error {
   constructor(readonly code: WorkerModelAdmissionCode, readonly detail: WorkerModelAdmissionDetail) { super(code); this.name = 'WorkerModelAdmissionError'; }

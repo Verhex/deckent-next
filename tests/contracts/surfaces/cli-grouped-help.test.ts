@@ -135,7 +135,9 @@ it.each(['en', 'tr'] as const)('keeps %s syntax whole and creates no short wrapp
       expect(line, label).not.toMatch(/\[[^\]]*$|<[^>]*$/);
       // Complete syntax-only continuations (e.g. [--reason <text>]) are not prose orphans.
       const syntaxOnly = /^(?:\[[^\]]+\]|--[\w-]+|<[^>]+>)(?:\s+(?:\[[^\]]+\]|--[\w-]+|<[^>]+>))*$/.test(line.trim());
-      if (!syntaxOnly && line.trim() && line.trim().split(/[\s|]+/).length <= 3) expect(sourceLines.has(line.trim().replace(/\s+/g, ' ')), label).toBe(true);
+      // S2: an action's "Required: …" line is an intentional heading of its own, however short.
+      const required = ['cli.help.action.requires', 'cli.help.action.requiresOffTerminal'].some(key => line.startsWith(catalog[key]!.split('{')[0]!));
+      if (!syntaxOnly && !required && line.trim() && line.trim().split(/[\s|]+/).length <= 3) expect(sourceLines.has(line.trim().replace(/\s+/g, ' ')), label).toBe(true);
     }
   }
 });
@@ -180,7 +182,7 @@ const HANDLER_SOURCES: Readonly<Record<string, readonly string[]>> = {
   identity: ['cli-identity/internal/command.ts', 'cli-identity/internal/distribution.ts'],
   policy: ['cli/internal/entry.ts', 'cli-approval/internal/policy-grants.ts', 'cli-approval/internal/policy-delegations.ts', 'cli-approval/internal/policy-mcp.ts', 'cli-observe/internal/policy-vocabulary.ts'],
   config: ['config/internal/command.ts'], mcp: ['cli/internal/mcp.ts#mcpCommand'], secret: ['cli-admin/internal/secret.ts'], toolchains: ['cli-admin/internal/toolchains.ts'],
-  runtime: ['cli-admin/internal/runtime.ts'], coding: ['cli-admin/internal/coding.ts'], inference: ['cli-models/internal/inference.ts'], operation: ['cli-admin/internal/operation.ts'],
+  runtime: ['cli-admin/internal/runtime.ts'], coding: ['cli-admin/internal/coding.ts', 'cli-admin/internal/worker-instructions.ts'], inference: ['cli-models/internal/inference.ts'], operation: ['cli-admin/internal/operation.ts'],
 };
 /** Action words a handler source dispatches on: `argv[1]|action|verb === 'x'`, `[...].includes(argv[1]|action)` and an `ACTIONS` list.
  * `file#name` reads only that exported function (a file that also holds a terminal slash handler with its own verbs). */

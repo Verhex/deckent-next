@@ -20,6 +20,19 @@ function patchLimit(p: Params, l: Locale): string {
     default: return t('error.PATCH_LIMIT', p, l);
   }
 }
+/** WORKER_INSTRUCTIONS_UNAVAILABLE (alpha.53 F1) names why there is nothing to trust or revoke; an unknown reason keeps the generic sentence. */
+function workerInstructionsUnavailable(p: Params, l: Locale): string {
+  switch (p['reason']) {
+    case 'target': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.target', p, l);
+    case 'no-execution': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.noExecution', p, l);
+    case 'source-none': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.sourceNone', p, l);
+    case 'absent': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.absent', p, l);
+    case 'store': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.store', p, l);
+    case 'size': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.size', p, l);
+    case 'unsafe': return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE.unsafe', p, l);
+    default: return t('error.WORKER_INSTRUCTIONS_UNAVAILABLE', p, l);
+  }
+}
 /** TASK_GRAPH_LIMIT (PARALLEL-S3) names the exceeded admission bound; an unknown detail keeps the generic sentence. */
 function taskGraphLimit(p: Params, l: Locale): string {
   switch (p['detail']) {
@@ -46,6 +59,10 @@ function mcpSandboxUnreachable(p: Params, l: Locale): string {
   if (p['kind'] === 'package-runner') return t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.packageRunner', { name, runner: String(p['runner'] ?? '') }, l);
   return t('error.MCP_SANDBOX_COMMAND_UNREACHABLE.containerDaemon', { name, runner: String(p['runner'] ?? '') }, l);
 }
+/** E1: the bounded kinds of a failed Docker image-probe step (the adapter's DockerImageProbeCause), each with its own words. */
+const DOCKER_IMAGE_PROBE_CAUSES: Readonly<Record<string, (l: Locale) => string>> = { deadline: l => t('docker.imageProbe.cause.deadline', {}, l),
+  exit: l => t('docker.imageProbe.cause.exit', {}, l), signal: l => t('docker.imageProbe.cause.signal', {}, l), parse: l => t('docker.imageProbe.cause.parse', {}, l) };
+const dockerImageProbeCause = (cause: unknown) => typeof cause === 'string' && Object.hasOwn(DOCKER_IMAGE_PROBE_CAUSES, cause) ? DOCKER_IMAGE_PROBE_CAUSES[cause]! : null;
 const coreDefinitions: ErrorDefinitions = Object.freeze({
   SECRET_STORE_PROTECTION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_PROTECTION_REQUIRED', p, l) }) },
   OAUTH_CONNECTION_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED', p, l) }) },
@@ -259,6 +276,9 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   WORK_INPUT_TEMPLATE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TEMPLATE_REQUIRED', p, l) }) },
   WORK_INPUT_TURN_LIMIT_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TURN_LIMIT_UNSUPPORTED', p, l) }) },
   WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE', p, l) }) },
+  WORKER_INSTRUCTIONS_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_INSTRUCTIONS_TOO_LARGE', p, l) }) },
+  WORKER_INSTRUCTIONS_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: workerInstructionsUnavailable(p, l) }) },
+  WORKER_INSTRUCTIONS_CHANGED: { category: 'error', render: (p, l) => ({ message: p['reason'] === 'place' ? t('error.WORKER_INSTRUCTIONS_CHANGED.place', p, l) : t('error.WORKER_INSTRUCTIONS_CHANGED', p, l) }) },
   WORK_CLASS_NOT_REGISTERED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_NOT_REGISTERED', p, l) }) },
   WORK_CLASS_OVERRIDE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_OVERRIDE_DENIED', p, l) }) },
   WORK_CLASS_PARENT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_PARENT_INVALID', p, l) }) },
@@ -368,6 +388,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   QUEUE_EXPIRED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_EXPIRED', p, l) }) },
   QUEUE_VERIFICATION_NOT_ADMITTED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_VERIFICATION_NOT_ADMITTED', p, l) }) },
   QUEUE_PREPARATION_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.QUEUE_PREPARATION_REFUSED', p, l) }) },
+  // OTONOM-TESLIM shadow (alpha.53): the advice record of a ticket could not be written; diagnosis only, the queue is unaffected.
+  AUTONOMY_SHADOW_NOT_RECORDED: { category: 'error', render: (p, l) => ({ message: t('error.AUTONOMY_SHADOW_NOT_RECORDED', p, l) }) },
   // D1a (owner 2026-10-18): typed reasons of the service's bounded delivery re-attempt (queue view `reattempt.reason`, ticket `reason`).
   DELIVERY_INTENT_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_INTENT_MISSING', p, l) }) },
   DELIVERY_REATTEMPT_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: t('error.DELIVERY_REATTEMPT_EXHAUSTED', p, l) }) },
@@ -390,6 +412,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   // K6 (owner 2026-09-30 A): the work target enforces task scope; params count, paths (first 16, repository-relative), omitted.
   PATCH_SCOPE_VIOLATION: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_SCOPE_VIOLATION', p, l) }) },
   PATCH_SCOPE_UNDECLARED: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_SCOPE_UNDECLARED', p, l) }) },
+  PATCH_INSTRUCTION_SURFACE_WRITE: { category: 'error', render: (p, l) => ({ message: t('error.PATCH_INSTRUCTION_SURFACE_WRITE', p, l) }) },
   // S6 (owner 2026-10-14): the pre-dispatch secret gate; params count, paths (first 16 as `path (rule)`), omitted — never a value. Without
   // params (a later view of the recorded code) the summary sentence stands. INCOMPLETE names the exhausted bound (limit, observed, bound).
   WORKER_TREE_SECRET_REFUSED: { category: 'error', render: (p, l) => ({ message: p['paths'] === undefined ? t('error.WORKER_TREE_SECRET_REFUSED.summary', p, l) : t('error.WORKER_TREE_SECRET_REFUSED', p, l),
@@ -403,6 +426,10 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   // REVISE 2691: the preflight could not prove its probe container gone; params requirement, kind, probe. Nothing launched; never met or unmet.
   EXECUTION_ENVIRONMENT_UNCERTAIN: { category: 'error', render: (p, l) => ({ message: p['probe'] === undefined ? t('error.EXECUTION_ENVIRONMENT_UNCERTAIN.summary', p, l)
     : t('error.EXECUTION_ENVIRONMENT_UNCERTAIN', p, l), suggestion: t('remedy.EXECUTION_ENVIRONMENT_UNCERTAIN', p, l) }) },
+  // E1: the probe for a requirement was stopped by its own deadline before it answered (container proven gone); params requirement, kind.
+  // The Run is held (progression park with this code) for an explicit re-run; never an installation defect, never retried on its own.
+  EXECUTION_ENVIRONMENT_TIMED_OUT: { category: 'error', render: (p, l) => ({ message: p['requirement'] === undefined ? t('error.EXECUTION_ENVIRONMENT_TIMED_OUT.summary', p, l)
+    : t('error.EXECUTION_ENVIRONMENT_TIMED_OUT', p, l), suggestion: t('remedy.EXECUTION_ENVIRONMENT_TIMED_OUT', p, l) }) },
   // R2 (D3a 2026-10-18): a load-dependent `time` bound (limit timeoutMs or admissionTimeoutMs), retried on a later turn; params refusals, maxTimeRefusals.
   WORKER_TREE_SCAN_DEFERRED: { category: 'error', render: (p, l) => ({ message: p['limit'] === undefined ? t('error.WORKER_TREE_SCAN_DEFERRED.summary', p, l) : t('error.WORKER_TREE_SCAN_DEFERRED', p, l),
     suggestion: t('remedy.WORKER_TREE_SCAN_DEFERRED', p, l) }) },
@@ -704,7 +731,9 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   INSTALLATION_ARTIFACT_CHANGED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_ARTIFACT_CHANGED', p, l) }) },
   INSTALLATION_ARTIFACT_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_ARTIFACT_UNAVAILABLE', p, l) }) },
   DOCKER_IMAGE_PROBE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.DOCKER_IMAGE_PROBE_INVALID', p, l) }) },
-  DOCKER_IMAGE_PROBE_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.DOCKER_IMAGE_PROBE_UNAVAILABLE', p, l) }) },
+  // E1: `cause` (deadline|exit|signal|parse) is the bounded kind of the failed Docker step, never Docker's own text.
+  DOCKER_IMAGE_PROBE_UNAVAILABLE: { category: 'config', render: (p, l) => { const cause = dockerImageProbeCause(p['cause']);
+    return { message: cause ? t('error.DOCKER_IMAGE_PROBE_UNAVAILABLE.cause', { cause: cause(l) }, l) : t('error.DOCKER_IMAGE_PROBE_UNAVAILABLE', p, l) }; } },
   DOCKER_IMAGE_PROBE_CHANGED: { category: 'config', render: (p, l) => ({ message: t('error.DOCKER_IMAGE_PROBE_CHANGED', p, l) }) },
   INSTALL_PROFILE_REQUIRED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALL_PROFILE_REQUIRED', p, l) }) },
   INSTALL_PREVIEW_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALL_PREVIEW_UNAVAILABLE', p, l) }) },

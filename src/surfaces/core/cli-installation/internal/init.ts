@@ -99,8 +99,9 @@ export async function initCommand(argv: readonly string[], context: Installation
     }
     throw ErrorRegistry.createError('CLI_USAGE');
   }
-  const locale = resolveLocale(language, context.env, (policyUpgrade || modes !== undefined || action === 'pool') && language === undefined
-    ? await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }) : undefined); context.onLocale?.(locale);
+  // The host's resolved locale (config language included) is the config-level fallback; a direct call without one keeps the config read for the actions that print.
+  const locale = resolveLocale(language, context.env, context.locale ?? ((policyUpgrade || modes !== undefined || action === 'pool') && language === undefined
+    ? await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }) : undefined)); context.onLocale?.(locale);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (action === '--help' || action === '-h') {
     if (profilePath || dockerExecutable || proposalDigest || acceptCustom || allowShutdown || json) throw ErrorRegistry.createError('CLI_USAGE');

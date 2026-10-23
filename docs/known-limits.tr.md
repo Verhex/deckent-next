@@ -149,6 +149,21 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   bileşimi daha güçlü tanık verebilir); yapay zekâ ajanının kabuğunu yalnız tanık değil, ajan işareti ve CLI kart kapısı reddeder.
   Bir kipi kapatmak kişinin kayıtlı tam otomatik seçimini bağlarda tutar ama geçerli kılmaz: her çağrı izni yeniden denetler.
 
+- **İşçi, proje talimat özetini ancak bir kişi güvenince görür.** Bir Run, Git çalışma hedefinin kökündeki tek bir proje talimat dosyasının
+  özetini alır (varsayılan `.deckent/worker-instructions.md`; ya da `AGENTS.md`, ya da hiçbiri; `execution.workerInstructions.source`).
+  O içerik için `deckent coding instructions trust` kişinin kendi terminalinde onaylanana kadar işçiler yalnız görev metnini alır;
+  `run create`, MCP ve `--json` çıktısı `WORKER_INSTRUCTIONS_WITHHELD` uyarısını taşır, `/do` ve kuyruk kabulleri bu uyarıyı göstermez.
+  Dosyadaki her değişiklik güveni yeniden düşürür. Git olmayan hedefte özet yoktur (açık no-op).
+- **Talimat dosyalarını işçiden gizlemek gizlilik sağlamaz.** Codex keşfi, ön kontrolde gizli yoklamalarla kanıtlanan sıkı yapılandırma
+  anahtarlarıyla `disabled` olur; anahtarlar yalnız Codex 0.163.0'da doğrulandı, Codex güncellemesinden sonra yeniden yoklayın
+  (sessizce yok sayılan bilinmeyen anahtar Run'ı değil yoklamayı düşürür). Cursor'da kapatma bayrağı yok, bu yüzden checkout seyrektir:
+  `AGENTS.md`, `CLAUDE.md`, `.agents`, `.claude`, `.codex`, `.cursor`, `DECKENT.md` ve işçi dosyası işçinin klonunda yoktur; tutulan yama
+  tam checkout'la aynıdır. Nesneler klonda durur (`git show HEAD:AGENTS.md` çalışır). Gizlenen yol listesi proje başına yalnız şablonun
+  `invocation.discovery.hiddenPaths` alanıyla değiştirilir; bunun için henüz CLI yoktur. `.claude`, `.codex`, `.cursor` ve `.deckent`
+  zaten yamalardan dışlanıyordu. Kuyruk doğrulaması tam ağacı korur. Herhangi bir işçinin bu talimat yollarından birini değiştirmesi,
+  görev kapsamı dosyayı ya da klasörünü `dir/**` biçiminde adlandırmıyorsa teslimde reddedilir (`PATCH_INSTRUCTION_SURFACE_WRITE`);
+  görevin kendisi kabul edilmiş görünür, yalnız teslim ya da kuyruk bileti reddedilir.
+
 ## Sağlayıcılar ve abonelikler
 
 - **Claude aboneliği:** Claude Code işçisi kendi Claude girişinizle çalışır. Abonelikli Brain (`/do`'nun arkasındaki planlayıcı)
@@ -331,6 +346,18 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Soru soran bir işçiye terminalden cevap verme henüz yapılmadı.** *Yol:* `deckent run resume --scope <id> --id <run>
   --command-id <id> --expected-revision <n> --task <id> --answer <metin>`.
 - **Otonom teslim tasarlandı ama kapalı.** Her teslim ve dala alma, doğrulanmış bir terminalde sizin `y`'nizi ister.
+- **Bekleyen bir ortam yoklaması siz sürdürene kadar havuz slotunu tutar.** Kendi süre sınırında durdurulan yoklama cevap vermez: Run
+  `EXECUTION_ENVIRONMENT_TIMED_OUT` ile bekletilir (kurulum kusuru olarak park edilmez, kendiliğinden yeniden denenmez); `deckent run
+  resume` yeniden yoklar. O zamana kadar slot tutulur; `run list` ve terminal işleri bekletmeyi kendi adıyla değil yalnızca "ilerleme
+  başarısız" olarak gösterir. İmaj yoklaması hataları sınırlı bir neden taşır (süre, çıkış, sinyal, ayrıştırma).
+- **Teslim kartı özeti bir izdüşümdür, kanıt değildir.** Kuyruk, teslim ve dala alma kartları başlığı, neyin değiştiğini, neden kabul
+  edildiğini, model kararını, riski ve evet/hayırın ne yapacağını gösterir. İşçinin kendi raporu iddia olarak gösterilir; Git değişiklik
+  bilgileri (dosyalar, +/−, kapsam dışı) Git çalışma alanı bağdaştırıcısı tarafından doldurulur. Kuyruk sırası değişmedi (yürüyenler önce,
+  park edilenler sonda).
+- **Otonomi gölgesi yalnız öneridir.** `autonomy@1` kuralı her kuyruk bileti için onay beklerken `would-deliver` ya da `would-hold` ve
+  nedenlerini kaydeder (`state/autonomy-shadow`, denetim zincirinin dışında). Hiçbir şey ona göre davranmaz; her teslim, dala alma ve geri
+  alma yine sizin `y`'nizi ister ve `y/N` isteminde gösterilmez. Bilet geçişi ile ekleme arasındaki çökme o revizyon için kayıt bırakmaz.
+  Kararlarınızla karşılaştırılması sonraki bir owner kararıdır.
 
 ## ERP ve operasyonlar
 
@@ -409,6 +436,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   değiştirir, ama bir istemcinin daha önce başlattığı MCP sunucusu ya da `deckent` terminali, istemci onu yeniden başlatana kadar
   yüklediği kodu kullanır. *Yol:* geçişten sonra istemciyi yeniden başlatın (Claude Code oturumu ya da terminali kapatıp yeniden
   açın); servisin hangi derlemeyle çalıştığını `deckent runtime describe` gösterir.
+
+- **alpha.53'ten alpha.52'ye dönüş dikkat ister.** `execution.workerInstructions` ayarını kaldırın; Cursor denemelerini bitirin ya da
+  bırakın (klonları seyrektir); alpha.52 Codex ve Cursor `disabled` türlerini reddeder; geçişte teslim kuyruğu boş olsun (biletlerin
+  başlığı farklı); alpha.52'nin denetim doğrulaması gölge deposunu görmez (zincirin dışındadır). Cursor kataloğu alpha.53 profilleri
+  için kaydedildiyse yedeği geri yükleyin. Defter v59 ve çalışma protokolü v29 değişmedi.
 
 ## Masaüstü ve diğer yüzeyler
 

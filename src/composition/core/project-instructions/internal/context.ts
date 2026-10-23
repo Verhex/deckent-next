@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { userInfo } from 'node:os';
-import { prepareProductDirectory, resolveGlobalScopePaths, normalizeGlobalScopePlatform, resolveProductLayout, getConfigKnownSecrets, redactForRecord, SystemTrustedClock,
+import { prepareProductDirectory, getConfigKnownSecrets, redactForRecord, SystemTrustedClock,
   type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { configuredApproval } from '#composition/core/approvals/index.js';
-import { openProjectInstructionReader, previewProjectInstructions, instructionDigest, PROJECT_INSTRUCTION_REGISTRY } from '#adapters/index.js';
+import { openHostProjectInstructionReader, previewProjectInstructions, instructionDigest, PROJECT_INSTRUCTION_REGISTRY } from '#adapters/index.js';
 import { createWorkspaceScope } from '#adapters/index.js';
 import { WorkspaceFileTarget, WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import { LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteAttemptStore, openSqliteApprovalStore } from '#adapters/index.js';
@@ -52,13 +52,8 @@ async function initialize(root: string, preview: InstructionInitPreview, scopeId
 }
 
 export async function configuredProjectInstructions(root: string, options: ConfigLoadOptions = {}): Promise<ProjectInstructionPort> {
-  const config = await loadComposedConfig(root, { ...options, heal: false }), env = options.env ?? process.env;
-  const global = resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, env), env, { ignoreProjectOverride: true });
-  const layout = resolveProductLayout({ projectRoot: global.stateDir, root: global.stateDir });
-  // Unsupported platforms keep consent in this session; they never read an unverified trust cache.
-  const directory = await prepareProductDirectory(layout, 'instructionTrust').catch(() => null);
-  const reader = await openProjectInstructionReader(root, directory, getConfigKnownSecrets(config))
-    .catch(() => openProjectInstructionReader(root, null, getConfigKnownSecrets(config)));
+  const config = await loadComposedConfig(root, { ...options, heal: false });
+  const reader = await openHostProjectInstructionReader(root, options.env ?? process.env, getConfigKnownSecrets(config));
   const issued = new WeakMap<InstructionInitPreview, string>();
   return { inspect: reader.inspect, trust: reader.trust,
     async preview(bridges, skeleton) { const known = getConfigKnownSecrets(config);

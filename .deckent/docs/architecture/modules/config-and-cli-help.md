@@ -91,7 +91,7 @@ packaged-binary or cross-platform acceptance; the lane excluded build and full v
 
 ## Coding template authoring
 
-`deckent coding template --provider <id> --kind <kind> [--image <sha256>] --preview|--apply`
+`deckent coding template --provider <id> --kind <kind> [--image <sha256>] [--discovery disabled|repository] --preview|--apply`
 adds a reusable native coding template through the existing project config writer. `--json` returns
 profile, kind, proposed registry revision, preimage digest and (on apply) config write receipt.
 `--lang en|tr` selects human output. Preview writes nothing; apply retains old rows, creates a registry
@@ -101,7 +101,8 @@ binding is refused rather than overwritten. No model, task prompt or effort is a
 Configure `admission` (registry, poolId, executionSlots, inFlightSlots) through `deckent config set
 admission` or `/config` first. The command does not invent pool capacity or evaluator policy. Configure
 `execution.docker` limits and an immutable image; an optional image must have an admitted provider
-pin. The CLI version and discovery selection come from that pin; absent or ambiguous pins refuse.
+pin. The CLI version and discovery selection come from that pin (an explicit `--discovery` overrides the
+mode as a new template content id); absent or ambiguous pins refuse.
 Apply requires the configured service/terminal scope and local config/write authority. Approval-required
 policy returns POLICY_APPROVAL_UNSUPPORTED via the existing allow-only set contract. A stale project
 digest, global registry contribution or changed effective Docker settings refuses publication.
@@ -117,3 +118,29 @@ kind bindings refuse a different profile and return unchanged for the same gener
 uses project ConfigApplication.set: config/write allow-only policy, digest CAS, sealed audit and atomic
 backup/publication. A global registry contribution or changed effective resource source refuses the
 write. This command does not launch, build, grant policy or prove image/worker readiness.
+
+Checkout shaping (alpha.53 C2): a CLI without a suppression flag (Cursor) realises `disabled` by its worker
+checkout. The native CLI registry's one `instructionSurface` list holds the default hidden paths (`name` at
+any depth or `/root/path`; also the delivery floor for every provider, alpha.53 G1): `AGENTS.md`, `CLAUDE.md`, `.agents`, `.claude`, `.codex`, `.cursor`, `/DECKENT.md`,
+`/.deckent/worker-instructions.md`); a template's `invocation.discovery.hiddenPaths` replaces them for that
+project (new template content id). Compilation freezes the set into the pinned profile
+(`nativeSubscription.checkout`); the Git broker clones sparse (non-cone, skip-worktree, clean `git status`);
+patch capture reads the set from the Run's frozen profile and completes absent hidden paths from their base
+blobs, so sparse and full checkouts give the same patch and a hidden path the worker writes stays a visible
+change. Queue verification and integration checkouts stay full; a non-Git workspace has no checkout to shape.
+This hides files from automatic discovery only; objects stay in the clone (`git show HEAD:AGENTS.md`).
+Claude and Codex stay argv-only, so their compiled profiles are unchanged.
+
+Worker instructions (alpha.53 F1): `deckent coding instructions [status] | trust | revoke [--target <id>] [--scope <id>]`.
+Config `execution.workerInstructions.source` is `worker-md` (`.deckent/worker-instructions.md`, default when the file exists),
+`agents-md` (`AGENTS.md`) or `none`; the file is read at the Git work target root, once per admission, bounded. `status` is read-only
+(`--json` allowed). `trust` and `revoke` are decided on `config`/`write` for `project:execution.workerInstructions`, sealed before the
+record changes, and need the person's terminal witness: a card shows path, size, sha256 and the first lines; AI actors, MCP, pipes and
+`--json` are refused. Trust holds for exactly that folder and digest; a change makes it untrusted. Untrusted: workers get the task text
+only and run create, MCP and `--json` carry `WORKER_INSTRUCTIONS_WITHHELD`.
+
+Action arguments (alpha.53 D2): a catalog action may list `requires`; help prints "Required: …" (and "Required without a terminal: …" when a
+terminal picker fills them). A handler's usage refusal of an action called without a required argument becomes `CLI_ARGUMENT_MISSING`
+naming it (exit 2); a present but invalid value stays `CLI_USAGE`. Scope rules (D1/D4, `resolveCommandScope`): a read uses `--scope`, else the configured `terminal.scopeId`, and prints which scope answered; a
+change never takes a silent default. Without a scope a person on a terminal picks from the valid scopes; a pipe, agent or CI gets
+`CLI_SCOPE_REQUIRED` (exit 2) naming them. Queue and task refusals are typed errors, not raw schema output.

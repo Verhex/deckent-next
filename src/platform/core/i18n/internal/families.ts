@@ -32,6 +32,8 @@ import monitoren from '../locales/en/monitor.json' with { type: 'json' };
 import setupen from '../locales/en/setup.json' with { type: 'json' };
 import securityen from '../locales/en/security.json' with { type: 'json' };
 import terminalen from '../locales/en/terminal.json' with { type: 'json' };
+import deliveryen from '../locales/en/delivery.json' with { type: 'json' };
+import termrunen from '../locales/en/termrun.json' with { type: 'json' };
 import helptr from '../locales/tr/help.json' with { type: 'json' };
 import cliruntr from '../locales/tr/clirun.json' with { type: 'json' };
 import clitasktr from '../locales/tr/clitask.json' with { type: 'json' };
@@ -44,6 +46,8 @@ import monitortr from '../locales/tr/monitor.json' with { type: 'json' };
 import setuptr from '../locales/tr/setup.json' with { type: 'json' };
 import securitytr from '../locales/tr/security.json' with { type: 'json' };
 import terminaltr from '../locales/tr/terminal.json' with { type: 'json' };
+import deliverytr from '../locales/tr/delivery.json' with { type: 'json' };
+import termruntr from '../locales/tr/termrun.json' with { type: 'json' };
 
 export const families = [
   { en: configen, tr: configtr },
@@ -69,6 +73,8 @@ export const families = [
   { en: setupen, tr: setuptr },
   { en: securityen, tr: securitytr },
   { en: terminalen, tr: terminaltr },
+  { en: termrunen, tr: termruntr },
+  { en: deliveryen, tr: deliverytr },
 ] as const;
 
 // Derived from `families` (distributive over the tuple), not from the JSON imports: the emitted declaration then names no JSON module, which a

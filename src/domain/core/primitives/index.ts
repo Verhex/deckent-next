@@ -8,3 +8,5 @@ export type { JsonValue, JsonObject, JsonValueLimits } from './internal/json.js'
 export { projectIdSchema, projectIdentitySchema } from './internal/project-identity.js';
 export type { ProjectId, ProjectIdentity } from './internal/project-identity.js';
 export { clientCommandIdSchema, CommandIdError, SYSTEM_COMMAND_PREFIXES } from './internal/command-id.js';
+export { workspaceHiddenPathSchema, workspaceHiddenPathsSchema, workspacePathHidden, instructionSurfaceWrites } from './internal/hidden-paths.js';
+export type { WorkspaceHiddenPaths } from './internal/hidden-paths.js';

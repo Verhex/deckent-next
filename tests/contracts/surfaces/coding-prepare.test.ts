@@ -44,7 +44,8 @@ it('rejects invalid transport, duplicated flags, unsupported providers and unkno
     [[], '{'],
     [[], JSON.stringify({ ...input(), invocation: { ...input().invocation, provider: 'other' } })],
     [[], JSON.stringify({ ...input(), invocation: { ...input().invocation, schemaVersion: 1 } })],
-    [[], JSON.stringify({ ...input(), invocation: { ...input().invocation, discovery: { schemaVersion: 1, mode: 'disabled' } } })],
+    // Every shipped CLI realises `disabled` since C2 (Cursor by checkout shaping); a hidden-path set for an argv-realised CLI is refused.
+    [[], JSON.stringify({ ...input('codex'), invocation: { ...input('codex').invocation, discovery: { schemaVersion: 1, mode: 'disabled', hiddenPaths: ['AGENTS.md'] } } })],
     [['--input', '-'], JSON.stringify(input())],
   ] as const) {
     const result = spawnSync(process.execPath, [cli, 'coding', 'prepare', '--input', '-', '--json', ...args],

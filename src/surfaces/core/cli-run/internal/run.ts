@@ -2,7 +2,7 @@ import { runProposalCommand } from './run-proposal.js';
 import { cliUsage, commandLocale, hasCliAction, shellIdentity } from '#surfaces/core/cli-kit/index.js';
 import { cliMode } from '#surfaces/core/cli-human/index.js';
 import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type Locale, type ProductLayout } from '#platform/index.js';
-import { runLifecycleCommandSchema, runAdmissionSchema, runDeliveryAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunDeliveryAdmission, type RunView, type RunReservationCommand } from '#engine/index.js';
+import { runLifecycleCommandSchema, runAdmissionSchema, runDeliveryAdmissionSchema, runReservationCommandSchema, type RunAdmission, type RunDeliveryAdmission, type RunView, type RunReservationCommand, type WorkerAdmissionWarning } from '#engine/index.js';
 import { resolve } from 'node:path';
 import { readGraphInput } from './graph-input.js';
 import { validateTaskGraph, TaskGraphError, sanitizeIssues, type AttemptIdentity } from '#domain/index.js';
@@ -14,8 +14,14 @@ import { runControlFlow } from './run-control.js';
 import { familyScope, pickRun, readScopeRuns, resolveRunId, runHumanIo, scopeLine } from './run-human.js';
 import REGISTRY from './run.json' with { type: 'json' };
 export { renderRunCancellation } from './cancellation.js';
+function withheldWarning(warning: Extract<WorkerAdmissionWarning, { code: 'WORKER_INSTRUCTIONS_WITHHELD' }>, locale: Locale) {
+  const params = { source: warning.source, digest: warning.digest?.slice(0, 12) ?? '-' };
+  if (warning.reason === 'absent') return t('run.warning.WORKER_INSTRUCTIONS_WITHHELD.absent', params, locale);
+  if (warning.reason === 'untrusted') return t('run.warning.WORKER_INSTRUCTIONS_WITHHELD.untrusted', params, locale);
+  return warning.reason === 'unsafe' ? t('run.warning.WORKER_INSTRUCTIONS_WITHHELD.unsafe', params, locale) : t('run.warning.WORKER_INSTRUCTIONS_WITHHELD.unreadable', params, locale);
+}
 export type { RunCancellationDeliveryHandler, RunQueryHandler } from '#surfaces/core/cli-terminal/index.js';
-export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }>; warnings?: readonly Readonly<{ code: string; taskId: string; modelId: string; minCliVersion: string; cliVersion: string | null }>[] }>>;
+export type RunAdmissionHandler = (root: string, command: RunAdmission, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; admission: Readonly<{ schemaVersion: 1; commandId: string; run: RunView }>; warnings?: readonly WorkerAdmissionWarning[] }>>;
 /** Local (not runtime-service) admission of a Run pinned to a completed delivery's commit (B06-2a `createDeliveryRun`). */
 export type RunDeliveryAdmissionHandler = (root: string, command: RunDeliveryAdmission, options: ConfigLoadOptions) => ReturnType<RunAdmissionHandler>;
 export type RunReservationHandler = (root: string, command: RunReservationCommand, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; layout: ProductLayout; reservation: Readonly<{ schemaVersion: 1; commandId: string; run: RunView; identities: readonly AttemptIdentity[] }> }>>;
@@ -57,8 +63,12 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
     await runControlFlow(action, context, await runHumanIo(context, locale), { scopeId: values.get('--scope'), runId: values.get('--id'), reason: values.get('--reason'), taskId, answer });
     return;
   }
-  const scopeId = values.get('--scope'); const typedRunId = values.get('--id');
-  if (!scopeId || !typedRunId) throw usage(!scopeId ? '--scope' : '--id');
+  // A change never takes a silent default: no --scope names the valid scopes (CLI_SCOPE_REQUIRED) instead of blaming another flag.
+  const io = interactive && !values.get('--scope') ? await runHumanIo(context, locale) : undefined;
+  const scope = await familyScope(context, { command: `deckent run ${action}`, locale, explicit: values.get('--scope'), mutating: true, interactive, ...(io ? { ask: io.ask } : {}) });
+  if (!scope) return;
+  const scopeId = scope.scopeId; const typedRunId = values.get('--id');
+  if (!typedRunId) throw usage('--id');
   // A short id resolves on every action that names an existing Run; never on `create`, whose --id names the new Run.
   const runId = action === 'create' ? typedRunId : await resolveRunId(context, scopeId, typedRunId);
   if (action === 'create') {
@@ -88,8 +98,9 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
       : await context.createDeliveryRun!(root, runDeliveryAdmissionSchema.parse({ ...parsed.data, deliveryCommandId }), options);
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => t('cli.run.create.result', {
       run: data.admission.run.runId, revision: data.admission.run.revision,
-    }, locale) + (data.warnings ?? []).map(warning => `\n${t('run.warning.WORKER_IMAGE_REFRESHING', { taskId: warning.taskId, modelId: warning.modelId,
-      minCliVersion: warning.minCliVersion, cliVersion: warning.cliVersion ?? '-' }, locale)}`).join('') }); return;
+    }, locale) + (data.warnings ?? []).map(warning => `\n${warning.code === 'WORKER_INSTRUCTIONS_WITHHELD'
+      ? withheldWarning(warning, locale)
+      : t('run.warning.WORKER_IMAGE_REFRESHING', { taskId: warning.taskId, modelId: warning.modelId, minCliVersion: warning.minCliVersion, cliVersion: warning.cliVersion ?? '-' }, locale)}`).join('') }); return;
   }
   if (action === 'reserve') {
     const commandId = values.get('--command-id'); const revision = values.get('--expected-revision');

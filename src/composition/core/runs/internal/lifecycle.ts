@@ -16,7 +16,7 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
       const approvals = maintain ? null : openSqliteApprovalStore(await path(), config.storage.sqlite);
       const peer = localPrincipalPeer();
       const decisions = approvals ? new RunDecisionApprovalBroker(approvals.store, integrity!, source,
-        () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid), Date.now, config.approvals.requestTtlMs, config.approvals.requestTtlMs, resolveLocale(undefined, options.env ?? process.env)) : undefined;
+        () => attestLocalInteractiveTerminal(peer?.pid, peer?.uid), Date.now, config.approvals.requestTtlMs, config.approvals.requestTtlMs, resolveLocale(undefined, options.env ?? process.env, config.language)) : undefined;
       try {
       const policy = new DispatchPolicyAuthorization(source);
       const app = new RunLifecycleApplication({ loadRun: (scope, run) => store.loadRun(scope, run), hasTaskEvaluation: (identity, revision) => store.hasTaskEvaluation(identity, revision),

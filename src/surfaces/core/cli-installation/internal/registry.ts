@@ -13,12 +13,13 @@ export async function initRegistryCommand(argv: readonly string[], context: Inst
     if (!value || value.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE');
     values.set(flag, value);
   }
-  if (allowed.slice(0, -1).some(flag => !values.has(flag)) || flags.has('--preview') === flags.has('--apply') || !context.initializeNativeCodingRegistry) throw ErrorRegistry.createError('CLI_USAGE');
+  // `--discovery` is optional: without it the adapter default (`disabled`) applies; `--lang` is optional as well.
+  if (allowed.filter(flag => flag !== '--discovery' && flag !== '--lang').some(flag => !values.has(flag)) || flags.has('--preview') === flags.has('--apply') || !context.initializeNativeCodingRegistry) throw ErrorRegistry.createError('CLI_USAGE');
   const root = context.root ?? process.cwd(), env = context.env ?? process.env;
   const locale = resolveLocale(values.get('--lang'), env, await loadConfigLanguage(root, { env })); context.onLocale?.(locale);
   const input = { schemaVersion: 1 as const, scopeId: values.get('--scope')!, provider: values.get('--provider')!, kind: values.get('--kind')!,
     poolId: values.get('--pool')!, executionSlots: Number(values.get('--execution-slots')), inFlightSlots: Number(values.get('--in-flight-slots')),
-    discovery: values.get('--discovery')! as InitialRegistryRequest['discovery'], apply: flags.has('--apply') };
+    ...(values.has('--discovery') ? { discovery: values.get('--discovery') as InitialRegistryRequest['discovery'] } : {}), apply: flags.has('--apply') };
   const result = await context.initializeNativeCodingRegistry(root, input, { env, heal: false });
   emit({ schemaVersion: result.schemaVersion, status: result.status, profile: result.profile, kind: result.kind,
     registry: result.registry, expect: result.expect, write: result.write }, { json: flags.has('--json'),

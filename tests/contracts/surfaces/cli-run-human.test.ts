@@ -108,7 +108,8 @@ it('negative: the AI and pipe control path still requires --command-id and --exp
   for (const [argv, env] of [[['run', 'cancel', '--scope', 's', '--id', LONG, '--command-id', 'c-1'], {}], [['run', 'hold', '--scope', 's', '--id', LONG, '--reason', 'r'], {}],
     [['run', 'close', '--scope', 's', '--id', LONG], { CLAUDECODE: '1' }]] as const) {
     const result = await run([...argv], s.context, root, env);
-    expect(result.code).toBe(2); expect(result.err).toContain('CLI_USAGE');
+    // S2 (alpha.53): the refusal names what is missing (CLI_ARGUMENT_MISSING, still exit 2) instead of "invalid".
+    expect(result.code).toBe(2); expect(result.err).toContain('CLI_ARGUMENT_MISSING'); expect(result.err).toContain('--expected-revision <n>');
   }
   // An agent on a real terminal is never asked: the same refusal.
   const tty = sinks();
@@ -268,4 +269,19 @@ it('inventory: default scope, short ids in a table, terminal-safe cells, the pag
   const json = sinks();
   await inventoryCommand(['inventory', '--scope', 's', '--json'], { ...context, stdout: json.stdout } as never);
   expect(JSON.parse(json.out.join(''))).toEqual(page);
+});
+
+it('D4: run cancel/hold/resume/close/reserve/create off a terminal without --scope name the valid scopes (CLI_SCOPE_REQUIRED, exit 2), never blame another flag; nothing is written', async () => {
+  const root = await project(), s = store([view()]), calls: string[] = [];
+  const writer = async () => { calls.push('write'); return null; };
+  const context = { ...s.context, applyRunLifecycle: writer, deliverRunCancellation: writer, reserveRunTasks: writer,
+    configChoiceSources: () => ({ async list() { return [{ value: 's' }, { value: 'live' }]; } }) };
+  for (const argv of [['cancel', '--id', LONG, '--command-id', 'c', '--expected-revision', '7'], ['close', '--id', LONG, '--command-id', 'c', '--expected-revision', '7'],
+    ['hold', '--id', LONG, '--command-id', 'c', '--expected-revision', '7', '--reason', 'x'], ['resume', '--id', LONG, '--command-id', 'c', '--expected-revision', '7'],
+    ['reserve', '--id', LONG, '--command-id', 'c', '--expected-revision', '7'], ['cancel']]) {
+    const result = await run(['run', ...argv, '--json'], context, root);
+    expect(result.code, argv.join(' ')).toBe(2);
+    expect(JSON.parse(result.err), argv.join(' ')).toMatchObject({ code: 'CLI_SCOPE_REQUIRED', params: { scopes: 's, live' } });
+  }
+  expect(calls).toEqual([]);
 });

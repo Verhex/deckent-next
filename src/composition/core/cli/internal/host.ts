@@ -1,5 +1,5 @@
 import { planRuntimeRun } from '#composition/core/run-planner/index.js';
-import { inspectInstallationStartability, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
+import { inspectInstallationStartability, readAutonomyShadow, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
 import { configuredProjectInstructions } from '#composition/core/project-instructions/index.js';
 import { executeConfiguredBackup, inspectConfiguredBackupSets, inspectConfiguredRecoveryFiles } from '#composition/core/backup/index.js';
 import { inspectConfiguredAdminPaths } from './admin-paths.js';
@@ -7,7 +7,7 @@ import { previewConfiguredIdentityProfile, listIdentityProfiles, listConfiguredI
 import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
 import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LEGACY_KEYS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind, providerConnectModelPriced, providerConnectSecretName, readProviderConnectSeed } from '#adapters/index.js';
 import { settledProviderCacheUsage } from '#engine/index.js';
-import { composeCore } from '#composition/core/root/index.js';
+import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, configuredConfigChoiceSources } from '#composition/core/config/index.js';
 import { inspectConfiguredWorkerTranscript, inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
 import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision, listConfiguredDecisions } from '#composition/core/decision/index.js';
@@ -16,11 +16,12 @@ import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains, inspect
 import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfiguredOperation } from '#composition/core/operations/index.js';
 import { changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredAllStandingGrants, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
-import { interactiveDeliveryHandlers, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
+import { interactiveDeliveryHandlers, describeConfiguredDeliverySummaries, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { connectConfiguredModel, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
-import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
+import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold,
+  inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { openConfigWindow, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
 import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
@@ -54,7 +55,9 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     deliverWorkspaceIntegration: delivery.deliver,
     adoptWorkspaceIntegration: delivery.adopt, rollbackWorkspaceIntegration: delivery.rollback, interactiveDelivery: interactiveDeliveryHandlers, // TESLIM-PENCERESI window answer
     inspectWorkerTranscript: inspectConfiguredWorkerTranscript, executeOperation: executeConfiguredOperation, compensateOperation: compensateConfiguredOperation, inspectOperation: inspectConfiguredOperation,
-    inspectWorkspaceIntegration: inspectConfiguredWorkspaceIntegration,
+    inspectWorkspaceIntegration: inspectConfiguredWorkspaceIntegration, describeDeliverySummaries: describeConfiguredDeliverySummaries, // TESLIM-KARTI-OZET card summaries
+    // OTONOM-TESLIM shadow (B1 store): read only for tickets the service already returned to this person (list/inspect); never on a consent card.
+    readAutonomyShadow: async (projectRoot, scopeId, commandId, options) => readAutonomyShadow((await loadComposedConfig(projectRoot, { ...options, heal: false })).productLayout, scopeId, commandId),
     checkWorkspaceIntegration: checkConfiguredWorkspaceIntegration, prepareWorkspaceIntegration: prepareConfiguredWorkspaceIntegration,
     prepareWorkspacePatch: prepareConfiguredWorkspacePatch, previewWorkspacePatch: previewConfiguredWorkspacePatch, renderUnifiedDiff: unifiedDiff,
     configChoiceSources: configuredConfigChoiceSources, configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal,
@@ -97,6 +100,9 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     handOverSecrets: (projectRoot, input, options) => handOverProjectSecrets(projectRoot, input.scopeId, options).catch(error => { throw queryFailure(error); }),
     listSecretStores: listConfiguredSecretStores,
     switchSecretStore: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).switchSecretStore(input),
+    // alpha.53 F1: the worker instruction file's trust, in this process at the person's witnessed terminal (no protocol op).
+    inspectWorkerInstructions: (projectRoot, options) => inspectConfiguredWorkerInstructions(projectRoot, options).catch(error => { throw queryFailure(error); }),
+    changeWorkerInstructionTrust: (projectRoot, input, options) => changeConfiguredWorkerInstructionTrust(projectRoot, input, options).catch(error => { throw queryFailure(error); }),
     inspectDeclaredModels, inspectModelBinding, prepareCodingProfile: prepareNativeCodingProfile, configureCodingTemplate: configureNativeCodingTemplate, initializeNativeCodingRegistry,
     clearSessionStanding: input => runtime.clearSessionStanding(input), renewApproval: input => runtime.renewApproval(input), listApprovals: input => runtime.listApprovals(input), inspectApproval: input => runtime.inspectApproval(input), decideApproval: input => runtime.decideApproval(input),
     invokeModel: invokeRuntimeModel,

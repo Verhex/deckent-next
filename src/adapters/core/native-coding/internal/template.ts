@@ -2,9 +2,9 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { executionProfileDefinitionSchema, immutableJsonObjectSchema, workInputSchema, type WorkerEffort, type CatalogPinModelEvidence, type ExecutionProfileDefinition } from '#domain/index.js';
 import { validateDockerTaskProfile } from '#adapters/core/docker-supervisor/index.js';
-import { compileNativeCodingDockerProfile, nativeCodingInvocationFields, NativeCodingProfileError } from './command.js';
+import { compileNativeCodingDockerProfile, nativeCodingInvocationFields, nativeDiscoverySupported, NativeCodingProfileError } from './command.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
-import { promptPartSchema } from './composition.js';
+import { nativePromptCompositionSchema, promptPartSchema } from './composition.js';
 import { nativeCodingTemplateEnvironment } from './environment.js';
 
 /**
@@ -29,8 +29,7 @@ function parseTemplate(profile: ExecutionProfileDefinition) {
   if (profile.adapter.version !== NATIVE_CODING_TEMPLATE_ADAPTER.version || !parameters.success
     || 'argv' in parameters.data.docker || 'nativeSubscription' in parameters.data.docker) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
   const { provider, discovery, maxTurns } = parameters.data.invocation, command = nativeCliCommand(provider);
-  if ((discovery.mode === 'disabled' && !command.disabledArgs)
-    || (discovery.settings && (!command.capabilities.settings || discovery.mode !== 'repository'))) throw new NativeCodingProfileError('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
+  if (!nativeDiscoverySupported(command, discovery)) throw new NativeCodingProfileError('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
   if (maxTurns !== undefined && !command.capabilities.maxTurns) throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_UNSUPPORTED');
   if (Number(parameters.data.docker['outputBytes']) < 65536) throw new NativeCodingProfileError('NATIVE_CODING_TEMPLATE_INVALID');
   // The compiler replaces argv; the placeholder only lets the Docker validator check every other parameter now.
@@ -69,22 +68,28 @@ export function createNativeCodingTemplate(resourceLimits: unknown, invocation: 
 export const renderWorkScope = (paths: readonly string[]) => paths.join('\n');
 
 /** Pure admission compilation of template + typed work input: invocation v4 with the exact pinned model, the work input's turn limit
- * (else the template's) and the template's prompt parts plus task/scope/acceptance. Keeps the template id/version as provenance. */
-export function compileNativeCodingWorkInput(template: ExecutionProfileDefinition, input: unknown, effort?: WorkerEffort, evidence?: CatalogPinModelEvidence): ExecutionProfileDefinition {
+ * (else the template's) and the template's prompt parts plus task/scope/acceptance. Keeps the template id/version as provenance.
+ * `context` appends admitted parts (the project's worker instruction snapshot) after the template's own; a composition that fits without
+ * them but not with them is the typed overflow refusal, judged by the same composition schema that bounds every prompt. */
+export function compileNativeCodingWorkInput(template: ExecutionProfileDefinition, input: unknown, effort?: WorkerEffort, evidence?: CatalogPinModelEvidence,
+  context: readonly z.infer<typeof promptPartSchema>[] = []): ExecutionProfileDefinition {
   const workInput = workInputSchema.safeParse(input);
   if (!workInput.success) throw new NativeCodingProfileError('NATIVE_CODING_INVOCATION_INVALID');
   const { docker, invocation: { composition, maxTurns, ...invocation } } = parseTemplate(template);
   const { model, task, scope, acceptance } = workInput.data; const turns = workInput.data.maxTurns ?? maxTurns;
   if (maxTurns !== undefined && turns !== undefined && turns > maxTurns) throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE');
+  const base = { schemaVersion: 1 as const, ...composition, task, scope: renderWorkScope(scope.paths), acceptance };
+  const admitted = context.length ? { ...base, context: [...(composition?.context ?? []), ...context] } : base;
+  if (context.length && nativePromptCompositionSchema.safeParse(base).success && !nativePromptCompositionSchema.safeParse(admitted).success) throw new NativeCodingProfileError('NATIVE_CODING_CONTEXT_OVERFLOW');
   return compileNativeCodingDockerProfile(docker, { ...invocation, schemaVersion: 4, ...(turns === undefined ? {} : { maxTurns: turns }),
     ...(workInput.data.effort === undefined ? {} : { effort: workInput.data.effort }),
-    model: { channelId: model.channelId, modelId: model.modelId, auxiliaryModelIds: [...model.auxiliaryModelIds] },
-    composition: { schemaVersion: 1, ...composition, task, scope: renderWorkScope(scope.paths), acceptance } }, effort, evidence);
+    model: { channelId: model.channelId, modelId: model.modelId, auxiliaryModelIds: [...model.auxiliaryModelIds] }, composition: admitted }, effort, evidence);
 }
 
 /** Registry code for a refused compilation: exact-model and turn-limit refusals stay typed; anything else is an invalid profile. */
-export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'EXECUTION_PROFILE_INVALID' {
+export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'WORKER_INSTRUCTIONS_TOO_LARGE' | 'EXECUTION_PROFILE_INVALID' {
   if (!(error instanceof NativeCodingProfileError)) return 'EXECUTION_PROFILE_INVALID';
+  if (error.code === 'NATIVE_CODING_CONTEXT_OVERFLOW') return 'WORKER_INSTRUCTIONS_TOO_LARGE';
   return (error.code === 'WORKER_MODEL_ALIAS_REFUSED' || error.code === 'WORKER_EFFORT_UNSUPPORTED') ? error.code : error.code === 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' ? 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'
     : error.code === 'NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE' ? 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' : 'EXECUTION_PROFILE_INVALID';
 }

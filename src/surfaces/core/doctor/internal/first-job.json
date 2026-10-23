@@ -7,7 +7,7 @@
       "command": ["deckent", "config", "set", "execution", "{\"docker\":{\"executable\":\"<docker path>\",\"imageId\":\"<image id>\"},\"git\":{\"gitExecutable\":\"<git path>\"}}"] },
     { "id": "registry", "fact": "registry", "title": "doctor.firstJob.registry",
       "command": ["deckent", "init", "registry", "--scope", "{scope}", "--provider", "{providers}", "--kind", "<kind>", "--pool", "<pool>", "--execution-slots", "<n>",
-        "--in-flight-slots", "<n>", "--discovery", "<repository|disabled>", "--preview"] },
+        "--in-flight-slots", "<n>", "--discovery", "<disabled|repository>", "--preview"] },
     { "id": "pool", "fact": "pool", "title": "doctor.firstJob.pool", "command": ["deckent", "init", "pool", "--scope", "{scope}", "--preview"] }
   ]
 }

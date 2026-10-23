@@ -81,7 +81,7 @@ describe.skipIf(process.platform !== 'linux' || !process.env.DECKENT_TEST_DOCKER
     const { patch: _patch, ...unbound } = original; void _patch;
     let record = unbound as typeof original;
     const store = { async loadBoundDispatch() { return record; }, loadBoundTask: (identity: typeof f.identity) => f.runtime.store.loadBoundTask(identity),
-      async retainDispatchPatch() { throw new Error('simulated-ledger-failure'); } };
+      loadRun: (scopeId: string, runId: string) => f.runtime.store.loadRun(scopeId, runId), async retainDispatchPatch() { throw new Error('simulated-ledger-failure'); } };
     const principal = { id: 'test', issuer: 'test', subject: 'test', assurance: 'os-user' as const, scopeIds: ['s'] };
     const app = new WorkspacePatchApplication(store, f.runtime.artifacts, { async verify() { return principal; } }, { async authorizeIdentity() {} }, 65536, 'warn');
     await expect(app.prepare(f.identity, { async capture() { return prepared.patch; } }, store)).rejects.toThrow('simulated-ledger-failure');

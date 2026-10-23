@@ -1,4 +1,4 @@
-import { t, resolveLocale, LOCALES, MESSAGE_REGISTRY, ErrorRegistry, type ExitCode, type Locale, type MessageKey } from '#platform/index.js';
+import { t, resolveLocale, LOCALES, MESSAGE_REGISTRY, ErrorRegistry, DeckentError, type ExitCode, type Locale, type MessageKey } from '#platform/index.js';
 import { CLI_CATALOG, HELP_GROUPS, type CliCommandName, type CliCommandSpec, type CliInstallationContract } from './command-catalog.js';
 
 interface CliHelpSpec extends CliCommandSpec {
@@ -37,15 +37,37 @@ export function catalogDispatch(spec: CliCommandSpec, argv: readonly string[]): 
   return children.length ? { missing: ['<action>'] } : { argv };
 }
 
-function refuse(spec: CliCommandSpec, argv: readonly string[], missing: readonly string[], context: CliDispatchContext | undefined): Error {
+/** `path` names the refused command: the family (its actions are listed) or one action (`models catalog activate`). */
+function refuse(spec: CliCommandSpec, argv: readonly string[], missing: readonly string[], context: CliDispatchContext | undefined, path = [spec.name]): Error {
   const flag = argv.indexOf('--lang'), env = context?.env ?? process.env;
   const locale = flag >= 0 || !context?.locale ? resolveLocale(flag >= 0 ? argv[flag + 1] : undefined, env) : context.locale;
   context?.onLocale?.(locale);
-  const actions = live(spec).map(child => child.children?.length ? `${child.name} ${live(child).map(item => item.name).join('|')}` : child.name);
-  return ErrorRegistry.createError('CLI_ARGUMENT_MISSING', { params: { command: `${CLI_NAME} ${spec.name}`, usage: [
+  const actions = path.length > 1 ? [] : live(spec).map(child => child.children?.length ? `${child.name} ${live(child).map(item => item.name).join('|')}` : child.name);
+  return ErrorRegistry.createError('CLI_ARGUMENT_MISSING', { params: { command: `${CLI_NAME} ${path.join(' ')}`, usage: [
     t('cli.help.bare.missing', { argument: missing.map(item => placeholders(item, locale)).join(', ') }, locale),
     ...(actions.length ? [t('cli.help.bare.actions', { actions: actions.join(' | ') }, locale)] : []),
-    t('cli.help.bare.details', { command: spec.name }, locale)].join('\n') } });
+    t('cli.help.bare.details', { command: path.join(' ') }, locale)].join('\n') } });
+}
+
+/**
+ * S2 (CLI-INSAN): a handler's usage refusal of an action called without an argument the catalog says it `requires` names that argument
+ * (CLI_ARGUMENT_MISSING, exit 2) instead of "invalid arguments". Only a refusal is read, so a person's terminal picker, the handler's checks
+ * and every accepted call are unchanged; a present but invalid value (the refusal names a flag the call carries) stays CLI_USAGE, as does a
+ * help request. A positional is present when a word follows the action (values of `--lang`, `--scope` and required flags are not words).
+ */
+function missingArgument(spec: CliCommandSpec, argv: readonly string[], error: unknown, context: CliDispatchContext | undefined): unknown {
+  if (!(error instanceof DeckentError) || error.code !== 'CLI_USAGE' || argv.includes('--help') || argv.includes('-h')) return error;
+  let action: CliCommandSpec = spec, depth = 1;
+  for (let next; (next = live(action).find(child => child.name === argv[depth])); depth++) action = next;
+  const alternatives = (action.requires ?? []).map(item => item.split(' | ').map(form => form.split(' ')));
+  const valued = [...COMMON_VALUE_FLAGS, ...alternatives.flat().filter(form => form[0]!.startsWith('--') && form.length > 1).map(form => form[0]!)];
+  const words: string[] = [];
+  for (let index = depth; index < argv.length; index++) if (valued.includes(argv[index]!)) index++; else if (!argv[index]!.startsWith('-')) words.push(argv[index]!);
+  let positional = 0;
+  const missing = (action.requires ?? []).filter((_, index) => !alternatives[index]!.some(form => form[0]!.startsWith('--') ? argv.includes(form[0]!) : words.length > positional++));
+  const named = error.params?.['flag'];
+  if (!missing.length || (typeof named === 'string' && !missing.some(item => item.split(' | ').some(form => form.split(' ')[0] === named)))) return error;
+  return refuse(spec, argv, missing, context, argv.slice(0, depth));
 }
 
 /** Bind the one catalog to actual dispatch handlers. No second command/help inventory: the catalog decides which action reaches a handler. */
@@ -60,7 +82,7 @@ export function registerCliCommands<C extends CliDispatchContext>(handlers: Read
     const run: RegisteredCliCommand<C>['run'] = (argv, context) => {
       const decision = catalogDispatch(spec, argv);
       if ('missing' in decision) throw refuse(spec, argv, decision.missing, context);
-      return handler(decision.argv, context);
+      return handler(decision.argv, context).catch((error: unknown) => { throw missingArgument(spec, decision.argv, error, context); });
     };
     return visit(spec, undefined, run);
   });
@@ -154,7 +176,13 @@ export function renderTopHelp(locale: Locale = resolveLocale(), catalog: readonl
 export function renderCommandHelp(command: CliHelpSpec, locale: Locale): string {
   const examples = MESSAGE_REGISTRY.catalogs[locale][`${command.detail}.examples`];
   const family = command.parent, children = live(command);
-  const overview = family ? [`deckent ${command.path!.join(' ')}`, message(command.summary, locale), '',
+  // `picks: true` = a person on a terminal picks everything listed; a list = only those (the rest is required on a terminal too).
+  const picked = command.picks === true ? command.requires ?? [] : command.picks ?? [];
+  const list = (items: readonly string[]) => ({ arguments: items.map(item => placeholders(item, locale)).join(', ') });
+  const always = (command.requires ?? []).filter(item => !picked.includes(item)), off = (command.requires ?? []).filter(item => picked.includes(item));
+  const required = [...(always.length ? [t('cli.help.action.requires', list(always), locale)] : []),
+    ...(off.length ? [t('cli.help.action.requiresOffTerminal', list(off), locale)] : [])];
+  const overview = family ? [`deckent ${command.path!.join(' ')}`, message(command.summary, locale), ...required, '',
     t('cli.help.familySynopsis', { command: family.path!.join(' ') }, locale), message(family.summary, locale), ''] : [];
   const bare = !family && command.bare && command.bare !== 'handler' && command.bare.read
     ? [t('cli.help.family.withoutAction', { command: `${CLI_NAME} ${command.name} ${command.bare.read}` }, locale)] : [];

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "rule": { "id": "autonomy", "version": 1 },
+  "operations": ["deliver"],
+  "riskClasses": ["small"],
+  "acceptanceVerdicts": ["accepted"],
+  "verificationPhases": ["accepted"],
+  "modelVerdicts": ["verified", "start-name-matched"],
+  "maxSizeBucket": "small",
+  "maxOutOfScope": 0,
+  "requireDeclaredScope": true
+}

@@ -1,0 +1,10 @@
+{
+  "titleChars": 240,
+  "outcomeChars": 240,
+  "targetChars": 256,
+  "modelChars": 256,
+  "pathChars": 512,
+  "maxTopPaths": 200,
+  "maxOutOfScopePaths": 16,
+  "evidenceKinds": 64
+}

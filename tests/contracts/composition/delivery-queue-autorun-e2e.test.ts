@@ -113,10 +113,10 @@ describe.skipIf(process.platform !== 'linux' || !process.env['DECKENT_TEST_DOCKE
 
     // The human act stays on the terminal: one publication card and one adoption card for the two-item batch.
     const confirmed = await cliInPty(f.project, f.options.env, ['task', 'integration-queue-confirm', '--scope', SCOPE, '--command-id', 'q1'],
-      [['y/N: ', 'y\r'], ['Adopt the verified prefix', 'y\r', 'fresh'], ['Queue result', '']]);
+      [['y/N: ', 'y\r'], ['Adopt the verified prefix', 'y\r', 'fresh'], ['Confirmed batch', '']]);
     expect(confirmed.status).toBe(0);
     expect(confirmed.output.match(/Items: 2/gu)).toHaveLength(2);
-    expect(confirmed.output).toContain('"settledPrefix":2');
+    expect(confirmed.output).toContain('Confirmed batch: 2 of');
     const settled = await Promise.all(tickets.map(view)) as TargetQueueView[];
     expect(settled.map(record => [record.state, record.outcome])).toEqual([['settled', 'adopted'], ['settled', 're-prepared+adopted']]);
     const c2 = await git(f.target, 'rev-parse', TARGET), c1 = await git(f.target, 'rev-parse', `${c2}^`);

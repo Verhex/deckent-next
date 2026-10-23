@@ -140,3 +140,14 @@ it.each(['en', 'tr'] as const)('%s generic business completions omit code delive
   const patch = { ...current, tasks: current.tasks.map(task => ({ ...task, resultBrief: { ...task.resultBrief!, deliveryOutlook: 'patch-not-prepared' as const } })) };
   expect(runCompletionText(patch, jobs)).toContain(locale === 'en' ? 'patch not prepared 1' : 'yama hazır değil 1');
 });
+
+it.each(['en', 'tr'] as const)('%s completion line names what an accepted verdict rests on, and omits it without criteria', locale => {
+  const current = run(runId, true), jobs = workSurfaceLabels(locale).jobs!;
+  expect(runCompletionText(current, jobs)).not.toContain(locale === 'en' ? 'Accepted on' : 'Kabul dayanağı');
+  const withCriteria = { ...current, tasks: current.tasks.map(task => ({ ...task, taskBrief: { ...task.taskBrief!, criteria: [{ id: 'c1', description: 'exit', evaluator: { id: 'process-exit', version: 1 } }] } })) } as unknown as RunView;
+  const lines = runCompletionText(withCriteria, jobs).split('\n');
+  expect(lines[1]).toBe(locale === 'en' ? 'Accepted on: exit code · content not independently verified' : lines[1]);
+  expect(lines[1]).toMatch(locale === 'en' ? /^Accepted on: / : /^Kabul dayanağı: /);
+  const rejected = { ...withCriteria, tasks: withCriteria.tasks.map(task => ({ ...task, resultBrief: { ...task.resultBrief!, evaluation: { verdict: 'rejected' as const } } })) } as unknown as RunView;
+  expect(runCompletionText(rejected, jobs)).not.toMatch(/Accepted on|Kabul dayanağı/);
+});

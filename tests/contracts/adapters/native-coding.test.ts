@@ -102,9 +102,46 @@ it('defaults Claude to discovery disabled without silently changing an old autho
   expect(() => compileNativeCodingDockerProfile(template(), { ...request, schemaVersion: 1 })).toThrow('NATIVE_CODING_INVOCATION_INVALID');
 });
 
-it.each(['codex', 'cursor'])('rejects unverified %s discovery suppression instead of falling back to repository discovery', provider => {
-  expect(() => compileNativeCodingDockerProfile(template(), { ...invocation(provider), discovery: undefined }))
-    .toThrow('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
+it('defaults Cursor to discovery disabled by checkout shaping: same argv as repository, the registry hidden set frozen in the profile (C2, owner Q4)', () => {
+  const disabled = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), { ...invocation('cursor'), discovery: undefined }));
+  const repository = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), invocation('cursor')));
+  expect(disabled.argv).toEqual(repository.argv);
+  expect(disabled.nativeSubscription?.preflight).toMatchObject({ discovery: 'disabled', requiredFlags: repository.nativeSubscription?.preflight?.requiredFlags });
+  expect(disabled.nativeSubscription?.checkout).toEqual({ schemaVersion: 1, hiddenPaths: ['AGENTS.md', 'CLAUDE.md', '.agents', '.claude', '.codex', '.cursor', '/DECKENT.md', '/.deckent/worker-instructions.md'] });
+  expect(repository.nativeSubscription?.checkout).toBeUndefined();
+  // A project's own set replaces the default; it exists only for a checkout-realised `disabled`.
+  const own = { schemaVersion: 1, mode: 'disabled', hiddenPaths: ['AGENTS.md', '/docs/agents'] };
+  expect(resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), { ...invocation('cursor'), discovery: own })).nativeSubscription?.checkout?.hiddenPaths).toEqual(own.hiddenPaths);
+  for (const [provider, discovery] of [['cursor', { ...own, mode: 'repository' }], ['codex', own], ['claude', own]] as const) {
+    expect(() => compileNativeCodingDockerProfile(template(), { ...invocation(provider), discovery })).toThrow('NATIVE_CODING_DISCOVERY_UNSUPPORTED');
+  }
+  for (const hiddenPaths of [['*.md'], ['a/b'], ['/a/../b'], ['!AGENTS.md'], ['..'], [], ['AGENTS.md', 'AGENTS.md'], ['/x/']]) {
+    expect(() => compileNativeCodingDockerProfile(template(), { ...invocation('cursor'), discovery: { ...own, hiddenPaths } })).toThrow('NATIVE_CODING_INVOCATION_INVALID');
+  }
+});
+
+it('keeps Claude and Codex argv-only: no checkout part, so their compiled profiles do not change (C2)', () => {
+  for (const provider of ['claude', 'codex']) {
+    expect(resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), { ...invocation(provider), discovery: undefined })).nativeSubscription?.checkout).toBeUndefined();
+  }
+});
+
+it('defaults Codex to discovery disabled: strict config plus both skills keys, preflight needs only help flags (owner 2026-10-23 Q2)', () => {
+  const request = { ...invocation('codex'), discovery: undefined };
+  const profile = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), request));
+  const suppression = ['--strict-config', '-c', 'skills.include_instructions=false', '-c', 'skills.bundled.enabled=false'];
+  const at = profile.argv.indexOf('--strict-config');
+  expect(profile.argv.slice(at, at + suppression.length)).toEqual(suppression);
+  expect(profile.argv.indexOf('--model')).toBeGreaterThan(at + suppression.length - 1);
+  const preflight = profile.nativeSubscription?.preflight;
+  expect(preflight).toMatchObject({ cliVersion: 'fixture-1', discovery: 'disabled' });
+  expect(preflight?.requiredFlags).toEqual(expect.arrayContaining(['--strict-config', '--config']));
+  // A config key is no help token: requiring it would fail every preflight; the hidden probes prove the keys instead.
+  expect(preflight?.requiredFlags.some(flag => flag.startsWith('skills.') || flag === '-c')).toBe(false);
+  const repository = resolveDockerTaskProfile(compileNativeCodingDockerProfile(template(), invocation('codex')));
+  expect(repository.argv).not.toContain('--strict-config');
+  expect(repository.argv.some(arg => arg.startsWith('skills.'))).toBe(false);
+  expect(repository.nativeSubscription?.preflight?.requiredFlags).not.toContain('--strict-config');
 });
 
 it('pins only typed non-secret explicit settings and refuses unsupported settings semantics', () => {

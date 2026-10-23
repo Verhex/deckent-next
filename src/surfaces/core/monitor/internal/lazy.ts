@@ -1,4 +1,5 @@
-import { emit, resolveLocale, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { emit, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import type { MonitorCommandContext } from './context.js';
 
 /**
@@ -9,7 +10,7 @@ export async function monitorCommand(argv: readonly string[], context: MonitorCo
   // `monitor --help [--lang <l>]` answers as cheaply as every other command's help; anything else goes to the full parser.
   const help = (argv.length === 2 || (argv.length === 4 && argv[2] === '--lang' && !argv[3]!.startsWith('-'))) && ['--help', '-h'].includes(argv[1]!);
   if (help) {
-    const locale = resolveLocale(argv[3], context.env); context.onLocale?.(locale);
+    const locale = commandLocale(context, argv[3]);
     emit(t('cli.monitor.help', {}, locale), { ...(context.stdout ? { stdout: context.stdout } : {}) });
     return;
   }

@@ -165,3 +165,16 @@ it('a catalog model is switched on or off by selection in the scope (expected re
   expect(await main(['models', 'catalog', 'deactivate', '--scope', 'live'], piped.context)).toBe(2);
   expect(piped.calls.some(call => call.kind === 'apply')).toBe(false);
 });
+
+it('D4: catalog list without --scope reads the configured default and names it; with none, and for a change, it refuses with the valid scopes (CLI_SCOPE_REQUIRED, exit 2)', async () => {
+  const f = await project(), h = host(f);
+  expect(await main(['models', 'catalog', 'list'], h.context)).toBe(0);
+  expect(h.out.text()).toContain('scope: live (default)'); expect(h.calls).toEqual([{ kind: 'catalog', value: { schemaVersion: 1, scopeId: 'live' } }]);
+  const bare = await project({}), none = host(bare);
+  expect(await main(['models', 'catalog', 'list', '--json'], none.context)).toBe(2);
+  expect(JSON.parse(none.err.text())).toMatchObject({ code: 'CLI_SCOPE_REQUIRED', params: { scopes: 'live, other' } });
+  // A change never takes the configured default, and the scope is named before any other missing flag.
+  const change = host(f);
+  expect(await main(['models', 'catalog', 'deactivate', '--json'], change.context)).toBe(2);
+  expect(JSON.parse(change.err.text())).toMatchObject({ code: 'CLI_SCOPE_REQUIRED' }); expect(change.calls).toEqual([]);
+});

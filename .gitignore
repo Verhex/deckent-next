@@ -8,6 +8,8 @@ apps/*/node_modules/
 # product state (per project, never committed) — except the dogfood core-memory authority, which is tracked
 .deckent/*
 !.deckent/docs/
+# This repository's worker-only instructions (owner Q3 2026-10-23, DECKENT-MD-WORKERS); the human terminal never reads it.
+!.deckent/worker-instructions.md
 .deckent/docs/*
 !.deckent/docs/core-memory/
 !.deckent/docs/decisions/

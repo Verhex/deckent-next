@@ -1,4 +1,4 @@
-import { queueWindowLabels } from './queue-labels.js';
+import { cardSummaryLabels, queueWindowLabels } from './queue-labels.js';
 import { t, type Locale } from '#platform/index.js';
 import type { WorkSurfaceLabels, LedgerCardLabels } from '#surfaces/core/terminal/index.js';
 import type { PickerLabels } from '#surfaces/core/terminal-picker/index.js';
@@ -63,7 +63,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
       gone: t('terminal.runControl.gone', {}, locale), reason: { label: t('terminal.runControl.reason.label', {}, locale), hint: t('terminal.runControl.reason.hint', {}, locale), empty: t('terminal.runControl.reason.empty', {}, locale) } },
     jobs: {
       locale, completed: t('terminal.jobs.completed', {}, locale), deliveryCounts: t('terminal.jobs.deliveryCounts', {}, locale), deliveryPatch: t('terminal.jobs.deliveryPatch', {}, locale), deliveryNext: t('terminal.jobs.deliveryNext', {}, locale),
-      detailsUnavailable: t('terminal.jobs.detailsUnavailable', {}, locale), trackingFull: t('terminal.jobs.trackingFull', {}, locale),
+      detailsUnavailable: t('terminal.jobs.detailsUnavailable', {}, locale), acceptanceEvidence: t('terminal.jobs.acceptanceEvidence', {}, locale), trackingFull: t('terminal.jobs.trackingFull', {}, locale),
       hints: t('terminal.jobs.hints', {}, locale), watchStatus: t('terminal.jobs.watchStatus', {}, locale), push: t('terminal.jobs.push', {}, locale), poll: t('terminal.jobs.poll', {}, locale),
       system: t('terminal.info.systemLabel', {}, locale), cancelPickerTitle: t('terminal.jobs.cancelPickerTitle', {}, locale), runTitle: t('terminal.jobs.runTitle', {}, locale), runFallback: t('terminal.jobs.runFallback', {}, locale),
       transcriptTitle: t('terminal.jobs.transcriptTitle', {}, locale), state: t('terminal.jobs.state', {}, locale), tasks: t('terminal.jobs.tasks', {}, locale),
@@ -261,7 +261,7 @@ export function pickerLabels(locale: Locale): PickerLabels {
 
 /** TESLIM-PENCERESI: the words of the terminal delivery window; `next` names the next step of the typed refusals it explains (others: `nextDefault`). */
 export function deliveryWindowLabels(locale: Locale): DeliveryWindowLabels {
-  return { queue: queueWindowLabels(locale),
+  return { queue: queueWindowLabels(locale), cardSummary: cardSummaryLabels(locale),
     title: t('terminal.delivery.title', {}, locale), ids: t('terminal.delivery.ids', {}, locale), loading: t('terminal.delivery.loading', {}, locale),
     check: t('terminal.delivery.check', {}, locale), outOfScope: t('terminal.delivery.outOfScope', {}, locale), summary: t('terminal.delivery.summary', {}, locale),
     file: t('terminal.delivery.file', {}, locale), moreFiles: t('terminal.delivery.moreFiles', {}, locale), where: t('terminal.delivery.where', {}, locale),

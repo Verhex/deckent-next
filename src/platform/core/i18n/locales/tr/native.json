@@ -206,5 +206,20 @@
   "error.OAUTH_CONNECTION_REAUTHORIZE": "Bu ChatGPT oturumu için tekrar giriş gerekir.",
   "error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED": "ChatGPT girişini etkileşimli terminalden başlatın. Giriş URL adresi yazdırılmaz.",
   "error.OAUTH_CONNECTION_PLATFORM_UNSUPPORTED": "Bu uygulamada ChatGPT tarayıcı girişi yalnız Linux/WSL üzerinde desteklenir.",
-  "error.SECRET_STORE_PROTECTION_REQUIRED": "Yenilenebilir kimlik bilgileri şifreli saklanmalıdır. Bu sır deposu bunları kabul edemez."
+  "error.SECRET_STORE_PROTECTION_REQUIRED": "Yenilenebilir kimlik bilgileri şifreli saklanmalıdır. Bu sır deposu bunları kabul edemez.",
+  "error.WORKER_INSTRUCTIONS_TOO_LARGE": "Projenin worker talimat dosyası worker istem bütçesine sığmıyor. Dosyayı kısaltın ya da bu proje için execution.workerInstructions.source değerini none yapın.",
+  "run.warning.WORKER_INSTRUCTIONS_WITHHELD.absent": "Uyarı: seçilen worker talimat kaynağı {source} için çalışma hedefinin kökünde dosya yok; worker'lar proje talimatı olmadan çalışır.",
+  "run.warning.WORKER_INSTRUCTIONS_WITHHELD.untrusted": "Uyarı: worker talimatları ({source}, özet {digest}) bu makinede güvenilir olarak işaretlenmedi; worker'lar bunlar olmadan çalışır. Dosyayı kendi terminalinizde inceleyip güvenin: deckent coding instructions trust --scope <id>.",
+  "run.warning.WORKER_INSTRUCTIONS_WITHHELD.unsafe": "Uyarı: worker talimatları ({source}) dışarıda bırakıldı; dosya düz bir dosya değil (bağlantı ya da özel dosya).",
+  "run.warning.WORKER_INSTRUCTIONS_WITHHELD.unreadable": "Uyarı: worker talimatları ({source}) dışarıda bırakıldı; dosya okunamadı.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE": "Burada güvenilecek ya da güveni geri alınacak bir worker talimat dosyası yok. Hiçbir şey değiştirilmedi.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.target": "Bu çalışma hedefi buradaki worker'ların kullandığı hedef değil (bkz. deckent coding instructions status). Hiçbir şey değiştirilmedi.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.noExecution": "Worker'lar talimat dosyası almaz: Git yürütmesi tanımlı değil. Hiçbir şey değiştirilmedi.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.sourceNone": "Bu projede worker talimatları kapalı (execution.workerInstructions.source değeri none). Hiçbir şey değiştirilmedi.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.absent": "Seçilen worker talimat dosyası çalışma hedefinin kökünde yok. Hiçbir şey değiştirilmedi.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.store": "Proje talimatları için özel güven klasörü kullanılamıyor ya da güvenli değil; güven kaydedilemez (bkz. deckent paths --global). Hiçbir şey değiştirilmedi.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.size": "Worker talimat dosyası talimat dosyası sınırından büyük; dosyayı kısaltın. Hiçbir şey değiştirilmedi.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.unsafe": "Worker talimat dosyası bir bağlantı ya da özel dosya; güvenilemez. Hiçbir şey değiştirilmedi.",
+  "error.WORKER_INSTRUCTIONS_CHANGED": "Worker talimat dosyası gösterildikten sonra değişti. Yeni içeriği incelemek için komutu yeniden çalıştırın. Hiçbir şeye güvenilmedi.",
+  "error.WORKER_INSTRUCTIONS_CHANGED.place": "Worker'ların okuduğu klasör ya da dosya kartta gösterilen değil (çalışma hedefi, klasörü, worker kaynağı ya da dosya değiştirildi). İncelemek için komutu yeniden çalıştırın. Hiçbir şey değiştirilmedi."
 }

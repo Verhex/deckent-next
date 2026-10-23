@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { askQueueConfirmation, renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
+import { askQueueConfirmation, renderQueueConsent, renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 import type { QueueConsent, TargetQueueView } from '#engine/index.js';
 
 // QUEUE-SMALL 5: both queue cards asked "Write this reference? y/N". The adoption card moves a branch, so it asks exactly that.
@@ -27,6 +27,16 @@ describe('queue confirmation questions', () => {
     const publish = await ask('publish', 'en', 'y\r');
     expect(publish).toMatchObject({ decision: true }); expect(publish.written).toContain('Write this reference? y/N: ');
     expect(publish.written).not.toContain('to the verified commit');
+  });
+
+  it('alpha.53 A3: summary lines stand above the exact card, which stays byte-identical; without them nothing is added', async () => {
+    const input = Object.assign(new PassThrough(), { isTTY: true }), output = new PassThrough(); let written = '';
+    output.on('data', chunk => { written += String(chunk); });
+    const publish = card('publish'), decision = askQueueConfirmation(publish, 'en', input, output, { timeoutMs: 5_000, summary: ['Summary (your yes approves the exact card below, nothing else):', 'Work: \u001b[31mfix'] });
+    setTimeout(() => input.write('n\r'), 20);
+    expect(await decision).toBe(false);
+    expect(written.startsWith('Summary (your yes approves the exact card below, nothing else):\nWork:  [31mfix\n' + renderQueueConsent(publish, 'en') + '\n')).toBe(true);
+    expect((await ask('publish', 'en', 'n\r')).written.startsWith(renderQueueConsent(publish, 'en').split('\nExpires')[0]!)).toBe(true);
   });
 
   it('every answer but an explicit y declines, and no controlling terminal is refused before any question', async () => {

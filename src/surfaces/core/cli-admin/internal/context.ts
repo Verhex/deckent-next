@@ -12,6 +12,7 @@ import type { SecretDeleteHandler, SecretNamesHandler, SecretSetHandler, SecretS
 import type { ProjectSecretHandler, SecretGrantHandler, SecretHandoverHandler, SecretInventoryHandler } from './secret-project.js';
 import type { SecretStoreSwitchHandler, SecretStoresHandler } from './secret-store.js';
 import type { ToolchainUpdateHandler } from './toolchains.js';
+import type { WorkerInstructionStatusHandler, WorkerInstructionTrustHandler } from './worker-instructions.js';
 
 /** The host operations the administration commands use (pool, backup, secret, audit, runtime, toolchains, operation, coding);
  * the CLI's full command context satisfies it. */
@@ -31,6 +32,9 @@ export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunch
   updateToolchains?: ToolchainUpdateHandler;
   prepareCodingProfile?: CodingProfilePreparationHandler;
   configureCodingTemplate?: CodingTemplateHandler;
+  // alpha.53 F1: `coding instructions status|trust|revoke` — the worker instruction file a Run snapshots, trusted only at a person's terminal.
+  inspectWorkerInstructions?: WorkerInstructionStatusHandler;
+  changeWorkerInstructionTrust?: WorkerInstructionTrustHandler;
   // SECRET-K1 (owner S1): the active secret backend and its state; doctor-only, never a hard failure of doctor. `secret list` names only.
   inspectSecretStore?: SecretStoreInspectHandler;
   listSecretNames?: SecretNamesHandler;

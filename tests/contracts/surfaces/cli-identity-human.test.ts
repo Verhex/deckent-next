@@ -122,3 +122,12 @@ it('distribute on a terminal: arrow-key picks (profile, person, role, project), 
   await main(['identity', 'distribute', '--scope', 'live', '--apply'], cancelled.context);
   expect(cancelled.calls.some(call => call.kind === 'apply')).toBe(false);
 });
+
+it('D4: choices without --scope reads the configured default and names it; with none it refuses with the valid scopes (CLI_SCOPE_REQUIRED, exit 2)', async () => {
+  const f = await project(), h = host(f);
+  expect(await main(['identity', 'choices'], h.context)).toBe(0);
+  expect(h.out.text()).toContain('scope: live (default)'); expect(h.calls).toEqual([{ kind: 'choices', value: 'live' }]);
+  const bare = await project({}), none = host(bare);
+  expect(await main(['identity', 'choices', '--json'], none.context)).toBe(2);
+  expect(JSON.parse(none.err.text())).toMatchObject({ code: 'CLI_SCOPE_REQUIRED', params: { scopes: 'live' } }); expect(none.calls).toEqual([]);
+});

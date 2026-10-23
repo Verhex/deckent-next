@@ -62,7 +62,7 @@ it('carries real retained patch advice through prepare, preview variants and int
   const store = { async loadBoundDispatch() { return dispatch; }, async retainDispatchPatch() { return dispatch; },
     async loadBoundTask() { return { id: 't', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'],
       workInput: { schemaVersion: 1, task: 'Edit notes.', scope: { paths: ['notes'] }, acceptance: 'Done.',
-        model: { channelId: 'c', modelId: 'm', auxiliaryModelIds: [] } } }; } };
+        model: { channelId: 'c', modelId: 'm', auxiliaryModelIds: [] } } }; }, async loadRun() { return null; } };
   const verifier = { async verify() { return { id: 'p', issuer: 'i', subject: 'u', assurance: 'os-user' as const, scopeIds: ['s'] }; } };
   const authorization = { async authorizeIdentity() {} };
   const patches = new WorkspacePatchApplication(store as never, artifacts, verifier, authorization, 65536, 'enforce');

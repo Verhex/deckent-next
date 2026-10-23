@@ -206,5 +206,20 @@
   "error.OAUTH_CONNECTION_REAUTHORIZE": "This ChatGPT session requires sign-in again.",
   "error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED": "Start ChatGPT sign-in from an interactive terminal. No sign-in URL is printed.",
   "error.OAUTH_CONNECTION_PLATFORM_UNSUPPORTED": "ChatGPT browser sign-in is supported on Linux/WSL only in this implementation.",
-  "error.SECRET_STORE_PROTECTION_REQUIRED": "Renewable credentials require encrypted storage. This secret store cannot accept them."
+  "error.SECRET_STORE_PROTECTION_REQUIRED": "Renewable credentials require encrypted storage. This secret store cannot accept them.",
+  "error.WORKER_INSTRUCTIONS_TOO_LARGE": "The project's worker instruction file does not fit the worker prompt budget. Shorten it, or set execution.workerInstructions.source to none for this project.",
+  "run.warning.WORKER_INSTRUCTIONS_WITHHELD.absent": "Warning: the selected worker instruction source {source} has no file at the work target root; workers run without project instructions.",
+  "run.warning.WORKER_INSTRUCTIONS_WITHHELD.untrusted": "Warning: worker instructions ({source}, digest {digest}) are not trusted on this host, so workers run without them. Review and trust the file at your own terminal: deckent coding instructions trust --scope <id>.",
+  "run.warning.WORKER_INSTRUCTIONS_WITHHELD.unsafe": "Warning: worker instructions ({source}) were left out because the file is not a plain regular file (link or special file).",
+  "run.warning.WORKER_INSTRUCTIONS_WITHHELD.unreadable": "Warning: worker instructions ({source}) were left out because the file could not be read.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE": "There is no worker instruction file to trust or revoke here. Nothing was changed.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.target": "That work target is not the one workers use here (see deckent coding instructions status). Nothing was changed.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.noExecution": "Workers get no instruction file: no Git execution is configured. Nothing was changed.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.sourceNone": "Worker instructions are off for this project (execution.workerInstructions.source is none). Nothing was changed.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.absent": "The selected worker instruction file does not exist at the work target root. Nothing was changed.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.store": "The private trust folder for project instructions is unavailable or unsafe, so trust cannot be saved (see deckent paths --global). Nothing was changed.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.size": "The worker instruction file is larger than the instruction file limit; shorten it. Nothing was changed.",
+  "error.WORKER_INSTRUCTIONS_UNAVAILABLE.unsafe": "The worker instruction file is a link or special file and cannot be trusted. Nothing was changed.",
+  "error.WORKER_INSTRUCTIONS_CHANGED": "The worker instruction file changed after it was shown. Run the command again to review the new content. Nothing was trusted.",
+  "error.WORKER_INSTRUCTIONS_CHANGED.place": "The folder or file workers read is not the one the card showed (the work target, its folder, the worker source or the file was replaced). Run the command again to review it. Nothing was changed."
 }

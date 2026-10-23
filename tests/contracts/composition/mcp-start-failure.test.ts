@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { mcpHelpRequested, mcpHelpText, mcpStartFailureText, run } from '#composition/core/mcp/index.js';
+import { mcpConfigLanguage, mcpHelpRequested, mcpHelpText, mcpStartFailureText, run } from '#composition/core/mcp/index.js';
 import { DeckentError, ErrorRegistry, t } from '#platform/index.js';
 
 // g2-mcp-hata (analysis 2026-10-18): a failed deckent-mcp start said only MCP_START_FAILED. The first stderr line stays exactly that (clients
@@ -54,4 +54,18 @@ it.skipIf(process.platform === 'win32')('the real built entry: --help prints hel
   expect(help.status).toBe(0); expect(help.stdout).toContain('--project'); expect(help.stderr).toBe('');
   const bad = spawnSync(process.execPath, [entry, '--bogus'], { env, encoding: 'utf8', input: '' });
   expect(bad.status).not.toBe(0); expect(bad.stderr.split('\n')[0]).toBe('MCP_START_FAILED'); expect(bad.stdout).toBe('');
+});
+
+// alpha.53 D3: the help and the start-failure line follow the project's configured language, not only LANG/DECKENT_LANG.
+it('config language drives the help text and the failure line when the environment says nothing', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-mcp-lang-')); roots.push(root);
+  await mkdir(join(root, 'home'), { recursive: true }); await mkdir(join(root, 'project', '.deckent'), { recursive: true, mode: 0o700 });
+  await writeFile(join(root, 'project', '.deckent', 'config.json'), JSON.stringify({ schema_version: 3, language: 'tr' }), { mode: 0o600 });
+  const env = { HOME: join(root, 'home'), LANG: 'C' };
+  const language = await mcpConfigLanguage(['--project', join(root, 'project')], env);
+  expect(language).toBe('tr');
+  expect(mcpHelpText(env, language)).toBe(mcpHelpText({ DECKENT_LANG: 'tr' })); expect(mcpHelpText(env, language)).not.toBe(mcpHelpText(env));
+  expect(await mcpConfigLanguage(['--project', join(root, 'missing')], env)).toBeUndefined();
+  const failure = mcpStartFailureText(ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE'), env, language);
+  expect(failure).toContain(t('error.LOCAL_RUNTIME_UNAVAILABLE', {}, 'tr'));
 });

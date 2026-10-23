@@ -198,3 +198,25 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     expect(result.admission.run.runId).toBe('typed-input'); expect(result.admission.run.tasks).toHaveLength(1);
   });
 });
+
+// C1 (owner 2026-10-23 Q2): own describe so the main block stays within the function size limit.
+describe.skipIf(process.platform === 'win32')('coding template discovery selection', () => {
+  it('keeps the admitted discovery mode by default and takes an explicit --discovery as a new template content id (C1)', async () => {
+    const f = await setup();
+    const kept = await configureNativeCodingTemplate(f.root, request, f.options);
+    expect(kept.profile.parameters).toMatchObject({ invocation: { discovery: { mode: 'repository' } } });
+    const hidden = await configureNativeCodingTemplate(f.root, { ...request, discovery: 'disabled' }, f.options);
+    expect(hidden.profile.parameters).toMatchObject({ invocation: { discovery: { mode: 'disabled' } } });
+    expect(hidden.profile.id).not.toBe(kept.profile.id);
+    await expect(configureNativeCodingTemplate(f.root, { ...request, discovery: 'off' }, f.options)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_INPUT_INVALID' });
+    let output = '', error = '';
+    const context = { root: f.root, env: f.options.env, configureCodingTemplate: configureNativeCodingTemplate,
+      stdout: { write: (chunk: string) => { output += chunk; return true; } }, stderr: { write: (chunk: string) => { error += chunk; return true; } } };
+    for (const [locale, said] of [['en', 'Repository instructions: hidden from the worker'], ['tr', 'Repo talimatları: işçiden gizli']] as const) {
+      output = ''; expect(await main(['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--discovery', 'disabled', '--preview', '--lang', locale], context), error).toBe(0);
+      expect(output).toContain(said);
+    }
+    output = ''; expect(await main(['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--preview', '--lang', 'en'], context), error).toBe(0);
+    expect(output).toContain('Repository instructions: read by the worker');
+  });
+});

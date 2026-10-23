@@ -100,7 +100,7 @@ Developer:
   runtime     Manage the local runtime service (without an action: describe)
       serve | describe | shutdown | restart
   coding      Prepare native coding profiles
-      prepare | template
+      prepare | template | instructions status|trust|revoke
       --input <file|-> | --provider <id> --kind <id>
   inference   Inspect local inference capacity
       plan | budget | metrics

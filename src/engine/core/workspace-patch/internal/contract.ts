@@ -11,7 +11,7 @@ export const patchLimitFields: Readonly<Record<WorkspacePatchLimitDetail, string
   time: 'execution.git.timeoutMs', 'git-timeout': 'execution.git.timeoutMs', 'git-output': 'execution.git.outputBytes' });
 export class WorkspacePatchError extends Error {
   constructor(readonly code: 'PATCH_INTEGRATION_PENDING' | 'PATCH_UNAVAILABLE' | 'PATCH_UNSAFE' | 'PATCH_LIMIT' | 'PATCH_UNSUPPORTED' | 'PATCH_CONFLICT' | 'PATCH_CORRUPT'
-    | 'PATCH_BASE_ADVANCED' | 'PATCH_SCOPE_VIOLATION' | 'PATCH_SCOPE_UNDECLARED',
+    | 'PATCH_BASE_ADVANCED' | 'PATCH_SCOPE_VIOLATION' | 'PATCH_SCOPE_UNDECLARED' | 'PATCH_INSTRUCTION_SURFACE_WRITE',
     readonly detail?: WorkspacePatchLimitDetail,
     /** Bounded, repository-relative facts for the error text (K6 scope refusal: count, shown paths, omitted); never host paths or content. */
     readonly params?: Readonly<Record<string, string | number>>) {

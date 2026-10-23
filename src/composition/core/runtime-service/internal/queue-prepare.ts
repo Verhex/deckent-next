@@ -1,15 +1,18 @@
-import { WorkspacePatchApplication, createWorkspaceQueuePreparation, stepWorkspaceQueueReattempt, stepWorkspaceRunDelivery } from '#engine/index.js';
+import { WorkspacePatchApplication, createWorkspaceQueuePreparation, stepWorkspaceQueueReattempt, stepWorkspaceRunDelivery, workspaceQueueShadow } from '#engine/index.js';
 import { GitIntegrationTarget, GitIntegrationDelivery, GitRunWorkspaceProvider, GitWorkspaceBroker, gitQueueCandidateSource, openSqliteInventoryReader, classifyDockerTaskEffects } from '#adapters/index.js';
 import type { TargetQueueRecord } from '#domain/index.js';
 import { withConfiguredRunAdmission } from '#composition/core/runs/index.js';
 import { prepareConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
-import type { ConfigLoadOptions } from '#platform/index.js';
+import { getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import type { QueueContext } from './queue-context.js';
+import { autonomyShadowWriter } from './autonomy-shadow.js';
 export async function queuePreparation(root: string, c: QueueContext, options: ConfigLoadOptions) {
   const store = await c.openAttempts(), verifier = { async verify() { return c.principal; } };
   const patches = new WorkspacePatchApplication(store, c.artifacts, verifier, c.authorization, c.config.artifacts.maxBytes, c.scopeMode);
   return createWorkspaceQueuePreparation({ ...c, registry: c.config.admission?.registry ?? null, bar: c.config.execution!.adoption.verification, maxBytes: c.config.artifacts.maxBytes }, store, patches, {
     delivery: new GitIntegrationDelivery(c.git), withAdmission: work => withConfiguredRunAdmission(root, c, options, work),
+    shadow: workspaceQueueShadow(store, { shadow: autonomyShadowWriter(c.layout), artifacts: c.artifacts, maxBytes: c.config.artifacts.maxBytes, scopeMode: c.scopeMode,
+      known: getConfigKnownSecrets(c.config), now: Date.now }),
     async target(previous) {
       const source = previous ? await gitQueueCandidateSource(previous, store, c.artifacts, c.git, c.limits) : undefined;
       return new GitIntegrationTarget(c.git, c.limits, source ? { commit: source.baseCommit, repository: source.repositoryRoot } : undefined);

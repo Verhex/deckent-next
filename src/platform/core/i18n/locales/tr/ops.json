@@ -496,5 +496,6 @@
   "shell.homeSubtreesMayBeHidden": "kimlik taraması sınırında incelenemeyen büyük HOME alt dizinleri gizlenir",
   "doctor.modelInvocationDelivery": "Model teslimi: profil {profile}, model {model}, kapsam {scope}, yüzey {surface}; gerekli {required} bayt, mevcut {available} bayt — {setting} değerini artırın veya profilin limits.responseMaxBytes değerini azaltın.",
   "doctor.modelInvocationDelivery.config.runtime-service": "service.responseMaxBytes (çalışma servisi)",
-  "doctor.modelInvocationDelivery.config.mcp": "mcp.responseMaxBytes (MCP yüzeyi)"
+  "doctor.modelInvocationDelivery.config.mcp": "mcp.responseMaxBytes (MCP yüzeyi)",
+  "error.AUTONOMY_SHADOW_NOT_RECORDED": "Bir teslim kuyruğu kaydı için kapalı kuralın gölge değerlendirmesi kaydedilemedi. Kuyruk ve kayıt etkilenmedi: bu yüzden hiçbir şey teslim edilmedi ya da bekletilmedi. Çalışma durumu klasörünün yazılabilir olduğunu denetleyin."
 }

@@ -626,6 +626,8 @@ function eventChannel(socketPath: string, maxQueued = 4000, batch = 64) {
 export interface NativeWorkerCapabilities {
   readonly maxTurns: { readonly flag: string; readonly hiddenHelpProbe: { readonly args: readonly string[]; readonly refusal: string } | null } | null;
   readonly settings: { readonly flag: string } | null;
+  readonly discovery: { readonly requiredFlags: readonly string[]; readonly hiddenProbes: readonly { readonly args: readonly string[]; readonly refusal: string }[];
+    readonly checkout: { readonly hiddenPaths: readonly string[] } | null } | null;
   readonly promptChannel: 'claude-system-prompt' | 'codex-instructions-file' | 'inline';
   readonly structuredReport: { readonly flag: string; readonly channel: 'inline-json' | 'schema-file' } | { readonly flag: null; readonly channel: 'final-text-json' } | null;
   readonly modelUsageEvidence: 'session-events' | 'session-start-name' | 'none';
@@ -645,19 +647,21 @@ export function nativePromptArguments(input: readonly string[], core: string, ta
     || !argv.includes('project_doc_max_bytes=0'))) throw new Error();
   return argv;
 }
-/** Required flags and hidden-parser probes are registry data; the parser refusal must match exactly. */
+/** A hidden-parser probe holds only when the CLI refuses its invalid value with exactly the registered refusal. */
+const refuses = (run: (args: readonly string[]) => string, probe: { readonly args: readonly string[]; readonly refusal: string }) => {
+  try { run(probe.args); return false; }
+  catch (error) { return String((error as { stderr?: unknown }).stderr ?? '').includes(probe.refusal); }
+};
+/** Required flags and hidden-parser probes are registry data; the parser refusal must match exactly. Disabled discovery also runs every
+ * registered discovery probe, so a CLI that would silently ignore an unknown suppression key fails here, before credentials exist. */
 export function nativePreflightCapabilities(capabilities: NativeWorkerCapabilities,
-  preflight: { schemaVersion: number; cliVersion: string; helpArgs: readonly string[]; requiredFlags: readonly string[] }, run: (args: readonly string[]) => string): boolean {
+  preflight: { schemaVersion: number; cliVersion: string; helpArgs: readonly string[]; requiredFlags: readonly string[]; discovery?: string }, run: (args: readonly string[]) => string): boolean {
   const version = run(['--version']).trim(), help = run(preflight.helpArgs).split(/[\s,=]+/);
   if (preflight.schemaVersion !== 1 || version !== preflight.cliVersion || preflight.requiredFlags.some(flag => {
     if (help.includes(flag)) return false;
     const probe = capabilities.maxTurns?.hiddenHelpProbe;
-    if (flag === capabilities.maxTurns?.flag && probe) {
-      try { run(probe.args); }
-      catch (error) { return !String((error as { stderr?: unknown }).stderr ?? '').includes(probe.refusal); }
-    }
-    return true;
-  })) throw new Error();
+    return !(flag === capabilities.maxTurns?.flag && probe && refuses(run, probe));
+  }) || (preflight.discovery === 'disabled' && (!capabilities.discovery || capabilities.discovery.hiddenProbes.some(probe => !refuses(run, probe))))) throw new Error();
   // A flagless channel (`final-text-json`) needs no help flag: the schema rides in the prompt.
   const report = capabilities.structuredReport;
   return report !== null && (report.flag === null || help.includes(report.flag));
@@ -687,7 +691,7 @@ async function main() {
     quotaPolicy?: QuotaPolicy; credential: Record<string, unknown>; credentialEnvironment?: string; environment: Record<string, string>; limits: { connections: number; idleMs: number };
     finalReport?: { schemaVersion: 1; limits: ReportLimits };
     dependencyContext?: { text: string; sha256: string; maxBytes: number };
-    preflight?: { schemaVersion: number; cliVersion: string; helpArgs: string[]; requiredFlags: string[] };
+    preflight?: { schemaVersion: number; cliVersion: string; helpArgs: string[]; requiredFlags: string[]; discovery?: string };
     promptDelivery?: { schemaVersion: number; channel: string; core: string; task: string;
       segments: { kind: string; id: string; version: number; sha256: string }[]; sha256: string; argvSha256: string } };
   const home = '/tmp/deckent-home';

@@ -4,3 +4,5 @@ export { PROCESS_EXIT_EVALUATOR, processExitTerminalEvaluator, evaluateProcessEx
 export type { ProcessExitParameters } from './internal/process-exit.js';
 export { OPERATION_EVIDENCE_EVALUATOR, evaluateOperationEvidence, createInstalledTerminalEvaluator, validateInstalledEvaluator, validateInstalledCriterion, installedEvaluatorParameters } from './internal/operation-evidence.js';
 export type { OperationEvidenceReader, OperationEvidenceResult, OperationSettlementReference } from './internal/operation-evidence.js';
+export { evaluatorEvidence } from './internal/evidence-kind.js';
+export type { EvaluatorEvidence, EvaluatorEvidenceKind } from './internal/evidence-kind.js';

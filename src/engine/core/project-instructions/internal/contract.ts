@@ -1,6 +1,8 @@
 /** Instruction content is model context, never permission, policy or execution authority. */
 export interface ProjectInstructionSource {
   readonly path: string; readonly bytes: number; readonly digest: string; readonly content: string;
+  /** The verified identity of the file that was read (no-follow, single link): a byte-identical replacement is a different file. */
+  readonly identity: Readonly<{ dev: number; ino: number }>;
 }
 export type ProjectInstructionView =
   | Readonly<{ status: 'absent' }>

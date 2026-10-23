@@ -1,5 +1,17 @@
 {
   "schemaVersion": 3,
+  "instructionSurface": {
+    "hiddenPaths": [
+      "AGENTS.md",
+      "CLAUDE.md",
+      ".agents",
+      ".claude",
+      ".codex",
+      ".cursor",
+      "/DECKENT.md",
+      "/.deckent/worker-instructions.md"
+    ]
+  },
   "adapters": {
     "codex": {
       "executable": "codex",
@@ -18,7 +30,13 @@
         "exec",
         "--help"
       ],
-      "disabledArgs": null,
+      "disabledArgs": [
+        "--strict-config",
+        "-c",
+        "skills.include_instructions=false",
+        "-c",
+        "skills.bundled.enabled=false"
+      ],
       "coreArgs": [
         "-c",
         "model_instructions_file=\"/tmp/deckent-prompt/core.txt\"",
@@ -29,6 +47,33 @@
       "capabilities": {
         "maxTurns": null,
         "settings": null,
+        "discovery": {
+          "requiredFlags": [
+            "--strict-config",
+            "--config"
+          ],
+          "hiddenProbes": [
+            {
+              "args": [
+                "exec",
+                "--strict-config",
+                "-c",
+                "skills.include_instructions=deckent-probe"
+              ],
+              "refusal": "expected a boolean\nin `skills.include_instructions`"
+            },
+            {
+              "args": [
+                "exec",
+                "--strict-config",
+                "-c",
+                "skills.bundled.enabled=deckent-probe"
+              ],
+              "refusal": "expected a boolean\nin `skills.bundled.enabled`"
+            }
+          ],
+          "checkout": null
+        },
         "promptChannel": "codex-instructions-file",
         "eventStream": "codex-exec-json",
         "structuredReport": {
@@ -103,6 +148,13 @@
         "settings": {
           "flag": "--settings"
         },
+        "discovery": {
+          "requiredFlags": [
+            "--safe-mode"
+          ],
+          "hiddenProbes": [],
+          "checkout": null
+        },
         "promptChannel": "claude-system-prompt",
         "eventStream": "claude-code-stream-json",
         "structuredReport": {
@@ -142,12 +194,17 @@
       "helpArgs": [
         "--help"
       ],
-      "disabledArgs": null,
+      "disabledArgs": [],
       "coreArgs": [],
       "modelAliases": [],
       "capabilities": {
         "maxTurns": null,
         "settings": null,
+        "discovery": {
+          "requiredFlags": [],
+          "hiddenProbes": [],
+          "checkout": {}
+        },
         "promptChannel": "inline",
         "eventStream": "cursor-agent-stream-json",
         "structuredReport": {
