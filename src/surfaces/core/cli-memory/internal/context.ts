@@ -4,7 +4,7 @@ import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js
 import type { MemoryInspectQuery, MemoryInspection, MemoryListQuery, MemoryListing, MemorySearchQuery, MemorySearchResult, MemoryProposeCommand, MemoryVerifyCommand,
   MemoryRetireCommand, MemoryMutationResult, MemoryReviewQuery, MemoryReview, MemorySourceQuery, MemorySourceEntries, MemoryPurgeCommand, MemoryPurgeResult,
   MemoryContestResolveCommand, MemoryContestResolveResult } from '#engine/index.js';
-import type { memoryEvaluatorView } from '#engine/index.js';
+import type { memoryEvaluatorView, MemoryHeld, MemoryRolloutStatus } from '#engine/index.js';
 
 /** S4 memory journal v1: reads use the application's `inspect` authorization; propose/verify/retire run only from a person's terminal card. */
 export interface MemoryCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'configChoiceSources'> {
@@ -21,4 +21,6 @@ export interface MemoryCommandContext extends CliBaseContext, Pick<TerminalLaunc
   listMemorySource?: (root: string, input: MemorySourceQuery, options: ConfigLoadOptions) => Promise<MemorySourceEntries>;
   purgeMemory?: (root: string, input: MemoryPurgeCommand, options: ConfigLoadOptions) => Promise<MemoryPurgeResult>;
   resolveMemoryContest?: (root: string, input: MemoryContestResolveCommand, options: ConfigLoadOptions) => Promise<MemoryContestResolveResult>;
+  /** S4B-7: the read-only rollout status of a scope (phase, exit criteria with numbers, provisional retention). */
+  inspectMemoryRollout?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<MemoryRolloutStatus | MemoryHeld>;
 }

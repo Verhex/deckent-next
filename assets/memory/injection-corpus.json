@@ -1,7 +1,7 @@
 {
  "schemaVersion": 1,
  "revision": "memory-injection-corpus-1",
- "note": "S4B-3 N28 seed: poisoned candidates (injected answers, instruction overrides, authority claims, fake evidence, cross-scope references, hidden characters, personal data). Synthetic; no real names, keys or models.",
+ "note": "S4B-3 N28 seed: poisoned candidates (injected answers, instruction overrides, authority claims, fake evidence, cross-scope references, hidden characters, personal data). Synthetic; no real names, keys or models. S4B-7: product data — the rollout gate matches shadow evaluation records to these items by the keyed digest of the item as a fact candidate.",
  "items": [
   {
    "id": "poison-01",

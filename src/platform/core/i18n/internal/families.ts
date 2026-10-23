@@ -36,6 +36,7 @@ import deliveryen from '../locales/en/delivery.json' with { type: 'json' };
 import memoryen from '../locales/en/memory.json' with { type: 'json' };
 import memoryautomationen from '../locales/en/memory-automation.json' with { type: 'json' };
 import memoryreviewen from '../locales/en/memory-review.json' with { type: 'json' };
+import memoryrollouten from '../locales/en/memory-rollout.json' with { type: 'json' };
 import agentsen from '../locales/en/agents.json' with { type: 'json' };
 import assignmenten from '../locales/en/assignment.json' with { type: 'json' };
 import termrunen from '../locales/en/termrun.json' with { type: 'json' };
@@ -58,6 +59,7 @@ import deliverytr from '../locales/tr/delivery.json' with { type: 'json' };
 import memorytr from '../locales/tr/memory.json' with { type: 'json' };
 import memoryautomationtr from '../locales/tr/memory-automation.json' with { type: 'json' };
 import memoryreviewtr from '../locales/tr/memory-review.json' with { type: 'json' };
+import memoryrollouttr from '../locales/tr/memory-rollout.json' with { type: 'json' };
 import agentstr from '../locales/tr/agents.json' with { type: 'json' };
 import agentsignen from '../locales/en/agentsign.json' with { type: 'json' };
 import agentsigntr from '../locales/tr/agentsign.json' with { type: 'json' };
@@ -116,6 +118,7 @@ export const families = [
   { en: memoryen, tr: memorytr },
   { en: memoryautomationen, tr: memoryautomationtr },
   { en: memoryreviewen, tr: memoryreviewtr },
+  { en: memoryrollouten, tr: memoryrollouttr },
   { en: assignmenten, tr: assignmenttr },
   { en: agentsen, tr: agentstr },
   { en: agentsignen, tr: agentsigntr },

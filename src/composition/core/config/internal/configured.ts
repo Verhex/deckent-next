@@ -5,6 +5,7 @@ import type { ModelReference, VerifiedPrincipal } from '#domain/index.js';
 import { createConfigFileDocuments, createConfigFileAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, resolveTerminalModel, type TerminalModelChoice } from '#adapters/index.js';
 import { resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { configuredMemoryRolloutPrecondition } from '#composition/core/memory-rollout/index.js';
 export async function resolveConfiguredConfigPrincipal(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<VerifiedPrincipal> {
   return (await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write')).principal;
 }
@@ -19,7 +20,9 @@ export function createConfiguredConfigApplication(projectRoot: string, options: 
   const documents = createConfigFileDocuments(projectRoot, options);
   const guarded: ConfigDocumentPort = guard ? { snapshot: layer => documents.snapshot(layer), publish: (input, planner) => documents.publish(input, async snapshot => { guard(snapshot); return planner(snapshot); }) } : documents;
   const load = (scopeId: string) => loadConfiguredScopeContext(projectRoot, scopeId, { ...options, force: true, heal: false }, 'write');
-  return new ConfigApplication(guarded, { ...createConfigFileAuthority(load), approvals: configuredConfigApprovals(load, options) });
+  // S4B-7: the protected memory live switches are written only when their measured rollout criteria hold (every write path builds this app).
+  return new ConfigApplication(guarded, { ...createConfigFileAuthority(load), approvals: configuredConfigApprovals(load, options),
+    precondition: configuredMemoryRolloutPrecondition(projectRoot, options) });
 }
 
 /** A card's value: a plain JSON string reads without its quotes ("dark", not "\"dark\""); anything else stays the bounded JSON text. */
