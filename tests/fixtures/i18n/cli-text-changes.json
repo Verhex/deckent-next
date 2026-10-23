@@ -479,6 +479,10 @@
     "cli.coding.template.help": {
       "before": "deckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--preview|--apply] [--json] [--lang en|tr]\nPreview or add a validated reusable coding template through governed configuration; existing kind bindings are preserved. On a terminal the missing choices are asked and a preview card is confirmed; elsewhere a missing choice lists the admitted values. Without --image the configured worker image is used; when no admitted CLI runs there, the error names the admitted images.",
       "after": "deckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--discovery disabled|repository] [--preview|--apply] [--json] [--lang en|tr]\nPreview or add a validated reusable coding template through governed configuration; existing kind bindings are preserved. On a terminal the missing choices are asked and a preview card is confirmed; elsewhere a missing choice lists the admitted values. Without --image the configured worker image is used; when no admitted CLI runs there, the error names the admitted images. Without --discovery the template keeps the discovery mode of the admitted profiles it derives from; --discovery disabled hides repository instructions from the worker."
+    },
+    "terminal.slash.runs": {
+      "before": "Every run of this scope; h hold, r resume, c close a parked run (each after its own y)",
+      "after": "Every run of this scope; h hold, r resume, c close a parked run, a answer a worker's question (each after its own y)"
     }
   },
   "tr": {
@@ -1089,6 +1093,10 @@
     "cli.coding.template.help": {
       "before": "deckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--preview|--apply] [--json] [--lang en|tr]\nDoğrulanmış yeniden kullanılabilir kodlama şablonunu önizler veya yönetilen config üzerinden ekler; mevcut görev türü bağlarını korur. Terminalde eksik seçimler sorulur ve önizleme kartı onaylanır; başka yerde eksik seçim kabul edilmiş değerleri listeler. --image verilmezse yapılandırılmış worker imajı kullanılır; orada kabul edilmiş CLI yoksa hata kabul edilmiş imajları söyler.",
       "after": "deckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--discovery disabled|repository] [--preview|--apply] [--json] [--lang en|tr]\nDoğrulanmış yeniden kullanılabilir kodlama şablonunu önizler veya yönetilen config üzerinden ekler; mevcut görev türü bağlarını korur. Terminalde eksik seçimler sorulur ve önizleme kartı onaylanır; başka yerde eksik seçim kabul edilmiş değerleri listeler. --image verilmezse yapılandırılmış worker imajı kullanılır; orada kabul edilmiş CLI yoksa hata kabul edilmiş imajları söyler. --discovery verilmezse şablon, türetildiği kabul edilmiş profillerin discovery modunu korur; --discovery disabled repo talimatlarını işçiden gizler."
+    },
+    "terminal.slash.runs": {
+      "before": "Bu kapsamın tüm işleri; h beklet, r sürdür, c bekleyen işi kapat (her biri kendi y'siyle)",
+      "after": "Bu kapsamın tüm işleri; h beklet, r sürdür, c bekleyen işi kapat, a işçinin sorusunu cevapla (her biri kendi y'siyle)"
     }
   }
 }
