@@ -10,10 +10,12 @@ import type { MemoryAutomation } from './automation.js';
  */
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const actor = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
-/** The sealed record of one purge (keyed digests and ids only, never content). `invocations`: the evaluator model invocations whose stored
- * content the purge removes through `model-invocation`/`purge-content`; the record keeps them so a replay after a restore removes them again. */
+/** The sealed record of one purge (keyed digests and ids only, never content). `decision`: the person's `memory`/`purge` policy decision; it is
+ * the only authority for removing the stored content of `invocationIds` — exactly the evaluator calls the entry's sealed evaluation records
+ * (`evaluationRecordIds`) name. The record keeps them so a replay after a restore removes them again under the same decision. */
 export const memoryPurgeRecordSchema = z.object({ schemaVersion: z.literal(1), purgeId: identitySchema, scopeId: identitySchema, entryId: identitySchema,
-  contentDigest: digest, digestKind: z.literal('keyed'), reasonCode: identitySchema, by: actor, evaluationRecordIds: z.array(identitySchema).max(MEMORY_LIMITS.purgeInvocationsMax).readonly(),
+  contentDigest: digest, digestKind: z.literal('keyed'), reasonCode: identitySchema, by: actor,
+  decision: z.object({ revision: identitySchema, ruleId: identitySchema }).strict().readonly(), evaluationRecordIds: z.array(identitySchema).max(MEMORY_LIMITS.purgeInvocationsMax).readonly(),
   invocationIds: z.array(identitySchema).max(MEMORY_LIMITS.purgeInvocationsMax).readonly(), atMs: counterSchema }).strict().readonly();
 export type MemoryPurgeRecord = z.infer<typeof memoryPurgeRecordSchema>;
 export const parseMemoryPurgeRecord = (value: unknown): MemoryPurgeRecord => {

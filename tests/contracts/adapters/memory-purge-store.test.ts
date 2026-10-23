@@ -24,16 +24,18 @@ const secret = { kind: 'fact', title: 'Tedarikçi Ayşe Yılmaz telefonu', body:
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'dn-memory-purge-')); roots.push(root);
   const path = join(root, 'ledger.db'); openSqliteLedger(path, options).close();
-  const integrity = createHmacIntegrity('k', randomBytes(32)), purged: string[] = [];
+  const integrity = createHmacIntegrity('k', randomBytes(32)), purged: { invocationId: string; decision: unknown; actor: string }[] = [];
+  const invocations = new Map<string, { commandId: string; invokedBy: { issuer: string; subject: string; assurance?: string }; reference: unknown; contentDigest: string | null }>();
   const journal = new FileMemoryPurgeJournal(async () => join(root, 'memory-purges'), async () => integrity);
   let clock = 1_000;
   const deps = (principal: typeof person | typeof distiller, extra: Partial<MemoryJournalDependencies> = {}): MemoryJournalDependencies => ({
     verifier: { verify: async () => principal }, authorize: async () => ({ revision: 'p1', ruleId: 'r' }),
     openStore: async access => openSqliteMemoryJournalStore(path, options, integrity, access), keyedDigest: memoryKeyedDigest(integrity), purgeJournal: journal,
-    purgeInvocationContent: async (_scope, invocationId) => { purged.push(invocationId); return 'purged'; }, readFilter: async () => () => true, now: () => clock++,
+    evaluatorInvocations: { load: async (_scope, id) => invocations.get(id) ?? null,
+      purgeContent: async input => { purged.push({ invocationId: input.invocationId, decision: input.decision, actor: input.actor.issuer }); return { replayed: false }; } }, readFilter: async () => () => true, now: () => clock++,
     eventId: () => `e${clock}`, ...extra });
   const app = (principal: typeof person | typeof distiller = person, extra: Partial<MemoryJournalDependencies> = {}) => new MemoryJournalApplication(deps(principal, extra));
-  return { root, path, integrity, journal, purged, app, journalFile: join(root, 'memory-purges', 'purges.jsonl') };
+  return { root, path, integrity, journal, purged, invocations, app, journalFile: join(root, 'memory-purges', 'purges.jsonl') };
 }
 const proposal = (commandId: string, content: object = secret) => ({ schemaVersion: 1, commandId, scopeId: 's', content, origin: { kind: 'human', ref: null } });
 const raw = (path: string, sql: string) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
@@ -91,10 +93,24 @@ describe('purge (A11): a person only, every revision tombstoned with a keyed dig
         await writer.putEvaluation!(record, memoryEvaluationDigest(record), event);
       }
     } finally { writer.close(); }
-    const result = await app.purge({ schemaVersion: 1, commandId: 'x1', scopeId: 's', entryId: entry.entryId, expectedRevision: 1, reasonCode: 'poisoned' });
+    const evaluatorCall = (commandId: string) => ({ commandId, invokedBy: { issuer: 'local-os/memory-evaluator', subject: 'uid:1000', assurance: 'workload-verified' }, reference: { ref: commandId }, contentDigest: 'b'.repeat(64) });
+    const purge = (commandId: string) => app.purge({ schemaVersion: 1, commandId, scopeId: 's', entryId: entry.entryId, expectedRevision: 1, reasonCode: 'poisoned' });
+    // Lead review 2026-10-23: an invocation the entry's records name but that another command claimed, or that someone other than the memory
+    // evaluator made, is refused before anything changes — no journal line, no tombstone, no content removed.
+    for (const forged of [evaluatorCall('unrelated-command'), { ...evaluatorCall('r1'), invokedBy: { issuer: 'local-os', subject: 'uid:1000', assurance: 'os-user' } }]) {
+      f.invocations.set('inv-1', forged); f.invocations.set('inv-2', evaluatorCall('r3'));
+      await expect(purge('x0')).rejects.toMatchObject({ code: 'MEMORY_PURGE_INVOCATION_REFUSED' });
+      expect(await f.journal.list()).toEqual([]); expect(f.purged).toEqual([]);
+      expect((await app.inspect({ schemaVersion: 1, scopeId: 's', entryId: entry.entryId }))).toMatchObject({ status: 'ok', entry: { content: { title: secret.title } } });
+    }
+    f.invocations.set('inv-1', evaluatorCall('r1'));
+    const result = await purge('x1');
     expect([...result.record.invocationIds].sort()).toEqual(['inv-1', 'inv-2']);
     expect([...result.record.evaluationRecordIds].sort()).toEqual(['r1', 'r2', 'r3']);
-    expect(f.purged.sort()).toEqual(['inv-1', 'inv-2']);
+    // Removed under the person's memory/purge decision (no model-invocation grant), sealed in the record for a replay.
+    expect(result.record.decision).toEqual({ revision: 'p1', ruleId: 'r' });
+    expect(f.purged.map(row => row.invocationId).sort()).toEqual(['inv-1', 'inv-2']);
+    expect(f.purged.every(row => JSON.stringify(row.decision) === JSON.stringify({ revision: 'p1', ruleId: 'r' }) && row.actor === 'local-os')).toBe(true);
     expect(result.invocations).toEqual({ purged: 2, absent: 0 });
     // Without an invocation purger the purge fails closed before any journal entry or ledger effect.
     const other = await app.propose(proposal('m9', { ...secret, title: 'Başka', body: 'Başka bir kayıt.' }));
@@ -104,7 +120,7 @@ describe('purge (A11): a person only, every revision tombstoned with a keyed dig
       await w2.putEvaluation!(record, memoryEvaluationDigest(record), { schemaVersion: 1, eventId: 'ev-r9', scopeId: 's', principal: record.evaluator, policyRevision: 'p', atMs: 6,
         subject: { kind: 'memory-evaluation', recordId: 'r9', entryId: other.entry.entryId, revision: 1, mode: 'shadow', verdict: 'unknown', recordDigest: memoryEvaluationDigest(record), subjectDigest: record.subjectDigest } });
     } finally { w2.close(); }
-    const closed = f.app(person, { purgeInvocationContent: undefined });
+    const closed = f.app(person, { evaluatorInvocations: undefined });
     await expect(closed.purge({ schemaVersion: 1, commandId: 'x9', scopeId: 's', entryId: other.entry.entryId, expectedRevision: 1, reasonCode: 'other' })).rejects.toMatchObject({ code: 'MEMORY_UNAVAILABLE' });
     expect((await f.journal.list()).map(row => row.purgeId)).toEqual(['x1']);
   });

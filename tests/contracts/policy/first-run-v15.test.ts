@@ -30,8 +30,8 @@ it('v15 adds exactly the person\'s memory propose, the distiller D1+D2, D4 and D
     scoped('first-run-mcp-observe-agent-catalog', mcpRef, 'agent-catalog', ['inspect']), scoped('first-run-memory-review', person, 'memory', ['verify', 'contest']),
     scoped('first-run-memory-evaluator', evaluatorRef, 'memory', ['inspect', 'verify', 'contest']),
     scoped('first-run-memory-evaluator-runs', evaluatorRef, 'run', ['inspect']), scoped('first-run-memory-evaluator-model', evaluatorRef, 'model-invocation', ['invoke']),
-    // S4B-4 (owner S-M12, A11): the named person retires and purges memory and removes stored model-invocation content (the purge card).
-    scoped('first-run-memory-purge', person, 'memory', ['retire', 'purge']), scoped('first-run-memory-purge-content', person, 'model-invocation', ['purge-content'])]);
+    // S4B-4 (owner S-M12, A11): the named person retires and purges memory (the purge card); no model-invocation grant (lead review 2026-10-23).
+    scoped('first-run-memory-purge', person, 'memory', ['retire', 'purge'])]);
   expect(firstRunPolicyTemplate({ ...input, principal: mcpRef }).policy.grants.filter(rule => ids.includes(rule.id)).map(rule => rule.id)).toEqual([FIRST_RUN_UPGRADE_RULE_IDS.observeAgentCatalog]);
 });
 
@@ -53,10 +53,11 @@ it('the grants decide only inside the floor: the distiller proposes and reads, n
   for (const action of ['inspect', 'define']) expect(decide(built.policy, owner, 'agent-catalog', action).decision).toBe('allow');
   expect(decide(built.policy, owner, 'agent-catalog', 'import').decision).toBe('deny');
   // The person may propose (their own card; it lets them delegate D2) and, S4B-3, verify and contest (it lets them delegate V2/V3; a person's verify is a
-  // human review at the terminal); S4B-4: retire and purge (the person's review and purge cards) and model-invocation purge-content.
+  // human review at the terminal); S4B-4: retire and purge (the person's review and purge cards).
   for (const action of ['propose', 'verify', 'contest', 'retire', 'purge']) expect(decide(built.policy, owner, 'memory', action).decision, action).toBe('allow');
   for (const action of ['retire', 'purge']) expect(decide(v14, owner, 'memory', action).decision, action).toBe('deny');
-  expect(decide(built.policy, owner, 'model-invocation', 'purge-content').decision).toBe('allow');
+  // Lead review 2026-10-23: the purge reaches only its entry's evaluator calls under the memory/purge decision; the template grants no purge-content.
+  expect(decide(built.policy, owner, 'model-invocation', 'purge-content').decision).toBe('deny');
   // A11: no AI purges — the MCP actor holds no such rule, and the floor refuses the evaluator and distiller whatever a rule says.
   const mcpActor = { ...owner, id: 'mcp', issuer: mcpRef.issuer };
   for (const principal of [mcpActor, evaluator, distiller]) for (const action of ['purge', 'retire']) expect(decide(built.policy, principal, 'memory', action).decision, `${principal.issuer}/${action}`).toBe('deny');

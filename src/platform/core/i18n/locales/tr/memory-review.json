@@ -54,5 +54,6 @@
   "backup.restore.memoryPurges": "Bu yedekten sonra kaydedilmiş {count} hafıza silmesi iş başlamadan yeniden uygulanacak.",
   "error.MEMORY_PURGE_REPLAY_HELD": "Silme günlüğündeki bir hafıza silmesi yeniden uygulanamadı (ya da günlük okunamıyor); silinen içerik yeniden görünmesin diye hafıza bekletiliyor.",
   "error.MEMORY_PERSON_REQUIRED": "Bunu yalnız bir kişi kendi terminalinde yapabilir: hiçbir AI hafızayı silemez, kaynağa göre emekliye ayıramaz ya da bir itirazı karara bağlayamaz.",
-  "error.MEMORY_CONTEST_RESOLVED": "Bu itiraz zaten başka bir kararla bağlandı; hiçbir şey değişmedi."
+  "error.MEMORY_CONTEST_RESOLVED": "Bu itiraz zaten başka bir kararla bağlandı; hiçbir şey değişmedi.",
+  "error.MEMORY_PURGE_INVOCATION_REFUSED": "Silme, bu kaydın kendi değerlendirici çağrılarından olmayan bir model çağrısını adlandırıyor; hiçbir şey silinmedi."
 }

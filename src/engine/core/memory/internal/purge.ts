@@ -1,8 +1,8 @@
-import { MEMORY_LIMITS, assertMemoryPerson, composeMemoryAutomation, encodeCommandProjection, isMemoryTombstone, memoryContestResolutionSchema, memoryEntryStale, memoryRetentionMs,
+import { MEMORY_LIMITS, assertMemoryPerson, composeMemoryAutomation, encodeCommandProjection, isMemoryEvaluatorPrincipal, isMemoryTombstone, memoryContestResolutionSchema, memoryEntryStale, memoryRetentionMs,
   parseMemoryPurgeRecord, MemoryError, type AuditEvent, type MemoryContest, type MemoryEntry, type MemoryPurgeRecord, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { MemoryJournalError, memoryContestResolveCommandSchema, memoryPurgeCommandSchema, memoryReviewQuerySchema, memorySourceQuerySchema, type MemoryContestResolveResult,
-  type MemoryJournalDependencies, type MemoryJournalStore, type MemoryPurgeReplay, type MemoryPurgeResult, type MemoryReview, type MemoryReviewItem,
+  type MemoryEvaluatorInvocation, type MemoryJournalDependencies, type MemoryJournalStore, type MemoryPurgeReplay, type MemoryPurgeResult, type MemoryReview, type MemoryReviewItem,
   type MemorySourceEntries } from './contract.js';
 
 /**
@@ -13,7 +13,7 @@ import { MemoryJournalError, memoryContestResolveCommandSchema, memoryPurgeComma
  */
 const held = () => new MemoryJournalError('MEMORY_PURGE_REPLAY_HELD');
 type Visible = (store: MemoryJournalStore, principal: VerifiedPrincipal, scopeId: string, entries: readonly MemoryEntry[]) => Promise<{ entries: MemoryEntry[]; withheld: number }>;
-type Admit = (action: 'inspect' | 'retire' | 'contest' | 'purge', scopeId: string) => Promise<{ principal: VerifiedPrincipal; authorization: { revision: string } }>;
+type Admit = (action: 'inspect' | 'retire' | 'contest' | 'purge', scopeId: string) => Promise<{ principal: VerifiedPrincipal; authorization: { revision: string; ruleId?: string } }>;
 type Retire = (command: { schemaVersion: 1; scopeId: string; commandId: string; entryId: string; expectedRevision: number; reason: string; supersededBy: null }) => Promise<{ entry: MemoryEntry }>;
 
 /** Every journal record of the scope must be in the ledger before anything reads or writes it (a restore that lost a purge never un-purges). */
@@ -28,13 +28,33 @@ export async function assertNoPendingMemoryPurge(deps: MemoryJournalDependencies
 const purgeEvent = (deps: MemoryJournalDependencies, principal: VerifiedPrincipal, policyRevision: string, record: MemoryPurgeRecord, revisions: number, replay: boolean): AuditEvent => ({
   schemaVersion: 1, eventId: deps.eventId(), scopeId: record.scopeId, principal: { issuer: principal.issuer, subject: principal.subject }, policyRevision, atMs: deps.now(),
   subject: { kind: 'memory-purge', purgeId: record.purgeId, entryId: record.entryId, contentDigest: record.contentDigest, revisions, invocations: record.invocationIds.length, replay } });
-/** The evaluator invocations' stored content (idempotent per purge and invocation). */
-async function purgeInvocations(deps: MemoryJournalDependencies, record: MemoryPurgeRecord) {
-  let purged = 0, absent = 0;
-  if (record.invocationIds.length && !deps.purgeInvocationContent) throw new MemoryJournalError('MEMORY_UNAVAILABLE');
-  for (const invocationId of record.invocationIds) {
+/**
+ * The purge record's evaluator invocations, each bound to the entry before anything is deleted (lead review 2026-10-23): it must be one the
+ * record lists, claimed by the command of one of the entry's sealed evaluation records (the evaluator's command id is its record id) and invoked
+ * by the memory evaluator. Any other invocation refuses the whole purge (`MEMORY_PURGE_INVOCATION_REFUSED`); none is reachable through this path.
+ */
+async function boundInvocations(deps: MemoryJournalDependencies, record: MemoryPurgeRecord, ids: readonly string[] = record.invocationIds) {
+  if (!ids.length) return [];
+  if (!deps.evaluatorInvocations) throw new MemoryJournalError('MEMORY_UNAVAILABLE');
+  const out: { invocationId: string; held: MemoryEvaluatorInvocation }[] = [];
+  for (const invocationId of ids) {
+    if (!record.invocationIds.includes(invocationId)) throw new MemoryJournalError('MEMORY_PURGE_INVOCATION_REFUSED');
+    const held = await deps.evaluatorInvocations.load(record.scopeId, invocationId);
+    if (!held) continue;
+    if (!record.evaluationRecordIds.includes(held.commandId) || !isMemoryEvaluatorPrincipal(held.invokedBy)) throw new MemoryJournalError('MEMORY_PURGE_INVOCATION_REFUSED');
+    out.push({ invocationId, held });
+  }
+  return out;
+}
+/** The bound invocations' stored content, removed under the purge record's own `memory`/`purge` decision (idempotent per purge and invocation). */
+export async function purgeMemoryInvocations(deps: MemoryJournalDependencies, record: MemoryPurgeRecord, actor: VerifiedPrincipal, ids: readonly string[] = record.invocationIds) {
+  let purged = 0, absent = ids.length;
+  for (const { invocationId, held } of await boundInvocations(deps, record, ids)) {
+    if (held.contentDigest === null) continue;
     const commandId = sha256(encodeCommandProjection('memory-purge-invocation:1', { purgeId: record.purgeId, invocationId }));
-    if (await deps.purgeInvocationContent!(record.scopeId, invocationId, commandId) === 'purged') purged++; else absent++;
+    await deps.evaluatorInvocations!.purgeContent({ scopeId: record.scopeId, invocationId, commandId, reference: held.reference, expectedContentDigest: held.contentDigest, actor,
+      decision: record.decision, atMs: deps.now() });
+    purged++; absent--;
   }
   return { purged, absent };
 }
@@ -59,17 +79,19 @@ export async function purgeMemoryEntry(deps: MemoryJournalDependencies, input: u
       if (entry.revision !== command.expectedRevision) throw new MemoryJournalError('MEMORY_REVISION_CONFLICT');
       if (isMemoryTombstone(entry.content)) throw new MemoryError('MEMORY_TRANSITION_INVALID');
       const evaluations = await store.evaluationsFor(command.scopeId, command.entryId, MEMORY_LIMITS.purgeInvocationsMax);
+      if (!authorization.ruleId) throw new MemoryJournalError('MEMORY_UNAVAILABLE');
       record = parseMemoryPurgeRecord({ schemaVersion: 1, purgeId: command.commandId, scopeId: command.scopeId, entryId: command.entryId,
         // A v61 entry's plain digest is re-keyed here: no plain digest of the content stays in the journal.
         contentDigest: deps.keyedDigest('memory-content:2', entry.content), digestKind: 'keyed', reasonCode: command.reasonCode,
-        by: { issuer: principal.issuer, subject: principal.subject }, evaluationRecordIds: evaluations.map(row => row.record.recordId),
+        by: { issuer: principal.issuer, subject: principal.subject }, decision: { revision: authorization.revision, ruleId: authorization.ruleId }, evaluationRecordIds: evaluations.map(row => row.record.recordId),
         invocationIds: [...new Set(evaluations.flatMap(row => row.record.invocationId ? [row.record.invocationId] : []))], atMs: deps.now() });
-      if (record.invocationIds.length && !deps.purgeInvocationContent) throw new MemoryJournalError('MEMORY_UNAVAILABLE');
+      // Every invocation is bound to this entry before the journal or the ledger changes (a refused one leaves nothing deleted).
+      await boundInvocations(deps, record);
       await deps.purgeJournal.append(record);
       replayed = (await store.tombstone(record, purgeEvent(deps, principal, authorization.revision, record, entry.revision, false))).replayed;
     }
   } finally { store.close(); }
-  const invocations = await purgeInvocations(deps, record);
+  const invocations = await purgeMemoryInvocations(deps, record, principal);
   const reader = await deps.openStore('read');
   try {
     const entry = await reader.load(record.scopeId, record.entryId);
@@ -100,7 +122,7 @@ export async function replayMemoryPurges(deps: MemoryJournalDependencies, scopeI
           if (!(await store.tombstone(record, purgeEvent(deps, principal, policyRevision, record, entry?.revision ?? 0, true))).replayed) applied++;
         }
       } finally { store.close(); }
-      if (pending || !pendingOnly) invocationsPurged += (await purgeInvocations(deps, record)).purged;
+      if (pending || !pendingOnly) invocationsPurged += (await purgeMemoryInvocations(deps, record, principal)).purged;
     }
     return { schemaVersion: 1, records: records.length, applied, invocationsPurged };
   } catch (error) { if (error instanceof MemoryJournalError && error.code === 'MEMORY_PURGE_REPLAY_HELD') throw error; throw Object.assign(held(), { cause: error }); }

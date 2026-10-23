@@ -91,9 +91,19 @@ export interface MemoryPurgeJournal {
   list(): Promise<readonly MemoryPurgeRecord[]>;
   append(record: MemoryPurgeRecord): Promise<{ readonly replayed: boolean }>;
 }
-/** Removes the stored content of one model invocation of the scope through `model-invocation`/`purge-content` (idempotent: `absent` when no
- * content is held — never captured, already purged, or no such invocation). */
-export type MemoryInvocationContentPurge = (scopeId: string, invocationId: string, commandId: string) => Promise<'purged' | 'absent'>;
+/** One stored model invocation as the purge checks it: which command claimed it, who invoked it, its reference and content digest (null: no
+ * content held — never captured or already purged). */
+export interface MemoryEvaluatorInvocation { readonly commandId: string; readonly invokedBy: { readonly issuer: string; readonly subject: string; readonly assurance?: string };
+  readonly reference: unknown; readonly contentDigest: string | null }
+/**
+ * S4B-4 (lead review 2026-10-23): the evaluator invocations a purge may reach. No model-invocation grant: the content is removed under the purge
+ * record's own `memory`/`purge` decision, and only for invocations the engine has bound to the entry's evaluation records.
+ */
+export interface MemoryEvaluatorInvocations {
+  load(scopeId: string, invocationId: string): Promise<MemoryEvaluatorInvocation | null>;
+  purgeContent(input: { readonly scopeId: string; readonly invocationId: string; readonly commandId: string; readonly reference: unknown; readonly expectedContentDigest: string;
+    readonly actor: VerifiedPrincipal; readonly decision: { readonly revision: string; readonly ruleId: string }; readonly atMs: number }): Promise<{ readonly replayed: boolean }>;
+}
 
 /** Idempotency record of one command: the fingerprint of (command, principal) and the revision it produced. */
 export interface MemoryReceipt { readonly scopeId: string; readonly commandId: string; readonly entryId: string; readonly revision: number; readonly digest: string }
@@ -174,7 +184,7 @@ export interface MemoryJournalDependencies {
   /** S4B-4: the purge journal (absent: no purge is possible and nothing is pending) and the evaluator-content purge (absent: a purge naming an
    * invocation fails closed before any effect). */
   readonly purgeJournal?: MemoryPurgeJournal;
-  readonly purgeInvocationContent?: MemoryInvocationContentPurge;
+  readonly evaluatorInvocations?: MemoryEvaluatorInvocations;
   readonly now: () => number;
   readonly eventId: () => string;
 }
@@ -209,7 +219,7 @@ export interface MemoryEvaluationPass { readonly schemaVersion: 1; readonly mode
   readonly alerts: readonly { readonly key: MemoryEvaluationAlertKey; readonly scopeId: string }[] }
 export type MemoryJournalErrorCode = MemoryHoldCode | 'MEMORY_COMMAND_CONFLICT' | 'MEMORY_REVISION_CONFLICT' | 'MEMORY_NOT_FOUND' | 'MEMORY_OUTCOME_UNKNOWN'
   | 'MEMORY_ENTRY_WITHHELD' | 'MEMORY_PURGED_CONTENT' | 'MEMORY_EXTRACTION_BOUND' | 'MEMORY_CANDIDATE_SECRET' | 'MEMORY_CANDIDATE_QUARANTINED' | 'MEMORY_DISTILLER_REQUIRED'
-  | 'MEMORY_EVALUATOR_REQUIRED' | 'MEMORY_PURGE_REPLAY_HELD' | 'MEMORY_CONTEST_RESOLVED';
+  | 'MEMORY_EVALUATOR_REQUIRED' | 'MEMORY_PURGE_REPLAY_HELD' | 'MEMORY_CONTEST_RESOLVED' | 'MEMORY_PURGE_INVOCATION_REFUSED';
 export class MemoryJournalError extends Error {
   constructor(readonly code: MemoryJournalErrorCode) { super(code); this.name = 'MemoryJournalError'; }
 }

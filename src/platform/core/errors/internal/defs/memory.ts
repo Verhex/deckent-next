@@ -32,4 +32,5 @@ export const memoryErrors: ErrorDefinitions = Object.freeze({
   MEMORY_PURGE_REPLAY_HELD: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_PURGE_REPLAY_HELD', p, l), suggestion: t('memory.held.next.MEMORY_PURGE_REPLAY_HELD', p, l) }) },
   MEMORY_PERSON_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_PERSON_REQUIRED', p, l) }) },
   MEMORY_CONTEST_RESOLVED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_CONTEST_RESOLVED', p, l) }) },
+  MEMORY_PURGE_INVOCATION_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_PURGE_INVOCATION_REFUSED', p, l) }) },
 });

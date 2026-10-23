@@ -54,5 +54,6 @@
   "backup.restore.memoryPurges": "{count} memory purges recorded after this backup will be re-applied before any work starts.",
   "error.MEMORY_PURGE_REPLAY_HELD": "A memory purge from the purge journal could not be re-applied (or the journal cannot be read); memory is held so purged content is never shown again.",
   "error.MEMORY_PERSON_REQUIRED": "Only a person can do this on their own terminal: no AI purges memory, retires it by source or resolves a contest.",
-  "error.MEMORY_CONTEST_RESOLVED": "This contest was already resolved with another decision; nothing was changed."
+  "error.MEMORY_CONTEST_RESOLVED": "This contest was already resolved with another decision; nothing was changed.",
+  "error.MEMORY_PURGE_INVOCATION_REFUSED": "The purge names a model call that is not one of this entry's own evaluator calls; nothing was deleted."
 }

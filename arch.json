@@ -3634,8 +3634,6 @@
         "src/adapters/core/sqlite-model-invocation",
         "src/adapters/core/provider-openai-chat",
         "src/engine/core/model-activation",
-        "src/engine/core/policy",
-        "src/engine/core/model-invocation",
         "src/platform/core/host",
         "src/platform/core/integrity",
         "src/composition/core/root"
