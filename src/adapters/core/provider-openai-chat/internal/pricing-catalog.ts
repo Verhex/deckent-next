@@ -1,7 +1,10 @@
 import { z } from 'zod';
 import { isDeepStrictEqual } from 'node:util';
+import COMPATIBILITY from './request-compatibility.json' with { type: 'json' };
 import data from './pricing.json' with { type: 'json' };
 import { catalogTariffSealSchema } from '#domain/index.js';
+/** A vendor identity is registry data (request-compatibility.json `vendors`), so a new OpenAI-compatible maker is a data update. */
+const vendorSchema = z.string().refine(value => (COMPATIBILITY.vendors as readonly string[]).includes(value));
 const rate = z.string().regex(/^(0|[1-9]\d*)(\.\d{1,4})?$/);
 const rates = z.object({ input: rate, cachedInput: rate, output: rate }).strict();
 const cacheRates = rates.extend({ cacheWrite: rate }).strict();
@@ -10,7 +13,7 @@ const common = { kind: z.literal('vendor-published'), currency: z.literal('USD')
   source: z.object({ url: z.string().url().startsWith('https://'), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     catalog: catalogTariffSealSchema.optional() }).strict() };
 export const openAiCompatiblePublishedTariffSchema = z.discriminatedUnion('version', [
-  z.object({ ...common, version: z.literal(1), vendor: z.enum(['openai', 'deepseek', 'zai']), usdPerMTok: rates,
+  z.object({ ...common, version: z.literal(1), vendor: vendorSchema, usdPerMTok: rates,
     offPeakUsdPerMTok: rates.optional(), schedule: z.literal('provider-tier-required').optional() }).strict(),
   z.object({ ...common, version: z.literal(2), vendor: z.literal('openai'), usdPerMTok: cacheRates,
     longContextAboveInputTokens: z.number().int().positive().safe(),

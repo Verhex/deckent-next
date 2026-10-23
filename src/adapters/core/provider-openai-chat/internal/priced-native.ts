@@ -24,8 +24,8 @@ export function createOpenAiChatPricedNative(input: OpenAiChatNativePortOptions 
       const usage = openAiChatUsageSchema.safeParse(usageInput);
       if (!usage.success) return null;
       const tariff = prepared.definition.tariff;
-      // Owner S4: unknown DeepSeek billing tier uses peak and an explicit upper-bound label.
-      const upperBound = tariff.kind === 'vendor-published' && tariff.version === 1 && tariff.vendor === 'deepseek' && tariff.schedule !== undefined;
+      // Owner S4: a tariff row that carries a billing-tier schedule (unknown tier at settlement) uses peak and an explicit upper-bound label.
+      const upperBound = tariff.kind === 'vendor-published' && tariff.version === 1 && tariff.schedule !== undefined;
       let rates = openAiCompatibleTariffRates(tariff, prepared.definition.endpoint, prepared.request.model, undefined, 0, catalogVerified.has(token as object));
       const details = usage.data['prompt_tokens_details'] as Record<string, unknown> | undefined;
       if (details !== undefined && (details === null || typeof details !== 'object' || Array.isArray(details))) return null;

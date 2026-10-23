@@ -165,12 +165,12 @@ export function settleProviderSpend(accountInput: unknown, reservationInput: unk
       : { state: measurement!.basis === 'measured-tariff' ? 'settled-measured-tariff' : 'settled-provider-reported', amountMinorUnits: measurement!.roundedMinorUnits, evidenceDigest: settlement.evidenceDigest } }) });
 }
 
-/** Only the owner-admitted scheduled DeepSeek measured upper bound is eligible for a governed reduction. */
+/** Only an owner-admitted scheduled measured upper bound (a published tariff row carrying the provider-tier-required schedule, whatever its vendor) is eligible for a governed reduction. */
 export function isProviderSpendUpperBound(reservation: ProviderSpendReservation): boolean {
   const price = reservation.descriptor.quote.pricing.definition;
   return reservation.disposition.state === 'settled-measured-tariff' && reservation.measurement?.basis === 'measured-tariff'
     && reservation.measurement.source.tier === 'upper-bound' && reservation.measurement.source.id === 'openai-compatible-usage-tariff'
     && reservation.descriptor.quote.pricing.id === 'openai-compatible-published-tariff'
     && price['modelId'] === reservation.measurement.source.modelId && price['version'] === 1
-    && price['kind'] === 'vendor-published' && price['vendor'] === 'deepseek' && price['schedule'] === 'provider-tier-required';
+    && price['kind'] === 'vendor-published' && price['schedule'] === 'provider-tier-required';
 }

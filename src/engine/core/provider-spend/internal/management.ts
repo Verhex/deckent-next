@@ -58,7 +58,7 @@ export function parseProviderSpendManagementReceipt(input: ProviderSpendManageme
     || !isDeepStrictEqual(authorization, input.authorization)) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   return Object.freeze({ ...input, command, actor, authorization, before, after });
 }
-/** Held money has one governed exit. Only explicitly labelled DeepSeek upper-bound settlements may be lowered once, preserving original evidence. */
+/** Held money has one governed exit. Only explicitly labelled (scheduled-tariff) upper-bound settlements may be lowered once, preserving original evidence. */
 export function reconcileProviderSpend(accountInput: unknown, reservationInput: unknown, command: Extract<ProviderSpendManagementCommand, { kind: 'reconcile' }>, receiptDigest: string) {
   const account = parseProviderSpendAccount(accountInput), reservation = parseProviderSpendReservation(reservationInput), d = reservation.descriptor;
   const exact = canonicalProviderSpendExactMinorUnits(command.exactMinorUnits);
