@@ -6,49 +6,35 @@ import { join } from 'node:path';
 import LIMITS from './editor.json' with { type: 'json' };
 
 export const TERMINAL_EDITOR_LIMITS = Object.freeze({ maxBytes: LIMITS.maxBytes, directoryPrefix: LIMITS.directoryPrefix, fileName: LIMITS.fileName });
-
 /** Why the draft stayed as it was. Never carries the editor command, the file path or the text. */
 export type ExternalEditorRefusal = 'no-editor' | 'not-started' | 'exit' | 'too-large' | 'unsafe' | 'failed';
-export type ExternalEditorOutcome =
-  | Readonly<{ kind: 'edited'; text: string }>
-  | Readonly<{ kind: 'unchanged' }>
-  | Readonly<{ kind: 'refused'; reason: ExternalEditorRefusal }>;
-export interface ExternalEditor {
-  /** Runs the person's editor on `text` with the terminal handed over (the caller suspends its own screen and input first). */
-  edit(text: string, signal?: AbortSignal): Promise<ExternalEditorOutcome>;
-}
-export interface ExternalEditorOptions {
-  /** The person's environment: `VISUAL`, then `EDITOR` (as Git, Claude Code and Codex read them); the editor runs with it. */
-  readonly env: NodeJS.ProcessEnv;
-  readonly tmpdir?: string;
-}
-
+export type ExternalEditorOutcome = Readonly<{ kind: 'edited'; text: string }> | Readonly<{ kind: 'unchanged' }> | Readonly<{ kind: 'refused'; reason: ExternalEditorRefusal }>;
+/** `edit` runs the person's editor on `text` with the terminal handed over (the caller suspends its own screen and input first). */
+export interface ExternalEditor { edit(text: string, signal?: AbortSignal): Promise<ExternalEditorOutcome> }
+/** `env`: the person's environment: `VISUAL`, then `EDITOR` (as Git, Claude Code and Codex read them); the editor runs with it. */
+export interface ExternalEditorOptions { readonly env: NodeJS.ProcessEnv; readonly tmpdir?: string }
 /** `VISUAL`/`EDITOR` split into argv: whitespace separates, single or double quotes keep a path with spaces whole. No shell runs. */
 export function editorCommand(env: NodeJS.ProcessEnv): readonly string[] | 'unset' | 'malformed' {
   const value = [env['VISUAL'], env['EDITOR']].find(item => typeof item === 'string' && item.trim() !== '')?.trim();
   if (!value) return 'unset';
   const words: string[] = [];
-  let word = '', quote: '"' | "'" | null = null, started = false;
+  let word: string | null = null, quote: string | null = null;
   for (const char of value) {
-    if (quote) { if (char === quote) quote = null; else word += char; continue; }
-    if (char === '"' || char === "'") { quote = char; started = true; continue; }
-    if (/\s/u.test(char)) { if (started || word) words.push(word); word = ''; started = false; continue; }
-    word += char;
+    if (quote) { if (char === quote) quote = null; else word += char; } else if (char === '"' || char === "'") { quote = char; word ??= ''; }
+    else if (/\s/u.test(char)) { if (word !== null) words.push(word); word = null; } else word = (word ?? '') + char;
   }
-  if (quote) return 'malformed';
-  if (started || word) words.push(word);
-  return words.length && words[0] ? words : 'malformed';
+  if (word !== null) words.push(word);
+  return quote || !words[0] ? 'malformed' : words;
 }
 
 const refused = (reason: ExternalEditorRefusal): ExternalEditorOutcome => Object.freeze({ kind: 'refused', reason });
-
 function runEditor(command: readonly string[], file: string, env: NodeJS.ProcessEnv, signal?: AbortSignal): Promise<'not-started' | 'aborted' | number> {
   return new Promise(resolve => {
     let started = false;
     const child = spawn(command[0]!, [...command.slice(1), file], { stdio: 'inherit', shell: false, env, ...(signal ? { signal } : {}) });
     child.once('spawn', () => { started = true; });
-    child.once('error', error => { resolve((error as { name?: string }).name === 'AbortError' ? 'aborted' : started ? 'aborted' : 'not-started'); });
-    child.once('exit', (code, killed) => { resolve(killed !== null || code === null ? 'aborted' : code); });
+    child.once('error', error => resolve((error as { name?: string }).name === 'AbortError' || started ? 'aborted' : 'not-started'));
+    child.once('exit', (code, killed) => resolve(killed !== null || code === null ? 'aborted' : code));
   });
 }
 
@@ -61,8 +47,7 @@ export function openExternalEditor(options: ExternalEditorOptions): ExternalEdit
   return Object.freeze({
     async edit(text: string, signal?: AbortSignal): Promise<ExternalEditorOutcome> {
       const command = editorCommand(options.env);
-      if (command === 'unset') return refused('no-editor');
-      if (command === 'malformed') return refused('not-started');
+      if (command === 'unset' || command === 'malformed') return refused(command === 'unset' ? 'no-editor' : 'not-started');
       if (Buffer.byteLength(text, 'utf8') > LIMITS.maxBytes) return refused('too-large');
       if (signal?.aborted) return refused('failed');
       let directory: string | null = null;
@@ -71,20 +56,14 @@ export function openExternalEditor(options: ExternalEditorOptions): ExternalEdit
         const file = join(directory, LIMITS.fileName);
         await writeFile(file, text, { mode: 0o600, flag: 'wx' });
         const exit = await runEditor(command, file, options.env, signal);
-        if (exit === 'not-started') return refused('not-started');
-        if (exit === 'aborted') return refused('failed');
-        if (exit !== 0) return refused('exit');
+        if (exit !== 0) return refused(exit === 'not-started' ? 'not-started' : exit === 'aborted' ? 'failed' : 'exit');
         const after = await lstat(file);
         if (!after.isFile()) return refused('unsafe');
         if (after.size > LIMITS.maxBytes) return refused('too-large');
-        const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
-        let read: string;
-        try {
-          const buffer = Buffer.alloc(LIMITS.maxBytes + 1);
-          const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-          if (bytesRead > LIMITS.maxBytes) return refused('too-large');
-          read = buffer.subarray(0, bytesRead).toString('utf8');
-        } finally { await handle.close(); }
+        const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0)), buffer = Buffer.alloc(LIMITS.maxBytes + 1);
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0).finally(() => handle.close());
+        if (bytesRead > LIMITS.maxBytes) return refused('too-large');
+        const read = buffer.subarray(0, bytesRead).toString('utf8');
         return read === text ? Object.freeze({ kind: 'unchanged' }) : Object.freeze({ kind: 'edited', text: read });
       } catch { return refused('failed'); }
       finally { if (directory) await rm(directory, { recursive: true, force: true }).catch(() => undefined); }

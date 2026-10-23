@@ -184,6 +184,8 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       searchNone: t('terminal.viewport.searchNone', {}, locale), copied: t('terminal.viewport.copied', {}, locale) },
     decisionArm: { arming: t('terminal.decision.arming', {}, locale), ignored: t('terminal.decision.ignored', {}, locale) },
     reasoning: { on: t('terminal.reasoning.on', {}, locale), off: t('terminal.reasoning.off', {}, locale), usage: t('terminal.reasoning.usage', {}, locale), unsupported: t('tui.model.reason.reasoningOff', {}, locale) },
+    copy: { sent: t('tuicopy.sent', {}, locale), none: t('tuicopy.none', {}, locale), range: t('tuicopy.range', {}, locale), usage: t('tuicopy.usage', {}, locale),
+      tooLarge: t('tuicopy.tooLarge', {}, locale), unavailable: t('tuicopy.unavailable', {}, locale) },
     scratch: { summary: t('terminal.scratch.summary', {}, locale), empty: t('terminal.scratch.empty', {}, locale), entry: t('terminal.scratch.entry', {}, locale),
       more: t('terminal.scratch.more', {}, locale), path: t('terminal.scratch.path', {}, locale), cleared: t('terminal.scratch.cleared', {}, locale),
       usage: t('terminal.scratch.usage', {}, locale) },
@@ -414,7 +416,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   const target = scopeId;
   // T2: theme and tier from what the terminal can draw and the person's setting; the banner and the clear from their settings (TERM=dumb never
   // clears). A config without a `terminal` section (scope from --scope) keeps every default.
-  const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean; readonly layout?: 'fullscreen' | 'inline'; readonly viewportRows?: number };
+  const presentation = (config['terminal'] ?? {}) as { readonly theme?: TerminalThemeSetting; readonly banner?: WorklineStartup['banner']; readonly clearOnStart?: boolean; readonly layout?: 'fullscreen' | 'inline'; readonly notify?: 'bell' | 'off'; readonly viewportRows?: number };
   const theme = resolveTerminalTheme(presentation.theme ?? TERMINAL_THEME_SETTINGS[0], colorCapability({ env, isTTY: tty.stdout, argv: process.argv }), env['COLORFGBG']);
   const ascii = prefersAsciiGlyphs(env);
   const home = env['HOME'] ?? env['USERPROFILE'], where = shortenHomePath(root, home);
@@ -445,6 +447,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     // NO_COLOR concerns colour only, so it does not stop the clear.
     clearScreen: env['TERM']?.trim().toLowerCase() !== 'dumb',
     // TERMINAL-SABIT-DUZEN: the full-window layout unless the person keeps the inline one (`terminal.layout: inline`).
+    ...(presentation.notify !== 'off' ? { attention: true } : {}),
     ...(presentation.layout === 'inline' ? { fullscreen: false } : {}), ...(presentation.viewportRows ? { viewportRows: presentation.viewportRows } : {}),
     completeTurn: turn, errorText: error => errorText(error, locale),
     ...(context.planRun ? { doPlan: { planning: t('brain.planning', {}, locale), cancelHint: t('brain.cancelHint', {}, locale), requestHint: t('brain.requestHint', {}, locale),

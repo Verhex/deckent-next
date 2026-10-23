@@ -446,7 +446,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 ## Desktop and other surfaces
 
 - **There is no Desktop app, no Dashboard and no remote HTTP API.** Use the terminal, the `deckent` command, MCP or the SDK.
-  `deckent monitor` is a read-only live view. The Desktop is planned after the beta.
+  `deckent monitor` is a read-only live view. Desktop app development starts during the beta, after the core layers are in
+  place; it is not shipped today.
 - **`deckent runtime` does not show since when the service runs.** The runtime protocol (v29) carries no start time; it waits for
   the next protocol version. The status shows build, configuration, running work and socket only.
 - **The monitor shows only the pools you may inspect** (`pool inspect`); other pools appear as one count ("Other work: N

@@ -1,11 +1,14 @@
 import type { AgentChatMessage } from './turn-stream.js';
 
-export interface ConversationSessionSummary { readonly sessionId: string; readonly updatedAtMs: number; readonly messages: number; readonly preview: string }
+export interface ConversationSessionSummary { readonly sessionId: string; readonly updatedAtMs: number; readonly messages: number; readonly preview: string;
+  /** The person's own name for the conversation (`/rename`); the picker shows it in place of the first message. */ readonly title?: string }
 /** Conversation snapshots of this scope (T-L5c); the caller binds the scope. Snapshots are context, never authority. */
 export interface ConversationSessionPort {
   save(input: { readonly sessionId: string; readonly messages: readonly AgentChatMessage[] }): Promise<void>;
   list(): Promise<readonly ConversationSessionSummary[]>;
   load(sessionId: string): Promise<readonly AgentChatMessage[] | null>;
+  /** Names one saved conversation; false when it is not saved (yet). Absent where the store cannot name sessions. */
+  rename?(sessionId: string, title: string): Promise<boolean>;
 }
 /** The executable's scope-explicit session store; `bindSessionScope` makes the workline port of one scope. */
 export interface TerminalSessionStoreView {
@@ -13,11 +16,13 @@ export interface TerminalSessionStoreView {
     readonly messages: readonly AgentChatMessage[] }): Promise<void>;
   list(scopeId: string): Promise<readonly ConversationSessionSummary[]>;
   load(scopeId: string, sessionId: string): Promise<readonly AgentChatMessage[] | null>;
+  rename?(scopeId: string, sessionId: string, title: string): Promise<boolean>;
 }
 export function bindSessionScope(store: TerminalSessionStoreView, scopeId: string, now: () => number = Date.now): ConversationSessionPort {
   return Object.freeze({ save: (input: { readonly sessionId: string; readonly messages: readonly AgentChatMessage[] }) =>
     store.save({ schemaVersion: 1, sessionId: input.sessionId, scopeId, updatedAtMs: now(), messages: input.messages }),
-  list: () => store.list(scopeId), load: (sessionId: string) => store.load(scopeId, sessionId) });
+  list: () => store.list(scopeId), load: (sessionId: string) => store.load(scopeId, sessionId),
+    ...(store.rename ? { rename: (sessionId: string, title: string) => store.rename!(scopeId, sessionId, title) } : {}) });
 }
 export type SessionRefusal = 'SESSION_REFERENCE_EXACT_REQUIRED' | 'SESSION_LIST_STALE' | 'SESSION_NOT_FOUND';
 type SessionReference = Readonly<{ target: string } | { refusal: Exclude<SessionRefusal, 'SESSION_NOT_FOUND'> }>;

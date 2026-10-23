@@ -3,6 +3,26 @@
 PLAN.md Sıradaki 14 **CLI-INSAN** maddesinin komut başına ayrıntısı; CLI-INSAN beta kapısı 8'dir (owner 2026-10-19). Her bölüm kurulu sürümde gerçek çağrıyla ölçülür, kaynak katalog tek başına kanıt sayılmaz.
 Yöntem: (1) kurulu sürümde ne yaptığı, (2) ne işe yaradığı, (3) argümansız ne yapmalı, (4) etkileşimli hâli. Ölçüm ortamı: `deckent v1.0.0-alpha.46`, commit `a4d2d444`, WSL, Node v26.10.0.
 
+## Kapanış durumu (2026-10-23)
+
+Bu incelemenin işi alpha.48 (2026-10-20) ve alpha.53'te (2026-10-23) indi. Aşağıdaki komut bölümleri kurulu alpha.46'nın ölçümüdür ve bugünkü davranışı anlatmaz; güncel durum bu tabloda ve [PLAN Sıradaki 14](../../../PLAN.md)'tedir. "Kodda" kaynakta doğrulandı demektir; gerçek terminalde kabul ayrıca gerekir (beta kapısı 8).
+
+| Ortak iş | Durum |
+|---|---|
+| Öncelikli 1: kuyruk listesi ham JSON | Kapandı, alpha.53: okunur kuyruk listesi (başlık, risk, kural sütunları) ve insan inspect/confirm/rollback/enqueue çıktısı |
+| Öncelikli 2: `backup verify` eksik set | Kapandı, alpha.48: `BACKUP_SET_NOT_FOUND` ayrı hata |
+| Dil | Kodda: dil zinciri config `language`'ı okur (alpha.48, `cli-kit/internal/locale.ts`); dil kalıntıları alpha.53'te |
+| Boş komut yok | Kodda: argümansız komutlar özet ya da seçici gösterir (alpha.48); eksik argüman `CLI_ARGUMENT_MISSING <ad>` ile söylenir (alpha.53) |
+| Ana yardım | Kodda: 100–150 satır, 80 sütun (alpha.48; `tests/contracts/surfaces/cli-grouped-help.test.ts`) |
+| Scope | Kodda: değişiklik komutlarında sessiz varsayılan yok, AI yolunda `CLI_SCOPE_REQUIRED` (alpha.48); `policy scopes` listesi (alpha.48); kuyruk ve görev okumalarında varsayılan scope (alpha.53). TTY seçicisi gerçek terminalde kanıt bekliyor |
+| Kimlik | `run list` alpha.48'de; kısa kimlik seçicisinin `report`, `run inspect`, `task` ve `approval`'da paylaşıldığı bu notta doğrulanmadı |
+| Ham JSON yok | Kodda: insan çıktısı varsayılan, JSON yalnız `--json` (alpha.48); kuyruk alpha.53'te |
+| İnsan biçimi | Büyük kısmı PRE-5 ile alpha.50'de; kalan sözcük ve kimlik artıkları PLAN Sıradaki 17 CIKTI-OKUNUR-2'de açık |
+| Yardım = davranış | Kodda: `pool quota-release` ve `policy mcp` katalogda; her komut kaydının katalogda grubu ve EN/TR metni olması testte (`cli-grouped-help.test.ts`) |
+| Hata doğruluğu | `backup verify` kapandı; diğer yanlış alanlı hataların her biri bu notta doğrulanmadı |
+| Kabul kanıtı | `/runs` kabul kanıtı satırı alpha.53'te; `run inspect` ve `report` için bu notta doğrulanmadı |
+| TTY akışları | Satır içi ok tuşlu kartlar alpha.48'de; seçici ve kart yolları gerçek terminalde kanıt bekliyor |
+
 ## Ana oturuma devir: alpha.48 (owner 2026-10-19)
 
 Owner bu incelemenin tamamını alpha.48 paketi olarak ana oturuma iletir; CLI-INSAN beta kapısı 8'dir. `operation` ve `terminal` bölümleri owner'ın genel onayıyla yazıldı, tek tek sunulmadı. Uygulama sırası ana oturumun planıdır; aşağıdaki gruplama öneridir.

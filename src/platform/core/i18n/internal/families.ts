@@ -34,6 +34,7 @@ import securityen from '../locales/en/security.json' with { type: 'json' };
 import terminalen from '../locales/en/terminal.json' with { type: 'json' };
 import deliveryen from '../locales/en/delivery.json' with { type: 'json' };
 import termrunen from '../locales/en/termrun.json' with { type: 'json' };
+import termansweren from '../locales/en/termanswer.json' with { type: 'json' };
 import helptr from '../locales/tr/help.json' with { type: 'json' };
 import cliruntr from '../locales/tr/clirun.json' with { type: 'json' };
 import clitasktr from '../locales/tr/clitask.json' with { type: 'json' };
@@ -58,6 +59,7 @@ import tuinotifytr from '../locales/tr/tuinotify.json' with { type: 'json' };
 import tuiqueuetr from '../locales/tr/tuiqueue.json' with { type: 'json' };
 import tuieditortr from '../locales/tr/tuieditor.json' with { type: 'json' };
 import tuisessiontr from '../locales/tr/tuisession.json' with { type: 'json' };
+import termanswertr from '../locales/tr/termanswer.json' with { type: 'json' };
 
 export const families = [
   { en: configen, tr: configtr },
@@ -84,6 +86,7 @@ export const families = [
   { en: securityen, tr: securitytr },
   { en: terminalen, tr: terminaltr },
   { en: termrunen, tr: termruntr },
+  { en: termansweren, tr: termanswertr },
   { en: deliveryen, tr: deliverytr },
   { en: tuicopyen, tr: tuicopytr },
   { en: tuinotifyen, tr: tuinotifytr },

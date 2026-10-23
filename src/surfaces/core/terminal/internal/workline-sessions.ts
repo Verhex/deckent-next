@@ -22,6 +22,10 @@ export interface ConversationSessionLabels {
   /** `{count}` messages resumed from `{session}`. */
   readonly resumed: string;
   readonly started: string;
+  /** T5 `/rename`: `usage` when no title was typed, `done` after naming, `nothingSaved` when the conversation has no saved snapshot yet. */
+  /** T5 picker filter: `prompt` carries `{text}` (the typed filter, may be empty), `none` is shown when no conversation matches. */
+  readonly filter?: { readonly prompt: string; readonly none: string };
+  readonly rename?: { readonly usage: string; readonly done: string; readonly nothingSaved: string };
   /** `{approx}{prompt}` of `{window}` tokens (`{percent}%`) · `{count}` messages */
   readonly context: string;
   /** No measurement yet · `{count}` messages */
@@ -32,7 +36,6 @@ export interface ConversationSessionLabels {
 /** One row of the arg-less `/resume` picker. Enter loads `sessionId` through the same path as `/resume <id>`. */
 export type SessionCommandResult = Readonly<{ entries: readonly WorkLedgerEntry[]; resumePicker?: readonly ResumePickerItem[]; refusal?: SessionRefusal }>;
 type ContextView = Omit<Extract<TurnDelta, { kind: 'context' }>, 'kind'>;
-const LISTED = 10;
 function done(entries: readonly WorkLedgerEntry[], resumePicker?: readonly ResumePickerItem[]): SessionCommandResult {
   return resumePicker && resumePicker.length > 0 ? { entries, resumePicker } : { entries };
 }
@@ -97,7 +100,7 @@ export function useConversationSession(port: ConversationSessionPort | undefined
       return [notice('error', labels.saveFailed)];
     }
   }, [labels, port, id]);
-  const run = useCallback(async (command: 'resume' | 'context' | 'clear', args: string,
+  const run = useCallback(async (command: 'resume' | 'context' | 'clear' | 'rename', args: string,
     history: { current: readonly AgentChatMessage[] }, execution: LocalExecution): Promise<SessionCommandResult> => {
     if (!labels) return done([]);
     const count = history.current.filter(message => message.role !== 'system').length;
@@ -116,7 +119,15 @@ export function useConversationSession(port: ConversationSessionPort | undefined
       return done([notice('info', head), ...view.map(line => notice('info', line))]);
     }
     if (!port) return done([notice('error', labels.unavailable)]);
-    const freshList = async () => (await port.list()).filter(summary => summary.sessionId !== id()).slice(0, LISTED);
+    if (command === 'rename') {
+      const title = args.trim();
+      if (!title) return done([notice('error', labels.rename?.usage ?? labels.unavailable)]);
+      if (!port.rename || !labels.rename) return done([notice('error', labels.unavailable)]);
+      try { return done([(await port.rename(id(), title)) ? systemSummaryEntry(labels.rename.done) : notice('error', labels.rename.nothingSaved)]); }
+      catch { return done([notice('error', labels.rename.nothingSaved)]); }
+    }
+    // The store bounds the list (its own `maxSessions`); the picker filters it by typed text.
+    const freshList = async () => (await port.list()).filter(summary => summary.sessionId !== id());
     const refuse = (refusal: SessionRefusal, text: string): SessionCommandResult => ({ refusal, entries: [notice('error', text)] });
     if (!args) {
       listed.current = (await freshList()).map(summary => ({ ...summary }));
@@ -124,7 +135,7 @@ export function useConversationSession(port: ConversationSessionPort | undefined
       // The index stays filled so a later typed `/resume 2` still resolves. The rows are the picker, not ledger lines.
       return done([], listed.current.map((summary, index) => ({ sessionId: summary.sessionId,
         ...projectHumanPickerText(fillTemplate(labels.entry, { index: index + 1, session: summary.sessionId.slice(0, 8), when: when(summary.updatedAtMs),
-          count: summary.messages, preview: summary.preview }), known, labels.hiddenCount) })));
+          count: summary.messages, preview: summary.title ?? summary.preview }), known, labels.hiddenCount) })));
     }
     const reference = resolveSessionReference(args, listed.current, /^\d+$/.test(args) && listed.current.length ? await freshList() : []);
     if ('refusal' in reference) {

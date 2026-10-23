@@ -60,7 +60,11 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
       closeDetail: t('terminal.runControl.closeDetail', {}, locale), state: t('terminal.runControl.state', {}, locale),
       identity: t('terminal.runControl.identity', {}, locale), prompt: t('terminal.runControl.prompt', {}, locale),
       holdPrompt: t('terminal.runControl.holdPrompt', {}, locale), pending: t('terminal.runControl.pending', {}, locale), kept: t('terminal.runControl.kept', {}, locale),
-      gone: t('terminal.runControl.gone', {}, locale), reason: { label: t('terminal.runControl.reason.label', {}, locale), hint: t('terminal.runControl.reason.hint', {}, locale), empty: t('terminal.runControl.reason.empty', {}, locale) } },
+      gone: t('terminal.runControl.gone', {}, locale), reason: { label: t('terminal.runControl.reason.label', {}, locale), hint: t('terminal.runControl.reason.hint', {}, locale), empty: t('terminal.runControl.reason.empty', {}, locale) },
+      keyAnswer: t('terminal.runAnswer.key', {}, locale) },
+    runAnswer: { title: t('terminal.runAnswer.title', {}, locale), question: t('terminal.runAnswer.question', {}, locale), detail: t('terminal.runAnswer.detail', {}, locale),
+      prompt: t('terminal.runAnswer.prompt', {}, locale), empty: t('terminal.runAnswer.empty', {}, locale), none: t('terminal.runAnswer.none', {}, locale), reread: t('terminal.runAnswer.reread', {}, locale),
+      reason: { label: t('terminal.runAnswer.reason.label', {}, locale), hint: t('terminal.runAnswer.reason.hint', {}, locale), empty: t('terminal.runAnswer.reason.empty', {}, locale) } },
     jobs: {
       locale, completed: t('terminal.jobs.completed', {}, locale), deliveryCounts: t('terminal.jobs.deliveryCounts', {}, locale), deliveryPatch: t('terminal.jobs.deliveryPatch', {}, locale), deliveryNext: t('terminal.jobs.deliveryNext', {}, locale),
       detailsUnavailable: t('terminal.jobs.detailsUnavailable', {}, locale), acceptanceEvidence: t('terminal.jobs.acceptanceEvidence', {}, locale), trackingFull: t('terminal.jobs.trackingFull', {}, locale),

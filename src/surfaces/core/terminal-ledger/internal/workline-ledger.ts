@@ -32,8 +32,11 @@ export interface WorklineLedgerPorts {
   /** Y1 (owner 2026-10-14): the governed Run controls of `run hold|resume|close` against the inspected revision; returns the rendered typed outcome.
    * `reason` is a hold's note (the person's own words from the card; absent: the surface's default sentence). Policy decides on every call. */
   readonly controlRun?: (runId: string, action: RunControlAction, expectedRevision: number, reason?: string) => Promise<string>;
+  /** BR2 (K7 port): the person's answer to a task's needs-input question through `run resume --task --answer`'s own lifecycle command (`answer`)
+   * against the inspected revision; returns the rendered typed outcome. Human-only: the service records the person as the decider. */
+  readonly answerTask?: (runId: string, taskId: string, answer: string, expectedRevision: number) => Promise<string>;
 }
-/** The human Run controls the terminal offers; `answer`, `accept` and `reject` are separate decisions and are not here. */
+/** The human Run controls the terminal offers; `answer` (`answerTask`), `accept` and `reject` are separate decisions and are not here. */
 export type RunControlAction = 'hold' | 'resume' | 'close';
 
 export async function loadRunViewsForWatch(ports: WorklineLedgerPorts): Promise<RunView[]> {

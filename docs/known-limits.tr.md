@@ -445,7 +445,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 ## Masaüstü ve diğer yüzeyler
 
 - **Masaüstü uygulaması, web paneli ve uzak HTTP API yok.** Terminali, `deckent` komutunu, MCP'yi ya da SDK'yı kullanın.
-  `deckent monitor` salt okunur canlı bir görünümdür. Masaüstü beta sonrası için planlı.
+  `deckent monitor` salt okunur canlı bir görünümdür. Masaüstü uygulamasının geliştirilmesi betada, çekirdek katmanlar
+  tamamlandıktan sonra başlar; bugün yayımlanmış değildir.
 - **`deckent runtime` servisin ne zamandan beri çalıştığını göstermez.** Çalışma protokolü (v29) başlangıç zamanı taşımaz; bir
   sonraki protokol sürümünü bekler. Durum yalnız derleme, yapılandırma, çalışan işler ve soketi gösterir.
 - **Monitor yalnız inceleme izniniz olan havuzları gösterir** (`pool inspect`); diğer havuzlar tek bir sayı olarak görünür
