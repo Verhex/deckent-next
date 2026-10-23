@@ -309,7 +309,8 @@
         "src/adapters/core/secret-store",
         "src/adapters/core/mcp-client",
         "src/adapters/core/local-runtime-socket",
-        "src/composition/core/setup"
+        "src/composition/core/setup",
+        "src/composition/core/memory"
       ],
       "plan": "SURFACES"
     },
@@ -396,7 +397,8 @@
         "src/platform/core/clock",
         "src/composition/core/run-planner",
         "src/composition/core/audit",
-        "src/platform/core/crash-reporting"
+        "src/platform/core/crash-reporting",
+        "src/composition/core/memory"
       ],
       "plan": "SURFACES"
     },
@@ -456,7 +458,9 @@
         "src/engine/core/decision",
         "src/domain/core/decision",
         "src/engine/core/handoff-observation",
-        "src/domain/core/task-graph"
+        "src/domain/core/task-graph",
+        "src/engine/core/memory",
+        "src/domain/core/memory"
       ],
       "plan": "FOUNDATION"
     },
@@ -1258,7 +1262,8 @@
         "src/surfaces/core/cli-human",
         "src/platform/core/config-fields",
         "src/surfaces/core/monitor",
-        "src/surfaces/core/config"
+        "src/surfaces/core/config",
+        "src/surfaces/core/cli-memory"
       ],
       "plan": "SURFACES"
     },
@@ -1344,7 +1349,8 @@
         "src/domain/core/audit",
         "src/domain/core/run",
         "src/engine/core/effect",
-        "src/engine/core/run-proposal"
+        "src/engine/core/run-proposal",
+        "src/engine/core/memory"
       ],
       "plan": "SURFACES"
     },
@@ -3511,6 +3517,69 @@
         "src/engine/core/runs"
       ],
       "plan": "CONTRACT"
+    },
+    "src/domain/core/memory": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/principal"
+      ],
+      "plan": "MEMORY"
+    },
+    "src/engine/core/memory": {
+      "dependencies": [
+        "src/domain/core/command",
+        "src/domain/core/memory",
+        "src/domain/core/audit",
+        "src/domain/core/principal",
+        "src/platform/core/integrity",
+        "src/engine/core/authentication",
+        "src/domain/core/policy",
+        "src/engine/core/policy",
+        "src/domain/core/primitives"
+      ],
+      "plan": "MEMORY"
+    },
+    "src/adapters/core/memory-journal-store": {
+      "dependencies": [
+        "src/domain/core/command",
+        "src/domain/core/memory",
+        "src/engine/core/audit",
+        "src/engine/core/memory",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/sqlite-ledger",
+        "src/platform/core/integrity"
+      ],
+      "plan": "MEMORY"
+    },
+    "src/composition/core/memory": {
+      "dependencies": [
+        "src/engine/core/memory",
+        "src/adapters/core/memory-journal-store",
+        "src/adapters/core/local-keyring",
+        "src/platform/core/clock",
+        "src/platform/core/config",
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors",
+        "src/engine/core/runtime",
+        "src/adapters/core/local-principal"
+      ],
+      "plan": "MEMORY"
+    },
+    "src/surfaces/core/cli-memory": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/config",
+        "src/platform/core/i18n",
+        "src/domain/core/memory",
+        "src/engine/core/memory",
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/cli-approval",
+        "src/surfaces/core/cli-terminal"
+      ],
+      "plan": "MEMORY"
     }
   },
   "composition": {
@@ -3619,7 +3688,8 @@
       "security",
       "terminal",
       "termrun",
-      "delivery"
+      "delivery",
+      "memory"
     ]
   },
   "literals": {

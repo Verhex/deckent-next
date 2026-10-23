@@ -116,5 +116,8 @@
   "terminal.info.usage.money",
   "terminal.activeWork.doTitle",
   "terminal.delivery.file",
-  "terminal.delivery.adoptTarget"
+  "terminal.delivery.adoptTarget",
+  "memory.column.id",
+  "memory.view.author.ai",
+  "memory.view.revision"
 ]

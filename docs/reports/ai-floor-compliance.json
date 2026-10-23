@@ -7,12 +7,12 @@
     "src/domain/core/policy/index.ts": "2695371ba1e8a488b4285d1a708d2dfd6f38a97c0ec4374f7d578781bdf27421",
     "src/domain/core/policy/internal/administer.ts": "7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004",
     "src/domain/core/policy/internal/administration.ts": "85ea655acb0a388542fae3740c47c81f6cfe7763434117e8d5aef10bc40c93b0",
-    "src/domain/core/policy/internal/ai-floor.ts": "982dc0365d6368e7526fb247adbb2c0599c21ec42e828ae9e3c7c234ab065183",
+    "src/domain/core/policy/internal/ai-floor.ts": "e26ed9ee2a90c24f9764d106837e4e998fc3c9e8a6cda5188968ec4280ecab43",
     "src/domain/core/policy/internal/decision-step.ts": "70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe",
     "src/domain/core/policy/internal/delegations.ts": "c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320",
     "src/domain/core/policy/internal/describe.ts": "0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df",
     "src/domain/core/policy/internal/evaluate.ts": "61b1172eabcab5da8a7a0935bc2d0bf523d5327a4c95e96b4a70ec7b191714f2",
-    "src/domain/core/policy/internal/first-run-template.ts": "b04f76abdfaf2a54bd8f1fb12e4a384928a2062a7bc23b61f752e3e895a8d8d1",
+    "src/domain/core/policy/internal/first-run-template.ts": "a0353ad4ddb75875415d6065e30eb69deb84494544f9d1d897fc08d273c27a90",
     "src/domain/core/policy/internal/mcp-capabilities.ts": "c864257ab5ce5852f0799805d358f7b8790ec54fe8656157a1e4addd8cdeafb4",
     "src/domain/core/policy/internal/mcp-grant.ts": "8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a",
     "src/domain/core/policy/internal/mode.ts": "b1f9479911852c8b3842c6b2135156534e16a8e2016e3c7120c2b4f627f4c444",
@@ -20,7 +20,7 @@
     "src/domain/core/policy/internal/schema.ts": "7ee507ceee1166b0f2fada5ad67e334ab5c883b47ad7a16f4ec3f0665220df9c",
     "src/domain/core/policy/internal/scope.ts": "7515bab07e7ee92d03be12c0a8710f72d6973419ca53a79fdeff61a84a496da4",
     "src/domain/core/policy/internal/standing.ts": "bb3b4f7c301474d2df1f690d85f3b1ea7219fbfe6f90af8b8d680017bb50d5db",
-    "src/domain/core/policy/internal/vocabulary.ts": "188637ad5d40fcbcc7eccbc4b13bb7e31a08355751b1c563cea0258b5bff61b2",
+    "src/domain/core/policy/internal/vocabulary.ts": "4c6bd3d9daf7b4fb7ec78097d47a73b62586fbedbba517b8a758ac207a493a6f",
     "src/domain/core/primitives/index.ts": "afa5a6e9acc3b73c157054ae1607652478b464a9da45b3ce27a46a6ec86e72a0",
     "src/domain/core/primitives/internal/command-id.ts": "69a16b34a9225fe7c8bb1047e9b9e99d03fd71573baf2281bfa8e870e1a219c9",
     "src/domain/core/primitives/internal/hidden-paths.ts": "0f7e83b0231ee7deaf9487bb1bdc8e6f7f27fd6cb914bae341a59462596f2916",
@@ -32,10 +32,10 @@
     "src/domain/core/principal/internal/principal.ts": "707e61804afb5f40f68471aa7542052bbb954f53f6e15d7e81cb9fbaccf583d2"
   },
   "summary": {
-    "routes": 262,
-    "floorRoutes": 186,
+    "routes": 266,
+    "floorRoutes": 188,
     "contexts": 6,
-    "policyChecks": 1572,
+    "policyChecks": 1596,
     "stepChecks": 48,
     "violations": 0
   },
@@ -22503,6 +22503,438 @@
       },
       "verdict": "uyumlu",
       "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "inspect",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "NO_GRANT"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "NO_GRANT"
+      },
+      "verdict": "uyumlu",
+      "reason": "NO_GRANT"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "inspect",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "inspect",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "inspect",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "inspect",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "inspect",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "token-granted",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "propose",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "NO_GRANT"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "NO_GRANT"
+      },
+      "verdict": "uyumlu",
+      "reason": "NO_GRANT"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "propose",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "propose",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "propose",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "propose",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "propose",
+      "floor": false,
+      "family": "vocabulary",
+      "context": "token-granted",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "retire",
+      "floor": true,
+      "family": "memory",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "retire",
+      "floor": true,
+      "family": "memory",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "retire",
+      "floor": true,
+      "family": "memory",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "retire",
+      "floor": true,
+      "family": "memory",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "retire",
+      "floor": true,
+      "family": "memory",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "retire",
+      "floor": true,
+      "family": "memory",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "verify",
+      "floor": true,
+      "family": "memory",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "verify",
+      "floor": true,
+      "family": "memory",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "verify",
+      "floor": true,
+      "family": "memory",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "verify",
+      "floor": true,
+      "family": "memory",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "verify",
+      "floor": true,
+      "family": "memory",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "memory",
+      "id": "fixture-target",
+      "action": "verify",
+      "floor": true,
+      "family": "memory",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
     },
     {
       "kind": "model-activation",

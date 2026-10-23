@@ -25,6 +25,7 @@ import { runControlCommandSchema, type RunLifecycleCommand, runCommandSchema, ru
 import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrencyReport } from '#engine/index.js';
 import { quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseReceipt, poolCapacityCommandSchema, type PoolCapacityCommand, type PoolCapacityReceipt, type PoolCapacityView, poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView } from '#engine/index.js';
 import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
+import { memoryListQuerySchema, memorySearchQuerySchema, memoryInspectQuerySchema, type MemoryListQuery, type MemoryListing, type MemorySearchQuery, type MemorySearchResult, type MemoryInspectQuery, type MemoryInspection } from '#engine/index.js';
 import { policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/index.js';
 export interface McpApplications {
   inspectTargetQueue?(query: QueueQuery): Promise<unknown>;
@@ -36,6 +37,8 @@ export interface McpApplications {
   recordModelIngress?(notice: ModelIngressProjection, input: unknown): Promise<void>;
   inspectMonitor?(query: MonitorQuery): Promise<MonitorSnapshot>;
   inspectDecision?(query: DecisionQuery): Promise<DecisionInspection>;
+  /** S4 memory journal v1: read-only; a failed read answers `held`, never an empty memory. */
+  listMemory?(query: MemoryListQuery): Promise<MemoryListing>; searchMemory?(query: MemorySearchQuery): Promise<MemorySearchResult>; inspectMemory?(query: MemoryInspectQuery): Promise<MemoryInspection>;
   renewApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   listApprovals?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   inspectApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
@@ -117,6 +120,13 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (inspectDecision) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_decision',
     description: t('mcp.tool.inspectDecision', {}, locale), schema: decisionQuerySchema,
     invoke: input => inspectDecision.call(applications, decisionQuerySchema.parse(input)) });
+  const { listMemory, searchMemory, inspectMemory } = applications;
+  if (listMemory) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'list_memory', description: t('mcp.tool.listMemory', {}, locale),
+    schema: memoryListQuerySchema, invoke: input => listMemory.call(applications, memoryListQuerySchema.parse(input)) });
+  if (searchMemory) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'search_memory', description: t('mcp.tool.searchMemory', {}, locale),
+    schema: memorySearchQuerySchema, invoke: input => searchMemory.call(applications, memorySearchQuerySchema.parse(input)) });
+  if (inspectMemory) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_memory', description: t('mcp.tool.inspectMemory', {}, locale),
+    schema: memoryInspectQuerySchema, invoke: input => inspectMemory.call(applications, memoryInspectQuerySchema.parse(input)) });
   if (applications.inspectPolicyAdministration) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_policy_administration',
     description: t('mcp.tool.policyAdministration', {}, locale), schema: policyAdministrationQuerySchema,
     invoke: input => applications.inspectPolicyAdministration!(policyAdministrationQuerySchema.parse(input)) });

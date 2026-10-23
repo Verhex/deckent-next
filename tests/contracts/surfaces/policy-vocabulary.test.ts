@@ -11,7 +11,7 @@ it('exposes the same versioned action/resource matrix through compiled CLI and S
   expect(JSON.parse(result.stdout)).toEqual(getPolicyVocabulary());
 });
 it('publishes the versioned policy action/resource matrix through the SDK', () => {
-  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['backup', 'config', 'decision', 'approval', 'task', 'attempt', 'operation', 'scope', 'pool', 'run', 'task-decision', 'run-decision', 'service', 'model-activation', 'model-invocation', 'provider-spend-account', 'agent-tool', 'mcp-server', 'permission-mode', 'agent-tool-call', 'secret', 'work-target', 'execution-environment', 'installation', 'monitor', 'policy']);
+  expect(getPolicyVocabulary().resources.map(r => r.kind)).toEqual(['backup', 'config', 'decision', 'memory', 'approval', 'task', 'attempt', 'operation', 'scope', 'pool', 'run', 'task-decision', 'run-decision', 'service', 'model-activation', 'model-invocation', 'provider-spend-account', 'agent-tool', 'mcp-server', 'permission-mode', 'agent-tool-call', 'secret', 'work-target', 'execution-environment', 'installation', 'monitor', 'policy']);
   // I-POL v13 (owner A48-D3, MON-NAMES, CA-1): Docker install, installation repair, monitor scope names and everyone's standing approvals.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'execution-environment')!.actions).toEqual(['install']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'installation')!.actions).toEqual(['repair']);
@@ -20,6 +20,8 @@ it('publishes the versioned policy action/resource matrix through the SDK', () =
   // BACKUP-COMMAND (owner 2026-10-08): installation recovery sets.
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'backup')!.actions).toEqual(['create', 'verify', 'restore']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'decision')!.actions).toEqual(['prepare','ask','record','outcome','inspect']);
+  // S4 memory journal v1: the scope is the resource id; v1 surfaces only inspect.
+  expect(getPolicyVocabulary().resources.find(r => r.kind === 'memory')!.actions).toEqual(['inspect', 'propose', 'verify', 'retire']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'attempt')!.actions).toContain('recover-output');
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'service')!.actions).toEqual(['shutdown']);
   expect(getPolicyVocabulary().resources.find(r => r.kind === 'operation')!.actions).toEqual(['execute', 'compensate', 'inspect']);

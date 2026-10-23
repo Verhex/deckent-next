@@ -37,7 +37,10 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 60;
+export const CURRENT_LEDGER_VERSION = 61;
+// S4 memory journal v1 (v61 after S0's v60 on a55/integrate): additive tables (current entry, append-only revisions and receipts, FTS5 index
+// keyed by the entry's explicit `id`, which VACUUM never renumbers). No earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v61).
+export const MEMORY_JOURNAL_LEDGER_VERSION = 61;
 // PRE-7 ORTAM-HAZIR: environment park + `not-run` acceptance vocabularies (Run park reason and its requirement as failure code, a
 // `launch-refused` previous binding, the launch refusal's `requirement` and `probe`, a binding's probe custody `probes`, report evidence `not-run`,
 // task reason `acceptance-check-not-run`).
@@ -72,6 +75,20 @@ export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  [MEMORY_JOURNAL_LEDGER_VERSION]: `CREATE TABLE memory_entries(id INTEGER PRIMARY KEY,scope_id TEXT NOT NULL,entry_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),
+    state TEXT NOT NULL CHECK(state IN('candidate','verified','retired')),seq INTEGER NOT NULL,record TEXT NOT NULL,UNIQUE(scope_id,entry_id));
+    CREATE INDEX memory_entries_recent ON memory_entries(scope_id,seq DESC);
+    CREATE TRIGGER memory_entries_no_delete BEFORE DELETE ON memory_entries BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    CREATE TABLE memory_entry_revisions(scope_id TEXT NOT NULL,entry_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,entry_id,revision),FOREIGN KEY(scope_id,entry_id) REFERENCES memory_entries(scope_id,entry_id));
+    CREATE TRIGGER memory_entry_revisions_no_update BEFORE UPDATE ON memory_entry_revisions BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    CREATE TRIGGER memory_entry_revisions_no_delete BEFORE DELETE ON memory_entry_revisions BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    CREATE TABLE memory_command_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,entry_id TEXT NOT NULL,revision INTEGER NOT NULL,record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,command_id));
+    CREATE TRIGGER memory_command_receipts_no_update BEFORE UPDATE ON memory_command_receipts BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    CREATE TRIGGER memory_command_receipts_no_delete BEFORE DELETE ON memory_command_receipts BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    CREATE VIRTUAL TABLE memory_search USING fts5(text,tokenize='unicode61 remove_diacritics 2');
+    PRAGMA user_version=61;`,
   // Table rebuild (primary key change); rowids are kept so "latest" stays the producer order. Downgrade = restore the pre-switch backup.
   60: `CREATE TABLE acceptance_metrics_v60(scope_id TEXT NOT NULL,producer_command_id TEXT NOT NULL,run_id TEXT NOT NULL,task_id TEXT NOT NULL,
     attempt_id TEXT NOT NULL,outcome_kind TEXT NOT NULL,record TEXT NOT NULL,superseded_by TEXT,PRIMARY KEY(scope_id,producer_command_id,outcome_kind));

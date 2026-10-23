@@ -131,6 +131,14 @@ export const CLI_CATALOG = [
     action('outcome', 'work', 'cli.help.action.outcome', 'cli.help.decide', { requires: INPUT }),
     action('inspect', 'work', 'cli.help.action.decide.inspect', 'cli.help.decide', { requires: INPUT }),
   ] },
+  // S4 memory journal v1: reads (list by default, search, inspect) and a person's terminal-card writes (propose, verify, retire).
+  { name: 'memory', group: 'observe', summary: 'memory.help.summary', detail: 'memory.help.detail', args: '[--scope <id>] [--state <name>] [--json]', bare: 'handler', children: [
+    action('search', 'observe', 'memory.help.action.search', 'memory.help.detail', { requires: ['<text>'] }),
+    action('inspect', 'observe', 'memory.help.action.inspect', 'memory.help.detail', { requires: ['<id>'] }),
+    action('propose', 'observe', 'memory.help.action.propose', 'memory.help.detail', { requires: ['--input <file>'] }),
+    action('verify', 'observe', 'memory.help.action.verify', 'memory.help.detail', { requires: ['<id>', '--note <text>'] }),
+    action('retire', 'observe', 'memory.help.action.retire', 'memory.help.detail', { requires: ['<id>', '--reason <text>'] }),
+  ] },
   { name: 'models', group: 'models', summary: 'cli.help.summary.models', detail: 'cli.help.models', args: '[--scope <id>] [--declared] [--catalog] [--verbose]', bare: 'handler', children: [
     action('binding', 'models', 'cli.help.action.binding', 'cli.help.modelsBinding', { requires: MODEL }),
     action('activation', 'models', 'cli.help.action.activation', 'cli.help.modelsActivation', { requires: MODEL }),

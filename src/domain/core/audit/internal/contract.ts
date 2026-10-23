@@ -83,6 +83,10 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
       stage: z.enum(['policy', 'cell', 'effect']), argsDigest: digest, revision: identitySchema }).strict()).max(AUDIT_POLICY_TURN_LIMITS.refusedMax) }).strict(),
     allowed: z.object({ count: counterSchema, calls: z.array(z.object({ tool: toolRef, call: turnCallRef, cell: agentToolCell, argsDigest: digest,
       revision: identitySchema }).strict()).max(AUDIT_POLICY_TURN_LIMITS.allowedMax) }).strict() }).strict(),
+  /** S4 memory journal v1: one transition of one entry (content and notes are never recorded, only their digest and the verification basis). */
+  z.object({ kind: z.literal('memory-journal'), action: z.union([z.literal('propose'), z.literal('verify'), z.literal('retire')]), entryId: identitySchema, commandId: identitySchema,
+    revision: counterSchema.positive(), state: z.enum(['candidate', 'verified', 'retired']), contentDigest: digest,
+    basis: z.enum(['human-review', 'independent-evaluation']).nullable() }).strict(),
   /** `person` null (MODES-3): the default `standart`, which no bindings entry names. */
   z.object({ kind: z.literal('permission-mode'), mode: z.enum(['auto-edit', 'full-auto', 'standart']), cell: z.enum(['edit-non-floor', 'shell-modify', 'mcp-call']),
     tool: toolRef, call: callRef, grants: z.object({ company: identitySchema, person: identitySchema.nullable() }).strict(),

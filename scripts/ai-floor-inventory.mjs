@@ -32,6 +32,10 @@ export const floorFamilies = [
   { id: 'tools', en: 'edit-authority and edit-floor tool-call cells', tr: 'edit-authority ve edit-floor araç çağrısı hücreleri',
     whyEn: 'Editing a protected boundary would otherwise circumvent the operation gate.', whyTr: 'Korunan sınırı düzenlemek operasyon kapısını dolanabilir.',
     routes: ['edit-authority', 'edit-floor'].map(id => ['agent-tool-call', id, 'invoke']) },
+  { id: 'memory', en: 'Memory verify and retire', tr: 'Hafıza doğrulama ve emekliye ayırma',
+    whyEn: 'Verified memory needs a person or an independent evaluation record, never the AI itself (law-audit fold 6); retiring is the same knowledge change.',
+    whyTr: 'Doğrulanmış hafıza bir kişi ya da bağımsız değerlendirme kaydı ister, AI kendisi asla (kanun denetimi madde 6); emekliye ayırmak da aynı bilgi değişikliğidir.',
+    routes: ['verify', 'retire'].map(action => ['memory', 'fixture-target', action]) },
 ];
 export const protectedPaths = ['policy', 'approvals', 'identity', 'security', 'storage', 'service', 'paths', 'shell', 'network', 'layout', 'execution',
   'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit',

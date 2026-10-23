@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource } from '#adapters/index.js';
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
+/** The v13 delta (I-POL): with v14 current, an exact older template lacks it as well as the current delta. */
+const V13_DELTA: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect',
+  'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all'];
 import { decideAgentToolCall } from '#engine/index.js';
 import { main } from '#surfaces/index.js';
 import { applyPolicyTemplateInstallation, upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
@@ -123,6 +126,9 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       grant('first-run-monitor-scope-diagnostics', 'monitor', ['inspect-scope-diagnostics'], 'all', { scopes: 'all' }),
       grant('first-run-standing-grants-all', 'policy', ['inspect-standing-grants'], 'all'),
       { id: 'first-run-mcp-observe-pool', effect: 'allow', actions: ['inspect'], scopes: [SCOPE], principals: [MCP_PERSON], resource: { kind: 'pool', ids: 'all' } },
+      // v14 (S4): memory journal reads for the named person and the MCP actor.
+      grant('first-run-memory-inspect', 'memory', ['inspect'], 'all'),
+      { id: 'first-run-mcp-observe-memory', effect: 'allow', actions: ['inspect'], scopes: [SCOPE], principals: [MCP_PERSON], resource: { kind: 'memory', ids: 'all' } },
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
@@ -139,7 +145,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(entries).toHaveLength(1);
     const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
       before: { policy: unknown }; after: { policy: unknown } };
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v13-/) });
+    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v14-/) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
 
@@ -173,7 +179,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const argv = ['init', 'policy', '--scope', SCOPE, '--upgrade', '--person', `${PERSON.issuer}/${PERSON.subject}`, '--json'];
     expect(await main([...argv, '--preview'], context)).toBe(0); expect(errors).toEqual([]);
     const preview = JSON.parse(output.join('')) as { revision: string; expect: string; rules: { id: string }[] };
-    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 13 } });
+    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 14 } });
     expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-service-shutdown']);
     expect(await f.bytes()).toBe(before);
     output.length = 0;
@@ -231,7 +237,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const owner = v5.grants[0]!.principals[0]!;
     const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(rule => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
       'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown'].includes(rule.id)
-      && !rule.id.startsWith('first-run-mcp-observe-') && !(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as readonly string[]).includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
+      && !rule.id.startsWith('first-run-mcp-observe-') && ![...V13_DELTA, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
       ids: (rule.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : rule) };
     await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });
     const v4Bytes = await readFile(policyPath, 'utf8');

@@ -19,13 +19,13 @@ function v59() {
 const rows = (db: DatabaseSync) => db.prepare('SELECT rowid,producer_command_id,record,superseded_by FROM acceptance_metrics ORDER BY rowid').all();
 
 it('v59 upgrades to v60: rows and their order are kept, the older row of an Attempt is superseded by its successor', () => {
-  expect(METRICS_V2_LEDGER_VERSION).toBe(60); expect(CURRENT_LEDGER_VERSION).toBe(60);
+  expect(METRICS_V2_LEDGER_VERSION).toBe(60); expect(CURRENT_LEDGER_VERSION).toBe(61);
   const db = v59();
   try {
     expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(59);
     const before = db.prepare('SELECT rowid,producer_command_id,record FROM acceptance_metrics ORDER BY rowid').all();
     migrateLedger(db, 'allow');
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(60);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(CURRENT_LEDGER_VERSION);
     expect(rows(db)).toEqual(before.map(row => ({ ...row, superseded_by: row.producer_command_id === 'evaluation' ? 'new-evidence' : null })));
     // One current row per (Task, Attempt, outcome kind) is a storage invariant, not a reader convention.
     expect(() => db.prepare("UPDATE acceptance_metrics SET superseded_by=NULL WHERE producer_command_id='evaluation'").run()).toThrow(/UNIQUE/);
