@@ -7,6 +7,15 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const MCP_REGISTRY_SCOPES = ['managed', 'local', 'project', 'user'] as const;
 /** S5b: the safety hold sources (Nervous pause, Auditor park) a Run hold and its audit name; the Run contract reuses this one list. */
 export const runSafetyHoldSourceSchema = z.enum(['nervous', 'auditor']);
+/**
+ * S6 Nervous K-B standing list (owner 2026-10-11 K-B, updated 2026-10-23 anchor s6r-kayip-calisan-2026-10-23): the only actions a Nervous proposal
+ * may name. Versioned code, never registry data; none opens an Attempt, resumes a Run or releases a slot (release is a broker gate step).
+ */
+export const RECOVERY_ACTIONS = Object.freeze(['fence-attempt', 'hold-run', 'stop-orphan', 'restart-component', 'alert-brain', 'hand-to-human'] as const);
+export const recoveryActionSchema = z.enum(RECOVERY_ACTIONS);
+/** S6R-2: what Nervous saw of a worker (`control-failed`: the daemon did not answer) and of its launcher (`dead`: another instance whose process is gone). */
+export const NERVOUS_ACTIVITY_STATES = Object.freeze(['missing', 'created', 'running', 'paused', 'exited', 'unknown', 'control-failed'] as const);
+export const NERVOUS_LAUNCHER_BASES = Object.freeze(['same-process', 'alive', 'dead', 'none', 'unreadable'] as const);
 /** Versioned audit event contract (general Core audit port, first slice — owner 2026-09-27 q4/q5). */
 export const AUDIT_EVENT_SCHEMA_VERSION = 1;
 export const AUDIT_SHELL_HEAD_MAX_CHARS = 200;
@@ -16,6 +25,11 @@ export const AUDIT_TRACKED_PATHS_MAX = 50;
 /** S5 D1 (owner Q5 2026-10-17): the most refused / silently allowed calls one `policy-turn` record names (each count is always the full number). */
 export const AUDIT_POLICY_TURN_LIMITS = Object.freeze({ refusedMax: limits.policyTurnRefusedMax, allowedMax: limits.policyTurnAllowedMax });
 export const DISPATCH_PREPARATION_PHASES = Object.freeze(['prepare', 'workspace', 'secret-gate', 'handoff', 'dispatch'] as const);
+/** S6R-2: the typed signal summary a `recovery-detection` seals (counts and states only, never a log line, path or worker output). */
+export const recoveryEvidenceSchema = z.object({ activity: z.enum(NERVOUS_ACTIVITY_STATES).nullable(), launcher: z.enum(NERVOUS_LAUNCHER_BASES).nullable(),
+  launcherPhase: z.enum(DISPATCH_PREPARATION_PHASES).nullable(), absentObservations: counterSchema, absentForMs: counterSchema.nullable(),
+  unavailableForMs: counterSchema.nullable(), containerRecorded: z.boolean().nullable(), workerRecorded: z.boolean().nullable(),
+  source: z.object({ kind: z.enum(['dispatch-preparation-aborted', 'policy-turn']), eventId: identitySchema, sequence: counterSchema.positive() }).strict().nullable() }).strict();
 /** Who the decision was made for: exact issuer and subject; a persona is never part of the record. */
 export const auditPrincipalSchema = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
 /**
@@ -257,6 +271,18 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    * ends since the last settle or resume; at `bound` the Run is parked (`progression-failed`, DISPATCH_PREPARATION_ABORTED) instead of dispatched. */
   z.object({ kind: z.literal('dispatch-preparation-aborted'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema,
     phase: z.enum(DISPATCH_PREPARATION_PHASES).nullable(), aborts: counterSchema.positive(), bound: counterSchema.positive() }).strict(),
+  /**
+   * S6R-2 (owner 2026-10-23, anchor s6r-kayip-calisan-2026-10-23): one Nervous proposal, sealed before any effect and once per case (`caseId`:
+   * the Attempt or scope case and the rule; the event id is derived from it). `disposition` is what the broker made of it: `shadow-only` (recorded
+   * only), `proposal-only` (live, but no owner standing approval, an unmeasured rule or no executor) or `execute`. `target` names the Attempt
+   * (generation null when the signal does not carry it) or null for a scope case; `evidence` is the typed signal summary, `evidenceDigest` its
+   * canonical digest. Written only by the Nervous principal.
+   */
+  z.object({ kind: z.literal('recovery-detection'), caseId: digest, rule: z.object({ id: identitySchema, version: counterSchema.positive(),
+    status: z.enum(['provisional', 'live']) }).strict(), registryRevision: identitySchema, action: recoveryActionSchema,
+    disposition: z.enum(['shadow-only', 'proposal-only', 'execute']),
+    target: z.object({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, generation: counterSchema.positive().nullable() }).strict().nullable(),
+    evidence: recoveryEvidenceSchema, evidenceDigest: digest }).strict(),
 ]);
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,

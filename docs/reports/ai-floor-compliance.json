@@ -4,10 +4,10 @@
   "sources": {
     "src/domain/core/approval/index.ts": "d9920351b89a86cc6d62984cbeb7bbd8c28fbfd2a31935f08c9aa05db00ebb4b",
     "src/domain/core/approval/internal/contract.ts": "10a07d273d83e76858c4ef935d84f8db0ac52ccd5007ba1254ebf3b77fc023fa",
-    "src/domain/core/policy/index.ts": "2695371ba1e8a488b4285d1a708d2dfd6f38a97c0ec4374f7d578781bdf27421",
+    "src/domain/core/policy/index.ts": "0d46ce2a16f21d44f3df7e6f9a5552656b234b38700a0f7a06cd6a66eaaeb5fc",
     "src/domain/core/policy/internal/administer.ts": "7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004",
     "src/domain/core/policy/internal/administration.ts": "85ea655acb0a388542fae3740c47c81f6cfe7763434117e8d5aef10bc40c93b0",
-    "src/domain/core/policy/internal/ai-floor.ts": "e26ed9ee2a90c24f9764d106837e4e998fc3c9e8a6cda5188968ec4280ecab43",
+    "src/domain/core/policy/internal/ai-floor.ts": "cd40a5c7ba64f36bf35f255fe765d85c810fa2e91809ece00ee80447118364bc",
     "src/domain/core/policy/internal/decision-step.ts": "70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe",
     "src/domain/core/policy/internal/delegations.ts": "c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320",
     "src/domain/core/policy/internal/describe.ts": "0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df",
@@ -28,8 +28,8 @@
     "src/domain/core/primitives/internal/json.ts": "51c0ef2cee02728e7cf4a51bd26c6b472c7c3b54a9c49b65ad55221c6aae171f",
     "src/domain/core/primitives/internal/project-identity.ts": "9064bacf688c1269071d7d0bbb87bee94863e9ab663b74bd80e764eb948c137b",
     "src/domain/core/primitives/internal/values.ts": "8fb9eb5396a3a5f2fc5a631c30e4fbd824936e30187b7827b2bc87d48b16490a",
-    "src/domain/core/principal/index.ts": "eacb293a1b187a7ad16e7faa8df0cce664b762684639948febe1ed493f2f95ea",
-    "src/domain/core/principal/internal/principal.ts": "707e61804afb5f40f68471aa7542052bbb954f53f6e15d7e81cb9fbaccf583d2"
+    "src/domain/core/principal/index.ts": "ac08be6c1e547f4d2adf8fa73679b03729f2432ac8cd5a52f66a83ae70f8bdf6",
+    "src/domain/core/principal/internal/principal.ts": "3d65db28daf24a41bbb0cf4af1fa51a3aaf9c6bcb5cdeae8eb92a14c9d87f5dc"
   },
   "summary": {
     "routes": 266,

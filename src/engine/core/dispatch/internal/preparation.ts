@@ -35,6 +35,14 @@ export async function readDispatchLauncherEvidence(records: (name: string) => Js
   if (!parsed?.success || !sameAttemptIdentity(parsed.data.identity, identity)) throw new DispatchError('DISPATCH_CORRUPT');
   return parsed.data;
 }
+/** S6R-2: the preparation record a launcher left for one Attempt (read-only; null when none), or `unreadable` for an unparsable or foreign record. */
+export async function readDispatchPreparationRecord(records: (name: string) => JsonRecordFile, identity: AttemptIdentity): Promise<DispatchPreparationRecord | 'unreadable' | null> {
+  const read = await records(recordName(identity)).read();
+  if (read.kind === 'absent') return null;
+  if (read.kind === 'io') throw read.error;
+  const parsed = read.kind === 'ready' ? dispatchPreparationRecordSchema.safeParse(read.value) : null;
+  return parsed?.success && sameAttemptIdentity(parsed.data.identity, identity) ? parsed.data : 'unreadable';
+}
 export type DispatchPreparationInstance = z.infer<typeof instanceSchema>;
 /** This process. In the runtime service one start is one instance: a record another instance never settled means that process died in it. */
 export const DISPATCH_PREPARATION_INSTANCE: DispatchPreparationInstance = Object.freeze({ id: randomUUID(), pid: process.pid, startedAt: Date.now() });

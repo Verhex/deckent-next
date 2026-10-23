@@ -180,6 +180,9 @@
     "maxConsecutiveFailures": 3,
     "maxPreparationAborts": 2,
     "maxReservationsPerTurn": 4,
+    "nervous": {
+      "mode": "off"
+    },
     "pageSize": 64,
     "parking": {
       "schemaVersion": 1,
