@@ -84,5 +84,10 @@ describe.skipIf(process.platform === 'win32')('human delivery-card summaries thr
     const [bad, good] = await describeConfiguredDeliverySummaries(f.project, [invalid, f.request], f.options);
     expect(bad).toBeNull();
     expect(good).toMatchObject({ operation: 'deliver', subject: f.request.identity, target: { state: 'available', id: 'refs/heads/feature' } });
+    // Characterization of the per-card read path: a card whose Run may not be inspected (POLICY_DENIED inside describe) is null beside a good card.
+    const refused = { ...f.request, identity: { ...f.request.identity, runId: 'not-granted' } };
+    const [denied, kept] = await describeConfiguredDeliverySummaries(f.project, [refused, f.request], f.options);
+    expect(denied).toBeNull();
+    expect(kept).toMatchObject({ subject: f.request.identity });
   });
 });
