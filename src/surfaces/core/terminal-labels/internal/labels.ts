@@ -1,7 +1,7 @@
 import { MESSAGE_REGISTRY, t, type Locale } from '#platform/index.js';
 import type { AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
 import type { ComposerLabels } from '#surfaces/core/terminal-composer/index.js';
-import type { ConversationSessionLabels } from '#surfaces/core/terminal/index.js';
+import type { ConversationSessionLabels, WorklineLabels } from '#surfaces/core/terminal/index.js';
 import { SLASH_GROUPS, SLASH_HELP_TITLE_KEY, WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 
 /** Catalog strings of the rendered answer (terminal.render.*): narration, footer, tool lines, context, compaction. */
@@ -45,10 +45,22 @@ export function terminalComposerLabels(locale: Locale): ComposerLabels {
   // Registry descriptions/hints contain no interpolation, matching the CLI help catalog lookup.
   const catalog = MESSAGE_REGISTRY.catalogs[locale === 'tr' ? 'tr' : 'en'];
   return { pasteChip: t('terminal.composer.pasteChip', {}, locale), search: t('terminal.composer.search', {}, locale),
-    exitArmed: t('terminal.composer.exitArmed', {}, locale), shortcuts: t('terminal.composer.shortcuts', {}, locale),
+    exitArmed: t('terminal.composer.exitArmed', {}, locale), shortcuts: composerShortcuts(locale),
     placeholder: t('terminal.workline.placeholder', {}, locale), stashed: t('terminal.composer.stashed', {}, locale),
     slash: Object.fromEntries([...WORKLINE_SLASH_COMMANDS.flatMap(command => [command.descriptionKey, ...(command.argumentKey ? [command.argumentKey] : [])]), ...SLASH_GROUPS.map(group => group.labelKey), SLASH_HELP_TITLE_KEY]
       .map(key => [key, catalog[key] ?? key])) };
+}
+
+/** The keyboard help panel: the composer's lines with T3 (Alt+Up) and T4 (Ctrl+G) from their own families placed before the closing `?` line. */
+function composerShortcuts(locale: Locale): string {
+  const lines = t('terminal.composer.shortcuts', {}, locale).split('\n');
+  return [...lines.slice(0, -1), t('tuiqueue.shortcut', {}, locale), t('tuieditor.shortcut', {}, locale), ...lines.slice(-1)].join('\n');
+}
+
+/** T3/T4: a message taken back out of the queue and an editor that left the draft as it was (tuiqueue.*, tuieditor.*). */
+export function terminalHandoffLabels(locale: Locale): NonNullable<WorklineLabels['handoff']> {
+  return { withdrawn: t('tuiqueue.withdrawn', {}, locale), editor: { 'no-editor': t('tuieditor.noEditor', {}, locale), 'not-started': t('tuieditor.notStarted', {}, locale),
+    exit: t('tuieditor.exit', {}, locale), 'too-large': t('tuieditor.tooLarge', {}, locale), unsafe: t('tuieditor.unsafe', {}, locale), failed: t('tuieditor.failed', {}, locale) } };
 }
 
 /** Catalog strings of `/resume`, `/context` and `/clear` (terminal.session.*). */

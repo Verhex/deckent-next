@@ -251,3 +251,27 @@ describe('serialized local session adoption', () => {
     c.send({ kind: 'close-view', context: local });
   });
 });
+
+describe('T3 withdraw a queued message (Codex Alt+Up)', () => {
+  it('takes only a still-queued input out of the FIFO; the active, an unknown or a drained input stays as it is', async () => {
+    const f = fixture(local, { kind: 'disabled', port: null }); const c = createPanelController(f.ports);
+    c.send({ kind: 'submit', context: local, inputId: 'a', text: 'running' });
+    c.send({ kind: 'submit', context: local, inputId: 'b', text: 'second' });
+    c.send({ kind: 'submit', context: local, inputId: 'c', text: 'third' });
+    const seen: number[] = []; c.subscribe(view => seen.push(view.queued.length));
+    expect(c.send({ kind: 'withdraw-queued', context: local, inputId: 'a' })).toBe(false);
+    expect(c.send({ kind: 'withdraw-queued', context: local, inputId: 'missing' })).toBe(false);
+    expect(c.send({ kind: 'withdraw-queued', context: { ...local, sessionId: 'other-session' }, inputId: 'c' })).toBe(false);
+    expect(c.send({ kind: 'withdraw-queued', context: local, inputId: 'c' })).toBe(true);
+    expect(c.send({ kind: 'withdraw-queued', context: local, inputId: 'c' })).toBe(false);
+    expect(c.snapshot().queued).toEqual([{ inputId: 'b' }]); expect(seen).toEqual([1]);
+    f.turns[0]!.resolve(); await tick();
+    // `b` drained into the adapter: it can no longer be taken back, and the withdrawn `c` never runs.
+    expect(c.send({ kind: 'withdraw-queued', context: local, inputId: 'b' })).toBe(false);
+    f.turns[1]!.resolve(); await tick();
+    expect(f.executions.map(e => e.input.text)).toEqual(['running', 'second']);
+    expect(c.snapshot().phase).toBe('idle');
+    c.send({ kind: 'close-view', context: local });
+    expect(c.send({ kind: 'withdraw-queued', context: local, inputId: 'b' })).toBe(false);
+  });
+});

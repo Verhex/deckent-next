@@ -1,1 +1,9 @@
-{}
+{
+  "tuieditor.shortcut": "Ctrl+G  edit the draft in your editor ($VISUAL or $EDITOR)",
+  "tuieditor.noEditor": "No editor is set: set VISUAL or EDITOR (for example EDITOR=nano) and start the terminal again. The draft is unchanged.",
+  "tuieditor.notStarted": "The editor named in VISUAL or EDITOR could not be started. The draft is unchanged.",
+  "tuieditor.exit": "The editor ended with an error, so its changes were not taken. The draft is unchanged.",
+  "tuieditor.tooLarge": "The text is larger than the editor can hand back. The draft is unchanged.",
+  "tuieditor.unsafe": "The draft file was replaced by a link or by something that is not a file, so it was not read. The draft is unchanged.",
+  "tuieditor.failed": "The editor could not be used. The draft is unchanged."
+}

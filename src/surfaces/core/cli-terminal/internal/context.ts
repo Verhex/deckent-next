@@ -17,7 +17,7 @@ import type { MonitorCommandContext, WorkerTranscriptHandler } from '#surfaces/c
 import type { TerminalAdminContext } from '#surfaces/core/terminal-admin/index.js';
 import type { ComposerHistoryPort } from '#surfaces/core/terminal-composer/index.js';
 import type { SurfaceFollowEvent } from '#surfaces/core/terminal-kit/index.js';
-import type { TerminalSessionStoreView } from '#surfaces/core/terminal/index.js';
+import type { TerminalSessionStoreView, WorklineProps } from '#surfaces/core/terminal/index.js';
 import type { TerminalChatPlanHandler, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler, TerminalMentionFindHandler,
   TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler, TerminalScratchInspectHandler } from './terminal-chat.js';
 
@@ -126,6 +126,8 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
   openTerminalHistory?: (root: string, options: ConfigLoadOptions) => Promise<ComposerHistoryPort | null>;
   openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
+  /** T4 (Ctrl+G): the person's `$VISUAL`/`$EDITOR` behind the composition's adapter (temporary 0600 file, bounded read-back). */
+  externalEditor?: WorklineProps['externalEditor'];
   completeTerminalChat?: TerminalChatTurnHandler;
   streamTerminalChat?: TerminalChatStreamHandler;
   /** PRE-8 first-use card (streamed turns): the composition's offer decision and the governed `secret grant` (source `card`). */

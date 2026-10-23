@@ -2,6 +2,7 @@ import { render, type Instance } from 'ink';
 import { createElement, type ReactElement } from 'react';
 import { WorklinePaletteProvider, type WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import type { TerminalHandover } from './handoff.js';
 import { mainScreenOutput, mouseFilteredInput, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, osc52Copy, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 
 /** What the host decided before the view exists: the view receives it and renders from it. */
@@ -14,6 +15,8 @@ export interface TerminalHostContext {
   readonly wheel?: WheelSource;
   readonly pointer?: PointerSource;
   readonly copyText?: (text: string) => void;
+  /** T4: present on a real TTY. Releases mouse reporting and stops reading the real input while a child process (the editor) owns the terminal. */
+  readonly handover?: TerminalHandover;
 }
 
 export interface TerminalHostOptions {
@@ -48,8 +51,14 @@ export async function runTerminalHost(options: TerminalHostOptions): Promise<voi
   // off again on every exit path this process controls (unmount, abort, a thrown error, process exit).
   const realInput = stdin ?? process.stdin, mouse = fullscreen && realInput.isTTY === true ? mouseFilteredInput(realInput) : null;
   const mouseOff = () => { try { out.write(MOUSE_REPORTING_OFF); } catch { /* the terminal is gone */ } };
+  // Ink's own suspension drops raw mode and its listener but the stream keeps reading (the mouse filter's `data` listener, a re-armed read):
+  // pausing the real TTY stops that read, so every key reaches the child. Ink's resume re-attaches its listener; the mouse filter needs `resume`.
+  const handover: TerminalHandover | undefined = realInput.isTTY === true ? {
+    release: () => { if (mouse) mouseOff(); realInput.pause(); },
+    reclaim: () => { if (!mouse) return; realInput.resume(); try { out.write(MOUSE_REPORTING_ON); } catch { /* the terminal is gone */ } },
+  } : undefined;
   const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
-    options.view({ fullscreen, transcriptExit,
+    options.view({ fullscreen, transcriptExit, ...(handover ? { handover } : {}),
       ...(mouse ? { wheel: mouse.wheel, pointer: mouse.pointer, copyText: (text: string) => { try { out.write(osc52Copy(text)); } catch { /* the terminal is gone */ } } } : {}) }));
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
   // Full window: Ink's alternate screen (left on exit, as vim/htop/the Claude Code fullscreen renderer do) with incremental line updates.

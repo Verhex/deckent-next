@@ -262,6 +262,7 @@
         "src/adapters/core/provider-connect",
         "src/adapters/core/agent-workspace-floor",
         "src/adapters/core/terminal-history",
+        "src/adapters/core/terminal-editor",
         "src/adapters/core/workspace-write",
         "src/engine/core/runtime",
         "src/adapters/core/contract",
@@ -2250,6 +2251,10 @@
         "src/platform/core/redaction",
         "src/platform/core/output"
       ],
+      "plan": "SURFACES"
+    },
+    "src/adapters/core/terminal-editor": {
+      "dependencies": [],
       "plan": "SURFACES"
     },
     "src/adapters/core/runtime-launcher": {

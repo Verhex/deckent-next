@@ -1,0 +1,2 @@
+export { editorCommand, openExternalEditor, TERMINAL_EDITOR_LIMITS, type ExternalEditor, type ExternalEditorOptions, type ExternalEditorOutcome,
+  type ExternalEditorRefusal } from './internal/editor.js';
