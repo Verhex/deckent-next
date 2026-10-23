@@ -44,7 +44,8 @@ export class RecoveryApplication {
   async assess(input: unknown, credential?: unknown): Promise<RecoveryCase> {
     const command = assessSchema.parse(input); await this.principal(command.scopeId, credential);
     const existing = await this.ports.store.loadCase(command.scopeId, command.caseId);
-    if (existing) return existing;
+    // A sealed escalation re-issues its hold (idempotent by its case-derived command id): a crash between the seal and the hold never strands the Run.
+    if (existing) { if (existing.decision?.action === 'escalate-human') await this.hold(existing, existing.decision.code); return existing; }
     const eventId = `recovery-detection:${command.caseId}`, sealed = await this.ports.detections.load(command.scopeId, eventId), subject = sealed?.event.subject;
     if (!subject || subject.kind !== 'recovery-detection' || subject.caseId !== command.caseId || !subject.target) throw new RecoveryError('RECOVERY_NOT_FOUND');
     const target = subject.target, run = await this.ports.store.loadRun(command.scopeId, target.runId);
@@ -123,8 +124,11 @@ export class RecoveryApplication {
   /** Seals the escalation first, then (except for a Run already closing) the s5b safety hold with a case-derived command id: a replay holds once. */
   private async close(current: RecoveryCase, code: RecoveryEscalationCode): Promise<RecoveryCase> {
     const closed = await this.ports.store.saveCase(current, closeRecoveryCase(current, { action: 'escalate-human', code }, this.ports.now()));
+    await this.hold(closed, code);
+    return closed;
+  }
+  private async hold(closed: RecoveryCase, code: RecoveryEscalationCode) {
     if (code !== 'run-closed') await this.ports.hold({ schemaVersion: 1, scopeId: closed.identity.scopeId, runId: closed.identity.runId, commandId: `recovery-hold:${closed.caseId}`,
       holdReason: `recovery:${code}:${closed.caseId.slice(0, 12)}` });
-    return closed;
   }
 }

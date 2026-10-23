@@ -98,7 +98,10 @@ it('N1/N24: an unsettled effect of the lost Attempt, or a legacy open intent in 
   const h = await harness(); await h.claim('open-1');
   const escalated = await h.app.assess(command(h.caseId));
   expect(escalated).toMatchObject({ state: 'escalated', gate: { result: 'open' }, decision: { action: 'escalate-human', code: 'effects-open' } });
-  expect(h.holds).toEqual([{ schemaVersion: 1, scopeId: 's', runId: 'run', commandId: `recovery-hold:${h.caseId}`, holdReason: `recovery:effects-open:${h.caseId.slice(0, 12)}` }]);
+  const hold = { schemaVersion: 1, scopeId: 's', runId: 'run', commandId: `recovery-hold:${h.caseId}`, holdReason: `recovery:effects-open:${h.caseId.slice(0, 12)}` };
+  expect(h.holds).toEqual([hold]);
+  // A crash between the sealed escalation and its hold: the replayed assess re-issues the same idempotent hold, nothing else.
+  expect(await h.app.assess(command(h.caseId))).toEqual(escalated); expect(h.holds).toEqual([hold, hold]); expect(h.cases()).toEqual([{ state: 'escalated', revision: 2 }]);
   await expect(h.app.continueLostTask(command(h.caseId, { evidenceDigest: escalated.evidenceDigest, causeClass: 'infra-transient' }))).rejects.toMatchObject({ code: 'RECOVERY_STALE' });
   expect((await h.store.loadRun('s', 'run'))!.progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
   const legacy = await harness(), db = new DatabaseSync(legacy.path);
