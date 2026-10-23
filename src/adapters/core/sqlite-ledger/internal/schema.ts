@@ -1,4 +1,5 @@
 import { migrateAuditCheckpoints } from './migration-v56.js';
+import { migrateEffectProducerIndex } from './migration-v63.js';
 import { migrateQuotaWaits } from './migration-v54.js';
 import { migrateRunCreateApprovals } from './migration-v52.js';
 import { migrateMeasuredTariffSpend } from './migration-v49.js';
@@ -37,7 +38,10 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 62;
+export const CURRENT_LEDGER_VERSION = 63;
+// S6R-1 effect producer (v63 after s1's v62): every new effect intent records its producer (Attempt | principal) in the record; the step adds
+// only the producer-Attempt index (migration-v63.ts). Older intents stay as written. Downgrade = restore the pre-switch backup.
+export const EFFECT_PRODUCER_LEDGER_VERSION = 63;
 // ATAMA-1 system assignment (lane v62; the lead renumbers at landing): Run graphs may hold work input v2 (no model), Run execution snapshots a
 // sealed `assignment` per task, and metric rows its summary. Additive: every v61 record parses unchanged, nothing is read or rewritten; the
 // version step alone keeps an older build (which refuses a newer ledger) from reading the new records. Downgrade = restore the pre-switch backup.
@@ -306,7 +310,8 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     [AUDIT_EVENT_LEDGER_VERSION]: () => migrateAuditEvents(db), [ADOPTION_VERIFICATION_LEDGER_VERSION]: () => migrateAdoptionVerification(db),
     [MODEL_CATALOG_LEDGER_VERSION]: () => migrateModelCatalog(db), [POOL_HOLD_LEDGER_VERSION]: () => migrateExecutionPoolHolds(db),
     [RUN_PARKING_LEDGER_VERSION]: () => migrateRunParking(db), [DECISION_PORT_LEDGER_VERSION]: () => migrateDecisionPort(db),
-    [POOL_CAPACITY_LEDGER_VERSION]: () => migratePoolCapacity(db), 49: () => migrateMeasuredTariffSpend(db) };
+    [POOL_CAPACITY_LEDGER_VERSION]: () => migratePoolCapacity(db), 49: () => migrateMeasuredTariffSpend(db),
+    [EFFECT_PRODUCER_LEDGER_VERSION]: () => migrateEffectProducerIndex(db) };
   for (let next = version + 1; next <= CURRENT_LEDGER_VERSION; next++) {
     if (next === 52) { migrateRunCreateApprovals(db); continue; }
     // Code-owned steps: each runs, then the version is recorded, in this one transaction.

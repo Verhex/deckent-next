@@ -23,9 +23,12 @@ export const PREVIOUS_LEDGER_VERSION = 50;
  * repositories' rows of one target at the same sequence, makes it fail, as it must; restoring the pre-switch backup is the real path. */
 /** v59 → v58 (PRE-7): v59 widened only record vocabularies (environment park, `not-run` acceptance), so the version alone goes back —
  * exact for a ledger that holds none of them; restoring the pre-switch backup is the real path. */
+/** v63 → v62 (S6R-1 effect producer): the producer-Attempt index is dropped; intents keep their recorded producer (an older build refuses the
+ * new records), so this is exact for a ledger without producer-bearing intents; restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V62_LEDGER_SQL = 'DROP INDEX effect_intents_producer_attempt; PRAGMA user_version=62;';
 /** v62 → v61 (ATAMA-1): v62 widened only record contracts (work input v2, sealed assignment), so the version alone goes back — exact for a
  * ledger that holds none of them; restoring the pre-switch backup is the real path. */
-export const DOWNGRADE_TO_V61_LEDGER_SQL = 'PRAGMA user_version=61;';
+export const DOWNGRADE_TO_V61_LEDGER_SQL = DOWNGRADE_TO_V62_LEDGER_SQL + ' PRAGMA user_version=61;';
 /** v61 → v60 (S4 memory journal): the additive memory tables are dropped; restoring the pre-switch backup is the real path. */
 export const DOWNGRADE_TO_V60_LEDGER_SQL = DOWNGRADE_TO_V61_LEDGER_SQL + ' DROP TABLE memory_search; DROP TABLE memory_command_receipts; DROP TABLE memory_entry_revisions; DROP TABLE memory_entries; PRAGMA user_version=60;';
 /** v60 → v59 (ATAMA-0): the metrics table back to the producer-only key without `superseded_by`; rowids kept. Two outcome kinds of one producer
