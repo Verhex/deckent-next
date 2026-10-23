@@ -19,7 +19,9 @@ const unique = (values: readonly string[]) => new Set(values).size === values.le
 const authorSchema = z.object({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).strict().readonly();
 /** S8-5: an AI/system author's write carries the key and signature digest it was verified with at commit; a person's card row carries none. */
 const provenanceSchema = z.object({ author: authorSchema, commandId: identitySchema, definedAtMs: counterSchema,
-  signed: z.object({ keyId: z.string().regex(/^[a-f0-9]{64}$/), signatureDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional() }).strict()
+  signed: z.object({ keyId: z.string().regex(/^[a-f0-9]{64}$/), signatureDigest: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly().optional(),
+  /** S8-4 (§6 fold A): a revision defined from a suggestion's draft names it; `lessons-derived` text came from worker lesson claims (AI output, N36). */
+  origin: z.object({ kind: z.enum(['lessons-derived', 'template']), suggestionId: digest, template: identitySchema, lessonSetDigest: digest.nullable() }).strict().readonly().optional() }).strict()
   .refine(row => (row.signed !== undefined) === row.author.ai).readonly();
 
 /** One exact skill revision an agent uses; `digest` is that revision's content digest (the pin). */
@@ -59,7 +61,8 @@ export type SkillSignatureVerdict = 'valid' | 'invalid' | 'unknown-key' | 'unava
 export type AgentCatalogErrorCode = 'AGENT_DEFINITION_INVALID' | 'SKILL_DEFINITION_INVALID' | 'AGENT_ORG_CYCLE' | 'AGENT_ORG_DEPTH' | 'AGENT_PARENT_NOT_FOUND'
   | 'AGENT_SKILL_NOT_PINNED' | 'AGENT_WORK_CLASS_UNKNOWN' | 'SKILL_IMPORT_UNPINNED' | 'SKILL_IMPORT_PIN_MISMATCH' | 'SKILL_IMPORT_UNSIGNED' | 'SKILL_IMPORT_SIGNATURE_UNVERIFIED'
   | 'AGENT_STANDING_REFUSED' | 'AGENT_STANDING_CONFLICT' | 'AGENT_PROMPT_TOO_LARGE'
-  | 'CATALOG_SIGNER_UNKNOWN' | 'CATALOG_SIGNER_REVOKED' | 'CATALOG_SIGNER_MISMATCH' | 'CATALOG_SIGNATURE_INVALID' | 'CATALOG_SIGNATURE_REQUIRED' | 'SKILL_SIGNER_REFUSED' | 'SKILL_SIGNER_INVALID';
+  | 'CATALOG_SIGNER_UNKNOWN' | 'CATALOG_SIGNER_REVOKED' | 'CATALOG_SIGNER_MISMATCH' | 'CATALOG_SIGNATURE_INVALID' | 'CATALOG_SIGNATURE_REQUIRED' | 'SKILL_SIGNER_REFUSED' | 'SKILL_SIGNER_INVALID'
+  | 'CATALOG_SUGGESTION_STALE' | 'CATALOG_SUGGESTION_SHADOW';
 export class AgentCatalogError extends Error {
   constructor(readonly code: AgentCatalogErrorCode) { super(code); this.name = 'AgentCatalogError'; }
 }

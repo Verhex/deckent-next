@@ -1,0 +1,6 @@
+{
+  "error.CATALOG_SUGGESTION_STALE": "Bu öneri artık açık değil (karara bağlandı, reddedildi, yenisiyle değişti, süresi doldu, imzalayan iptal edildi ya da başka bir sürümü adlandırıyor). Hiçbir şey değişmedi; bkz. `deckent agents suggestions`.",
+  "error.CATALOG_SUGGESTION_SHADOW": "Bu öneri gölge kipte kaydedildi: yalnız kanıttır, kart sunmaz. Hiçbir şey değişmedi.",
+  "error.CATALOG_DRAFT_UNAVAILABLE": "Taslak sunulamıyor: derslerinden okuyabildikleriniz kuralın istediğinden az ya da hiçbiri skill boyutuna sığmıyor. Hiçbir şey değişmedi.",
+  "error.CATALOG_DRAFT_CHANGED": "Kart gösterildikten sonra taslak değişti (okuyabildiğiniz dersler ya da şablon). Hiçbir şey değişmedi; kartı yeniden açın."
+}

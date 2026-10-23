@@ -82,6 +82,8 @@ import quotaasktr from '../locales/tr/quotaask.json' with { type: 'json' };
 import headlesstr from '../locales/tr/headless.json' with { type: 'json' };
 import agentstatsen from '../locales/en/agentstats.json' with { type: 'json' };
 import agentstatstr from '../locales/tr/agentstats.json' with { type: 'json' };
+import agentsevoen from '../locales/en/agentsevo.json' with { type: 'json' };
+import agentsevotr from '../locales/tr/agentsevo.json' with { type: 'json' };
 
 export const families = [
   { en: configen, tr: configtr },
@@ -112,6 +114,7 @@ export const families = [
   { en: quotaasken, tr: quotaasktr },
   { en: headlessen, tr: headlesstr },
   { en: agentstatsen, tr: agentstatstr },
+  { en: agentsevoen, tr: agentsevotr },
   { en: deliveryen, tr: deliverytr },
   { en: memoryen, tr: memorytr },
   { en: memoryautomationen, tr: memoryautomationtr },

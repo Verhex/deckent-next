@@ -44,9 +44,13 @@ export const floorFamilies = [
     whyEn: 'Only a person adds or revokes the keys AI and system principals sign catalog actions with (S8-5, owner 2026-10-23); an AI holding this would grant itself signing authority.',
     whyTr: 'AI ve sistem kimliklerinin katalog eylemlerini imzaladığı anahtarları yalnız bir kişi ekler ya da iptal eder (S8-5, owner 2026-10-23); bunu taşıyan bir AI kendine imza yetkisi verirdi.',
     routes: ['enrol', 'add', 'revoke', 'repair', 'future-action'].map(action => ['skill-signer', 'fixture-target', action]) },
+  { id: 'catalog', en: 'Catalog suggestions and rule narrowing (every AI but the catalog aggregator)', tr: 'Katalog önerisi ve kural daraltması (katalog toplayıcı dışındaki her AI)',
+    whyEn: 'Only the catalog aggregator writes suggestions and the automatic narrowing, each signed by its own key (S8-3, §9); another AI writing them could steer which agent runs without a card.',
+    whyTr: 'Önerileri ve otomatik daraltmayı yalnız katalog toplayıcı, kendi anahtarıyla imzalayarak yazar (S8-3, §9); bunları yazan başka bir AI hangi ajanın kartsız çalışacağını yönlendirebilirdi.',
+    routes: ['suggest', 'narrow'].map(action => ['agent-catalog', 'fixture-target', action]) },
 ];
 export const protectedPaths = ['policy', 'approvals', 'identity', 'security', 'storage', 'service', 'paths', 'shell', 'network', 'layout', 'execution',
-  'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit', 'memory', 'memoryAutomation', 'runRuntime.recovery', 'runRuntime.nervous', 'models.headless',
+  'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit', 'memory', 'memoryAutomation', 'runRuntime.recovery', 'runRuntime.nervous', 'models.headless', 'catalogEvolution',
   'terminal.shell.realm', 'terminal.shell.environment', 'terminal.fetch.egress', 'terminal.fetch.allowedHosts'];
 floorFamilies.push({ id: 'configuration', en: 'Protected configuration subtrees, descendants and whole-object ancestors',
   tr: 'Korunan ayar ağaçları, alt yolları ve bütün nesneyi değiştiren üst yolları',

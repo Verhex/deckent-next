@@ -3784,7 +3784,10 @@
         "src/engine/core/model-activation",
         "src/engine/core/memory",
         "src/adapters/core/catalog-evolution-store",
-        "src/adapters/core/sqlite-model-activation"
+        "src/adapters/core/sqlite-model-activation",
+        "src/composition/core/memory",
+        "src/engine/core/policy",
+        "src/domain/core/principal"
       ],
       "plan": "LEARNING"
     },
@@ -3908,7 +3911,9 @@
         "src/domain/core/provider-catalog",
         "src/platform/core/integrity",
         "src/engine/core/authentication",
-        "src/engine/core/agent-catalog"
+        "src/engine/core/agent-catalog",
+        "src/domain/core/command",
+        "src/domain/core/memory"
       ],
       "plan": "LEARNING"
     },
@@ -4047,7 +4052,8 @@
       "headless",
       "recovery",
       "brainwait",
-      "agentstats"
+      "agentstats",
+      "agentsevo"
     ]
   },
   "literals": {

@@ -4,9 +4,11 @@ import { sha256 } from '#platform/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
 import { agentDefineCommandSchema, agentInspectQuerySchema, agentListQuerySchema, skillDefineCommandSchema, skillImportCommandSchema, skillInspectQuerySchema,
   skillListQuerySchema, AgentCatalogStoreError, type AgentCatalogAction, type AgentCatalogDependencies, type AgentCatalogMutation, type AgentCatalogStore,
-  type AgentInspection, type AgentListing, type SignedCatalogAction, type SkillInspection, type SkillListing } from './contract.js';
+  type AgentInspection, type AgentListing, type SignedCatalogAction, type SkillInspection, type SkillListing, type AgentCatalogChange } from './contract.js';
+import { catalogSuggestionAuditSubject, catalogSuggestionStateSchema } from './suggestions.js';
 import { catalogCommandDigest, personaDigest, skillContentDigest, skillSetDigest } from './digests.js';
 import { agentPromptBytes, agentPromptParts } from './selection.js';
+import { signCatalogActions } from './signing.js';
 
 type Item = AgentDefinition | SkillDefinition;
 const inScope = <T extends Item>(item: T, scopeId: string): T => { if (item.scopeId !== scopeId) throw new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT'); return item; };
@@ -70,23 +72,28 @@ export class AgentCatalogApplication {
         if (!skill || inScope(skill, command.scopeId).skillId !== ref.skillId || skill.revision !== ref.revision || skill.contentDigest !== ref.digest) throw new AgentCatalogError('AGENT_SKILL_NOT_PINNED');
         skills.push(skill);
       }
+      const decided = await this.decide(store, command, principal, previous as AgentDefinition | null, command.content.workClasses);
       const item = defineAgentRevision(previous as AgentDefinition | null, { scopeId: command.scopeId, agentId: command.agentId, commandId: command.commandId, content: command.content,
-        personaDigest: personaDigest(command.content.persona), skillSetDigest: skillSetDigest(command.content.skills), author: principal, atMs: this.deps.now(), signed });
+        personaDigest: personaDigest(command.content.persona), skillSetDigest: skillSetDigest(command.content.skills), author: principal, atMs: this.deps.now(), signed, origin: decided.origin });
       // S8-1a (§5, N16): persona + pinned skills must leave the reserved task budget of the worker prompt bound, checked here and again at admission.
       const bound = this.deps.promptCompositionMaxBytes;
       if (bound !== undefined && agentPromptBytes(agentPromptParts(item, skills)) > bound - AGENT_CATALOG_LIMITS.promptReservedTaskBytes) throw new AgentCatalogError('AGENT_PROMPT_TOO_LARGE');
       const prior = previous as AgentDefinition | null, kept = new Set(prior?.content.skills.map(ref => JSON.stringify(ref)) ?? []);
       // Q-S6: inheritance needs the same skill set or local-only added/changed skills (an imported one always restarts at candidate).
       const importChanged = skills.some(skill => skill.source.kind === 'import' && !kept.has(JSON.stringify({ skillId: skill.skillId, revision: skill.revision, digest: skill.contentDigest })));
-      return { item, standings: initialAgentStandings(item, prior ? { definition: prior, standings: await store.standings(command.scopeId, prior.agentId, prior.revision) } : null, importChanged) };
+      return { item, standings: initialAgentStandings(item, prior ? { definition: prior, standings: await store.standings(command.scopeId, prior.agentId, prior.revision) } : null, importChanged),
+        suggestion: decided.suggestion };
     }) as Promise<AgentCatalogMutation<AgentDefinition>>;
   }
   /** A person's own skill text (source local, unsigned, pinned by its content digest). Import from elsewhere goes through `importSkill` only. */
   async defineSkill(input: unknown, credential?: unknown): Promise<AgentCatalogMutation<SkillDefinition>> {
     const command = skillDefineCommandSchema.parse(input), { principal, authorization } = await this.admit('define', command.scopeId, credential);
-    return this.mutate('skill', command, command.skillId, principal, authorization.revision, async (_store, previous, signed) => ({ item: defineSkillRevision(previous as SkillDefinition | null, {
-      scopeId: command.scopeId, skillId: command.skillId, commandId: command.commandId, content: command.content, contentDigest: skillContentDigest(command.content),
-      source: { kind: 'local' }, signature: { status: 'unsigned' }, author: principal, atMs: this.deps.now(), signed }) })) as Promise<AgentCatalogMutation<SkillDefinition>>;
+    return this.mutate('skill', command, command.skillId, principal, authorization.revision, async (store, previous, signed) => {
+      const decided = await this.decide(store, command, principal, null, null);
+      return { item: defineSkillRevision(previous as SkillDefinition | null, { scopeId: command.scopeId, skillId: command.skillId, commandId: command.commandId, content: command.content,
+        contentDigest: skillContentDigest(command.content), source: { kind: 'local' }, signature: { status: 'unsigned' }, author: principal, atMs: this.deps.now(), signed, origin: decided.origin }),
+      suggestion: decided.suggestion };
+    }) as Promise<AgentCatalogMutation<SkillDefinition>>;
   }
   /** Floor (d) for every principal and whatever policy allows: pinned by the digest of the received bytes and signed over (id, digest) by a key the
    * person registered for `import` — verified by the store inside the write transaction (S8-5), so a key revoked before commit refuses the import. */
@@ -99,24 +106,35 @@ export class AgentCatalogApplication {
       scopeId: command.scopeId, skillId: command.skillId, commandId: command.commandId, content: command.content, contentDigest, signed,
       source: { kind: 'import', ref: command.source.ref }, signature: { status: 'verified', ...signature }, author: principal, atMs: this.deps.now() }) }), 'import') as Promise<AgentCatalogMutation<SkillDefinition>>;
   }
-  /**
-   * S8-5 (S8-DESIGN §8, §9): an AI/system principal writes only signed — with the `signed` its external key made, or through the host signer
-   * service with its own enrolled key — over the `catalog-action:1` bytes built here from the typed command; a person's card write carries none.
-   * The key state is read again in the store's commit transaction (a revoke in between refuses the write); the append-only revocation log is
-   * checked first, so a key revoked there (after a restore) or a broken log refuses before any signing.
-   */
+  /** S8-5: an AI/system write is signed over the `catalog-action:1` bytes built here from the typed command (`signCatalogActions`); a person's carries none. */
   private async sign(store: AgentCatalogStore, kind: 'agent' | 'skill', action: 'define' | 'import', command: { scopeId: string; commandId: string; expectedRevision: number | null;
     signed?: CatalogSignature | undefined }, itemId: string, revision: number, digest: string, principal: VerifiedPrincipal): Promise<SignedCatalogAction | undefined> {
-    if (!isAiPrincipal(principal)) { if (command.signed) throw new AgentCatalogError('CATALOG_SIGNATURE_INVALID'); return undefined; }
-    const revoked = this.deps.revocations ? await this.deps.revocations.list() : [];
-    const by = { issuer: principal.issuer, subject: principal.subject }, rows = await store.signers(command.scopeId, AGENT_CATALOG_LIMITS.signersPerScopeMax);
-    const key = command.signed ? rows.find(row => row.keyId === command.signed!.keyId) : rows.find(row => row.purpose === 'action' && row.state === 'active'
-      && row.boundPrincipal?.issuer === by.issuer && row.boundPrincipal.subject === by.subject);
-    if (!key || (!command.signed && (key.custody !== 'host' || !this.deps.custody))) throw new AgentCatalogError(command.signed ? 'CATALOG_SIGNER_UNKNOWN' : 'CATALOG_SIGNATURE_REQUIRED');
-    if (revoked.some(row => row.scopeId === command.scopeId && row.keyId === key.keyId)) throw new AgentCatalogError('CATALOG_SIGNER_REVOKED');
-    const signedAction = { scopeId: command.scopeId, action, target: { kind, id: itemId, revision }, expectedRevision: command.expectedRevision, contentDigest: digest,
-      toStanding: null, suggestionId: null, commandId: command.commandId, principal: by };
-    return { action: signedAction, keyId: key.keyId, signature: command.signed?.signature ?? await this.deps.custody!.signAction(key.keyId, signedAction) };
+    return (await signCatalogActions(this.deps, store, principal, command.scopeId, [{ scopeId: command.scopeId, action, target: { kind, id: itemId, revision },
+      expectedRevision: command.expectedRevision, contentDigest: digest, toStanding: null, suggestionId: null, commandId: command.commandId,
+      principal: { issuer: principal.issuer, subject: principal.subject } }], command.signed))[0];
+  }
+  /**
+   * S8-4 define from a suggestion (§6 fold A; a person's card only — the draft is rendered at card time under their read filter and never stored): the
+   * suggestion must be open, live (not shadow), unexpired and of a kind this define decides — a skill from `propose-skill` (origin `lessons-derived`: AI
+   * output, N36), an agent from `propose-agent` (binding its WorkClass) or the next revision of the agent a `revise-agent` names. Decided in this commit.
+   */
+  private async decide(store: AgentCatalogStore, command: { scopeId: string; commandId: string; fromSuggestion?: string | undefined }, principal: VerifiedPrincipal,
+    previous: AgentDefinition | null, workClasses: readonly string[] | null) {
+    if (!command.fromSuggestion) return {};
+    if (isAiPrincipal(principal)) throw new AgentCatalogError('AGENT_STANDING_REFUSED');
+    const found = await store.suggestion(command.scopeId, command.fromSuggestion), at = this.deps.now();
+    if (!found) throw new AgentCatalogStoreError('AGENT_CATALOG_NOT_FOUND');
+    const { record, state } = found, key = record.key, p = record.proposed;
+    if (record.scopeId !== command.scopeId) throw new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT');
+    if (record.mode !== 'on') throw new AgentCatalogError('CATALOG_SUGGESTION_SHADOW');
+    const fits = workClasses === null ? record.kind === 'propose-skill' : record.kind === 'propose-agent' ? key.kind === 'work-class' && workClasses.includes(key.workClass)
+      : record.kind === 'revise-agent' && key.kind === 'agent' && previous !== null && key.agentId === previous.agentId && key.revision === previous.revision;
+    if (state.state !== 'open' || at >= record.expiresAtMs || !fits) throw new AgentCatalogError('CATALOG_SUGGESTION_STALE');
+    const origin = p.kind === 'skill-draft' ? { kind: 'lessons-derived' as const, suggestionId: record.suggestionId, template: p.template, lessonSetDigest: p.lessonSetDigest }
+      : p.kind === 'agent-draft' ? { kind: 'template' as const, suggestionId: record.suggestionId, template: p.template, lessonSetDigest: null } : undefined;
+    const next = catalogSuggestionStateSchema.parse({ schemaVersion: 1, scopeId: record.scopeId, suggestionId: record.suggestionId, state: 'decided', revision: state.revision + 1,
+      by: { issuer: principal.issuer, subject: principal.subject, ai: false }, atMs: at, commandId: command.commandId, decision: 'define', supersededBy: null });
+    return { origin, suggestion: { previous: state, next, record } };
   }
   /** The current revision's standings, each checked against the row it belongs to (scope, agent, revision, a bound WorkClass). */
   private async standingsOf(store: AgentCatalogStore, item: AgentDefinition): Promise<readonly AgentStanding[]> {
@@ -126,7 +144,7 @@ export class AgentCatalogApplication {
   }
   private async mutate(kind: 'agent' | 'skill', command: { scopeId: string; commandId: string; expectedRevision: number | null; signed?: CatalogSignature | undefined }, itemId: string,
     principal: VerifiedPrincipal, policyRevision: string, next: (store: AgentCatalogStore, previous: Item | null, signed: { keyId: string; signatureDigest: string } | undefined) =>
-      Promise<{ item: Item; standings?: readonly AgentStanding[] }>, action: 'define' | 'import' = 'define'): Promise<AgentCatalogMutation<Item>> {
+      Promise<{ item: Item; standings?: readonly AgentStanding[]; suggestion?: AgentCatalogChange['suggestion'] }>, action: 'define' | 'import' = 'define'): Promise<AgentCatalogMutation<Item>> {
     const digest = catalogCommandDigest(kind, command, principal);
     const store = await this.deps.openStore('write');
     try {
@@ -146,12 +164,13 @@ export class AgentCatalogApplication {
       if (previous && inScope(previous, command.scopeId).revision !== command.expectedRevision) throw new AgentCatalogStoreError('AGENT_CATALOG_REVISION_CONFLICT');
       const signed = await this.sign(store, kind, action, command, itemId, (previous?.revision ?? 0) + 1, digest, principal);
       const mark = signed && { keyId: signed.keyId, signatureDigest: sha256(signed.signature) };
-      const { item, standings = [] } = await next(store, previous, mark);
+      const { item, standings = [], suggestion } = await next(store, previous, mark);
       const contentDigest = 'agentId' in item ? item.personaDigest : item.contentDigest;
       const event: AuditEvent = { schemaVersion: 1, eventId: this.deps.eventId(), scopeId: command.scopeId, principal: { issuer: principal.issuer, subject: principal.subject },
         policyRevision, atMs: item.provenance.definedAtMs, subject: { kind: 'agent-catalog', item: kind, action, id: itemId, commandId: command.commandId, revision: item.revision,
           contentDigest, skillSetDigest: 'agentId' in item ? item.skillSetDigest : null, ...(mark ? { signed: mark } : {}) } };
-      const receipt = { scopeId: command.scopeId, commandId: command.commandId, kind, itemId, revision: item.revision, digest }, seal = signed ? { signed } : {};
+      const decided = suggestion && { ...suggestion, event: { ...event, eventId: this.deps.eventId(), atMs: suggestion.next.atMs, subject: catalogSuggestionAuditSubject(suggestion.record, 'decide', suggestion.next) } };
+      const receipt = { scopeId: command.scopeId, commandId: command.commandId, kind, itemId, revision: item.revision, digest }, seal = { ...(signed ? { signed } : {}), ...(decided ? { suggestion: decided } : {}) };
       const saved = await store.commit(kind === 'agent' ? { kind, previous: previous as AgentDefinition | null, next: item as AgentDefinition, receipt, event, standings, ...seal }
         : { kind, previous: previous as SkillDefinition | null, next: item as SkillDefinition, receipt, event, ...seal });
       return { schemaVersion: 1, replayed: saved.replayed, item: saved.item };

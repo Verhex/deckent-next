@@ -1,0 +1,6 @@
+{
+  "error.CATALOG_SUGGESTION_STALE": "That suggestion is no longer open (decided, dismissed, superseded, expired, its signer revoked, or it names another revision). Nothing was changed; see `deckent agents suggestions`.",
+  "error.CATALOG_SUGGESTION_SHADOW": "That suggestion was recorded in shadow mode: it is evidence only and offers no card. Nothing was changed.",
+  "error.CATALOG_DRAFT_UNAVAILABLE": "No draft can be offered: fewer of its lessons are readable for you than the rule needs, or none fits the skill size. Nothing was changed.",
+  "error.CATALOG_DRAFT_CHANGED": "The draft changed after the card was shown (the lessons you may read, or the template). Nothing was changed; open the card again."
+}
