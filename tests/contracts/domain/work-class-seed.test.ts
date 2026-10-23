@@ -23,10 +23,13 @@ it('the Core seed is a v2 registry: each class has an acceptance profile and a d
 const identity = { scopeId: 's', runId: 'r', layoutRevision: 'l', taskId: 't', attemptId: 'a', generation: 1 };
 const graph = { schemaVersion: 2, revision: 1, tasks: [{ id: 't', kind: 'small', dependencies: [], acceptanceCriteria: ['exit'] }],
   criterionDefinitions: [{ id: 'exit', version: 1, description: 'The worker exits cleanly', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] };
-function evaluatingSeedTask() {
-  const execution = resolveExecutionRegistry(graph, { schemaVersion: 1, revision: 'execution-r1',
+function seedExecution(input: unknown = graph) {
+  return resolveExecutionRegistry(input, { schemaVersion: 1, revision: 'execution-r1',
     profiles: [{ id: 'profile', version: 1, adapter: { id: 'test', version: 1 }, parameters: {} }], kinds: [{ kind: 'small', profile: { id: 'profile', version: 1 } }],
     evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] }, { profile() { return undefined; }, criterion() { return undefined; } });
+}
+function evaluatingSeedTask() {
+  const execution = seedExecution();
   const run = reserveRunTasks(createRun({ scopeId: 's', runId: 'r', layoutRevision: 'l' }, graph, 0, execution), 0, [identity], 0);
   const attempt = applyAttemptObservation(createAttempt(identity), { protocolVersion: 1, identity, sequence: 1, eventId: 'exit', result: { kind: 'exited', exitCode: 0 } }, 0);
   return observeRunAttempt(run, 1, attempt);
@@ -42,4 +45,9 @@ it('a seed-bound task freezes the seed profile and keeps today\'s conclusions fo
   // Negative: a verdict that names no evidence type is missing evidence under the profile and never passes silently.
   const untyped = inspectTaskEvaluation(run, bindTaskAcceptance(run, evaluation('pass')));
   expect(untyped.conclusion).toBe('unknown'); expect(untyped.evaluation.acceptance).toMatchObject({ score: 0, ceilingReasons: ['missing-evidence'] });
+});
+it('a declared criterion acceptance on a Core class must fit the seed profile: a mismatch is a typed admission refusal (behavior change)', () => {
+  const declared = (acceptance: unknown) => ({ ...graph, criterionDefinitions: [{ ...graph.criterionDefinitions[0]!, acceptance }] });
+  expect(seedExecution(declared({ criterionType: 'completion', evidenceTypes: ['retained-artifact'] })).tasks[0]!.acceptance).toMatchObject({ workClass: 'small' });
+  expect(() => seedExecution(declared({ criterionType: 'correctness', evidenceTypes: ['verification-result'] }))).toThrow('TASK_EVALUATION_PROFILE_MISMATCH');
 });
