@@ -40,7 +40,8 @@ function dump(path: string) {
     return { version: db.prepare('PRAGMA user_version').get(), schema,
       tables: Object.fromEntries(schema.filter(row => row.type === 'table').map(row => {
         const name = String(row.name).replaceAll('"', '""');
-        return [row.name, db.prepare(`SELECT * FROM "${name}" ORDER BY rowid`).all()];
+        // FTS5 shadow tables (ledger v61 memory search) are WITHOUT ROWID: they are ordered by their key column instead.
+        return [row.name, db.prepare(`SELECT * FROM "${name}" ORDER BY ${/WITHOUT ROWID/i.test(String(row.sql)) ? '1' : 'rowid'}`).all()];
       })) };
   } finally { db.close(); }
 }
