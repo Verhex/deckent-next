@@ -1,7 +1,7 @@
-# Owner kararları ve tarihsel envanter — PLAN.md'den taşındı (2026-10-05)
+# Owner kararları ve tarihsel envanter
 
-Tarihli owner kararları, legacy → Next envanteri, modül yapısı/bitiş tahmini, Claude/Anthropic bulguları ve dış owner kararı eşlemesi; özgün metin ve tarihler korunmuştur. Karar indeksi PLAN.md'dedir.
-Kaynak/Source: PLAN.md @58537c7f lines 32–73, 111–116, 192–215, 226–243, 318–334, 470–471, 475–479, 481–482, 507–540, 549–575, 576–588; text below is verbatim.
+Tarihli owner kararları, legacy → Next envanteri, modül yapısı/bitiş tahmini, Claude/Anthropic bulguları ve dış owner kararı eşlemesi. Bu yaşayan bir kayıttır: ilk bölümler 2026-10-05'te PLAN.md'den taşındı, sonraki owner kararları doğrudan buraya tarih sırasıyla yazılır. Karar indeksi PLAN.md'dedir.
+Taşınan ilk bölümlerin kaynağı/Source: PLAN.md @58537c7f lines 32–73, 111–116, 192–215, 226–243, 318–334, 470–471, 475–479, 481–482, 507–540, 549–575, 576–588; o bölümlerin metni birebirdir (verbatim).
 
 **Owner kararı 2026-09-23 — iki hat ve Enterprise katmanı (Jev 124d141b two_lanes_contract_gate 0,99; core-memory kanun 10):**
 Ticari hedef Deckent-Enterprise; Core Apache-2.0/açık kaynak ve bağımsız (owner 2026-09-29 lisans kararı önceki MIT ifadesini aşar; `LICENSE`). Her Core sözleşmesi Enterprise ve ERP adapter'larının
@@ -537,6 +537,49 @@ Bu ek önceki tarihlerdeki eksik kararları kaynağıyla tamamlar. Aynı günün
 - **DIR4:** Codex ağırlıklı worker; PTY/soket host doğrulaması lead'de, lane sonucu bağımsız veya canlı kabul değildir. Kaynak: `/home/alperen/.claude-team/projects/-home-alperen-deckent-next/memory/project-beta-dogfood-promotion-2026-10-15.md`. Plan: [ilgili iş](../plan/roadmap-2026-10-15.md#beta-sonrasi).
 - **PROD-CMP:** Beta sonrası Paperclip/Hermes karşılaştırmasıyla Desktop, ürünleşme, hızlı onboarding ve entegrasyon aşamaları (A0–A7) ayrıntılı ele alınır; brief beta sonrası iş planına referansla alınır, beta sırası korunur. Kaynak: kanal 2560 (Codex analiz oturumu, owner 2026-10-15), `.deckent/docs/plan/post-beta-productization-paperclip-hermes.md`.
 
+<a id="karar-2026-10-16"></a>
+
+## Owner kararları — 2026-10-16…19 (belge denetimi eki, 2026-10-23)
+
+Bu ek, 2026-10-16 ile 10-19 arasında verilip burada kaydı olmayan owner kararlarını kısaca tamamlar. Kaynak: lead oturumunun karar notları ve maddelerde adı geçen tarihli dış `proof/` klasörleri. Sonraki bir karar önceki seçimi daraltır ya da aşar; madde bunu söyler. Kayıt uygulama veya kabul değildir.
+
+### 2026-10-16
+
+- **POLICY-V12:** temiz kurulum provası (dış `proof/TEMIZ-KURULUM-2026-10-16/`) yeni kurulumda `runtime restart` yapılamadığını ve kurulum sahibinin scope inceleyemediğini gösterdi. Owner "Evet, v12 hazırla" dedi: ilk kurulum şablonu v12 kurulum sahibine insan scope incelemesi ve servis kapatma izni verir, kurulum `service.identity` yazar, v11 için `--upgrade` yolu vardır; yapay zekâya yeni izin verilmez. Owner v12'yi TESLIM-KUYRUGU ile tek geçişte canlıya aldırdı (alpha.43).
+- **/do hotfix ve 50 görev:** owner'ın canlı `/do` denemesi üç yerden kırıldı (dış `proof/DO-TEST-2026-10-16`). Owner "Şimdi hotfix" dedi; hotfix de Astra, CI ve owner'ın canlı sorusundan geçer. Tek `/do` çalışınca N1'de `deckent` CLI ile 50 gerçek dogfood görevi tasarlanıp tamamlanır.
+- **K1–K8:** owner "Beta sonrası kalsın" dedi (iş daha önce yanlışlıkla tamamlandı diye bildirilmişti; yalnız Y1 `/runs` tuşları vardı). 2026-10-18'de beta işi olarak ayrı dalda paralel başladı.
+- **TESLIM-KUYRUGU:** owner "Şimdi, 50 görevden önce" dedi. Hedef başına sıralı teslim kuyruğu (eşzamanlılık config'ten); taban kayınca yol çakışması denetimi ve güncel hedef başında yeniden hazırlanan aday, kabul birleşik ağaçta yeniden doğrulanır; çakışma tipli `needs-reattempt` verir, yeni Attempt yalnız kuralla açılır, kör tekrar yok; benimseme her zaman toplu y/N penceresinden hızlı ileri, asla main'e; ERP için kayıt sürümü CAS karşılığı.
+- **Masaüstü hazırlığı:** owner masaüstü dilim 3 (olay akışı), dilim 4 (ayrı depo, karar yüzeyi yok) ve hazırlığı beta öncesine aldı. 2026-10-18'de masaüstünün tamamı betaya alındı; 2026-10-23'te masaüstü tasarım şeridi iptal edildi (aşağıda).
+- **AJAN-ORG altı cevap** (yol haritası ORG-Q1–Q6; kayıt dış `proof/ANALIZ-AJAN-ORG-DESKTOP-2026-10-14/OWNER-KARARLARI-2026-10-16.md`): (1) katı, devredilemez taban yalnız iki maddedir: sabitlenmemiş ya da imzasız skill içe aktarılamaz ve bu katı kuralları yapay zekâ değiştiremez; kendi önerisini onaylama, terfi ve yetki genişletme politikayla açılabilir. (2) Ajan tanımı yalnız gereksinim taşır; kesin modeli atama seçer. (3) Core: katalog, karne, atama, Run tavanı, tek makine ve küçük takım; Enterprise: merkez, IdP/SCIM, çok makine, kurumsal yönetişim. (4) Ajan ve skill tanımları defterde kapsamlı katalog verisidir. (5) npm'de tek paket `@verhex/deckent`; masaüstü ayrı kurulum programıdır. (6) Yeni ajan/skill/terfi/yetki genişletme ve Run başına bir kart varsayılandır; aday ajanlar kalıcı kabul kullanamaz.
+- **AJAN-ORG uygulama sınırı:** bugünkü "MCP onay veremez / Brain yetki vermez" tabanı, politika devrini getiren dilim tasarım, kanun denetimi ve Astra ile ayrı gelene kadar aynen geçerlidir. Masaüstünden N1'e kayıt beta sonrasıdır.
+- **GitHub Issues ve Projects:** beta geçişinden sonra her iş bir GitHub issue'su olarak proje panosunda izlenir ve owner depo adını `deckent` yapar. Beta öncesi bugünkü akış (PLAN, host panosu, proof) sürer.
+
+### 2026-10-17
+
+- **İş hedefi kurulumu:** kuyruk `execution.workTargets` olmadan çalışmıyordu (dış `proof/TESLIM-KUYRUGU-2026-10-16/IS-HEDEFI-KARAR-ANALIZI.md`). Owner A+ seçti: canlı ve N1'de ayrı klon, iş hedefi, doğrulama ve kuyruk süreleri ürün komutlarıyla kurulur; her uygulama önizleme ve owner onayıyla yapılır; yeni kurulum için varsayılan hedef beta sonrası. Teslim başına doğrulama hafif kontroldür (typecheck + lint-arch/lint-docs); tam test sürümden önce toplu kalır. Teslim edilen iş main'e yalnız PR ile ulaşır; her canlı geçişten sonra kuyruk boşken teslim dalı main'e getirilir.
+- **Node 24 tabanı ve beta öncesi düzeltmeler:** Node 24.21'deki yerel çökmenin kök nedeni bulundu (dış `proof/NODE24-CRASH-2026-10-17/REPORT.md`); `engines` tabanı Node ≥ 24.22.0 oldu, Node 24 desteği korundu (2026-10-22 güvenlik güncellemesiyle sürüm başına 24.22.1 / 26.12.1). İşçi imajı sayaç düzeltmesi kabul edildi; crash-loop breaker ve S6 bağımlılık bağlama sınıfı (kilit dosyası özetine göre bir kez taranır) beta öncesine alındı.
+- **Jev 1.14:** tam model kimliği `jev-1.14.0` kullanılır; kapılama eski yeterlilik sorusuyla sürer, yeni tek önermeli soru gölge olarak kaydedilir; eşikler değişmez; yaklaşık iki hafta sonra gölge ve kapılama verisi owner'a gelir.
+- **Auditor modeli** (dış `proof/AUDITOR-MODEL-2026-10-17/`): owner analiz kartı açtırdı; ürün kodu beta sonrası. Modelin bir araç çağrısını durdurup durduramayacağına gölge ölçümünden sonra karar verilir; ölçüm prompt injection izlerini ayrıca raporlar. Model hiçbir zaman son karar verici değildir; deterministik kapı tek uygulayıcıdır; denetçi ilkesi salt okurdur.
+- **Model kataloğu güncelliği (beta sonrası):** sağlayıcı model listeleri çekilip seçilmiş katalogla karşılaştırılır, yeni ve kalkan modeller doctor/monitor'da gösterilir; hiçbiri kendiliğinden etkinleştirilmez.
+
+### 2026-10-18
+
+- **Beta kapsam dondurması:** kalan beta öncesi kod tek pakette (alpha.46, beta adayı); sonrası yalnız kanıt. SIWC görünür ChatGPT girişi, Y3 onay kanalı, Y4 taban ve D3 uzak karar tasarımı betaya taşındı. Owner aynı gün alpha.46'yı yayımlattı ve alpha.47'yi (çalışma zamanı R1–R6) "beta öncesi son kod paketi" olarak açtı; sonraki paketler (alpha.48 CLI-İNSAN, alpha.50–53) de owner kararlarıyla geldi.
+- **CLI ve insan yüzeyleri:** CLI komut adları kısaltılmaz; CLI'yı esas olarak AI araçları kullanır ve başarı, bir AI'ın doğru komutu bulup bütün işlevleri kullanabilmesidir. İnsan yüzeyleri (terminal, monitor, masaüstü) sade ve tekrarsızdır.
+- **Kontrol tıkanma değildir:** tam otomatik modda düşük riskli okumalar için tekrar tekrar onay istenmesi ürün kusurudur. İstenen: satır içi onay ve soru kartları, ok tuşları, tek ve çok seçimli soru altyapısı ve kişinin yazdığı, geri alınabilir "her zaman izin ver" kuralı. Devredilemez taban için "her zaman" sunulmaz.
+- **Kanıtlanmış terminal deneyimi:** Claude Code ve Codex'te alt giriş çubuğu sabittir; terminal ve masaüstü etkileşimleri denenmiş yolları kopyalar, yeniden keşfetmez.
+- **50 görev ölçütü:** başarı, 50 görevi Deckent'in kendisinin yürütmesidir; sonuç görev başına "Deckent tek başına / lead müdahalesi" olarak raporlanır. Bağımsız N1 görevleri paralel dalgalarla koşar ve tek kuyruk partisinde onaylanır.
+- **Beta kapsamı, akşam** (dış `proof/BETA-PLAN-2026-10-18`): masaüstünün 17 dilimi betada; SIWC abonelikle sohbet, Brain ve Codex işçileri (OAuth belirteci işçiye verilmez, röle host'ta); alpha.47 sınırlı otomatik davranış (aynı dosya çakışmasında bir otomatik yeniden deneme, sessiz işçiye uyarı ve durdurma, boş rapor tipli hata); paket satır bütçeleri alpha.47 için geçici olarak artırıldı. Optimizasyon beta sonrası ayrı bir programdır.
+- **Codex işçi belirteci:** Codex işçisinin bugünkü kısa ömürlü belirteç yolu kalır (yenileme belirteci işçiye girmez); bilinen sınırlarda yazılıdır.
+- **Yedek zamanlaması:** `backup.schedule` tek değer alır (off, daily ya da before-upgrade); günlük yedekli kurulum defter yükseltmesinden hemen önce yedek almaz. Bu bilinen sınırda yazılıdır; ikisinin birlikte seçilmesi yedek işi yeniden açılınca konuşulur.
+
+### 2026-10-19
+
+- **CLI-INSAN:** owner kurulu alpha.46'da her komutu tek tek inceledi ([CLI incelemesi](../plan/cli-review-2026-10-19.md)) ve "bu tamamlanmadan betaya çıkış yok" dedi: beta kapısı 8, alpha.48 paketi. Ana yardım 100–150 satır olur, komutlar ve seçenekler ayrı bölümde durur, `--help --all` ayrımı kalkar; yardımda görünen her komut tek başına ya güvenli varsayılanını yapar ya alt komutlarını ve eksik argümanı gösterir.
+- **alpha.48 kapsamı ve güvenlik:** CLI-INSAN, rehberli kurulum (Docker kurulumu kişinin onayıyla), Claude Security bulguları ve toplu politika şablonu v13. SEC-1 için bütün yüzeylerde terminal tanığı, SEC-2 için MCP güveninin kartla bir kez yeniden onayı; paket satır bütçesi adapters 29250 / composition 7650.
+- **Yönetici görünürlüğü:** yöneticiler reddedilen ve başarısız scope adlarını tam görür. Bu sabit bir rol denetimi değil, verilebilir ve geri alınabilir bir politika eylemidir (v13 şablonu kurulum yöneticisine varsayılan verir); diğerleri yalnız sayıyı görür, karar başarısızsa sayıya düşülür. Her görünürlük yeteneği kendi adlı politika eylemini alır; Enterprise eşlemeyi merkezden dağıtır.
+- **Dış değerlendirme aracı:** owner, Deckent verisini üçüncü taraf bir buluta yükleyen pazar simülasyonu aracını reddetti; ileride önerilecek böyle bir araç tamamen yerel çalışmalıdır.
+
 <a id="beta-rakip-2026-10-20"></a>
 
 ## Owner kararı — 2026-10-20: rakip taramasından beta işleri
@@ -657,3 +700,54 @@ Kaynak: ana oturum (lead 4d4830b2). Lead toplu 2026-10-22'yi ayrı alpha.52 sür
 - **Yönetim:** lead projeyi skill'lerle yönetir, işçilere de skill kullandırır.
 - **Sıradaki owner adımı:** owner test senaryosunu yapıp Deckent'in kontrolünü yeniden ele alır.
 - **Beta geçişi:** npm paketi yayını; owner: scope'suz `deckent` adı npm'de `dedent` benzerlik uyarısına takılıyor, "muhtemelen verhex/deckent alacağız" → scope'lu `@verhex/deckent` (`npm install -g @verhex/deckent`; @'siz `Verhex/deckent` GitHub kısayoludur), ad yayından önce kesinleşir; tüm dokümantasyonun güncellenmesi (kurulumu yapan AI/insan ne gerekir, ne yapabilir), deckent.ai sitesi ve docs sayfası; ardından beta iş maddelerinin yeniden sıralanması, dogfood ile geliştirme ve tam ürünleşme. Owner: ilk push 2026-09-16; ilk hedef tarihin gerisindeyiz.
+
+
+<a id="alpha52-release-2026-10-22"></a>
+
+## Owner kararları — 2026-10-22: alpha.52 geçişi, N1 = main, Node güvenlik güncellemesi, alpha.53 kapsamı
+
+Kaynak: ana oturum (lead) owner kararları. Kayıt yalnız owner'ın seçimlerini tutar; bir kabul veya beta kararı değildir.
+
+- **alpha.52 merge ve geçiş:** owner "Birleştir ve geç" dedi; PR #110, merge `4166bfbd`; canlı 20:20Z, N1 20:21Z (switch `4166bfbd2892-e673f0035254`, defter v59). Cursor kataloğu `cursor-cli-subscription` canlıya ve N1'e yalnız geçiş kalıcı olduktan sonra (sağlık ve yaklaşık bir günlük kullanım) kaydedilir; kayıttan sonra alpha.51'e dönüş yalnız yedekten olur.
+- **N1 = main:** owner önce "n1 ve main her zaman aynı olsun" dedi, sonra netleştirdi: "paketlerle eşitleme kuralı kalıcı, her değişikliği direkt almaya gerek yok." Her canlı sürüm geçişinde N1 çalışma zamanı, N1 projesi ve teslim klonu kuyruk boşken yeni main'e hızlı ileri alınır; sürümsüz toplu birleştirmeler N1 eşitlemesini tetiklemez; N1 benimsemeleri her dalgadan sonra PR ile main'e ulaşır; paylaşılan profillerde canlı ve N1 yapılandırması eşit tutulur.
+- **Node güvenlik güncellemesi:** owner 2026-10-21 Node güvenlik sürümünün her yere uygulanmasını istedi ("kaçırmayalım"): host Node 26.12.1 ve 24.22.1, başlatıcılar, servis birimleri ve işçi imajı; ürünün sürüm başına tabanı (`engines` ≥ 24.22.1 / ≥ 26.12.1) toplu 2026-10-22 ile main'e indi.
+- **Bağımlılık riski ve yerel model:** fast-uri için kabul edilen risk aynı koşullarla 30 gün uzatıldı (2026-11-21'e kadar). Yerel vLLM Qwen servisi owner yeniden açana kadar kapalıdır; GPU başka projelerde kullanılır.
+- **alpha.53 kapsamı (gece, çoklu seçim):** beta öncesi kod kalmadığı ve betaya zaman olduğu için TESLIM-KARTI-OZET ile OTONOM-TESLIM'in ilk adımı, BETA-ISCI-BAGLAM ve CLI-INSAN kalanı öne çekildi. Beta geçişi hazırlığı (npm, doküman, site) şimdi seçilmedi.
+
+<a id="alpha53-2026-10-23"></a>
+
+## Owner kararları — 2026-10-23: alpha.53, yeni yüzey izni, çekirdek katmanlar, alpha.54/55 programı
+
+Kaynak: ana oturum (lead) AskUserQuestion turları; alpha.53 planı dış `proof/ALPHA53-2026-10-23/PLAN.md`, program `proof/ALPHA54-2026-10-23/PROGRAM.md`. Kayıt yalnız owner'ın seçimlerini tutar; bir kabul veya beta kararı değildir.
+
+### alpha.53 seçimleri ve geçişi
+
+- **Seçimler (hepsi önerilen):** (1) gölge kural `autonomy@1` için uygun model kararları `verified` ve `start-name-matched`; sağlayıcının seçtiği, doğrulanmamış ya da ikame model `would-hold` alır. (2) Codex ve yeni işçi profillerinde keşif varsayılan olarak `disabled`; canlı ve N1 Codex profilleri owner kartıyla ve önce/sonra ölçümüyle taşınır. (3) İşçi talimat kaynağı proje başına seçilir (`worker-md`, `agents-md` ya da `none`); Deckent deposu yalnız işçiye yönelik kısa bir dosya alır, CLAUDE.md ve AGENTS.md değişmez. (4) Cursor checkout'unda talimat dosyaları gizlenir (seyrek checkout); eşitlik yama özetiyle kanıtlanır. (5) `/runs` kabul kanıtı satırı alpha.53'e girer. (6) Kuyruk sırası değişmez.
+- **Kanun denetimi düzeltmeleri:** gölge kayıt denetim zincirinin dışında ayrı bir depoda tutulur (eski sürüm denetim doğrulamasını bozmasın diye); y/N isteminde gölge etiketi gösterilmez; teslim özeti genel bir zarftır ve değişiklik bölümünü adaptör doldurur.
+- **Merge ve geçiş:** owner "Birleştir ve geç" dedi; PR #111, merge `b10f46ae`; canlı 00:47Z, N1 00:48Z (switch `b10f46ae8fd0-12aed6973728`, defter v59). Geçişten sonra owner N1'de işçi talimat dosyasına güven verdi.
+
+<a id="yeni-yuzeyler-2026-10-23"></a>
+
+### Beta öncesi yeni yüzeyler
+
+Owner: "Beta öncesi yeni yüzeyler izinli çünkü işlerimizi tamamladık ve 5-6 gün boşluğumuz var bu nedenle rahatız ilerleyebiliriz." Bu, 2026-10-14 yönetim modelindeki "beta öncesi yeni yüzeyi owner açar" kuralı altında owner'ın açtığı penceredir. Paketleme ve test ayrımı kuralı sürer; yeni yüzeyler CHANGELOG ve PLAN'a yazılır.
+
+### Kapsam: alpha.54, masaüstü, çekirdek katmanlar, belgeler
+
+- **alpha.54:** owner: "alpha 54e beta rakip 1-4 terminal eksikleri ve codex model işlerini de dahil et … sağlam bir beta geçişi yapacağız." Kapsam: işçi talimat dosyasının hedef ref ağacından okunması, BETA-RAKIP 1–4, HARNESS-FARK beta listesindeki terminal eksikleri, Codex model doğrulaması ve alpha.53'ün küçük açıkları; iki dalga, tek sürüm, bir tam test.
+- **Masaüstü ve yedi çekirdek katman:** owner önce masaüstünde "tasarım ve yapı şimdi, kod beta sonrası" seçti; aynı gün masaüstü tasarım şeridini iptal etti. Yerine hafıza, ajan/skill doğuşu, işçi yürütmesi, değerlendirme, Brain, Nervous ve Auditor katmanları betadan önce kurulur; beta bunları gerçek dogfood ve testle iyileştirir (owner: "gerçek dogfoodingle aslında geliştirme sağlamadık bayadır"). Orkestrasyon mekanizmaları kapanınca masaüstü geliştirmesi paralel başlar.
+- **Belgeler:** owner: "anlamsız doküman asla istemiyorum tüm dokümanların baştan sona akışı okunaklılığı cümlelerin birbiriyle anlam takibi doğru olmalı … dokümanlar şeffaf ve düzgün dillerle yazılsın." Her belge güncel olur ve her iş doğru durumda ve yerde durur (PLAN, COMPLETED-PLAN, yol haritası, known-limits, ARCHITECTURE); README okunur bir sırayla yeniden yazılır. Belge değişiklikleri sonraki paketle ya da sürümsüz toplu ile iner.
+
+<a id="program-2026-10-23"></a>
+
+### Program cevapları Q1–Q6
+
+- **Q1:** K1–K8 dalından yalnız K7 (işçi sorusuna cevap) main'e taşınır; protokol değişmez.
+- **Q2:** işçi imajı `deckent init` içinde ön plan aşaması olarak kurulur (boyut ve süre uyarısı, yazılı onay) ya da var olan bir imaj benimsenir; elle JSON gerekmez.
+- **Q3:** kaybolan işçi otomatik kurtarılır. Owner: "Otomatik kurtarma … ilgili çalışan front model görüp aksiyonu almalı manuel süreçleri azaltıp otomasyon kontrol güvenlik hız prensipleriyle ilerlemeliyiz." Tespit deterministiktir (Nervous, model yok); sorumlu frontier model kanıtı okuyup tek, tipli ve sınırlı bir eylem seçer (sonlandırma kanıtından sonra slotu bırakmak, yeni Attempt'te devam etmek ya da belirsiz dış etkiyi önce uzlaştırmak); kör tekrar yoktur ve her karar kanıtıyla mühürlenir. Bu durum için 2026-10-11 K-B "asla yeni Attempt" kuralı güncellenir ve KARAR 12 yeniden açılır; önce kanun denetimli tasarım yazılır (İz 2 S6R).
+- **Q4:** Codex model adı istemci günlüğünden `client-reported` etiketiyle kaydedilir (hiçbir zaman "eşleşti" ya da "doğrulandı" değil); uyuşmazlık insana bekletilir; token düzeltmeleri yapılır.
+- **Q5:** işçi talimat güveni ref ve içerik özetine bağlanır; commit gösterilir ve mühürlenir ama karşılaştırılmaz; N1'deki güven geçerli kalır.
+- **Q6:** İz 2 (çekirdek katmanlar) şimdi paralel başlar; hazır dilimler alpha.55 olarak birlikte, bir tam testle iner.
+- **Kanun denetimi (HOLD, düzeltildi):** İz 2 owner cevabından önce açılmadı. S6 Nervous yalnız deterministik eşik ve kurallarla çalışır, kendisi yeni Attempt açmaz (kaybolan işçi kurtarması Q3 ile ayrı tasarlanır), üç sürekli eylem dışını reddeder ve sürekli onay kaydının sahibi owner'dır. Hafızada "doğrulanmış" durumu ve S8 terfisi insan ya da bağımsız değerlendirme kaydı ister; terfiler geri alma ve kapsam sınırı taşır (müşteriler arası sızıntı yok). Defter ve protokol numaraları iniş sırasında verilir. S3 headless Brain H1 (tekrar 0, araç yok), H6 ön uçuş ve H2'yi (müşteride API anahtarı varsayılan) korur.
+
+Plan: [PLAN Şimdi ve alpha.54/55 programı](../../../PLAN.md).
