@@ -13,3 +13,4 @@ export * from './internal/question.js';
 export * from './internal/arming.js';
 export * from './internal/mouse.js';
 export * from './internal/selection.js';
+export * from './internal/focus.js';

@@ -7,6 +7,8 @@ import chatDefaults from './terminal-chat-defaults.json' with { type: 'json' };
 /** T2 presentation vocabularies (first entry = default); the workline's own copy (`TERMINAL_THEME_SETTINGS`) is tested equal. */
 export const TERMINAL_THEMES = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'ansi'] as const;
 export const TERMINAL_BANNERS = ['full', 'compact', 'off'] as const;
+/** T2 attention notices (first entry = default): the terminal bell while the window is unfocused, or nothing. */
+export const TERMINAL_NOTIFY = ['bell', 'off'] as const;
 
 /** Operator terminal chat is a governed model invocation: the section names a declared catalog model;
  * catalog revision and binding are read fresh per turn and enforced by the model invocation service. */
@@ -29,6 +31,8 @@ export const terminalConfigSchema = z.object({
   /** T2 (T-STARTUP): clear the visible screen (never the scrollback) when the interactive workline opens on a terminal. */
   clearOnStart: z.boolean().default(true),
   layout: z.enum(['fullscreen', 'inline']).default('fullscreen'), // TERMINAL-SABIT-DUZEN: full window, or inline (native scrollback)
+  /** T2 (alpha.54): `bell` rings the terminal bell when work finishes or a card waits while the window reports it lost focus; `off` never does. */
+  notify: z.enum(TERMINAL_NOTIFY).default(TERMINAL_NOTIFY[0]),
   viewportRows: z.number().int().min(100).max(100_000).default(2_000), // rows the full-window conversation scrolls back through
   /** T4-B (owner 2026-10-08, Jev d84b248d): the person's own default terminal model — an exact catalog reference, nothing else. Only the user
    * (global) layer may hold it; precedence is in {@link resolveTerminalModel}. Additive optional key (the `readResultMaxBytes` pattern). */

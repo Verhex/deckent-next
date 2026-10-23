@@ -57,6 +57,8 @@ export function terminalSessionLabels(locale: Locale): ConversationSessionLabels
     unavailable: t('terminal.session.unavailable', {}, locale), saveFailed: t('terminal.session.saveFailed', {}, locale),
     exactRequired: t('terminal.session.exactRequired', {}, locale), listStale: t('terminal.session.listStale', {}, locale),
     resumed: t('terminal.session.resumed', {}, locale), started: t('terminal.session.started', {}, locale),
+    filter: { prompt: t('terminal.session.filter.prompt', {}, locale), none: t('terminal.session.filter.none', {}, locale) },
+    rename: { usage: t('terminal.session.rename.usage', {}, locale), done: t('terminal.session.rename.done', {}, locale), nothingSaved: t('terminal.session.rename.nothingSaved', {}, locale) },
     context: t('terminal.session.context', {}, locale), contextNone: t('terminal.session.contextNone', {}, locale),
     history: { omitted: t('terminal.session.history.omitted', {}, locale), toolResults: t('terminal.session.history.toolResults', {}, locale),
       summarized: t('terminal.session.history.summarized', {}, locale) },
