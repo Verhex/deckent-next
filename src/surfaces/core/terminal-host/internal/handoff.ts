@@ -9,7 +9,7 @@ export type ExternalEditorOutcome =
   | Readonly<{ kind: 'edited'; text: string }> | Readonly<{ kind: 'unchanged' }> | Readonly<{ kind: 'refused'; reason: ExternalEditorRefusal }>;
 /** The person's `$VISUAL`/`$EDITOR` behind an adapter: this surface spawns no process and writes no file. */
 export interface ExternalEditorPort { edit(text: string, signal?: AbortSignal): Promise<ExternalEditorOutcome> }
-/** What the host gives back while a child process owns the terminal: mouse reporting and the real input stream (`terminal-host`). */
+/** What the host switches off while a child process owns the terminal: its mouse and focus reports (`terminal-host`). */
 export interface TerminalHandover { release(): void; reclaim(): void }
 export interface DraftHandoffLabels {
   /** `{text}`: the message taken back out of the queue. */
@@ -31,9 +31,9 @@ export interface DraftHandoffOptions<C extends PanelContext> {
  * T3 and T4: the composer's draft leaves the terminal and comes back.
  * T3 (Codex Alt+Up): the last message still waiting in the queue is taken out of the FIFO (the controller refuses one that already started) and
  * handed back as the person queued it, paste chips included. The controller exports no text, so the remembered entries live here, bounded by the queue.
- * T4 (Claude Code / Codex Ctrl+G): Ink releases raw mode, bracketed paste and the alternate screen, the host releases mouse reporting and stops
- * reading the real input (else this process would take the editor's keys), SIGINT is ignored while a cooked-mode editor may raise it, and
- * everything is restored on every path before the held rows are printed.
+ * T4 (Claude Code / Codex Ctrl+G): Ink releases raw mode, bracketed paste and the alternate screen, the host switches mouse and focus reports
+ * off, the adapter runs the editor synchronously (this process reads no key meanwhile), SIGINT is ignored while a cooked-mode editor may raise it,
+ * and everything is restored on every path before the held rows are printed.
  */
 export function useDraftHandoffs<C extends PanelContext, E extends { readonly text: string }>(options: DraftHandoffOptions<C>) {
   const latest = useRef(options);

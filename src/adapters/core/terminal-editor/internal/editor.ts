@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { constants } from 'node:fs';
 import { lstat, mkdtemp, open, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -28,14 +28,13 @@ export function editorCommand(env: NodeJS.ProcessEnv): readonly string[] | 'unse
 }
 
 const refused = (reason: ExternalEditorRefusal): ExternalEditorOutcome => Object.freeze({ kind: 'refused', reason });
-function runEditor(command: readonly string[], file: string, env: NodeJS.ProcessEnv, signal?: AbortSignal): Promise<'not-started' | 'aborted' | number> {
-  return new Promise(resolve => {
-    let started = false;
-    const child = spawn(command[0]!, [...command.slice(1), file], { stdio: 'inherit', shell: false, env, ...(signal ? { signal } : {}) });
-    child.once('spawn', () => { started = true; });
-    child.once('error', error => resolve((error as { name?: string }).name === 'AbortError' || started ? 'aborted' : 'not-started'));
-    child.once('exit', (code, killed) => resolve(killed !== null || code === null ? 'aborted' : code));
-  });
+/**
+ * Synchronous on purpose (as Claude Code runs `$EDITOR`): while the editor owns the TTY this process runs no event loop, so it reads no key the editor
+ * should get (a paused stream still re-arms a read) and draws nothing; SIGINT from a cooked-mode editor is queued for the caller's listener.
+ */
+function runEditor(command: readonly string[], file: string, env: NodeJS.ProcessEnv): 'not-started' | 'aborted' | number {
+  const result = spawnSync(command[0]!, [...command.slice(1), file], { stdio: 'inherit', shell: false, env });
+  return result.error ? 'not-started' : result.signal !== null || result.status === null ? 'aborted' : result.status;
 }
 
 /**
@@ -55,7 +54,7 @@ export function openExternalEditor(options: ExternalEditorOptions): ExternalEdit
         directory = await mkdtemp(join(options.tmpdir ?? tmpdir(), LIMITS.directoryPrefix));
         const file = join(directory, LIMITS.fileName);
         await writeFile(file, text, { mode: 0o600, flag: 'wx' });
-        const exit = await runEditor(command, file, options.env, signal);
+        const exit = signal?.aborted ? 'aborted' : runEditor(command, file, options.env);
         if (exit !== 0) return refused(exit === 'not-started' ? 'not-started' : exit === 'aborted' ? 'failed' : 'exit');
         const after = await lstat(file);
         if (!after.isFile()) return refused('unsafe');

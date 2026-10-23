@@ -159,7 +159,7 @@ export interface WorklineProps {
   /** The full window's mouse wheel (SGR reports taken out of the input by `runTerminalWorkline`). */
   readonly wheel?: WheelSource;
   /** TERM-POLISH: the full window's left-button pointer (click-and-drag selection) and the clipboard write of the selection (OSC 52). */ readonly pointer?: PointerSource; readonly copyText?: (text: string) => void;
-  /** T4 (Ctrl+G): the person's editor (an adapter) and the host's release of mouse reporting and real input while it runs. */
+  /** T4 (Ctrl+G): the person's editor (an adapter) and the host's switch of its mouse and focus reports while it runs. */
   readonly externalEditor?: ExternalEditorPort; readonly handover?: TerminalHandover;
   /** T2: rings the terminal bell while the window is in the background (the host decides); absent when the setting is off. */
   readonly notify?: () => void;

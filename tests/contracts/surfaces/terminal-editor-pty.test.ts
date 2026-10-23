@@ -32,12 +32,14 @@ def read_for(seconds):
             if not chunk: return False
             out += chunk
     return True
+start = 0
 for wait, send, pause in steps:
     deadline = time.time() + 20
-    # Each wait looks only at the output after the previous step (a word can appear again).
-    while out.decode('utf8', 'replace').find(wait, marks[-1] if marks else 0) < 0:
+    # Each wait looks only after the previous step's match (a word can appear again).
+    while out.decode('utf8', 'replace').find(wait, start) < 0:
         if time.time() > deadline or not read_for(0.1):
             os.kill(pid, 9); sys.stdout.write(json.dumps({'timeout': wait, 'output': out.decode('utf8', 'replace')})); sys.exit(3)
+    start = out.decode('utf8', 'replace').find(wait, start) + len(wait)
     read_for(pause)
     marks.append(len(out.decode('utf8', 'replace')))
     if send: os.write(fd, send.encode())
@@ -79,9 +81,10 @@ describe.skipIf(process.platform === 'win32')('external editor on a real PTY (pr
   }
 
   it('Ctrl+C in a cooked-mode editor ends the editor (SIGINT to the group), never the terminal; the draft is kept', async () => {
-    const run = await pty([['READY', 'keep', 0.3], ['keep', '\u0007', 0.2], ['EDITOR-OPEN[keep]', '\u0003', 0.3], ['EDITOR-FAILED', 'X', 0.3], ['keepX', '', 0.3]],
+    const run = await pty([['READY', 'keep', 0.3], ['keep', '\u0007', 0.2], ['EDITOR-OPEN[keep]', '\u0003', 0.3], ['EDITOR-FAILED', 'X', 0.3], ['keepX', '\u0015', 0.3]],
       'fullscreen', 'cooked');
     expect(run.output.slice(run.marks[2])).not.toContain('EDITOR-GOT[');
+    // Still the same process: the draft took the next key, and the two closing Ctrl+C on the emptied line end it normally.
     expect(run.output).toContain('EXIT-CLEAN');
   }, 120_000);
 });

@@ -23,7 +23,7 @@ export interface TerminalHostContext {
   readonly notify?: () => void;
   /** T1 `/copy`: the clipboard request writer (OSC 52, tmux-wrapped, byte-capped); present on every real TTY, not only in the full window. */
   readonly clipboard?: (text: string) => ClipboardResult;
-  /** T4: present on a real TTY. Releases mouse reporting and stops reading the real input while a child process (the editor) owns the terminal. */
+  /** T4: present while the host takes mouse or focus reports. Switches them off while a child process (the editor) owns the terminal and on again after. */
   readonly handover?: TerminalHandover;
 }
 
@@ -64,12 +64,8 @@ export async function runTerminalHost(options: TerminalHostOptions): Promise<voi
   const realInput = stdin ?? process.stdin, mouse = (fullscreen || attention) && realInput.isTTY === true ? mouseFilteredInput(realInput) : null;
   const reportingOff = () => { try { out.write(`${fullscreen ? MOUSE_REPORTING_OFF : ''}${attention ? FOCUS_REPORTING_OFF : ''}`); } catch { /* the terminal is gone */ } };
   const reportingOn = () => { try { out.write(`${fullscreen ? MOUSE_REPORTING_ON : ''}${attention ? FOCUS_REPORTING_ON : ''}`); } catch { /* the terminal is gone */ } };
-  // T4: Ink's own suspension drops raw mode and its listener but the stream keeps reading (the input filter's `data` listener, a re-armed read):
-  // pausing the real TTY stops that read, so every key reaches the child. Ink's resume re-attaches its listener; the input filter needs `resume`.
-  const handover: TerminalHandover | undefined = realInput.isTTY === true ? {
-    release: () => { if (mouse) reportingOff(); realInput.pause(); },
-    reclaim: () => { if (!mouse) return; realInput.resume(); reportingOn(); },
-  } : undefined;
+  // T4: Ink's own suspension hands back raw mode, bracketed paste and the alternate screen; mouse and focus reports are the host's to switch off and on.
+  const handover: TerminalHandover | undefined = mouse ? { release: reportingOff, reclaim: reportingOn } : undefined;
   const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
     options.view({ fullscreen, transcriptExit, ...(handover ? { handover } : {}), ...(out.isTTY === true ? { clipboard: createClipboardWriter(out) } : {}),
       ...(mouse && attention ? { notify: () => { if (mouse.focus.state() !== 'unfocused') return; try { out.write(ATTENTION_BELL); } catch { /* the terminal is gone */ } } } : {}),
