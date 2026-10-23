@@ -278,7 +278,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE', p, l) }) },
   WORKER_INSTRUCTIONS_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_INSTRUCTIONS_TOO_LARGE', p, l) }) },
   WORKER_INSTRUCTIONS_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: workerInstructionsUnavailable(p, l) }) },
-  WORKER_INSTRUCTIONS_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_INSTRUCTIONS_CHANGED', p, l) }) },
+  WORKER_INSTRUCTIONS_CHANGED: { category: 'error', render: (p, l) => ({ message: p['reason'] === 'place' ? t('error.WORKER_INSTRUCTIONS_CHANGED.place', p, l) : t('error.WORKER_INSTRUCTIONS_CHANGED', p, l) }) },
   WORK_CLASS_NOT_REGISTERED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_NOT_REGISTERED', p, l) }) },
   WORK_CLASS_OVERRIDE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_OVERRIDE_DENIED', p, l) }) },
   WORK_CLASS_PARENT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_PARENT_INVALID', p, l) }) },

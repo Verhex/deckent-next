@@ -12,6 +12,10 @@ const missing = (error: unknown) => (error as NodeJS.ErrnoException)?.code === '
 
 /** No symlink, hardlink, FIFO or device, also for any directory of a nested name. Reads allocate only the registry bound plus one byte. */
 export async function readInstructionFile(root: string, name: string, maxBytes: number): Promise<Buffer | null> {
+  return (await readIdentifiedFile(root, name, maxBytes))?.bytes ?? null;
+}
+/** The same bounded read, also naming the identity of the file it verified (for a trust card's binding). */
+async function readIdentifiedFile(root: string, name: string, maxBytes: number): Promise<Readonly<{ bytes: Buffer; dev: number; ino: number }> | null> {
   const path = join(root, name);
   let info, directory = root;
   for (const part of name.split('/').slice(0, -1)) {
@@ -35,10 +39,12 @@ export async function readInstructionFile(root: string, name: string, maxBytes: 
     if (used > maxBytes) throw new Error('size');
     const after = await lstat(path), end = await handle.stat();
     if (after.isSymbolicLink() || after.dev !== opened.dev || after.ino !== opened.ino || end.size !== opened.size || end.mtimeMs !== opened.mtimeMs) throw new Error('unsafe');
-    return bytes.subarray(0, used);
+    return { bytes: bytes.subarray(0, used), dev: opened.dev, ino: opened.ino };
   } finally { await handle.close(); }
 }
 
+/** The file a trust card showed: its path and identity. */
+export type ExpectedInstructionFile = Readonly<{ path: string; dev: number; ino: number }>;
 /** Trust lives in a private user-global managed directory, never a workspace-controlled record. */
 /** `files` narrows the candidates (a worker selection reads exactly one file); the default keeps the terminal's DECKENT.md → AGENTS.md order. */
 export async function openProjectInstructionReader(rootInput: string, trustDirectory: string | null, known?: KnownSecretSnapshot, files: readonly string[] = REGISTRY.files) {
@@ -57,9 +63,11 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
       const currentRoot = await stat(root);
       if (currentRoot.dev !== identity.dev || currentRoot.ino !== identity.ino) throw new Error('unsafe');
       for (const name of files) {
-        const bytes = await readInstructionFile(root, name, REGISTRY.maxBytes);
-        if (bytes === null) continue;
-        const source: ProjectInstructionSource = { path: join(root, name), bytes: bytes.length, digest: instructionDigest(bytes), content: redactForRecord(bytes.toString('utf8'), known) };
+        const read = await readIdentifiedFile(root, name, REGISTRY.maxBytes);
+        if (read === null) continue;
+        const { bytes } = read;
+        const source: ProjectInstructionSource = { path: join(root, name), bytes: bytes.length, digest: instructionDigest(bytes), content: redactForRecord(bytes.toString('utf8'), known),
+          identity: { dev: read.dev, ino: read.ino } };
         if (Buffer.byteLength(source.content) > REGISTRY.maxBytes) return { status: 'blocked', reason: 'size' };
         // Only an owner-private, no-follow record counts; an absent/invalid cache asks again.
         let trusted = sessionTrusted.has(source.digest);
@@ -81,9 +89,13 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
       return { status: 'blocked', reason };
     }
   };
-  return { root, inspect: load, async trust(digest: string): Promise<ProjectInstructionView> {
+  // REVISE 2734 R1: a writer that names the exact file it showed acts only when the read just before the write is that file (path + identity).
+  const sameFile = (source: ProjectInstructionSource, expected?: ExpectedInstructionFile) => !expected
+    || (source.path === expected.path && source.identity.dev === expected.dev && source.identity.ino === expected.ino);
+  return { root, identity: { dev: identity.dev, ino: identity.ino }, inspect: load, async trust(digest: string, expected?: ExpectedInstructionFile): Promise<ProjectInstructionView> {
     const current = await load();
     if (current.status !== 'trust-required' && current.status !== 'ready') return current;
+    if (!sameFile(current.source, expected)) throw new Error('changed');
     if (current.source.digest !== digest) return { status: 'trust-required', source: current.source };
     if (trustDirectory) {
       try {
@@ -95,9 +107,14 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
     sessionTrusted.add(digest);
     return { status: 'ready', source: current.source };
   },
-  /** Takes back consent for exactly this folder and digest (true: a persisted record was removed). An absent record is already untrusted. */
-  async revoke(digest: string): Promise<boolean> {
+  /** Takes back consent for exactly this folder and digest (true: a persisted record was removed). An absent record is already untrusted.
+   * With `expected`, only while that exact file with that digest is still the one read here (else `changed`, nothing removed). */
+  async revoke(digest: string, expected?: ExpectedInstructionFile): Promise<boolean> {
     if (!/^[a-f0-9]{64}$/u.test(digest)) throw new Error('unsafe');
+    if (expected) {
+      const current = await load();
+      if ((current.status !== 'trust-required' && current.status !== 'ready') || !sameFile(current.source, expected) || current.source.digest !== digest) throw new Error('changed');
+    }
     sessionTrusted.delete(digest);
     if (!trustDirectory) return false;
     try {

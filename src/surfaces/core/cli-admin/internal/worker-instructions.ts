@@ -1,5 +1,5 @@
 import { ErrorRegistry, EXIT_CODES, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type ExitCode, type Locale } from '#platform/index.js';
-import type { WorkerInstructionStatus, WorkerInstructionTrustResult } from '#engine/index.js';
+import type { WorkerInstructionBinding, WorkerInstructionStatus, WorkerInstructionTrustResult } from '#engine/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
@@ -7,8 +7,9 @@ import { adminSinks, askAdminCard, confirmOptions, reportCancelled } from './io.
 
 /** `coding instructions status`: the configured work target's worker instruction file (read-only; never its whole content). */
 export type WorkerInstructionStatusHandler = (root: string, options: ConfigLoadOptions) => Promise<{ readonly schemaVersion: 1; readonly targets: readonly WorkerInstructionStatus[] }>;
-/** `coding instructions trust|revoke` in this process at the person's witnessed terminal (decided on `config`/`write`, sealed before the record changes). */
-export type WorkerInstructionTrustHandler = (root: string, input: { readonly scopeId: string; readonly action: 'trust' | 'revoke'; readonly digest: string; readonly target?: string },
+/** `coding instructions trust|revoke` in this process at the person's witnessed terminal (decided on `config`/`write`, sealed before the record changes);
+ * `binding` is the exact place the card showed, as the host made it. */
+export type WorkerInstructionTrustHandler = (root: string, input: { readonly scopeId: string; readonly action: 'trust' | 'revoke'; readonly binding: WorkerInstructionBinding },
   options: ConfigLoadOptions) => Promise<WorkerInstructionTrustResult>;
 
 const where = (row: WorkerInstructionStatus, locale: Locale) => row.target === null ? t('cli.coding.instructions.projectRoot', { root: terminalSafeText(row.root) }, locale)
@@ -77,6 +78,8 @@ export async function codingInstructionsCommand(argv: readonly string[], context
     body: [where(row, locale), fileLine(row, locale), trust ? t('cli.coding.instructions.card.trustBody', {}, locale) : t('cli.coding.instructions.card.revokeBody', {}, locale),
       ...(trust ? ['', ...row.preview.map(line => `  ${terminalSafeText(line)}`)] : [])], options: confirmOptions(locale) });
   if (answer !== 'apply') return cancelled();
-  const result = await changeWorkerInstructionTrust!(root, { scopeId: resolved.scopeId, action: action as 'trust' | 'revoke', digest: row.digest!, ...(row.target === null ? {} : { target: row.target }) }, options);
+  if (!row.binding) throw ErrorRegistry.createError('WORKER_INSTRUCTIONS_UNAVAILABLE', { params: { reason: 'unreadable' } });
+  // REVISE 2734 R1: the writer gets the exact place this card showed (folder, its identity, source, file, digest), never a digest or target id alone.
+  const result = await changeWorkerInstructionTrust!(root, { scopeId: resolved.scopeId, action: action as 'trust' | 'revoke', binding: row.binding }, options);
   emit(result.trusted ? t('cli.coding.instructions.done.trusted', { digest: result.digest }, locale) : t('cli.coding.instructions.done.revoked', { digest: result.digest }, locale), sinks);
 }

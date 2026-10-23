@@ -38,13 +38,16 @@ const piped = () => Object.assign(Readable.from([]), { isTTY: false });
 const tty = () => Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return undefined; } });
 const DIGEST = 'ab'.repeat(32);
 const row = (state: WorkerInstructionStatus['state']): WorkerInstructionStatus => ({ target: 'n1', root: '/work/n1', source: 'worker-md', file: '.deckent/worker-instructions.md',
-  explicit: false, off: null, state, reason: null, path: '/work/n1/.deckent/worker-instructions.md', bytes: 31, digest: DIGEST, preview: ['Run npm test before reporting.'] });
+  explicit: false, off: null, state, reason: null, path: '/work/n1/.deckent/worker-instructions.md', bytes: 31, digest: DIGEST, preview: ['Run npm test before reporting.'], binding: BINDING });
+/** The host-made canonical place of the card (REVISE 2734 R1): the CLI hands exactly this to the writer, never a digest or target id alone. */
+const BINDING = { target: 'n1', root: '/real/n1', rootDev: 1, rootIno: 2, source: 'worker-md', file: '.deckent/worker-instructions.md',
+  path: '/real/n1/.deckent/worker-instructions.md', fileDev: 1, fileIno: 3, digest: DIGEST };
 function handlers(state: WorkerInstructionStatus['state'], calls: unknown[]) {
   return {
     inspectWorkerInstructions: async () => ({ schemaVersion: 1 as const, targets: [row(state)] }),
-    changeWorkerInstructionTrust: async (_root: string, input: { scopeId: string; action: 'trust' | 'revoke'; digest: string; target?: string }) => {
+    changeWorkerInstructionTrust: async (_root: string, input: { scopeId: string; action: 'trust' | 'revoke'; binding: typeof BINDING }) => {
       calls.push(input);
-      return { schemaVersion: 1 as const, action: input.action, target: 'n1', path: row(state).path!, digest: input.digest, trusted: input.action === 'trust', changed: true, decisionEventId: 'decision:x' };
+      return { schemaVersion: 1 as const, action: input.action, target: 'n1', path: row(state).path!, digest: DIGEST, trusted: input.action === 'trust', changed: true, decisionEventId: 'decision:x' };
     },
   };
 }
@@ -86,7 +89,7 @@ it('status is read-only, human in both languages and typed with --json; a bare `
   expect(calls).toEqual([]);
 });
 
-it('a person confirms the card: trust passes the exact digest shown and the target; cancel, no-op and a wrong target change nothing', async () => {
+it('a person confirms the card: trust passes the exact place shown (host-made binding); cancel, no-op and a wrong target change nothing', async () => {
   const f = await project(), calls: unknown[] = [];
   card.interactive = true; card.answers = ['apply'];
   const out = capture(), err = capture();
@@ -97,7 +100,7 @@ it('a person confirms the card: trust passes the exact digest shown and the targ
     expect.stringContaining('It grants no permission'), '', '  Run npm test before reporting.']);
   expect(card.asked[0]!.options.map(option => option.id)).toEqual(['apply', 'cancel']); expect(card.asked[0]!.initial).toBeUndefined();
   expect(out.text()).toContain(`Trusted (SHA-256 ${DIGEST})`);
-  expect(calls).toEqual([{ scopeId: 'scope', action: 'trust', digest: DIGEST, target: 'n1' }]);
+  expect(calls).toEqual([{ scopeId: 'scope', action: 'trust', binding: BINDING }]);
   card.answers = ['cancel'];
   const cancelled = capture();
   expect(await main(['coding', 'instructions', 'revoke', '--scope', 'scope'], { root: f.root, env: f.env, stdin: piped(), stdout: capture().sink, stderr: cancelled.sink,
@@ -116,5 +119,5 @@ it('a person confirms the card: trust passes the exact digest shown and the targ
   expect(await main(['coding', 'instructions', 'trust', '--scope', 'scope', '--target', 'other'], { root: f.root, env: f.env, stdin: piped(), stdout: capture().sink,
     stderr: wrongTarget.sink, ...handlers('untrusted', calls) })).not.toBe(0);
   expect(wrongTarget.text()).toContain('WORKER_INSTRUCTIONS_UNAVAILABLE');
-  expect(calls).toEqual([{ scopeId: 'scope', action: 'trust', digest: DIGEST, target: 'n1' }, { scopeId: 'scope', action: 'revoke', digest: DIGEST, target: 'n1' }]);
+  expect(calls).toEqual([{ scopeId: 'scope', action: 'trust', binding: BINDING }, { scopeId: 'scope', action: 'revoke', binding: BINDING }]);
 });
