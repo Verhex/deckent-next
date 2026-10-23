@@ -131,8 +131,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       grant('first-run-memory-inspect', 'memory', ['inspect'], 'all'),
       { id: 'first-run-mcp-observe-memory', effect: 'allow', actions: ['inspect'], scopes: [SCOPE], principals: [MCP_PERSON], resource: { kind: 'memory', ids: 'all' } },
       // v15 (S4B-1 + S7): the batch reaches POLICY_CHANGE_MAX (32) here; the person's memory propose and the distiller's first two rules come first.
-      grant('first-run-memory-propose', 'memory', ['propose'], 'all'), { ...grant('first-run-memory-distiller', 'memory', ['inspect', 'propose'], 'all'), principals: [DISTILLER] },
-      { ...grant('first-run-memory-distiller-runs', 'run', ['inspect'], 'all'), principals: [DISTILLER] },
+      grant('first-run-memory-propose', 'memory', ['propose'], 'all'), ...([['first-run-memory-distiller', 'memory', ['inspect', 'propose']], ['first-run-memory-distiller-runs', 'run', ['inspect']]] as const).map(([id, kind, actions]) => ({ ...grant(id, kind, [...actions], 'all'), principals: [DISTILLER] })),
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
