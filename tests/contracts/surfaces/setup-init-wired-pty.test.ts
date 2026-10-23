@@ -109,7 +109,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     const f = await fixture();
     // A Docker that never answers (any host, any CI): the execution stages stay blocked, so this flow never offers a real worker-image build (BR1).
     const run = await f.pty('full-init', [process.execPath, cli, 'init'], [['Enter confirm', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'], ['> 6. Permissions', '1\r'],
-      ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 5. Who uses this installation · ready', '1\r'], ['> 11. Model connection', '2\r'], ['> 13. Project instructions', '2\r'], ['> 14. Final check', '1\r'], ['Final check: applied; observed again.', '1\r']],
+      ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 5. Who uses this installation · ready', '1\r'], ['> 11. Model connection', '2\r'], ['> 13. Project instructions', '2\r'], ['> 16. Final check', '1\r'], ['Final check: applied; observed again.', '1\r']],
       { DOCKER_HOST: 'unix:///nonexistent/docker.sock' });
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.status, run.output.slice(-2000)).toBe(0);

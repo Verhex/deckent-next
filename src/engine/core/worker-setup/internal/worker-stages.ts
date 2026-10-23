@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { SetupDecision, SetupStageContext } from './contract.js';
+import type { SetupDecision, SetupStageContext } from '#engine/core/setup/index.js';
 
 const imageId = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 /** BR1: the worker image as composition observes it (configuration, this installation's newest receipt, a read-only `image inspect` of the

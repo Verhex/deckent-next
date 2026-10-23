@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { nativeCliIds } from '#domain/index.js';
-import type { SetupDecision, SetupFamilyPackage, SetupStageContext } from './contract.js';
+import type { SetupDecision, SetupFamilyPackage, SetupStageContext } from '#engine/core/setup/index.js';
 import defaults from './work.json' with { type: 'json' };
 
 /** The `work` family's facts (BR1 1b): what the first job still needs, from configuration and the pool ledger only (the I-S7 first-job facts). */
