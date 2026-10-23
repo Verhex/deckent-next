@@ -376,8 +376,8 @@ const CODEX_CHANGE_KINDS: Readonly<Record<string, 'write' | 'edit'>> = { add: 'w
 /** Changes attributed per file_change item; the rest are counted as unmapped, never silently dropped (Astra 2066 R3). */
 const CODEX_MAX_CHANGES = 512;
 /** Codex state beyond the shared normalizer state: seen tool items (by native id) and running token totals for the summary. */
-export interface CodexNormalizerState { readonly calls: Set<string>; turns: number; measured: boolean; readonly tokens: { input: number; output: number; cacheRead: number; thinking: number | null } }
-export function createCodexState(): CodexNormalizerState { return { calls: new Set(), turns: 0, measured: false, tokens: { input: 0, output: 0, cacheRead: 0, thinking: null } }; }
+export interface CodexNormalizerState { readonly calls: Set<string>; turns: number; measured: boolean; readonly tokens: { input: number; output: number; cacheRead: number; cacheWrite: number; thinking: number | null } }
+export function createCodexState(): CodexNormalizerState { return { calls: new Set(), turns: 0, measured: false, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: null } }; }
 const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 /**
  * Maps one line of `codex exec --json` onto contract events (B09-3). Shapes follow the pinned Codex 0.155.1 SDK item types
@@ -461,20 +461,21 @@ function mapCodexLine(line: string, state: NormalizerState, codex: CodexNormaliz
     if (!usage) {
       if (data.usage !== undefined) miss('usage-invalid');
       emit('session.ended', { outcome: type === 'turn.completed' ? 'success' : 'error', turns: codex.turns, durationMs: Math.max(0, now - state.startMs),
-        apiDurationMs: null, costUsd: null, costBasis: null, tokens: codex.measured ? { ...codex.tokens, cacheWrite: 0 } : null, permissionDenials: 0 });
+        apiDurationMs: null, costUsd: null, costBasis: null, tokens: codex.measured ? { ...codex.tokens } : null, permissionDenials: 0 });
       return;
     }
-    const cached = num(usage.cached_input_tokens);
-    // OpenAI input totals include cached tokens; the contract counts them apart, like Claude's cache_read.
-    const tokens = { input: Math.max(0, num(usage.input_tokens) - cached), output: num(usage.output_tokens), cacheRead: cached, cacheWrite: 0,
+    const cached = num(usage.cached_input_tokens), written = num(usage.cache_write_input_tokens);
+    // OpenAI input totals include cache reads and cache writes (Codex rust-v0.163.0 `parses_cache_write_token_usage`: 100 = 40 + 60); the
+    // contract counts both apart, like Claude's cache_read/cache_creation.
+    const tokens = { input: Math.max(0, num(usage.input_tokens) - cached - written), output: num(usage.output_tokens), cacheRead: cached, cacheWrite: written,
       thinking: typeof usage.reasoning_output_tokens === 'number' ? num(usage.reasoning_output_tokens) : null };
     if (type === 'turn.completed') {
       emit('usage', { tokens }); codex.measured = true;
-      codex.tokens.input += tokens.input; codex.tokens.output += tokens.output; codex.tokens.cacheRead += tokens.cacheRead;
+      codex.tokens.input += tokens.input; codex.tokens.output += tokens.output; codex.tokens.cacheRead += tokens.cacheRead; codex.tokens.cacheWrite += tokens.cacheWrite;
       if (tokens.thinking !== null) codex.tokens.thinking = (codex.tokens.thinking ?? 0) + tokens.thinking;
     }
     emit('session.ended', { outcome: type === 'turn.completed' ? 'success' : 'error', turns: codex.turns, durationMs: Math.max(0, now - state.startMs),
-      apiDurationMs: null, costUsd: null, costBasis: null, tokens: { ...codex.tokens, cacheWrite: 0 }, permissionDenials: 0 });
+      apiDurationMs: null, costUsd: null, costBasis: null, tokens: { ...codex.tokens }, permissionDenials: 0 });
   } else if (!CODEX_KNOWN.has(type)) miss(type);
 }
 /** Cursor `tool_call` keys (cursor-agent stream-json: documented readToolCall/writeToolCall/function, observed editToolCall). Unknown keys stay
