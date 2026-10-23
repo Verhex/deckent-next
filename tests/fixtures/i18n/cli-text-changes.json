@@ -499,6 +499,14 @@
     "doctor.firstJob.execution": {
       "before": "Tell Deckent where work runs: that image id and the docker and git paths (command -v docker, command -v git)",
       "after": "Build or adopt the worker image and write the execution settings (deckent init asks on a card first)"
+    },
+    "cli.coding.instructions.help": {
+      "before": "deckent coding instructions [status] [--json] [--lang en|tr]\nShows the worker instruction file of the work target (execution.workerInstructions; the project root when no work target is configured): path, size, SHA-256 and whether workers get it now.\ndeckent coding instructions trust|revoke [--target <id>] --scope <id> [--lang en|tr]\nTrusts (or takes back) exactly the file's current content for that folder. A card on your own terminal shows the path, size, SHA-256 and first lines; AI tools, MCP, pipes and --json are refused. Decided on the config write permission for execution.workerInstructions and recorded in the audit log. A changed file is untrusted again.",
+      "after": "deckent coding instructions [status] [--json] [--lang en|tr]\nShows the worker instruction file of the work target (execution.workerInstructions; the project root when no work target is configured): path, size, SHA-256 and whether workers get it now.\ndeckent coding instructions trust|revoke [--target <id>] --scope <id> [--lang en|tr]\nTrusts (or takes back) exactly the file's current content for that folder and, with a work target, for its base ref. A card on your own terminal shows the path, size, SHA-256 and first lines; AI tools, MCP, pipes and --json are refused. Decided on the config write permission for execution.workerInstructions and recorded in the audit log. A changed file is untrusted again."
+    },
+    "error.WORKER_INSTRUCTIONS_CHANGED.place": {
+      "before": "The folder or file workers read is not the one the card showed (the work target, its folder, the worker source or the file was replaced). Run the command again to review it. Nothing was changed.",
+      "after": "The folder, ref or file workers read is not the one the card showed (the work target, its folder, its base ref, the worker source or the file was replaced). Run the command again to review it. Nothing was changed."
     }
   },
   "tr": {
@@ -1173,6 +1181,14 @@
     "doctor.firstJob.execution": {
       "before": "İşin nerede çalışacağını söyleyin: o imaj kimliği ile docker ve git yolları (command -v docker, command -v git)",
       "after": "Worker imajını derleyin ya da benimseyin ve çalıştırma ayarlarını yazın (deckent init önce kartta sorar)"
+    },
+    "cli.coding.instructions.help": {
+      "before": "deckent coding instructions [status] [--json] [--lang en|tr]\nÇalışma hedefinin worker talimat dosyasını gösterir (execution.workerInstructions; çalışma hedefi tanımlı değilse proje kökü): yol, boyut, SHA-256 ve worker'ların dosyayı şu an alıp almadığı.\ndeckent coding instructions trust|revoke [--target <id>] --scope <id> [--lang en|tr]\nDosyanın yalnızca şu anki içeriğine o klasör için güvenir (ya da güveni geri alır). Kendi terminalinizdeki kart yolu, boyutu, SHA-256 değerini ve ilk satırları gösterir; yapay zekâ araçları, MCP, boru (pipe) ve --json reddedilir. Karar execution.workerInstructions için config yazma iznine göre verilir ve denetim kaydına yazılır. Değişen dosya yeniden güvenilmez olur.",
+      "after": "deckent coding instructions [status] [--json] [--lang en|tr]\nÇalışma hedefinin worker talimat dosyasını gösterir (execution.workerInstructions; çalışma hedefi tanımlı değilse proje kökü): yol, boyut, SHA-256 ve worker'ların dosyayı şu an alıp almadığı.\ndeckent coding instructions trust|revoke [--target <id>] --scope <id> [--lang en|tr]\nDosyanın yalnızca şu anki içeriğine o klasör için, çalışma hedefi varsa onun temel ref'i için güvenir (ya da güveni geri alır). Kendi terminalinizdeki kart yolu, boyutu, SHA-256 değerini ve ilk satırları gösterir; yapay zekâ araçları, MCP, boru (pipe) ve --json reddedilir. Karar execution.workerInstructions için config yazma iznine göre verilir ve denetim kaydına yazılır. Değişen dosya yeniden güvenilmez olur."
+    },
+    "error.WORKER_INSTRUCTIONS_CHANGED.place": {
+      "before": "Worker'ların okuduğu klasör ya da dosya kartta gösterilen değil (çalışma hedefi, klasörü, worker kaynağı ya da dosya değiştirildi). İncelemek için komutu yeniden çalıştırın. Hiçbir şey değiştirilmedi.",
+      "after": "Worker'ların okuduğu klasör, ref ya da dosya kartta gösterilen değil (çalışma hedefi, klasörü, temel ref'i, worker kaynağı ya da dosya değiştirildi). İncelemek için komutu yeniden çalıştırın. Hiçbir şey değiştirilmedi."
     }
   }
 }

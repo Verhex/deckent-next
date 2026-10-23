@@ -160,10 +160,14 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   (`.deckent/worker-instructions.md` by default, or `AGENTS.md`, or none; `execution.workerInstructions.source`) at the Git work target
   root. With a configured work target the file is read from the commit the target's base ref names (alpha.54), not from the folder:
   an uncommitted or modified copy is never used, a file that exists only in the folder reads as absent, and a link, a submodule or a
-  non-tree parent is left out as unsafe. Trust binds the folder and the file's content; the commit is shown (`ref@commit` in
-  `status`, on the card and in the worker prompt) and recorded but not compared, so a branch that moves on with the same bytes stays
-  trusted and trust given on alpha.53 stays valid. Without a configured target the folder's file is read as before. *Impact:* commit
-  the file before you trust it; a change you have not committed does not reach workers. Until `deckent coding instructions trust` is confirmed at the person's own terminal for that exact content, workers get the task
+  non-tree parent is left out as unsafe. Trust binds the folder, the ref and the file's content: the same bytes on another ref or in
+  the folder itself need their own trust, and taking trust back on one ref leaves another ref's trust in place. The commit is shown
+  (`ref@commit` in `status`, on the card and in the worker prompt) and recorded but not compared, so a branch that moves on with the
+  same bytes stays trusted. Trust given on alpha.53 (folder and content) still counts at any ref of that folder with those bytes:
+  alpha.54 seals the list of those older records the first time it opens the trust folder. A folder-and-content trust given later
+  (for the folder's own file without a configured target, or in the terminal) never opens a ref. Taking trust back at a ref ends that
+  ref's trust and its alpha.53 trust, and keeps the folder's own trust. Without a configured target the folder's file is read and trusted by folder and content as before. *Impact:* commit the file before you trust it; a change you have not committed does not
+  reach workers. Back on alpha.53, trust given at a ref on alpha.54 is not seen and is asked again. Until `deckent coding instructions trust` is confirmed at the person's own terminal for that exact content, workers get the task
   text only and `run create`, MCP and `--json` carry the warning `WORKER_INSTRUCTIONS_WITHHELD`; `/do` and queue admissions show no such
   warning. Any change to the file makes it untrusted again. A non-Git target has no snapshot (explicit no-op).
 - **Hiding instruction files from a worker is not confidentiality.** Codex discovery is `disabled` by strict-config keys that are

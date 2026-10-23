@@ -149,8 +149,11 @@ Two separate things decide what a coding worker knows about your repository.
   [--target <id>] --scope <id>` trusts, or takes back, exactly the file's current content for that folder: a card at your own
   terminal shows the path, size, SHA-256 and first lines; AI tools, MCP, pipes and `--json` are refused; the decision uses the
   config write permission for `execution.workerInstructions` and is recorded in the audit log. A changed file is untrusted
-  again; trust binds the folder and the content, so a branch that moves on with the same bytes stays trusted (the commit is
-  shown and recorded, not compared). Until it is trusted, workers get the task text only and Run creation warns `WORKER_INSTRUCTIONS_WITHHELD`; a file that
+  again; with a work target trust binds the folder, the ref and the content (another ref with the same bytes needs its own
+  trust; a folder-and-content trust from alpha.53 still counts, one given later without a target or in the terminal does not,
+  and a revoke at the ref ends it there but keeps the folder's own trust),
+  so a branch that moves on with the same bytes stays trusted (the commit is shown and recorded, not compared); without one it
+  binds the folder and the content. Until it is trusted, workers get the task text only and Run creation warns `WORKER_INSTRUCTIONS_WITHHELD`; a file that
   does not fit the prompt bounds refuses the Run (`WORKER_INSTRUCTIONS_TOO_LARGE`).
 - **Discovery: what the worker CLI loads by itself.** `disabled` (the default) hides the repository's own instruction files
   (`AGENTS.md`, `CLAUDE.md`, `.agents`, `.claude`, `.codex`, `.cursor`, `DECKENT.md` and the worker file): Claude runs with

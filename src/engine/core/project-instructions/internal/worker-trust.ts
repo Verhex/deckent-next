@@ -45,7 +45,7 @@ export interface WorkerInstructionTrustPorts {
   readonly policy: unknown;
   /** Seals one `authority-decision` in the project's ledger; throws when it cannot (nothing is trusted then). */
   record(subject: AuthorityDecisionSubject, atMs: number): { readonly event: { readonly eventId: string } };
-  /** The trust record change itself (user-global, folder- and digest-bound); runs only after an allowed, sealed decision. */
+  /** The trust record change itself (user-global; folder + digest, with a work target folder + ref + digest); runs only after an allowed, sealed decision. */
   apply(): Promise<unknown>;
   now(): number;
 }

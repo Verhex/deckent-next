@@ -137,7 +137,10 @@ Config `execution.workerInstructions.source` is `worker-md` (`.deckent/worker-in
 names (alpha.54 R1; never the working tree; status and the card show `ref@commit`), or at the Git work target root without a configured target. `status` is read-only
 (`--json` allowed). `trust` and `revoke` are decided on `config`/`write` for `project:execution.workerInstructions`, sealed before the
 record changes, and need the person's terminal witness: a card shows path, size, sha256 and the first lines; AI actors, MCP, pipes and
-`--json` are refused. Trust holds for exactly that folder and digest; a change makes it untrusted. Untrusted: workers get the task text
+`--json` are refused. Trust holds for exactly that folder and digest, with a work target that folder, ref and digest (alpha.54 REVISE 2738 R1; an
+folder + digest record counts at a ref only when it existed as alpha.54 first opened the trust folder (sealed list), and a revoke there
+ends that without removing the folder's own record); a change
+makes it untrusted. Untrusted: workers get the task text
 only and run create, MCP and `--json` carry `WORKER_INSTRUCTIONS_WITHHELD`.
 
 Action arguments (alpha.53 D2): a catalog action may list `requires`; help prints "Required: …" (and "Required without a terminal: …" when a
