@@ -212,13 +212,16 @@ describe('phase 3 context criteria from sealed memory-context seals, and the sha
     expect(criterion(status, 'context-overflow')).toMatchObject({ met: false, measure: { count: 1, sample: 24 } });
     expect(criterion(status, 'context-integrity')).toMatchObject({ met: false, measure: { count: 3, sample: 24 } });
   });
-  it('a stored candidate that now screens as hidden-character payload, a purge the ledger lacks, or an unreadable purge journal fail the shared criteria', async () => {
+  it('a stored candidate that now screens as hidden-character payload fails the shared criterion; a purge the ledger lacks or an unreadable purge journal holds the read (§6.6)', async () => {
     const f = fixture(); f.add({ content: { kind: 'fact', title: 'Görünmez', body: `Metin ${[...'hide'].map(char => String.fromCodePoint(0xe0000 + char.charCodeAt(0))).join('')}`, tags: [], lesson: null } });
     expect(criterion(await f.status(), 'candidate-secrets')).toMatchObject({ met: false, measure: { count: 1, sample: 1 } });
     const pending = fixture({ journal: async () => [{ scopeId: 's', purgeId: 'p-lost' } as MemoryPurgeRecord, { scopeId: 'other', purgeId: 'p-other' } as MemoryPurgeRecord] });
-    expect(criterion(await pending.status(), 'purge-replay')).toMatchObject({ met: false, measure: { count: 1, sample: 1 } });
+    const rollout = (app: typeof pending.application) => app.rollout({ schemaVersion: 1, scopeId: 's', modes: ALL_ON }, { contextEvents: async () => [] });
+    expect(await rollout(pending.application)).toEqual({ schemaVersion: 1, status: 'held', code: 'MEMORY_PURGE_REPLAY_HELD' });
     const unreadable = fixture({ journal: async () => { throw new Error('torn'); } });
-    expect(criterion(await unreadable.status(), 'purge-replay')).toMatchObject({ met: false, measure: null });
+    expect(await rollout(unreadable.application)).toEqual({ schemaVersion: 1, status: 'held', code: 'MEMORY_PURGE_REPLAY_HELD' });
+    const replayed = fixture({ journal: async () => [{ scopeId: 's', purgeId: 'p-done' } as MemoryPurgeRecord] }); replayed.store.purges.add('p-done');
+    expect(criterion(await replayed.status(), 'purge-replay')).toMatchObject({ met: true, measure: { count: 0, sample: 1 } });
   });
   it('retention stays provisional registry data; the status measures stale entries against it and names no entry', async () => {
     const f = fixture(); f.add({ human: 5 });

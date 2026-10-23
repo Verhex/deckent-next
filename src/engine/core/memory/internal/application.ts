@@ -225,14 +225,15 @@ export class MemoryJournalApplication {
   /**
    * S4B-7 (§11): the rollout status of one scope — phase, every exit criterion with its measured numbers (counts only: no entry id, title or
    * digest leaves), the provisional retention values — under the caller's `memory`/`inspect`. Read-only: it enables nothing; a source that
-   * cannot be read leaves its criteria unmet. It reads on while a purge replay is pending (counts only) and reports that as a criterion.
+   * cannot be read leaves its criteria unmet. Like every memory read (§6.6) it holds while a purge the journal holds is missing from the ledger.
    */
   async rollout(input: unknown, ports: MemoryRolloutPorts, credential?: unknown): Promise<MemoryRolloutStatus | MemoryHeld> {
     const query = memoryRolloutQuerySchema.parse(input);
     await this.admit('inspect', query.scopeId, credential);
     let store: MemoryJournalStore;
     try { store = await this.deps.openStore('read'); } catch (error) { return held(error); }
-    try { return await measureMemoryRollout(this.deps, store, query.scopeId, query.modes, ports); } catch (error) { return held(error); } finally { store.close(); }
+    try { await assertNoPendingMemoryPurge(this.deps, store, query.scopeId); return await measureMemoryRollout(this.deps, store, query.scopeId, query.modes, ports); }
+    catch (error) { return held(error); } finally { store.close(); }
   }
   /** S4B-4 §6.6 restore safety: the scope's journal records re-applied (service start, and before a person's write). The authority is the sealed
    * journal record (a person's purge, already decided); the replay narrows only, so its events name the journal, not a policy rule. */
