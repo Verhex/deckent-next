@@ -138,7 +138,8 @@ names (alpha.54 R1; never the working tree; status and the card show `ref@commit
 (`--json` allowed). `trust` and `revoke` are decided on `config`/`write` for `project:execution.workerInstructions`, sealed before the
 record changes, and need the person's terminal witness: a card shows path, size, sha256 and the first lines; AI actors, MCP, pipes and
 `--json` are refused. Trust holds for exactly that folder and digest, with a work target that folder, ref and digest (alpha.54 REVISE 2738 R1; an
-alpha.53 folder + digest record still counts at a ref); a change makes it untrusted. Untrusted: workers get the task text
+folder + digest record, from alpha.53 or a read without a target, still counts at a ref and a revoke there removes it); a change
+makes it untrusted. Untrusted: workers get the task text
 only and run create, MCP and `--json` carry `WORKER_INSTRUCTIONS_WITHHELD`.
 
 Action arguments (alpha.53 D2): a catalog action may list `requires`; help prints "Required: …" (and "Required without a terminal: …" when a

@@ -161,9 +161,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   üst dizin güvensiz diye dışarıda kalır. Güven klasöre, ref'e ve dosyanın içeriğine bağlıdır: aynı baytlar başka bir ref'te ya da
   klasörün kendisinde kendi güvenini ister; bir ref'te güveni geri almak başka bir ref'in güvenini bırakır. Commit gösterilir
   (`status`, kart ve işçi isteminde `ref@commit`) ve kaydedilir ama karşılaştırılmaz; bu yüzden aynı baytlarla ilerleyen dal güvenilir
-  kalır. alpha.53'te verilen güven (klasör ve içerik) o klasörün aynı baytlı her ref'inde, orada geri alınana dek geçerli kalır;
-  alpha.54 bir ref için bu eski biçimi hiç yazmaz. Yapılandırılmış hedef yoksa klasördeki dosya eskisi gibi okunur ve güven klasöre ve
-  içeriğe bağlıdır. *Etki:* dosyayı güvenmeden önce commit edin; commit etmediğiniz değişiklik işçilere ulaşmaz. alpha.53'e
+  kalır. Klasör ve içerik güveni (alpha.53'te ya da yapılandırılmış hedef yokken klasörün kendi dosyası için verilen) o klasörün aynı
+  baytlı her ref'inde yine sayılır; alpha.54 bir ref için bu biçimi hiç yazmaz ve bir ref'te güveni geri almak onu da kaldırır.
+  Yapılandırılmış hedef yoksa klasördeki dosya eskisi gibi okunur ve güven klasöre ve içeriğe bağlıdır. *Etki:* dosyayı güvenmeden önce commit edin; commit etmediğiniz değişiklik işçilere ulaşmaz. alpha.53'e
   dönülürse alpha.54'te bir ref için verilen güven görülmez ve yeniden sorulur. O içerik için `deckent coding instructions trust` kişinin kendi terminalinde onaylanana kadar işçiler yalnız görev metnini alır;
   `run create`, MCP ve `--json` çıktısı `WORKER_INSTRUCTIONS_WITHHELD` uyarısını taşır, `/do` ve kuyruk kabulleri bu uyarıyı göstermez.
   Dosyadaki her değişiklik güveni yeniden düşürür. Git olmayan hedefte özet yoktur (açık no-op).
