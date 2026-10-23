@@ -3639,7 +3639,11 @@
         "src/engine/core/policy",
         "src/adapters/core/file-artifacts",
         "src/adapters/core/attempt-store",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/domain/core/attempt",
+        "src/domain/core/memory",
+        "src/domain/core/principal",
+        "src/capabilities/core/artifacts"
       ],
       "plan": "MEMORY"
     },

@@ -197,7 +197,7 @@ type Lesson = { kind: 'fact'; title: string; body: string } | { kind: 'lesson'; 
 interface FinalReport { schemaVersion: 1; summary: string; changedFiles: string[]; openIssues: string[];
   checks: { command: string; outcome: 'passed' | 'failed' | 'not-run' | 'unknown'; checkId?: string; role?: 'acceptance' | 'exploratory' }[];
   handoff?: HandoffNote; sharedNotes?: string[]; lessons?: Lesson[]; exit?: { schemaVersion: 1; kind: 'needs-input'; question: string } }
-type FinalReportResult = { status: 'reported'; report: FinalReport } | { status: 'unavailable'; reason: 'invalid' | 'oversized' | 'missing' | 'unsupported' | 'lessons-invalid' };
+type FinalReportResult = { status: 'reported'; report: FinalReport; lessons?: 'invalid' } | { status: 'unavailable'; reason: 'invalid' | 'oversized' | 'missing' | 'unsupported' };
 export function validateFinalReport(value: unknown, secrets: readonly string[], l: ReportLimits): FinalReportResult {
   if (Buffer.byteLength(JSON.stringify(value) ?? '') > l.reportBytes) return { status: 'unavailable', reason: 'oversized' };
   const object = (v: unknown, keys: string[], optional: string[] = []): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
@@ -224,8 +224,9 @@ export function validateFinalReport(value: unknown, secrets: readonly string[], 
     || !Array.isArray(value.checks) || value.checks.length > l.checks || !value.checks.every(c => object(c, ['command', 'outcome'], ['checkId', 'role'])
       && (!Object.hasOwn(c, 'checkId') || (text(c.checkId, l.checkIdChars) && c.checkId.length > 0)) && (!Object.hasOwn(c, 'role') || CHECK_ROLES.includes(c.role as string))
       && text(c.command, l.checkCommandChars) && typeof c.outcome === 'string' && ['passed', 'failed', 'not-run', 'unknown'].includes(c.outcome))) return { status: 'unavailable', reason: 'invalid' };
-  if (Object.hasOwn(value, 'lessons') && !lessonsOk(value.lessons)) return { status: 'unavailable', reason: 'lessons-invalid' };
-  const input = value as unknown as FinalReport, red = (text: string, max: number) => redactText(text, secrets, max);
+  // S4B-2: a malformed optional `lessons` claim is dropped and marked; it never rejects the report (the claim is not work).
+  const lessonsBad = Object.hasOwn(value, 'lessons') && !lessonsOk(value.lessons);
+  const input = (lessonsBad ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'lessons')) : value) as unknown as FinalReport, red = (text: string, max: number) => redactText(text, secrets, max);
   const report: FinalReport = { schemaVersion: 1, summary: red(input.summary, l.summaryChars), changedFiles: input.changedFiles.map(x => red(x, l.changedFileChars)),
     checks: input.checks.map(x => ({ command: red(x.command, l.checkCommandChars), outcome: x.outcome,
       ...(x.checkId === undefined ? {} : { checkId: red(x.checkId, l.checkIdChars) }), ...(x.role === undefined ? {} : { role: x.role }) })), openIssues: input.openIssues.map(x => red(x, l.openIssueChars)),
@@ -237,8 +238,7 @@ export function validateFinalReport(value: unknown, secrets: readonly string[], 
       ...(x.kind === 'lesson' ? { cause: red(x.cause, l.lessonFieldChars), correction: red(x.correction, l.lessonFieldChars) } : {}) } as Lesson)) } : {}),
     ...(input.exit ? { exit: { schemaVersion: 1, kind: 'needs-input', question: red(input.exit.question.trim(), l.handoffOpenQuestionChars) } } : {}) };
   if (report.handoff && !handoff(report.handoff)) return { status: 'unavailable', reason: 'invalid' };
-  if (report.lessons && !lessonsOk(report.lessons)) return { status: 'unavailable', reason: 'lessons-invalid' };
-  return Buffer.byteLength(JSON.stringify(report)) > l.reportBytes ? { status: 'unavailable', reason: 'oversized' } : { status: 'reported', report };
+  return Buffer.byteLength(JSON.stringify(report)) > l.reportBytes ? { status: 'unavailable', reason: 'oversized' } : { status: 'reported', report, ...(lessonsBad ? { lessons: 'invalid' as const } : {}) };
 }
 /** Strict-schema transport nulls (OpenAI strict schemas require every property) become absence before validation. */
 function dropTransportNulls(value: unknown): void {

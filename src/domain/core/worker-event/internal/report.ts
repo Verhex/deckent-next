@@ -38,17 +38,20 @@ export const workerFinalReportSchema = z.object({ schemaVersion: z.literal(1), s
 }).strict().refine(value => new TextEncoder().encode(JSON.stringify(value)).byteLength <= limits.reportBytes);
 export type WorkerFinalReport = z.infer<typeof workerFinalReportSchema>;
 export const workerFinalReportResultSchema = z.discriminatedUnion('status', [
-  z.object({ schemaVersion: z.literal(1), kind: z.literal('native-worker-report'), status: z.literal('reported'), report: workerFinalReportSchema }).strict(),
+  z.object({ schemaVersion: z.literal(1), kind: z.literal('native-worker-report'), status: z.literal('reported'), report: workerFinalReportSchema,
+    /** The worker's optional `lessons` claim was malformed and dropped; the rest of the report stands. */ lessons: z.literal('invalid').optional() }).strict(),
   z.object({ schemaVersion: z.literal(1), kind: z.literal('native-worker-report'), status: z.literal('unavailable'),
-    reason: z.enum(['invalid', 'oversized', 'missing', 'unsupported', 'lessons-invalid']) }).strict(),
+    reason: z.enum(['invalid', 'oversized', 'missing', 'unsupported']) }).strict(),
 ]);
 export type WorkerFinalReportResult = z.infer<typeof workerFinalReportResultSchema>;
-/** S4B-2: a report whose only defect is its `lessons` field (everything else parses) gets its own typed reason; a structural defect wins as `invalid`. */
-function lessonsOnlyInvalid(value: object): boolean {
+/** S4B-2: a `reported` record whose only defect is its optional `lessons` claim (everything else parses) is read without the claim and marked
+ * `lessons: 'invalid'`; the claim never rejects the report. A structural defect still makes the whole report `invalid`. */
+function withoutInvalidLessons(value: object): WorkerFinalReportResult | null {
   const record = 'report' in value && value.report && typeof value.report === 'object' && !Array.isArray(value.report) ? { ...value.report } as Record<string, unknown> : null;
-  if (!record || !('lessons' in record) || 'status' in value && value.status !== 'reported') return false;
+  if (!record || !('lessons' in record) || !('status' in value) || value.status !== 'reported') return null;
   delete record.lessons;
-  return workerFinalReportSchema.safeParse(record).success;
+  const report = workerFinalReportSchema.safeParse(record);
+  return report.success ? { schemaVersion: 1, kind: 'native-worker-report', status: 'reported', report: report.data, lessons: 'invalid' } : null;
 }
 /** A single bounded record in the existing retained stdout. Missing/truncated/duplicate records never invent a report. */
 export function readWorkerFinalReport(stdout: string): WorkerFinalReportResult {
@@ -60,7 +63,7 @@ export function readWorkerFinalReport(stdout: string): WorkerFinalReportResult {
     if (!value || typeof value !== 'object' || !('kind' in value) || value.kind !== 'native-worker-report') continue;
     if (result) return { ...unavailable, reason: 'invalid' };
     const parsed = workerFinalReportResultSchema.safeParse(value);
-    result = parsed.success ? parsed.data : { ...unavailable, reason: lessonsOnlyInvalid(value) ? 'lessons-invalid' : 'invalid' };
+    result = parsed.success ? parsed.data : withoutInvalidLessons(value) ?? { ...unavailable, reason: 'invalid' };
   }
   return result ?? unavailable;
 }
@@ -68,8 +71,9 @@ export function readWorkerFinalReport(stdout: string): WorkerFinalReportResult {
  * of a coding patch and of a business operation alike. `acceptanceChecks` summarises the last outcome of the acceptance checks:
  * `not-passed` when one ran and did not pass (`failed`, or `unknown` = ran with an unreadable outcome), else `not-run` (PRE-7) when one
  * was reported as not run. Both refuse the task; `not-run` is an observed worker claim, never an environment verdict (Law 1). */
-export const workerReportEvidenceSchema = z.object({ status: z.enum(['reported', 'missing', 'invalid', 'oversized', 'unsupported', 'lessons-invalid']),
-  acceptanceChecks: z.enum(['not-passed', 'not-run']).optional() }).strict().refine(value => value.status === 'reported' || value.acceptanceChecks === undefined).readonly();
+export const workerReportEvidenceSchema = z.object({ status: z.enum(['reported', 'missing', 'invalid', 'oversized', 'unsupported']),
+  acceptanceChecks: z.enum(['not-passed', 'not-run']).optional(), /** S4B-2: a malformed optional `lessons` claim was dropped; acceptance is unaffected. */ lessons: z.literal('invalid').optional(),
+}).strict().refine(value => value.status === 'reported' || (value.acceptanceChecks === undefined && value.lessons === undefined)).readonly();
 export type WorkerReportEvidence = z.infer<typeof workerReportEvidenceSchema>;
 export function workerReportEvidence(result: WorkerFinalReportResult): WorkerReportEvidence {
   if (result.status !== 'reported') return { status: result.reason };
@@ -78,14 +82,14 @@ export function workerReportEvidence(result: WorkerFinalReportResult): WorkerRep
     if (check.checkId === undefined) untyped.push(check.outcome); else last.set(check.checkId, check.outcome);
   }
   const outcomes = [...untyped, ...last.values()];
-  if (outcomes.some(outcome => outcome === 'failed' || outcome === 'unknown')) return { status: 'reported', acceptanceChecks: 'not-passed' };
-  return outcomes.includes('not-run') ? { status: 'reported', acceptanceChecks: 'not-run' } : { status: 'reported' };
+  const marker = result.lessons ? { lessons: 'invalid' as const } : {};
+  if (outcomes.some(outcome => outcome === 'failed' || outcome === 'unknown')) return { status: 'reported', acceptanceChecks: 'not-passed', ...marker };
+  return outcomes.includes('not-run') ? { status: 'reported', acceptanceChecks: 'not-run', ...marker } : { status: 'reported', ...marker };
 }
 /** The typed refusal of a work task's report evidence. Absence of a valid report fails (missing evidence, never a claim of success);
  * `unsupported` (the worker CLI declares no structured result channel) is not gated and stays visible on the evaluation. */
-export function workerReportRefusal(evidence: WorkerReportEvidence): 'report-missing' | 'report-invalid' | 'declared-check-not-passed' | 'acceptance-check-not-run' | 'lessons-invalid' | null {
+export function workerReportRefusal(evidence: WorkerReportEvidence): 'report-missing' | 'report-invalid' | 'declared-check-not-passed' | 'acceptance-check-not-run' | null {
   if (evidence.status === 'missing') return 'report-missing';
   if (evidence.status === 'invalid' || evidence.status === 'oversized') return 'report-invalid';
-  if (evidence.status === 'lessons-invalid') return 'lessons-invalid';
   return evidence.acceptanceChecks === 'not-passed' ? 'declared-check-not-passed' : evidence.acceptanceChecks === 'not-run' ? 'acceptance-check-not-run' : null;
 }

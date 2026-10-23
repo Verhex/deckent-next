@@ -87,8 +87,7 @@ export function installStatusLabel(status: MonitorInstallStatus, locale: Locale)
 export function notAcceptedLabel(reason: NonNullable<MonitorTask['evaluation']['reason']>, locale: Locale): string {
   const labels = { 'no-change-produced': t('task.acceptance.noChangeProduced', {}, locale), 'report-missing': t('task.acceptance.reportMissing', {}, locale),
     'report-invalid': t('task.acceptance.reportInvalid', {}, locale), 'declared-check-not-passed': t('task.acceptance.declaredCheckNotPassed', {}, locale),
-    'worker-stalled': t('task.acceptance.workerStalled', {}, locale), 'acceptance-check-not-run': t('task.acceptance.checkNotRun', {}, locale),
-    'lessons-invalid': t('task.acceptance.lessonsInvalid', {}, locale) };
+    'worker-stalled': t('task.acceptance.workerStalled', {}, locale), 'acceptance-check-not-run': t('task.acceptance.checkNotRun', {}, locale) };
   return labels[reason];
 }
 /** The engine's environment-park detail prefix, tied to its constant by type (a value import would load the host graph at CLI startup). */

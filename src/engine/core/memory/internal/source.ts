@@ -7,8 +7,8 @@ import type { MemoryEvaluationSource } from './contract.js';
 /**
  * S4B-1 §4.1: one distiller source from sealed records only — the Run snapshot, the canonical evaluation of the Attempt and the effect ledger's
  * answer whether the Attempt left an unresolved effect. `accepted` needs the Task accepted and this Attempt the evaluated, bound one; E1's answer is
- * the person's answer to the earlier generation's question when this Attempt is the next generation. The worker report's `lessons` and the typed
- * earlier failure are S4B-2's: `report` carries the worker's lesson claims read from the sealed output (`memoryReportClaimsOf`), null here without one. The work target is the Run's (null: none); the WorkClass view is the caller's registry projection.
+ * the person's answer to the earlier generation's question when this Attempt is the next generation. The worker report's `lessons` (S4B-2, rule E3) arrive as `report`,
+ * read from the sealed output (`memoryReportClaimsOf`), null without one; the typed earlier failure (rule E2) is not read yet (null, tracked follow-up). The work target is the Run's (null: none); the WorkClass view is the caller's registry projection.
  */
 export function memoryExtractionSourceOf(input: { readonly run: RunSnapshot; readonly attemptId: string; readonly evaluations: readonly TaskEvaluation[];
   readonly unsettledEffects: boolean; readonly workClass: MemoryExtractionSource['workClass']; readonly workTargetId: string | null;
@@ -29,7 +29,7 @@ export function memoryExtractionSourceOf(input: { readonly run: RunSnapshot; rea
 export interface MemoryReportClaims { readonly lessons: readonly unknown[] | null; readonly reportDigest: string }
 /**
  * S4B-2 (§4.1, E3): the lesson claims of one Attempt's sealed output, read exactly as handoff reads it — the bytes must match the receipt, the
- * envelope must belong to the Attempt, and the report must be a valid `reported` one (a missing, invalid, oversized or `lessons-invalid` report
+ * envelope must belong to the Attempt, and the report must be a valid `reported` one (a missing, invalid or oversized report, or one whose malformed `lessons` were dropped
  * yields no claims). No claims (absent or empty) is `null`: the report still seals nothing for memory. Throws only on a mismatch the caller maps to none.
  */
 export function memoryReportClaimsOf(receipt: { readonly byteLength: number; readonly digest: string }, bytes: Uint8Array, identity: unknown): MemoryReportClaims | null {

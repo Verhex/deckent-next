@@ -589,7 +589,6 @@
   "task.acceptance.noChangeProduced": "Kabul edilmedi: değişiklik üretilmedi.",
   "task.acceptance.reportMissing": "Kabul edilmedi: işçi sonuç raporu vermeden bitti.",
   "task.acceptance.reportInvalid": "Kabul edilmedi: işçinin sonuç raporu geçersizdi.",
-  "task.acceptance.lessonsInvalid": "Kabul edilmedi: işçinin raporundaki dersler geçersizdi (çok fazla, çok uzun ya da eksik).",
   "task.acceptance.declaredCheckNotPassed": "Kabul edilmedi: işçi raporundaki bir kabul kontrolü geçmedi.",
   "task.acceptance.workerStalled": "Kabul edilmedi: işçi sessiz kaldı ve yeniden deneme hakkı bitti.",
   "monitor.detail.container": "Konteyner {id} · imaj {image} · başlangıç {started} · bitiş {ended} · kaynak sınırları: CPU {cpus} · bellek {memory}",

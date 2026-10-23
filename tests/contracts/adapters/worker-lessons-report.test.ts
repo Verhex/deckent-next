@@ -6,7 +6,7 @@ import { validateFinalReport } from '#adapters/core/native-connection/index.js';
 import { createCodexState, createFinalReportJsonSchema, createNativeLineObserver, createNormalizerState, finalReportCollector } from '#adapters/core/native-connection/internal/worker.js';
 
 // S4B-2: the standalone worker bootstrap mirrors the domain `lessons` claim: same bounds (injected registry limits), secrets redacted before retention,
-// strict-schema transport nulls become absence, and the typed reason is lessons-invalid.
+// strict-schema transport nulls become absence, and a malformed claim is dropped and marked (lessons: 'invalid'), never a report rejection.
 const base = { schemaVersion: 1, summary: 'Done', changedFiles: [], checks: [], openIssues: [] };
 const lesson = { kind: 'lesson', title: 'Masraf merkezi', body: 'Boş geçilemez.', cause: 'Alan boştu', correction: 'Onaya gönder' };
 const fact = { kind: 'fact', title: 'Not', body: 'Tek satır.' };
@@ -17,12 +17,12 @@ it('accepts the same lessons as the domain schema and keeps older reports valid'
     expect(workerFinalReportSchema.safeParse(value).success).toBe(true);
   }
 });
-it('negative: count, length, incomplete, extra-key and wrong-shape lessons are lessons-invalid; a structural defect stays invalid', () => {
+it('negative: count, length, incomplete, extra-key and wrong-shape lessons are dropped and marked, never reject the report; a structural defect stays invalid', () => {
   const l = workerReportLimits;
   for (const lessons of [Array.from({ length: l.lessons + 1 }, () => fact), [{ ...fact, title: 'a'.repeat(l.lessonTitleChars + 1) }], [{ ...fact, body: 'a'.repeat(l.lessonBodyChars + 1) }],
     [{ ...lesson, cause: 'a'.repeat(l.lessonFieldChars + 1) }], [{ kind: 'lesson', title: 't', body: 'b', cause: 'c' }], [{ ...fact, cause: 'c' }], [{ ...fact, grant: 'x' }],
     [{ ...fact, title: ' ' }], [{ ...fact, kind: 'rule' }], 'text', [null], [[]]]) {
-    expect(validateFinalReport({ ...base, lessons }, [])).toEqual({ status: 'unavailable', reason: 'lessons-invalid' });
+    expect(validateFinalReport({ ...base, lessons }, [])).toEqual({ status: 'reported', report: base, lessons: 'invalid' });
   }
   expect(validateFinalReport({ ...base, summary: 1, lessons: [{ kind: 'x' }] }, [])).toEqual({ status: 'unavailable', reason: 'invalid' });
 });
@@ -43,7 +43,7 @@ it('the structured-output schemas carry lessons with the registry bounds; the st
   expect(strict.required).toContain('lessons'); expect(strict.properties.lessons.anyOf[1]).toEqual({ type: 'null' });
   expect(strict.properties.lessons.anyOf[0]!.items!.required).toEqual(['kind', 'title', 'body', 'cause', 'correction']);
 });
-it('strict-schema transport nulls become absence before validation, and an invalid lessons claim from the channel is lessons-invalid', () => {
+it('strict-schema transport nulls become absence before validation, and an invalid lessons claim from the channel is dropped and marked', () => {
   const collect = (lessons: unknown) => {
     const collector = finalReportCollector('codex', [], workerReportLimits);
     const observer = createNativeLineObserver('codex-exec-json', createNormalizerState([]), createCodexState(), () => {}, collector);
@@ -52,5 +52,5 @@ it('strict-schema transport nulls become absence before validation, and an inval
   };
   expect(collect(null)).toEqual({ status: 'reported', report: base });
   expect(collect([{ ...fact, cause: null, correction: null }, lesson])).toEqual({ status: 'reported', report: { ...base, lessons: [fact, lesson] } });
-  expect(collect([{ ...lesson, correction: null }])).toEqual({ status: 'unavailable', reason: 'lessons-invalid' });
+  expect(collect([{ ...lesson, correction: null }])).toEqual({ status: 'reported', report: base, lessons: 'invalid' });
 });

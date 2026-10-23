@@ -58,9 +58,8 @@ export const taskEligibilitySchema = z.discriminatedUnion('kind', [
 /** Typed causes of a failed Task (additive literals). `report-missing`/`report-invalid` (R5, owner D5a): a work task ended without a valid
  * structured result report; `declared-check-not-passed`: its report's acceptance check did not pass; `worker-stalled` (R3): the
  * bounded silence retry is exhausted; `acceptance-check-not-run` (PRE-7): its report says an acceptance check was not run (an observed
- * claim, not an environment verdict); `lessons-invalid` (S4B-2): the report is otherwise valid but its optional `lessons` claim is not (a content
- * defect of the worker, not a transport one, so it is not retried). Only report-missing/report-invalid are retried by the run recovery owner (R3). */
-export const TASK_NOT_ACCEPTED_REASONS = ['no-change-produced', 'report-missing', 'report-invalid', 'declared-check-not-passed', 'worker-stalled', 'acceptance-check-not-run', 'lessons-invalid'] as const;
+ * claim, not an environment verdict). Only report-missing/report-invalid are retried by the run recovery owner (R3). */
+export const TASK_NOT_ACCEPTED_REASONS = ['no-change-produced', 'report-missing', 'report-invalid', 'declared-check-not-passed', 'worker-stalled', 'acceptance-check-not-run'] as const;
 export type TaskNotAcceptedReason = typeof TASK_NOT_ACCEPTED_REASONS[number];
 export const taskProgressSchema = z.object({
   taskId: identity,
