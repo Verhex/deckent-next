@@ -24,27 +24,34 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   transport, backup and restore do not run on macOS either; platform tests skip them with a `[requires Linux …]` tag.
 - **The terminal screen layout has not been tried** on physical Windows Terminal, macOS Terminal, VS Code's terminal or tmux.
   *Impact:* the input bar, windows and colors may misbehave there. *Workaround:* use a plain Linux or WSL2 terminal.
-- **Copying with the mouse uses your terminal's clipboard sequence (OSC 52)** and was proven only on a Linux pseudo-terminal, not on
-  physical Windows Terminal, WSL inside it, xterm, tmux or iTerm2. Some terminals block it (iTerm2 until "Applications in terminal may
-  access clipboard" is on; tmux needs `set -g set-clipboard on`). Drag selection has no autoscroll and no double/triple click.
-  *Impact:* after "Copied … characters" the paste may be empty. *Workaround:* hold Shift (Option in iTerm2) and drag to use the
+- **Copying with the mouse and `/copy [n]` use your terminal's clipboard sequence (OSC 52)** and were proven only on a Linux
+  pseudo-terminal, not on physical Windows Terminal, WSL inside it, xterm, tmux or iTerm2. Some terminals block it (iTerm2 until
+  "Applications in terminal may access clipboard" is on; tmux needs `set -g set-clipboard on`, and for `/copy` also
+  `allow-passthrough on`). Deckent cannot ask the terminal whether it took the text, so `/copy` says "sent", never "copied". One
+  request carries at most 64 KiB and `/copy` reaches back at most 99 answers; a larger answer is refused, and off an interactive
+  terminal nothing is sent. Drag selection has no autoscroll and no double/triple click.
+  *Impact:* after "Copied … characters" or "Sent answer …" the paste may be empty. *Workaround:* hold Shift (Option in iTerm2) and drag to use the
   terminal's own selection, or set `terminal.layout` to `inline`.
 - **arm64 is not shipped.** The locked bubblewrap bundle ships for x86_64; an arm64 build check is not arm64 runtime proof.
   *Workaround:* use x86_64.
 - **No npm package yet.** You install from source (see [Get started](../README.md#get-started)).
 - **Some install-time messages are English only** (build and sandbox preparation messages appear before translation exists).
-- **`deckent init` sets up the installation, not yet a first coding Run** (alpha.48 I-S3). It applies the first-run
-  permissions, the language, the sandbox check, the Docker install (person only), the model connection (`models connect`),
-  the project instructions and the final check, each through its existing command. *Impact:* setup does not build the worker image or write the registry and pool:
-  its summary (and `deckent init --json`, `firstJob`) lists the missing first-job steps in order with their exact commands (worker image
-  with `npm run worker:image` in the source checkout, `deckent config set execution`, `deckent init registry`, `deckent init pool`) and
-  doctor's pool row names the first one; the list reads configuration and the pool ledger only and does not check that the configured
-  image exists; a delivery clone is not a setup stage either. The profile you choose (solo, team, enterprise or custom) is saved in your user's global configuration
+- **`deckent init` prepares the first job only for a person at a terminal** (alpha.54 BR1; alpha.48 I-S3). It applies the
+  first-run permissions, the language, the sandbox check, the Docker install (person only), the model connection (`models connect`),
+  the project instructions and the final check, each through its existing command. Since alpha.54 it also builds the worker image from
+  the installed package after a card that names its size and time limit (or adopts an image you name with `deckent init --image-id
+  sha256:<id>`), writes the execution settings from the Docker and Git paths it found, declares the first work kind `coding` on the
+  coding CLI you pick with the pool `workers` and one running slot, and sets up that pool, each after its own card. *Impact:* without a
+  terminal, and with `--yes`, none of these four steps runs: the summary (and `deckent init --json`, `firstJob`) lists the missing
+  first-job steps in order with their exact commands (`deckent init`, `deckent init registry`, `deckent init pool`) and doctor names the
+  first one. Another kind, pool name or capacity still needs `deckent init registry` with its own flags. The image build needs Docker
+  and the network, and a running service reads the new `execution` and `admission` settings only after `deckent runtime restart`.
+  `deckent doctor` checks read-only (`docker image inspect`, no container) that the configured image is on this Docker. A delivery
+  clone is not a setup stage. The profile you choose (solo, team, enterprise or custom) is saved in your user's global configuration
   (`identity.profile`; distribution stays `deckent identity distribute`); the next `deckent init` reads it back and shows the stage done,
   and doctor no longer asks for one. Unattended `--yes` does not save the profile. The final check is doctor's own rows: it reads done only with no
-  warning and every other stage done or skipped, so on a fresh install it stays "ready to apply" (doctor still warns about
-  the worker pool and names the first missing first-job step; after `--yes` only, it also asks for the identity profile). Unattended
-  `deckent init --yes --scope <id>` applies only the fresh permissions, the language and the final check.
+  warning and every other stage done or skipped. Unattended `deckent init --yes --scope <id>` applies only the fresh permissions, the
+  language and the final check.
 - **Docker Engine install from setup is new** (alpha.48 I-D2; offered in the `deckent init` window since I-S3, only to a
   person at a real terminal). It installs only from Docker's official apt repository on the Ubuntu and Debian releases Docker
   lists (checked 2026-10-19), with Docker's signing key shipped in Deckent; everything else (native Windows/macOS, Docker
@@ -150,7 +157,12 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 - **A worker sees the project's instruction snapshot only after a person trusts it.** A Run snapshots one project instruction file
   (`.deckent/worker-instructions.md` by default, or `AGENTS.md`, or none; `execution.workerInstructions.source`) at the Git work target
-  root. Until `deckent coding instructions trust` is confirmed at the person's own terminal for that exact content, workers get the task
+  root. With a configured work target the file is read from the commit the target's base ref names (alpha.54), not from the folder:
+  an uncommitted or modified copy is never used, a file that exists only in the folder reads as absent, and a link, a submodule or a
+  non-tree parent is left out as unsafe. Trust binds the folder and the file's content; the commit is shown (`ref@commit` in
+  `status`, on the card and in the worker prompt) and recorded but not compared, so a branch that moves on with the same bytes stays
+  trusted and trust given on alpha.53 stays valid. Without a configured target the folder's file is read as before. *Impact:* commit
+  the file before you trust it; a change you have not committed does not reach workers. Until `deckent coding instructions trust` is confirmed at the person's own terminal for that exact content, workers get the task
   text only and `run create`, MCP and `--json` carry the warning `WORKER_INSTRUCTIONS_WITHHELD`; `/do` and queue admissions show no such
   warning. Any change to the file makes it untrusted again. A non-Git target has no snapshot (explicit no-op).
 - **Hiding instruction files from a worker is not confidentiality.** Codex discovery is `disabled` by strict-config keys that are
@@ -188,19 +200,25 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   (`127.0.0.1` or `[::1]`), and a remote OpenAI-compatible server needs a published price row; today those exist only for
   the OpenAI, DeepSeek and Z.ai APIs, and there is no way to declare your own price. *Impact:* a company model server on
   your network cannot be used. *Workaround:* run the model server on this machine.
-- **A Codex worker's model cannot be verified, and a Cursor worker's model is checked by name only.** Only Claude Code reports
-  per-model usage (`verified`). Codex results are recorded as unverified and accepted by their criteria. Cursor reports only the
+- **A Codex worker's model is only client-reported, and a Cursor worker's model is checked by name only.** Only Claude Code reports
+  per-model usage (`verified`). Codex writes the model it resolved into its own session log inside the container; Deckent reads the
+  first turn's model from that log (bounded, no links followed; only the model and the Codex version leave the container) and records
+  `client-reported` (Turkish: "istemci beyanı"). The admitted model, by its exact id or a catalog name of it, is accepted by its criteria
+  with that label; another name reads `client-reported-mismatch` and the attempt is held for a person; no name stays `unverified` and is
+  accepted by its criteria as before. The worker can rewrite that log, so this is never `verified` and never a substitution failure.
+  The Codex names were measured from Codex 0.163.0. Cursor reports only the
   model's display-style name at session start: a name the catalog records for the chosen model reads `start-name-matched` and is
   accepted by its criteria; a name the catalog records for another model reads `substituted` and fails; no name or an unknown
   name reads `unverified` and the attempt is held for a human, never accepted silently. A Cursor catalog entry with
   `selection: provider` (`auto`) leaves the model choice to Cursor and reads `provider-chosen`; it never claims a model match.
-  *Impact:* a matched name is weaker evidence than Claude's per-model usage, and if a Codex worker ran another model the work
-  is still accepted.
+  *Impact:* a client-reported or matched name is weaker evidence than Claude's per-model usage, and a Codex worker that rewrites its
+  own log can hide another model.
 - **Cursor renames can hold every Cursor attempt on that model.** The packaged names were measured from Cursor
   2026.10.19-6bbf2c4, and the worker image records the installed Cursor version but does not pin it. If an update renames a
   model, each Cursor attempt on it is held as `unverified` until the catalog names are measured again. *Workaround:* re-measure
   with `cursor-agent -p --output-format stream-json` and register an updated catalog.
-- **Codex and Cursor workers report little about their run.** A Codex attempt shows one turn and no token use. A Cursor attempt
+- **Codex and Cursor workers report less about their run.** A Codex attempt shows its turns and measured tokens (fresh input, cache
+  reads, cache writes, output and reasoning), but no cost because it runs on a subscription. A Cursor attempt
   shows derived turns (the number of assistant messages, not a provider count), tokens, duration and tool calls, but no cost
   because it runs on a subscription. *Impact:* their effort and cost are not comparable with Claude Code's. *Workaround:* judge
   them by the delivered result.
@@ -347,10 +365,13 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **A worker that asks you a question cannot be answered from the terminal yet.** *Workaround:* `deckent run resume --scope <id>
   --id <run> --command-id <id> --expected-revision <n> --task <id> --answer <text>`.
 - **Autonomous delivery is designed but off.** Every delivery and adoption needs your `y` in a verified terminal.
-- **A held environment probe keeps its pool slot until you resume.** A probe stopped by its own deadline gives no answer: the Run is held
-  with `EXECUTION_ENVIRONMENT_TIMED_OUT` (not parked as an installation defect, never retried automatically) and `deckent run resume`
-  probes again. Until then the slot stays held, and `run list` and terminal jobs show the hold only as "ilerleme başarısız" /
-  "progression failed", not by its own name. Image probe failures keep a bounded cause (deadline, exit, signal, parse).
+- **A held Run keeps its pool slot until you resume.** When a hold is laid over another park (progression failed, environment not
+  ready, quota exhausted and the others), progression stops and the active or unresolved task keeps its pool slot until `deckent run
+  resume`; holds that only stop new reservations keep the slots of tasks that are already running, by design. `/runs`, the `/run`
+  picker and `deckent run list` show the park reason and, for a hold laid over another park, "also held by an operator". A probe
+  stopped by its own deadline gives no answer: the Run is held with `EXECUTION_ENVIRONMENT_TIMED_OUT` (not parked as an installation
+  defect, never retried automatically) and `deckent run resume` probes again; until then its slot stays held, and the lists show this
+  hold as "progression failed", not by its own code. Image probe failures keep a bounded cause (deadline, exit, signal, parse).
 - **The delivery card summary is a projection, not evidence.** Queue, delivery and adoption cards show title, what changed, why it was
   accepted, model verdict, risk and what yes/no does. The worker's own report is shown as a claim; the Git change facts (files, +/−,
   out-of-scope) are filled by the Git workspace adapter. Queue ordering is unchanged (in flight first, parked last).
@@ -374,7 +395,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   names its field. *Impact:* a person writes the command document by hand or uses a script.
 - **An uncertain ERP write has no exit except a resend.** If the target cannot say whether the write happened, Deckent does not
   retry it by itself and the record keeps the target busy. When the target can confirm afterwards, resend the same command id and
-  its evidence settles the record; if it cannot, the record stays unresolved. *Impact:* a person cannot close it yet. Closing
+  its evidence settles the record; if it cannot, the record stays unresolved. `EFFECT_OUTCOME_UNKNOWN` names this next step and
+  `deckent operation inspect` shows it for an unknown or claimed record. `EFFECT_TARGET_BUSY` says an earlier operation on the same
+  record must settle first, but it cannot name that earlier command: you must know its command id. *Impact:* a person cannot close
+  an unresolved record yet. Closing
   it with a human declaration (with attached evidence, not counted as acceptance) is planned.
 - **The approval card for an operation shows the operation, the target and a 12-character input digest,** not the fields it will
   write. *Impact:* the approver cannot see an amount or status. *Workaround:* inspect the input file before approving.
@@ -416,8 +440,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   before-upgrade), so with daily the upgrade starts without a fresh set and the way back is the newest daily set, up to about a
   day old. *Workaround:* before an upgrade run `deckent backup create --scope <id> --set <absolute path>` yourself, or choose
   before-upgrade instead of daily.
-- **A lost worker can keep its slot.** A granted attempt can stay active and hold an execution slot until custody is resolved.
-  *Workaround:* watch it with `deckent monitor`; the slot is freed only by a typed manual decision or by evidence that the worker ended.
+- **A lost worker can keep its slot, and there is no automatic recovery yet.** A granted attempt can stay active and hold an execution
+  slot until custody is resolved. `deckent run inspect` says so: the task stays held, nothing is retried, released or accepted, no new
+  attempt starts, and the running service checks the worker again. *Workaround:* watch it with `deckent monitor`; the slot is freed
+  only by a typed manual decision or by evidence that the worker ended. Automatic recovery is planned for the core layers before beta.
 - **The clean-machine rehearsal stopped at the model step.** A fresh clone on 2026-10-15/16 reached install, `doctor`, policy,
   registry and pool. The model connection, `/do`, a worker image build on an empty Docker daemon and the start-up
   toolchain refresh on a clean daemon were not exercised there. *Workaround:* follow the README first-job path and report what differs.
@@ -438,6 +464,13 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   restarts it. *Workaround:* after a switch, restart the client (the Claude Code session, or close and reopen the terminal);
   `deckent runtime describe` shows which build the service runs.
 
+- **Switching to alpha.54 and back needs care.** Codex worker profiles pinned before alpha.54 carry the old `none` evidence stamp and
+  are refused with `WORKER_MODEL_BINDING_MISMATCH` when a Run is created or its budget is planned: finish the waiting Codex work before
+  the switch and declare the Codex profiles again after it. Going back to alpha.53: unset `terminal.responseStyle` and
+  `terminal.notify` (alpha.53 refuses a `terminal` section with keys it does not know); Codex profiles declared on alpha.54 carry the
+  `client-reported` stamp, which alpha.53 refuses, and alpha.53 cannot read the `client-reported` and `client-reported-mismatch` model
+  verdicts. Instruction trust keeps the same key, so it stays valid in both directions, and alpha.53 again reads the file from the
+  folder. A `/rename` title is a separate file that alpha.53 ignores. Ledger v59 and runtime protocol v29 did not change.
 - **Rolling back from alpha.53 to alpha.52 needs care.** Unset `execution.workerInstructions`; finish or release Cursor attempts (their
   clones are sparse); Codex and Cursor `disabled` kinds are refused by alpha.52; have an empty delivery queue at the switch (tickets
   are titled differently); the alpha.52 audit verify does not see the shadow store (it is outside the chain). If the Cursor catalog was
@@ -498,6 +531,17 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   `readme-clone-note (verify task)`; the terminal `/runs` window still says "Untitled run".
 - **`deckent terminal status` does not contact the chat model**, so its reachability reads "not tested"; the first answer in
   `deckent` or the `/provider` check shows it. The context window reads "?" until the first answer is measured.
+- **The background bell needs focus reports from your terminal.** With `terminal.notify` at `bell` (the default) Deckent asks the
+  terminal for focus reports (mode 1004) and rings the bell when work ends or a card waits, only after the window reported that it
+  lost focus. A terminal or multiplexer that sends no reports (tmux without `focus-events on`) never rings; whether the bell sounds,
+  flashes or does nothing is your terminal's setting. *Workaround:* `terminal.notify` `off` turns it off.
+- **Ctrl+G stops the terminal while your editor runs.** The draft goes to a private temporary file (folder 0700, file 0600) and
+  `$VISUAL`, else `$EDITOR`, runs on it with no shell. Until the editor exits, Deckent reads no key and draws nothing, so progress,
+  answers and cards appear only afterwards. An editor that returns at once (a GUI editor without its wait flag, such as `code`
+  without `--wait`) gives the draft back unchanged; with neither variable set, after an editor error or above 1 MiB the draft is
+  unchanged. *Workaround:* set `EDITOR` to a terminal editor or a GUI editor with its wait flag.
+- **`terminal.responseStyle` is a request to the model, not a rule.** `concise` and `explanatory` add one line to the terminal chat
+  model's instructions (`standard` adds nothing); the model may not follow it, and it does not change workers or `/do` plans.
 - **`deckent workers watch` has no row selection.** It redraws one window on a terminal (Esc or q closes); details come from
   `deckent workers --verbose`. `--json` returns the whole observation report, history included, whatever `--all` says.
 - **The SDK still exports raw writers** next to the managed ones; a later versioned SDK contract is meant to keep only the

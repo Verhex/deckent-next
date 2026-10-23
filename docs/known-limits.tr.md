@@ -23,28 +23,33 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   geri yükleme macOS'ta da çalışmaz; platform testleri bunları `[requires Linux …]` etiketiyle atlar.
 - **Terminal ekran düzeni** fiziksel Windows Terminal, macOS Terminal, VS Code terminali ya da tmux'ta **denenmedi.**
   *Etki:* giriş çubuğu, pencereler ve renkler orada bozulabilir. *Yol:* düz bir Linux ya da WSL2 terminali kullanın.
-- **Fareyle kopyalama terminalinizin pano dizisini (OSC 52) kullanır** ve yalnız bir Linux sözde-terminalinde kanıtlandı; fiziksel
-  Windows Terminal, onun içindeki WSL, xterm, tmux ya da iTerm2'de denenmedi. Bazı terminaller bunu engeller (iTerm2'de "Applications in
-  terminal may access clipboard" açılmalı; tmux'ta `set -g set-clipboard on` gerekir). Sürükleyerek seçimde otomatik kaydırma ve çift/üçlü
-  tıklama yok. *Etki:* "… karakter panoya kopyalandı" sonrasında yapıştırma boş gelebilir. *Yol:* Shift'e (iTerm2'de Option) basılı tutup
+- **Fareyle kopyalama ve `/copy [n]` terminalinizin pano dizisini (OSC 52) kullanır** ve yalnız bir Linux sözde-terminalinde
+  kanıtlandı; fiziksel Windows Terminal, onun içindeki WSL, xterm, tmux ya da iTerm2'de denenmedi. Bazı terminaller bunu engeller
+  (iTerm2'de "Applications in terminal may access clipboard" açılmalı; tmux'ta `set -g set-clipboard on`, `/copy` için ayrıca
+  `allow-passthrough on` gerekir). Deckent terminalin metni alıp almadığını soramaz; bu yüzden `/copy` "gönderildi" der, hiçbir zaman
+  "kopyalandı" demez. Tek istek en çok 64 KiB taşır ve `/copy` en çok 99 yanıt geriye gider; daha büyük yanıt reddedilir, etkileşimli
+  olmayan terminalde hiçbir şey gönderilmez. Sürükleyerek seçimde otomatik kaydırma ve çift/üçlü tıklama yok. *Etki:* "… karakter
+  panoya kopyalandı" ya da "… terminal panosuna gönderildi" sonrasında yapıştırma boş gelebilir. *Yol:* Shift'e (iTerm2'de Option) basılı tutup
   sürükleyerek terminalin kendi seçimini kullanın ya da `terminal.layout` değerini `inline` yapın.
 - **arm64 yayımlanmıyor.** Kilitli bubblewrap paketi x86_64 için gelir; arm64 derleme kontrolü arm64 çalışma kanıtı değildir.
   *Yol:* x86_64 kullanın.
 - **Henüz npm paketi yok.** Kaynaktan kurarsınız ([Başlarken](../README.tr.md#başlarken)).
 - **Bazı kurulum mesajları yalnız İngilizce** (derleme ve sandbox hazırlığı mesajları çeviri var olmadan önce çıkar).
-- **`deckent init` kurulumu yapar, henüz ilk kodlama Run'ını değil** (alpha.48 I-S3). İlk kurulum izinlerini, dili,
-  sandbox kontrolünü, Docker kurulumunu (yalnız kişi), model bağlantısını (`models connect`), proje yönergelerini ve son
-  kontrolü, her birini kendi mevcut komutuyla uygular. *Etki:* kurulum worker imajını oluşturmaz, kaydı ve havuzu yazmaz:
-  özeti (ve `deckent init --json`, `firstJob`) ilk iş için eksik adımları sırayla ve tam komutlarıyla listeler (kaynak kodda
-  `npm run worker:image` ile worker imajı, `deckent config set execution`, `deckent init registry`, `deckent init pool`), doctor'un
-  havuz satırı ilkini gösterir; liste yalnız yapılandırmayı ve havuz defterini okur, ayarlı imajın makinede olup olmadığını
-  denetlemez; teslim klonu da kurulum aşaması değildir.
+- **`deckent init` ilk işi yalnız terminaldeki bir kişi için hazırlar** (alpha.54 BR1; alpha.48 I-S3). İlk kurulum izinlerini,
+  dili, sandbox kontrolünü, Docker kurulumunu (yalnız kişi), model bağlantısını (`models connect`), proje yönergelerini ve son
+  kontrolü, her birini kendi mevcut komutuyla uygular. alpha.54'ten beri ayrıca, boyutu ve süre sınırını söyleyen bir karttan sonra
+  worker imajını kurulu paketten derler (ya da `deckent init --image-id sha256:<kimlik>` ile verdiğiniz imajı benimser), bulduğu
+  Docker ve Git yollarından yürütme ayarlarını yazar, seçtiğiniz kodlama CLI'ı üzerinde `coding` ilk iş türünü `workers` havuzu ve
+  bir çalışma yuvasıyla tanımlar ve o havuzu kurar; her biri kendi kartından sonra. *Etki:* terminal yoksa ve `--yes` ile bu dört
+  adımın hiçbiri çalışmaz: özet (ve `deckent init --json`, `firstJob`) ilk iş için eksik adımları sırayla ve tam komutlarıyla
+  listeler (`deckent init`, `deckent init registry`, `deckent init pool`), doctor ilkini gösterir. Başka bir iş türü, havuz adı ya da
+  kapasite hâlâ kendi bayraklarıyla `deckent init registry` ister. İmaj derlemesi Docker ve ağ ister; çalışan servis yeni `execution`
+  ve `admission` ayarlarını ancak `deckent runtime restart` sonrasında okur. `deckent doctor` yapılandırılan imajın bu Docker'da
+  olduğunu salt okunur denetler (`docker image inspect`, konteyner yok). Teslim klonu kurulum aşaması değildir.
   Seçtiğiniz profil (tek kullanıcı, ekip, kurum ya da özel) kullanıcınızın genel yapılandırmasına kaydedilir
   (`identity.profile`; dağıtım `deckent identity distribute` olarak kalır); sonraki `deckent init` onu geri okur ve aşamayı tamam
   gösterir, doctor da artık profil istemez. Gözetimsiz `--yes` profili kaydetmez. Son kontrol
-  doctor'ın kendi satırlarıdır: yalnız hiç uyarı yokken ve diğer her aşama tamam ya da atlanmışken "tamam" olur; bu yüzden
-  yeni kurulumda "uygulanmaya hazır" kalır (doctor worker havuzu için uyarır ve ilk iş için eksik ilk adımı
-  gösterir; yalnız `--yes` sonrasında kimlik profilini de ister). Gözetimsiz `deckent init --yes --scope <kimlik>` yalnız yeni izinleri, dili ve son kontrolü uygular.
+  doctor'ın kendi satırlarıdır: yalnız hiç uyarı yokken ve diğer her aşama tamam ya da atlanmışken "tamam" olur. Gözetimsiz `deckent init --yes --scope <kimlik>` yalnız yeni izinleri, dili ve son kontrolü uygular.
 - **Kurulumdan Docker Engine kurmak yeni** (alpha.48 I-D2; I-S3'ten beri `deckent init` penceresinde, yalnız gerçek bir
   terminaldeki kişiye önerilir). Yalnız Docker'ın resmi apt deposundan, Docker'ın listelediği Ubuntu ve Debian sürümlerinde
   (2026-10-19'da kontrol edildi), Deckent ile gelen Docker imza anahtarıyla kurar; geri kalan her durumda (yerel
@@ -151,7 +156,12 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 - **İşçi, proje talimat özetini ancak bir kişi güvenince görür.** Bir Run, Git çalışma hedefinin kökündeki tek bir proje talimat dosyasının
   özetini alır (varsayılan `.deckent/worker-instructions.md`; ya da `AGENTS.md`, ya da hiçbiri; `execution.workerInstructions.source`).
-  O içerik için `deckent coding instructions trust` kişinin kendi terminalinde onaylanana kadar işçiler yalnız görev metnini alır;
+  Yapılandırılmış bir iş hedefi varsa dosya klasörden değil, hedefin temel ref'inin gösterdiği commit'ten okunur (alpha.54): commit
+  edilmemiş ya da değiştirilmiş kopya hiç kullanılmaz, yalnız klasörde olan dosya yok sayılır; bağlantı, alt modül ya da ağaç olmayan
+  üst dizin güvensiz diye dışarıda kalır. Güven klasöre ve dosyanın içeriğine bağlıdır; commit gösterilir (`status`, kart ve işçi
+  isteminde `ref@commit`) ve kaydedilir ama karşılaştırılmaz; bu yüzden aynı baytlarla ilerleyen dal güvenilir kalır ve alpha.53'te
+  verilen güven geçerli kalır. Yapılandırılmış hedef yoksa klasördeki dosya eskisi gibi okunur. *Etki:* dosyayı güvenmeden önce commit
+  edin; commit etmediğiniz değişiklik işçilere ulaşmaz. O içerik için `deckent coding instructions trust` kişinin kendi terminalinde onaylanana kadar işçiler yalnız görev metnini alır;
   `run create`, MCP ve `--json` çıktısı `WORKER_INSTRUCTIONS_WITHHELD` uyarısını taşır, `/do` ve kuyruk kabulleri bu uyarıyı göstermez.
   Dosyadaki her değişiklik güveni yeniden düşürür. Git olmayan hedefte özet yoktur (açık no-op).
 - **Talimat dosyalarını işçiden gizlemek gizlilik sağlamaz.** Codex keşfi, ön kontrolde gizli yoklamalarla kanıtlanan sıkı yapılandırma
@@ -187,18 +197,25 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   edilir; uzak bir OpenAI uyumlu sunucu yayımlanmış bir fiyat satırı ister. Bugün bu satırlar yalnız OpenAI, DeepSeek ve Z.ai
   API'leri için var ve kendi fiyatınızı bildirmenin yolu yok. *Etki:* ağınızdaki bir şirket model sunucusu kullanılamaz.
   *Yol:* model sunucusunu bu makinede çalıştırın.
-- **Codex işçisinin kullandığı model doğrulanamaz, Cursor işçisinin modeli yalnız adla denetlenir.** Model başına kullanımı yalnız
-  Claude Code bildirir (`verified`). Codex sonuçları doğrulanmamış olarak kaydedilir ve ölçütlerine göre kabul edilir. Cursor
+- **Codex işçisinin modeli yalnız istemci beyanıdır, Cursor işçisinin modeli yalnız adla denetlenir.** Model başına kullanımı yalnız
+  Claude Code bildirir (`verified`). Codex çözdüğü modeli konteyner içindeki kendi oturum günlüğüne yazar; Deckent ilk turun modelini o
+  günlükten okur (sınırlı, bağlantı izlenmez; konteynerden yalnız model ve Codex sürümü çıkar) ve `client-reported` ("istemci beyanı")
+  kaydeder. İstenen model, tam kimliğiyle ya da katalogdaki bir adıyla, bu etiketle ölçütlerine göre kabul edilir; başka bir ad
+  `client-reported-mismatch` okunur ve deneme bir insan için tutulur; ad yoksa eskisi gibi `unverified` kalır ve ölçütlerine göre kabul
+  edilir. İşçi bu günlüğü değiştirebilir; bu yüzden sonuç hiçbir zaman `verified` olmaz ve ikame hatası sayılmaz. Codex adları Codex
+  0.163.0'dan ölçüldü. Cursor
   yalnızca oturum başında modelin görünen adını bildirir: katalogun seçilen model için kaydettiği ad `start-name-matched` okunur ve
   ölçütlerine göre kabul edilir; katalogun başka bir model için kaydettiği ad `substituted` okunur ve başarısız olur; ad yoksa ya
   da bilinmiyorsa `unverified` okunur ve deneme bir insan için tutulur, sessizce kabul edilmez. `selection: provider` taşıyan Cursor
   katalog girdisi (`auto`) model seçimini Cursor'a bırakır ve `provider-chosen` okunur; model eşleşmesi iddia etmez. *Etki:*
-  eşleşen ad, Claude'un model başına kullanımından zayıf kanıttır; Codex işçisi başka bir modelle çalıştıysa iş yine kabul edilir.
+  istemci beyanı ya da eşleşen ad, Claude'un model başına kullanımından zayıf kanıttır; kendi günlüğünü değiştiren bir Codex işçisi
+  başka bir modeli gizleyebilir.
 - **Cursor model yeniden adlandırması o modeldeki tüm Cursor denemelerini tutabilir.** Paketli adlar Cursor 2026.10.19-6bbf2c4
   sürümünden ölçüldü; işçi imajı kurulu Cursor sürümünü kaydeder ama sabitlemez. Bir güncelleme modeli yeniden adlandırırsa, katalog
   adları yeniden ölçülene kadar o modeldeki her Cursor denemesi `unverified` diye tutulur. *Yol:* `cursor-agent -p --output-format
   stream-json` ile yeniden ölçün ve güncel bir katalog kaydedin.
-- **Codex ve Cursor işçileri çalışmaları hakkında az şey bildirir.** Codex denemesi tek tur ve token kullanımı yok gösterir. Cursor
+- **Codex ve Cursor işçileri çalışmaları hakkında daha az şey bildirir.** Codex denemesi turlarını ve ölçülen token'ları (yeni girdi,
+  önbellek okuma, önbellek yazma, çıktı ve akıl yürütme) gösterir; abonelikle çalıştığı için maliyet göstermez. Cursor
   denemesi türetilmiş tur (asistan mesajı sayısı; sağlayıcı sayısı değil), token, süre ve araç çağrılarını gösterir; abonelikle
   çalıştığı için maliyet göstermez. *Etki:* emek ve maliyetleri Claude Code ile karşılaştırılamaz. *Yol:* teslim edilen sonuca göre
   değerlendirin.
@@ -346,10 +363,13 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Soru soran bir işçiye terminalden cevap verme henüz yapılmadı.** *Yol:* `deckent run resume --scope <id> --id <run>
   --command-id <id> --expected-revision <n> --task <id> --answer <metin>`.
 - **Otonom teslim tasarlandı ama kapalı.** Her teslim ve dala alma, doğrulanmış bir terminalde sizin `y`'nizi ister.
-- **Bekleyen bir ortam yoklaması siz sürdürene kadar havuz slotunu tutar.** Kendi süre sınırında durdurulan yoklama cevap vermez: Run
-  `EXECUTION_ENVIRONMENT_TIMED_OUT` ile bekletilir (kurulum kusuru olarak park edilmez, kendiliğinden yeniden denenmez); `deckent run
-  resume` yeniden yoklar. O zamana kadar slot tutulur; `run list` ve terminal işleri bekletmeyi kendi adıyla değil yalnızca "ilerleme
-  başarısız" olarak gösterir. İmaj yoklaması hataları sınırlı bir neden taşır (süre, çıkış, sinyal, ayrıştırma).
+- **Bekletilen bir Run siz sürdürene kadar havuz slotunu tutar.** Başka bir park nedeninin (ilerleme başarısız, ortam hazır değil,
+  kota bitti ve diğerleri) üzerine bekletme konduğunda ilerleme durur ve etkin ya da çözümsüz görev havuz slotunu `deckent run resume`
+  komutuna kadar tutar; yalnız yeni rezervasyonları durduran bekletmeler, tasarım gereği, zaten çalışan görevlerin slotlarını tutar.
+  `/runs`, `/run` seçicisi ve `deckent run list` park nedenini ve başka bir park üzerine konan bekletme için "ayrıca operatör
+  tarafından bekletiliyor" ifadesini gösterir. Kendi süre sınırında durdurulan yoklama cevap vermez: Run `EXECUTION_ENVIRONMENT_TIMED_OUT` ile
+  bekletilir (kurulum kusuru olarak park edilmez, kendiliğinden yeniden denenmez) ve `deckent run resume` yeniden yoklar; o zamana
+  kadar slotu tutulur ve listeler bu bekletmeyi kendi koduyla değil "ilerleme başarısız" olarak gösterir. İmaj yoklaması hataları sınırlı bir neden taşır (süre, çıkış, sinyal, ayrıştırma).
 - **Teslim kartı özeti bir izdüşümdür, kanıt değildir.** Kuyruk, teslim ve dala alma kartları başlığı, neyin değiştiğini, neden kabul
   edildiğini, model kararını, riski ve evet/hayırın ne yapacağını gösterir. İşçinin kendi raporu iddia olarak gösterilir; Git değişiklik
   bilgileri (dosyalar, +/−, kapsam dışı) Git çalışma alanı bağdaştırıcısı tarafından doldurulur. Kuyruk sırası değişmedi (yürüyenler önce,
@@ -374,7 +394,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   söyler. *Etki:* kişi komut belgesini elle ya da bir betikle yazar.
 - **Belirsiz bir ERP yazımından yeniden göndermeden başka çıkış yok.** Hedef yazımın olup olmadığını söyleyemiyorsa Deckent onu
   kendiliğinden yeniden denemez ve kayıt hedefi meşgul tutar. Hedef sonradan doğrulayabiliyorsa aynı komut kimliğini yeniden
-  gönderin, kanıtı kaydı kesinleştirir; doğrulayamıyorsa kayıt çözümsüz kalır. *Etki:* bir kişi onu henüz kapatamaz.
+  gönderin, kanıtı kaydı kesinleştirir; doğrulayamıyorsa kayıt çözümsüz kalır. `EFFECT_OUTCOME_UNKNOWN` bu sonraki adımı söyler ve
+  `deckent operation inspect` belirsiz ya da sahiplenilmiş kayıtta onu gösterir. `EFFECT_TARGET_BUSY` aynı kayıttaki önceki bir
+  işlemin önce sonuçlanması gerektiğini söyler ama o önceki komutu adlandıramaz: komut kimliğini sizin bilmeniz gerekir. *Etki:* bir
+  kişi çözümsüz kaydı henüz kapatamaz.
   İnsan beyanıyla (kanıt eki zorunlu, kabul sayılmaz) kapatma planlı.
 - **Bir operasyonun onay kartı operasyonu, hedefi ve 12 karakterlik girdi özetini gösterir,** yazacağı alanları değil.
   *Etki:* onaylayan tutarı ya da durumu göremez. *Yol:* onaylamadan önce girdi dosyasını inceleyin.
@@ -416,8 +439,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yükseltme öncesi); günlük seçiliyse yükseltme yeni set almadan başlar ve dönüş yolu en yeni günlük settir, en fazla yaklaşık bir
   gün eskidir. *Yol:* yükseltmeden önce `deckent backup create --scope <id> --set <mutlak yol>` komutunu kendiniz çalıştırın ya
   da günlük yerine yükseltme öncesini seçin.
-- **Kaybolan bir işçi slotunu tutabilir.** Verilmiş bir deneme, saklama çözülene kadar etkin kalıp bir yürütme slotunu tutabilir.
-  *Yol:* `deckent monitor` ile izleyin; slot yalnız tipli manuel kararla ya da işçinin bittiğine dair kanıtla bırakılır.
+- **Kaybolan bir işçi slotunu tutabilir ve henüz otomatik kurtarma yok.** Verilmiş bir deneme, saklama çözülene kadar etkin kalıp bir
+  yürütme slotunu tutabilir. `deckent run inspect` bunu söyler: görev bekletilir, hiçbir şey yeniden denenmez, serbest bırakılmaz ya da
+  kabul edilmez, yeni deneme başlamaz ve çalışan servis işçiyi yeniden kontrol eder. *Yol:* `deckent monitor` ile izleyin; slot yalnız
+  tipli manuel kararla ya da işçinin bittiğine dair kanıtla bırakılır. Otomatik kurtarma betadan önceki çekirdek katmanlarda planlı.
 - **Temiz makine provası model adımında durdu.** 2026-10-15/16'da taze bir klon kurulum, `doctor`, politika, kayıt defteri ve
   havuza ulaştı. Model bağlantısı, `/do`, boş bir Docker daemon'unda işçi imajı derlemesi ve temiz daemon'da başlangıç
   araç zinciri tazelemesi orada denenmedi. *Yol:* README'deki ilk iş yolunu izleyin ve farkı bildirin.
@@ -437,6 +462,14 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yüklediği kodu kullanır. *Yol:* geçişten sonra istemciyi yeniden başlatın (Claude Code oturumu ya da terminali kapatıp yeniden
   açın); servisin hangi derlemeyle çalıştığını `deckent runtime describe` gösterir.
 
+- **alpha.54'e geçiş ve geri dönüş dikkat ister.** alpha.54'ten önce sabitlenmiş Codex işçi profilleri eski `none` kanıt damgasını
+  taşır ve Run oluşturulurken ya da bütçesi planlanırken `WORKER_MODEL_BINDING_MISMATCH` ile reddedilir: geçişten önce bekleyen Codex
+  işini bitirin ve geçişten sonra Codex profillerini yeniden tanımlayın. alpha.53'e dönüş: `terminal.responseStyle` ve
+  `terminal.notify` ayarlarını kaldırın (alpha.53 tanımadığı anahtarları olan `terminal` bölümünü reddeder); alpha.54'te tanımlanan
+  Codex profilleri alpha.53'ün reddettiği `client-reported` damgasını taşır ve alpha.53 `client-reported` ile
+  `client-reported-mismatch` model kararlarını okuyamaz. Talimat güveni aynı anahtarı korur, bu yüzden iki yönde de geçerli kalır;
+  alpha.53 dosyayı yeniden klasörden okur. `/rename` başlığı alpha.53'ün yok saydığı ayrı bir dosyadır. Defter v59 ve çalışma
+  protokolü v29 değişmedi.
 - **alpha.53'ten alpha.52'ye dönüş dikkat ister.** `execution.workerInstructions` ayarını kaldırın; Cursor denemelerini bitirin ya da
   bırakın (klonları seyrektir); alpha.52 Codex ve Cursor `disabled` türlerini reddeder; geçişte teslim kuyruğu boş olsun (biletlerin
   başlığı farklı); alpha.52'nin denetim doğrulaması gölge deposunu görmez (zincirin dışındadır). Cursor kataloğu alpha.53 profilleri
@@ -500,6 +533,17 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   `readme-clone-note (verify işi)`; terminaldeki `/runs` penceresi hâlâ "Başlıksız iş" der.
 - **`deckent terminal status` sohbet modeline bağlanmaz,** bu yüzden erişim "sınanmadı" görünür; `deckent` içindeki ilk yanıt ya da
   `/provider` kontrolü gösterir. Bağlam penceresi ilk yanıt ölçülene kadar "?" görünür.
+- **Arka plan zili terminalinizin odak bildirimlerine bağlıdır.** `terminal.notify` `bell` (varsayılan) iken Deckent terminalden odak
+  bildirimi ister (mod 1004) ve iş bittiğinde ya da bir kart beklediğinde zili yalnız pencere odağı kaybettiğini bildirdikten sonra
+  çalar. Bildirim göndermeyen terminal ya da çoklayıcı (`focus-events on` olmayan tmux) hiç çalmaz; zilin ses, yanıp sönme ya da hiçbir
+  şey olması terminalinizin ayarıdır. *Yol:* `terminal.notify` `off` kapatır.
+- **Ctrl+G, editörünüz çalışırken terminali durdurur.** Taslak özel bir geçici dosyaya (klasör 0700, dosya 0600) yazılır ve kabuk
+  olmadan `$VISUAL`, yoksa `$EDITOR` onunla çalışır. Editör kapanana kadar Deckent tuş okumaz ve çizim yapmaz; ilerleme, yanıtlar ve
+  kartlar ancak sonra görünür. Hemen dönen bir editör (bekleme bayrağı olmayan grafik editör, örneğin `--wait` olmadan `code`) taslağı
+  değişmeden geri verir; iki değişken de yoksa, editör hata verirse ya da metin 1 MiB'ı aşarsa taslak değişmez. *Yol:* `EDITOR`
+  değerini bir terminal editörü ya da bekleme bayrağıyla bir grafik editör yapın.
+- **`terminal.responseStyle` modele bir istektir, kural değildir.** `concise` ve `explanatory` terminal sohbet modelinin talimatına
+  bir satır ekler (`standard` hiçbir şey eklemez); model buna uymayabilir; işçileri ya da `/do` planlarını değiştirmez.
 - **`deckent workers watch` satır seçmeye izin vermez.** Terminalde tek pencereyi yeniden çizer (Esc ya da q kapatır); ayrıntı
   `deckent workers --verbose` ile gelir. `--json`, `--all` ne derse desin geçmiş dahil tüm gözlem raporunu döndürür.
 - **SDK hâlâ ham yazıcıları da dışa aktarır,** yönetilenlerin yanında; sonraki sürümlü bir SDK sözleşmesinin yalnız

@@ -28,7 +28,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> This README describes **pre-release `1.0.0-alpha.53`**, the latest released version; [CHANGELOG.md](CHANGELOG.md)
+> This README describes **pre-release `1.0.0-alpha.54`**, the latest released version; [CHANGELOG.md](CHANGELOG.md)
 > lists every release, newest first. Deckent is not on npm yet: install it from source as shown in
 > [Get started](#get-started). An npm package is planned for the beta, probably as `@verhex/deckent` (the name is
 > not final yet).
@@ -245,32 +245,37 @@ from scratch yet ([known limits](docs/known-limits.md)).
 
 ### One-time setup
 
-Four steps prepare where work runs. Each `--preview` shows what would change and writes nothing. `deckent init` and
-`deckent doctor` list whichever of these steps are still missing, with the exact command.
+Work runs in a worker container, so Deckent needs a worker image, settings that say where work runs, a first kind of
+work and a worker pool. `deckent init` prepares all four at your own terminal. It asks on a card before each step and
+writes nothing until you confirm.
 
 ```sh
-# 1. In the Deckent source checkout: build the worker image. The path is where the build receipt is written;
-#    the command prints the image id (sha256:…)
-npm run worker:image -- /abs/path/worker-images/r4-20260930.json
+# 1. In your project: build the worker image, write the execution settings, declare the first kind of work and set
+#    up the worker pool. Each step asks on a card first.
+deckent init
+#    Or use a worker image this Docker already has instead of building one:
+deckent init --image-id sha256:<image id>
 
-# 2. In your project: tell Deckent where work runs (use the image id from step 1)
-deckent config set execution '{"docker":{"executable":"/usr/bin/docker","imageId":"sha256:<from step 1>","memoryBytes":2147483648,"pids":512,"cpus":1,"logMaxSizeKiB":2048,"logMaxFiles":2,"tmpBytes":1073741824,"deadlineMs":1200000,"controlTimeoutMs":15000,"outputBytes":1048576},"git":{"gitExecutable":"/usr/bin/git","timeoutMs":180000,"outputBytes":8388608}}'
-
-# 3. Declare the worker pool and the first kind of work
-deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
-  --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
-deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
-  --execution-slots 2 --in-flight-slots 2 --discovery repository --apply
-deckent init pool --scope my-project --preview
-deckent init pool --scope my-project --apply
-
-# 4. Restart the service so it reads the new configuration
+# 2. If the service was already running, restart it so it reads the new settings
 deckent runtime restart
 ```
 
-The values are examples: choose the worker (`codex` or `claude`; a Cursor worker needs one more catalog step, see the
-operator reference), the pool name and the capacity for your machine. `--discovery repository` lets the worker CLI load
-your repository's own instruction files, hooks and MCP settings; leave it out to hide them (the default).
+The image build uses Docker and the network (the base image and the coding CLIs), and its card names the size and the time
+limit before anything starts. The execution settings name the Docker and Git that `deckent init` found and the new image;
+the other values keep their defaults (`deckent config explain execution`). The first kind of work is `coding` on the coding
+CLI you pick (`codex`, `claude` or `cursor`; a Cursor worker needs one more catalog step, see the operator reference), with
+the pool `workers` and one running slot. For another kind, pool name or capacity, or without a terminal, `deckent init` and
+`deckent doctor` print the missing steps with their exact commands, for example:
+
+```sh
+deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
+  --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
+deckent init pool --scope my-project --preview
+```
+
+Each `--preview` shows what would change and writes nothing; run the same command with `--apply` to write it.
+`--discovery repository` lets the worker CLI load your repository's own instruction files, hooks and MCP settings; leave it
+out to hide them (the default).
 The [operator reference](.deckent/docs/architecture/operator-reference.md#first-job-setup-in-detail) explains every value,
 what each preview checks, and what to do on an installation set up before the current first-run policy.
 
@@ -516,7 +521,7 @@ hardens them through real use, and Desktop app development starts alongside it.
 
 ```mermaid
 flowchart LR
-  N["Now · alpha.53<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>backup and audit"] --> C["Before the beta · core layers<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
+  N["Now · alpha.54<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>backup and audit"] --> C["Before the beta · core layers<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
   C --> B["Beta<br/>npm package<br/>layers improved through real use and tests<br/>Desktop app development in parallel"]
   B --> E["Enterprise · separate distribution<br/>SSO · fleet · central policy<br/>ERP connectors"]
 ```

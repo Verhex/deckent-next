@@ -28,7 +28,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> Bu README yayımlanmış son sürümü anlatır: **ön sürüm `1.0.0-alpha.53`**. [CHANGELOG.md](CHANGELOG.md) tüm
+> Bu README yayımlanmış son sürümü anlatır: **ön sürüm `1.0.0-alpha.54`**. [CHANGELOG.md](CHANGELOG.md) tüm
 > sürümleri en yenisi başta listeler. Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için,
 > büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil).
 
@@ -245,32 +245,37 @@ aşağıdaki iş adımları Deckent'in kendi geliştirmesinde her gün kullanıl
 
 ### Bir kez yapılan kurulum
 
-Dört adım işin nerede çalışacağını hazırlar. Her `--preview` neyin değişeceğini gösterir ve hiçbir şey yazmaz.
-`deckent init` ve `deckent doctor` bu adımlardan hangilerinin eksik olduğunu tam komutuyla listeler.
+İş bir işçi konteynerinde çalışır; bu yüzden Deckent'in bir işçi imajına, işin nerede çalışacağını söyleyen ayarlara, ilk
+iş türüne ve bir işçi havuzuna ihtiyacı var. `deckent init` dördünü de kendi terminalinizde hazırlar. Her adımdan önce bir
+kartla sorar ve siz onaylamadan hiçbir şey yazmaz.
 
 ```sh
-# 1. Deckent kaynak dizininde: işçi imajını derleyin. Yol, derleme makbuzunun yazılacağı yerdir;
-#    komut imaj kimliğini (sha256:…) basar
-npm run worker:image -- /abs/path/worker-images/r4-20260930.json
+# 1. Projenizde: işçi imajını derleyin, yürütme ayarlarını yazın, ilk iş türünü tanımlayın ve işçi havuzunu
+#    kurun. Her adım önce bir kartla sorar.
+deckent init
+#    Ya da yeni imaj derlemek yerine bu Docker'da zaten olan bir imajı kullanın:
+deckent init --image-id sha256:<imaj kimliği>
 
-# 2. Projenizde: Deckent'e işin nerede çalışacağını söyleyin (1. adımdaki imaj kimliğiyle)
-deckent config set execution '{"docker":{"executable":"/usr/bin/docker","imageId":"sha256:<1. adımdan>","memoryBytes":2147483648,"pids":512,"cpus":1,"logMaxSizeKiB":2048,"logMaxFiles":2,"tmpBytes":1073741824,"deadlineMs":1200000,"controlTimeoutMs":15000,"outputBytes":1048576},"git":{"gitExecutable":"/usr/bin/git","timeoutMs":180000,"outputBytes":8388608}}'
-
-# 3. İşçi havuzunu ve ilk iş türünü tanımlayın
-deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
-  --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
-deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
-  --execution-slots 2 --in-flight-slots 2 --discovery repository --apply
-deckent init pool --scope my-project --preview
-deckent init pool --scope my-project --apply
-
-# 4. Servisi yeniden başlatın, yeni yapılandırmayı okusun
+# 2. Servis zaten çalışıyorduysa yeni ayarları okusun diye yeniden başlatın
 deckent runtime restart
 ```
 
-Değerler örnektir: işçiyi (`codex` ya da `claude`; Cursor işçisi bir katalog adımı daha ister, işletim başvurusuna
-bakın), havuz adını ve kapasiteyi makinenize göre seçin. `--discovery repository` işçi CLI'ının deponuzun kendi talimat
-dosyalarını, hook'larını ve MCP ayarlarını yüklemesine izin verir; bunları gizlemek için bayrağı vermeyin (varsayılan). Her değeri, her
+İmaj derlemesi Docker ve ağ kullanır (temel imaj ve kodlama CLI'ları); kartı, bir şey başlamadan önce boyutu ve süre
+sınırını söyler. Yürütme ayarları `deckent init`'in bulduğu Docker ve Git'i ve yeni imajı yazar; diğer değerler
+varsayılanında kalır (`deckent config explain execution`). İlk iş türü, seçtiğiniz kodlama CLI'ı üzerinde `coding`'dir
+(`codex`, `claude` ya da `cursor`; Cursor işçisi bir katalog adımı daha ister, işletim başvurusuna bakın); havuzu
+`workers`, bir çalışma yuvasıyla. Başka bir iş türü, havuz adı ya da kapasite için veya terminal olmadan, `deckent init`
+ve `deckent doctor` eksik adımları tam komutlarıyla yazar, örneğin:
+
+```sh
+deckent init registry --scope my-project --provider codex --kind coding --pool my-workers \
+  --execution-slots 2 --in-flight-slots 2 --discovery repository --preview
+deckent init pool --scope my-project --preview
+```
+
+Her `--preview` neyin değişeceğini gösterir ve hiçbir şey yazmaz; yazmak için aynı komutu `--apply` ile çalıştırın.
+`--discovery repository` işçi CLI'ının deponuzun kendi talimat dosyalarını, hook'larını ve MCP ayarlarını yüklemesine
+izin verir; bunları gizlemek için bayrağı vermeyin (varsayılan). Her değeri, her
 önizlemenin neyi kontrol ettiğini ve güncel ilk kurulum policy'sinden önce kurulmuş bir kurulumda ne yapılacağını
 [işletim başvurusu](.deckent/docs/architecture/operator-reference.tr.md#adım-adım-ilk-iş-kurulumu) anlatır.
 
@@ -510,7 +515,7 @@ katmanları gerçek kullanımla sağlamlaştırır; masaüstü uygulamasının g
 
 ```mermaid
 flowchart LR
-  N["Şimdi · alpha.53<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>yedek ve denetim"] --> C["Betadan önce · çekirdek katmanlar<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
+  N["Şimdi · alpha.54<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>yedek ve denetim"] --> C["Betadan önce · çekirdek katmanlar<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
   C --> B["Beta<br/>npm paketi<br/>katmanlar gerçek kullanım ve testlerle gelişir<br/>paralelde masaüstü uygulaması geliştirmesi"]
   B --> E["Enterprise · ayrı dağıtım<br/>SSO · filo · merkezi policy<br/>ERP bağlayıcıları"]
 ```

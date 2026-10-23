@@ -20,7 +20,7 @@ describe('documented npm scripts exist', () => {
   it('every npm run <script> in the README pair, CONTRIBUTING.md and docs/*.md is a package.json script', () => {
     const found = documents.flatMap(name => references(name, read(name)));
     expect(missing(found)).toEqual([]);
-    expect(found.filter(item => item.file === 'README.md').map(item => item.script)).toEqual(expect.arrayContaining(['worker:image', 'build']));
+    expect(found.filter(item => item.file === 'README.md').map(item => item.script)).toEqual(expect.arrayContaining(['build']));
     expect(found.some(item => item.file === 'README.tr.md')).toBe(true);
   });
   it('names a missing script with its file and line', () => {
