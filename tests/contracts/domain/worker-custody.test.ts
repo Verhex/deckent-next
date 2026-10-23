@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { releaseWorkerCustody, reserveRunTasks, deriveAcceptanceView, runSnapshotSchema, taskProgressSchema } from '#domain/index.js';
-import { deriveAcceptanceMetric, measureTaskOccupancy, planSchedulingWave } from '#engine/index.js';
+import { deriveAcceptanceMetrics, measureTaskOccupancy, planSchedulingWave } from '#engine/index.js';
 import { identity } from './acceptance-fixture.js';
 import { lostWorker } from './worker-custody-fixture.js';
 
@@ -37,7 +37,7 @@ it('releases capacity only and replays the same evidence without another revisio
     ? { ...task, workerCustody: { schemaVersion: 1, state: 'released', basis: 'termination-proof', fenceReceiptId: f.fence.receiptId, proofReceiptId: f.proof.receiptId } } : task) });
   expect(next.progress[0]).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
   expect(deriveAcceptanceView(next, identity.taskId)).toMatchObject({ outcome: 'incomplete', evaluationId: null, score: null, ceilingReasons: ['unsettled-effect'] });
-  expect(deriveAcceptanceMetric(JSON.stringify({ action: 'release-worker-custody' }), next)).toBeNull();
+  expect(deriveAcceptanceMetrics(JSON.stringify({ action: 'release-worker-custody' }), next)).toEqual([]);
   expect(JSON.stringify(f.run)).toBe(before); expect(JSON.stringify(f.attempt)).toBe(attemptBytes);
   expect(releaseWorkerCustody(next, next.revision, f.record, f.fence, f.proof)).toEqual(next);
   expect(() => releaseWorkerCustody(next, next.revision, f.record, f.fence, { ...f.proof, receiptId: 'other-proof' })).toThrow('RUN_ATTEMPT_CONFLICT');
