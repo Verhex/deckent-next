@@ -102,13 +102,16 @@ one section; other sections link to it.
 
 - **Before you start:** your installation needs the current first-run policy; an older one upgrades first (see
   [First-run setup](#first-run-setup)).
-- **Worker image:** `npm run worker:image -- <new receipt path>` runs in the Deckent source checkout, needs Docker and writes a
-  new receipt file at that path. It prints one JSON line with the immutable image id, for example
-  `{"imageId":"sha256:f296…5250","tag":"deckent/worker:r4-20260930","imageVersion":"r4-20260930","receipt":"…","activation":"not-activated"}`.
-  Nothing is activated; the `execution` setting names the image. Versions and updates:
-  [Worker image versions](#worker-image-versions).
-- **`execution` values:** the README example uses 2 GiB memory, 512 processes, 1 CPU, a 20-minute deadline and bounded logs
-  and output. Saving prints
+- **Worker image (alpha.54):** `deckent init` builds the worker image from the installed package as a foreground step after a
+  card that names its size and the time limit (`toolchains.update.buildTimeoutMs`), and records a receipt for this installation;
+  `deckent init --image-id sha256:<id>` instead checks an image this Docker already has against the package's worker image
+  version (one short read-only container with no network) and records the receipt. Only a person at a terminal is asked;
+  `--yes` never builds. When this Docker already holds a Deckent worker image, the new build takes the next version after it.
+  Versions and updates: [Worker image versions](#worker-image-versions).
+- **`execution` values:** `deckent init` writes only the Docker executable and the image id it built or adopted, and the Git
+  executable it found; memory, processes, CPU, deadline, log and output bounds keep their defaults (`deckent config explain
+  execution`). `deckent doctor` checks read-only (`docker image inspect`, no container) that the configured image is on this
+  Docker. Saving the setting by hand prints
   `Saved execution in project. Apply: restart. Backup: …/.deckent/config.json.bak.<time>.…` and
   `Restart required: the running service started with the previous configuration. Restart it with `deckent runtime restart` (or /service-restart in the terminal).`
 - **Registry and pool:** `deckent init registry` writes the first admission registry and pool settings from the coding CLI it
@@ -138,12 +141,16 @@ Two separate things decide what a coding worker knows about your repository.
 
 - **The worker instruction file.** A Run passes one instruction file from the work target, selected by
   `execution.workerInstructions.source`: `worker-md` (`.deckent/worker-instructions.md`, used by default when it exists),
-  `agents-md` (`AGENTS.md`) or `none`. Without Git execution this is an explicit no-op. `deckent coding instructions` (or
+  `agents-md` (`AGENTS.md`) or `none`. Without Git execution this is an explicit no-op. With a configured work target the file
+  is read from the commit the target's base ref names (alpha.54), never from the folder: an uncommitted change is not used, a
+  link, a submodule or a non-tree parent is left out as unsafe, and `status`, the trust card and the worker prompt name
+  `ref@commit`. Without a configured target the folder's file is read. `deckent coding instructions` (or
   `status`) shows the file's path, size, SHA-256 and whether workers get it now. `deckent coding instructions trust|revoke
   [--target <id>] --scope <id>` trusts, or takes back, exactly the file's current content for that folder: a card at your own
   terminal shows the path, size, SHA-256 and first lines; AI tools, MCP, pipes and `--json` are refused; the decision uses the
   config write permission for `execution.workerInstructions` and is recorded in the audit log. A changed file is untrusted
-  again. Until it is trusted, workers get the task text only and Run creation warns `WORKER_INSTRUCTIONS_WITHHELD`; a file that
+  again; trust binds the folder and the content, so a branch that moves on with the same bytes stays trusted (the commit is
+  shown and recorded, not compared). Until it is trusted, workers get the task text only and Run creation warns `WORKER_INSTRUCTIONS_WITHHELD`; a file that
   does not fit the prompt bounds refuses the Run (`WORKER_INSTRUCTIONS_TOO_LARGE`).
 - **Discovery: what the worker CLI loads by itself.** `disabled` (the default) hides the repository's own instruction files
   (`AGENTS.md`, `CLAUDE.md`, `.agents`, `.claude`, `.codex`, `.cursor`, `DECKENT.md` and the worker file): Claude runs with

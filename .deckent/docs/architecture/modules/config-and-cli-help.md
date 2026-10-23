@@ -133,7 +133,8 @@ Claude and Codex stay argv-only, so their compiled profiles are unchanged.
 
 Worker instructions (alpha.53 F1): `deckent coding instructions [status] | trust | revoke [--target <id>] [--scope <id>]`.
 Config `execution.workerInstructions.source` is `worker-md` (`.deckent/worker-instructions.md`, default when the file exists),
-`agents-md` (`AGENTS.md`) or `none`; the file is read at the Git work target root, once per admission, bounded. `status` is read-only
+`agents-md` (`AGENTS.md`) or `none`; the file is read once per admission, bounded, from the commit the configured work target's base ref
+names (alpha.54 R1; never the working tree; status and the card show `ref@commit`), or at the Git work target root without a configured target. `status` is read-only
 (`--json` allowed). `trust` and `revoke` are decided on `config`/`write` for `project:execution.workerInstructions`, sealed before the
 record changes, and need the person's terminal witness: a card shows path, size, sha256 and the first lines; AI actors, MCP, pipes and
 `--json` are refused. Trust holds for exactly that folder and digest; a change makes it untrusted. Untrusted: workers get the task text

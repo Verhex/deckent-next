@@ -103,13 +103,16 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
 
 - **Başlamadan önce:** kurulumunuzda güncel ilk kurulum policy'si olmalıdır; eski bir kurulum önce yükseltilir (bkz.
   [Başlangıç kurulumu](#başlangıç-kurulumu)).
-- **İşçi imajı:** `npm run worker:image -- <yeni makbuz yolu>` Deckent kaynak dizininde çalışır, Docker ister ve o yola yeni
-  bir makbuz dosyası yazar. Değişmez imaj kimliğiyle tek satır JSON basar, örneğin
-  `{"imageId":"sha256:f296…5250","tag":"deckent/worker:r4-20260930","imageVersion":"r4-20260930","receipt":"…","activation":"not-activated"}`.
-  Hiçbir şey etkinleştirilmez; imajı `execution` ayarı adlandırır. Sürümler ve güncelleme:
+- **İşçi imajı (alpha.54):** `deckent init` işçi imajını kurulu paketten ön planda derler; önce boyutu ve süre sınırını
+  (`toolchains.update.buildTimeoutMs`) söyleyen bir kart gösterir ve bu kurulum için bir makbuz kaydeder.
+  `deckent init --image-id sha256:<kimlik>` ise bu Docker'da zaten olan bir imajı paketin işçi imaj sürümüyle karşılaştırır
+  (ağsız, salt okunur tek kısa konteyner) ve makbuzu kaydeder. Yalnız terminaldeki kişiye sorulur; `--yes` hiçbir zaman
+  derlemez. Bu Docker'da zaten bir Deckent işçi imajı varsa yeni derleme ondan sonraki sürümü alır. Sürümler ve güncelleme:
   [Kodlama işçisi imaj sürümleri](#kodlama-işçisi-imaj-sürümleri).
-- **`execution` değerleri:** README örneği 2 GiB bellek, 512 süreç, 1 CPU, 20 dakikalık süre ve sınırlı log ve çıktı kullanır.
-  Kaydetme şunu basar:
+- **`execution` değerleri:** `deckent init` yalnız Docker çalıştırılabilirini, derlediği ya da benimsediği imaj kimliğini ve
+  bulduğu Git çalıştırılabilirini yazar; bellek, süreç, CPU, süre, log ve çıktı sınırları varsayılanında kalır
+  (`deckent config explain execution`). `deckent doctor` yapılandırılan imajın bu Docker'da olduğunu salt okunur denetler
+  (`docker image inspect`, konteyner yok). Ayarı elle kaydetmek şunu basar:
   `execution, proje katmanına kaydedildi. Uygulama: yeniden başlatınca. Yedek: …/.deckent/config.json.bak.<zaman>.…` ve
   `Yeniden başlatma gerekli: çalışan servis önceki yapılandırmayla başladı. `deckent runtime restart` ile (terminalde /service-restart) yeniden başlatın.`
 - **Kayıt ve havuz:** `deckent init registry`, bulduğu kodlama CLI'ından ilk kabul kaydını (registry) ve havuz ayarlarını
@@ -139,12 +142,16 @@ Bir kodlama işçisinin deponuz hakkında ne bildiğine birbirinden ayrı iki ş
 
 - **İşçi talimat dosyası.** Bir Run iş hedefinden tek bir talimat dosyası iletir; dosya `execution.workerInstructions.source`
   ile seçilir: `worker-md` (`.deckent/worker-instructions.md`, varsa varsayılan olarak kullanılır), `agents-md` (`AGENTS.md`)
-  ya da `none`. Git yürütmesi yoksa bu açık bir işlemsizliktir. `deckent coding instructions` (ya da `status`) dosyanın yolunu,
+  ya da `none`. Git yürütmesi yoksa bu açık bir işlemsizliktir. Yapılandırılmış bir iş hedefi varsa dosya klasörden değil,
+  hedefin temel ref'inin gösterdiği commit'ten okunur (alpha.54): commit edilmemiş değişiklik kullanılmaz; bağlantı, alt modül
+  ya da ağaç olmayan üst dizin güvensiz diye dışarıda kalır; `status`, güven kartı ve işçi istemi `ref@commit` gösterir.
+  Yapılandırılmış hedef yoksa klasördeki dosya okunur. `deckent coding instructions` (ya da `status`) dosyanın yolunu,
   boyutunu, SHA-256 değerini ve işçilerin onu şu an alıp almadığını gösterir. `deckent coding instructions trust|revoke
   [--target <id>] --scope <id>` o klasör için dosyanın tam olarak şu anki içeriğine güvenir ya da güveni geri alır: kendi
   terminalinizdeki kart yolu, boyutu, SHA-256 değerini ve ilk satırları gösterir; yapay zekâ araçları, MCP, borular ve `--json`
   reddedilir; karar `execution.workerInstructions` için config yazma iznini kullanır ve denetim kaydına yazılır. Değişen dosya
-  yeniden güvenilmez olur. Güvenilene dek işçiler yalnız görev metnini alır ve Run oluşturma `WORKER_INSTRUCTIONS_WITHHELD`
+  yeniden güvenilmez olur; güven klasöre ve içeriğe bağlıdır, bu yüzden aynı baytlarla ilerleyen dal güvenilir kalır (commit
+  gösterilir ve kaydedilir, karşılaştırılmaz). Güvenilene dek işçiler yalnız görev metnini alır ve Run oluşturma `WORKER_INSTRUCTIONS_WITHHELD`
   uyarısı verir; istem sınırlarına sığmayan dosya Run'ı reddeder (`WORKER_INSTRUCTIONS_TOO_LARGE`).
 - **Keşif: işçi CLI'ının kendiliğinden yüklediği şeyler.** `disabled` (varsayılan) deponun kendi talimat dosyalarını gizler
   (`AGENTS.md`, `CLAUDE.md`, `.agents`, `.claude`, `.codex`, `.cursor`, `DECKENT.md` ve işçi dosyası): Claude `--safe-mode` ile,
