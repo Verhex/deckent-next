@@ -228,7 +228,7 @@
   "climodels.roles.state.pending": "yeni model: rol bekliyor",
   "climodels.roles.price.unknown": "bilinmiyor",
   "climodels.roles.price.subscription": "abonelik (token başı fiyat yok)",
-  "climodels.roles.price.perToken": "milyon token başına {input} giriş / {output} çıkış (katalog, {day})",
+  "climodels.roles.price.perToken": "milyon token başına {input} giriş / {output} çıkış ({day} itibarıyla)",
   "climodels.roles.makerUnknown": "bilinmiyor",
   "climodels.roles.unlock.brain": "Brain olarak iş planlar",
   "climodels.roles.unlock.worker": "çalışan görevlerine atanabilir",

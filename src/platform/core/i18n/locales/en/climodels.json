@@ -228,7 +228,7 @@
   "climodels.roles.state.pending": "new model: role pending",
   "climodels.roles.price.unknown": "unknown",
   "climodels.roles.price.subscription": "subscription (no per-token price)",
-  "climodels.roles.price.perToken": "{input} in / {output} out per million tokens (catalog, {day})",
+  "climodels.roles.price.perToken": "{input} in / {output} out per million tokens (as of {day})",
   "climodels.roles.makerUnknown": "unknown",
   "climodels.roles.unlock.brain": "plans work as the Brain",
   "climodels.roles.unlock.worker": "may be assigned worker tasks",
