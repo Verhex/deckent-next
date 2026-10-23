@@ -37,7 +37,11 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 61;
+export const CURRENT_LEDGER_VERSION = 62;
+// ATAMA-1 system assignment (lane v62; the lead renumbers at landing): Run graphs may hold work input v2 (no model), Run execution snapshots a
+// sealed `assignment` per task, and metric rows its summary. Additive: every v61 record parses unchanged, nothing is read or rewritten; the
+// version step alone keeps an older build (which refuses a newer ledger) from reading the new records. Downgrade = restore the pre-switch backup.
+export const WORKER_ASSIGNMENT_LEDGER_VERSION = 62;
 // S4 memory journal v1 (v61 after S0's v60 on a55/integrate): additive tables (current entry, append-only revisions and receipts, FTS5 index
 // keyed by the entry's explicit `id`, which VACUUM never renumbers). No earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v61).
 export const MEMORY_JOURNAL_LEDGER_VERSION = 61;
@@ -75,6 +79,7 @@ export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  [WORKER_ASSIGNMENT_LEDGER_VERSION]: 'PRAGMA user_version=62;',
   [MEMORY_JOURNAL_LEDGER_VERSION]: `CREATE TABLE memory_entries(id INTEGER PRIMARY KEY,scope_id TEXT NOT NULL,entry_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),
     state TEXT NOT NULL CHECK(state IN('candidate','verified','retired')),seq INTEGER NOT NULL,record TEXT NOT NULL,UNIQUE(scope_id,entry_id));
     CREATE INDEX memory_entries_recent ON memory_entries(scope_id,seq DESC);

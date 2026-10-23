@@ -12,10 +12,13 @@ import type { ModelCatalogReader } from './catalog.js';
  */
 export type WorkerModelAdmissionCode = 'WORKER_MODEL_UNPINNED' | 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_CHANNEL_NOT_ACTIVE'
   | 'WORKER_CHANNEL_MISMATCH' | 'WORKER_MODEL_UNKNOWN' | 'WORKER_MODEL_RETIRED' | 'WORKER_MODEL_NOT_CURRENT' | 'WORKER_MODEL_NOT_ACTIVE'
-  | 'WORKER_MODEL_CLI_TOO_OLD' | 'WORKER_MODEL_BINDING_MISMATCH' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_CLASS_NOT_REGISTERED';
+  | 'WORKER_MODEL_CLI_TOO_OLD' | 'WORKER_MODEL_BINDING_MISMATCH' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_CLASS_NOT_REGISTERED'
+  | 'WORKER_ASSIGNMENT_NO_CANDIDATES' | 'WORKER_ASSIGNMENT_NONE';
 export interface WorkerModelAdmissionDetail {
   readonly taskId: string; readonly channelId: string | null; readonly modelId: string | null;
   readonly exactModelId?: string; readonly minCliVersion?: string; readonly cliVersion?: string | null;
+  /** ATAMA-1 refusals: the WorkClass whose candidate list was read and each skipped candidate with its typed reason (bounded by the list). */
+  readonly workClass?: string; readonly skipped?: string;
 }
 /** Admission that passes with a visible caveat (WORKER-AUTO-REFRESH, owner K2): the pinned worker CLI is older than the model's minimum while
  * a worker image refresh is in flight, so the Run is admitted on the newest image it can use today. Never raised when no refresh runs. */
@@ -65,7 +68,7 @@ async function checkModel(reader: ModelCatalogReader, scopeId: string, taskId: s
   return entry;
 }
 /** K3 work input as recorded in the Run graph: the requested pin and optional effort of a task compiled from a template. */
-export type WorkerTaskRequest = Readonly<{ id: string; workInput?: Readonly<{ model: Readonly<{ channelId: string; modelId: string; auxiliaryModelIds: readonly string[] }>; effort?: string | undefined }> | undefined }>;
+export type WorkerTaskRequest = Readonly<{ id: string; workInput?: Readonly<{ model?: Readonly<{ channelId: string; modelId: string; auxiliaryModelIds: readonly string[] }> | undefined; effort?: string | undefined }> | undefined }>;
 
 export interface WorkerPlanningTemplate { readonly profile: { id: string; version: number }; readonly provider: string; readonly cliVersion: string }
 /** Read-only planner choices share the admission check, including scope activation, lifecycle, alias and CLI floor. */
@@ -111,7 +114,8 @@ export async function admitWorkerModels(tasksInput: readonly unknown[], scopeId:
     }
     const { provider, preflight, model, reasoningEffort, effortMode } = subscription.data; const request = requested.get(task.taskId);
     const detail = Object.freeze({ taskId: task.taskId, channelId: model.channelId, modelId: model.modelId });
-    if (request && JSON.stringify([request.model.channelId, request.model.modelId, request.model.auxiliaryModelIds])
+    // A work input without a model (v2) was assigned by the system; the frozen assignment seal is checked against the pin by the Run's integrity check.
+    if (request?.model && JSON.stringify([request.model.channelId, request.model.modelId, request.model.auxiliaryModelIds])
       !== JSON.stringify([model.channelId, model.modelId, model.auxiliaryModelIds])) throw new WorkerModelAdmissionError('WORKER_MODEL_BINDING_MISMATCH', detail);
     for (const modelId of [model.modelId, ...model.auxiliaryModelIds]) {
       const entry = await checkModel(reader, scopeId, task.taskId, provider, preflight?.cliVersion ?? null, model.channelId, modelId, nowMs, options.imageRefreshInProgress ? warnings : undefined);

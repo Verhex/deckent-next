@@ -1,19 +1,38 @@
 {
-  "schemaVersion": 2,
-  "revision": "atama-0-2026-10-23",
+  "schemaVersion": 4,
+  "revision": "atama-1-2026-10-23",
   "classes": [
-    { "id": "small", "defaultEffort": "high", "proposalAdmission": { "risk": "low", "standingAdmission": false },
+    { "id": "small", "candidatePolicyId": "light", "defaultEffort": "high", "proposalAdmission": { "risk": "low", "standingAdmission": false },
       "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} },
-    { "id": "test", "defaultEffort": "high", "proposalAdmission": { "risk": "normal", "standingAdmission": false },
+    { "id": "test", "candidatePolicyId": "light", "defaultEffort": "high", "proposalAdmission": { "risk": "normal", "standingAdmission": false },
       "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} },
-    { "id": "feature", "defaultEffort": "xhigh", "proposalAdmission": { "risk": "normal", "standingAdmission": false },
+    { "id": "feature", "candidatePolicyId": "standard", "defaultEffort": "xhigh", "proposalAdmission": { "risk": "normal", "standingAdmission": false },
       "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} },
-    { "id": "design", "defaultEffort": "max", "proposalAdmission": { "risk": "high", "standingAdmission": false },
+    { "id": "design", "candidatePolicyId": "deep", "defaultEffort": "max", "proposalAdmission": { "risk": "high", "standingAdmission": false },
       "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} },
-    { "id": "architecture", "defaultEffort": "max", "proposalAdmission": { "risk": "high", "standingAdmission": false },
+    { "id": "architecture", "candidatePolicyId": "deep", "defaultEffort": "max", "proposalAdmission": { "risk": "high", "standingAdmission": false },
       "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} },
-    { "id": "security-critical", "defaultEffort": "max", "proposalAdmission": { "risk": "high", "standingAdmission": false },
+    { "id": "security-critical", "candidatePolicyId": "deep", "defaultEffort": "max", "proposalAdmission": { "risk": "high", "standingAdmission": false },
       "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} }
+  ],
+  "evidenceExtensions": [],
+  "candidatePolicies": [
+    { "id": "light", "version": 1, "candidates": [
+      { "channelId": "claude-cli-subscription", "modelId": "claude-sonnet-5-5" },
+      { "channelId": "codex-cli-subscription", "modelId": "gpt-6-luna" },
+      { "channelId": "cursor-cli-subscription", "modelId": "composer-2.5" }
+    ] },
+    { "id": "standard", "version": 1, "candidates": [
+      { "channelId": "claude-cli-subscription", "modelId": "claude-opus-5-5" },
+      { "channelId": "codex-cli-subscription", "modelId": "gpt-6.1-sol", "effort": "medium" },
+      { "channelId": "cursor-cli-subscription", "modelId": "claude-opus-5-thinking-high" }
+    ] },
+    { "id": "deep", "version": 1, "candidates": [
+      { "channelId": "claude-cli-subscription", "modelId": "claude-opus-5-5", "effort": "high" },
+      { "channelId": "claude-cli-subscription", "modelId": "claude-fable-5-1", "effort": "high" },
+      { "channelId": "codex-cli-subscription", "modelId": "gpt-6.1-sol", "effort": "high" },
+      { "channelId": "cursor-cli-subscription", "modelId": "claude-opus-5-thinking-high" }
+    ] }
   ],
   "bindings": [
     { "kind": "coding", "classId": "feature" },

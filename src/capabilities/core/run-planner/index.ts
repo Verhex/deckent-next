@@ -1,15 +1,18 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
+import { runProposalSchema, validateTaskGraph, TaskGraphError, TASK_GRAPH_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, identitySchema, encodeCommandProjection, type EvaluatorDefinition, type BrainPlanCommand, type WorkClassPolicy } from '#domain/index.js';
 import { installedEvaluatorParameters } from '#capabilities/core/evaluation-evidence/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import templates from './internal/templates.json' with { type: 'json' };
 const selected = z.object({ id: identitySchema, version: z.number().int().positive().safe() }).strict();
-const template = selected.extend({ instruction: z.string().min(1).max(16_384), summaryChars: z.number().int().min(1).max(1024) }).strict();
+/** `modelAssignment: 'system'` (ATAMA-1, owner ASS1): the plan names tasks and WorkClasses only; the worker comes from the WorkClass candidate
+ * list at admission. Absent = the earlier contract, where the plan pinned a worker model (v1/v2 rows keep their bytes and digest). */
+const template = selected.extend({ instruction: z.string().min(1).max(16_384), summaryChars: z.number().int().min(1).max(1024),
+  modelAssignment: z.enum(['brain', 'system']).optional() }).strict();
 type BrainReasoning = 'model-default' | 'off';
 const reasoning = z.enum(templates.reasoningModes as [BrainReasoning, ...BrainReasoning[]]);
 export const brainPlannerConfigSchema = z.object({ schemaVersion: z.literal(1).default(1),
-  selected: selected.default(templates.selected), templates: z.array(template).min(1).max(256).default(templates.templates),
+  selected: selected.default(templates.selected), templates: z.array(template).min(1).max(256).default(z.array(template).parse(templates.templates)),
   maxCompletionTokens: z.number().int().positive().safe().nullable().default(templates.maxCompletionTokens),
   reasoning: reasoning.default(reasoning.parse(templates.reasoning)),
   context: z.object({ maxKinds: z.number().int().positive().safe(), maxModels: z.number().int().positive().safe(),
@@ -34,10 +37,12 @@ export function brainInputDigest(command: BrainPlanCommand, known?: KnownSecretS
 }
 /** The draft schema shown to the model. The graph contract still reads older versions (stored proposals), but a NEW plan must use the
  * current graph version: an older one cannot carry typed work input (live /do 2026-10-13: a v2 plan with workInput was refused). */
-function brainDraftJsonSchema(turnLimit: boolean) {
+function brainDraftJsonSchema(turnLimit: boolean, systemAssignment: boolean) {
   const schema = zodToJsonSchema(brainDraftSchema, { $refStrategy: 'none' }) as { properties?: { graph?: { properties?: Record<string, unknown> } } };
   const graph = schema.properties?.graph?.properties;
   if (graph) graph['schemaVersion'] = { type: 'number', const: TASK_GRAPH_SCHEMA_VERSION };
+  // ATAMA-1: the model is offered only the work input version that leaves the worker to the system, without model or effort fields.
+  if (systemAssignment) systemWorkInputSchema(graph);
   // No supplied kind's worker can honour a turn limit: the model is not offered `workInput.maxTurns` at all (live /do 2026-10-16 planned
   // maxTurns for a Codex worker). The draft contract still accepts it, so a stored proposal keeps parsing; creation refuses it typed.
   if (!turnLimit) dropProperty(schema, 'maxTurns');
@@ -51,6 +56,21 @@ function dropProperty(node: unknown, name: string): void {
   if (Array.isArray(record['required'])) record['required'] = (record['required'] as unknown[]).filter(value => value !== name);
   Object.values(record).forEach(value => dropProperty(value, name));
 }
+function systemWorkInputSchema(graph: Record<string, unknown> | undefined): void {
+  const items = (graph?.['tasks'] as { items?: { properties?: Record<string, unknown> } } | undefined)?.items?.properties;
+  const union = items?.['workInput'] as { anyOf?: { properties?: Record<string, { const?: unknown }>; required?: string[] }[] } | undefined;
+  const branch = union?.anyOf?.find(row => row.properties?.['schemaVersion']?.const === WORK_INPUT_ASSIGNED_SCHEMA_VERSION);
+  if (!items || !branch?.properties) throw ErrorRegistry.createError('BRAIN_TEMPLATE_UNAVAILABLE');
+  for (const name of ['model', 'effort']) delete branch.properties[name];
+  branch.required = (branch.required ?? []).filter(name => name !== 'model' && name !== 'effort');
+  items['workInput'] = branch;
+}
+/** The configured template the next plan uses; a missing or ambiguous selection is refused, never a fallback. */
+export function selectedBrainTemplate(configInput: unknown) {
+  const config = brainPlannerConfigSchema.parse(configInput), chosen = config.templates.filter(row => row.id === config.selected.id && row.version === config.selected.version);
+  if (chosen.length !== 1) throw ErrorRegistry.createError('BRAIN_TEMPLATE_UNAVAILABLE');
+  return chosen[0]!;
+}
 /** A turn limit is offered only when at least one supplied kind's worker supports it; unknown context offers it (no new refusal). */
 function supportsTurnLimit(context: unknown): boolean {
   const kinds = (context as { kinds?: readonly { turnLimit?: string }[] } | null)?.kinds;
@@ -58,18 +78,17 @@ function supportsTurnLimit(context: unknown): boolean {
   return kinds.some(row => row.turnLimit === 'supported');
 }
 export function prepareBrainPrompt(command: BrainPlanCommand, policy: WorkClassPolicy, context: unknown, configInput: unknown, known?: KnownSecretSnapshot) {
-  const config = brainPlannerConfigSchema.parse(configInput), chosen = config.templates.filter(row => row.id === config.selected.id && row.version === config.selected.version);
-  if (chosen.length !== 1) throw ErrorRegistry.createError('BRAIN_TEMPLATE_UNAVAILABLE');
-  const chosenTemplate = chosen[0]!, intent = redactForRecord(command.intent, known);
+  const config = brainPlannerConfigSchema.parse(configInput), chosenTemplate = selectedBrainTemplate(config), intent = redactForRecord(command.intent, known);
+  const modelAssignment = chosenTemplate.modelAssignment ?? 'brain';
   const projected = JSON.stringify(redactJson({ scopeId: command.scopeId, workClasses: policy, context }, known));
   const bytes = new TextEncoder().encode(projected).length;
   if (bytes > config.context.maxBytes) throw ErrorRegistry.createError('BRAIN_CONTEXT_TOO_LARGE', { params: { limit: config.context.maxBytes, observed: bytes, unit: 'bytes' } });
   return Object.freeze({ template: { id: chosenTemplate.id, version: chosenTemplate.version,
-    digest: sha256(encodeCommandProjection('brain-template:1', chosenTemplate)) }, summaryChars: chosenTemplate.summaryChars,
+    digest: sha256(encodeCommandProjection('brain-template:1', chosenTemplate)) }, summaryChars: chosenTemplate.summaryChars, modelAssignment,
     inputDigest: brainInputDigest(command, known), contextDigest: sha256(projected), intent,
     messages: [{ role: 'system' as const, content: redactForRecord(chosenTemplate.instruction, known) },
       { role: 'user' as const, content: JSON.stringify({ intent, context: JSON.parse(projected) as unknown,
-        schema: brainDraftJsonSchema(supportsTurnLimit(context)) }) }] });
+        schema: brainDraftJsonSchema(supportsTurnLimit(context), modelAssignment === 'system') }) }] });
 }
 /** A reply that is exactly one Markdown code fence around the object (```json … ``` or ``` … ```) is read as its body; anything else is
  * parsed as given. Models add the fence despite the instruction (live /do 2026-10-16, stage json); no other repair is attempted. */
@@ -91,5 +110,11 @@ export function parseBrainDraft(text: string, known?: KnownSecretSnapshot, optio
     throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: error instanceof TaskGraphError ? error.code : 'TASK_GRAPH_INVALID' } });
   }
   return parsed.data;
+}
+/** ATAMA-1 (owner ASS1, A1): under a system-assignment template a NEW reply that names a worker model or effort (or uses the work input
+ * version that requires one) is refused, typed. Stored proposals are never re-judged by this rule (their source check reads them as recorded). */
+export function assertBrainLeavesAssignment(draft: BrainDraft): void {
+  if (draft.graph.tasks.some(task => task.workInput && (task.workInput.schemaVersion !== WORK_INPUT_ASSIGNED_SCHEMA_VERSION
+    || task.workInput.model !== undefined || task.workInput.effort !== undefined))) throw ErrorRegistry.createError('BRAIN_ASSIGNMENT_REFUSED');
 }
 export const brainOutputDigest = (draft: BrainDraft) => sha256(encodeCommandProjection('brain-output:1', draft));

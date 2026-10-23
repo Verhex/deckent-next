@@ -13,5 +13,6 @@
   "currencyChars": 16,
   "ruleChars": 64,
   "reasonChars": 64,
-  "runChars": 64
+  "runChars": 64,
+  "assignmentChars": 160
 }

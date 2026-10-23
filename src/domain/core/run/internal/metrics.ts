@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { counterSchema, identitySchema } from '#domain/core/primitives/index.js';
 import { exactModelIdSchema, modelUsageEvidenceSchema, workerEffortSchema } from '#domain/core/provider-catalog/index.js';
+import { assignmentEffortSourceSchema, assignmentPolicyReferenceSchema } from './assignment.js';
 /** DECKENT-METRICS is evidence metadata, never an acceptance command or a new state writer.
  * Each row is attributed to an exact scoped Attempt; a Run incomplete observation is explicitly distinguished from a Task result. */
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -41,6 +42,10 @@ const currentMetricsSchema = z.object({ schemaVersion: z.literal(2), ...common,
   ]).readonly(),
   evidenceKinds: z.array(z.enum(METRIC_EVIDENCE_KINDS)).max(METRIC_EVIDENCE_KINDS.length).readonly(),
   acceptanceScore: z.number().finite().min(0).max(1).nullable(),
+  /** ATAMA-1: how the system chose this Attempt's worker (from the Run's sealed assignment); absent for a pinned model and on earlier rows. */
+  assignment: z.object({ candidatePolicy: assignmentPolicyReferenceSchema, candidateIndex: counterSchema,
+    workClassRevision: identitySchema, catalogRevision: identitySchema, modelRevision: counterSchema.positive(), activationRevision: counterSchema.positive(),
+    effortSource: assignmentEffortSourceSchema }).strict().readonly().optional(),
 }).strict().refine(value => consistent(value) && new Set(value.evidenceKinds).size === value.evidenceKinds.length
   && value.evidenceKinds.every((kind, index) => index === 0 || value.evidenceKinds[index - 1]! < kind)).readonly();
 export const deckentMetricsSchema = z.union([legacyMetricsSchema, currentMetricsSchema]);

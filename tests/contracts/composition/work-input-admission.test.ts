@@ -36,7 +36,7 @@ const workInput = (modelId = 'claude-sonnet-5-5', extra: object = {}, auxiliaryM
 const handPrepared = (id: string, maxTurns = 40, policy = false) => ({ ...compileNativeCodingDockerProfile(
   { id: 'coding', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { argv: ['unused'], ...docker } },
   { schemaVersion: 4, ...claudeInvocation, maxTurns, model: { channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [HAIKU] },
-    composition: { schemaVersion: 1, ...parts, task: TASK, scope: 'note.txt\nsrc/notes/**', acceptance: ACCEPTANCE } }, policy ? { schemaVersion: 1, level: 'xhigh', source: 'policy-default', status: 'selected', workClass: 'feature', policyRevision: 'atama-0-2026-10-23', target: 'xhigh' } : undefined), id });
+    composition: { schemaVersion: 1, ...parts, task: TASK, scope: 'note.txt\nsrc/notes/**', acceptance: ACCEPTANCE } }, policy ? { schemaVersion: 1, level: 'xhigh', source: 'policy-default', status: 'selected', workClass: 'feature', policyRevision: 'atama-1-2026-10-23', target: 'xhigh' } : undefined), id });
 const profiles = [template('coding', claudeInvocation), template('codex-coding', codexInvocation), handPrepared('hand')];
 const registry = { schemaVersion: 1 as const, revision: 'k3', profiles, kinds: [{ kind: 'coding', profile: { id: 'coding', version: 1 } },
   { kind: 'codex-coding', profile: { id: 'codex-coding', version: 1 } }, { kind: 'hand', profile: { id: 'hand', version: 1 } }],
@@ -304,7 +304,7 @@ describe.skipIf(process.platform === 'win32')('fixed-Ultra opt-in producer to su
     const request = run(`fixed-${choice}`, kind, input), created = await createRun(f.project, request, f.options);
     const boundary = choice === 'unmapped' || choice === 'design';
     const selected = boundary ? { schemaVersion: 1, level: null, source: 'cli-default', status: 'ultra-opt-in-required', ...(choice === 'design' ? {
-      workClass: 'design', policyRevision: 'atama-0-2026-10-23', target: 'max' } : {}) }
+      workClass: 'design', policyRevision: 'atama-1-2026-10-23', target: 'max' } : {}) }
       : choice === 'explicit' ? { schemaVersion: 1, level: 'ultra', source: 'explicit', status: 'selected' }
         : { schemaVersion: 1, level: 'ultra', source: 'policy-default', status: 'selected', workClass: 'deep', policyRevision: 'deliberate-ultra', target: 'ultra' };
     const frozen = f.snapshotProfile(request.runId).tasks[0]!.profile;
