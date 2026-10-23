@@ -1,0 +1,60 @@
+import { expect, it } from 'vitest';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+  matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipal, memoryDistillerPrincipalRef, namedPersonPolicyAdditions, resolvePolicyBindings,
+  upgradeFirstRunPolicy } from '#domain/index.js';
+import { FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
+
+// S4B-1 + S7 (owner S-M1/S-M2 2026-10-23, S4B-DESIGN §5 A2/A2b; lead: v15 carries s7's agent-catalog grants): one add-only bump v14 → v15. The memory
+// distiller workload gets D1+D2 (memory inspect, propose), D4 (run inspect) and, as its own rule, D3 (attempt read-output); the named person may
+// propose memory (the delegation bound needs it to grant D2) and inspects and defines in the agent/skill catalog, the MCP actor inspects it.
+// Rollback removes exactly this delta.
+const person = { issuer: 'host', subject: 'owner' };
+const mcpRef = mcpPrincipalRef(person), distillerRef = memoryDistillerPrincipalRef(person);
+const owner = { id: 'owner', ...person, assurance: 'os-user' as const, scopeIds: ['installation', 'other'] };
+const distiller = memoryDistillerPrincipal(person, ['installation', 'other']);
+const names = { proposeMcpToolName: FIRST_RUN_TOOL_NAMES.proposeMcpToolName, mcpCallOperationId: FIRST_RUN_TOOL_NAMES.mcpCallOperationId,
+  policyAdministerOperationId: FIRST_RUN_TOOL_NAMES.policyAdministerOperationId, executionEnvironmentIds: FIRST_RUN_TOOL_NAMES.executionEnvironmentIds };
+const input = { scopeId: 'installation', principal: person, ...FIRST_RUN_TOOL_NAMES };
+const built = firstRunPolicyTemplate(input), ids: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+const v15 = built.policy.grants.filter(rule => ids.includes(rule.id));
+const v14 = { ...built.policy, revision: 'first-run-template-v14', grants: built.policy.grants.filter(rule => !ids.includes(rule.id)) };
+const scoped = (id: string, principal: object, kind: string, actions: string[]) => ({ id, effect: 'allow', actions, scopes: ['installation'], principals: [principal], resource: { kind, ids: 'all' } });
+const decide = (policy: unknown, principal: typeof owner, kind: string, action: string, scopeId = 'installation') =>
+  evaluatePolicy(resolvePolicyBindings(policy, built.bindings), { principal, scopeId, action, resource: { kind, id: kind === 'memory' || kind === 'agent-catalog' ? scopeId : 'x' } });
+
+it('v15 adds exactly the person\'s memory propose, the distiller D1+D2, D4 and D3 (own rule) and the agent catalog rules; the ids are the rollback delta', () => {
+  expect(built.version).toBe(15); expect(built.policy.revision).toBe('first-run-template-v15');
+  expect(v15).toEqual([scoped('first-run-memory-propose', person, 'memory', ['propose']), scoped('first-run-memory-distiller', distillerRef, 'memory', ['inspect', 'propose']), scoped('first-run-memory-distiller-runs', distillerRef, 'run', ['inspect']),
+    scoped('first-run-memory-distiller-output', distillerRef, 'attempt', ['read-output']), scoped('first-run-agent-catalog', person, 'agent-catalog', ['inspect', 'define']),
+    scoped('first-run-mcp-observe-agent-catalog', mcpRef, 'agent-catalog', ['inspect'])]);
+  expect(firstRunPolicyTemplate({ ...input, principal: mcpRef }).policy.grants.filter(rule => ids.includes(rule.id)).map(rule => rule.id)).toEqual([FIRST_RUN_UPGRADE_RULE_IDS.observeAgentCatalog]);
+});
+
+it('the grants decide only inside the floor: the distiller proposes and reads, never verifies, retires, purges or imports; nothing outside the installed scope', async () => {
+  for (const [kind, action] of [['memory', 'inspect'], ['memory', 'propose'], ['run', 'inspect'], ['attempt', 'read-output']]) expect(decide(built.policy, distiller, kind!, action!).decision).toBe('allow');
+  for (const [kind, action] of [['memory', 'propose'], ['run', 'inspect']]) expect(decide(v14, distiller, kind!, action!).decision).toBe('deny');
+  for (const [kind, action] of [['memory', 'verify'], ['memory', 'retire'], ['memory', 'purge'], ['agent-catalog', 'inspect'], ['attempt', 'execute']])
+    expect(decide(built.policy, distiller, kind!, action!).decision, `${kind}/${action}`).toBe('deny');
+  expect(decide(built.policy, distiller, 'memory', 'propose', 'other').decision).toBe('deny');
+  await expect(new MemoryPolicyAuthorization({ async load() { return resolvePolicyBindings(built.policy, built.bindings); } }).authorize('propose', 'installation', distiller))
+    .resolves.toMatchObject({ ruleId: 'first-run-memory-distiller' });
+  for (const action of ['inspect', 'define']) expect(decide(built.policy, owner, 'agent-catalog', action).decision).toBe('allow');
+  expect(decide(built.policy, owner, 'agent-catalog', 'import').decision).toBe('deny');
+  // The person may propose (their own card; it lets them delegate D2); verify, retire and purge stay ungranted (S4B-4's card).
+  expect(decide(built.policy, owner, 'memory', 'propose').decision).toBe('allow');
+  for (const action of ['verify', 'retire', 'purge']) expect(decide(built.policy, owner, 'memory', action).decision, action).toBe('deny');
+});
+
+it('exact v14 becomes exactly v15; edited and hand-built policies get the delta add-only; a person\'s broader rule never stands in for the distiller\'s; rollback removes exactly v15', () => {
+  expect(upgradeFirstRunPolicy(v14, input)).toEqual({ status: 'upgrade', from: 14, policy: built.policy });
+  expect(upgradeFirstRunPolicy(built.policy, input)).toEqual({ status: 'current' });
+  const extra = { id: 'extra', effect: 'allow', actions: ['inspect', 'propose'], scopes: ['installation'], principals: [person], resource: { kind: 'memory', ids: 'all' } };
+  const edited = { ...v14, revision: 'a-edited', grants: [...v14.grants, extra] };
+  const handBuilt = { ...edited, grants: edited.grants.map(rule => rule.id === 'first-run-read-tools' ? { ...rule, id: 'custom-read-tools' } : rule) };
+  for (const plan of [firstRunTemplateAdditions(edited, { ...names, person }), namedPersonPolicyAdditions(handBuilt, { ...names, person, scopeId: 'installation' })]) {
+    // The person's own `extra` rule covers their propose cell, never the distiller's: only the distiller and catalog rules are added.
+    expect(plan.status === 'plan' ? plan.rules : null).toEqual(v15.filter(rule => rule.id !== FIRST_RUN_UPGRADE_RULE_IDS.memoryPropose));
+  }
+  expect(firstRunTemplateRollback(built.policy, person, 'installation').rules.map(rule => rule.id)).toEqual(v15.map(rule => rule.id));
+  expect(matchFirstRunPolicyTemplate('first-run-template-v15')).toEqual({ id: 'first-run-template', version: 15 });
+});

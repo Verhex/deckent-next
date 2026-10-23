@@ -14,14 +14,14 @@ const input = { scopeId: 'installation', principal: person, ...names, readToolNa
   scratchWriteOperationId: 'workspace.scratch.write', editShellToolNames: ['run_shell'], writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run' };
 const v12ids = ['first-run-scope-inspect', 'first-run-service-shutdown'];
 // I-POL (alpha.48): the current template is v13, an add-only delta over v12 (FIRST_RUN_CURRENT_UPGRADE_RULE_IDS); v12 is the current one without it.
-const current = firstRunPolicyTemplate(input), v13ids: readonly string[] = [...['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool'], ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]; // the v13 delta and v14's (S4), both later than this file's version
+const current = firstRunPolicyTemplate(input), v13ids: readonly string[] = [...['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory'], ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]; // the v13 delta, v14's (S4) and v15's (S4B-1 + S7), all later than this file's version
 const built = { version: 12, bindings: current.bindings, policy: { ...current.policy, revision: 'first-run-template-v12', grants: current.policy.grants.filter(rule => !v13ids.includes(rule.id)) } };
 const v11 = { ...built.policy, revision: 'first-run-template-v11', grants: built.policy.grants.filter(rule => !v12ids.includes(rule.id)) };
 const source = (policy: unknown) => ({ async load() { return resolvePolicyBindings(policy, built.bindings); } });
 const SERVICE = 'installation-runtime';
 
 it('v12 adds exactly two rules naming the person alone, in the installed scope only, on the installed scope and this installation\'s service id', () => {
-  expect(current.version).toBe(14); // the v12 rules below are unchanged inside v13 and v14
+  expect(current.version).toBe(15); // the v12 rules below are unchanged inside v13, v14 and v15
   expect(built.policy.grants.filter(rule => v12ids.includes(rule.id))).toEqual([
     { id: 'first-run-scope-inspect', effect: 'allow', actions: ['inspect'], scopes: ['installation'], principals: [person], resource: { kind: 'scope', ids: ['installation'] } },
     { id: 'first-run-service-shutdown', effect: 'allow', actions: ['shutdown'], scopes: ['installation'], principals: [person], resource: { kind: 'service', ids: [SERVICE] } },

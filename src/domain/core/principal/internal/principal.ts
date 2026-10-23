@@ -47,6 +47,9 @@ export const memoryDistillerPrincipal = (owner: { readonly issuer: string; reado
   return verifiedPrincipalSchema.parse({ id: `${ref.subject}@${ref.issuer}`, ...ref, assurance: 'workload-verified', scopeIds: [...scopeIds] });
 };
 
+/** A reference that names a non-person actor by its transport identity (MCP, auditor, Nervous, memory distiller): never an installing person. */
+export const isWorkloadPrincipalRef = (ref: { readonly issuer: string }) =>
+  isMcpPrincipal(ref) || isAuditorPrincipal(ref) || isNervousPrincipal(ref) || isMemoryDistillerPrincipal(ref);
 /** Transport identity dominates assurance: a forged legacy MCP, auditor, Nervous or memory-distiller os-user is still AI. */
 export const isAiPrincipal = (actor: { readonly issuer: string; readonly assurance?: string }) =>
   isMcpPrincipal(actor) || isAuditorPrincipal(actor) || isNervousPrincipal(actor) || isMemoryDistillerPrincipal(actor) || actor.assurance !== 'os-user';

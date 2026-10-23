@@ -12,7 +12,7 @@ import { installationBindingNotRunReason } from '../support/binding-capability.j
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS } from '#domain/index.js';
 /** I-POL (alpha.48): the v13 delta; an older template reconstructed from the current one leaves it out, and the upgrade adds it last. */
 /** The v13 delta (I-POL) and the current v14 delta (S4): the rules added after v12, in plan order. */
-const V13: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
+const V13: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory', ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 
 /** SEC-1 (I-POL): `init policy --upgrade --apply` is an authority write and vitest has no terminal, so this file attests the witness; the refusal
  * without one is tests/contracts/composition/policy-upgrade-witness.test.ts. */
@@ -30,24 +30,24 @@ describe.skipIf(process.platform === 'win32')('requires POSIX local principal an
 it('previews without touching disk, then a real apply journals and writes policy.json + bindings.json privately; a repeated apply is a byte-identical replay', async () => {
   const root = await project();
   const preview = await previewPolicyTemplateInstallation(root, 'installation');
-  expect(preview).toMatchObject({ status: 'preview', scopeId: 'installation', template: { id: 'first-run-template', version: 14 } });
+  expect(preview).toMatchObject({ status: 'preview', scopeId: 'installation', template: { id: 'first-run-template', version: 15 } });
   await expect(stat(join(root, '.deckent'))).rejects.toMatchObject({ code: 'ENOENT' });
   const identity = readLocalOsIdentity();
   expect(preview.principal).toEqual({ issuer: identity.issuer, subject: identity.subject });
   expect(await inspectPolicyTemplate(root)).toBeNull(); // no policy file yet
 
   const result = await applyPolicyTemplateInstallation(root, 'installation');
-  expect(result).toMatchObject({ status: 'installed', template: { id: 'first-run-template', version: 14 }, scopeId: 'installation' });
+  expect(result).toMatchObject({ status: 'installed', template: { id: 'first-run-template', version: 15 }, scopeId: 'installation' });
   const policyPath = join(root, '.deckent/policy.json'), bindingsPath = join(root, '.deckent/bindings.json');
   const policyBytes = await readFile(policyPath, 'utf8'), bindingsBytes = await readFile(bindingsPath, 'utf8');
   const identityPaths = ['installation-identity', 'project-identity'].map(name => join(root, '.deckent', name, 'identity.json'));
   const identities = await Promise.all(identityPaths.map(path => readFile(path, 'utf8')));
   expect(JSON.parse(identities[0]!)).toHaveProperty('installationId'); expect(JSON.parse(identities[1]!)).toHaveProperty('projectId');
-  expect(JSON.parse(policyBytes)).toMatchObject({ schemaVersion: 2, revision: 'first-run-template-v14' });
-  expect(JSON.parse(bindingsBytes)).toEqual({ schemaVersion: 1, revision: 'first-run-template-v14-bindings', bindings: [] });
+  expect(JSON.parse(policyBytes)).toMatchObject({ schemaVersion: 2, revision: 'first-run-template-v15' });
+  expect(JSON.parse(bindingsBytes)).toEqual({ schemaVersion: 1, revision: 'first-run-template-v15-bindings', bindings: [] });
   expect((await stat(policyPath)).mode & 0o777).toBe(0o600); expect((await stat(bindingsPath)).mode & 0o777).toBe(0o600);
 
-  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 14 });
+  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 15 });
 
   const replay = await applyPolicyTemplateInstallation(root, 'installation');
   expect(replay).toMatchObject({ status: 'replayed' });
@@ -119,7 +119,7 @@ it('migrates exactly an untouched first-run v4 policy to v7 (v5 owner 2026-10-07
   expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(v5);
   expect(await readFile(bindingsPath, 'utf8')).toBe(bindingsBefore);
   expect((await stat(policyPath)).mode & 0o777).toBe(0o600);
-  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 14 });
+  expect(await inspectPolicyTemplate(root)).toEqual({ id: 'first-run-template', version: 15 });
   expect(await upgradePolicyTemplateInstallation(root, 'installation', true)).toMatchObject({ status: 'current' });
 });
 

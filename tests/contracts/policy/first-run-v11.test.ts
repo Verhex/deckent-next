@@ -13,7 +13,7 @@ const built = firstRunPolicyTemplate(input);
 // v10 never had the v12 owner rules either (POLICY-V12): the exact v10 bytes are the current template minus the v11 and v12 rules.
 const v12ids = ['first-run-scope-inspect', 'first-run-service-shutdown'];
 // I-POL (alpha.48): nor the v13 delta, which is now the rollback delta (owner A48-D3, D3c).
-const v13ids: readonly string[] = [...['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool'], ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]; // the v13 delta and v14's (S4), both later than this file's version
+const v13ids: readonly string[] = [...['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory'], ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]; // the v13 delta, v14's (S4) and v15's (S4B-1 + S7), all later than this file's version
 const v10 = { ...built.policy, revision: 'first-run-template-v10', grants: built.policy.grants.filter(rule => !ids.includes(rule.id) && !v12ids.includes(rule.id) && !v13ids.includes(rule.id)) };
 const identity = { scopeId: 'installation', runId: 'run', taskId: 'task', attemptId: 'attempt', generation: 1 };
 const source = (policy: unknown) => ({ async load() { return resolvePolicyBindings(policy, built.bindings); } });
@@ -72,7 +72,7 @@ it('preserves customized v11 ids and existing coverage; since v13 no v11 rule is
   expect(plan).toMatchObject({ status: 'plan', conflicts: [ids[1]] });
   if (plan.status !== 'plan') throw new Error('missing v11 plan');
   expect(plan.rules.map(rule => rule.id)).toEqual([ids[2], ...v12ids, ...v13ids]);
-  // The rollback holds only the current (v14) delta: neither the content-equal v11 rules nor the customized one are touched or reported.
+  // The rollback holds only the current (v15) delta: neither the content-equal v11 rules nor the customized one are touched or reported.
   const rollback = firstRunTemplateRollback({ ...built.policy, grants: built.policy.grants.map(rule => rule.id === changed.id ? changed : rule) }, person, undefined);
   expect(rollback.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]); expect(rollback.conflicts).toEqual([]);
   expect(firstRunTemplateRollback(built.policy, mcpPrincipalRef(person), undefined)).toEqual({ rules: [], conflicts: [] });
