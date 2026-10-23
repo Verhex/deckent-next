@@ -51,7 +51,7 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
     await rename(temporary, target);
   };
   const run = async (args: readonly string[]): Promise<ProcessEvidence & { stdout: string; stderr: string }> => {
-    await emptyRunDir(runDir);
+    // No emptying here: another process's preflight must never remove an in-flight call's prompt file (only `send` empties, under maxInFlight).
     const result = await runNodeProcess({ schemaVersion: 1, requestId: randomUUID(), executable: executable, args: [...args], cwd: runDir, env,
       timeoutMs: headless.limits.preflightTimeoutMs, outputBytes: headless.limits.preflightOutputBytes }, signal);
     if (result.reason !== 'exit') refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'spawn' });
