@@ -1,0 +1,8 @@
+{
+  "roles": 64,
+  "rolesPerModel": 16,
+  "models": 1024,
+  "exceptions": 64,
+  "overlays": 16,
+  "exceptionMaxDays": 31
+}

@@ -461,7 +461,8 @@
         "src/domain/core/task-graph",
         "src/engine/core/memory",
         "src/domain/core/memory",
-        "src/engine/core/nervous"
+        "src/engine/core/nervous",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "FOUNDATION"
     },
@@ -3075,7 +3076,9 @@
         "src/capabilities/core/run-planner",
         "src/engine/core/authentication",
         "src/engine/core/model-invocation",
-        "src/engine/core/run-proposal"
+        "src/engine/core/run-proposal",
+        "src/domain/core/provider-catalog",
+        "src/engine/core/model-activation"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
