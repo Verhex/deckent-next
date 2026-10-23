@@ -60,6 +60,8 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'usage', group: 'info', descriptionKey: 'terminal.slash.usage' },
   { name: 'doctor', group: 'info', descriptionKey: 'terminal.slash.doctor' },
   { name: 'scope', group: 'info', descriptionKey: 'terminal.slash.scope' },
+  // M2 follow-up: which exact catalog model holds which tier/roles (the `deckent models roles show` view); read-only, assigning stays `models roles set`.
+  { name: 'roles', group: 'info', descriptionKey: 'terminal.slash.roles' },
   { name: 'exit', group: 'session', descriptionKey: 'terminal.slash.exit' },
   { name: 'quit', group: 'session', descriptionKey: 'terminal.slash.exit' },
   { name: 'help', group: 'info', descriptionKey: 'terminal.slash.help' },
@@ -72,7 +74,7 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
 export const RESERVED_SLASH_COMMAND_NAMES: readonly string[] = Object.freeze([]);
 
 /** Read-only inspect commands (S09). Each is answered by an optional port that re-reads a typed query per call; `status` keeps its static line without one. */
-export const INSPECT_SLASH_COMMANDS = Object.freeze(['status', 'model', 'usage', 'doctor', 'scope'] as const);
+export const INSPECT_SLASH_COMMANDS = Object.freeze(['status', 'model', 'usage', 'doctor', 'scope', 'roles'] as const);
 export type InspectSlashCommand = typeof INSPECT_SLASH_COMMANDS[number];
 export function isInspectSlashCommand(command: string): command is InspectSlashCommand {
   return (INSPECT_SLASH_COMMANDS as readonly string[]).includes(command);

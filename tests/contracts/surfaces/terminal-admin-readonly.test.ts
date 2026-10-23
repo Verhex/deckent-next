@@ -42,11 +42,38 @@ async function catalogFixture() {
 
 describe('terminal read-only management (S09)', () => {
   it('registers /model /usage /doctor /scope with catalog descriptions in both locales', () => {
-    for (const name of ['model', 'usage', 'doctor', 'scope']) {
+    for (const name of ['model', 'usage', 'doctor', 'scope', 'roles']) {
       const command = WORKLINE_SLASH_COMMANDS.find(entry => entry.name === name);
       expect(command, name).toMatchObject({ descriptionKey: `terminal.slash.${name}` });
       expect(command?.argumentKey).toBeUndefined();
     }
+  });
+
+  describe('/roles (M2 follow-up: the models roles show view in the terminal)', () => {
+    const rolesView = { schemaVersion: 1 as const, scopeId: 's', revision: 'rev-1', digest: 'd'.repeat(64), roles: [{ id: 'brain', minimumTier: 'frontier' as const }, { id: 'worker', minimumTier: 'worker' as const }],
+      models: [
+        { channelId: 'chan-a', modelId: 'model-assigned', state: 'assigned' as const, tier: 'worker' as const, roles: ['worker'], version: 1, measured: false, exceptions: [],
+          catalog: { channelId: 'chan-a', modelId: 'model-assigned', displayName: 'Assigned', maker: 'maker-x', pricing: { kind: 'unknown' as const } } },
+        { channelId: 'chan-a', modelId: 'model-fresh', state: 'pending' as const, tier: null, roles: [], version: null, measured: false, exceptions: [],
+          catalog: { channelId: 'chan-a', modelId: 'model-fresh', displayName: 'Fresh', maker: 'maker-x', pricing: { kind: 'unknown' as const } } },
+      ], pending: 1 };
+    it.each(['en', 'tr'] as const)('prints the same table as the CLI renderer, read-only, with the pending footer (%s)', async locale => {
+      const reads: unknown[] = [];
+      const ports = terminalAdminPorts({ ...base, locale, context: { inspectModelRoles: async (_root, query) => { reads.push(query); return rolesView as never; } } }).inspect;
+      const text = (await ports.roles!('', { usage: EMPTY_SESSION_USAGE })).join('\n');
+      const { renderModelRoleInspection } = await import('#surfaces/core/cli-models/index.js');
+      expect(text).toBe(renderModelRoleInspection(rolesView as never, locale, { width: Number.POSITIVE_INFINITY, ascii: false }));
+      expect(text).toContain('model-assigned'); expect(text).toContain('model-fresh'); expect(reads).toEqual([{ schemaVersion: 1, scopeId: 's' }]);
+      expect(text).toContain(locale === 'en' ? 'New model: role pending (1)' : 'Yeni model: rol bekliyor (1)');
+    });
+    it('refuses arguments, says so when the read is not wired and shows a failed read as its typed error', async () => {
+      const usage = terminalAdminPorts({ ...base, locale: 'en', context: { inspectModelRoles: async () => rolesView as never } }).inspect;
+      expect((await usage.roles!('set x', { usage: EMPTY_SESSION_USAGE })).join('\n')).toMatch(/Usage: \/roles/u);
+      const bare = terminalAdminPorts({ ...base, locale: 'en', context: {} }).inspect;
+      expect((await bare.roles!('', { usage: EMPTY_SESSION_USAGE })).join('\n')).toContain('cannot be read');
+      const failing = terminalAdminPorts({ ...base, locale: 'en', context: { inspectModelRoles: async () => { throw typed('INVENTORY_UNAVAILABLE'); } } }).inspect;
+      await expect(failing.roles!('', { usage: EMPTY_SESSION_USAGE })).rejects.toBeDefined();
+    });
   });
 
   describe.skipIf(process.platform === 'win32')('/model on the real catalog application', () => {
