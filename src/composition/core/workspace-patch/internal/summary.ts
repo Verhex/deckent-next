@@ -30,10 +30,7 @@ export async function describeConfiguredDeliverySummaries(root: string, input: r
           // No retained patch (or an unreadable one) is no change evidence; a policy refusal stays a refusal (the application shows it as withheld).
           change: async identity => { try { const { patch, scope } = await patches.preview(identity); return workspacePatchChangeFacts(patch, scope); }
             catch (error) { if (error instanceof WorkspacePatchError || error instanceof ArtifactError) return null; throw error; } } });
-        for (const [index, request] of requests.entries()) {
-          if (request?.identity.scopeId !== scopeId) continue;
-          out[index] = await app.describe(request, c.principal).catch(() => null);
-        }
+        for (const [index, request] of requests.entries()) if (request?.identity.scopeId === scopeId) out[index] = await app.describe(request, c.principal).catch(() => null);
       } finally { reader.close(); }
     }
     return Object.freeze(out);
