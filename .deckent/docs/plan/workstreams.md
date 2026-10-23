@@ -1,5 +1,7 @@
 # İş alanları, açık işler ve kabul edilmiş yönler — PLAN.md'den taşındı (2026-10-05)
 
+> **Durum notu (2026-10-23):** Bu sayfa 2026-10-05 durumunun donmuş kaydıdır; içindeki "açık", "sıradaki", "bugün" ve "güncel" ifadeleri o günü anlatır. Güncel iş ve durum [PLAN](../../../PLAN.md)'da, tamamlanan iş [COMPLETED-PLAN](../../../COMPLETED-PLAN.md)'dadır.
+
 Açık işler (2026-09-24), ana iş alanları tablosunun tam metni ve kabul edilmiş yeni yönler. Kısa tablo PLAN.md'dedir.
 Kaynak/Source: PLAN.md @58537c7f lines 74–110, 117–140, 216–225; text below is verbatim.
 
@@ -31,10 +33,10 @@ T-L7 (yerel uzun bağlam profili) önkoşuldur; canlı profil 2026-09-25 owner g
 Analiz ve dilimler (T-L1..L7):
 `deckent-refactor-work/TERMINAL-CLAUDE-CODE-CLASS-ANALYSIS-2026-09-24.md`.
 
-**Terminal durumu (2026-09-27):** T-L1–T-L5 (okuma araçları, akış, yönetilen araç döngüsü, kalıcı tur, `chatTurn`, bağlam ölçümü, otomatik sıkıştırma, `/resume` `/new` (bugün `/clear`) `/context`) ve T-L4 dilim 1–3 (araç onayı, dosya yazımı C11 etkisi, `run_shell`, canlı çıktı kuyruğu) ile dilim 4a (izin modları) main'de (`357aeeb`); slash Enter, `@file` ve protokol v15 main'de; dilim 4c, C12 G4 ve kalıcı cleanup işareti dördüncü partide. O tarihte canlı servis eski build'deydi (`b4e77dc`, v14); güncel canlı durum "Canlı kurulum" satırında (2026-09-29: `4a2ac04`, v18). vLLM terminal profili (owner 2026-09-30, seçenek B): `--max-model-len 196608 --max-num-seqs 4 --gpu-memory-utilization 0.92 --speculative-config {"method":"mtp","num_speculative_tokens":2} --prefix-match-unit 16 --enable-auto-tool-choice --tool-call-parser qwen3_xml --reasoning-parser qwen3`; Deckent profili `local-qwen` v6 `contextWindowTokens` 196608; ölçüm: MTP kabul %53–81, sıcak prefix isabeti %96,4, kısa bağlam 144,5 tok/s (önce ~50), betik `deckent-refactor-work/host-tools/inference/start-vllm-terminal.sh`. Açık: ajan döngüsünde bekleme/tekrar (owner oturumu), `/compact` (protokol eki), dilim 4d, 8×32k worker profili. Tarihsel dilim anlatısı [COMPLETED-PLAN](COMPLETED-PLAN.md)'de.
+**Terminal durumu (2026-09-27):** T-L1–T-L5 (okuma araçları, akış, yönetilen araç döngüsü, kalıcı tur, `chatTurn`, bağlam ölçümü, otomatik sıkıştırma, `/resume` `/new` (bugün `/clear`) `/context`) ve T-L4 dilim 1–3 (araç onayı, dosya yazımı C11 etkisi, `run_shell`, canlı çıktı kuyruğu) ile dilim 4a (izin modları) main'de (`357aeeb`); slash Enter, `@file` ve protokol v15 main'de; dilim 4c, C12 G4 ve kalıcı cleanup işareti dördüncü partide. O tarihte canlı servis eski build'deydi (`b4e77dc`, v14); güncel canlı durum "Canlı kurulum" satırında (2026-09-29: `4a2ac04`, v18). vLLM terminal profili (owner 2026-09-30, seçenek B): `--max-model-len 196608 --max-num-seqs 4 --gpu-memory-utilization 0.92 --speculative-config {"method":"mtp","num_speculative_tokens":2} --prefix-match-unit 16 --enable-auto-tool-choice --tool-call-parser qwen3_xml --reasoning-parser qwen3`; Deckent profili `local-qwen` v6 `contextWindowTokens` 196608; ölçüm: MTP kabul %53–81, sıcak prefix isabeti %96,4, kısa bağlam 144,5 tok/s (önce ~50), betik `deckent-refactor-work/host-tools/inference/start-vllm-terminal.sh`. Açık: ajan döngüsünde bekleme/tekrar (owner oturumu), `/compact` (protokol eki), dilim 4d, 8×32k worker profili. Tarihsel dilim anlatısı [COMPLETED-PLAN](../../../COMPLETED-PLAN.md)'de.
 
 Devam planı: dış çalışma alanı `DEVAM-PLANI-2026-09-24.md` (Astra 2055/2057 değerlendirmesiyle). **S** akış karar listesi
-uygulandı ([COMPLETED-PLAN](COMPLETED-PLAN.md)). Sıra: **A-1** yönetilen araç döngüsü tasarımı
+uygulandı ([COMPLETED-PLAN](../../../COMPLETED-PLAN.md)). Sıra: **A-1** yönetilen araç döngüsü tasarımı
 (owner onayı 2026-09-24; salt okunur araçlar policy izin verirse ek varsayılan onay olmadan, etkili araçlar mevcut onaylı uygulama
 yetkisiyle; `@` dosya adayı scoped okuma portu — uygulandı, protokol v15) ∥ **B09-3** canlı worker satırı + Codex normalizer → **A-2** D15b `do` →
 RunProposal → **G31** atama (aşağıdaki satır). Terminal açıkları: kuyruk boşaltmanın duraklatılması (Astra 2057) **K5 tipli havuz bekletmesi olarak uygulandı (20. parti, ledger v44)**,
