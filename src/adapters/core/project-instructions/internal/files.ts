@@ -47,8 +47,11 @@ async function readIdentifiedFile(root: string, name: string, maxBytes: number):
 export type ExpectedInstructionFile = Readonly<{ path: string; dev: number | null; ino: number | null }>;
 /** Trust lives in a private user-global managed directory, never a workspace-controlled record. */
 /** `files` narrows the candidates (a worker selection reads exactly one file); the default keeps the terminal's DECKENT.md → AGENTS.md order.
- * `committed` (alpha.54 R1: a work target's base ref) reads each file from that ref's commit instead of the working tree; the trust key
- * stays this folder + content digest, so a record made from a working-tree read of the same bytes is honoured. */
+ * `committed` (alpha.54 R1: a work target's base ref) reads each file from that ref's commit instead of the working tree.
+ * Trust records (REVISE 2738 R1, owner Q5): a working-tree read keys consent by this folder + content digest, as alpha.53 did. A committed read
+ * keys a NEW grant by folder + ref + digest in its own tagged form, so another ref or the working tree with the same bytes is not trusted by it.
+ * Legacy rule: a committed read also honours the folder + digest record (alpha.53's form, so consent given on alpha.53 stays valid) but never writes it;
+ * its revoke removes both, so a revoked card never stays trusted. */
 export async function openProjectInstructionReader(rootInput: string, trustDirectory: string | null, known?: KnownSecretSnapshot, files: readonly string[] = REGISTRY.files,
   committed?: CommittedInstructionSource) {
   const root = await realpath(rootInput), identity = await stat(root);
@@ -60,7 +63,18 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
     const trustRoot = await realpath(trustDirectory), rel = relative(root, trustRoot);
     if (!rel || (rel !== '..' && !rel.startsWith(`..${sep}`))) throw new Error('unsafe');
   }
-  const trustPath = (digest: string) => join(trustDirectory!, instructionDigest(`${rootDigest}\0${digest}`));
+  // A record's name binds what it trusts; its content names its kind (the bare digest is the folder + content form, never written for a ref).
+  const ref = committed?.ref ?? null, REF_TAG = 'ref-trust:1';
+  const records = (digest: string) => [...(ref === null ? [] : [{ name: instructionDigest(`${rootDigest}\0${REF_TAG}\0${ref}\0${digest}`), body: `${REF_TAG}\n${digest}` }]),
+    { name: instructionDigest(`${rootDigest}\0${digest}`), body: digest }];
+  const grant = (digest: string) => records(digest)[0]!; // what a trust here writes: the ref form for a committed read, else folder + content
+  const recorded = async ({ name, body }: { name: string; body: string }) => {
+    try {
+      const info = await lstat(join(trustDirectory!, name));
+      return info.isFile() && !info.isSymbolicLink() && info.nlink === 1 && info.uid === process.getuid?.() && (info.mode & 0o777) === 0o600
+        && (await readInstructionFile(trustDirectory!, name, 256))?.toString('utf8') === body;
+    } catch { return false; } // fail closed: cached consent is a convenience
+  };
   const load = async (): Promise<ProjectInstructionView> => {
     try {
       const currentRoot = await stat(root);
@@ -74,15 +88,8 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
           identity: 'commit' in read ? { kind: 'ref', ref: committed!.ref, commit: read.commit, blobOid: read.blobOid } : { kind: 'file', dev: read.dev, ino: read.ino } };
         if (Buffer.byteLength(source.content) > REGISTRY.maxBytes) return { status: 'blocked', reason: 'size' };
         // Only an owner-private, no-follow record counts; an absent/invalid cache asks again.
-        let trusted = sessionTrusted.has(source.digest);
-        if (trustDirectory && !trusted) {
-          try {
-            const info = await lstat(trustPath(source.digest));
-            if (info.isFile() && !info.isSymbolicLink() && info.nlink === 1 && info.uid === process.getuid?.() && (info.mode & 0o777) === 0o600) {
-              trusted = (await readInstructionFile(trustDirectory, instructionDigest(`${rootDigest}\0${source.digest}`), 256))?.toString('utf8') === source.digest;
-            }
-          } catch { /* fail closed: cached consent is a convenience */ }
-        }
+        let trusted = sessionTrusted.has(grant(source.digest).name);
+        for (const record of trustDirectory ? records(source.digest) : []) if (!trusted) trusted = await recorded(record);
         const endRoot = await stat(root);
         if (endRoot.dev !== identity.dev || endRoot.ino !== identity.ino) throw new Error('unsafe');
         return { status: trusted ? 'ready' : 'trust-required', source };
@@ -101,17 +108,19 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
     if (current.status !== 'trust-required' && current.status !== 'ready') return current;
     if (!sameFile(current.source, expected)) throw new Error('changed');
     if (current.source.digest !== digest) return { status: 'trust-required', source: current.source };
+    const { name, body } = grant(digest);
     if (trustDirectory) {
       try {
-        const handle = await open(trustPath(digest), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-        try { await handle.writeFile(digest); await handle.sync(); } finally { await handle.close(); }
+        const handle = await open(join(trustDirectory, name), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+        try { await handle.writeFile(body); await handle.sync(); } finally { await handle.close(); }
       } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
     }
     // Accept the exact already-masked snapshot; later disk changes never mutate this context.
-    sessionTrusted.add(digest);
+    sessionTrusted.add(name);
     return { status: 'ready', source: current.source };
   },
-  /** Takes back consent for exactly this folder and digest (true: a persisted record was removed). An absent record is already untrusted.
+  /** Takes back consent for exactly this folder and digest, at a committed read for this ref and the legacy folder + digest record — never another
+   * ref's record (true: a persisted record was removed). An absent record is already untrusted.
    * With `expected`, only while that exact file with that digest is still the one read here (else `changed`, nothing removed). */
   async revoke(digest: string, expected?: ExpectedInstructionFile): Promise<boolean> {
     if (!/^[a-f0-9]{64}$/u.test(digest)) throw new Error('unsafe');
@@ -119,13 +128,17 @@ export async function openProjectInstructionReader(rootInput: string, trustDirec
       const current = await load();
       if ((current.status !== 'trust-required' && current.status !== 'ready') || !sameFile(current.source, expected) || current.source.digest !== digest) throw new Error('changed');
     }
-    sessionTrusted.delete(digest);
+    sessionTrusted.delete(grant(digest).name);
     if (!trustDirectory) return false;
-    try {
-      const info = await lstat(trustPath(digest));
-      if (!info.isFile() || info.isSymbolicLink()) throw new Error('unsafe');
-      await unlink(trustPath(digest));
-      return true;
-    } catch (error) { if (missing(error)) return false; throw error; }
+    let removed = false;
+    for (const { name } of records(digest)) {
+      const path = join(trustDirectory, name);
+      try {
+        const info = await lstat(path);
+        if (!info.isFile() || info.isSymbolicLink()) throw new Error('unsafe');
+        await unlink(path); removed = true;
+      } catch (error) { if (!missing(error)) throw error; }
+    }
+    return removed;
   } };
 }

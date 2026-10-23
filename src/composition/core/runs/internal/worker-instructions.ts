@@ -6,7 +6,7 @@ import { assertAuthorityWitness, AuditApplication, AuthorityDecisionRecords, dec
 import { ErrorRegistry, getConfigKnownSecrets, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
-/** The one answer to "which file, in which folder" for admission, `coding instructions status` and the trust path (same folder = same trust key). */
+/** The one answer to "which file, in which folder, at which ref" for admission, `coding instructions status` and the trust path (same place = same trust key). */
 function workerInstructionPlace(projectRoot: string, config: ResolvedConfig) {
   const selected = config.execution?.workerInstructions?.source, source = selected ?? 'worker-md', target = selectWorkTarget(config.execution);
   const off = !config.execution ? 'no-execution' as const : source === 'none' ? 'source-none' as const : null;
