@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { MODEL_MAKERS, canonicalModelMaker, makersIndependent, parseProviderCatalogDocument } from '#domain/index.js';
+import { MODEL_MAKERS, canonicalModelMaker, independentMakerRows, makersIndependent, parseProviderCatalogDocument } from '#domain/index.js';
 
 // S4B-1 (MODEL-INDEPENDENCE-AUDIT M1 item 1, lead 2026-10-23): independence compares canonical makers from a small versioned registry, never raw
 // catalog `vendorId` strings. An alias resolves to one maker; a provider-chosen entry (`selection: 'provider'`) or one without metadata is
@@ -34,4 +34,13 @@ it('every catalog vendor is either canonical or a registered alias of a canonica
   const vendors = new Set(models.flatMap(model => 'vendorId' in model ? [model.vendorId] : []));
   for (const alias of Object.keys(MODEL_MAKERS.aliases)) expect(Object.keys(MODEL_MAKERS.aliases)).not.toContain(MODEL_MAKERS.aliases[alias]);
   expect([...vendors].every(vendor => typeof vendor === 'string' && vendor.length > 0)).toBe(true);
+});
+
+it('the independent rows follow the registry order and the catalog maker only: no model name decides it', () => {
+  const rows = [{ channelId: 'a', modelId: 'x', vendorId: 'anthropic' }, { channelId: 'b', modelId: 'y', vendorId: 'openai' }, { channelId: 'c', modelId: 'z', vendorId: 'zhipu' },
+    { channelId: 'd', modelId: 'auto', selection: 'provider' }];
+  expect(independentMakerRows(rows, canonicalModelMaker, ['anthropic']).map(row => [row.channelId, row.maker])).toEqual([['b', 'openai'], ['c', 'zai']]);
+  expect(independentMakerRows(rows, canonicalModelMaker, ['zai'])).toHaveLength(2);
+  expect(independentMakerRows(rows, canonicalModelMaker, [null])).toEqual([]);
+  expect(independentMakerRows(rows.slice(0, 1), canonicalModelMaker, ['anthropic'])).toEqual([]);
 });

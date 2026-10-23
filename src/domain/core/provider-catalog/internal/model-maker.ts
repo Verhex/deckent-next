@@ -22,3 +22,10 @@ export function canonicalModelMaker(model: unknown): string | null {
 export function makersIndependent(evaluator: string | null, sources: readonly (string | null)[]): boolean {
   return evaluator !== null && sources.length > 0 && sources.every(source => source !== null && source !== evaluator);
 }
+/**
+ * The rows (role models, in registry order) an independent evaluator may use for work done by `sourceMakers`: each row's canonical maker known
+ * and different from every source maker. Empty: no independent evaluator (S4B-3 keeps the entry a candidate; the read-only view says so).
+ */
+export function independentMakerRows<T>(rows: readonly T[], makerOf: (row: T) => string | null, sourceMakers: readonly (string | null)[]): readonly (T & { readonly maker: string })[] {
+  return Object.freeze(rows.flatMap(row => { const maker = makerOf(row); return maker !== null && makersIndependent(maker, sourceMakers) ? [Object.freeze({ ...row, maker })] : []; }));
+}
