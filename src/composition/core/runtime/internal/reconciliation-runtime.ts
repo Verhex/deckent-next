@@ -1,7 +1,7 @@
 import { abortableRuntimeWait } from './wait.js';
 import { SystemTrustedClock, ErrorRegistry, loadConfig, type ConfigLoadOptions, type DeckentError } from '#platform/index.js';
 import { ReconciliationRuntimeLoop, type ReconciliationRecoveryCommand, type ReconciliationRecoveryPage } from '#engine/index.js';
-import { recoverConfiguredReconciliation } from '#composition/core/runs/index.js';
+import { prepareConfiguredNervous, recoverConfiguredReconciliation } from '#composition/core/runs/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 
 export interface ConfiguredReconciliationRuntimeObserver {
@@ -24,10 +24,12 @@ export async function prepareConfiguredReconciliationRuntime(projectRoot: string
     return Object.freeze({ run });
   }
   const clock = new SystemTrustedClock();
+  // S6R-2: the Nervous shadow detector reads each page after reconciliation; its failure is reported, never a reconciliation failure.
+  const nervous = prepareConfiguredNervous(projectRoot, options, config.runRuntime.nervous.mode, runtime.pageSize);
   const loop = new ReconciliationRuntimeLoop(async command =>
     (await recoverConfiguredReconciliation(projectRoot, command, options, serviceScopeIds)).recovery,
   abortableRuntimeWait, { now: () => clock.sample().monotonicMs }, {
-    onPage: observer.onPage,
+    async onPage(command, result) { await observer.onPage(command, result); await nervous?.observe(command).catch(error => observer.onError(command, queryFailure(error))); },
     async onError(command, error) { await observer.onError(command, queryFailure(error)); },
   }, { scopeIds: runtime.scopeIds, pollIntervalMs: runtime.pollIntervalMs, failureBackoffMs: runtime.failureBackoffMs });
   return Object.freeze({ run: (signal: AbortSignal) => loop.run(signal) });

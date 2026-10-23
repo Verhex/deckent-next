@@ -105,6 +105,8 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     parking: RUN_PARKING_SETTINGS.default({ schemaVersion: 1 }),
     quotaRecovery: QUOTA_RECOVERY_SETTINGS.default({ schemaVersion: 1 }),
     stallRecovery: STALL_RECOVERY_SETTINGS.default({ schemaVersion: 1 }),
+    /** S6R-2 Nervous detector (owner 2026-10-23 Q-R2: shadow first, customer default off): `shadow` seals proposals and executes nothing; `live` arrives with S6R-3 (additive). */
+    nervous: z.object({ mode: z.enum(['off', 'shadow']).default('off') }).strict().default({}),
     maxConcurrentRuns: z.number().int().positive().safe().default(SERVICE_EXECUTION_CAPACITY_DEFAULT),
     maxReservationsPerTurn: z.number().int().positive().safe().default(4),
     pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),

@@ -26,6 +26,14 @@ export const auditorPrincipal = (owner: { readonly issuer: string; readonly subj
   return verifiedPrincipalSchema.parse({ id: `${ref.subject}@${ref.issuer}`, ...ref, assurance: 'workload-verified', scopeIds: [...scopeIds] });
 };
 
-/** Transport identity dominates assurance: a forged legacy MCP or auditor os-user is still AI. */
+/**
+ * S6 Nervous (K-B, owner 2026-10-23): the deterministic violation watcher's workload identity, issued only by the composition root (no client
+ * channel names it). It reads and proposes; its only write is its own sealed `recovery-detection` record. A forged `os-user` Nervous is still it.
+ */
+export const nervousPrincipalRef = (owner: { readonly issuer: string; readonly subject: string }) =>
+  Object.freeze({ issuer: identitySchema.parse(`${owner.issuer}/nervous`), subject: identitySchema.parse(owner.subject) });
+export const isNervousPrincipal = (actor: { readonly issuer: string }) => actor.issuer.endsWith('/nervous');
+
+/** Transport identity dominates assurance: a forged legacy MCP, auditor or Nervous os-user is still AI. */
 export const isAiPrincipal = (actor: { readonly issuer: string; readonly assurance?: string }) =>
-  isMcpPrincipal(actor) || isAuditorPrincipal(actor) || actor.assurance !== 'os-user';
+  isMcpPrincipal(actor) || isAuditorPrincipal(actor) || isNervousPrincipal(actor) || actor.assurance !== 'os-user';

@@ -31,7 +31,7 @@ export type { McpCapabilityGroup, McpCapabilityAction, McpCapabilitySelection, M
 
 export { assertPolicyAdministrationPreserved, usablePolicyAdmins, PolicyLastAdminError, type AdministrationAssurance } from './internal/administration.js';
 
-export { aiAuthorityFloor, AUDITOR_READ_ACTIONS } from './internal/ai-floor.js';
+export { aiAuthorityFloor, AUDITOR_READ_ACTIONS, NERVOUS_READ_ACTIONS } from './internal/ai-floor.js';
 export { explicitDecisionGrant } from './internal/decision-step.js';
 export { DecisionDelegationError, getDecisionSteps, delegationQuerySchema, delegationCommandSchema } from './internal/delegations.js';
 export type { DecisionStep, DelegationQuery, DelegationCommand, DecisionDelegationView } from './internal/delegations.js';

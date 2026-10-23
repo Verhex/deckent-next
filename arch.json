@@ -460,7 +460,8 @@
         "src/engine/core/handoff-observation",
         "src/domain/core/task-graph",
         "src/engine/core/memory",
-        "src/domain/core/memory"
+        "src/domain/core/memory",
+        "src/engine/core/nervous"
       ],
       "plan": "FOUNDATION"
     },
@@ -551,7 +552,10 @@
         "src/engine/core/effect",
         "src/engine/core/run-proposal",
         "src/adapters/core/project-instructions",
-        "src/engine/core/project-instructions"
+        "src/engine/core/project-instructions",
+        "src/engine/core/nervous",
+        "src/platform/core/common",
+        "src/platform/core/utils"
       ],
       "plan": "EXECUTION"
     },
@@ -3580,6 +3584,18 @@
         "src/surfaces/core/cli-terminal"
       ],
       "plan": "MEMORY"
+    },
+    "src/engine/core/nervous": {
+      "dependencies": [
+        "src/domain/core/attempt",
+        "src/domain/core/audit",
+        "src/domain/core/command",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/engine/core/audit",
+        "src/platform/core/integrity"
+      ],
+      "plan": "EXECUTION"
     }
   },
   "composition": {

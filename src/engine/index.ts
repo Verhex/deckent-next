@@ -7,7 +7,7 @@ export type { DispatchClaim, DispatchAdmission, SupervisorProfileValidator, Laun
 export { decideDispatchLaunch, validateLaunchRequest } from '#engine/core/dispatch/index.js';
 export { assertTaskEnvironment, environmentProbeRegistry, registerEnvironmentProbeKind, EnvironmentProbeRegistry, type EnvironmentProbe, type EnvironmentProbes } from '#engine/core/dispatch/index.js';
 export type { DispatchLaunchState, DispatchLaunchTransition } from '#engine/core/dispatch/index.js';
-export { DispatchApplication, dispatchNeedsObservation, inactivityVerdict, inactivityWatch, type InactivityVerdict, type GatewayActivityCounters, DispatchPreparationGuard, DISPATCH_PREPARATION_INSTANCE, dispatchPreparationRecordSchema, dispatchLauncherEvidenceSchema, readDispatchLauncherEvidence, type DispatchLauncherEvidence, type DispatchPreparationContext, type DispatchPreparationInstance, type DispatchPreparationPark, type DispatchPreparationPhase, type DispatchPreparationRecord } from '#engine/core/dispatch/index.js';
+export { DispatchApplication, dispatchNeedsObservation, inactivityVerdict, inactivityWatch, type InactivityVerdict, type GatewayActivityCounters, DispatchPreparationGuard, DISPATCH_PREPARATION_INSTANCE, dispatchPreparationRecordSchema, dispatchLauncherEvidenceSchema, readDispatchLauncherEvidence, readDispatchPreparationRecord, type DispatchLauncherEvidence, type DispatchPreparationContext, type DispatchPreparationInstance, type DispatchPreparationPark, type DispatchPreparationPhase, type DispatchPreparationRecord } from '#engine/core/dispatch/index.js';
 export type { DispatchAuthorization, DispatchIdentityAuthorization, DispatchOutcome } from '#engine/core/dispatch/index.js';
 export { projectDispatchTerminal, projectDispatchCancellation, mergeDispatchTerminal } from '#engine/core/dispatch/index.js';
 export { PoolPolicyAuthorization, PoolControlPolicyAuthorization, assertPoolControlAllowed, RunPolicyAuthorization, DispatchPolicyAuthorization, DispatchInventoryPolicyAuthorization, PolicyAuthorizationError, assertRequestCompany, installationOwnScopes, resolvePolicyScopeMembership, ScopeRegistrationError } from '#engine/core/policy/index.js';
@@ -70,6 +70,7 @@ export * from '#engine/core/monitor/index.js';
 export * from '#engine/core/toolchain-currency/index.js';
 export * from '#engine/core/approval/index.js';
 export * from '#engine/core/audit/index.js';
+export * from '#engine/core/nervous/index.js';
 export * from '#engine/core/agent-turn/index.js';
 export * from '#engine/core/shell-classification/index.js';
 export * from '#engine/core/secret-store/index.js';
