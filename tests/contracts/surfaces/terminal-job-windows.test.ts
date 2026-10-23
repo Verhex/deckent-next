@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { createElement } from 'react';
 import { Text } from 'ink';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { projectResultBrief, type RunView } from '#engine/index.js';
+import { DELIVERY_SUMMARY_ACTIONS, deliverySummarySchema, projectResultBrief, targetQueueViewSchema, type RunView } from '#engine/index.js';
 import type { WorkLedgerEntry, WorklineLedgerPorts, WorklineApproval } from '#surfaces/core/terminal-ledger/index.js';
+import { ticketSummaryBlock } from '#surfaces/core/delivery-summary/index.js';
 import { workSurfaceLabels } from '#surfaces/core/work-labels/index.js';
 import { runDetailLines } from '#surfaces/core/terminal-work/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
@@ -68,6 +69,27 @@ describe('SW-2 job windows', () => {
     await snapshot(`run-detail-${locale}`, view);
     expect(runDetailLines(run, work).some(line => line.spans.some(item => item.role === 'muted'))).toBe(true);
     await close(view); onlySummary();
+  });
+  it.each(['en', 'tr'] as const)('%s: /run shows the summary of a queue row read through the ledger port, and its not-available state when the read fails', async locale => {
+    const subject = { scopeId: 'scope-a', runId, layoutRevision: 'layout', taskId: 'task-id', attemptId, generation: 1 };
+    const ticket = targetQueueViewSchema.parse({ schemaVersion: 1, commandId: 'q1', identity: subject, operation: 'delivery', target: { kind: 'git-ref', id: 'refs/heads/integration' },
+      display: { schemaVersion: 1, labelKey: 'queue.git.target', basisKey: 'queue.git.basis', versionKey: 'queue.git.version', prepareActionKey: 'queue.git.prepare' },
+      state: 'awaiting-confirmation', outcome: null, revision: 1, observedAt: 1, freshness: 'last-known', position: 1, nextAction: 'confirm-batch', responsibility: 'human',
+      basis: { observed: 'o', effective: 'e', candidate: 'c' }, verification: null, evidenceRefs: [], reason: null });
+    const summary = deliverySummarySchema.parse({ schemaVersion: 1, operation: 'adopt', subject, target: { state: 'available', id: 'refs/heads/integration', protected: false },
+      title: { source: 'work-input', text: 'Queue row headline' }, outcome: { state: 'withheld' }, acceptance: { verdict: 'accepted', criteriaCount: 1, evidence: [] },
+      tests: { worker: { state: 'withheld' }, verification: { state: 'unavailable' } }, model: { state: 'withheld' },
+      risk: { class: 'small', workClass: 'small', protectedTarget: false, sizeBucket: 'tiny', flags: [] }, actions: DELIVERY_SUMMARY_ACTIONS.adopt, change: { state: 'withheld' } });
+    const queued = { ...run, targetQueue: { records: [ticket], truncated: false } } as unknown as RunView;
+    const read = vi.fn(async () => [ticketSummaryBlock(summary, undefined, locale)]), shown = await open('/run', ports({ inspectRun: async () => queued, queueSummaryLines: read }), locale);
+    await until(() => shown.stdout.frame.includes('> Fix checkout'), 'run picker'); await choose(shown);
+    await until(() => shown.stdout.frame.includes('Queue row headline'), 'queue row summary'); expect(read).toHaveBeenCalledTimes(1); await snapshot(`run-queue-summary-${locale}`, shown);
+    await close(shown); onlySummary();
+    captured.entries = []; captured.seen = new WeakSet();
+    const failing = await open('/run', ports({ inspectRun: async () => queued, queueSummaryLines: async () => { throw new Error('unreadable'); } }), locale);
+    await until(() => failing.stdout.frame.includes('> Fix checkout'), 'run picker'); await choose(failing);
+    await until(() => failing.stdout.frame.includes(workSurfaceLabels(locale).jobs!.delivery), 'detail'); await settle(40);
+    expect(failing.stdout.frame).not.toContain('Queue row headline'); await close(failing);
   });
   it('picks the worker and pages the complete transcript by keys in a short terminal', async () => {
     const inspect = vi.fn(ports().inspectTranscript!), view = await open('/transcript', ports({ inspectTranscript: inspect }), 'en', 24);

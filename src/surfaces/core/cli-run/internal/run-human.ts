@@ -44,7 +44,9 @@ export function runStateWord(run: RunView, locale: Locale): string {
     'needs-input': () => t('terminal.jobs.parked.needs-input', {}, locale), 'operator-hold': () => t('terminal.jobs.parked.operator-hold', {}, locale),
     'progression-failed': () => t('terminal.jobs.parked.progression-failed', {}, locale), 'quota-exhausted': () => t('terminal.jobs.parked.quota-exhausted', {}, locale),
     'environment-not-ready': () => t('terminal.jobs.parked.environment-not-ready', {}, locale) };
-  return t('cli.run.list.stateReason', { state, reason: reasons[run.state.reason]() }, locale);
+  const reason = reasons[run.state.reason]();
+  // A hold laid over another park keeps the park's own reason and says the hold too.
+  return t('cli.run.list.stateReason', { state, reason: run.state.operatorHold && run.state.reason !== 'operator-hold' ? `${reason}, ${t('terminal.jobs.parked.heldOver', {}, locale)}` : reason }, locale);
 }
 
 /** A Run waits for someone when it is parked (a decision, an answer, a hold, a quota) — such Runs are listed first. */

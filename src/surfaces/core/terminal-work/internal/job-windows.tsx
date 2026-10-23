@@ -21,6 +21,8 @@ export interface JobWindowLabels {
   readonly runStates: Readonly<Record<string, string>>;
   /** Owner 2026-10-17: why a parked Run waits (`parked` state reasons), and the window's `{code}` / `{note}` lines. */
   readonly parkReasons?: Readonly<Record<string, string>>; readonly parkCode?: string; readonly parkNote?: string;
+  /** alpha.54 g: a hold laid over another park (`operatorHold`), said next to the park's own reason. */
+  readonly heldOver?: string;
 }
 export type JobWindowPresentation = Readonly<{ kind: 'job-window'; title: string; lines: readonly WindowLine[] }>
   | Readonly<{ kind: 'job-picker'; title: string; rows: readonly (readonly Span[])[] }>;
@@ -52,7 +54,22 @@ export function openingWorkText(runs: readonly RunView[] | undefined, activeWork
   const running = (runs ?? []).filter(run => run.state?.kind !== 'terminal').length;
   return running + activeWorkers > 0 ? fillTemplate(labels.opening, { runs: running, workers: activeWorkers }) : null;
 }
-export function runDetailLines(run: RunView, work: WorkSurfaceLabels): WindowLine[] {
+/**
+ * The state word of a Run in the Runs list and picker: the state, and for a parked Run its reason; a hold laid over another park says both
+ * (the hold record's typed reason is the park reason `operator-hold`, or the `operatorHold` overlay the original reason stays under).
+ */
+export function runListStateText(run: RunView, labels: JobWindowLabels): string {
+  const state = runStateText(run, labels), reason = parkReasonText(run, labels);
+  if (run.state?.kind !== 'parked' || !reason) return state;
+  const over = run.state.operatorHold && run.state.reason !== 'operator-hold' ? labels.heldOver : undefined;
+  return `${state}: ${reason}${over ? `, ${over}` : ''}`;
+}
+/** The summary lines of each queue row of a Run, from the ledger's reader (the card's own renderer); a failed read is the card's not-available line; undefined = no reader or no rows. */
+export async function queueRowSummaries(run: RunView, read: WorklineLedgerPorts['queueSummaryLines']): Promise<readonly (readonly string[])[] | undefined> {
+  const views = run.targetQueue?.records ?? [];
+  return read && views.length ? read(views).catch(() => views.map(() => [])) : undefined;
+}
+export function runDetailLines(run: RunView, work: WorkSurfaceLabels, summaries?: readonly (readonly string[])[]): WindowLine[] {
   const labels = work.jobs!;
   const section = (title: string): WindowLine => ({ spans: [span(title, { bold: true, role: 'accent' })] });
   const field = (label: string, text: string, muted = false): WindowLine => ({ label: [span(label, { bold: true })], spans: [span(text, muted ? { role: 'muted' } : {})] });
@@ -65,7 +82,8 @@ export function runDetailLines(run: RunView, work: WorkSurfaceLabels): WindowLin
     section(labels.attempts), ...run.tasks.map((task, index) => field(taskLabel(task, index), task.resultBrief?.attemptId ? displayId(task.resultBrief.attemptId) : labels.unknown, true)),
     section(labels.delivery), ...run.tasks.map((task, index) => ({ label: [span(taskLabel(task, index), { bold: true })], spans: task.resultBrief?.runDelivery
       ? [span(labels.runStates[task.resultBrief.runDelivery.state] ?? task.resultBrief.runDelivery.state), ...(task.resultBrief.runDelivery.commit ? [span(` · ${displayId(task.resultBrief.runDelivery.commit)}`, { role: 'muted' })] : [])] : [span(labels.unknown, { role: 'muted' })] })),
-    ...(run.targetQueue?.records ?? []).flatMap(view => renderQueueStatus(view, labels.locale).split('\n').map(text => ({ spans: [span(text)] }))),
+    ...(run.targetQueue?.records ?? []).flatMap((view, index) => [...renderQueueStatus(view, labels.locale).split('\n'),
+      ...summaries?.[index] ?? []].map(text => ({ spans: [span(text)] }))),
     ...(run.targetQueue?.truncated ? [{ spans: [span(t('queue.truncated', {}, labels.locale), { role: 'warning' })] }] : []),
     ...run.tasks.flatMap((task, index) => [section(taskLabel(task, index)), ...(task.resultBrief
       ? renderBriefLines(task.taskBrief, task.resultBrief, labels.locale).map(text => ({ spans: [span(text)] }))
@@ -94,7 +112,7 @@ export async function pickRun(panel: WorklinePanel, execution: LocalExecution, l
     await panel.pick(execution, { kind: 'job-window', title: work.jobs!.runTitle, lines: [{ spans: [span(work.live!.empty, { role: 'muted' })] }] }, ['close']); return null;
   }
   const choice = await panel.pick(execution, { kind: 'job-picker', title: cancellable ? work.jobs!.cancelPickerTitle : work.live!.runsTitle,
-    rows: runs.map(run => [span(runTitle(run, work.jobs!), { bold: true }), span(` [${runStateText(run, work.jobs!)}]`, { role: 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })]) }, runs.map((_, index) => String(index)));
+    rows: runs.map(run => [span(runTitle(run, work.jobs!), { bold: true }), span(` [${runListStateText(run, work.jobs!)}]`, { role: 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })]) }, runs.map((_, index) => String(index)));
   if (choice === null || execution.signal.aborted) return null;
   // Refresh revision and cancellation eligibility after the choice; the service remains the authority at mutation time.
   const selected = await ledger.inspectRun(runs[Number(choice)]!.runId);
@@ -109,7 +127,7 @@ export async function runJobWindow(command: 'workers' | 'runs' | 'run' | 'transc
     const workers = command === 'workers' ? (await ledgerEntriesForWorkers(ledger, 'list')).filter((row): row is WorkLedgerWorkerEntry => row.kind === 'worker') : [];
     const runs = command === 'runs' ? await loadRunViewsForWatch(ledger) : [];
     const lines = command === 'workers' ? liveWindowLines('workers', { workers, runs: [] }, { live: work.live!, panel: work.panel, workerLine: work.workerLine }, Number.POSITIVE_INFINITY)
-      : runs.length ? runs.map(run => ({ spans: [span(runTitle(run, labels), { bold: true }), span(` [${runStateText(run, labels)}]`, { role: 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })] })) : [{ spans: [span(work.live!.empty, { role: 'muted' })] }];
+      : runs.length ? runs.map(run => ({ spans: [span(runTitle(run, labels), { bold: true }), span(` [${runListStateText(run, labels)}]`, { role: 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })] })) : [{ spans: [span(work.live!.empty, { role: 'muted' })] }];
     const title = command === 'workers' ? work.panel.title : work.live!.runsTitle;
     await panel.pick(execution, { kind: 'job-window', title, lines }, ['close']);
     if (command === 'runs') onSeen?.();
@@ -117,7 +135,7 @@ export async function runJobWindow(command: 'workers' | 'runs' | 'run' | 'transc
   }
   if (command === 'run') {
     const run = await pickRun(panel, execution, ledger, work);
-    if (run && !execution.signal.aborted) { await panel.pick(execution, { kind: 'job-window', title: runTitle(run, labels), lines: runDetailLines(run, work) }, ['close']); onSeen?.(run.runId); }
+    if (run && !execution.signal.aborted) { await panel.pick(execution, { kind: 'job-window', title: runTitle(run, labels), lines: runDetailLines(run, work, await queueRowSummaries(run, ledger.queueSummaryLines)) }, ['close']); onSeen?.(run.runId); }
     return run ? `${labels.runTitle}: ${runTitle(run, labels)} [${runStateText(run, labels)}]` : fillTemplate(labels.closed, { title: labels.runTitle });
   }
   const workers = (await ledgerEntriesForWorkers(ledger, 'transcript')).filter((row): row is WorkLedgerWorkerEntry => row.kind === 'worker' && Boolean(row.attempt));
