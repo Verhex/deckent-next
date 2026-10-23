@@ -20,6 +20,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const identity = (config as Record<string, unknown>)['identity'] as { profile?: { id?: unknown } } | undefined;
   const names = context.listSecretNames ? await context.listSecretNames(root, options).then(view => view.names, () => null) : null;
   const catalog = context.inspectModelCatalog && scopeId ? await context.inspectModelCatalog(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
+  const roles = context.inspectModelRoles && scopeId ? await context.inspectModelRoles(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
   const executionEnvironment = context.inspectExecutionEnvironment ? await context.inspectExecutionEnvironment(options.env ?? process.env).catch(() => null) : null;
   // PRE-8 v2: the one inventory (names only): used keys without a grant, undeclared project keys, declared keys not stored, used keys stored nowhere.
   const inventory = context.inspectSecretInventory && scopeId ? await context.inspectSecretInventory(root, { scopeId, all: false }, options).catch(() => null) : null;
@@ -32,6 +33,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     identityProfile: typeof identity?.profile?.id === 'string' ? { state: 'selected', id: identity.profile.id } : { state: 'missing' },
     backupPassphraseStored: names === null ? null : names.includes(DOCTOR_BACKUP_PASSPHRASE_SECRET),
     retiringModels: catalog === null ? null : retiringModels(catalog, config.models.retirementWarningDays), secretUse,
+    pendingRoleModels: roles === null ? null : roles.models.filter(entry => entry.state === 'pending').map(entry => ({ modelId: entry.modelId, channelId: entry.channelId })),
   };
 }
 

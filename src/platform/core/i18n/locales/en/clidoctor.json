@@ -186,5 +186,7 @@
   "doctor.firstJob.pool": "Set up the worker pool: preview, then the same command with --apply",
   "doctor.firstJob.next": "{step}: {command}",
   "doctor.check.pool.missing": "The worker pool is configured but not set up yet: Runs cannot start workers",
-  "doctor.poolReadiness.status.missing": "configured, not set up yet"
+  "doctor.poolReadiness.status.missing": "configured, not set up yet",
+  "doctor.check.roles.pending": "New model: role pending — {model} ({channel}); no role may use it until a person assigns one",
+  "doctor.check.roles.more": "New model: role pending — {count} more catalog models; see deckent models roles"
 }

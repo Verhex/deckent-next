@@ -8,3 +8,4 @@ export type { ModelCatalogApplyHandler, ModelCatalogInspectionHandler } from './
 export { renderModelConnect, type ModelConnectHandler } from './internal/model-connect.js';
 export { SCOPE_BUDGET_CHOICES, scopeBudgetCreateCommand, scopeBudgetLine, scopeBudgetRevisionCommand } from './internal/budget.js';
 export { modelRetirementWarnings, renderRetirementWarning, type ModelRetirementWarning } from './internal/models-table.js';
+export type { ModelRoleAssignHandler, ModelRoleInspectionHandler } from './internal/model-roles.js';

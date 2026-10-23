@@ -29,4 +29,8 @@ export const assignmentErrors: ErrorDefinitions = Object.freeze({
   MODEL_ROLE_REGISTRY_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ROLE_REGISTRY_LIMIT', p, l) }) },
   MODEL_ROLE_REVISION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ROLE_REVISION_INVALID', p, l) }) },
   MODEL_ROLE_LAYER_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ROLE_LAYER_INVALID', p, l) }) },
+  // M2 typed role admission (`deckent models roles set`): a model outside the scope's catalog, a malformed request or section, a stale card.
+  MODEL_ROLE_CATALOG_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ROLE_CATALOG_UNKNOWN', p, l) }) },
+  MODEL_ROLE_COMMAND_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ROLE_COMMAND_INVALID', p, l) }) },
+  MODEL_ROLE_STALE: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_ROLE_STALE', p, l) }) },
 });

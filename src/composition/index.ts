@@ -16,7 +16,8 @@ export { previewSuppliedInstallation, inspectSuppliedInstallation, applySupplied
 export type { InstallationApplyChoices } from '#composition/core/installation/index.js';
 export { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 export { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
-export { admitConfiguredModelActivation, inspectConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
+export { admitConfiguredModelActivation, inspectConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelCatalog, assignConfiguredModelRole,
+  inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
 export { connectConfiguredModel } from '#composition/core/model-connect/index.js';
 export * from '#composition/core/model-invocation/index.js';
 export { invokeRuntimeModel, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation } from '#composition/core/runtime-service/index.js';

@@ -7,6 +7,7 @@ import type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelI
 import type { ProviderSpendManagementHandler, ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './model-spending.js';
 import type { ModelCatalogApplyHandler, ModelCatalogInspectionHandler } from './model-catalog.js';
 import type { ModelConnectHandler } from './model-connect.js';
+import type { ModelRoleAssignHandler, ModelRoleInspectionHandler } from './model-roles.js';
 
 export type InferenceMetricsReading =
   | { readonly ok: true; readonly url: string; readonly body: string }
@@ -30,4 +31,7 @@ export interface ModelCommandContext extends CliBaseContext {
   applyModelCatalog?: ModelCatalogApplyHandler;
   /** T4-B `models.connect` (CLI `models connect`, the terminal's /provider model step). */
   connectModel?: ModelConnectHandler;
+  /** M2 `models roles`: the tier/role read view (catalog models with their row or pending) and the person's one-row write. */
+  inspectModelRoles?: ModelRoleInspectionHandler;
+  assignModelRole?: ModelRoleAssignHandler;
 }

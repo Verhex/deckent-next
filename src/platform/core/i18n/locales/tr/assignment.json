@@ -22,5 +22,8 @@
   "error.MODEL_ROLE_REGISTRY_LIMIT": "Model kademe/rol kaydı sınırlarını aşıyor (ek katman, rol, satır ya da istisna sayısı). Hiçbir şey değişmedi; kaydı küçültün.",
   "error.MODEL_ROLE_REVISION_INVALID": "Model kademe/rol kaydı ile ek katmanlarının birleşik revizyonu kaydedilemeyecek kadar uzun. Hiçbir şey değişmedi; daha kısa revizyonlar ya da daha az ek katman kullanın.",
   "error.MODEL_ROLE_LAYER_INVALID": "Model kademe/rol ek katmanları kurulum (global) yapılandırmasına aittir; bir proje yapılandırması hangi modelin bir rolü üstlenebileceğini değiştiremez. model_roles bölümünü global yapılandırmaya taşıyın.",
-  "assignment.config.modelRoles": "Model kademe/rol kaydının kurulum ek katmanları: Brain, çalışan, kurtarma kararı ve hafıza değerlendirici rollerini hangi tam katalog modellerinin üstlenebileceği ve tarihli istisnalar. Yalnız global katman."
+  "assignment.config.modelRoles": "Model kademe/rol kaydının kurulum ek katmanları: Brain, çalışan, kurtarma kararı ve hafıza değerlendirici rollerini hangi tam katalog modellerinin üstlenebileceği ve tarihli istisnalar. Yalnız global katman.",
+  "error.MODEL_ROLE_CATALOG_UNKNOWN": "Bu tam model, bu kapsamın görebildiği model kataloğunda yok; bu yüzden ona kademe ya da rol verilemez. Hiçbir şey değişmedi; modeli listeleyen kataloğu kaydedin (deckent models catalog register) ve kanal ile model kimliğini deckent models roles ile denetleyin.",
+  "error.MODEL_ROLE_COMMAND_INVALID": "Kademe/rol isteği geçerli değil (bilinmeyen kademe, iki kez yazılmış rol ya da bozuk bir model_roles bölümü). Hiçbir şey değişmedi; deckent models roles --help ile denetleyin.",
+  "error.MODEL_ROLE_STALE": "Model kademe/rol kaydı kart gösterildikten sonra değişti. Hiçbir şey değişmedi; güncel durumu görmek için komutu yeniden çalıştırın."
 }

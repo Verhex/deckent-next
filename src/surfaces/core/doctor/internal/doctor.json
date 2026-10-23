@@ -10,6 +10,7 @@
     "retired"
   ],
   "backupPassphraseName": "BACKUP_PASSPHRASE",
+  "pendingRoleRowsShown": 5,
   "fixes": [
     {
       "id": "toolchain-update",

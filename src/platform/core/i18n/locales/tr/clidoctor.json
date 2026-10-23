@@ -186,5 +186,7 @@
   "doctor.firstJob.pool": "Worker havuzunu kurun: önce önizleme, sonra aynı komut --apply ile",
   "doctor.firstJob.next": "{step}; komut: {command}",
   "doctor.check.pool.missing": "Worker havuzu yapılandırılmış ama henüz kurulmamış: Run'lar worker başlatamaz",
-  "doctor.poolReadiness.status.missing": "yapılandırılmış, henüz kurulmamış"
+  "doctor.poolReadiness.status.missing": "yapılandırılmış, henüz kurulmamış",
+  "doctor.check.roles.pending": "Yeni model: rol bekliyor — {model} ({channel}); bir kişi rol verene kadar hiçbir rol onu kullanamaz",
+  "doctor.check.roles.more": "Yeni model: rol bekliyor — {count} katalog modeli daha; deckent models roles ile bakın"
 }

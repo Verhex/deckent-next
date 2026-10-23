@@ -168,6 +168,11 @@ export const CLI_CATALOG = [
       action('activate', 'models', 'cli.help.action.models.catalog.activate', 'cli.help.modelsCatalog', { requires: CATALOG_CHANGE, picks: true }),
       action('deactivate', 'models', 'cli.help.action.models.catalog.deactivate', 'cli.help.modelsCatalog', { requires: CATALOG_CHANGE, picks: true }),
     ] },
+    // M2 typed role admission: which exact catalog model serves which role; `set` is a person's card (never AI, pipe or --json).
+    { name: 'roles', group: 'models', summary: 'cli.help.action.models.roles', detail: 'climodels.roles.help', children: [
+      action('show', 'models', 'cli.help.action.models.roles.show', 'climodels.roles.help'),
+      action('set', 'models', 'cli.help.action.models.roles.set', 'climodels.roles.help', { requires: ['--channel <id>', '--model <id>', '--tier <tier>', '--roles <roles> | --no-roles'] }),
+    ] },
   ] },
   { name: 'approval', group: 'approvals', summary: 'cli.help.summary.approval', detail: 'cli.approval.help', args: '[--scope <id>] [--input <file|->]', bare: { read: 'list' }, children: [
     action('list', 'approvals', 'cli.help.action.approval.list', 'cli.approval.help'),

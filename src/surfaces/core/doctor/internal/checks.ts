@@ -23,6 +23,8 @@ export interface DoctorCheckFacts {
   readonly backupPassphraseStored: boolean | null;
   /** Active models whose catalog lifecycle is past `active` (registry `retirementStates`); null when the catalog could not be read. */
   readonly retiringModels: readonly Readonly<{ modelId: string; channelId: string; state: string; date: string | null }>[] | null;
+  /** M2: catalog models no tier/role row names (every role refuses them until a person assigns one); null or absent when not read. */
+  readonly pendingRoleModels?: readonly Readonly<{ modelId: string; channelId: string }>[] | null;
   /** `missing`: the admission names a pool whose ledger row does not exist yet (`deckent init pool` provisions it). */
   readonly poolStatus: 'ready' | 'drift' | 'unavailable' | 'unconfigured' | 'missing';
   /** I-S7: whether an execution section (worker image) and an admission registry are configured; absent → the pool status alone decides. */
@@ -135,6 +137,11 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   else if (!f.retiringModels.length) rows.push(row('work', 'work.models', 'ok', t('doctor.check.models.ok', {}, l)));
   else for (const model of f.retiringModels) rows.push(row('work', 'work.models', 'warning', t('doctor.check.models.retiring', { model: model.modelId, channel: model.channelId, state: model.state === 'retired' ? t('doctor.check.models.state.retired', {}, l) : t('doctor.check.models.state.deprecated', {}, l), date: model.date ?? '-' }, l),
     scoped('deckent models list', f)));
+  // M2: a new catalog model fails closed until a person gives it a tier and roles; shown up to the registry bound, then counted.
+  const pending = f.pendingRoleModels ?? [], shown = pending.slice(0, registry.pendingRoleRowsShown);
+  for (const model of shown) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.pending', { model: terminalSafeText(model.modelId), channel: terminalSafeText(model.channelId) }, l),
+    scoped(`deckent models roles set --channel ${model.channelId} --model ${model.modelId} --tier <tier> --roles <roles>`, f)));
+  if (pending.length > shown.length) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.more', { count: pending.length - shown.length }, l), scoped('deckent models roles', f)));
   return rows;
 }
 
