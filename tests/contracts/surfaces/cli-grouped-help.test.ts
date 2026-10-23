@@ -177,7 +177,7 @@ it('removes unused help headings in both locales', () => {
 const HANDLER_SOURCES: Readonly<Record<string, readonly string[]>> = {
   audit: ['cli-admin/internal/audit.ts'], backup: ['cli-admin/internal/backup.ts'], terminal: ['cli-terminal/internal/terminal.ts'],
   init: ['cli-installation/internal/init.ts'], workers: ['cli-observe/internal/workers.ts'], run: ['cli-run/internal/run.ts', 'cli-run/internal/run-proposal.ts'],
-  task: ['cli-task/internal/task.ts', 'delivery-queue/internal/cli.ts'], pool: ['cli-admin/internal/pool.ts'], decide: ['cli-decision/internal/command.ts'], memory: ['cli-memory/internal/command.ts'], agents: ['cli-agents/internal/command.ts', 'cli-agents/internal/signers.ts'],
+  task: ['cli-task/internal/task.ts', 'delivery-queue/internal/cli.ts'], pool: ['cli-admin/internal/pool.ts'], decide: ['cli-decision/internal/command.ts'], memory: ['cli-memory/internal/command.ts'], agents: ['cli-agents/internal/command.ts', 'cli-agents/internal/signers.ts', 'cli-agents/internal/evolution.ts'],
   models: ['cli-models/internal/models.ts', 'cli-models/internal/model-catalog.ts', 'cli-models/internal/model-roles.ts'], approval: ['cli-approval/internal/approvals.ts'],
   identity: ['cli-identity/internal/command.ts', 'cli-identity/internal/distribution.ts'],
   policy: ['cli/internal/entry.ts', 'cli-approval/internal/policy-grants.ts', 'cli-approval/internal/policy-delegations.ts', 'cli-approval/internal/policy-mcp.ts', 'cli-observe/internal/policy-vocabulary.ts'],
