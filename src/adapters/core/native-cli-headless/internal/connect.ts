@@ -6,17 +6,21 @@ import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { findExecutable } from '#adapters/core/setup-detect-execution/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, isNativeCliHeadlessAdapter, nativeCliHeadlessDefinitionSchema, refuse, type NativeCliHeadlessDefinition } from './contract.js';
 import { headlessPreflight } from './preflight.js';
+import { headlessIsolationSeal, type HeadlessIsolation } from './realm.js';
 
 export type HeadlessConnectInput = Readonly<{ protocol: Readonly<{ family: string; version: string }>; minCliVersion: string; stateDir: string;
-  executable?: string | undefined; configDir?: string | undefined; env: Readonly<Record<string, string | undefined>>; now: () => number; signal?: AbortSignal }>;
+  executable?: string | undefined; configDir?: string | undefined; env: Readonly<Record<string, string | undefined>>; now: () => number; isolation: HeadlessIsolation;
+  signal?: AbortSignal }>;
 /**
  * S3-3 connect (no model call): the absolute executable (given, else the first in PATH of the registry's CLI name) and the login directory
  * (given, else the registry default under the person's home, owner Q-H1) by realpath, the uid of this process sealed as the owner floor, then
- * the preflight (version, flags, login kind). Returns the definition without consent; `withConsent` adds the person's choice.
+ * the preflight (version, flags, login kind). S3-5: the realm is the isolation proof — no usable bubblewrap here, no connection (typed, before any
+ * path search or spawn); every preflight spawn already runs inside it. Returns the definition without consent; `withConsent` adds the person's choice.
  */
 export async function prepareHeadlessConnection(input: HeadlessConnectInput): Promise<Omit<NativeCliHeadlessDefinition, 'delegatedUse'>> {
   const entry = nativeCliHeadless(input.protocol.family), uid = process.getuid?.();
   if (!entry || uid === undefined) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
+  await headlessIsolationSeal(input.isolation);
   const { connect } = entry.headless, controller = AbortSignal.timeout(connect.pathSearchTimeoutMs);
   const named = input.executable ?? await findExecutable(entry.command.executable, input.env, connect.pathSearchDirectories, input.signal ? AbortSignal.any([input.signal, controller]) : controller);
   const executable = named && isAbsolute(named) ? await realpath(named).catch(() => null) : null;
@@ -25,7 +29,7 @@ export async function prepareHeadlessConnection(input: HeadlessConnectInput): Pr
   const configDir = isAbsolute(asked) ? await realpath(asked).catch(() => null) : null;
   if (!configDir) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
   const base = { schemaVersion: 1 as const, executable, configDir, stateDir: input.stateDir, ownerUid: uid, minCliVersion: input.minCliVersion };
-  await headlessPreflight(entry, nativeCliHeadlessDefinitionSchema.parse({ ...base, delegatedUse: null }), input.now, input.signal);
+  await headlessPreflight(entry, nativeCliHeadlessDefinitionSchema.parse({ ...base, delegatedUse: null }), input.now, input.isolation, input.signal);
   return base;
 }
 /** The person's consent choice (`classes` undefined: keep the existing one; empty: withdrawn). An unchanged choice keeps its record byte for byte. */

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, splitModelInvocationDelta, type ModelInvocationDeltaSink, type ModelInvocationNativeResult,
@@ -6,10 +5,10 @@ import { modelInvocationProfileSchema, parseModelBindingDefinition, splitModelIn
 import { createModelInvocationResponseEvidence, modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
 import { nativeCliHeadless, nativeEffortArgs } from '#adapters/core/native-cli-registry/index.js';
 import { nativeQuotaPolicy, parseClaudeStreamLine, type ClaudeStreamLine } from '#adapters/core/native-connection/index.js';
-import { runNodeProcess } from '#adapters/core/process-runner/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, nativeCliHeadlessDefinitionSchema, refuse, type HeadlessRejectionBody, type NativeCliHeadlessDefinition } from './contract.js';
 import { headlessArgv, type HeadlessEntry } from './env.js';
 import { emptyRunDir, headlessPreflight, type HeadlessPreflight } from './preflight.js';
+import { runHeadlessIsolated, type HeadlessIsolation } from './realm.js';
 
 /** Line parsers by event-stream data (registry `eventStream`); a family without one has no headless step. */
 const PARSERS: Readonly<Record<string, (line: string) => ClaudeStreamLine>> = { 'claude-code-stream-json': parseClaudeStreamLine };
@@ -69,7 +68,7 @@ function assemble(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared:
  * evidence for every refusal (body = adapter JSON, never CLI output). Timeout, cancel, crash and a missing result are thrown: `unknown`.
  */
 export type NativeCliHeadlessPort = ModelInvocationNativePort & { preflight(profile: ModelInvocationProfile, signal?: AbortSignal): Promise<void> };
-export function createNativeCliHeadlessPort(options: { readonly now: () => number }): NativeCliHeadlessPort {
+export function createNativeCliHeadlessPort(options: { readonly now: () => number; readonly isolation: HeadlessIsolation }): NativeCliHeadlessPort {
   const tokens = new WeakSet<object>();
   const target = (profileInput: unknown) => {
     const parsed = modelInvocationProfileSchema.safeParse(profileInput);
@@ -83,7 +82,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
     billingAxis: 'subscription' as const,
     responseBytesUpperBound(prepared: unknown) { if (!prepared || typeof prepared !== 'object' || !tokens.has(prepared)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'token' });
       return modelInvocationNativeResponseUpperBound((prepared as Prepared).profile.limits.responseMaxBytes); },
-    async preflight(profile: ModelInvocationProfile, signal?: AbortSignal) { const { definition, entry } = target(profile); await headlessPreflight(entry, definition, options.now, signal); },
+    async preflight(profile: ModelInvocationProfile, signal?: AbortSignal) { const { definition, entry } = target(profile); await headlessPreflight(entry, definition, options.now, options.isolation, signal); },
     async prepare(profileInput: unknown, bindingInput: unknown, requestInput: unknown): Promise<unknown> {
       const { profile, definition, entry } = target(profileInput);
       let model: string;
@@ -105,7 +104,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
     async send(input: unknown, signal?: AbortSignal, onDelta?: ModelInvocationDeltaSink): Promise<ModelInvocationNativeResult> {
       if (!input || typeof input !== 'object' || !tokens.has(input)) refuse('HEADLESS_REQUEST_INVALID', { reason: 'token' });
       const prepared = input as Prepared; tokens.delete(prepared);
-      const { headless } = prepared.entry, preflight = await headlessPreflight(prepared.entry, prepared.definition, options.now, signal);
+      const { headless } = prepared.entry, preflight = await headlessPreflight(prepared.entry, prepared.definition, options.now, options.isolation, signal);
       const parse = PARSERS[prepared.entry.command.capabilities.eventStream]!, quotaPolicy = nativeQuotaPolicy(), runDir = await realpath(preflight.runDir);
       const promptFile = join(preflight.runDir, headless.systemPromptFile), quota: Quota = {};
       let refusal: Refusal | null = null, init = false, result: Extract<ClaudeStreamLine, { kind: 'result' }> | null = null;
@@ -131,9 +130,11 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       try {
         await emptyRunDir(preflight.runDir);
         await writeFile(promptFile, prepared.system, { mode: 0o600, flag: 'wx' });
-        evidence = await runNodeProcess({ schemaVersion: 2, requestId: randomUUID(), executable: prepared.definition.executable,
-          args: [...headlessArgv(prepared.entry, preflight.runDir, prepared.model, prepared.effortArgs)], cwd: preflight.runDir, env: preflight.env,
-          timeoutMs: prepared.profile.limits.timeoutMs, outputBytes: 2 * prepared.profile.limits.responseMaxBytes + headless.limits.responseFramingBytes,
+        // S3-5: the call runs in the realm like every preflight spawn; the prompt file is the only host file it sees in its private run dir.
+        evidence = await runHeadlessIsolated(prepared.entry, options.isolation, { executable: prepared.definition.executable,
+          args: headlessArgv(prepared.entry, preflight.runDir, prepared.model, prepared.effortArgs), env: preflight.env, stateDir: prepared.definition.stateDir,
+          runDir: preflight.runDir, configDir: prepared.definition.configDir, promptFile },
+        { timeoutMs: prepared.profile.limits.timeoutMs, outputBytes: 2 * prepared.profile.limits.responseMaxBytes + headless.limits.responseFramingBytes,
           stderrBytes: headless.limits.stderrMaxBytes, maxLineBytes: headless.limits.maxLineBytes, interruptGraceMs: headless.limits.killGraceMs,
           stdinBase64: Buffer.from(prepared.user, 'utf8').toString('base64') }, signal, onLine);
       } finally { await rm(promptFile, { force: true }); }

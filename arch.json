@@ -1636,6 +1636,7 @@
         "src/adapters/core/provider-anthropic-messages",
         "src/adapters/core/provider-connect",
         "src/adapters/core/provider-openai-chat",
+        "src/adapters/core/shell-sandbox-bwrap",
         "src/adapters/core/workspace-read",
         "src/composition/core/config",
         "src/composition/core/model-activation",
@@ -1801,7 +1802,9 @@
         "src/adapters/core/provider-decision-http",
         "src/adapters/core/workspace-read",
         "src/composition/core/secrets",
-        "src/adapters/core/native-cli-headless"
+        "src/adapters/core/native-cli-headless",
+        "src/adapters/core/shell-sandbox-bwrap",
+        "src/platform/core/host"
       ],
       "plan": "PROVIDERS"
     },
@@ -3852,10 +3855,12 @@
     },
     "src/adapters/core/native-cli-headless": {
       "dependencies": [
+        "src/adapters/core/host-shell",
         "src/adapters/core/native-cli-registry",
         "src/adapters/core/native-connection",
         "src/adapters/core/process-runner",
         "src/adapters/core/setup-detect-execution",
+        "src/adapters/core/shell-sandbox-bwrap",
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog",
@@ -4149,6 +4154,14 @@
       }
     ],
     "invariants": [
+      {
+        "file": "src/adapters/core/native-connection/internal/egress.ts",
+        "symbol": "tunnelNativeConnect",
+        "values": [
+          "HTTP/1.1 200 Connection Established"
+        ],
+        "reason": "HTTP CONNECT success response (RFC 9110 section 9.3.6: any 2xx turns the connection into a tunnel); a protocol constant of the worker and headless egress gateway, moved from gateway.ts with the shared tunnel (S3-5). Not an operator policy."
+      },
       {
         "file": "src/adapters/core/shell-sandbox-bwrap/internal/arguments.ts",
         "symbol": "BUBBLEWRAP_ARGUMENT_MAX_BYTES",

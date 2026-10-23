@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import type { ModelConnectCommand } from '#domain/index.js';
 import { ModelConnectError, type ConnectedAdapter } from '#engine/index.js';
-import { headlessConnectionAdapter, headlessConsent, prepareHeadlessConnection, readProviderConnectSeed, type ProviderConnectKind } from '#adapters/index.js';
-import { normalizeGlobalScopePlatform, resolveGlobalScopePaths, type ConfigLoadOptions } from '#platform/index.js';
+import { headlessConnectionAdapter, headlessConsent, prepareHeadlessConnection, readProviderConnectSeed, shellSandboxCapabilities, type ProviderConnectKind } from '#adapters/index.js';
+import { globalStateRoot, normalizeGlobalScopePlatform, resolveGlobalScopePaths, type ConfigLoadOptions } from '#platform/index.js';
 import { snapshotConfiguredConfig } from '#composition/core/config/index.js';
 
 /**
@@ -20,7 +20,8 @@ export function headlessConnectPorts(projectRoot: string, command: ModelConnectC
     if (!protocol || !minCliVersion) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
     const root = resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, env), env).stateDir;
     const stateDir = join(root, 'headless', createHash('sha256').update(JSON.stringify([kind.id, command.scopeId, nativeId])).digest('hex').slice(0, 16));
-    return { protocol, base: await prepareHeadlessConnection({ protocol, minCliVersion, stateDir, executable: command.cli?.executable, configDir: command.cli?.configDir, env, now: Date.now }) };
+    return { protocol, base: await prepareHeadlessConnection({ protocol, minCliVersion, stateDir, executable: command.cli?.executable, configDir: command.cli?.configDir, env, now: Date.now,
+      isolation: async () => (await shellSandboxCapabilities(globalStateRoot(env))).bubblewrap }) };
   })();
   return {
     previewEnabled: async () => ((await snapshotConfiguredConfig(projectRoot, options)).global as { models?: { headless?: { preview?: unknown } } }).models?.headless?.preview === true,

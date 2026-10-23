@@ -1,4 +1,4 @@
-import { readFile, stat, utimes } from 'node:fs/promises';
+import { readdir, readFile, stat, utimes } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -27,10 +27,12 @@ describe.skipIf(process.platform !== 'linux')('S3-2 headless native port with a 
       expect(JSON.stringify(result)).not.toMatch(/cost|usd/iu);
       expect(deltas).toEqual([{ kind: 'text', text: '{"ok":true}' }]);
       const entries = await c.log(), callEntry = entries.find(entry => entry.mode === 'call')!;
-      expect(entries.map(entry => entry.mode)).toEqual(['version', 'help', 'probe-system', 'probe', 'auth', 'call']);
+      // S3-5: the hidden-flag probes run isolated with an empty temporary config dir, so they cannot log into the login dir (see the probe test).
+      expect(entries.map(entry => entry.mode)).toEqual(['version', 'help', 'auth', 'call']);
       for (const entry of entries.filter(item => !item.mode.startsWith('probe'))) {
         // N24/N25/N1: every spawn has the same built environment, HOME = cwd = the connection's run dir, no deny name, no inherited variable.
-        expect(Object.keys(entry.env).sort()).toEqual([...Object.keys(headless.env.fixed), ...headless.env.runDir, headless.env.configDir].sort());
+        expect(Object.keys(entry.env).sort()).toEqual([...Object.keys(headless.env.fixed), ...headless.env.runDir, headless.env.configDir, ...headless.isolation.proxy.env,
+          ...headless.isolation.proxy.clear].sort());
         expect(entry.env.HOME).toBe(c.runDir); expect(entry.cwd).toBe(c.runDir); expect(entry.env[headless.env.configDir]).toBe(c.configDir);
       }
       // N18: argv carries no prompt or message text; the turn is bounded and the model pinned.
@@ -86,17 +88,12 @@ describe.skipIf(process.platform !== 'linux')('S3-2 headless native port with a 
     const hidden = headless.preflight.hiddenFlags.map(row => row.flag);
     expect(hidden).toEqual(expect.arrayContaining(['--max-turns', headless.systemPromptFlag]));
     for (const flag of hidden) expect(fullHelp().split(/\s+/u)).not.toContain(flag);
+    // The fake answers a probe with the parser refusal only when it sees an empty config dir of its own (HOME = cwd = that dir, not the login
+    // dir), so a passing preflight proves where the probes ran; isolated, they cannot write into the login dir, and their dirs are removed.
     const c = await connection({ steps: happy() });
     await expect(c.call()).resolves.toMatchObject({ native: { object: 'chat.completion' } });
-    const probes = (await c.log()).filter(entry => entry.mode.startsWith('probe'));
-    expect(probes.map(entry => entry.mode)).toEqual(['probe-system', 'probe']);
-    for (const probe of probes) {
-      const dir = probe.env[headless.env.configDir]!;
-      expect(dir).not.toBe(c.configDir); expect(dir.startsWith(join(c.root, 'state', 'probe-'))).toBe(true);
-      expect(probe.env.HOME).toBe(dir); expect(probe.cwd).toBe(dir); expect(existsSync(dir)).toBe(false);
-      expect(Object.keys(probe.env).some(name => DENIED.includes(name))).toBe(false);
-    }
-    expect(probes[0]!.entries).toEqual([]);
+    expect((await c.log()).filter(entry => entry.mode.startsWith('probe'))).toEqual([]);
+    expect((await readdir(join(c.root, 'state'))).filter(name => name.startsWith('probe-'))).toEqual([]);
   });
   it('closes typed when the system prompt file option is unknown to the parser', async () => {
     const c = await connection({ systemProbeRefusal: null, steps: happy() });
