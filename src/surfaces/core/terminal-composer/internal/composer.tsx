@@ -36,6 +36,7 @@ export interface ComposerProps {
   /** Total visible rows, including the frame. The full draft remains editable behind this caret-following viewport. */
   readonly maxRows?: number | undefined;
   /** `mentions`: the draft's `@path` tokens outside paste chips (attached by the owner through the service, never read here). */
+  /** `entry`: the draft as typed (chips unexpanded), before `historyText`. */
   readonly onSubmit: (text: string, mentions: readonly string[], entry: ComposerHistoryEntry) => void;
   readonly onCancel: () => void;
   readonly onExit: () => void;
@@ -133,7 +134,8 @@ export function Composer(props: ComposerProps): ReactNode {
       else if (intent.type === 'submit') {
         const entry = remembered.get(intent.entry) ?? intent.entry;
         void (async () => history?.append(entry))().catch(ignore);
-        onSubmit(intent.text, intent.mentions, entry);
+        // The owner gets the draft as typed (T3 gives it back on Alt+Up); only recall and history keep the remembered form.
+        onSubmit(intent.text, intent.mentions, intent.entry);
       } else if (intent.type === 'mention' && mentions) {
         lookup.current?.abort();
         if (lookupTimer.current) clearTimeout(lookupTimer.current);

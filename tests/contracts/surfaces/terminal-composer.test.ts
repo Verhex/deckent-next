@@ -513,4 +513,14 @@ describe('T3 withdraw a queued message and T4 external editor (composer)', () =>
     release(null); await view.type('!');
     await until(() => view.stdout.text.slice(mark).includes('> keep me!|'), 'draft kept and editable');
   });
+
+  it('hands the owner the draft as typed while recall keeps only the remembered form', async () => {
+    const entries: ComposerHistoryEntry[] = [];
+    const view = mount({ historyText: text => text.split(' ')[0]!, onSubmit: (_text, _mentions, entry) => entries.push(entry) });
+    await view.type('/mode full-auto\r');
+    await until(() => entries.length === 1, 'submit');
+    expect(entries[0]!.text).toBe('/mode full-auto');
+    await view.keys('\u001b[A');
+    await until(() => view.stdout.text.includes('> /mode|'), 'recall shows the remembered form');
+  });
 });
