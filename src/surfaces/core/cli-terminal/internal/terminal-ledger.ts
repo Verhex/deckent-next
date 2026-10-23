@@ -142,6 +142,14 @@ export function createWorklineLedgerPorts(input: {
         return action === 'hold' ? t('terminal.runControl.result.hold', params, locale)
           : action === 'resume' ? t('terminal.runControl.result.resume', params, locale) : t('terminal.runControl.result.close', params, locale);
       },
+      // BR2 (K7 port): the same in-process lifecycle command as `deckent run resume --task --answer` (CLI `run-control.ts`); no service protocol change
+      // and no MCP surface (answering is a human decision). The answer is the person's own text; the schema bounds it.
+      async answerTask(runId: string, taskId: string, answer: string, expectedRevision: number) {
+        const commandId = `terminal-run-answer-${randomUUID()}`;
+        const command = runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId, action: 'answer', taskId, answer, expectedRevision });
+        const result = await applyRunLifecycle(root, command, options), run = result?.lifecycle.run;
+        return t('terminal.runAnswer.result', { run: shortId(runId), command: commandId, revision: run?.revision ?? '—', state: run ? runStateWord(run.state, locale) : '—' }, locale);
+      },
     } : {}),
   }, input.inspectSurfaceAccess);
 }

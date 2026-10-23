@@ -1,0 +1,4 @@
+{
+  "staleRetries": 2,
+  "staleCodes": ["RUN_STORE_CONFLICT"]
+}
