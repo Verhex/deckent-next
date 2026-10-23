@@ -5,7 +5,7 @@ import { DecisionCard, approvalTemplateLine, projectApprovalDecisionText, type A
 import { fillTemplate, loadRunViewsForWatch, type RunControlAction, type WorklineLedgerPorts } from '#surfaces/core/terminal-ledger/index.js';
 import { projectHumanPickerText, span, useHumanTextSecrets, type Span } from '#surfaces/core/terminal-render/index.js';
 import { Window, type WindowLine } from '#surfaces/core/terminal-window/index.js';
-import { runStateText, runTitle } from './job-windows.js';
+import { runHoldText, runStateText, runTitle } from './job-windows.js';
 import RUN_CONTROL from './run-control.json' with { type: 'json' };
 import type { LocalExecution, WorklinePanel } from './workline-panel.js';
 import type { WorkSurfaceLabels } from './workline-actions.js';
@@ -20,7 +20,7 @@ export interface RunControlLabels {
   /** Card titles (`{run}` short id), the action's consequence, the Run's state line and the full identity. */
   readonly holdTitle: string; readonly resumeTitle: string; readonly closeTitle: string;
   readonly holdDetail: string; readonly resumeDetail: string; readonly closeDetail: string;
-  readonly state: string; readonly identity: string;
+  readonly state: string; readonly identity: string; /** S6R-6: `{reason}`, why a held Run is held (absent: no reason line). */ readonly heldReason?: string;
   readonly prompt: string; readonly holdPrompt: string; readonly pending: string;
   /** `{run}`: the card was answered no (or closed); nothing was sent. `{run}`: the Run is no longer there. */
   readonly kept: string; readonly gone: string;
@@ -93,9 +93,9 @@ export function RunControlDecisionCard({ value, work, labels, pending, onDecide 
   readonly pending: boolean; readonly onDecide: (yes: boolean, reason?: string) => void }) {
   const known = useHumanTextSecrets(), p = (text: string) => projectApprovalDecisionText(text, known), words = work.runControl!, jobs = work.jobs!, { run, action } = value;
   const title = action === 'hold' ? words.holdTitle : action === 'resume' ? words.resumeTitle : words.closeTitle;
-  const detail = action === 'hold' ? words.holdDetail : action === 'resume' ? words.resumeDetail : words.closeDetail;
+  const detail = action === 'hold' ? words.holdDetail : action === 'resume' ? words.resumeDetail : words.closeDetail, held = action === 'hold' || !words.heldReason ? null : runHoldText(run, jobs);
   return <DecisionCard title={approvalTemplateLine(title, { run: p(shortId(run.runId)), title: p(runTitle(run, jobs)) })}
-    projectedLines={[approvalTemplateLine(detail, {}), approvalTemplateLine(words.state, { state: runStateText(run, jobs), revision: String(run.revision) }),
+    projectedLines={[approvalTemplateLine(detail, {}), approvalTemplateLine(words.state, { state: runStateText(run, jobs), revision: String(run.revision) }), ...(held ? [approvalTemplateLine(words.heldReason!, { reason: p(held) })] : []),
       approvalTemplateLine(words.identity, { run: p(run.runId) })]}
     decisionLabels={labels} prompt={action === 'hold' ? words.holdPrompt : words.prompt} pendingText={words.pending} position={work.window.position} pending={pending}
     {...(action === 'hold' ? { reason: words.reason } : {})} onDecide={(yes, _standing, reason) => onDecide(yes, reason)} />;

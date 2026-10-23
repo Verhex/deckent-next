@@ -1165,7 +1165,8 @@
         "src/engine/core/approval",
         "src/surfaces/core/monitor",
         "src/platform/core/i18n",
-        "src/surfaces/core/effect-confirmation"
+        "src/surfaces/core/effect-confirmation",
+        "src/surfaces/core/recovery-text"
       ],
       "plan": "SURFACES"
     },
@@ -1250,7 +1251,9 @@
         "src/platform/core/i18n",
         "src/domain/core/audit",
         "src/domain/core/provider-catalog",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/engine/core/recovery",
+        "src/surfaces/core/recovery-text"
       ],
       "plan": "SURFACES"
     },
@@ -2628,7 +2631,9 @@
         "src/engine/core/handoff-observation",
         "src/platform/core/errors",
         "src/platform/core/output",
-        "src/engine/core/workspace-patch"
+        "src/engine/core/workspace-patch",
+        "src/domain/core/principal",
+        "src/engine/core/recovery"
       ],
       "plan": "MONITOR"
     },
@@ -2673,7 +2678,8 @@
         "src/engine/core/runs",
         "src/surfaces/core/terminal-theme",
         "src/engine/core/resource-observation",
-        "src/domain/core/work-cost"
+        "src/domain/core/work-cost",
+        "src/surfaces/core/recovery-text"
       ],
       "plan": "MONITOR"
     },
@@ -3295,7 +3301,8 @@
         "src/domain/core/attempt",
         "src/surfaces/core/cli-human",
         "src/domain/core/work-cost",
-        "src/platform/core/common"
+        "src/platform/core/common",
+        "src/surfaces/core/recovery-text"
       ],
       "plan": "SURFACES"
     },
@@ -3395,7 +3402,8 @@
         "src/domain/core/model-activation",
         "src/surfaces/core/cli-human",
         "src/engine/core/inference-serving",
-        "src/surfaces/core/cli-models"
+        "src/surfaces/core/cli-models",
+        "src/engine/core/recovery"
       ],
       "plan": "SURFACES"
     },
@@ -3552,7 +3560,8 @@
         "src/surfaces/core/config",
         "src/surfaces/core/terminal-render",
         "src/platform/core/i18n",
-        "src/platform/core/output"
+        "src/platform/core/output",
+        "src/surfaces/core/recovery-text"
       ],
       "plan": "MONITOR"
     },
@@ -3694,7 +3703,8 @@
         "src/domain/core/primitives",
         "src/domain/core/principal",
         "src/engine/core/audit",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/domain/core/recovery"
       ],
       "plan": "EXECUTION"
     },
@@ -3837,6 +3847,14 @@
         "src/platform/core/errors"
       ],
       "plan": "PROVIDERS"
+    },
+    "src/surfaces/core/recovery-text": {
+      "dependencies": [
+        "src/platform/core/i18n",
+        "src/domain/core/recovery",
+        "src/engine/core/recovery"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {
@@ -3958,7 +3976,8 @@
       "tuisession",
       "termanswer",
       "quotaask",
-      "headless"
+      "headless",
+      "recovery"
     ]
   },
   "literals": {

@@ -1,5 +1,5 @@
 import type { ConfigLoadOptions } from '#platform/index.js';
-import type { ModelCatalogInspection, ModelInvocationDeliveryFinding, ModelRoleInspection, ModelRoleQuery } from '#engine/index.js';
+import type { ModelCatalogInspection, ModelInvocationDeliveryFinding, ModelRoleInspection, ModelRoleQuery, RecoveryModeState } from '#engine/index.js';
 import type { ModelCatalogQuery } from '#domain/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { ExecutionEnvironmentDoctorView, InstallationBindingReport, InstallationStartabilityView, RecoveryFilesDoctorView, ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
@@ -19,6 +19,8 @@ export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandC
   assessModelInvocationDelivery?: (root: string, options: ConfigLoadOptions) => Promise<readonly ModelInvocationDeliveryFinding[]>;
   // S1 D4: files an interrupted backup restore left behind; doctor-only, read-soft (null when unwired or unreadable).
   inspectRecoveryFiles?: (root: string, options: ConfigLoadOptions) => Promise<RecoveryFilesDoctorView>;
+  /** S6R-6: the protected Nervous/recovery modes and the owner's standing continuation grant in a scope (doctor's recovery row). */
+  inspectRecoveryMode?: (root: string, input: { schemaVersion: 1; scopeId: string }, options: ConfigLoadOptions) => Promise<RecoveryModeState>;
   // REALM-NOTICE: the shell realm a call here gets and every sandbox provider passed over (read-only measurement); doctor-only.
   inspectShellRealm?: (root: string, options: ConfigLoadOptions) => Promise<ShellRealmDoctorView>;
   // WORKER-AUTO-REFRESH: the worker image refresh status (updating / current / failed with a typed reason); doctor-only, local file read, null when unwired or never run.

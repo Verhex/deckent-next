@@ -11,7 +11,8 @@ const positive = counterSchema.positive();
  * S6R-5 (S6R-DESIGN §6, §8; owner Q-R1/Q-R2): the recovery-decision registry, versioned Core data (`assets/recovery/decision.json`), every bound
  * provisional until measured (K-F S8). `template` names the current prompt among the versioned `templates` (`id@version` is sealed with each call);
  * `noteCodes` the codes a decision may pass on with their worker-facing text; `answer` the strict answer bounds; `call` the completion cap of the one
- * call (retries 0); `breaker` the per-process circuit breaker (more model decisions than this in the window: escalate without a call); `pass` the
+ * call (retries 0); `breaker` the installation circuit breaker (S6R-6: counted from the sealed decisions, so it survives a restart — at least
+ * `maxCasesPerWindow` model calls in `windowMs`, or `scanLimit` decision seals in the window without reaching it: escalate without a call); `pass` the
  * detection page one pass reads and the most cases it keeps waiting for their release. No model, provider or vendor name is data here.
  */
 export const recoveryDecisionRegistrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']),
@@ -20,7 +21,7 @@ export const recoveryDecisionRegistrySchema = z.object({ schemaVersion: z.litera
   noteCodes: z.array(z.object({ code: recoveryNoteCodeSchema, text: z.string().min(1).max(512) }).strict().readonly()).min(1).max(64).readonly(),
   answer: z.object({ maxBytes: positive, rationaleMaxChars: positive }).strict().readonly(),
   call: z.object({ maxCompletionTokens: positive }).strict().readonly(),
-  breaker: z.object({ maxCasesPerWindow: counterSchema, windowMs: positive }).strict().readonly(),
+  breaker: z.object({ maxCasesPerWindow: counterSchema, windowMs: positive, scanLimit: positive }).strict().readonly(),
   pass: z.object({ pageSize: positive, maxPending: positive }).strict().readonly(),
 }).strict().superRefine((value, context) => {
   if (!value.templates.some(row => row.id === value.template.id && row.version === value.template.version)) context.addIssue({ code: z.ZodIssueCode.custom, path: ['template'], message: 'RECOVERY_TEMPLATE_UNKNOWN' });

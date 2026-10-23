@@ -4,6 +4,8 @@ import { renderAuditReason, renderAuditStatus } from './audit.js';
 import { shortImageId } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
 import { firstJobCommand, firstJobSteps, firstJobTitle } from './first-job.js';
+import type { RecoveryModeState } from '#engine/index.js';
+import { recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
 
 /** The four groups of the owner-accepted doctor view (CLI review 2026-10-19 §doctor): Kurulum / Güvenlik / Çalışma / Araçlar. */
 export type DoctorGroup = 'setup' | 'security' | 'work' | 'tools';
@@ -36,6 +38,8 @@ export interface DoctorCheckFacts {
   readonly workerImage?: 'present' | 'missing' | 'unknown' | null;
   /** PRE-34: the execution environment as `deckent init` decides it (same detection and setup decision; read-only); null when it could not be asked. */
   readonly executionEnvironment?: ExecutionEnvironmentDoctorView | null;
+  /** S6R-6: lost-worker recovery modes and the owner's standing continuation grant in this scope; null or absent when not read. */
+  readonly recoveryMode?: RecoveryModeState | null;
   /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
   readonly secretUse?: readonly DoctorSecretUse[] | null;
 }
@@ -148,6 +152,13 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   for (const model of shown) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.pending', { model: terminalSafeText(model.modelId), channel: terminalSafeText(model.channelId) }, l),
     scoped(`deckent models roles set --channel ${model.channelId} --model ${model.modelId} --tier <tier> --roles <roles>`, f)));
   if (pending.length > shown.length) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.more', { count: pending.length - shown.length }, l), scoped('deckent models roles', f)));
+  // S6R-6: lost-worker recovery — the protected modes and the owner's standing grant; live without the grant sends every case to a person.
+  const recovery = f.recoveryMode;
+  if (recovery) {
+    const text = recoveryStateLines(recovery, l).join(' ');
+    rows.push(recovery.recovery !== 'live' || recovery.continuation === 'automatic' ? row('work', 'work.recovery', 'ok', text)
+      : recovery.continuation === 'unknown' ? row('work', 'work.recovery', 'untested', text) : row('work', 'work.recovery', 'warning', text, scoped('deckent policy grants', f)));
+  }
   return rows;
 }
 

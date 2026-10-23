@@ -1,6 +1,7 @@
 import type { VerifiedPrincipal } from '#domain/index.js';
 import { AuditApplication, RecoveryApplication, RecoveryDecisionApplication, memoryCatalogFacts, memoryCatalogKey, recoveryContinuationApproval, recoveryDecisionPrincipal, recoveryDecisionRegistry,
-  recoveryModelReference, recoveryModelRows, type MemoryCatalogFact, type RecoveryDecisionOutcome, type RecoveryModelPorts, type RoleModelSources } from '#engine/index.js';
+  recoveryGrantState, recoveryModeState, recoveryModelReference, recoveryModelRows, type MemoryCatalogFact, type RecoveryDecisionOutcome, type RecoveryModeState, type RecoveryModelPorts,
+  type RoleModelSources } from '#engine/index.js';
 import { extractOpenAiChatTextFromInvocation, openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteModelActivationReader, openSqliteModelCatalogReader, openSqliteModelInvocationReader,
   openSqliteRecoveryStore } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
@@ -58,12 +59,13 @@ async function withRoleSources<T>(c: Context, path: string, work: (facts: Readon
  * loads). Per scope pass it reads the next page of sealed Nervous `recovery-detection` records whose stop step was executed (fence / stop-orphan) and
  * decides each case under the composition-root recovery principal; a case whose slot is not released yet waits (bounded) for a later pass.
  * `shadow` seals what each decision would do and changes nothing; `live` applies a sealed decision (continuation under the owner's standing
- * grant, or a hold for a person). Memory (cursor, waiting cases, breaker) is per process: a restart re-reads the detections and every sealed case
- * replays without a second model call.
+ * grant, or a hold for a person). Memory (cursor, waiting cases) is per process: a restart re-reads the detections and every sealed case replays
+ * without a second model call. S6R-6: the circuit breaker is the ledger's — the sealed model decisions of every service scope (`scopeIds`) in the
+ * registry window — so a restart neither resets it nor spends new calls.
  */
-export function prepareConfiguredRecovery(projectRoot: string, options: ConfigLoadOptions, mode: 'off' | 'shadow' | 'live') {
+export function prepareConfiguredRecovery(projectRoot: string, options: ConfigLoadOptions, mode: 'off' | 'shadow' | 'live', scopeIds: readonly string[] = []) {
   if (mode === 'off') return null;
-  const registry = recoveryDecisionRegistry(), cursors = new Map<string, number>(), waiting = new Map<string, string[]>(), breaker = { times: [] as number[] };
+  const registry = recoveryDecisionRegistry(), cursors = new Map<string, number>(), waiting = new Map<string, string[]>();
   return Object.freeze({ async run(scopeId: string): Promise<readonly RecoveryDecisionOutcome[]> { try {
     const c = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write'), path = await c.path();
     const integrity = await openLocalIntegrityAuthority(c.layout, c.config.approvals.keyFile, true), principal = recoveryDecisionPrincipal(c.principal, scopeId);
@@ -79,7 +81,8 @@ export function prepareConfiguredRecovery(projectRoot: string, options: ConfigLo
         return subject.kind === 'recovery-detection' && subject.disposition === 'execute' && subject.target && RELEASING.has(subject.action) ? [subject.caseId] : []; });
       const queue = [...new Set([...waiting.get(scopeId) ?? [], ...fresh])], still: string[] = [], outcomes: RecoveryDecisionOutcome[] = [], failures: unknown[] = [];
       await withRoleSources(c, path, async (facts, roles) => {
-        const decider = new RecoveryDecisionApplication({ recovery, store: cases, seals: ledger, approval, owner, policyRevision: c.document.revision, registry, now: Date.now, breaker,
+        const decider = new RecoveryDecisionApplication({ recovery, store: cases, seals: ledger, approval, owner, policyRevision: c.document.revision, registry, now: Date.now,
+          breakerScopes: () => [...new Set([scopeId, ...scopeIds])],
           models: recoveryModelPorts(projectRoot, options, c, path, principal, facts, roles) }, verifier);
         // One case's failure never blocks the others; the first is reported after all of them (the case waits for the next pass).
         for (const caseId of queue) {
@@ -95,4 +98,17 @@ export function prepareConfiguredRecovery(projectRoot: string, options: ConfigLo
       return Object.freeze(outcomes);
     } finally { audit.close(); cases.close(); }
   } catch (error) { throw queryFailure(error); } } });
+}
+
+/**
+ * S6R-6 live switch semantics (doctor's recovery row): the protected `runRuntime.nervous.mode` and `runRuntime.recovery.mode` of this
+ * installation and whether the owner's standing grant `recovery-action/apply continue-new-attempt` holds in the scope. `live` continues a lost
+ * task only with that grant; without it every case is sealed and goes to a person (no model call). Read-only.
+ */
+export async function inspectConfiguredRecoveryMode(projectRoot: string, input: Readonly<{ schemaVersion: 1; scopeId: string }>, options: ConfigLoadOptions = {}): Promise<RecoveryModeState> {
+  try {
+    const c = await loadConfiguredScopeContext(projectRoot, input.scopeId, options, 'read');
+    return recoveryModeState({ nervous: c.config.runRuntime.nervous.mode, recovery: c.config.runRuntime.recovery.mode },
+      recoveryGrantState(c.document, c.principal, [input.scopeId], Date.now()));
+  } catch (error) { throw queryFailure(error); }
 }

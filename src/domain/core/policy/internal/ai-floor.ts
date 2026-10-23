@@ -70,8 +70,9 @@ const PROTECTED_CONFIG_PATHS = Object.freeze(['policy', 'approvals', 'identity',
   'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit',
   // S4B-1 A10 (lead 2026-10-23, a tightening): the memory automation switches and registry overlay (`memoryAutomation`), and the reserved `memory` root.
   'memory', 'memoryAutomation',
-  // S6R-5 (lead on s6r4 Q1): the recovery mode, which lets the recovery decision continue a lost task.
-  'runRuntime.recovery',
+  // S6R-5 (lead on s6r4 Q1): the recovery mode, which lets the recovery decision continue a lost task. S6R-6: the Nervous mode, which lets the
+  // broker fence, stop and release a worker (protected the same way: no AI switches either on or off).
+  'runRuntime.recovery', 'runRuntime.nervous',
   'terminal.shell.realm', 'terminal.shell.environment', 'terminal.fetch.egress', 'terminal.fetch.allowedHosts']);
 export function protectedConfigKey(keyPath: string): boolean {
   const key = keyPath.replace(/\[[^\]]*\]/gu, '.0').replace(/\.+$/u, '');

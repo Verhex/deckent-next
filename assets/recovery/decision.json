@@ -13,6 +13,6 @@
   ],
   "answer": { "maxBytes": 8192, "rationaleMaxChars": 600 },
   "call": { "maxCompletionTokens": 1024 },
-  "breaker": { "maxCasesPerWindow": 8, "windowMs": 3600000 },
+  "breaker": { "maxCasesPerWindow": 8, "windowMs": 3600000, "scanLimit": 256 },
   "pass": { "pageSize": 16, "maxPending": 256 }
 }

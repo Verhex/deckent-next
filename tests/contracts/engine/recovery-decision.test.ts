@@ -1,7 +1,8 @@
 import { afterEach, expect, it } from 'vitest';
 import { rm } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
-import { RECOVERY_DECISION_SEED, RECOVERY_POLICY_SEED, effectRecordSchema, freezeRecoveryPolicy, loadRecoveryPolicy, nervousPrincipalRef, recoveryPrincipal, type VerifiedPrincipal } from '#domain/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, RECOVERY_DECISION_SEED, RECOVERY_POLICY_SEED, effectRecordSchema, freezeRecoveryPolicy, loadRecoveryPolicy, nervousPrincipalRef, recoveryPrincipal, recoveryPrincipalRef,
+  type VerifiedPrincipal } from '#domain/index.js';
 import { AuditApplication, RecoveryApplication, RecoveryDecisionApplication, prepareTaskStart, recoveryContinuationApproval, recoveryDecisionCommandId,
   type RecoveryModelRequest, type RecoveryModelResult, type RecoveryModelRow } from '#engine/index.js';
 import { openSqliteRecoveryStore, type SqliteAttemptStore } from '#adapters/index.js';
@@ -119,7 +120,7 @@ it.each([
   ['only a non-invocable row', { rows: [{ ...metered, invocable: false }] }, 'no-eligible-model'],
   ['Q-H3: a subscription row without the connection\'s delegated-use consent', { rows: [{ ...metered, billing: 'subscription' as const }] }, 'consent-required'],
   ['no owner standing grant for continuation (only a person could act)', { document: { ...standing, grants: [] } }, 'continuation-not-approved'],
-  ['the installation circuit breaker is open', { registry: { ...RECOVERY_DECISION_SEED as object, breaker: { maxCasesPerWindow: 0, windowMs: 3600000 } } }, 'breaker-open'],
+  ['the installation circuit breaker is open', { registry: { ...RECOVERY_DECISION_SEED as object, breaker: { maxCasesPerWindow: 0, windowMs: 3600000, scanLimit: 256 } } }, 'breaker-open'],
 ] as const)('%s: deterministic escalation, no model call', async (_name, input, code) => {
   const h = await harness(input);
   expect(await decide(h)).toMatchObject({ kind: 'escalated', case: { state: 'escalated', decision: { action: 'escalate-human', code } } });
@@ -180,4 +181,74 @@ it('N27: a Run admitted without frozen recovery is never decided; N14: only the 
   h.state.principal = owner as VerifiedPrincipal;
   await expect(decide(h)).rejects.toMatchObject({ code: 'RECOVERY_PRINCIPAL_REQUIRED' });
   expect(h.calls).toEqual([]); expect(h.sealed()).toEqual([]);
+});
+
+// S6R-6 (lead item 3): the circuit breaker is read from the sealed decisions, so it survives a restart and is bounded by registry values; a case
+// already decided by its model in shadow is not asked again after the switch to live.
+const priorSeal = async (path: string, eventId: string, atMs: number, extra: Record<string, unknown> = {}) => {
+  const audit = await openSqliteAuditStore(path, LEDGER_OPTIONS);
+  try {
+    const ref = recoveryPrincipalRef(owner);
+    new AuditApplication(audit, lostIntegrity).record({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId, scopeId: 's', principal: { issuer: ref.issuer, subject: ref.subject },
+      policyRevision: 'owner-policy', atMs, subject: { kind: 'recovery-decision', caseId: 'e'.repeat(64), mode: 'live', evidenceDigest: 'd'.repeat(64),
+        target: { runId: 'other', taskId: 't', attemptId: 'x', generation: 1 }, gate: { result: 'clear', settled: 'none', intents: 0 }, terminationReceiptId: 'release-x',
+        model: { channelId: 'channel-a', modelId: 'model-a', template: { id: 'recovery-decision', version: 1 }, registryRevision: 'r', inputDigest: 'a'.repeat(64), outputDigest: null, invocationId: null },
+        action: 'escalate-human', causeClass: null, note: null, code: 'model-failed', failure: 'MODEL_INVOCATION_TIMEOUT', standingRef: null, ...extra } });
+  } finally { audit.close(); }
+};
+const narrow = { ...RECOVERY_DECISION_SEED as object, breaker: { maxCasesPerWindow: 1, windowMs: 10, scanLimit: 16 } };
+
+it('persistent breaker: a model call sealed before a restart counts in a fresh application; one outside the window or adopted from shadow does not', async () => {
+  const counted = await harness({ registry: narrow });
+  await priorSeal(counted.path, 'recovery-decision:prior-in-window', 35);
+  expect(await decide(counted, 'live', counted.make())).toMatchObject({ kind: 'escalated', case: { decision: { code: 'breaker-open' } } });
+  expect(counted.calls).toEqual([]);
+  const old = await harness({ registry: narrow });
+  await priorSeal(old.path, 'recovery-decision:prior-old', 5); // since = 40 - 10 + 1 = 31: older than the window
+  await priorSeal(old.path, 'recovery-decision:prior-adopted', 36, { basis: 'shadow' }); // the same call as its shadow seal: not a second call
+  await priorSeal(old.path, 'recovery-decision:prior-deterministic', 37, { model: null, code: 'no-eligible-model', failure: null }); // nothing spent
+  expect(await decide(old, 'live', old.make())).toMatchObject({ kind: 'continued' }); expect(old.calls).toHaveLength(1);
+});
+
+it('persistent breaker is bounded: a window holding scanLimit decision seals without reaching the bound counts as open (fail closed, no call)', async () => {
+  const h = await harness({ registry: { ...RECOVERY_DECISION_SEED as object, breaker: { maxCasesPerWindow: 8, windowMs: 3600000, scanLimit: 2 } } });
+  for (const id of ['a', 'b']) await priorSeal(h.path, `recovery-decision:prior-${id}`, 30, { model: null, code: 'no-eligible-model', failure: null });
+  expect(await decide(h)).toMatchObject({ kind: 'escalated', case: { decision: { code: 'breaker-open' } } }); expect(h.calls).toEqual([]);
+});
+
+it('shadow → live: a case its model decided in shadow is not asked again; the live seal adopts it (basis shadow) and the continuation applies', async () => {
+  const h = await harness();
+  expect(await decide(h, 'shadow')).toMatchObject({ kind: 'shadow', action: 'continue-new-attempt' }); expect(h.calls).toHaveLength(1);
+  expect(h.cases()).toEqual([]);
+  expect(await decide(h, 'live', h.make())).toMatchObject({ kind: 'continued', case: { state: 'applied', decision: { note: 'previous-attempt-launcher-died' } } });
+  expect(h.calls).toHaveLength(1);
+  const [shadowSeal, liveSeal] = h.sealed();
+  expect(shadowSeal).toMatchObject({ mode: 'shadow' }); expect(liveSeal).toMatchObject({ mode: 'live', basis: 'shadow', action: 'continue-new-attempt', model: shadowSeal.model });
+  expect(await decide(h, 'live', h.make())).toMatchObject({ kind: 'continued', replay: true }); expect(h.calls).toHaveLength(1);
+});
+
+it('shadow → live: a shadow seal without a model (a deterministic escalation, nothing spent) is decided afresh once the cause is gone', async () => {
+  const h = await harness({ document: { ...standing, grants: [] } });
+  expect(await decide(h, 'shadow')).toMatchObject({ kind: 'shadow', action: 'escalate-human', code: 'continuation-not-approved' }); expect(h.calls).toEqual([]);
+  h.state.document = standing;
+  expect(await decide(h, 'live')).toMatchObject({ kind: 'continued' }); expect(h.calls).toHaveLength(1);
+  expect(h.sealed().at(-1)).toMatchObject({ mode: 'live', action: 'continue-new-attempt' }); expect(h.sealed().at(-1)).not.toHaveProperty('basis');
+});
+
+it('a shadow model decision of other evidence is never adopted: the changed case is decided by its own call', async () => {
+  const h = await harness();
+  expect(await decide(h, 'shadow')).toMatchObject({ kind: 'shadow' });
+  const settled = await h.store.claimEffect(effectIntent('late-1', { producer: { kind: 'attempt', identity: h.identity } }));
+  await h.store.saveEffect(settled, effectRecordSchema.parse({ ...settled, state: 'refused', refusal: 'EFFECT_REJECTED' })); // the gate now sees one reconciled intent
+  expect(await decide(h, 'live')).toMatchObject({ kind: 'continued' }); expect(h.calls).toHaveLength(2);
+  expect(h.sealed().at(-1)).not.toHaveProperty('basis');
+});
+
+it('revoked grant between the sealed decision and its apply: the case ends escalated with a hold, never left gated for a retry', async () => {
+  const h = await harness(); h.state.crash = true;
+  await expect(decide(h)).rejects.toThrow('CRASH_AFTER_SEAL');
+  h.state.document = { ...standing, grants: [] };
+  expect(await decide(h, 'live', h.make())).toMatchObject({ kind: 'escalated', case: { state: 'escalated', decision: { code: 'continuation-not-approved' } } });
+  expect(h.cases()).toEqual([{ state: 'escalated', revision: 2 }]); expect(h.holds).toHaveLength(1); expect(h.calls).toHaveLength(1);
+  expect(await decide(h, 'live', h.make())).toMatchObject({ kind: 'escalated', replay: true }); expect(h.calls).toHaveLength(1);
 });

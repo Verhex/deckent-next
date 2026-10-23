@@ -4,6 +4,7 @@ import { AUDIT_EVENT_SCHEMA_VERSION, RECOVERY_DECISION_ACTIONS, RECOVERY_RUN_MOD
   type RecoveryCase, type RecoveryDecisionRegistry, type RecoveryEscalationCode, type RunSnapshot } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
+import { AUDIT_PAGE_MAX } from '#engine/core/audit/index.js';
 import { recoveryContinuationApprovalSchema } from './approval.js';
 import { recoveryDecisionCommandId, type RecoveryApplication, type RecoveryPrepared } from './application.js';
 import type { RecoveryStore } from './port.js';
@@ -23,8 +24,10 @@ export interface RecoveryModelPorts {
 export interface RecoveryDecisionPorts {
   readonly recovery: Pick<RecoveryApplication, 'prepare' | 'assess' | 'continueLostTask' | 'escalate'>;
   readonly store: Pick<RecoveryStore, 'loadCase' | 'loadRun'>;
-  /** The audit writer of the decision seal (the recovery principal's only other record) and its reader. */
-  readonly seals: { load(scopeId: string, eventId: string): AuditRecord | null | Promise<AuditRecord | null>; record(event: unknown): unknown };
+  /** The audit writer of the decision seal (the recovery principal's only other record), its reader, and (S6R-6) the bounded recent window of one
+   * kind the circuit breaker counts. */
+  readonly seals: { load(scopeId: string, eventId: string): AuditRecord | null | Promise<AuditRecord | null>; record(event: unknown): unknown;
+    listRecentKind(scopeId: string, kind: 'recovery-decision', sinceAtMs: number, limit: number): readonly AuditRecord[] | Promise<readonly AuditRecord[]> };
   readonly models: RecoveryModelPorts;
   /** The owner's standing grant of a continuation in a scope, read fresh (S6R-4 `recoveryContinuationApproval`). */
   readonly approval: (scopeId: string) => Promise<unknown>;
@@ -33,8 +36,9 @@ export interface RecoveryDecisionPorts {
   readonly policyRevision: string;
   readonly registry: unknown;
   readonly now: () => number;
-  /** The circuit breaker's call times, shared by every pass of this process (bounded by the registry window). */
-  readonly breaker?: { times: number[] };
+  /** S6R-6: the scopes whose sealed decisions the installation circuit breaker counts (composition: every scope the service decides; absent: the
+   * case's own scope). The count is read from the ledger per check, so it survives a restart. */
+  readonly breakerScopes?: () => readonly string[];
 }
 type Sealed = Extract<AuditEvent['subject'], { kind: 'recovery-decision' }>;
 type Mode = 'shadow' | 'live';
@@ -57,9 +61,8 @@ const failureCode = (error: unknown) => { const code = (error as { code?: unknow
  */
 export class RecoveryDecisionApplication {
   private readonly registry: RecoveryDecisionRegistry;
-  private readonly breaker: { times: number[] };
   constructor(private readonly ports: RecoveryDecisionPorts, private readonly verifier: PrincipalVerifier) {
-    this.registry = loadRecoveryDecisionRegistry(ports.registry); this.breaker = ports.breaker ?? { times: [] };
+    this.registry = loadRecoveryDecisionRegistry(ports.registry);
   }
   async decide(input: unknown, credential?: unknown): Promise<RecoveryDecisionOutcome> {
     const command = decideSchema.parse(input), principal = await authenticate(this.verifier, credential, command.scopeId);
@@ -95,9 +98,17 @@ export class RecoveryDecisionApplication {
     const sealed = await this.loadSeal(ref.scopeId, current.caseId, 'live');
     let subject = sealed;
     if (!subject) {
-      const run = await this.ports.store.loadRun(ref.scopeId, current.identity.runId);
-      if (!run) throw new RecoveryError('RECOVERY_CORRUPT');
-      subject = await this.seal(current, 'live', await this.choose(current, run, 'live'));
+      // S6R-6: a case already decided by its model in shadow (same evidence) is not asked again after the switch to live: the live seal adopts the
+      // shadow decision (`basis: 'shadow'`, its call's model block). A shadow seal without a model (a deterministic escalation) is decided afresh.
+      const shadow = await this.loadSeal(ref.scopeId, current.caseId, 'shadow');
+      if (shadow && shadow.model !== null && shadow.evidenceDigest === current.evidenceDigest) {
+        const { model, action, causeClass, note, code, failure, standingRef } = shadow;
+        subject = await this.seal(current, 'live', { model, action, causeClass, note, code, failure, standingRef, basis: 'shadow' });
+      } else {
+        const run = await this.ports.store.loadRun(ref.scopeId, current.identity.runId);
+        if (!run) throw new RecoveryError('RECOVERY_CORRUPT');
+        subject = await this.seal(current, 'live', await this.choose(current, run, 'live'));
+      }
     }
     const echo = { ...ref, evidenceDigest: current.evidenceDigest };
     // A sealed escalation of other evidence (a gate refusal sealed, then a crash before `assess`, then the evidence changed) still hands the case to a
@@ -125,15 +136,13 @@ export class RecoveryDecisionApplication {
     const { scopeId } = current.identity, registry = this.registry, now = this.ports.now();
     const approval = recoveryContinuationApprovalSchema.safeParse(await this.ports.approval(scopeId).catch(() => null));
     if (!approval.success || !approval.data.scopeIds.includes(scopeId)) return this.escalation('continuation-not-approved');
-    this.breaker.times = this.breaker.times.filter(at => now - at < registry.breaker.windowMs);
-    if (this.breaker.times.length >= registry.breaker.maxCasesPerWindow) return this.escalation('breaker-open');
+    if (await this.breakerOpen(scopeId, now)) return this.escalation('breaker-open');
     const rows = (await this.ports.models.rows(scopeId)).filter(row => row.invocable);
     if (!rows.length) return this.escalation('no-eligible-model');
     const row = rows.find(candidate => subscriptionDelegationRefusal({ billing: candidate.billing, principalClass: 'system', owner: this.ports.owner, consent: candidate.consent }) === null);
     if (!row) return this.escalation('consent-required', 'HEADLESS_DELEGATION_REFUSED');
     const template = recoveryDecisionTemplate(registry), messages = [{ role: 'system' as const, content: template.text },
       { role: 'user' as const, content: JSON.stringify(this.request(current, run)) }];
-    this.breaker.times.push(now);
     let result: RecoveryModelResult;
     try {
       result = await this.ports.models.invoke({ scopeId, commandId: recoveryDecisionCommandId(current.caseId, current.evidenceDigest, mode), row, messages,
@@ -147,6 +156,25 @@ export class RecoveryDecisionApplication {
     if (!answer.ok) return { ...this.escalation('answer-invalid', answer.failure), model };
     if (answer.action === 'escalate-human') return { ...this.escalation('human-chosen'), causeClass: answer.causeClass, model };
     return { model, action: 'continue-new-attempt', causeClass: answer.causeClass, note: answer.note, code: null, failure: null, standingRef: approval.data.decisionRef };
+  }
+  /**
+   * S6R-6 installation circuit breaker, persistent: the model calls of recovery decisions (shadow and live seals with a model block; a live seal
+   * adopting a shadow decision is the same call) sealed in the registry window across the breaker scopes. Open at the bound, when a window holds
+   * `scanLimit` seals without reaching it, or when the ledger cannot be read (fail closed: no call). A crash between the call and its seal is the
+   * one call not yet counted; its replay finds the claimed invocation (command id) and never sends it again.
+   */
+  private async breakerOpen(scopeId: string, now: number): Promise<boolean> {
+    const { maxCasesPerWindow, windowMs, scanLimit } = this.registry.breaker, since = Math.max(0, now - windowMs + 1), limit = Math.min(scanLimit, AUDIT_PAGE_MAX);
+    if (maxCasesPerWindow === 0) return true;
+    try {
+      let calls = 0;
+      for (const id of new Set(this.ports.breakerScopes?.() ?? [scopeId])) {
+        const page = await this.ports.seals.listRecentKind(id, 'recovery-decision', since, limit);
+        calls += page.filter(record => record.event.subject.kind === 'recovery-decision' && record.event.subject.model !== null && record.event.subject.basis === undefined).length;
+        if (calls >= maxCasesPerWindow || page.length >= limit) return true;
+      }
+      return false;
+    } catch { return true; }
   }
   /** The evidence projection the model reads (S6R-DESIGN §5, §6): typed states, counts and codes of the sealed case only — no policy, principal, path or log. */
   private request(current: RecoveryCase, run: RunSnapshot) {

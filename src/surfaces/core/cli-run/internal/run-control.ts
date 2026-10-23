@@ -3,6 +3,7 @@ import { ErrorRegistry, t, terminalSafeText, type Locale } from '#platform/index
 import { runLifecycleCommandSchema, runQuerySchema, type RunView } from '#engine/index.js';
 import type { RunCommandContext } from './context.js';
 import { familyScope, pickRun, readScopeRuns, resolveRunId, runStateWord, runTitle, shownId, type RunHumanIo } from './run-human.js';
+import { runHoldReasonText } from '#surfaces/core/recovery-text/index.js';
 import { renderRunCancellation } from './cancellation.js';
 import REGISTRY from './run.json' with { type: 'json' };
 
@@ -63,7 +64,9 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
   for (let round = 0; ; round++) {
     const run = (await context.inspectRun(io.root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId }), io.options)).run;
     if (!run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
-    const extra = [...(action === 'hold' ? [t('cli.run.control.reason', { reason }, locale)] : []),
+    // S6R-6: a held Run's card says why it is held, in words (a system hold's catalog text, never its raw code).
+    const held = action === 'hold' ? null : runHoldReasonText(run.state, locale);
+    const extra = [...(action === 'hold' ? [t('cli.run.control.reason', { reason }, locale)] : []), ...(held ? [t('recovery.hold.cardReason', { reason: held }, locale)] : []),
       ...(input.quota !== undefined ? [t('quotaask.control.choice', { choice: input.quota === 'wait' ? t('quotaask.choice.wait', {}, locale) : t('quotaask.choice.next-candidate', {}, locale) }, locale)] : []),
       ...(input.answer !== undefined ? [t('cli.run.control.answer', { task: input.taskId ?? '-', answer: input.answer }, locale)] : []), ...(round ? [t('cli.run.control.reread', {}, locale)] : [])];
     const answer = await io.ask(controlCard(action, run, scopeId, locale, extra));

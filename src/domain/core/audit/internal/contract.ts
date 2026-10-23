@@ -333,7 +333,9 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     model: z.object({ channelId: identitySchema, modelId: identitySchema, template: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(),
       registryRevision: identitySchema, inputDigest: digest, outputDigest: digest.nullable(), invocationId: identitySchema.nullable() }).strict().nullable(),
     action: z.enum(['continue-new-attempt', 'escalate-human']), causeClass: z.enum(['infra-transient', 'infra-persistent', 'task-induced', 'unknown']).nullable(),
-    note: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(), code: identitySchema.nullable(), failure: identitySchema.nullable(), standingRef: identitySchema.nullable() }).strict(),
+    note: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(), code: identitySchema.nullable(), failure: identitySchema.nullable(), standingRef: identitySchema.nullable(),
+    /** S6R-6: `shadow` — this live decision adopts the sealed shadow decision of the same evidence (its model block is that call's; no second call). */
+    basis: z.literal('shadow').optional() }).strict(),
 ]);
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,

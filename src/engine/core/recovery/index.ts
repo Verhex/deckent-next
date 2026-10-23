@@ -6,3 +6,5 @@ export { RECOVERY_CONTINUE_ACTION, recoveryContinuationApproval, recoveryContinu
 export type { RecoveryContinuationApproval } from './internal/approval.js';
 export type { RecoveryAudit, RecoveryContinuationWrite, RecoveryStore, RecoveryTermination } from './internal/port.js';
 export { RECOVERY_DECISION_ROLE, recoveryDecisionPrincipal, recoveryDecisionRegistry, recoveryModelReference, recoveryModelRows } from './internal/models.js';
+export { recoveryGrantState, recoveryModeState } from './internal/mode.js';
+export type { RecoveryConfigMode, RecoveryContinuation, RecoveryGrantState, RecoveryModeState } from './internal/mode.js';
