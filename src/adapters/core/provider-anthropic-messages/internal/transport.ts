@@ -2,12 +2,12 @@ import { anthropicResponseSpendMeasurement, anthropicSpendMeasurement, anthropic
 import type { AnthropicUsage } from './assemble.js';
 import { z } from 'zod';
 import { modelInvocationResponseContentDescriptor, type ModelInvocationNativePort, type ModelInvocationSpendingInput } from '#engine/index.js';
-import { modelInvocationProfileSchema, parseModelBindingDefinition, type ModelInvocationNativeResponse, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type ProviderSpendQuote } from '#domain/index.js';
+import { modelInvocationProfileSchema, parseModelBindingDefinition, type CatalogTariffLookup, type ModelInvocationNativeResponse, type ModelInvocationDeltaSink, type ModelInvocationNativeResult, type ProviderSpendQuote } from '#domain/index.js';
 import { NativeJsonHttpError, sendNativeJsonHttp } from '#adapters/core/provider-http-json/index.js';
 import { OPENAI_CHAT_ENABLE_THINKING_CAPABILITY, OPENAI_CHAT_TOKEN_COUNT_CAPABILITY, OPENAI_CHAT_TOOL_CALLS_CAPABILITY, OpenAiChatHttpError,
-  openAiChatWireObjectSchema, parseOpenAiChatTextRequest, type OpenAiChatHttpErrorCode, type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
+  catalogTariffMatches, openAiChatWireObjectSchema, parseOpenAiChatTextRequest, type OpenAiChatHttpErrorCode, type OpenAiChatHttpLimits, type OpenAiChatTextRequest } from '#adapters/core/provider-openai-chat/index.js';
 import { ANTHROPIC_MESSAGES_FAMILY, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, ANTHROPIC_MESSAGES_PROTOCOL_VERSION,
-  parseAnthropicMessagesDefinition, parseAnthropicMessagesLimits, type AnthropicMessagesDefinition } from './contract.js';
+  anthropicTariffSchema, parseAnthropicMessagesDefinition, parseAnthropicMessagesLimits, type AnthropicMessagesDefinition } from './contract.js';
 import { anthropicPrefixDigest } from './continuation.js';
 import { anthropicMessagesBody } from './messages.js';
 import { parseAnthropicMessageResponse } from './response.js';
@@ -15,6 +15,8 @@ import { createAnthropicMessagesStream } from './stream.js';
 import { quoteAnthropicPublishedTariff } from './tariff.js';
 export interface AnthropicMessagesNativeOptions {
   readonly resolveCredential?: (reference: string, signal?: AbortSignal) => Promise<string | undefined>;
+  /** Security review M4: the spend authority's re-read of a sealed catalog tariff; without it a sealed tariff is never priced. */
+  readonly catalogTariff?: CatalogTariffLookup;
 }
 export type PreparedAnthropicRequest = Readonly<{ definition: AnthropicMessagesDefinition; limits: OpenAiChatHttpLimits; request: OpenAiChatTextRequest;
   body: string; wire: Record<string, unknown>; scopeId: string; prefixDigest: string; countedTokens?: number | null }>;
@@ -65,12 +67,14 @@ export interface AnthropicMessagesPricedNative {
   quote(input: ModelInvocationSpendingInput): ProviderSpendQuote;
 }
 /** The native port and its quote resolver share one registry of prepared tokens, so a quote is always of the request that is sent. */
-export function createAnthropicMessagesPricedNative(options: AnthropicMessagesNativeOptions = {}): AnthropicMessagesPricedNative {
+export function createAnthropicMessagesPricedNative(input: AnthropicMessagesNativeOptions = {}): AnthropicMessagesPricedNative {
+  // The catalog lookup is the spend authority's own port; the transport (and its HTTP options) never receives it.
+  const { catalogTariff, ...options } = input;
   const responses = new WeakMap<object, string>();
   /** Only the final cumulative usage of a send (never the interim `message_start` count) backs a cut stream's settlement. */
   const usage = new WeakMap<object, unknown>();
   const quotes = new WeakMap<object, ProviderSpendQuote>();
-  const tokens = new WeakMap<object, PreparedAnthropicRequest>(), countable = new WeakSet<object>();
+  const tokens = new WeakMap<object, PreparedAnthropicRequest>(), countable = new WeakSet<object>(), catalogVerified = new WeakSet<object>();
   const read = (token: unknown) => {
     const value = token && typeof token === 'object' ? tokens.get(token) : undefined;
     if (!value) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
@@ -113,6 +117,10 @@ export function createAnthropicMessagesPricedNative(options: AnthropicMessagesNa
       const canCount = adapterDefinition.tokenCountEndpoint && declares(OPENAI_CHAT_TOKEN_COUNT_CAPABILITY);
       const count = canCount ? await countPrepared(prepared, options, signal) : null;
       tokens.set(token, Object.freeze({ ...prepared, countedTokens: count?.promptTokens ?? null }));
+      // A sealed catalog tariff is re-read from its registered row before it can be priced (the seal alone is never trusted).
+      const seal = adapterDefinition.tariff.source.catalog;
+      if (seal && catalogTariff && catalogTariffMatches(adapterDefinition.tariff,
+        await catalogTariff(seal, adapterDefinition.tariff.modelId, parsedProfile.data.scopeId), anthropicTariffSchema)) catalogVerified.add(token);
       if (canCount) countable.add(token);
       return token;
     },
@@ -138,6 +146,6 @@ export function createAnthropicMessagesPricedNative(options: AnthropicMessagesNa
     },
   });
   return Object.freeze({ native, quote: (input: ModelInvocationSpendingInput) => {
-    const quote = quoteAnthropicPublishedTariff(input, read(input.prepared)); quotes.set(input.prepared as object, quote); return quote;
+    const quote = quoteAnthropicPublishedTariff(input, read(input.prepared), catalogVerified.has(input.prepared as object)); quotes.set(input.prepared as object, quote); return quote;
   } });
 }

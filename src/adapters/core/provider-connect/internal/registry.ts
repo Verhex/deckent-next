@@ -12,9 +12,12 @@ export const PROVIDER_CONNECT_ADAPTERS = ['anthropic-messages-http', 'openai-cha
 const SECRET_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/u;
 const secretNameSchema = z.string().regex(SECRET_NAME);
 const header = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
+/** A route path stays on the connection's origin (security review M4): one leading `/`, non-empty segments of unreserved characters that never
+ * start with `.` — so no `//` authority, scheme, `.`/`..` segment, percent-encoding, backslash, query or fragment can move a keyed request. */
+const routePathSchema = z.string().max(128).regex(/^(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)+$/u);
 /** One model's Responses wire route (path under the endpoint, documented dialect, source). The registry's shipped rows and (M4) a registered
  * catalog row's `connect.route` (the model id then comes from the row) are parsed by this one schema. */
-export const providerProtocolRouteSchema = z.object({ modelId: z.string().min(1), path: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u),
+export const providerProtocolRouteSchema = z.object({ modelId: z.string().min(1), path: routePathSchema,
   dialect: openAiChatDialectSchema.refine(d => d.protocol === 'responses'),
   source: z.object({ url: z.string().url().startsWith('https://'), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict() }).strict();
 /** One metadata-priced model's verified first-party endpoint tag and token field (shipped rows and, M4, a catalog row's `connect.route`). */

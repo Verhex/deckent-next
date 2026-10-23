@@ -45,3 +45,7 @@ export const modelMetadataSchema = z.object({ channelModelId: exact, vendorId: i
     .refine(terms => terms.tariff !== undefined || terms.route !== undefined).readonly().optional() });
 /** The ledger row a connected profile's tariff was taken from (M4): the catalog channel and the row's revision, sealed into the tariff's source. */
 export const catalogTariffSealSchema = z.object({ channelId: identitySchema, modelRevision: z.number().int().positive().safe() }).strict().readonly();
+export type CatalogTariffSeal = z.infer<typeof catalogTariffSealSchema>;
+/** The spend authority's re-read of a sealed tariff (security review M4): the registered row's own `connect.tariff` term when the ledger catalog
+ * holds exactly that (channel, exact model id) at exactly the sealed revision, else null. A seal is never trusted on its own. */
+export type CatalogTariffLookup = (seal: CatalogTariffSeal, modelId: string, scopeId: string) => Promise<unknown>;

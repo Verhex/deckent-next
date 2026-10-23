@@ -8,3 +8,4 @@ export { recoverConfiguredModelCancellations, releaseSettledModelSlots } from '.
 export { assessConfiguredModelInvocationDelivery, configuredModelInvocationDeliverySurfaces } from './internal/delivery-audit.js';
 export type { ModelInvocationDeliveryFinding, ModelInvocationDeliverySurface } from './internal/delivery-audit.js';
 export { inspectConfiguredInvocableModels } from './internal/invocable-now.js';
+export { createCatalogTariffLookup } from './internal/catalog-tariff.js';

@@ -12,7 +12,7 @@ import { isOpenAiChatHttpAdapter, OpenAiChatHttpError, parseOpenAiChatHttpDefini
 import { prepareOpenAiChatHttpRequest } from './transport.js';
 export const OPENAI_CHAT_OPERATOR_TARIFF_METER_ID = 'openai-chat-operator-reservation' as const;
 /** Request-tier quote with an exact registry margin; legacy loopback zero remains supported. */
-export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInput, preparedBody?: string, reasoningInputTokensUpperBound = 0): ProviderSpendQuote {
+export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInput, preparedBody?: string, reasoningInputTokensUpperBound = 0, catalogVerified = false): ProviderSpendQuote {
   if (!Number.isSafeInteger(reasoningInputTokensUpperBound) || reasoningInputTokensUpperBound < 0) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
   const profile = modelInvocationProfileSchema.parse(input.profile);
   if (!isOpenAiChatHttpAdapter(profile.adapter)) {
@@ -33,7 +33,7 @@ export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInpu
     ? Math.max(openAiChatPromptUpperBound(input.command.nativeRequest), Buffer.byteLength(body, 'utf8')) + reasoningInputTokensUpperBound : openAiChatPromptUpperBound(input.command.nativeRequest);
   if (!Number.isSafeInteger(inputBound)) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_TOO_LARGE');
   const serviceTier = request.service_tier && request.service_tier !== 'auto' ? request.service_tier : OPENAI_RESERVATION_POLICY.expectedServiceTier;
-  const rates = openAiCompatibleTariffRates(tariff, definition.endpoint, request.model, serviceTier, inputBound);
+  const rates = openAiCompatibleTariffRates(tariff, definition.endpoint, request.model, serviceTier, inputBound, catalogVerified);
   const tiered = tariff.kind === 'vendor-published' && tariff.version === 2;
   const evidence = { schemaVersion: 1, tariffDigest, bodyDigest: createHash('sha256').update(body).digest('hex'),
     calculation: { schemaVersion: 1, currency: tariff.currency, usdPerMTok: rates, inputBound, outputBound: request.max_completion_tokens, requestCount: 1, ...(tiered ? { serviceTier, safetyMarginPercent: OPENAI_RESERVATION_POLICY.safetyMarginPercent } : {}),
@@ -46,11 +46,11 @@ export function quoteOpenAiChatOperatorTariff(input: ModelInvocationSpendingInpu
       { field: 'output', tokens: request.max_completion_tokens, usdPerMillionTokens: rates.output }]), tiered ? OPENAI_RESERVATION_POLICY.safetyMarginPercent : 0)) });
 }
 /** A zero-rate legacy tariff is admitted only for a loopback endpoint. Remote paid calls require verified or explicitly declared rates. */
-export function openAiCompatibleTariffRates(tariff: ReturnType<typeof parseOpenAiChatHttpDefinition>['tariff'], endpoint: string, modelId: string, serviceTier: string = OPENAI_RESERVATION_POLICY.expectedServiceTier, inputTokens = 0): { input: string; cachedInput: string; output: string; cacheWrite?: string } {
+export function openAiCompatibleTariffRates(tariff: ReturnType<typeof parseOpenAiChatHttpDefinition>['tariff'], endpoint: string, modelId: string, serviceTier: string = OPENAI_RESERVATION_POLICY.expectedServiceTier, inputTokens = 0, catalogVerified = false): { input: string; cachedInput: string; output: string; cacheWrite?: string } {
   // Metadata-priced OpenRouter calls have a separate priced wrapper; they never reach a static/zero tariff.
   if (tariff.kind === 'openrouter-endpoint') throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');
   if (tariff.kind === 'vendor-published') {
-    if (!verifiedOpenAiCompatibleTariff(tariff, endpoint, modelId)) throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');
+    if (!verifiedOpenAiCompatibleTariff(tariff, endpoint, modelId, catalogVerified)) throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');
     if (tariff.version === 1) return tariff.usdPerMTok;
     const tier = tariff.processingTiers.find(row => row.serviceTier === serviceTier);
     if (!tier) throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');

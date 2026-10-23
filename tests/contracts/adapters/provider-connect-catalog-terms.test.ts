@@ -2,7 +2,7 @@ import * as http from '#adapters/core/provider-http-json/index.js';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PROVIDER_CONNECT_KINDS, connectionAdapter, providerConnectKind, providerEndpoint, readProviderConnectSeed } from '#adapters/core/provider-connect/index.js';
+import { PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_REGISTRY, connectionAdapter, parseProviderConnectRegistry, providerConnectKind, providerEndpoint, readProviderConnectSeed } from '#adapters/core/provider-connect/index.js';
 import { anthropicPublishedTariff, anthropicSettledCharge, createAnthropicMessagesPricedNative } from '#adapters/core/provider-anthropic-messages/index.js';
 import { createOpenAiChatPricedNative, lookupOpenAiCompatibleTariff } from '#adapters/core/provider-openai-chat/index.js';
 import { parseProviderCatalogDocument, type CatalogModel, type ProviderCatalogDocument } from '#domain/index.js';
@@ -43,6 +43,9 @@ const profileOf = (built: ReturnType<typeof connectionAdapter>, providerId: stri
   return { reference, profile: { schemaVersion: 1 as const, id: 'p', version: 1, scopeId: 'scope', reference, bindingDigest: 'a'.repeat(64), protocol: built.protocol,
     adapter: built.adapter, allocation: { id: 'p', maxCalls: null, maxInFlight: 1 }, limits: { requestMaxBytes: 65_536, responseMaxBytes: 65_536, timeoutMs: 2_000 } } };
 };
+/** The authoritative registered row the spend authority re-reads at preparation (the composition binds the ledger catalog reader). */
+const rowLookup = (row: ReturnType<typeof rowOf>) => async (seal: { channelId: string; modelRevision: number }, modelId: string) =>
+  seal.channelId === row.channelId && seal.modelRevision === row.modelRevision && modelId === row.model.nativeId && 'connect' in row.model ? row.model.connect?.tariff ?? null : null;
 const commandOf = (reference: Record<string, unknown>, nativeRequest: Record<string, unknown>) => ({ schemaVersion: 1 as const, commandId: 'call', scopeId: 'scope', reference,
   catalogRevision: 'catalog', expectedBinding: { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: 'a'.repeat(64) }, nativeRequest });
 
@@ -67,7 +70,7 @@ describe('catalog v3 connect terms', () => {
     const binding = { encodingVersion: 1, provider: { id: 'anthropic-api', version: 1 }, model: { id: FABLE, version: 1, nativeId: FABLE,
       protocols: [{ family: 'anthropic-messages', version: '2023-06-01', capabilities: [] }] } };
     const request = { model: FABLE, messages: [{ role: 'user' as const, content: 'hello' }], max_completion_tokens: 100, stream: true, stream_options: { include_usage: true } };
-    const command = commandOf(reference, request), priced = createAnthropicMessagesPricedNative({ resolveCredential: async () => 'sk-ant-test' });
+    const command = commandOf(reference, request), priced = createAnthropicMessagesPricedNative({ resolveCredential: async () => 'sk-ant-test', catalogTariff: rowLookup(row) });
     const prepared = await priced.native.prepare(profile as never, binding as never, request);
     const quote = priced.quote({ command, requestDigest: modelInvocationRequestDigest(command), profile, profileDigest: modelInvocationProfileDigest(profile as never),
       definition: binding, prepared } as never);
@@ -96,7 +99,7 @@ describe('catalog v3 connect terms', () => {
         usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110, prompt_tokens_details: { cached_tokens: 40 } } })));
       if (!('response' in parsed)) throw new Error('fixture'); return parsed.response;
     });
-    const priced = createOpenAiChatPricedNative({ resolveCredential: async () => 'sk-test' } as never), command = commandOf(reference, request);
+    const priced = createOpenAiChatPricedNative({ resolveCredential: async () => 'sk-test', catalogTariff: rowLookup(row) } as never), command = commandOf(reference, request);
     const prepared = await priced.native.prepare(profile as never, binding as never, request);
     const quote = priced.quote({ profile, definition: binding, command, requestDigest: modelInvocationRequestDigest(command), profileDigest: modelInvocationProfileDigest(profile as never), prepared } as never);
     expect(quote.pricing).toMatchObject({ id: 'openai-compatible-published-tariff', definition: tariff }); expect(quote.maxChargeMinorUnits).toBeGreaterThan(0);
@@ -186,5 +189,68 @@ describe('catalog v3 connect terms', () => {
       }
     }
     expect(outputs).toEqual(fixture.outputs);
+  });
+
+});
+
+describe('catalog v3 connect terms: security review M4', () => {
+  it('a catalog route can never move the request, or its key, to another origin (negative)', async () => {
+    const openai = providerConnectKind('openai-api')!, chat = 'https://api.openai.com/v1/chat/completions';
+    const send = vi.spyOn(http, 'sendNativeJsonHttp');
+    for (const path of ['//evil.example/v1/responses', 'https://evil.example/v1/responses', '/v1/../../evil', '/v1/./responses', '/../v1/responses',
+      '/v1/%2e%2e/x', '/v1%2Fresponses', '/v1/%5Cevil', '/v1\\evil', 'v1/responses', '/v1//responses', '/v1/responses?x=1', '/v1/responses#x', '/.hidden']) {
+      const row = rowOf(await synthetic('openai-api', SOL, { tariff: solTariff(new URL(path, chat).href), route: { ...responsesRoute, path } }), SOL);
+      expect(() => connectionAdapter(openai, input(chat, SOL, 'DECKENT_OPENAI_KEY', row)), path).toThrow('MODEL_CONNECT_DEFINITION_INVALID');
+    }
+    // The shipped registry's own routes are held to the same path rule.
+    const kinds = PROVIDER_CONNECT_KINDS.map(kind => kind.id !== 'openai-api' ? kind : { ...kind, connect: { ...kind.connect!,
+      protocolRoutes: [{ ...kind.connect!.protocolRoutes![0]!, path: '//evil.example/v1/responses' }] } });
+    expect(() => parseProviderConnectRegistry({ ...PROVIDER_CONNECT_REGISTRY, kinds })).toThrow();
+    // An accepted route stays on the connection's origin: the key is only ever named for that origin.
+    const row = rowOf(await synthetic('openai-api', SOL, { tariff: solTariff('https://api.openai.com/v1/responses'), route: responsesRoute }), SOL);
+    const built = connectionAdapter(openai, input(chat, SOL, 'DECKENT_OPENAI_KEY', row)).adapter.definition as { endpoint: string; authentication: unknown };
+    expect(new URL(built.endpoint).origin).toBe('https://api.openai.com');
+    expect(built.authentication).toEqual({ type: 'bearer', credentialRef: 'DECKENT_OPENAI_KEY' });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('a sealed catalog tariff is priced only when it equals the registered row it names (negative: forged seal, other numbers, other revision)', async () => {
+    const endpoint = 'https://api.openai.com/v1/chat/completions', kind = providerConnectKind('openai-api')!;
+    const row = rowOf(await synthetic('openai-api', SOL, { tariff: solTariff(endpoint) }), SOL);
+    const built = connectionAdapter(kind, input(endpoint, SOL, 'DECKENT_OPENAI_KEY', row));
+    const request = { model: SOL, messages: [{ role: 'user' as const, content: 'hello' }], max_completion_tokens: 10 };
+    const binding = { encodingVersion: 1, provider: { id: 'openai-api', version: 1 }, model: { id: SOL, version: 1, nativeId: SOL,
+      protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [] }] } };
+    const quoteWith = async (adapter: typeof built, lookup?: ReturnType<typeof rowLookup>) => {
+      const { reference, profile } = profileOf(adapter, 'openai-api', SOL), command = commandOf(reference, request);
+      const priced = createOpenAiChatPricedNative({ resolveCredential: async () => 'sk-test', ...(lookup ? { catalogTariff: lookup } : {}) } as never);
+      const prepared = await priced.native.prepare(profile as never, binding as never, request);
+      return () => priced.quote({ profile, definition: binding, command, requestDigest: modelInvocationRequestDigest(command), profileDigest: modelInvocationProfileDigest(profile as never), prepared } as never);
+    };
+    expect((await quoteWith(built, rowLookup(row)))().maxChargeMinorUnits).toBeGreaterThan(0);
+    // No authority to re-read the row: the seal alone is never trusted.
+    expect(await quoteWith(built)).toThrow('PROVIDER_SPEND_TARIFF_UNVERIFIED');
+    // A forged profile: the same seal with cheaper numbers.
+    const definition = built.adapter.definition as { tariff: { usdPerMTok: Record<string, string> } };
+    const forged = { ...built, adapter: { ...built.adapter, definition: { ...definition, tariff: { ...definition.tariff, usdPerMTok: { ...definition.tariff.usdPerMTok, output: '0.01' } } } } };
+    expect(await quoteWith(forged as never, rowLookup(row))).toThrow('PROVIDER_SPEND_TARIFF_UNVERIFIED');
+    // The row moved on (another revision) or is gone: unverified.
+    expect(await quoteWith(built, rowLookup({ ...row, modelRevision: 4 }))).toThrow('PROVIDER_SPEND_TARIFF_UNVERIFIED');
+    // Anthropic: the same rule for a sealed tariff (an unsealed shipped tariff is priced as before).
+    const anthropic = providerConnectKind('anthropic-api')!, fable = rowOf(await synthetic('anthropic-api', FABLE, { tariff: fableTariff }), FABLE);
+    const sealed = connectionAdapter(anthropic, input('https://api.anthropic.com/v1/messages', FABLE, 'DECKENT_ANTHROPIC_KEY', fable));
+    const anthropicQuote = async (lookup?: ReturnType<typeof rowLookup>) => {
+      const { reference, profile } = profileOf(sealed, 'anthropic-api', FABLE);
+      const fableBinding = { encodingVersion: 1, provider: { id: 'anthropic-api', version: 1 }, model: { id: FABLE, version: 1, nativeId: FABLE,
+        protocols: [{ family: 'anthropic-messages', version: '2023-06-01', capabilities: [] }] } };
+      const fableRequest = { ...request, model: FABLE }, command = commandOf(reference, fableRequest);
+      const priced = createAnthropicMessagesPricedNative({ resolveCredential: async () => 'sk-ant-test', ...(lookup ? { catalogTariff: lookup } : {}) });
+      const prepared = await priced.native.prepare(profile as never, fableBinding as never, fableRequest);
+      return () => priced.quote({ command, requestDigest: modelInvocationRequestDigest(command), profile, profileDigest: modelInvocationProfileDigest(profile as never),
+        definition: fableBinding, prepared } as never);
+    };
+    expect((await anthropicQuote(rowLookup(fable)))().maxChargeMinorUnits).toBeGreaterThan(0);
+    expect(await anthropicQuote()).toThrow('PROVIDER_SPEND_TARIFF_UNVERIFIED');
+    expect(await anthropicQuote(rowLookup({ ...fable, modelRevision: 9 }))).toThrow('PROVIDER_SPEND_TARIFF_UNVERIFIED');
   });
 });

@@ -77,7 +77,12 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
     ?? (connect.adapter === OPENAI_CHAT_HTTP_ADAPTER_ID && !connect.metadataPricing ? catalogRoute(providerProtocolRouteSchema, input.catalog, input.nativeId) : undefined);
   // A reconnect is not the migration selection: existing definitions keep their wire choice.
   const responses = route && (!input.existing || (input.existing['dialect'] as { protocol?: unknown } | undefined)?.protocol === 'responses');
-  if (responses) input = { ...input, endpoint: new URL(route.path, input.endpoint).href };
+  if (responses) {
+    // The route never leaves the connection's origin: the key is only ever named for that origin (security review M4).
+    const routed = new URL(route.path, input.endpoint);
+    if (routed.origin !== new URL(input.endpoint).origin) throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID');
+    input = { ...input, endpoint: routed.href };
+  }
   const secure = endpointMayCarryKey(input.endpoint); // G2-7: the one key rule; plain http (loopback too) is `authentication: none`
   if (connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID) {
     if (!secure || input.credentialRef === null) throw new ProviderConnectError('MODEL_CONNECT_KEY_INSECURE');

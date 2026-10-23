@@ -1,10 +1,11 @@
 import { isDeepStrictEqual } from 'node:util';
-import { createOpenRouterOpenAiPricedNative, OpenRouterPricingError, PROVIDER_CONNECT_REGISTRY } from '#adapters/index.js';
+import { createOpenRouterOpenAiPricedNative, OpenRouterPricingError, PROVIDER_CONNECT_REGISTRY, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { modelInvocationProfileSchema, PROVIDER_SPEND_SCOPE_BUDGET_ID, type ModelBindingDefinition, type ModelInvocationProfile } from '#domain/index.js';
 import { ProviderSpendError, providerSpendLocalZeroTariff, checkModelInvocationCapacity, type ModelInvocationNativePort, type ModelInvocationSpendingAuthority, type ModelInvocationSpendingInput } from '#engine/index.js';
 import { createOpenAiChatPricedNative, isOpenAiChatHttpAdapter, parseOpenAiChatHttpDefinition, createOpenRouterPricedNative, OPENROUTER_CHAT_HTTP_ADAPTER_ID, OPENROUTER_CHAT_HTTP_ADAPTER_VERSION, parseOpenRouterChatDefinition, type OpenRouterPricedNative, fetchOpenRouterTariff, createOpenRouterTariffCache, type OpenRouterMetadataObservation, providerSpendingBudgetFor, providerSpendingConfiguredBudget, openSqliteProviderSpendAccountReader, createAnthropicMessagesPricedNative, parseAnthropicMessagesDefinition, createDecisionHttpNativePort, decisionHttpAdapter, parseDecisionHttpDefinition, quoteDecisionHttpOperatorTariff, ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID, ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION, type AnthropicMessagesPricedNative, localPrefixCacheSalt } from '#adapters/index.js';
 import type { ConfigLoadOptions, TrustedClock } from '#platform/index.js';
 import { admitInvocationCredential, scopedInvocationCredentialResolver } from './credential.js';
+import { createCatalogTariffLookup } from './catalog-tariff.js';
 import type { loadInvocationContext } from './context.js';
 import { invocationEffectAuthority } from './authority.js';
 /** One tariff per (endpoint, model, tag, CA) for the process lifetime of the freshness window: calls inside it make no metadata request. The fetcher is resolved per miss. */
@@ -17,6 +18,7 @@ const installationCacheSalt = (context: InvocationNativeContext, scopeId: string
 /** One invocation-scoped registry owns the exact OpenRouter native/quote pair. Metadata acquisition is unauthenticated and completes before pure preparation; credential resolution remains send-only. Tariff acquisition, preparation, quote and send read one trusted clock: the host wall may step backwards between them (I40), and the platform floor, not raw Date.now, keeps them ordered within this process. */
 export function createConfiguredModelInvocationNative(context: InvocationNativeContext, options: ConfigLoadOptions, clock: TrustedClock, readOnly = false) {
   const now = () => clock.sample().wallMs;
+  const catalogTariff = createCatalogTariffLookup(async () => openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }));
   // The scope's ledger account wins (governed create/revision, stage 1); a configured budget alone opens the first account; neither: unavailable.
   const budgetFor = async (scopeId: string) => {
     const configured = providerSpendingConfiguredBudget(await context.freshConfig(), scopeId), reader = await openSqliteProviderSpendAccountReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs });
@@ -44,7 +46,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
       }
       if (profile.adapter.id === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID && profile.adapter.version === ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION) {
         const definition = parseAnthropicMessagesDefinition(profile.adapter.definition);
-        const priced = createAnthropicMessagesPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options) });
+        const priced = createAnthropicMessagesPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options), catalogTariff });
         anthropic = { profile, priced }; return priced.native;
       }
       if (isOpenAiChatHttpAdapter(profile.adapter)) {
@@ -55,7 +57,7 @@ export function createConfiguredModelInvocationNative(context: InvocationNativeC
             now, resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options) });
           selected = { profile, priced, cell }; return priced.native;
         }
-        openai = createOpenAiChatPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options),
+        openai = createOpenAiChatPricedNative({ resolveCredential: scopedInvocationCredentialResolver(context, profile, definition.authentication, options), catalogTariff,
           cacheSalt: scopeId => readOnly ? localPrefixCacheSalt(context.layout, scopeId, context.config.approvals.keyFile, false) : installationCacheSalt(context, scopeId) }); return openai.native;
       }
       if (profile.adapter.id !== OPENROUTER_CHAT_HTTP_ADAPTER_ID || profile.adapter.version !== OPENROUTER_CHAT_HTTP_ADAPTER_VERSION) return null;

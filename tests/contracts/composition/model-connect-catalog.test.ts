@@ -7,6 +7,10 @@ import { PROVIDER_CONNECT_REGISTRY, parseProviderConnectRegistry, readProviderCo
 import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
 import { applyConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { clearConfigCache } from '#platform/index.js';
+import { createAnthropicMessagesPricedNative, openSqliteModelCatalogReader } from '#adapters/index.js';
+import { createCatalogTariffLookup } from '#composition/core/model-invocation/index.js';
+import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 
 // M4 (owner 2026-10-23): a model the release does not know connects and answers after ONE data step, a `models catalog register --file`
@@ -66,6 +70,28 @@ describe.skipIf(process.platform !== 'linux')('models.connect from a registered 
     const profile = config['provider_invocation_profiles']!.profiles!.find(item => JSON.stringify(item['reference']) === JSON.stringify(reference));
     expect(profile).toMatchObject({ adapter: { id: 'anthropic-messages-http', definition: { endpoint: 'https://api.anthropic.com/v1/messages', maxOutputTokens: 128000,
       tariff: { ...fableTariff, source: { ...fableTariff.source, catalog: { channelId: 'anthropic-api', modelRevision: 1 } } } } } });
+    // The spend authority re-reads the sealed row from the ledger catalog (the lookup the invocation composition binds): the connected profile is
+    // priced; the same profile with forged, cheaper numbers under the same seal is refused.
+    const context = await loadConfiguredScopeContext(f.project, 'scope', f.options, 'read');
+    const lookup = createCatalogTariffLookup(async () => openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }));
+    expect(await lookup({ channelId: 'anthropic-api', modelRevision: 1 }, FABLE)).toEqual(fableTariff);
+    expect(await lookup({ channelId: 'anthropic-api', modelRevision: 2 }, FABLE)).toBeNull();
+    expect(await lookup({ channelId: 'anthropic-api', modelRevision: 1 }, UNPRICED)).toBeNull();
+    const quote = async (value: Record<string, unknown>) => {
+      const binding = { encodingVersion: 1, provider: { id: 'anthropic-api', version: 1 }, model: { id: FABLE, version: 1, nativeId: FABLE,
+        protocols: [{ family: 'anthropic-messages', version: '2023-06-01', capabilities: [] }] } };
+      const request = { model: FABLE, messages: [{ role: 'user' as const, content: 'hello' }], max_completion_tokens: 10 };
+      const command = { schemaVersion: 1 as const, commandId: 'call', scopeId: 'scope', reference, catalogRevision: 'catalog',
+        expectedBinding: { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: String(value['bindingDigest']) }, nativeRequest: request };
+      const priced = createAnthropicMessagesPricedNative({ resolveCredential: async () => 'sk-ant-test', catalogTariff: lookup });
+      const prepared = await priced.native.prepare(value, binding, request);
+      return () => priced.quote({ command, requestDigest: modelInvocationRequestDigest(command), profile: value, profileDigest: modelInvocationProfileDigest(value as never),
+        definition: binding, prepared } as never);
+    };
+    expect((await quote(profile!))().maxChargeMinorUnits).toBeGreaterThan(0);
+    const forged = structuredClone(profile!) as { adapter: { definition: { tariff: { usdPerMTok: Record<string, string> } } } };
+    forged.adapter.definition.tariff.usdPerMTok['output'] = '0.01';
+    expect(await quote(forged)).toThrow('PROVIDER_SPEND_TARIFF_UNVERIFIED');
     const before = JSON.stringify(await f.config());
     await expect(connectConfiguredModel(f.project, connect(UNPRICED, 'connect-unpriced'), f.options)).rejects.toMatchObject({ code: 'MODEL_CONNECT_TARIFF_UNKNOWN' });
     expect(JSON.stringify(await f.config())).toBe(before);

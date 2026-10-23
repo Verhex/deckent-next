@@ -28,10 +28,21 @@ export function lookupOpenAiCompatibleTariff(endpoint: string, modelId: string):
 }
 /**
  * A shipped row is the authority for its exact endpoint and model: the profile's tariff must equal it. Without one (M4), only a tariff
- * `models connect` sealed from a registered catalog row for exactly this endpoint and model is admitted; an unsealed one stays unverified.
+ * `models connect` sealed from a registered catalog row, for exactly this endpoint and model, AND re-verified against that row by the spend
+ * authority (`catalogVerified`, see `catalogTariffMatches`) is admitted; an unsealed or unverified one stays unverified.
  */
-export function verifiedOpenAiCompatibleTariff(input: OpenAiCompatiblePublishedTariff, endpoint: string, modelId: string): boolean {
+export function verifiedOpenAiCompatibleTariff(input: OpenAiCompatiblePublishedTariff, endpoint: string, modelId: string, catalogVerified = false): boolean {
   const shipped = lookupOpenAiCompatibleTariff(endpoint, modelId);
   if (shipped) return isDeepStrictEqual(input, shipped);
-  return input.source.catalog !== undefined && input.endpoint === endpoint && input.modelId === modelId;
+  return catalogVerified && input.source.catalog !== undefined && input.endpoint === endpoint && input.modelId === modelId;
+}
+/**
+ * Security review M4: a sealed tariff equals the registered row's own term (`lookup` result, parsed by the adapter's tariff schema) under the
+ * same seal. The lookup itself guarantees the (channel, model, revision) of the seal; a missing row, another revision or other numbers fail.
+ */
+export function catalogTariffMatches(tariff: Readonly<{ source: Readonly<{ catalog?: unknown }> }>, term: unknown,
+  schema: z.ZodType<Readonly<{ source: object }>, z.ZodTypeDef, unknown>): boolean {
+  if (tariff.source.catalog === undefined || term === null || term === undefined) return false;
+  const parsed = schema.safeParse(structuredClone(term));
+  return parsed.success && isDeepStrictEqual({ ...parsed.data, source: { ...parsed.data.source, catalog: tariff.source.catalog } }, tariff);
 }
