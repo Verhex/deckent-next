@@ -5,3 +5,4 @@ export { BUBBLEWRAP_BUNDLED_MAX_BYTES, BUBBLEWRAP_KNOWN_PATHS, BUBBLEWRAP_MINIMU
   type BubblewrapSelectOptions } from './internal/launcher.js';
 export { BUBBLEWRAP_BUNDLED } from './internal/bundled.js';
 export { inspectShellRealmSelection, shippedShellSandboxes, type ShellRealmReport, type ShellRealmSelectionView } from './internal/select.js';
+export { isolatedProcessArguments, isolatedProcessCommand, type IsolatedProcessView } from './internal/process.js';

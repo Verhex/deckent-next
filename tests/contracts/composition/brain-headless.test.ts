@@ -10,6 +10,9 @@ import { clearConfigCache } from '#platform/index.js';
 import { proposalFixture } from '../support/run-proposal.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { assistantLine, initLine, rateLimitLine, resultLine, uiLine, writeFakeCli, type FakeStep } from '../../fixtures/native-headless/stream.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
+// S3-5: every headless CLI spawn runs in the bubblewrap realm; a host without one is covered by the real-sandbox guard, not silently here.
+const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 
 const MODEL = 'vendor/model', cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0)) await close(); });
@@ -22,7 +25,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture(steps: FakeStep[]) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'deckent-brain-headless-'))); roots.push(root);
-  const bin = join(root, 'bin'), configDir = join(root, 'login'), logPath = join(root, 'cli.jsonl');
+  const bin = join(root, 'bin'), configDir = join(root, 'login'), logPath = join(configDir, '.claude.json'); // S3-5: the isolated CLI's own state file
   await mkdir(bin); await mkdir(configDir, { mode: 0o700 });
   const executable = await writeFakeCli(bin, { logPath, steps, initCwd: 'actual' });
   const f = await brainProviderFixture({ noCharge: true, headless: { executable, configDir, stateDir: join(root, 'state') } }); cleanups.push(f.close);
@@ -30,7 +33,7 @@ async function fixture(steps: FakeStep[]) {
   return { f, calls: async () => (await log()).filter(entry => entry.mode === 'call') };
 }
 
-describe.skipIf(process.platform !== 'linux')('S3-4 Brain through the headless subscription step (fake CLI)', () => {
+describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-4 Brain through the headless subscription step (fake CLI)', () => {
   it('plans one guarded turn: subscription contribution, no money, no prompt in argv, no effort flag (reasoning model-default and off)', async () => {
     const h = await fixture(lines(draft));
     const result = await planRun(h.f.project, command, h.f.options);

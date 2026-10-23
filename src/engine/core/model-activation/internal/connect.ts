@@ -34,8 +34,6 @@ export interface ModelConnectPorts {
    * the layer being written (null: a new profile), so the adapter keeps the person's own choices in it (CACHE-SLICE1: the cache TTL). */
   adapter(kind: string, input: Readonly<{ endpoint: string | null; credentialRef: string | null; nativeId: string; maxOutputTokens: number; currency: string; existing?: JsonObject | null;
     catalog?: Readonly<{ channelId: string; modelRevision: number; model: CatalogModel }> | null }>): ConnectedAdapter | Promise<ConnectedAdapter>;
-  /** S3-3: whether the installation owner turned on preview kinds (the protected user-layer switch); absent = off. */
-  previewEnabled?(): Promise<boolean>;
   principal(): Promise<VerifiedPrincipal>;
   /** The two authored layer documents and the merged configuration, read fresh. */
   layers(): Promise<Readonly<{ global: Record<string, unknown>; project: Record<string, unknown>; effective: Record<string, unknown> }>>;
@@ -62,7 +60,7 @@ export type ConnectedAdapter = Readonly<{ adapter: Readonly<{ id: string; versio
 export class ModelConnectError extends Error {
   constructor(readonly code: 'MODEL_CONNECT_INVALID' | 'MODEL_CONNECT_NOT_CONNECTABLE' | 'MODEL_CONNECT_ENDPOINT_FIXED' | 'MODEL_CONNECT_ENDPOINT_INVALID'
     | 'MODEL_CONNECT_MODEL_UNKNOWN' | 'MODEL_CONNECT_DECLARATION_CONFLICT' | 'MODEL_CONNECT_KEY_NAME_UNAVAILABLE' | 'MODEL_CONNECT_PRICE_REQUIRED'
-    | 'HEADLESS_PERSON_REQUIRED' | 'HEADLESS_KIND_UNAVAILABLE') { super(code); this.name = 'ModelConnectError'; }
+    | 'HEADLESS_PERSON_REQUIRED') { super(code); this.name = 'ModelConnectError'; }
 }
 
 const sameReference = (left: ModelReference, right: ModelReference) => left.providerId === right.providerId && left.providerVersion === right.providerVersion
@@ -103,10 +101,10 @@ export class ModelConnectApplication {
     const command = parsed.data, ports = this.ports, kind = ports.kind(command.connection);
     if (!kind?.available || !kind.connect) throw new ModelConnectError('MODEL_CONNECT_NOT_CONNECTABLE');
     if (!kind.endpoint.editable && command.endpoint !== null) throw new ModelConnectError('MODEL_CONNECT_ENDPOINT_FIXED');
-    // S3-3: a person's own CLI login is connected by that person only, and only where the installation owner turned the preview on.
+    // S3-3: a person's own CLI login is connected by that person only. S3-5: where its isolation realm is usable — the adapter step refuses
+    // typed before any spawn or write otherwise, on every installation (no preview switch, no unisolated fallback).
     const principal = await ports.principal();
     if (kind.connect.personOnly && isAiPrincipal(principal)) throw new ModelConnectError('HEADLESS_PERSON_REQUIRED');
-    if (kind.connect.preview && !(await ports.previewEnabled?.())) throw new ModelConnectError('HEADLESS_KIND_UNAVAILABLE');
     // A CLI kind has no address and no key: its adapter step names the executable and the login directory instead.
     const chatPath = kind.connect.chatPath, address = command.endpoint ?? kind.endpoint.default, base = chatPath === null || address === null ? null : ports.endpoint(address);
     if (base === null && chatPath !== null) throw new ModelConnectError('MODEL_CONNECT_ENDPOINT_INVALID');

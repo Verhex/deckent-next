@@ -10,6 +10,9 @@ import { openSqliteModelActivationStore } from '#adapters/core/sqlite-model-acti
 import { openSqliteModelInvocationStore } from '#adapters/core/sqlite-model-invocation/index.js';
 import { binding as definition, cleanupConnections, connection, request } from '../../fixtures/native-headless/connection.js';
 import { assistantLine, initLine, rateLimitLine, resultLine, uiLine } from '../../fixtures/native-headless/stream.js';
+import { measureTestShellHost } from '../../fixtures/shell-host.js';
+// S3-5: every headless CLI spawn runs in the bubblewrap realm; a host without one is covered by the real-sandbox guard, not silently here.
+const sandbox = (await measureTestShellHost()).bubblewrap.status === 'available';
 
 afterEach(cleanupConnections);
 const sqlite = { journalMode: 'delete' as const, durability: 'full' as const, busyTimeoutMs: 2000 };
@@ -48,7 +51,7 @@ describe('S3-3 principal classes and the person a workload acts for', () => {
     for (const actor of [person, mcp, recovery, evaluator]) expect(delegationOwner(actor)).toEqual(owner);
   });
 });
-describe.skipIf(process.platform !== 'linux')('S3-3 N19 delegated use of a subscription profile, enforced by the invocation application', () => {
+describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-3 N19 delegated use of a subscription profile, enforced by the invocation application', () => {
   it.each([
     ['the person without any consent', person, null, 'responded'],
     ['an MCP actor without consent', mcp, null, 'HEADLESS_DELEGATION_REFUSED'],

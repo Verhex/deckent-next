@@ -23,10 +23,9 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const principal = typeof scopeId === 'string' ? () => resolveConfiguredConfigPrincipal(projectRoot, scopeId, options) : () => { throw new ModelConnectError('MODEL_CONNECT_INVALID'); };
     const scope = () => loadConfiguredScopeContext(projectRoot, String(scopeId), options, 'write');
     let effective: Record<string, unknown> = {};
-    const parsed = modelConnectCommandSchema.safeParse(input), cli = parsed.success ? headlessConnectPorts(projectRoot, parsed.data, options, principal) : null;
+    const parsed = modelConnectCommandSchema.safeParse(input), cli = parsed.success ? headlessConnectPorts(parsed.data, options, principal) : null;
     const app = new ModelConnectApplication({
       kind: id => { const kind = kindOf(id); return kind && { id: kind.id, available: kind.available, endpoint: kind.endpoint, keyRequired: kind.key?.required ?? false, connect: kind.connect }; },
-      ...(cli ? { previewEnabled: cli.previewEnabled } : {}),
       defaults: registry.profileDefaults,
       endpoint: text => { const checked = providerEndpoint(text); return checked.ok ? checked.base : null; },
       secretName: (id, base) => { const kind = kindOf(id); return kind ? providerConnectSecretName(kind, base) : null; },
