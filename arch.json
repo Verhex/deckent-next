@@ -1164,7 +1164,17 @@
         "src/surfaces/core/terminal-delivery",
         "src/platform/core/common",
         "src/engine/core/run-proposal",
-        "src/surfaces/core/terminal-conversation"
+        "src/surfaces/core/terminal-conversation",
+        "src/surfaces/core/terminal-host"
+      ],
+      "plan": "SURFACES"
+    },
+    "src/surfaces/core/terminal-host": {
+      "dependencies": [
+        "src/surfaces/core/terminal-kit",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-theme",
+        "src/surfaces/core/terminal-window"
       ],
       "plan": "SURFACES"
     },
@@ -3618,7 +3628,12 @@
       "security",
       "terminal",
       "termrun",
-      "delivery"
+      "delivery",
+      "tuicopy",
+      "tuinotify",
+      "tuiqueue",
+      "tuieditor",
+      "tuisession"
     ]
   },
   "literals": {

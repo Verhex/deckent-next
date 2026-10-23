@@ -1,7 +1,8 @@
 import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
-import { render, renderToString, Box, Static, Text, useApp, useStdout, useWindowSize, type Instance } from 'ink';
+import { renderToString, Box, Static, Text, useApp, useStdout, useWindowSize } from 'ink';
+import { runTerminalHost } from '#surfaces/core/terminal-host/index.js';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
@@ -9,7 +10,7 @@ import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_S
 import { StatusStrip } from './status-strip.js';
 import { useLiveWindows } from './workline-live.js';
 import { AssistantLive, openAssistantStream, renderAssistantStream, renderCompleteReply, type AssistantStreamStep, type AssistantRenderLabels } from '#surfaces/core/terminal-render/index.js';
-import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, resolveRenderGlyphs, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { HumanTextContext, humanRecordText, projectHumanPickerText, RenderGlyphsContext, useRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { redactForRecord, type KnownSecretSnapshot } from '#platform/index.js';
 import type { RunProposalResult } from '#engine/index.js';
 import { assistantLedgerEntries, streamStepEntries, workerReportToLedgerEntries, WORK_LEDGER_SCHEMA_VERSION, type WorkLedgerEntry, ledgerEntriesForWorkers, loadRunViewsForWatch, type WorklineLedgerPorts, fillTemplate, agentHistory, appendLedger, boundAgentHistory, compactLedger, EMPTY_LEDGER, LEDGER_TAIL_LIMIT, plainChatHistory, type AgentChatMessage, type ChatTurnMessage, type LedgerBuffer, type LedgerRow, notice } from '#surfaces/core/terminal-ledger/index.js';
@@ -17,9 +18,9 @@ import { useConversationSession, type ConversationSessionLabels, type Conversati
 import { freshContextHistory } from '#surfaces/core/terminal-conversation/index.js';
 import MODEL_SWITCH from './model-switch.json' with { type: 'json' };
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
-import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, mainScreenOutput, useFocusOwner, type WindowNote,
+import { Window, WindowDecideHintContext, WindowOpeningContext, WindowNoteContext, PinnedWorkline, WindowFocusHint, useFocusOwner, type WindowNote,
   FullscreenWorkline, ChatViewport, fullscreenFrameRows, fullscreenInfoRows, type ChatViewportLabels, DecisionArmContext, DECISION_ARM_DEFAULT, DecisionArmLabelsContext, type DecisionArmLabels,
-  WheelContext, mouseFilteredInput, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, osc52Copy, PointerContext, usePointerCopy, CopiedNotice, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
+  WheelContext, PointerContext, usePointerCopy, CopiedNotice, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 import { INFO_WINDOW_COMMANDS, useInfoWindow, type WorklineInfo } from './workline-info.js';
 import { formatContextTokens, span } from '#surfaces/core/terminal-render/index.js';
 import { Composer, slashMatches, type ComposerLabels, type ComposerHistoryPort, type ComposerMentionPort } from '#surfaces/core/terminal-composer/index.js';
@@ -749,38 +750,12 @@ export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
   readonly startup?: WorklineStartup;
 }
 
-/** Ctrl+C is handled by the composer (cancel a running turn, clear a draft, or exit on a second press); the outer signal unmounts the view. */
+/** The workline is the host's view: the host owns start-up, mouse, OSC 52 copy, the alternate screen and the terminal restore (`terminal-host`). */
 export async function runTerminalWorkline(options: WorklineRunOptions): Promise<void> {
   const { palette, stdin, stdout, signal, ascii, startup, ...props } = options;
-  const out = stdout ?? process.stdout;
-  // TERMINAL-SABIT-DUZEN: a TTY that takes escape sequences gets the full-window layout unless the person chose `inline` (`fullscreen: false`).
-  const fullscreen = out.isTTY === true && props.clearScreen !== false && props.fullscreen !== false;
-  const transcriptExit: { current: (() => string) | null } = { current: null };
-  if (startup && !fullscreen) writeStartup(out, startup, palette);
-  // Full window on a real TTY: mouse reports are taken out of the input (wheel = scroll, left drag = select and copy, the rest dropped) and reporting is switched
-  // off again on every exit path this process controls (unmount, abort, a thrown error, process exit).
-  const realInput = stdin ?? process.stdin, mouse = fullscreen && realInput.isTTY === true ? mouseFilteredInput(realInput) : null;
-  const mouseOff = () => { try { out.write(MOUSE_REPORTING_OFF); } catch { /* the terminal is gone */ } };
-  const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
-    createElement(WorklineApp, { ...props, fullscreen, ...(fullscreen && startup ? { startup } : {}), transcriptExit,
-      ...(mouse ? { wheel: mouse.wheel, pointer: mouse.pointer, copyText: (text: string) => { try { out.write(osc52Copy(text)); } catch { /* the terminal is gone */ } } } : {}) }));
-  // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.
-  // Full window: Ink's alternate screen (left on exit, as vim/htop/the Claude Code fullscreen renderer do) with incremental line updates.
-  const instance: Instance = render(createElement(WorklinePaletteProvider, { palette, children: view }),
-    { exitOnCtrlC: false, patchConsole: false, ...(out.isTTY === true ? { interactive: true } : {}), ...(mouse ? { stdin: mouse.input } : stdin ? { stdin } : {}),
-      ...(fullscreen ? { alternateScreen: true, incrementalRendering: true } : {}),
-      stdout: props.clearScreen === false ? out : mainScreenOutput(out) });
-  const stop = () => instance.unmount();
-  signal?.addEventListener('abort', stop, { once: true });
-  if (mouse) { out.write(MOUSE_REPORTING_ON); process.once('exit', mouseOff); }
-  try { await instance.waitUntilExit(); }
-  finally {
-    signal?.removeEventListener('abort', stop);
-    if (mouse) { mouseOff(); process.off('exit', mouseOff); mouse.close(); }
-    // The conversation goes to the main screen after the alternate screen is left, so it stays in the terminal's own scrollback.
-    if (fullscreen) { try { const text = transcriptExit.current?.(); if (text) out.write(`${text}\n`); } catch { /* the view is gone; nothing to restore */ } }
-    const input = stdin ?? process.stdin;
-    try { if (input.isTTY && input.isRaw) input.setRawMode(false); } catch { /* already restored */ }
-    input.unref?.();
-  }
+  await runTerminalHost({ palette, ...(stdin ? { stdin } : {}), ...(stdout ? { stdout } : {}), ...(signal ? { signal } : {}), ...(ascii !== undefined ? { ascii } : {}),
+    ...(props.clearScreen !== undefined ? { clearScreen: props.clearScreen } : {}), ...(props.fullscreen !== undefined ? { fullscreen: props.fullscreen } : {}),
+    ...(startup ? { inlineStartup: out => writeStartup(out, startup, palette) } : {}),
+    view: context => createElement(WorklineApp, { ...props, fullscreen: context.fullscreen, ...(context.fullscreen && startup ? { startup } : {}), transcriptExit: context.transcriptExit,
+      ...(context.wheel ? { wheel: context.wheel } : {}), ...(context.pointer ? { pointer: context.pointer } : {}), ...(context.copyText ? { copyText: context.copyText } : {}) }) });
 }

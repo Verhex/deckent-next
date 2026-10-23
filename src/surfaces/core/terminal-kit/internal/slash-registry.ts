@@ -61,6 +61,12 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'help', group: 'info', descriptionKey: 'terminal.slash.help' },
 ]);
 
+/**
+ * Names alpha.54 terminal lanes (T1 `/copy`, T5 `/rename`) will register. They are held out of `WORKLINE_SLASH_COMMANDS` until their behaviour exists, so the palette
+ * and `/help` never list a command that does nothing; the lane that lands the behaviour moves its name into the registry and out of this list.
+ */
+export const RESERVED_SLASH_COMMAND_NAMES: readonly string[] = Object.freeze(['copy', 'rename']);
+
 /** Read-only inspect commands (S09). Each is answered by an optional port that re-reads a typed query per call; `status` keeps its static line without one. */
 export const INSPECT_SLASH_COMMANDS = Object.freeze(['status', 'model', 'usage', 'doctor', 'scope'] as const);
 export type InspectSlashCommand = typeof INSPECT_SLASH_COMMANDS[number];

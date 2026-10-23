@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseSlashLine, WORKLINE_SLASH_COMMANDS, type WorklineProps } from '#surfaces/core/terminal/index.js';
-import { slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY } from '#surfaces/core/terminal-kit/index.js';
+import { RESERVED_SLASH_COMMAND_NAMES, slashCommandRow, slashHelpText, SLASH_GROUPS, SLASH_HELP_TITLE_KEY } from '#surfaces/core/terminal-kit/index.js';
 import { paletteCommand } from '#surfaces/core/terminal-composer/index.js';
 import { terminalComposerLabels } from '#surfaces/core/terminal-labels/index.js';
 import { snapshotKnownSecrets, t } from '#platform/index.js';
@@ -41,6 +41,11 @@ describe('terminal slash registry', () => {
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'workers')).toBe(true);
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'run')).toBe(true);
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'runs')).toBe(true);
+  });
+
+  it('reserves /copy and /rename without listing a command that does nothing', () => {
+    expect(RESERVED_SLASH_COMMAND_NAMES).toEqual(['copy', 'rename']);
+    for (const name of RESERVED_SLASH_COMMAND_NAMES) expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === name)).toBe(false);
   });
 
   it.each(['en', 'tr'] as const)('%s labels cover exactly the registry description and argument keys, including mcp/config', locale => {
