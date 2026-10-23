@@ -192,6 +192,15 @@ describe('bounded spend, unknown answers and contests (N16, N26, N33)', () => {
 });
 
 describe('fail closed and N28 injection corpus', () => {
+  it('a refusal before anything was sent (the invoker throws) seals no record and stops the pass; the candidate is asked once the cause is fixed', async () => {
+    let refuse = true;
+    const f = fixture({ answer: request => { if (refuse) throw Object.assign(new Error('POLICY_DENIED'), { code: 'POLICY_DENIED' }); return echo('pass')(request); } });
+    await f.propose('a1', 'Bir'); await f.propose('a2', 'İki');
+    await expect(f.application.evaluatePage('s', 'shadow')).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    expect(f.store.evaluations).toEqual([]); expect(f.calls).toHaveLength(1);
+    refuse = false;
+    expect(await f.application.evaluatePage('s', 'shadow')).toMatchObject({ calls: 2, records: [{ verdict: 'pass' }, { verdict: 'pass' }] });
+  });
   it('a store without the evaluation methods holds; another principal is refused', async () => {
     const f = fixture();
     const bare = new MemoryEvaluationApplication({ deps: { ...f.application['ports'].deps, openStore: async () => ({ ...f.store, putEvaluation: undefined, close() {} }) as never },

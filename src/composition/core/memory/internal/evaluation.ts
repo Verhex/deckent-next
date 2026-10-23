@@ -23,22 +23,27 @@ async function settledSpend(p: Pass, scopeId: string, commandId: string, billing
     return { invocationId: record.receipt.claim.invocationId, spend: memoryEvaluationSpendOf(held ? { receipt: record.receipt, spending: held.spending } : null, billing) };
   } catch { return { invocationId: null, spend: { state: 'unknown' as const } }; } finally { reader.close(); }
 }
+const scopeRows = (c: Context, roles: RoleModelSources, facts: ReadonlyMap<string, MemoryCatalogFact>, scopeId: string) =>
+  memoryEvaluatorRows(roles, c.config['provider_invocation_profiles'], scopeId, facts, Date.now());
 /** The evaluator's model ports: active `memory-evaluator` role rows (S2) with catalog makers; one call under the evaluator's own principal. */
 function evaluatorPorts(projectRoot: string, options: ConfigLoadOptions, p: Pass): MemoryEvaluatorPorts {
-  const profiles = p.c.config['provider_invocation_profiles'], rows = (scopeId: string) => memoryEvaluatorRows(p.roles, profiles, scopeId, p.facts, Date.now());
+  const profiles = p.c.config['provider_invocation_profiles'], rows = (scopeId: string) => scopeRows(p.c, p.roles, p.facts, scopeId);
   return { rows, async invoke(request) {
     // N3: the exact row must still be an active role row with an invocation path, re-read just before the call (the role registry restricts V5).
     const current = (await rows(request.scopeId)).some(row => row.channelId === request.row.channelId && row.modelId === request.row.modelId && row.invocable);
     const reference = current ? memoryEvaluatorReference(p.roles, profiles, request.scopeId, request.row) : null;
     if (!reference) return { status: 'failed', code: 'MEMORY_EVALUATOR_NOT_INVOCABLE', invocationId: null, spend: { state: 'none' } };
-    let text: string | null = null, code = 'MEMORY_EVALUATION_EMPTY';
+    let text: string | null = null, code = 'MEMORY_EVALUATION_EMPTY', thrown: unknown = null;
     try {
       const { command } = await prepareTerminalChatCommand({ projectRoot, scopeId: request.scopeId, messages: [...request.messages], options }, false, reference,
         { maxCompletionTokens: request.maxCompletionTokens });
       // The record id is the command id: a replay after a crash finds the claimed invocation and never sends it again (retries 0).
       text = extractOpenAiChatTextFromInvocation(await invokeConfiguredModelAs(projectRoot, { ...command, commandId: request.commandId }, p.evaluator, options));
-    } catch (error) { const raw = (error as { code?: unknown }).code; code = typeof raw === 'string' ? raw : 'MEMORY_EVALUATION_CALL_FAILED'; }
+    } catch (error) { thrown = error; const raw = (error as { code?: unknown }).code; code = typeof raw === 'string' ? raw : 'MEMORY_EVALUATION_CALL_FAILED'; }
     const settled = await settledSpend(p, request.scopeId, request.commandId, request.row.billing);
+    // Nothing was claimed (a configuration, binding, activation or authority refusal before the provider effect): not an answer, so nothing is
+    // sealed and the candidate is asked once the cause is fixed; the pass stops with the typed error.
+    if (thrown !== null && settled.invocationId === null) throw thrown;
     return text ? { status: 'responded', text, ...settled } : { status: 'failed', code, ...settled };
   } };
 }
@@ -85,6 +90,6 @@ export async function inspectConfiguredMemoryEvaluators(projectRoot: string, sco
     const c = await loadConfiguredScopeContext(projectRoot, scopeId, { ...options, heal: false }, 'read');
     await new MemoryPolicyAuthorization({ async load() { return c.document; } }).authorize('inspect', scopeId, c.principal);
     return await withModelFacts(c, await c.path(), async (facts, roles) =>
-      memoryEvaluatorView(await memoryEvaluatorRows(roles, c.config['provider_invocation_profiles'], scopeId, facts, Date.now()), facts, c.config.memoryAutomation.overlay));
+      memoryEvaluatorView(await scopeRows(c, roles, facts, scopeId), facts, c.config.memoryAutomation.overlay));
   } catch (error) { throw queryFailure(error); }
 }

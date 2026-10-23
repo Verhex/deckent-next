@@ -21,8 +21,8 @@ afterEach(async () => { await Promise.all(fixtures.splice(0).map(f => f.close())
 const CHANNEL = 'test-operator', modelId = 'vendor/model';
 const roles = { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'fixture-evaluator-roles', roles: [],
   models: [{ channelId: CHANNEL, modelId, version: 1, tier: 'frontier', roles: ['brain', 'memory-evaluator'] }], exceptions: [] }] };
-async function setup(options: { evaluatorGrants: boolean; invoke: boolean }) {
-  const f = await brainProviderFixture({ response: JSON.stringify({ verdict: 'pass' }), modelRoles: roles }); fixtures.push(f);
+async function setup(options: { evaluatorGrants: boolean; invoke: boolean; roles?: unknown }) {
+  const f = await brainProviderFixture({ response: JSON.stringify({ verdict: 'pass' }), modelRoles: options.roles ?? roles }); fixtures.push(f);
   const reference = f.reference;
   const local = readLocalOsIdentity(), person = { issuer: local.issuer, subject: local.subject }, evaluator = { issuer: `${person.issuer}/memory-evaluator`, subject: person.subject };
   const policy = JSON.parse(await readFile(join(f.data, 'policy.json'), 'utf8')) as { grants: object[] };
@@ -61,6 +61,10 @@ it('the read-only view names the evaluator row, its catalog maker and its price 
   await memoryCommand(['memory', '--scope', 's', '--lang', 'en'], { root: f.project, env: f.options.env, listMemory: listConfiguredMemory, inspectMemoryEvaluators: inspectConfiguredMemoryEvaluators,
     stdout: { write(chunk: string) { text += chunk; } } });
   expect(text).toContain(`Evaluator for this scope: ${reference.providerId}/vendor/model by maker-b`); expect(text).toContain('at most 0.9216 a day');
+  // N3: a model holding only the Brain role is never an evaluator row.
+  const brainOnly = await setup({ evaluatorGrants: true, invoke: true, roles: { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'fixture-brain-only', roles: [],
+    models: [{ channelId: CHANNEL, modelId, version: 1, tier: 'frontier', roles: ['brain'] }], exceptions: [] }] } });
+  expect(await inspectConfiguredMemoryEvaluators(brainOnly.f.project, 's', brainOnly.f.options)).toMatchObject({ available: false, rows: [] });
 });
 
 it('V5: the evaluator invokes its model under its own principal only with its grant; the call is sealed and its spend read exactly from the spend ledger', async () => {

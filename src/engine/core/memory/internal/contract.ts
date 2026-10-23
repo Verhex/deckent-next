@@ -141,7 +141,8 @@ export type MemoryEvaluatorCall = { readonly status: 'responded'; readonly text:
 export interface MemoryEvaluatorPorts {
   /** The scope's evaluator rows (S2 role registry × catalog), registry order. */
   rows(scopeId: string): Promise<readonly MemoryEvaluatorRow[]>;
-  /** One call, no tools, no retry; never throws for a provider failure (it is `failed` with the spend the ledger settled). */
+  /** One call, no tools, no retry. Throws only when nothing was sent (a refusal before the provider effect: the pass stops, no record, the
+   * candidate is asked later); every failure after the claim is `failed` with the spend the ledger settled (sealed, never asked again). */
   invoke(request: { readonly scopeId: string; readonly commandId: string; readonly row: MemoryEvaluatorRow; readonly maxCompletionTokens: number;
     readonly messages: readonly { readonly role: 'system' | 'user'; readonly content: string }[] }): Promise<MemoryEvaluatorCall>;
 }
