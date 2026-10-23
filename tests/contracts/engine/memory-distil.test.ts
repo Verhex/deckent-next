@@ -1,9 +1,9 @@
 import { createHmac, createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { MemoryJournalApplication, MemoryJournalError, type MemoryChange, type MemoryExtractionReceipt, type MemoryJournalDependencies, type MemoryJournalStore,
+import { MemoryJournalApplication, MemoryJournalError, memoryExtractionSourceOf, type MemoryChange, type MemoryExtractionReceipt, type MemoryJournalDependencies, type MemoryJournalStore,
   type MemoryReceipt, type MemorySupport } from '#engine/index.js';
-import { encodeCommandProjection, memoryDistillerPrincipal, memoryEntryMatches, type AuditEvent, type MemoryEntry, type MemoryState } from '#domain/index.js';
+import { encodeCommandProjection, memoryDistillerPrincipal, memoryEntryMatches, type AuditEvent, type MemoryEntry, type MemoryState, type RunSnapshot, type TaskEvaluation } from '#domain/index.js';
 import { snapshotKnownSecrets } from '#platform/index.js';
 
 // S4B-1 (S4B-DESIGN §4, §4.6, §7.4; owner S-M1/S-M2/S-M11 2026-10-23): system candidates from sealed evidence, keyed content digests, one entry per
@@ -52,6 +52,9 @@ class Store implements MemoryJournalStore {
     return { run: rows.filter(row => row.source.runId === runId).reduce((sum, row) => sum + row.proposed, 0),
       scope: rows.filter(row => row.atMs >= sinceMs).reduce((sum, row) => sum + row.proposed, 0) };
   }
+  positions = new Map<string, string>();
+  async extractionCursor(scopeId: string) { return this.positions.get(scopeId) ?? null; }
+  async advanceCursor(scopeId: string, position: string) { this.positions.set(scopeId, position); }
   close() {}
 }
 type Filter = NonNullable<MemoryJournalDependencies['readFilter']>;
@@ -187,5 +190,31 @@ describe('distil: rules, gate, screening, bounds (§4.1–§4.5)', () => {
     expect(await application.distil(source(), { mode: 'shadow' })).toMatchObject({ status: 'extracted', proposed: 0, shadow: 1 });
     expect(store.rows.size).toBe(0); expect(store.extractions).toHaveLength(1);
     await expect(app({ principal: human }).application.distil(source(), { mode: 'live' })).rejects.toMatchObject({ code: 'MEMORY_DISTILLER_REQUIRED' });
+  });
+});
+
+describe('sealed source and the bounded page (§4.1)', () => {
+  const identity = (attemptId: string, generation: number) => ({ scopeId: 's', runId: 'r1', taskId: 't1', attemptId, generation, layoutRevision: 'l' });
+  const run = (phase: string, answerGeneration: number | null) => ({ identity: { scopeId: 's', runId: 'r1' }, bindings: [{ identity: identity('a2', 2) }],
+    progress: [{ taskId: 't1', phase, ...(answerGeneration === null ? {} : { inputAnswer: { schemaVersion: 1, source: identity('a1', answerGeneration), question: 'Ne yapılmalı?', answer: 'Onaya gönder.' } }) }] });
+  const evaluation = { evaluationId: 'ev-a2', identity: identity('a2', 2) };
+  const of = (snapshot: unknown, overrides: Record<string, unknown> = {}) => memoryExtractionSourceOf({ run: snapshot as RunSnapshot, attemptId: 'a2', evaluations: [evaluation as unknown as TaskEvaluation],
+    unsettledEffects: false, workClass: { id: 'small', family: 'small', risk: 'low' }, workTargetId: null, ...overrides });
+  it('takes the person\'s answer only for the next generation, the evaluation digest from the sealed record, and acceptance from the Task phase', () => {
+    expect(of(run('accepted', 1))).toMatchObject({ runId: 'r1', taskId: 't1', attemptId: 'a2', generation: 2, accepted: true, settled: true,
+      inputAnswer: { question: 'Ne yapılmalı?', answer: 'Onaya gönder.' }, evaluation: { id: 'ev-a2', digest: expect.stringMatching(/^[a-f0-9]{64}$/) }, lessons: null });
+    expect(of(run('accepted', 0))?.inputAnswer).toBeNull();
+    expect(of(run('running', 1))?.accepted).toBe(false);
+    expect(of(run('accepted', 1), { unsettledEffects: true })?.settled).toBe(false);
+    expect(of(run('accepted', 1), { evaluations: [] })).toBeNull();
+    expect(of(run('accepted', 1), { attemptId: 'other' })).toBeNull();
+  });
+  it('pages after the durable position, passes over a row without a source, and refuses anyone but the distiller', async () => {
+    const { application, store } = app({ principal: distiller }), asked: (string | null)[] = [];
+    const page = async (after: string | null) => { asked.push(after); return after === null ? [{ position: '7', source: null }, { position: '9', source: source() }] : []; };
+    expect(await application.distilPage('s', 'live', { page })).toMatchObject({ processed: 1, outcomes: [{ status: 'extracted', proposed: 1 }] });
+    expect(await application.distilPage('s', 'live', { page })).toEqual({ processed: 0, outcomes: [] });
+    expect(asked).toEqual([null, '9']); expect(store.rows.size).toBe(1);
+    await expect(app({ principal: human, store }).application.distilPage('s', 'live', { page })).rejects.toMatchObject({ code: 'MEMORY_DISTILLER_REQUIRED' });
   });
 });

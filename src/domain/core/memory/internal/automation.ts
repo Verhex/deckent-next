@@ -3,6 +3,7 @@ import { counterSchema, identitySchema } from '#domain/core/primitives/index.js'
 import automationSeed from '../../../../../assets/memory/automation.json' with { type: 'json' };
 import extractorsSeed from '../../../../../assets/memory/extractors.json' with { type: 'json' };
 import templatesSeed from '../../../../../assets/memory/templates.json' with { type: 'json' };
+import { CORE_WORK_CLASSES, mergeWorkClassRegistries, type WorkClassRegistry } from '#domain/core/run/index.js';
 import { MEMORY_LIMITS, MemoryError, memoryLessonClaimSchema } from './contract.js';
 
 /**
@@ -50,6 +51,17 @@ export function composeMemoryAutomation(overlay?: unknown): MemoryAutomation {
 export const memoryExtractionAllowed = (automation: MemoryAutomation, workClassId: string) =>
   automation.workClasses.some(row => row.workClassId === workClassId && row.extraction && row.personalData === 'none');
 
+/** The source class as the distiller keys it: its id, its family (root of the parent chain) and its proposal risk (unset → normal). Unknown → null. */
+export function memoryWorkClassOf(configured: WorkClassRegistry | undefined, classId: string | null): { id: string; family: string; risk: 'low' | 'normal' | 'high' } | null {
+  if (classId === null) return null;
+  const policy = configured?.schemaVersion !== undefined && configured.schemaVersion !== 1 ? mergeWorkClassRegistries(CORE_WORK_CLASSES, [configured]) : configured ?? CORE_WORK_CLASSES;
+  const byId = new Map(policy.classes.map(row => [row.id, row] as const)), start = byId.get(classId);
+  if (!start) return null;
+  let root = start;
+  for (let hops = 0; 'parentClassId' in root && root.parentClassId !== undefined && hops < byId.size; hops++) root = byId.get(root.parentClassId) ?? root;
+  const risk = 'proposalAdmission' in start && start.proposalAdmission ? start.proposalAdmission.risk : 'normal';
+  return { id: start.id, family: root.id, risk };
+}
 const extractorSchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, rules: z.array(z.object({ id: z.enum(['E1', 'E2', 'E3']), version: positive,
   kind: z.enum(['human-answer', 'failure-fix', 'worker-claim']), enabled: z.boolean() }).strict().readonly()).min(1).max(16).readonly() }).strict().readonly();
 export const MEMORY_EXTRACTORS = Object.freeze(extractorSchema.parse(extractorsSeed));

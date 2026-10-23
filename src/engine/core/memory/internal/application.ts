@@ -119,6 +119,27 @@ export class MemoryJournalApplication {
       contentDigest, author: principal, atMs: support.atMs, audience, origin: { kind: 'run', ref: `run/${source.runId}/task/${source.taskId}/attempt/${source.attemptId}` } }), support, command);
     return { status: saved.replayed ? 'replayed' : 'proposed', entry: saved.entry };
   }
+  /**
+   * S4B-1 §4.1: one bounded page of the scope's accepted Tasks after the durable cursor (`loopPage` from the registry), each distilled once, the
+   * cursor advanced past each. Off the hot path (the service's reconciliation pass calls it); an error stops the page with the cursor at the
+   * last finished source, so the next pass retries it.
+   */
+  async distilPage(scopeId: string, mode: 'live' | 'shadow', port: { page(after: string | null, limit: number): Promise<readonly { readonly position: string; readonly source: unknown }[]> },
+    credential?: unknown): Promise<{ readonly processed: number; readonly outcomes: readonly MemoryDistilOutcome[] }> {
+    const { principal } = await this.admit('propose', scopeId, credential);
+    if (!isMemoryDistillerPrincipal(principal)) throw new MemoryJournalError('MEMORY_DISTILLER_REQUIRED');
+    const limit = composeMemoryAutomation(this.deps.automation).bounds.loopPage, store = await this.deps.openStore('write');
+    let after: string | null;
+    try { if (!store.extractionCursor || !store.advanceCursor) throw new MemoryJournalError('MEMORY_UNAVAILABLE'); after = await store.extractionCursor(scopeId); } finally { store.close(); }
+    const outcomes: MemoryDistilOutcome[] = [];
+    for (const row of (await port.page(after, limit)).slice(0, limit)) {
+      // A row without a sealed source (Run or evaluation gone) is passed over; it is never invented.
+      if (row.source !== null) outcomes.push(await this.distil(row.source, { mode }, credential));
+      const store = await this.deps.openStore('write');
+      try { await store.advanceCursor!(scopeId, row.position); } finally { store.close(); }
+    }
+    return { processed: outcomes.length, outcomes };
+  }
   /** S4B-1 §4.1–§4.5: the distiller's pass over one sealed source (rules, WorkClass gate, screening, bounds, once per Attempt). Off the hot path. */
   async distil(input: unknown, options: { readonly mode: 'live' | 'shadow' }, credential?: unknown): Promise<MemoryDistilOutcome> {
     return distilSource(this.deps, input, options, {

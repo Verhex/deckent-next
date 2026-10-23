@@ -574,7 +574,8 @@
         "src/engine/core/runtime",
         "src/platform/core/clock",
         "src/platform/core/config",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/composition/core/memory"
       ],
       "plan": "EXECUTION"
     },
@@ -3530,7 +3531,8 @@
     "src/domain/core/memory": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/domain/core/run"
       ],
       "plan": "MEMORY"
     },
@@ -3546,7 +3548,11 @@
         "src/engine/core/policy",
         "src/domain/core/primitives",
         "src/platform/core/redaction",
-        "src/engine/core/agent-turn"
+        "src/engine/core/agent-turn",
+        "src/domain/core/task-graph",
+        "src/domain/core/attempt",
+        "src/domain/core/run",
+        "src/domain/core/task-evaluation"
       ],
       "plan": "MEMORY"
     },
@@ -3558,7 +3564,9 @@
         "src/engine/core/memory",
         "src/adapters/core/audit-store",
         "src/adapters/core/sqlite-ledger",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/domain/core/primitives",
+        "src/adapters/core/attempt-store"
       ],
       "plan": "MEMORY"
     },
@@ -3573,7 +3581,9 @@
         "src/composition/core/policy",
         "src/composition/core/query-errors",
         "src/engine/core/runtime",
-        "src/adapters/core/local-principal"
+        "src/adapters/core/local-principal",
+        "src/domain/core/run",
+        "src/adapters/core/git-workspace"
       ],
       "plan": "MEMORY"
     },

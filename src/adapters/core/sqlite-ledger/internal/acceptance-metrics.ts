@@ -71,6 +71,12 @@ export function readRunAcceptanceMetrics(db: DatabaseSync, snapshot: RunSnapshot
   });
 }
 
+/** S4B-1: the scope's current, accepted Task metric rows after `after` (the row position), oldest first, at most `limit` — the distiller's source feed. */
+export function readAcceptedTaskMetrics(db: DatabaseSync, scopeId: string, after: number, limit: number) {
+  return db.prepare(`SELECT rowid AS position,record FROM acceptance_metrics WHERE scope_id=? AND outcome_kind='task' AND superseded_by IS NULL AND rowid>? ORDER BY rowid LIMIT ?`)
+    .all(scopeId, after, limit).map(row => ({ position: Number(row['position']), metric: parseMetricRecord(row['record']) }))
+    .filter(row => row.metric.outcome.kind === 'task' && row.metric.outcome.status === 'accepted' && row.metric.identity.scopeId === scopeId);
+}
 /** Same-Run sharing requires a currently accepted Task and its exact immutable settlement digest, never mere prior use. */
 export function readAcceptedOperationSettlements(db: DatabaseSync, run: RunSnapshot): NonNullable<OperationEvidenceBinding['acceptedSettlements']> {
   return Object.freeze(readRunAcceptanceEvaluations(db, run).flatMap(evaluation => {
