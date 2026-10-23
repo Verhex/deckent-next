@@ -23,7 +23,9 @@ it('raw create reports undeclared permissions/ceiling/class; a registry gate is 
   const raw = { schemaVersion: command.schemaVersion, commandId: command.commandId, scopeId: command.scopeId, runId: command.runId, graph: command.graph };
   const graph = { ...raw.graph, tasks: raw.graph.tasks.map(task => ({ id: task.id, kind: task.kind, dependencies: task.dependencies, acceptanceCriteria: task.acceptanceCriteria })) };
   const noRule = { decision: verdict.decision, revision: verdict.revision, reason: verdict.reason };
-  const text = renderRunCreateApprovalSummary({ ...raw, graph }, { ...create, graph }, noRule);
+  // The raw create's execution is resolved from its own graph (as admission does): since the ATAMA-0 seed every Core class freezes an
+  // acceptance profile, reusing the proposal graph's execution would seal that graph's class and the card would rightly name it.
+  const text = renderRunCreateApprovalSummary({ ...raw, graph }, { ...create, graph, execution: fixtureExecution(graph) }, noRule);
   expect(text).toContain('work class: not declared'); expect(text).toContain('Also mentioned by the proposal (advisory, not evaluated, grants nothing): not declared');
   expect(text).not.toContain('Checked by policy at admission');
   expect(text).toContain('Declared budget ceiling: not declared'); expect(text).toContain('work-class registry');
