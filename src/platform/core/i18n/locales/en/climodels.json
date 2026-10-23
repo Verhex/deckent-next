@@ -132,7 +132,7 @@
   "climodels.mcp.result.imported": "Imported untrusted (each asks on first use): {names}",
   "climodels.mcp.result.importedNone": "Nothing was imported.",
   "climodels.mcp.result.skipped": "Skipped {name}: {reason}",
-  "config.field.models": "Model settings: how many days before a switched-on model's retirement `deckent models` and doctor warn, and headless.preview — the installation owner's switch (user layer only, default off) for preview connection kinds such as the subscription Brain through the person's own CLI",
+  "config.field.models": "Model display settings: how many days before a switched-on model's retirement `deckent models` and doctor warn",
   "climodels.models.heading": "Models you can use in scope {scope}",
   "climodels.models.empty": "No model is registered in the catalog yet. Connect one with: deckent models connect",
   "climodels.models.footer": "Switch one on or off: deckent models catalog activate|deactivate · declared by connected providers: deckent models --declared",

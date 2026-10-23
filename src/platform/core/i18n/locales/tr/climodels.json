@@ -132,7 +132,7 @@
   "climodels.mcp.result.imported": "Güvenilmeden içe aktarıldı (her biri ilk kullanımda sorar): {names}",
   "climodels.mcp.result.importedNone": "Hiçbir şey içe aktarılmadı.",
   "climodels.mcp.result.skipped": "Atlandı {name}: {reason}",
-  "config.field.models": "Model ayarları: açık bir modelin emekliliğinden kaç gün önce `deckent models` ve doctor uyarır; headless.preview — kişinin kendi CLI'ı üzerinden abonelik Brain'i gibi önizleme bağlantı türleri için kurulum sahibinin anahtarı (yalnız kullanıcı katmanı, varsayılan kapalı)",
+  "config.field.models": "Model gösterim ayarları: açık bir modelin emekliliğinden kaç gün önce `deckent models` ve doctor uyarır",
   "climodels.models.heading": "Scope {scope}'da kullanılabilir modeller",
   "climodels.models.empty": "Katalogda henüz kayıtlı model yok. Bağlamak için: deckent models connect",
   "climodels.models.footer": "Açmak ya da kapatmak için: deckent models catalog activate|deactivate · bağlı sağlayıcıların beyanı: deckent models --declared",
