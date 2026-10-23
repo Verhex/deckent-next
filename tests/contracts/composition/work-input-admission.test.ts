@@ -475,35 +475,37 @@ describe.skipIf(process.platform === 'win32')('worker instruction snapshot throu
   it('the governed trust path makes admission include the snapshot; refusals, a changed digest and revoke leave workers without it', async () => {
     const f = await seeded(registry, undefined, execution(), await home()), file = join(f.project, '.deckent/worker-instructions.md');
     const witness = { attest: async () => true }, status = async () => (await inspectConfiguredWorkerInstructions(f.project, f.options)).targets[0]!;
-    const change = (action: 'trust' | 'revoke', digest: string, extra: object = {}, attest = witness) =>
-      changeConfiguredWorkerInstructionTrust(f.project, { scopeId: 's', action, digest, ...extra }, f.options, attest);
+    type Binding = Parameters<typeof changeConfiguredWorkerInstructionTrust>[1]['binding'];
+    const change = (action: 'trust' | 'revoke', binding: Binding, attest = witness) => changeConfiguredWorkerInstructionTrust(f.project, { scopeId: 's', action, binding }, f.options, attest);
     const decisions = () => { const db = new DatabaseSync(f.path, { readOnly: true }); try {
       return (db.prepare("SELECT record FROM audit_events WHERE kind = 'authority-decision' ORDER BY sequence").all() as { record: string }[])
         .map(row => (JSON.parse(row.record) as { event: { subject: { action: string; resource: object; basisDigest: string; verdict: { decision: string } } } }).event.subject)
         .filter(subject => subject.action.startsWith('worker-instructions-')); } finally { db.close(); } };
     expect(await status()).toMatchObject({ target: null, source: 'worker-md', state: 'absent', off: null });
-    await expect(change('trust', 'ab'.repeat(32))).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_UNAVAILABLE', params: { reason: 'absent' } });
+    const forged = { target: null, root: f.project, rootDev: 0, rootIno: 0, source: 'worker-md', file: '.deckent/worker-instructions.md', path: file, fileDev: 0, fileIno: 0, digest: 'ab'.repeat(32) };
+    await expect(change('trust', forged)).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_UNAVAILABLE', params: { reason: 'absent' } });
     await writeFile(file, 'Run npm test before reporting.\nKeep changes small.');
     const shown = await status();
     expect(shown).toMatchObject({ state: 'untrusted', bytes: 50, preview: ['Run npm test before reporting.', 'Keep changes small.'] });
-    const digest = shown.digest!;
+    const digest = shown.digest!, card = shown.binding!;
     // No terminal witness (an AI tool's shell, MCP, a peer): refused before anything is read or sealed.
-    await expect(change('trust', digest, {}, { attest: async () => false })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    await expect(change('trust', card, { attest: async () => false })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
     // The person lacks `config`/`write` on execution.workerInstructions: the refusal is sealed, nothing is trusted.
-    await expect(change('trust', digest)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+    await expect(change('trust', card)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     expect(decisions()).toEqual([expect.objectContaining({ action: 'worker-instructions-trust', basisDigest: digest, verdict: expect.objectContaining({ decision: 'deny' }),
       resource: { kind: 'config', id: 'project:execution.workerInstructions' } })]);
     expect((await status()).state).toBe('untrusted');
     const policy = join(f.project, 'd', 'policy.json'), document = JSON.parse(await readFile(policy, 'utf8'));
     await writeFile(policy, JSON.stringify({ ...document, grants: [...document.grants, { id: 'config', effect: 'allow', actions: ['write'], scopes: ['s'],
       principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'config', ids: 'all' } }] }), { mode: 0o600 });
-    await expect(change('trust', 'cd'.repeat(32))).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_CHANGED' }); // not the content the card showed
-    await expect(change('trust', digest, { target: 'n1' })).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_UNAVAILABLE', params: { reason: 'target' } });
-    const granted = await change('trust', digest);
+    await expect(change('trust', { ...card, digest: 'cd'.repeat(32) })).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_CHANGED' }); // not the content the card showed
+    // A card for another work target than the one workers use here is not this place (REVISE 2734 R1; the CLI refuses an unknown --target itself).
+    await expect(change('trust', { ...card, target: 'n1' })).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_CHANGED', params: { reason: 'place' } });
+    const granted = await change('trust', card);
     expect(granted).toMatchObject({ action: 'trust', target: null, digest, trusted: true, changed: true, decisionEventId: expect.stringMatching(/^decision:/u) });
     expect(decisions().at(-1)).toMatchObject({ action: 'worker-instructions-trust', verdict: { decision: 'allow' } });
     expect((await status()).state).toBe('trusted');
-    expect(await change('trust', digest)).toMatchObject({ changed: false, decisionEventId: null }); // nothing to change, nothing sealed
+    expect(await change('trust', card)).toMatchObject({ changed: false, decisionEventId: null }); // nothing to change, nothing sealed
     expect(decisions()).toHaveLength(2);
     // Admission (C3) now includes exactly that snapshot.
     expect((await createRun(f.project, run('after-trust', 'coding', workInput()), f.options)).warnings).toEqual([]);
@@ -514,7 +516,7 @@ describe.skipIf(process.platform === 'win32')('worker instruction snapshot throu
     expect((await createRun(f.project, run('changed-file', 'coding', workInput()), f.options)).warnings).toEqual([expect.objectContaining({ reason: 'untrusted' })]);
     await writeFile(file, 'Run npm test before reporting.\nKeep changes small.');
     expect((await status()).state).toBe('trusted');
-    expect(await change('revoke', digest)).toMatchObject({ action: 'revoke', trusted: false, changed: true });
+    expect(await change('revoke', card)).toMatchObject({ action: 'revoke', trusted: false, changed: true });
     expect(decisions().at(-1)).toMatchObject({ action: 'worker-instructions-revoke', verdict: { decision: 'allow' } });
     expect((await status()).state).toBe('untrusted');
     expect((await createRun(f.project, run('after-revoke', 'coding', workInput()), f.options)).warnings).toEqual([expect.objectContaining({ reason: 'untrusted', digest })]);
@@ -522,85 +524,7 @@ describe.skipIf(process.platform === 'win32')('worker instruction snapshot throu
     // Off for this project: status says so and there is nothing to trust.
     await reconfigure(f, { schemaVersion: 1, source: 'none' });
     expect(await status()).toMatchObject({ state: 'off', off: 'source-none', file: null, digest: null });
-    await expect(change('trust', digest)).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_UNAVAILABLE', params: { reason: 'source-none' } });
-  });
-
-  /** REVISE 2734 R1: the writer acts only on the exact place the card showed (canonical root + identity, source, file + identity, digest);
-   * any other place is a typed refusal before a decision is sealed or a trust record changes. */
-  describe('R1: the trust card binds the exact folder and file it showed', () => {
-    const name = '.deckent/worker-instructions.md', TEXT = 'Run npm test before reporting.';
-    async function bound() {
-      const f = await seeded(registry, undefined, execution(), await home());
-      const policy = join(f.project, 'd', 'policy.json'), document = JSON.parse(await readFile(policy, 'utf8'));
-      await writeFile(policy, JSON.stringify({ ...document, grants: [...document.grants, { id: 'config', effect: 'allow', actions: ['write'], scopes: ['s'],
-        principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'config', ids: 'all' } }] }), { mode: 0o600 });
-      const folder = async (label: string) => { const root = join(f.project, label); await mkdir(join(root, '.deckent'), { recursive: true }); await writeFile(join(root, name), TEXT); return root; };
-      const setTarget = async (path: string | null, workerInstructions?: object) => {
-        const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
-        const { workTargets: _targets, workerInstructions: _instructions, ...rest } = config.execution; void _targets; void _instructions;
-        await writeFile(configPath, JSON.stringify({ ...config, execution: { ...rest, ...(workerInstructions ? { workerInstructions } : {}),
-          ...(path === null ? {} : { workTargets: { schemaVersion: 1, targets: [{ id: 'n1', kind: 'git', path, baseRef: 'refs/heads/main' }] } }) } })); clearConfigCache();
-      };
-      const status = async () => (await inspectConfiguredWorkerInstructions(f.project, f.options)).targets[0]!;
-      // What the CLI sends from the card it showed.
-      const change = (action: 'trust' | 'revoke', row: Awaited<ReturnType<typeof status>>) => changeConfiguredWorkerInstructionTrust(f.project,
-        { scopeId: 's', action, digest: row.digest!, ...(row.target === null ? {} : { target: row.target }), binding: (row as { binding?: unknown }).binding } as never,
-        f.options, { attest: async () => true });
-      const stateAt = async (root: string, file = name) => (await (await openHostProjectInstructionReader(root, f.options.env, undefined, [file])).inspect()).status;
-      const sealed = () => { const db = new DatabaseSync(f.path, { readOnly: true }); try {
-        return (db.prepare("SELECT record FROM audit_events WHERE kind = 'authority-decision'").all() as { record: string }[]).filter(row => row.record.includes('worker-instructions-')).length;
-      } finally { db.close(); } };
-      return { f, folder, setTarget, status, change, stateAt, sealed, A: await folder('a'), B: await folder('b') };
-    }
-    const refused = { code: 'WORKER_INSTRUCTIONS_CHANGED', params: { reason: 'place' } };
-
-    it('same target id, path moved to a folder with byte-identical content: the moved-to folder is not trusted', async () => {
-      const { setTarget, status, change, stateAt, sealed, A, B } = await bound();
-      await setTarget(A); const card = await status();
-      await setTarget(B); expect((await status()).digest).toBe(card.digest);
-      await expect(change('trust', card)).rejects.toMatchObject(refused);
-      expect([await stateAt(A), await stateAt(B), sealed()]).toEqual(['trust-required', 'trust-required', 0]);
-    });
-    it('the card showed the project root (no work target); a target appearing before the write is refused', async () => {
-      const { f, setTarget, status, change, stateAt, sealed, B } = await bound();
-      await writeFile(join(f.project, name), TEXT); const card = await status(); expect(card.target).toBeNull();
-      await setTarget(B);
-      await expect(change('trust', card)).rejects.toMatchObject(refused);
-      expect([await stateAt(f.project), await stateAt(B), sealed()]).toEqual(['trust-required', 'trust-required', 0]);
-    });
-    it('the project switches the worker source to a byte-identical AGENTS.md: refused', async () => {
-      const { setTarget, status, change, stateAt, sealed, A } = await bound();
-      await writeFile(join(A, 'AGENTS.md'), TEXT); await setTarget(A); const card = await status();
-      await setTarget(A, { schemaVersion: 1, source: 'agents-md' }); expect((await status()).digest).toBe(card.digest);
-      await expect(change('trust', card)).rejects.toMatchObject(refused);
-      expect([await stateAt(A, 'AGENTS.md'), sealed()]).toEqual(['trust-required', 0]);
-    });
-    it('the file is replaced by another file with identical bytes (new inode): refused', async () => {
-      const { setTarget, status, change, stateAt, sealed, A } = await bound();
-      await setTarget(A); const card = await status();
-      await writeFile(join(A, '.deckent/replacement.md'), TEXT); await rename(join(A, '.deckent/replacement.md'), join(A, name));
-      expect((await status()).digest).toBe(card.digest);
-      await expect(change('trust', card)).rejects.toMatchObject(refused);
-      expect([await stateAt(A), sealed()]).toEqual(['trust-required', 0]);
-    });
-    it('revoke has the same binding: a revoke card for folder A never removes the trust of folder B', async () => {
-      const { f, setTarget, status, change, stateAt, sealed, A, B } = await bound();
-      await setTarget(A);
-      expect(await change('trust', await status())).toMatchObject({ trusted: true, changed: true }); expect(sealed()).toBe(1); // a fresh card is honoured
-      const reader = await openHostProjectInstructionReader(B, f.options.env, undefined, [name]), view = await reader.inspect();
-      if (view.status !== 'trust-required') throw new Error(view.status);
-      await reader.trust(view.source.digest);
-      const card = await status(); expect(card.state).toBe('trusted');
-      await setTarget(B);
-      await expect(change('revoke', card)).rejects.toMatchObject(refused);
-      expect([await stateAt(A), await stateAt(B), sealed()]).toEqual(['ready', 'ready', 1]);
-    });
-    it('the card carries the host-made canonical place: target, real root and its identity, source, file, path and its identity, digest', async () => {
-      const { status, setTarget, A } = await bound();
-      await setTarget(A); const card = await status();
-      expect((card as { binding?: unknown }).binding).toEqual({ target: 'n1', root: A, rootDev: expect.any(Number), rootIno: expect.any(Number), source: 'worker-md', file: name,
-        path: join(A, name), fileDev: expect.any(Number), fileIno: expect.any(Number), digest: card.digest });
-    });
+    await expect(change('trust', card)).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_UNAVAILABLE', params: { reason: 'source-none' } });
   });
 
   it('honours the per-project source (agents-md, none, explicit absent), is a no-op without Git execution and refuses an overflow at planning and creation', async () => {
@@ -623,5 +547,84 @@ describe.skipIf(process.platform === 'win32')('worker instruction snapshot throu
     await writeFile(join(f.project, '.deckent/worker-instructions.md'), 'x'.repeat(40_000)); // above the reader bound: the same refusal, never a silent omission
     await expect(createRun(f.project, run('oversize', 'coding', workInput()), f.options)).rejects.toMatchObject({ code: 'WORKER_INSTRUCTIONS_TOO_LARGE' });
     expect(f.runs()).toBe(before);
+  });
+});
+
+/** REVISE 2734 R1: the writer acts only on the exact place the card showed (canonical root + identity, source, file + identity, digest);
+ * any other place is a typed refusal before a decision is sealed or a trust record changes. */
+describe.skipIf(process.platform === 'win32')('R1: the trust card binds the exact folder and file it showed', () => {
+  const execution = () => ({ execution: { docker: { executable: '/usr/bin/docker', imageId: docker.imageId }, git: { gitExecutable: '/usr/bin/git' } } });
+  const home = async () => { const path = await mkdtemp(join(tmpdir(), 'dn-worker-home-')); roots.push(path); await chmod(path, 0o700); return path; };
+  const name = '.deckent/worker-instructions.md', TEXT = 'Run npm test before reporting.';
+  async function bound() {
+    const f = await seeded(registry, undefined, execution(), await home());
+    const policy = join(f.project, 'd', 'policy.json'), document = JSON.parse(await readFile(policy, 'utf8'));
+    await writeFile(policy, JSON.stringify({ ...document, grants: [...document.grants, { id: 'config', effect: 'allow', actions: ['write'], scopes: ['s'],
+      principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'config', ids: 'all' } }] }), { mode: 0o600 });
+    const folder = async (label: string) => { const root = join(f.project, label); await mkdir(join(root, '.deckent'), { recursive: true }); await writeFile(join(root, name), TEXT); return root; };
+    const setTarget = async (path: string | null, workerInstructions?: object) => {
+      const configPath = join(f.project, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
+      const { workTargets: _targets, workerInstructions: _instructions, ...rest } = config.execution; void _targets; void _instructions;
+      await writeFile(configPath, JSON.stringify({ ...config, execution: { ...rest, ...(workerInstructions ? { workerInstructions } : {}),
+        ...(path === null ? {} : { workTargets: { schemaVersion: 1, targets: [{ id: 'n1', kind: 'git', path, baseRef: 'refs/heads/main' }] } }) } })); clearConfigCache();
+    };
+    const status = async () => (await inspectConfiguredWorkerInstructions(f.project, f.options)).targets[0]!;
+    // What the CLI sends from the card it showed: the row's host-made binding.
+    const change = (action: 'trust' | 'revoke', row: Awaited<ReturnType<typeof status>>) => changeConfiguredWorkerInstructionTrust(f.project,
+      { scopeId: 's', action, binding: row.binding! }, f.options, { attest: async () => true });
+    const stateAt = async (root: string, file = name) => (await (await openHostProjectInstructionReader(root, f.options.env, undefined, [file])).inspect()).status;
+    const sealed = () => { const db = new DatabaseSync(f.path, { readOnly: true }); try {
+      return (db.prepare("SELECT record FROM audit_events WHERE kind = 'authority-decision'").all() as { record: string }[]).filter(row => row.record.includes('worker-instructions-')).length;
+    } finally { db.close(); } };
+    return { f, folder, setTarget, status, change, stateAt, sealed, A: await folder('a'), B: await folder('b') };
+  }
+  const refused = { code: 'WORKER_INSTRUCTIONS_CHANGED', params: { reason: 'place' } };
+
+  it('same target id, path moved to a folder with byte-identical content: the moved-to folder is not trusted', async () => {
+    const { setTarget, status, change, stateAt, sealed, A, B } = await bound();
+    await setTarget(A); const card = await status();
+    await setTarget(B); expect((await status()).digest).toBe(card.digest);
+    await expect(change('trust', card)).rejects.toMatchObject(refused);
+    expect([await stateAt(A), await stateAt(B), sealed()]).toEqual(['trust-required', 'trust-required', 0]);
+  });
+  it('the card showed the project root (no work target); a target appearing before the write is refused', async () => {
+    const { f, setTarget, status, change, stateAt, sealed, B } = await bound();
+    await writeFile(join(f.project, name), TEXT); const card = await status(); expect(card.target).toBeNull();
+    await setTarget(B);
+    await expect(change('trust', card)).rejects.toMatchObject(refused);
+    expect([await stateAt(f.project), await stateAt(B), sealed()]).toEqual(['trust-required', 'trust-required', 0]);
+  });
+  it('the project switches the worker source to a byte-identical AGENTS.md: refused', async () => {
+    const { setTarget, status, change, stateAt, sealed, A } = await bound();
+    await writeFile(join(A, 'AGENTS.md'), TEXT); await setTarget(A); const card = await status();
+    await setTarget(A, { schemaVersion: 1, source: 'agents-md' }); expect((await status()).digest).toBe(card.digest);
+    await expect(change('trust', card)).rejects.toMatchObject(refused);
+    expect([await stateAt(A, 'AGENTS.md'), sealed()]).toEqual(['trust-required', 0]);
+  });
+  it('the file is replaced by another file with identical bytes (new inode): refused', async () => {
+    const { setTarget, status, change, stateAt, sealed, A } = await bound();
+    await setTarget(A); const card = await status();
+    await writeFile(join(A, '.deckent/replacement.md'), TEXT); await rename(join(A, '.deckent/replacement.md'), join(A, name));
+    expect((await status()).digest).toBe(card.digest);
+    await expect(change('trust', card)).rejects.toMatchObject(refused);
+    expect([await stateAt(A), sealed()]).toEqual(['trust-required', 0]);
+  });
+  it('revoke has the same binding: a revoke card for folder A never removes the trust of folder B', async () => {
+    const { f, setTarget, status, change, stateAt, sealed, A, B } = await bound();
+    await setTarget(A);
+    expect(await change('trust', await status())).toMatchObject({ trusted: true, changed: true }); expect(sealed()).toBe(1); // a fresh card is honoured
+    const reader = await openHostProjectInstructionReader(B, f.options.env, undefined, [name]), view = await reader.inspect();
+    if (view.status !== 'trust-required') throw new Error(view.status);
+    await reader.trust(view.source.digest);
+    const card = await status(); expect(card.state).toBe('trusted');
+    await setTarget(B);
+    await expect(change('revoke', card)).rejects.toMatchObject(refused);
+    expect([await stateAt(A), await stateAt(B), sealed()]).toEqual(['ready', 'ready', 1]);
+  });
+  it('the card carries the host-made canonical place: target, real root and its identity, source, file, path and its identity, digest', async () => {
+    const { status, setTarget, A } = await bound();
+    await setTarget(A); const card = await status();
+    expect(card.binding).toEqual({ target: 'n1', root: A, rootDev: expect.any(Number), rootIno: expect.any(Number), source: 'worker-md', file: name,
+      path: join(A, name), fileDev: expect.any(Number), fileIno: expect.any(Number), digest: card.digest });
   });
 });

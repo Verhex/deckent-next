@@ -220,5 +220,6 @@
   "error.WORKER_INSTRUCTIONS_UNAVAILABLE.store": "Proje talimatları için özel güven klasörü kullanılamıyor ya da güvenli değil; güven kaydedilemez (bkz. deckent paths --global). Hiçbir şey değiştirilmedi.",
   "error.WORKER_INSTRUCTIONS_UNAVAILABLE.size": "Worker talimat dosyası talimat dosyası sınırından büyük; dosyayı kısaltın. Hiçbir şey değiştirilmedi.",
   "error.WORKER_INSTRUCTIONS_UNAVAILABLE.unsafe": "Worker talimat dosyası bir bağlantı ya da özel dosya; güvenilemez. Hiçbir şey değiştirilmedi.",
-  "error.WORKER_INSTRUCTIONS_CHANGED": "Worker talimat dosyası gösterildikten sonra değişti. Yeni içeriği incelemek için komutu yeniden çalıştırın. Hiçbir şeye güvenilmedi."
+  "error.WORKER_INSTRUCTIONS_CHANGED": "Worker talimat dosyası gösterildikten sonra değişti. Yeni içeriği incelemek için komutu yeniden çalıştırın. Hiçbir şeye güvenilmedi.",
+  "error.WORKER_INSTRUCTIONS_CHANGED.place": "Worker'ların okuduğu klasör ya da dosya kartta gösterilen değil (çalışma hedefi, klasörü, worker kaynağı ya da dosya değiştirildi). İncelemek için komutu yeniden çalıştırın. Hiçbir şey değiştirilmedi."
 }
