@@ -4,7 +4,8 @@ import type { WorkerModelEvidence, WorkerModelVerdict, WorkerModelView } from '#
 const verdicts = (locale: Locale, provider: string): Readonly<Record<WorkerModelVerdict, string>> => ({ verified: t('cli.worker.model.verdict.verified', {}, locale),
   substituted: t('cli.worker.model.verdict.substituted', {}, locale), unverified: t('cli.worker.model.verdict.unverified', {}, locale),
   pending: t('cli.worker.model.verdict.pending', {}, locale), 'start-name-matched': t('cli.worker.model.verdict.start-name-matched', {}, locale),
-  'provider-chosen': t('cli.worker.model.verdict.provider-chosen', { provider }, locale) });
+  'provider-chosen': t('cli.worker.model.verdict.provider-chosen', { provider }, locale), 'client-reported': t('cli.worker.model.verdict.client-reported', { provider }, locale),
+  'client-reported-mismatch': t('cli.worker.model.verdict.client-reported-mismatch', { provider }, locale) });
 const evidence = (locale: Locale): Readonly<Record<WorkerModelEvidence, string>> => ({ sealed: t('cli.worker.model.evidence.sealed', {}, locale),
   invalid: t('cli.worker.model.evidence.invalid', {}, locale), live: t('cli.worker.model.evidence.live', {}, locale),
   none: t('cli.worker.model.evidence.none', {}, locale), denied: t('cli.worker.model.evidence.denied', {}, locale) });
