@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 import { canonicalModelMaker, catalogDefaultEffort, catalogPinModelEvidence, eligibleRoleModels, isCandidateSelector, MODEL_TIERS, resolveTaskWorkClass, resolveWorkClassCandidates, roleModelKey, WORK_CLASS_LIMITS,
   WORK_CLASS_WORKER_ROLE, WorkerEffortError, type CandidateSelector, type CatalogModel, type CatalogPinModelEvidence, type ExecutionProfileDefinition, type ModelRolePolicy, type ReasoningEffort,
-  type WorkClassRegistry, type WorkInput, type WorkerAssignment, type WorkerAssignmentSkip } from '#domain/index.js';
+  type WorkClassRegistry, type WorkInput, type WorkerAssignment, type WorkerAssignmentSkip, type TaskAgentSelection } from '#domain/index.js';
 import { admitWorkerModels, workerRoleKeys, WorkerModelAdmissionError, type ModelCatalogReader } from '#engine/core/model-activation/index.js';
 /** The admission facts a system assignment reads: the Run's scope (activation is per scope), admission time, the image-refresh caveat and
  * (M3) the composed tier/role registry (Core seed + the installation's `model_roles` overlays) that candidate roles and selectors read. */
-export interface WorkerAssignmentContext { readonly scopeId: string; readonly nowMs: number; readonly imageRefreshInProgress?: boolean; readonly roles: ModelRolePolicy }
+export interface WorkerAssignmentContext { readonly scopeId: string; readonly nowMs: number; readonly imageRefreshInProgress?: boolean; readonly roles: ModelRolePolicy; readonly agents?: ReadonlyMap<string, TaskAgentSelection> /* S8-1b */ }
 /** A chosen candidate before effort selection; `seal` lacks only the effort level, which the one effort owner (selectWorkerEffort) decides. */
 export type PendingWorkerAssignment = Readonly<{ input: WorkInput; model: CatalogModel; target: ReasoningEffort | null;
   seal: DistributiveOmit<WorkerAssignment, 'effort'> & Readonly<{ effortSource: WorkerAssignment['effort']['source'] }> }>;

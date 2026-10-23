@@ -25,7 +25,10 @@ export const PREVIOUS_LEDGER_VERSION = 50;
  * exact for a ledger that holds none of them; restoring the pre-switch backup is the real path. */
 /** v66 → v65 (S6R-4 recovery cases): the additive table (with its index and triggers) is dropped; exact for a ledger without recovery cases;
  * restoring the pre-switch backup is the real path. */
-export const DOWNGRADE_TO_V65_LEDGER_SQL = 'DROP TABLE recovery_cases; PRAGMA user_version=65;';
+/** v67 → v66 (S8-1a agent standing): the additive tables (with index and triggers) are dropped; exact for a ledger without standing rows;
+ * restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V66_LEDGER_SQL = 'DROP TABLE agent_standing_receipts; DROP TABLE agent_standing_revisions; DROP TABLE agent_standings; PRAGMA user_version=66;';
+export const DOWNGRADE_TO_V65_LEDGER_SQL = DOWNGRADE_TO_V66_LEDGER_SQL + ' DROP TABLE recovery_cases; PRAGMA user_version=65;';
 /** v65 → v64 (S4B-1 memory automation): the additive tables (with their indexes and triggers) are dropped and the v61 no-update trigger on revisions
  * is restored; exact for a ledger without automation rows or tombstones; restoring the pre-switch backup is the real path. */
 export const DOWNGRADE_TO_V64_LEDGER_SQL = DOWNGRADE_TO_V65_LEDGER_SQL + ' DROP TABLE memory_purges; DROP TABLE memory_contests; DROP TABLE memory_evaluations; DROP TABLE memory_extraction_cursors; '

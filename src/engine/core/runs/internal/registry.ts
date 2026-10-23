@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { freezeTaskAcceptance, assertAcceptanceCriteria, readWorkerModelPin, resolveTaskWorkClass, type TaskStallPolicy, type FrozenWorkClassProfile, executionProfileDefinitionSchema, executionRegistrySchema, runExecutionSnapshotSchema, encodeCriterionDefinition, validateTaskGraph, type ExecutionProfileDefinition, type EvaluatorDefinition, type CriterionDefinition, type RunExecutionSnapshot, type TaskGraph, type WorkInput, type WorkerAssignment } from '#domain/index.js';
+import { freezeTaskAcceptance, assertAcceptanceCriteria, readWorkerModelPin, resolveTaskWorkClass, type TaskStallPolicy, type FrozenWorkClassProfile, executionProfileDefinitionSchema, executionRegistrySchema, runExecutionSnapshotSchema, encodeCriterionDefinition, validateTaskGraph, type ExecutionProfileDefinition, type EvaluatorDefinition, type CriterionDefinition, type RunExecutionSnapshot, type TaskGraph, type WorkInput, type WorkerAssignment, type TaskAgentSeal } from '#domain/index.js';
 export interface ExecutionRegistryValidation {
   /** Installed adapter/evaluator selection; data cannot introduce executable code or grant policy. */
   profile(profile: ExecutionProfileDefinition): undefined;
@@ -9,7 +9,7 @@ export interface ExecutionRegistryValidation {
   isTemplate?(profile: ExecutionProfileDefinition): boolean;
   compile?(template: ExecutionProfileDefinition, workInput: WorkInput, kind: string, taskId: string): ExecutionProfileDefinition;
   /** ATAMA-1: the sealed system assignment of a task whose work input left the model open (read after its compile); undefined otherwise. */
-  assignment?(taskId: string): WorkerAssignment | undefined;
+  assignment?(taskId: string): WorkerAssignment | undefined; /** S8-1b: the agent the system selected for a compiled task. */ agent?(taskId: string): TaskAgentSeal | undefined;
   /** R3 (owner D4a): the installation silence policy and the deadline a profile's policy must stop before (null: no host liveness channel). */
   silence?: Readonly<{ policy: TaskStallPolicy; deadline(profile: ExecutionProfileDefinition): number | null }>;
 }
@@ -32,7 +32,7 @@ export function assertRunExecution(graphInput: unknown, executionInput: unknown)
     if (!selectedTasks.has(task.id)) invalid();
     const entry = execution.tasks.find(row => row.taskId === task.id)!;
     // ATAMA-1: a system assignment exists exactly for a work input that left the model open, and the frozen pin is the sealed choice.
-    if ((entry.assignment !== undefined) !== (task.workInput !== undefined && task.workInput.model === undefined)) invalid();
+    if ((entry.assignment !== undefined) !== (task.workInput !== undefined && task.workInput.model === undefined)) invalid(); if (entry.agent && entry.agent.workClass !== (entry.acceptance?.workClass ?? entry.assignment?.workClass ?? task.workClass ?? task.workInput?.workClass ?? entry.agent.workClass)) invalid(); // S8-1b
     if (entry.assignment) {
       const pinned = readWorkerModelPin(entry.profile.parameters);
       if (!pinned || pinned.pin.channelId !== entry.assignment.channelId || pinned.pin.modelId !== entry.assignment.modelId || pinned.pin.auxiliaryModelIds.length !== 0
@@ -72,9 +72,9 @@ export function resolveExecutionRegistry(graphInput: unknown, registryInput: unk
     // EXEC-RELEASE C2 (owner B): the kind's explicit no-workspace-delivery declaration is frozen with the Run, only when present.
     const acceptance = freezeTaskAcceptance(task, graph.criterionDefinitions, registry.workClasses);
     if (acceptance && !workClassProfiles.some(row => row.workClass === acceptance.frozen.workClass && row.policyRevision === acceptance.frozen.policyRevision && row.profileVersion === acceptance.frozen.profileVersion)) workClassProfiles.push(acceptance.frozen);
-    const stall = freezeSilencePolicy(task, profile, registry.workClasses, validation.silence), assignment = template ? validation.assignment?.(task.id) : undefined;
+    const stall = freezeSilencePolicy(task, profile, registry.workClasses, validation.silence), assignment = template ? validation.assignment?.(task.id) : undefined, agent = template ? validation.agent?.(task.id) : undefined;
     return Object.freeze({ taskId: task.id, profile, ...(acceptance ? { acceptance: acceptance.reference } : {}), ...(kind.workspaceDelivery ? { workspaceDelivery: kind.workspaceDelivery } : {}), ...(stall ? { stall } : {}),
-      ...(assignment ? { assignment } : {}) });
+      ...(assignment ? { assignment } : {}), ...(agent ? { agent } : {}) });
   });
   const criteria = graph.criterionDefinitions.map(criterion => {
     const evaluator = registry.evaluators.find(entry => entry.id === criterion.evaluator.id && entry.version === criterion.evaluator.version);

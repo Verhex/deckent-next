@@ -503,6 +503,8 @@
     },
     "src/composition/core/runs": {
       "dependencies": [
+        "src/engine/core/agent-catalog",
+        "src/composition/core/agent-catalog",
         "src/domain/core/run",
         "src/engine/core/handoff-observation",
         "src/engine/core/audit",
@@ -710,7 +712,8 @@
         "src/domain/core/worker-event",
         "src/domain/core/audit",
         "src/domain/core/provider-spend",
-        "src/domain/core/recovery"
+        "src/domain/core/recovery",
+        "src/domain/core/agent-catalog"
       ],
       "plan": "CONTRACT"
     },
@@ -788,6 +791,7 @@
     },
     "src/engine/core/runs": {
       "dependencies": [
+        "src/domain/core/agent-catalog",
         "src/domain/core/audit",
         "src/engine/core/audit",
         "src/domain/core/attempt",
@@ -3409,6 +3413,7 @@
     },
     "src/engine/core/run-proposal": {
       "dependencies": [
+        "src/domain/core/agent-catalog",
         "src/domain/core/command",
         "src/domain/core/principal",
         "src/domain/core/model-invocation",
@@ -3717,6 +3722,7 @@
     },
     "src/engine/core/agent-catalog": {
       "dependencies": [
+        "src/domain/core/task-graph",
         "src/domain/core/command",
         "src/domain/core/agent-catalog",
         "src/domain/core/audit",
@@ -3744,6 +3750,10 @@
     },
     "src/composition/core/agent-catalog": {
       "dependencies": [
+        "src/adapters/core/native-coding",
+        "src/domain/core/agent-catalog",
+        "src/domain/core/task-graph",
+        "src/platform/core/integrity",
         "src/engine/core/agent-catalog",
         "src/engine/core/runtime",
         "src/domain/core/run",

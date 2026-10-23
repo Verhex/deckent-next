@@ -1,4 +1,4 @@
-import { encodeCommandProjection, isAiPrincipal, type ModelInvocationBillingAxis, type ProposalPermission, type RunProposal, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
+import { encodeCommandProjection, isAiPrincipal, type ModelInvocationBillingAxis, type ProposalPermission, type RecordedTaskAgent, type RunProposal, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
 import { DeckentError, ErrorRegistry, type TrustedClock } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
@@ -12,6 +12,8 @@ export interface RunProposalContext {
   loadBudget(scopeId: string, principal: VerifiedPrincipal): Promise<ProviderSpendCheckpoint | Readonly<{ checkpoint: ProviderSpendCheckpoint | null; source?: 'configured' }> | null>;
   classifySpending?(proposal: RunProposal): Promise<Readonly<{ semantics: 'metered' | 'not-metered'; digest: string }>>;
   verifySource(proposal: RunProposal, principal: VerifiedPrincipal): Promise<void>;
+  /** S8-1b: the system's agent selection per work-input task now (the same selection admission re-derives); absent = no catalog. */
+  selectAgents?(proposal: RunProposal): Promise<ReadonlyMap<string, Omit<RecordedTaskAgent, 'taskId'>>>;
 }
 export interface RunProposalResult { readonly schemaVersion: 1; readonly proposal: RunProposalRecord; readonly run: RunView | null;
   readonly planningSpending?: Readonly<{ billingAxis?: ModelInvocationBillingAxis; class: 'metered' | 'not-metered' | 'unknown'; currency: string | null;
@@ -50,7 +52,7 @@ export class RunProposalApplication {
     const spending = await this.context.classifySpending?.(proposal);
     const loaded = spending?.semantics === 'not-metered' ? null : await this.context.loadBudget(proposal.scopeId, principal);
     const snapshot = loaded && 'checkpoint' in loaded ? loaded : { checkpoint: loaded };
-    return validateRunProposal(proposal, this.context.registry, snapshot.checkpoint, now, spending, 'source' in snapshot ? snapshot.source : undefined);
+    return validateRunProposal(proposal, this.context.registry, snapshot.checkpoint, now, spending, 'source' in snapshot ? snapshot.source : undefined, await this.context.selectAgents?.(proposal));
   }
   async propose(input: unknown, credential?: unknown): Promise<RunProposalResult> {
     const proposal = parseRunProposal(input), principal = await authenticate(this.verifier, credential, proposal.scopeId);

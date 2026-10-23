@@ -12,19 +12,20 @@ import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index
 import { withRunCreationAuthority } from './authority.js';
 import { readWorkerInstructions } from './worker-instructions.js';
 import { prepareMemoryContext } from './memory-context.js';
+import { configuredAgentSelection } from '#composition/core/agent-catalog/index.js';
 type ScopeContext = Awaited<ReturnType<typeof loadConfiguredScopeContext>>;
 export async function withConfiguredRunAdmission<T>(projectRoot: string, context: ScopeContext, options: ConfigLoadOptions,
-  work: (app: RunAdmissionApplication, authority: import('#engine/index.js').RunCreationAuthority, warnings: () => readonly WorkerAdmissionWarning[]) => Promise<T>) {
+  work: (app: RunAdmissionApplication, authority: import('#engine/index.js').RunCreationAuthority, warnings: () => readonly WorkerAdmissionWarning[], agents: ReturnType<typeof configuredAgentSelection>) => Promise<T>) {
   let warnings: readonly WorkerAdmissionWarning[] = [], compiled = false;
   const { config, layout, document, principal, path } = context, instructions = await readWorkerInstructions(projectRoot, config, options);
   const store = runAdmissionStorePerCall({ reader: async () => openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
     writer: async () => openSqliteAttemptStore(await path(), config.storage.sqlite, { now: Date.now, timeoutMs: config.runRuntime.parking.timeoutMs }, 'forbid') });
   return withRunCreationAuthority(context, async (authority, sealing) => {
-  const memory = prepareMemoryContext(context, sealing); // S4B-5: verified memory into each task's prompt (off: nothing read)
+  const memory = prepareMemoryContext(context, sealing), agents = configuredAgentSelection(path, config.storage.sqlite, sealing.integrity); // S4B-5 memory, S8-1b agent selection
   const app = new RunAdmissionApplication(store, { async verify() { return principal; } }, authority,
     executionResourceAuthorization({ async load() { return document; } }, selectWorkTarget(config.execution)?.id ?? null),
     memory.wrap(createRunAdmissionContext(config, layout.revision, { catalog: async () => openSqliteModelCatalogReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }),
-      refreshing: () => isToolchainRefreshInProgress(projectRoot, options), now: Date.now, warnings: value => { warnings = value; }, silenceDeadline: dockerTaskSilenceDeadline,
+      refreshing: () => isToolchainRefreshInProgress(projectRoot, options), now: Date.now, warnings: value => { warnings = value; }, silenceDeadline: dockerTaskSilenceDeadline, agents,
       validation: { profile(value) {
         try { assertNativeWorkerBinding(value); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); }
         try { validateDockerTaskProfile(value); } catch { throw ErrorRegistry.createError('EXECUTION_PROFILE_INVALID'); }
@@ -33,10 +34,10 @@ export async function withConfiguredRunAdmission<T>(projectRoot: string, context
       compiler: { capability(value) { try { return nativeWorkerEffortCapability(value); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } },
         bind(value, selection, evidence) { try { return bindNativeWorkerEffort(value, selection, evidence); } catch { throw ErrorRegistry.createError('WORKER_MODEL_BINDING_MISMATCH'); } },
         compile(template, input, selection, evidence, task) { compiled = true; if (instructions.oversize) throw ErrorRegistry.createError('WORKER_INSTRUCTIONS_TOO_LARGE');
-          return memory.compile(task?.taskId, extra => { try { return compileNativeCodingWorkInput(template, input, selection, evidence, [...instructions.parts, ...extra]); }
+          return memory.compile(task?.taskId, extra => { try { return compileNativeCodingWorkInput(template, input, selection, evidence, [...instructions.parts, ...extra], task?.agent); }
             catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); } }); } } })));
   // A withheld snapshot is reported only when this admission compiled a worker prompt; a replay or a template-free Run says nothing.
-  return work(app, authority, () => [...(compiled && instructions.withheld ? [instructions.withheld] : []), ...warnings, ...memory.warnings()]);
+  return work(app, authority, () => [...(compiled && instructions.withheld ? [instructions.withheld] : []), ...warnings, ...memory.warnings()], agents);
   });
 }
 async function admitConfiguredRun(projectRoot: string, command: RunAdmission, options: ConfigLoadOptions,

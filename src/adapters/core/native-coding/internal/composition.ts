@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { memoryTemplate, workerReportLimits } from '#domain/index.js';
 import core from './worker-core.json' with { type: 'json' };
+import limits from './prompt-limits.json' with { type: 'json' };
+export const NATIVE_PROMPT_LIMITS /* data; the agent catalog's define-time bound (S8-1a) */ = Object.freeze({ ...limits });
 
 const text = z.string().min(1).refine(value => value.trim().length > 0 && !value.includes('\0') && Buffer.byteLength(value) <= 16384);
 /** One explicitly selected, versioned prompt part (core, persona, skill or context). */
@@ -13,7 +15,7 @@ export const nativePromptCompositionSchema = z.object({ schemaVersion: z.literal
   const ids = [...(value.persona ? [value.persona.id] : []), ...value.skills.map(p => p.id)];
   if (new Set(ids).size !== ids.length || new Set(value.context.map(p => p.id)).size !== value.context.length)
     ctx.addIssue({ code: 'custom', message: 'Duplicate prompt selection' });
-  if (Buffer.byteLength(JSON.stringify(value)) > 32768) ctx.addIssue({ code: 'custom', message: 'Prompt composition too large' });
+  if (Buffer.byteLength(JSON.stringify(value)) > limits.compositionMaxBytes) ctx.addIssue({ code: 'custom', message: 'Prompt composition too large' });
 }).readonly();
 export const promptHash = (value: string) => createHash('sha256').update(value).digest('hex');
 

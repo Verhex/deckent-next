@@ -1,13 +1,15 @@
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { TaskGraphError, validateTaskGraph, executionRegistrySchema, resolveTaskWorkClass, encodeCommandProjection, advisoryProposalPermissions, isRecognisedProposalPermission,
-  type ModelInvocationReceipt, type ProposalPermission, type RunProposal, type RunProposalBinding, type WorkClassRegistry } from '#domain/index.js';
+  type ModelInvocationReceipt, type ProposalPermission, type RunProposal, type RunProposalBinding, type RecordedTaskAgent, type WorkClassRegistry } from '#domain/index.js';
 import { ErrorRegistry, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { brainOutputDigest, parseBrainDraft } from '#capabilities/index.js';
 import { parseProviderSpendCheckpoint, providerSpendRemaining, type ProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
 import { runProposalPermissionCatalog } from '#engine/core/runs/index.js';
-/** Pure gates. Registry metadata advertises permissions; evaluatePolicy still decides each permission. */
+/** Pure gates. Registry metadata advertises permissions; evaluatePolicy still decides each permission. `agents`: the system's agent selection per task
+ * now (S8-1b); a candidate agent takes standing admission away (AJAN-ORG S6, owner Q-S3), and the selection is recorded for the admission recheck. */
 export function validateRunProposal(proposal: RunProposal, registry: WorkClassRegistry | undefined, checkpointInput: ProviderSpendCheckpoint | null,
-  now: number, spending?: Readonly<{ semantics: 'metered' | 'not-metered'; digest: string }>, budgetSource?: 'configured'): NonNullable<RunProposalBinding['admission']> {
+  now: number, spending?: Readonly<{ semantics: 'metered' | 'not-metered'; digest: string }>, budgetSource?: 'configured',
+  agents?: ReadonlyMap<string, Omit<RecordedTaskAgent, 'taskId'>>): NonNullable<RunProposalBinding['admission']> {
   try { validateTaskGraph(proposal.graph); } catch (error) {
     if (!(error instanceof TaskGraphError)) throw error;
     throw ErrorRegistry.createError('RUN_PROPOSAL_GRAPH_INVALID', { params: { reason: error.code } });
@@ -18,8 +20,9 @@ export function validateRunProposal(proposal: RunProposal, registry: WorkClassRe
     const resolved = resolveTaskWorkClass(task.kind, task.workClass, registry); policy = resolved.policy;
     const admission = resolved.workClass && 'proposalAdmission' in resolved.workClass ? resolved.workClass.proposalAdmission : undefined;
     standingAdmission &&= admission?.risk === 'low' && admission.standingAdmission === true
-      && resolved.policy.bindings.some(row => row.kind === task.kind && row.classId === task.workClass);
+      && resolved.policy.bindings.some(row => row.kind === task.kind && row.classId === task.workClass) && agents?.get(task.id)?.standing !== 'candidate';
   }
+  const recorded = proposal.graph.tasks.flatMap(task => { const row = agents?.get(task.id); return row ? [{ taskId: task.id, agentId: row.agentId, revision: row.revision, standing: row.standing }] : []; });
   // accept_mark (owner 2026-10-18, Jev 2f191a60): the list is advisory and evaluates nothing; admission evaluates only the system-derived task set.
   // A model's unrecognised or repeated entry is marked on the card instead of refusing the plan; a person's own list stays strict.
   if (proposal.source.kind === 'human') {
@@ -30,7 +33,7 @@ export function validateRunProposal(proposal: RunProposal, registry: WorkClassRe
       seen.add(key);
     }
   }
-  const basis = { registryRevision: policy!.revision, registryDigest: sha256(encodeCommandProjection('proposal-registry:1', policy)), standingAdmission,
+  const basis = { registryRevision: policy!.revision, registryDigest: sha256(encodeCommandProjection('proposal-registry:1', policy)), standingAdmission, ...(recorded.length ? { agents: recorded } : {}),
     ...(spending ? { budgetSemantics: spending.semantics === 'not-metered' ? 'not-metered' as const : 'admission-check-only' as const, spendingDigest: spending.digest } : {}) };
   if (spending?.semantics === 'not-metered') return Object.freeze({ ...basis, budget: null });
   if (!checkpointInput) throw ErrorRegistry.createError('RUN_PROPOSAL_BUDGET_MISSING');
@@ -56,9 +59,13 @@ export function unrecognisedRunProposalPermissions(proposal: RunProposal, regist
 /** The admission basis a pending approval keeps exact on resubmission (recheck_ceiling, owner 2026-10-18). The person approves the declared
  * ceiling, never the moving balance: registry, budget identity/revision/source and spending semantics stay exact, while the checkpoint digest and
  * money left may move. validateRunProposal rechecks currency, frozen and money left >= ceiling on every submission. */
-export function stableRunProposalBasis(basis: RunProposalBinding['admission']): unknown {
-  if (!basis?.budget) return basis;
+export function stableRunProposalBasis(input: RunProposalBinding['admission']): unknown {
+  // S8-1b: the agent selection is re-derived at admission (a changed active agent needs the card there); it never parks the proposal. Standing
+  // admission is the registry's (digest-bound) answer plus that selection, so it is left out too: a promoted candidate then proceeds on its card.
+  if (!input) return input;
+  const basis = Object.fromEntries(Object.entries(input).filter(([key]) => key !== 'agents' && key !== 'standingAdmission')) as Omit<typeof input, 'agents' | 'standingAdmission'>;
   const budget = basis.budget;
+  if (!budget) return basis;
   return { ...basis, budget: { budgetId: budget.budgetId, budgetRevision: budget.budgetRevision, checkedAt: budget.checkedAt, ...(budget.source ? { source: budget.source } : {}) } };
 }
 /** The same recheck inside the Run transaction, against the account row read under the writer lock. */

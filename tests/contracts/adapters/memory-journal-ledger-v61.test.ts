@@ -28,7 +28,7 @@ const propose = (commandId: string, scopeId: string, title = 'Fatura eşleştirm
 
 describe('ledger v61 memory journal migration', () => {
   it('pins the version: v61 is the memory journal step', () => {
-    expect(MEMORY_JOURNAL_LEDGER_VERSION).toBe(61); expect(CURRENT_LEDGER_VERSION).toBe(66);
+    expect(MEMORY_JOURNAL_LEDGER_VERSION).toBe(61); expect(CURRENT_LEDGER_VERSION).toBe(67);
   });
   it('backs up v60 and adds only the memory tables; an older reader refuses the upgraded ledger', async () => {
     const f = await ledger(); const db = new DatabaseSync(f.path); db.exec(DOWNGRADE_TO_V60_LEDGER_SQL); db.close();

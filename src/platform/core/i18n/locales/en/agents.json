@@ -68,5 +68,15 @@
   "error.SKILL_IMPORT_UNPINNED": "Refused: a skill from elsewhere must name its content digest (pin).",
   "error.SKILL_IMPORT_PIN_MISMATCH": "Refused: the skill's content does not match its pin.",
   "error.SKILL_IMPORT_UNSIGNED": "Refused: a skill from elsewhere must be signed.",
-  "error.SKILL_IMPORT_SIGNATURE_UNVERIFIED": "Refused: the skill's signature could not be verified against a trusted key for exactly this content."
+  "error.SKILL_IMPORT_SIGNATURE_UNVERIFIED": "Refused: the skill's signature could not be verified against a trusted key for exactly this content.",
+  "error.AGENT_PROMPT_TOO_LARGE": "The agent's persona and pinned skills do not fit the worker prompt next to the task. Nothing was saved or run, and no other agent was chosen. Shorten the persona or pin fewer or shorter skills.",
+  "error.AGENT_STANDING_REFUSED": "That agent standing change is not allowed from its current standing or by this principal. Nothing was changed.",
+  "error.AGENT_STANDING_CONFLICT": "The agent's standing changed since it was shown. Nothing was changed; look at it again and decide on the current standing.",
+  "agent.card.selected": "  agent: {agentId} (revision {revision}, {standing})",
+  "agent.standing.active": "promoted",
+  "agent.standing.candidate": "candidate",
+  "agents.inspect.standings": "Standing per work class: {standings}",
+  "agents.inspect.standingNone": "Standing per work class: none recorded (defined before standings existed; revise the agent to open them)",
+  "agent.standing.redesign-required": "redesign required",
+  "agent.standing.retired": "retired"
 }

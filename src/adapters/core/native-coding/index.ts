@@ -6,6 +6,7 @@ export { nativeCliCommand, parseNativeCliRegistry, NativeCliRegistryError, nativ
 export type { NativeCliCapabilities } from '#adapters/core/native-cli-registry/index.js';
 
 export { bindNativeWorkerEffort } from './internal/effort.js';
+export { NATIVE_PROMPT_LIMITS } from './internal/composition.js';
 export { detectNativeCliVersion } from './internal/discovery.js';
 export { nativeCodingEnvironmentProbes } from './internal/environment.js';
 export type { ContainerProbeRunner } from './internal/environment.js';

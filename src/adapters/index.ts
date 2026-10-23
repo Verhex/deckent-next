@@ -56,7 +56,7 @@ export type { NativeJsonHttpAuthentication } from '#adapters/core/provider-http-
 
 export { createBoundedMcpTransport, mcpToolDeliveryCapacityForProbe } from '#adapters/core/mcp-transport/index.js';
 export { compileNativeCodingDockerProfile, nativeCodingInvocationSchema, NativeCodingProfileError, assertNativeWorkerBinding,
-  nativeCliIdSchema, createNativeCodingTemplate, nativeWorkerEffortCapability, bindNativeWorkerEffort, NATIVE_CODING_TEMPLATE_ADAPTER, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeCodingTemplateBase, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit } from '#adapters/core/native-coding/index.js';
+  nativeCliIdSchema, createNativeCodingTemplate, nativeWorkerEffortCapability, bindNativeWorkerEffort, NATIVE_CODING_TEMPLATE_ADAPTER, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, nativeCodingTemplateBase, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, NATIVE_PROMPT_LIMITS } from '#adapters/core/native-coding/index.js';
 export type { NativeCodingInvocation } from '#adapters/core/native-coding/index.js';
 export { detectNativeCliVersion } from '#adapters/core/native-coding/index.js';
 export { nativeCodingEnvironmentProbes, type ContainerProbeRunner } from '#adapters/core/native-coding/index.js';

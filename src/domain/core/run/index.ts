@@ -29,7 +29,7 @@ export type { WorkClassRegistry, WorkClassAcceptanceProfile, WorkClassPolicy, Ca
 export { workerAssignmentSchema, workerAssignmentSkipSchema } from './internal/assignment.js';
 export type { WorkerAssignment, WorkerAssignmentSkip } from './internal/assignment.js';
 export { holdRun, answerTaskInput, parkRunProgression } from './internal/lifecycle.js';
-export { deckentMetricsSchema, deriveDeckentMetrics, measuredCostSchema, METRIC_EVIDENCE_KINDS } from './internal/metrics.js';
+export { deckentMetricsSchema, deriveDeckentMetrics, measuredCostSchema, METRIC_EVIDENCE_KINDS, FAILURE_CAUSES } from './internal/metrics.js';
 export type { DeckentMetrics, CurrentDeckentMetrics, DeckentMetricsMeasurements } from './internal/metrics.js';
 
 export { freezeTaskAcceptance, assertAcceptanceCriteria, frozenWorkClassProfileSchema, taskAcceptanceReferenceSchema, acceptanceCriterionSchema, AcceptanceProfileError } from './internal/acceptance.js';

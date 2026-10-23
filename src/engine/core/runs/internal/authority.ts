@@ -1,4 +1,4 @@
-import { commandEnvelopeSchema, deriveProposalPermissions, encodeCommandProjection, evaluatePolicy, policySchema, AuditError,
+import { commandEnvelopeSchema, deriveProposalPermissions, encodeCommandProjection, evaluatePolicy, policySchema, standingAgentsChanged, AuditError,
   type AuthorityAdmission, type AuditRecord, type Policy, type PolicyDecision, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
 import { ErrorRegistry, sha256, type TrustedClock, type Locale, type KnownSecretSnapshot } from '#platform/index.js';
 import { AuditApplication, AuthorityDecisionRecords } from '#engine/core/audit/index.js';
@@ -54,8 +54,8 @@ export class RunCreationAuthority {
     // A proposal may only lower the registry gate when every exact class declares low risk and standing admission.
     // It never lowers policy require-approval or deny.
     if (command.proposal && !command.proposal.admission) throw ErrorRegistry.createError('RUN_PROPOSAL_CORRUPT');
-    // D2b: a delivery intent delegates queue submission to the service, so its Run always shows the human a card (never standing/allow).
-    if (command.proposal && (!command.proposal.admission!.standingAdmission || command.proposal.delivery) && evaluation.verdict.decision === 'allow') {
+    // D2b: a delivery intent always shows the human a card (never standing/allow); S8-1b (N29): so does an agent that is not the recorded `active` one.
+    if (command.proposal && (!command.proposal.admission!.standingAdmission || command.proposal.delivery || standingAgentsChanged(command.proposal.admission!.agents, create.execution.tasks)) && evaluation.verdict.decision === 'allow') {
       evaluation = { ...evaluation, verdict: { decision: 'require-approval', revision: evaluation.verdict.revision, reason: 'APPROVAL_REQUIRED' } };
     }
     const record = this.seal(command, principal, evaluation, this.basis(create, workspace));
