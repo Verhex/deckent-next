@@ -1,4 +1,6 @@
-import { isAiPrincipal } from '#domain/core/principal/index.js';
+import { isAiPrincipal, isAuditorPrincipal } from '#domain/core/principal/index.js';
+/** S5 (AUDITOR-MODEL Q4): the only actions the auditor principal may ever be granted. A security invariant, never policy data. */
+export const AUDITOR_READ_ACTIONS = Object.freeze(['inspect', 'list', 'verify'] as const);
 /**
  * Approval cards whose decision widens authority: identity profile distribution, MCP capability grants and the first-run template
  * upgrade/rollback (each also needs `policy.administer`, floored below; deciding the card is a second, independent route).
@@ -14,6 +16,8 @@ const AUTHORITY_APPROVAL_IDS = Object.freeze(['identity-profile', 'policy-mcp-ca
  */
 export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assurance?: string }, resource: { readonly kind: string; readonly id: string }, action: string): boolean {
   if (!isAiPrincipal(actor)) return false;
+  // The auditor reads and writes nothing else: every other action (any resource, any extension's future action) is refused whatever is granted.
+  if (isAuditorPrincipal(actor) && !(AUDITOR_READ_ACTIONS as readonly string[]).includes(action)) return true;
   if (resource.kind === 'operation' && resource.id === 'policy.administer' && ['execute', 'compensate'].includes(action)) return true;
   if (['authority-document', 'authenticator', 'approval-assurance'].includes(resource.kind) && !['inspect', 'list'].includes(action)) return true;
   if (resource.kind === 'backup' && action === 'restore') return true;

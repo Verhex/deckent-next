@@ -625,3 +625,60 @@ describe('S02 fenced remembered audit and final producer validity', () => {
   });
 
 });
+
+// S5 D1 (AUDITOR-MODEL, owner Q5 2026-10-17): every refused decision and every plain allow of one turn reach ONE sealed `policy-turn` record,
+// written when the turn flushes; nothing per call, so the call paths above keep their own events unchanged.
+describe('policy-turn record of refused and silently allowed calls (S5 D1)', () => {
+  const read: AgentToolSpec = { name: 'read_file', version: 1, toolClass: 'read', description: 'read', inputSchema: { type: 'object' } } as AgentToolSpec;
+  const policyTurns = (f: Awaited<ReturnType<typeof fixture>>) => f.auditRecords().filter(record => record.event.subject.kind === 'policy-turn').map(record => record.event.subject);
+
+  it('requires POSIX private audit keyring — seals a policy-stage deny, a cell-stage approval request, an effect-stage deny and a plain allow, each with its position', async context => { privateAudit(context);
+    const denied = await fixture([snapshot('deny', null)]);
+    expect(await denied.decisions.authorize(edit, args, { round: 1, index: 0, callId: 'c0' })).toBe('deny');
+    expect(denied.events()).toBe(0);
+    expect(await denied.decisions.flush()).toBe(true);
+    expect(policyTurns(denied)).toEqual([{ kind: 'policy-turn', turnId: 'turn', ceiling: false, allowed: { count: 0, calls: [] }, refused: { count: 1, calls: [
+      { tool: { name: 'edit_file', version: 1 }, call: { round: 1, index: 0, callId: 'c0' }, cell: null, decision: 'deny', stage: 'policy', argsDigest: expect.stringMatching(/^[a-f0-9]{64}$/u), revision: 'p-deny-null+b' }] } }]);
+    // A replayed flush of the same content appends nothing.
+    expect(await denied.decisions.flush()).toBe(true); expect(denied.events()).toBe(1);
+
+    const asked = await fixture([snapshot('require-approval', 'ask')]);
+    expect(await asked.decisions.authorize(edit, args, { round: 2, index: 1, callId: 'c1' })).toBe('require-approval');
+    await asked.decisions.flush();
+    expect(policyTurns(asked)[0]).toMatchObject({ refused: { count: 1, calls: [{ cell: 'edit', decision: 'require-approval', stage: 'cell', call: { round: 2, index: 1, callId: 'c1' } }] } });
+
+    // Allowed when planned, denied at the effect: the effect-stage refusal is recorded and nothing ran.
+    const changed = await fixture([snapshot('allow', null), snapshot('deny', null)]);
+    expect(await changed.decisions.authorize(edit, args, { round: 1, index: 0, callId: 'call_1' })).toBe('allow');
+    expect((await changed.execute()).eventsAtRun).toBe(-1);
+    await changed.decisions.flush();
+    expect(policyTurns(changed)[0]).toMatchObject({ allowed: { count: 0 }, refused: { count: 1, calls: [{ cell: 'edit', decision: 'deny', stage: 'effect', call: { round: 1, index: 0, callId: 'call_1' } }] } });
+
+    // A plain allow that ran (edit through execute, a read through the turn's own path) is in `allowed`; the silent counter stays.
+    const base = snapshot('allow', null, 'p-read') as { grants: unknown[] } & Record<string, unknown>;
+    const withRead = resolvePolicyBindings({ schemaVersion: 2, revision: 'p-read', roles: [], separationOfDuties: [], restrictions: [], grants: [...base.grants,
+      { id: 'read-tool', effect: 'allow', actions: ['invoke'], scopes: ['scope'], principals: [me], resource: { kind: 'agent-tool', ids: ['read_file'] } }] }, { schemaVersion: 1, revision: 'b', bindings: [] });
+    const allowed = await fixture([withRead]);
+    expect(await allowed.decisions.authorize(edit, args)).toBe('allow');
+    // The plain allow reaches its effect (the fixture's gate stands in for the effect application) and is noted before it runs.
+    expect((await allowed.execute()).admissions).toHaveLength(1);
+    // Only a call this turn authorized is noted: an unknown read adds nothing.
+    allowed.decisions.ranAllowed(read, { path: 'docs/x.md' }, { round: 1, index: 2 }, 'call_3');
+    expect(await allowed.decisions.authorize(read, { path: 'src/a.ts' })).toBe('allow');
+    allowed.decisions.ranAllowed(read, { path: 'src/a.ts' }, { round: 1, index: 1 }, 'call_2');
+    expect(allowed.events()).toBe(0);
+    await allowed.decisions.flush();
+    expect(policyTurns(allowed)[0]).toMatchObject({ refused: { count: 0, calls: [] }, allowed: { count: 2, calls: [
+      { tool: { name: 'edit_file', version: 1 }, cell: 'edit', call: { round: 1, index: 0, callId: 'call_1' } },
+      { tool: { name: 'read_file', version: 1 }, cell: 'read', call: { round: 1, index: 1, callId: 'call_2' }, revision: expect.stringContaining('p-read') }] } });
+  });
+
+  it('requires POSIX private audit keyring — a turn that decided nothing writes nothing; an unavailable audit is reported, never thrown, and changes no decision', async context => { privateAudit(context);
+    const idle = await fixture([snapshot('allow', null)]);
+    expect(await idle.decisions.flush()).toBe(true); expect(idle.events()).toBe(0);
+    const broken = await fixture([snapshot('deny', null)]);
+    broken.failAudit();
+    expect(await broken.decisions.authorize(edit, args, { round: 1, index: 0, callId: 'c0' })).toBe('deny');
+    expect(await broken.decisions.flush()).toBe(false);
+  });
+});

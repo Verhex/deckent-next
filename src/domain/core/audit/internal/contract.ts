@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { authorityDecisionSubjectSchema } from './authority-decision.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import limits from './limits.json' with { type: 'json' };
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** The MCP registry scopes (the adapter's own list; the audit contract stays dependency-free). */
 const MCP_REGISTRY_SCOPES = ['managed', 'local', 'project', 'user'] as const;
@@ -10,6 +11,8 @@ export const AUDIT_SHELL_HEAD_MAX_CHARS = 200;
 /** FA-TRACKED-WARN: the most workspace-relative paths one `tracked-files-changed` list names (its count is always the full number). */
 export const AUDIT_TRACKED_PATHS_MAX = 50;
 /** Crash-loop breaker: the phases of one dispatch preparation, in order (before workspace acquisition → secret gate → handoff → supervisor/claim). */
+/** S5 D1 (owner Q5 2026-10-17): the most refused / silently allowed calls one `policy-turn` record names (each count is always the full number). */
+export const AUDIT_POLICY_TURN_LIMITS = Object.freeze({ refusedMax: limits.policyTurnRefusedMax, allowedMax: limits.policyTurnAllowedMax });
 export const DISPATCH_PREPARATION_PHASES = Object.freeze(['prepare', 'workspace', 'secret-gate', 'handoff', 'dispatch'] as const);
 /** Who the decision was made for: exact issuer and subject; a persona is never part of the record. */
 export const auditPrincipalSchema = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
@@ -35,6 +38,11 @@ const permissionMode = z.enum(['ask', 'auto-edit', 'full-auto', 'standart', 'ful
 /** An agent tool call's position in its turn (the same identity every call event carries). */
 const callRef = z.object({ turnId: identitySchema, round: counterSchema.positive(), index: counterSchema, callId: identitySchema }).strict();
 const toolRef = z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), version: counterSchema.positive() }).strict();
+/** The agent tool call cells (engine policy catalog; the audit contract keeps its own copy to stay dependency-free). */
+const agentToolCell = z.enum(['read', 'edit', 'edit-floor', 'edit-self-source', 'edit-authority', 'shell-read-none', 'shell-read-low', 'shell-narrow-mutating',
+  'shell-destructive', 'shell-always-ask', 'shell-other-modify', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor']);
+/** One call position without its turn (the `policy-turn` record names the turn once). */
+const turnCallRef = z.object({ round: counterSchema.positive(), index: counterSchema, callId: identitySchema }).strict();
 /**
  * A silent decision produced by the terminal permission mode (slice 4): the mode relaxed a cell the company policy marked
  * mode-eligible, turning `require-approval` into `allow` for exactly this tool call. Other subject kinds join this union as
@@ -59,6 +67,18 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     evidence: z.literal('model-unverified').nullable() }).strict(),
   z.object({kind:z.literal('decision-port'),action:z.enum(['ask','record','outcome']),phase:z.enum(['admitted','observed']),
     decisionId:identitySchema,caseDigest:digest,adviceDigest:digest.nullable(),selectedOption:identitySchema.nullable()}).strict(),
+  /**
+   * S5 D1 (AUDITOR-MODEL, owner Q5 2026-10-17; changes q5 in this scope): one sealed record per agent turn of every policy decision on its tool
+   * calls that is not already its own event. `refused`: each deny and require-approval — at the policy question before planning (`policy`,
+   * no cell yet), on the planned cell (`cell`) or again at the effect (`effect`). `allowed`: each call that ran on a plain allow (no mode,
+   * standing approval or full access, which keep their own events). Tool identity, position, cell and argument digest only — never arguments,
+   * paths or output. Each list keeps its full count and at most its `AUDIT_POLICY_TURN_LIMITS` entries; `ceiling` marks refusals past the bound.
+   */
+  z.object({ kind: z.literal('policy-turn'), turnId: identitySchema, ceiling: z.boolean(),
+    refused: z.object({ count: counterSchema, calls: z.array(z.object({ tool: toolRef, call: turnCallRef, cell: agentToolCell.nullable(), decision: z.enum(['deny', 'require-approval']),
+      stage: z.enum(['policy', 'cell', 'effect']), argsDigest: digest, revision: identitySchema }).strict()).max(AUDIT_POLICY_TURN_LIMITS.refusedMax) }).strict(),
+    allowed: z.object({ count: counterSchema, calls: z.array(z.object({ tool: toolRef, call: turnCallRef, cell: agentToolCell, argsDigest: digest,
+      revision: identitySchema }).strict()).max(AUDIT_POLICY_TURN_LIMITS.allowedMax) }).strict() }).strict(),
   /** `person` null (MODES-3): the default `standart`, which no bindings entry names. */
   z.object({ kind: z.literal('permission-mode'), mode: z.enum(['auto-edit', 'full-auto', 'standart']), cell: z.enum(['edit-non-floor', 'shell-modify', 'mcp-call']),
     tool: toolRef, call: callRef, grants: z.object({ company: identitySchema, person: identitySchema.nullable() }).strict(),

@@ -14,6 +14,18 @@ export const mcpPrincipalRef = (owner: { readonly issuer: string; readonly subje
   Object.freeze({ issuer: identitySchema.parse(`${owner.issuer}/mcp`), subject: identitySchema.parse(owner.subject) });
 export const isMcpPrincipal = (actor: { readonly issuer: string }) => actor.issuer.endsWith('/mcp');
 
-/** Transport identity dominates assurance: a forged legacy MCP os-user is still AI. */
+/**
+ * S5 (AUDITOR-MODEL, owner 2026-10-17 Q4): the read-only auditor, a workload identity only the composition root issues (no client channel
+ * names it; a new principal kind waits for OG5). Its issuer suffix is the identity: a forged `os-user` auditor is still the auditor.
+ */
+export const auditorPrincipalRef = (owner: { readonly issuer: string; readonly subject: string }) =>
+  Object.freeze({ issuer: identitySchema.parse(`${owner.issuer}/auditor`), subject: identitySchema.parse(owner.subject) });
+export const isAuditorPrincipal = (actor: { readonly issuer: string }) => actor.issuer.endsWith('/auditor');
+export const auditorPrincipal = (owner: { readonly issuer: string; readonly subject: string }, scopeIds: readonly string[]): VerifiedPrincipal => {
+  const ref = auditorPrincipalRef(owner);
+  return verifiedPrincipalSchema.parse({ id: `${ref.subject}@${ref.issuer}`, ...ref, assurance: 'workload-verified', scopeIds: [...scopeIds] });
+};
+
+/** Transport identity dominates assurance: a forged legacy MCP or auditor os-user is still AI. */
 export const isAiPrincipal = (actor: { readonly issuer: string; readonly assurance?: string }) =>
-  isMcpPrincipal(actor) || actor.assurance !== 'os-user';
+  isMcpPrincipal(actor) || isAuditorPrincipal(actor) || actor.assurance !== 'os-user';

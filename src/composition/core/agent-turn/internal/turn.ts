@@ -110,7 +110,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
   // B1: each card of this turn (tool call, MCP trust) gets a one-time capability for this principal and peer process, sent only on this turn's stream; settled → revoked.
   const emitApproval = (event: Extract<AgentTurnStreamEvent, { kind: 'approval.requested' | 'approval.settled' }>) => channel.emit(event.kind === 'approval.settled' ? (host.decisions.revoke(command.scopeId,
     event.approvalId), event) : { ...event, decisionCapability: host.decisions.mint({ scopeId: command.scopeId, approvalId: event.approvalId, principal: context.principal, peerPid: peer.pid, expiresAt: event.expiresAt }, clock.sample().wallMs) });
-  let store: Awaited<ReturnType<typeof openSqliteAgentTurnStore>> | null = null, registered = false;
+  let store: Awaited<ReturnType<typeof openSqliteAgentTurnStore>> | null = null, registered = false, flushPolicy: (() => Promise<boolean>) | null = null;
   try {
     // FETCH: egress `none` (the default) builds no fetch at all — no tool, no transport use; the prompt then says fetch_url is not offered (and, v6, no network at all unless the shell's posture reaches it).
     const fetchSettings = readTerminalFetchConfig(config), fetcher = scratch && fetchSettings.egress !== 'none' ? createAgentFetch({ settings: fetchSettings,
@@ -176,7 +176,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     };
     const approvals = createAgentCallApprovals({ context, clock, scopeId: command.scopeId, turnId: command.turnId, describe });
     // One permission decision per call (T-L4 slice 4a): strict policy, floor raise and permission-mode lowering, again at the effect.
-    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } });
+    const decisions = createAgentCallDecisions({ context, clock, scopeId: command.scopeId, turnId: command.turnId, edits: editsOf, shell, approvals, fetch: fetcher, mcp, fullAccess, standing: { memory: host.answers.memory, session: SessionStanding.sessionKey(command.scopeId, context.principal, command.sessionId ?? command.turnId) } }); flushPolicy = decisions.flush;
     // NATIVE-BAGLAM: the descriptive session snapshot over one fresh policy snapshot (mode, thinking, model facts, each tool's effect now); the prompt states it, `session_state` returns it fresh.
     const posture = shell ? await shell.posture() : null, sessionOf = async () => { const policy = await context.policy.load().catch(() => null); return agentSessionSnapshot({ policy, principal: context.principal, scopeId: command.scopeId, sessionId: command.sessionId ?? null, fullAccess, tools, shell: posture,
       thinking: command.reasoning === 'off' ? 'off' : thinkingSwitch ? 'on' : 'model-default', model: { ...reference, nativeId: binding.definition.model.nativeId, protocols: binding.definition.model.protocols }, decide: (tool, cell, shellInput) => decisions.probe(policy, tool, cell, shellInput) }); };
@@ -249,7 +249,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
       },
       // An edit is also the `workspace.file.write` operation, a shell command `host.shell.run`: the stricter of both decisions holds;
       // the write floor and the shell tiers raise allow in every mode; a permission mode lowers only a company-eligible cell (slice 4a).
-      authorize: (tool, args) => decisions.authorize(tool, args),
+      authorize: (tool, args, call) => decisions.authorize(tool, args, call),
       async prepare(tool, args) {
         if ((tool.toolClass === 'shell' && shell) || (tool.toolClass === 'edit' && editsOf(tool.name)) || fetches(tool) || mcps(tool)) return decisions.prepare(tool, args);
         return { ok: true };
@@ -290,7 +290,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
           if (outcome === 'allow') await answer?.wait();
           // Approved: re-evaluate policy now; a deny since the request wins (contract §2). The owner's decision stays `allow` (the settlement says
           // so); the call is refused by policy, never reported as the owner's refusal (DENY-WORDING, lead 2026-10-07).
-          if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal, mcps(tool) ? mcp?.server(tool.name) ?? undefined : undefined) === 'deny') { settlement = 'allow'; return 'policy-deny'; }
+          if (outcome === 'allow' && await toolAuthority.decide(tool, command.scopeId, context.principal, mcps(tool) ? mcp?.server(tool.name) ?? undefined : undefined) === 'deny') { decisions.refusedAfterApproval(tool, args, { round, index, callId: call.id }, typeof policy.revision === 'string' ? policy.revision : 'unknown'); settlement = 'allow'; return 'policy-deny'; }
           // Policy revalidation is asynchronous: it spends the same authorization budget as waiting.
           if (outcome === 'allow') {
             const consumed = clock.sample();
@@ -341,7 +341,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
         if (fetches(tool)) return decisions.execute(tool, args, execution, callId, gate => fetcher!.apply(args, toolSignal, execution, gate));
         if (mcps(tool)) return decisions.execute(tool, args, execution, callId, gate => mcp!.apply(tool.name, args, toolSignal, execution, gate));
         if (proposals?.owns(tool.name)) return proposals.apply(args);
-        return scratch?.reads(tool.name) ? scratch.read(tool.name, args, toolSignal) : workspace.execute(tool.name, args, toolSignal);
+        decisions.ranAllowed(tool, args, execution, callId); return scratch?.reads(tool.name) ? scratch.read(tool.name, args, toolSignal) : workspace.execute(tool.name, args, toolSignal);
       },
       now: () => clock.sample().wallMs, recordIngress: async notice => { if (notice.disposition === 'unchanged') return; const loaded = await context.policy.load() as { revision?: unknown }; const policyRevision = typeof loaded.revision === 'string' ? loaded.revision : 'unknown'; const atMs = clock.sample().wallMs; await withAgentAudit(context, audit => audit.record({ schemaVersion: 1, eventId: sha256(`model-ingress:1\0${command.scopeId}\0${command.turnId}\0${notice.fieldDigest}\0${notice.codePoints}\0${atMs}`), scopeId: command.scopeId, principal: { issuer: context.principal.issuer, subject: context.principal.subject }, policyRevision, atMs, subject: { kind: 'model-ingress', fieldDigest: notice.fieldDigest, projectedDigest: notice.projectedDigest, decodedDigest: notice.decodedDigest, codePoints: notice.codePoints, disposition: notice.disposition } })); },
     };
@@ -357,7 +357,7 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     return Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note: withMcpNotices(mcpNotices, result.note), rounds: result.rounds,
       toolCalls: result.toolCalls, answer: kept, answerBytes, replayed: result.replayed, recorded: result.recorded });
   } finally {
-    connection.stop();
+    /* S5 D1: the turn's `policy-turn` record, however the turn ends. */ await flushPolicy?.(); connection.stop();
     if (registered) host.running.delete(key);
     scratch?.release();
     store?.close();

@@ -133,15 +133,18 @@ export async function modeRuntime(input: { grants: Record<string, unknown>[]; mo
     const text = events.flatMap(event => event.kind === 'message' && event.message.role === 'tool' ? [event.message.content] : [])[0] ?? '';
     return { events, card: events.some(event => event.kind === 'approval.requested'), status: finished?.kind === 'tool.finished' ? finished.status : null, text, turnId };
   };
-  /** Decision audit events; `inventory` adds the D1 producer-inventory events that precede each composed decision (documented). */
-  const audit = (inventory = false) => rows(`SELECT record FROM audit_events${inventory ? '' : " WHERE kind <> 'approval-assurance-registration'"} ORDER BY sequence`).map(row => JSON.parse(String((row as { record: string }).record)) as
+  /** Per-call decision audit events; `inventory` adds the D1 producer-inventory events that precede each composed decision (documented). The
+   * turn-level `policy-turn` record (S5 D1: every refusal and plain allow of a turn, one row per turn) is read with `policyTurns`. */
+  const audit = (inventory = false) => rows(`SELECT record FROM audit_events WHERE kind <> 'policy-turn'${inventory ? '' : " AND kind <> 'approval-assurance-registration'"} ORDER BY sequence`).map(row => JSON.parse(String((row as { record: string }).record)) as
     { event: { eventId: string; policyRevision: string; principal: unknown; subject: Record<string, unknown> & { call: Record<string, unknown> } } });
+  const policyTurns = () => rows("SELECT record FROM audit_events WHERE kind = 'policy-turn' ORDER BY sequence").map(row => (JSON.parse(String((row as { record: string }).record)) as
+    { event: { subject: { turnId: string; ceiling: boolean; refused: { count: number; calls: readonly Record<string, unknown>[] }; allowed: { count: number; calls: readonly Record<string, unknown>[] } } } }).event.subject);
   const counters = () => Object.fromEntries(rows('SELECT counter, count FROM audit_counters').map(row => [(row as { counter: string }).counter, (row as { count: number }).count]));
   /** The failure message for a turn assertion: the full event stream (with the `done` finish and note), the decision responses and the
    * service's settlement, e.g. `expect(result, f.evidence(result)).toMatchObject(...)`. */
   const evidence = (result: { readonly turnId: string; readonly events: readonly unknown[] }) =>
     JSON.stringify({ turnId: result.turnId, service: serviceState, events: result.events, decisions });
-  return { project, data, ledger, rows, exec, call, audit, counters, writeAuthority, sent: state.sent, client, env, evidence,
+  return { project, data, ledger, rows, exec, call, audit, policyTurns, counters, writeAuthority, sent: state.sent, client, env, evidence,
     /** Queues the next turn's one tool call (for a test that drives `client.chatTurn` itself). */
     script: (name: string, args: Record<string, unknown>) => { state.script.push({ name, arguments: JSON.stringify(args) }); } };
 }
