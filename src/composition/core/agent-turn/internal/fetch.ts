@@ -1,4 +1,4 @@
-import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
+import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentToolCallCell, type EffectApprovalGate } from '#engine/index.js';
 import { SystemTrustedClock } from '#platform/index.js';
 import { agentFetchEffectCommandId, createLocalPeerSession, describeFetchApproval, describeFetchRefusal, describeFetchResult, NETWORK_FETCH_OPERATION,
@@ -40,7 +40,7 @@ export function createAgentFetch(input: { readonly settings: TerminalFetchConfig
       const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
       try {
         await new EffectApplication({ async resolve(ref) { return ref.id === NETWORK_FETCH_OPERATION.operation.id && ref.version === 1 ? NETWORK_FETCH_OPERATION : null; } },
-          { resolve: kind => kind === NETWORK_FETCH_TARGET_KIND ? target : null }, store, gate, sessions, new OperationPolicyAuthorization(context.policy), clock).execute(command);
+          { resolve: kind => kind === NETWORK_FETCH_TARGET_KIND ? target : null }, store, gate, sessions, new OperationPolicyAuthorization(context.policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER }).execute(command);
         return ran ? describeFetchResult(ran) : describeFetchRefusal('no-result');
       } catch (error) {
         // A request that ran (refused before sending, or unknown after) reports itself; otherwise nothing was sent.

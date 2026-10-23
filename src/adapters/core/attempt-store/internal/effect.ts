@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { effectIntentSchema, effectRecordSchema, EffectError, type EffectIntent, type EffectRecord } from '#domain/index.js';
 
-/** Generic effect intents (ledger v34). Intent is durable before the effect; state moves only by compare-and-swap on the stored record. */
+/** Generic effect intents (ledger v34; producer from S6R-1). Intent is durable before the effect; state moves only by compare-and-swap on the stored record. */
 export class SqliteEffectJournal {
   constructor(private readonly db: DatabaseSync) {}
   read(scopeId: string, commandId: string): EffectRecord | null {
@@ -38,6 +38,8 @@ export class SqliteEffectJournal {
         if (JSON.stringify(existing.intent) !== JSON.stringify(intent)) throw new EffectError('EFFECT_CONFLICT');
         this.db.exec('COMMIT'); return existing;
       }
+      // S6R-1: a new intent names its producer (Attempt or direct principal); only older rows read without one.
+      if (!intent.producer) throw new EffectError('EFFECT_INVALID');
       if (this.db.prepare('SELECT 1 FROM effect_intents WHERE scope_id=? AND idempotency_key_hash=?').get(scopeId, intent.idempotencyKeyHash)) {
         throw new EffectError('EFFECT_CONFLICT');
       }

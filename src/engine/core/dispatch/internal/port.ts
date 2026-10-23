@@ -13,8 +13,11 @@ export const dispatchTerminalSchema = z.object({ handle: identitySchema, ...proc
   .refine(value => !value.interruptCause || value.interrupted === true, 'ATTEMPT_EXIT_CAUSE_INVALID').readonly();
 const actorSchema = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly();
 export const dispatchAdmissionSchema = claimObject.extend({ profile: supervisorProfileSchema }).strict().readonly();
+/** S6R-1: the created container's immutable id, durable before `start`; the later incarnation (`worker`) must be that container. Older records
+ * omit it. */
+const containerIdSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const dispatchRecordSchema = claimObject.extend({
-  schemaVersion: z.literal(2), worker: workerIncarnationSchema.optional(), profile: supervisorProfileSchema,
+  schemaVersion: z.literal(2), containerId: containerIdSchema.optional(), worker: workerIncarnationSchema.optional(), profile: supervisorProfileSchema,
   launch: z.enum(['pending', 'granted', 'prevented-before-launch']),
   grant: z.object({ generation: counterSchema.positive(), grantedAt: counterSchema, principal: actorSchema }).strict().readonly().optional(),
   prevention: z.object({ reason: z.literal('cancel-requested') }).strict().readonly().optional(),
@@ -22,10 +25,11 @@ export const dispatchRecordSchema = claimObject.extend({
 }).strict().superRefine((record, context) => {
   const invalid = () => context.addIssue({ code: z.ZodIssueCode.custom, path: ['launch'], message: 'DISPATCH_LAUNCH_EVIDENCE_CONFLICT' });
   if (record.patch && (!record.terminal || record.patch.scopeId !== record.request.identity.scopeId)) invalid();
+  if (record.containerId !== undefined && record.worker !== undefined && record.worker.id !== record.containerId) invalid();
   if (record.launch === 'granted') {
     if (!record.grant || record.grant.generation !== record.request.identity.generation || record.prevention) invalid();
   } else {
-    if (record.grant || record.terminal !== null || record.output !== undefined || record.worker !== undefined) invalid();
+    if (record.grant || record.terminal !== null || record.output !== undefined || record.worker !== undefined || record.containerId !== undefined) invalid();
     if (record.launch === 'prevented-before-launch' ? !record.cancellation || !record.prevention : !!record.prevention) invalid();
   }
 }).readonly();
@@ -47,6 +51,8 @@ export type DispatchRecord = z.infer<typeof dispatchRecordSchema>;
 /** Trusted lookup after authorization; full identity must match the Run binding. */
 export interface RunBoundDispatchStore { loadBoundDispatch(identity: AttemptIdentity): Promise<DispatchRecord | null> }
 export interface DispatchStore {
+  /** S6R-1: the created container id of a granted, unfenced dispatch (idempotent; another id is a conflict). */
+  retainDispatchContainer?(claim: DispatchClaim, containerId: string): Promise<DispatchRecord>;
   retainDispatchWorker?(claim: DispatchClaim, worker: NonNullable<DispatchRecord['worker']>): Promise<DispatchRecord>;
   requestDispatchCancellation(request: DispatchClaim['request'], principal: VerifiedPrincipal): Promise<DispatchRecord>;
   retainDispatchOutput(claim: DispatchClaim, receipt: ArtifactReceipt): Promise<DispatchRecord>;

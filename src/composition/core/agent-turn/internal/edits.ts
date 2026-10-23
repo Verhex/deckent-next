@@ -1,4 +1,4 @@
-import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
+import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
 import { SystemTrustedClock, prepareProductDirectory } from '#platform/index.js';
 import { agentFileEffectCommandId, createLocalPeerSession, openSqliteAttemptStore, type LocalPeerIdentity, type WorkspaceEditArea, type WorkspaceEditPlan } from '#adapters/index.js';
@@ -63,7 +63,7 @@ export function createAgentFileEdits(input: { readonly area: WorkspaceEditArea; 
         const effects = new EffectApplication({ async resolve(ref) {
           return ref.id === descriptor.operation.id && ref.version === descriptor.operation.version ? descriptor : null;
         } }, { resolve: kind => kind === descriptor.targetKind ? target : null }, store, gate, sessions,
-        new OperationPolicyAuthorization(context.policy), clock);
+        new OperationPolicyAuthorization(context.policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER });
         const result = await effects.execute(command);
         return { status: 'ok', text: `[deckent] ${tool}: wrote ${area.shown(planned.rel)} (+${planned.added} −${planned.removed} lines, version ${String(result.version).slice(0, 12)})` };
       } catch (error) {

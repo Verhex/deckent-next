@@ -1,6 +1,6 @@
 import { realpath } from 'node:fs/promises';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { EffectError, type AgentToolOutcome } from '#domain/index.js';
+import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolApprovalFacts, assertAuthorityWitness, agentToolArgumentsDigest, type EffectApprovalGate } from '#engine/index.js';
 import { configuredSecretResolver, ManagedFileError, resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { agentWorkspaceDeny, attestLocalInteractiveTerminal, createLocalPeerSession, localPrincipalChannel, localPrincipalPeer, createWorkspaceReadTools, describeMcpRefusal, describeMcpResult, isWriteApprovalFloored, MCP_TOOL_CALL_OPERATION, MCP_TOOL_TARGET_KIND, mcpInspectSandboxes,
@@ -72,7 +72,7 @@ export async function createAgentMcp(input: { readonly pool: McpClientPool; read
     const store = await openSqliteAttemptStore(await context.path(), context.config.storage.sqlite, { now: Date.now, timeoutMs: context.config.runRuntime.parking.timeoutMs }, 'forbid');
     try {
       await new EffectApplication({ async resolve(ref) { return ref.id === MCP_TOOL_CALL_OPERATION.operation.id && ref.version === 1 ? MCP_TOOL_CALL_OPERATION : null; } },
-        { resolve: kind => kind === MCP_TOOL_TARGET_KIND ? target : null }, store, gate, sessions, new OperationPolicyAuthorization(context.policy), clock).execute(command);
+        { resolve: kind => kind === MCP_TOOL_TARGET_KIND ? target : null }, store, gate, sessions, new OperationPolicyAuthorization(context.policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER }).execute(command);
       return ran ? describeMcpResult(ran, entry.display, settings.resultMaxBytes, entry) : describeMcpRefusal(entry.display, 'no-result');
     } catch (error) {
       return ran ? describeMcpResult(ran, entry.display, settings.resultMaxBytes, entry)

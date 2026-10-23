@@ -1,4 +1,4 @@
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, ApprovalError, authorityDocuments, delegationWithin, describePolicyChange, planPolicyChange,
+import { PRINCIPAL_EFFECT_PRODUCER, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, ApprovalError, authorityDocuments, delegationWithin, describePolicyChange, planPolicyChange,
   effectCommandSchema, policyChangeSchema, PolicyChangeError, PolicyLastAdminError, policySchema, resolvePolicyBindings, type ApprovalActor, type DelegatedRule, type EffectCommand, type EffectTargetRef, type OperationDescriptor, type Policy,
   type PolicyChangePlan, type VerifiedPrincipal } from '#domain/index.js';
 import type { IntegrityAuthority, TrustedClock } from '#platform/index.js';
@@ -161,6 +161,6 @@ export class PolicyAdministrationApplication {
     });
     return new EffectApplication({ async resolve(ref) { return ref.id === POLICY_ADMINISTER_OPERATION.operation.id && ref.version === 1 ? POLICY_ADMINISTER_OPERATION : null; } },
       { resolve: kind => kind === AUTHORITY_DOCUMENT_TARGET_KIND ? target : null }, deps.effects, gate, deps.sessions, new OperationPolicyAuthorization(deps.policy), deps.clock,
-      { surface: 'authority' }).submit('execute', command, credential);
+      { surface: 'authority', producer: PRINCIPAL_EFFECT_PRODUCER }).submit('execute', command, credential);
   }
 }

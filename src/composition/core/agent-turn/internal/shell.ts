@@ -1,5 +1,5 @@
 import { relative, resolve, sep } from 'node:path';
-import { EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
+import { PRINCIPAL_EFFECT_PRODUCER, EffectError, type AgentToolOutcome, type EffectCommand } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, agentToolArgumentsDigest, type AgentTurnShellPosture, boundApprovalPreview, classifyReadOnlyShellCommand, classifyShellContainment, classifyShellMutation,
   classifyShellAuthority, classifyShellRisk, shellPermissionTier, type EffectApprovalGate, type ShellPermissionTier, type ShellRiskClassification } from '#engine/index.js';
 import { globalStateRoot, loadConfig, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
@@ -196,7 +196,7 @@ export function createAgentShell(input: { readonly scope: WorkspaceScope; readon
         await new EffectApplication({ async resolve(ref) {
           return ref.id === HOST_SHELL_RUN_OPERATION.operation.id && ref.version === HOST_SHELL_RUN_OPERATION.operation.version ? HOST_SHELL_RUN_OPERATION : null;
         } }, { resolve: kind => kind === HOST_SHELL_TARGET_KIND ? target : null }, store, gate, sessions,
-        new OperationPolicyAuthorization(context.policy), clock).execute(command);
+        new OperationPolicyAuthorization(context.policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER }).execute(command);
         // The streamed display must be delivered before the result joins it on the channel.
         await channel.drained();
         const ran = result as HostShellResult | null;

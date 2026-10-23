@@ -4,7 +4,7 @@ import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { LocalOsSessionAuthority, createLocalPeerSession, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAttemptStore, readOperationsConfig,
   resolveOperationCatalog, resolveOperationTargets, type LocalPeerIdentity } from '#adapters/index.js';
 import { EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, awaitOperationApproval, runtimeOperationQuerySchema, type EffectOutcome } from '#engine/index.js';
-import { effectCommandSchema, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
+import { PRINCIPAL_EFFECT_PRODUCER, effectCommandSchema, type EffectCommand, type OperationDescriptor } from '#domain/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { loadConfiguredPeerScopeContext, loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -41,7 +41,7 @@ async function withEffects<T>(root: string, scopeId: string, options: ConfigLoad
     try {
       const broker = new OperationApprovalBroker(journal.store, integrity, source, clock,
         { requestTtlMs: config.approvals.requestTtlMs, defaultAdmitWithinMs: config.approvals.requestTtlMs });
-      const application = new EffectApplication(catalog, targets, store, broker, sessions, policy, clock);
+      const application = new EffectApplication(catalog, targets, store, broker, sessions, policy, clock, { producer: PRINCIPAL_EFFECT_PRODUCER });
       return await use(application, (waitScope, approvalId, wait) => awaitOperationApproval(journal.store, integrity, { scopeId: waitScope, approvalId },
         () => clock.sample().wallMs, clock.sample().wallMs + wait.timeoutMs, wait.signal, wait.pollMs));
     } finally { journal.close(); store.close(); }

@@ -11,7 +11,7 @@ import { createWorkspaceScope } from '#adapters/index.js';
 import { WorkspaceFileTarget, WORKSPACE_FILE_WRITE_OPERATION } from '#adapters/index.js';
 import { LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteAttemptStore, openSqliteApprovalStore } from '#adapters/index.js';
 import { EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, type ProjectInstructionPort, type InstructionInitPreview } from '#engine/index.js';
-import type { EffectCommand } from '#domain/index.js';
+import { PRINCIPAL_EFFECT_PRODUCER, type EffectCommand } from '#domain/index.js';
 
 /** Same local OS principal, scoped policy, broker, file target and C11 settlement as other human/AI writes. */
 async function initialize(root: string, preview: InstructionInitPreview, scopeId: string, options: ConfigLoadOptions) {
@@ -35,7 +35,7 @@ async function initialize(root: string, preview: InstructionInitPreview, scopeId
     const broker = new OperationApprovalBroker(approvals.store, integrity, policy, clock,
       { requestTtlMs: config.approvals.requestTtlMs, defaultAdmitWithinMs: config.approvals.requestTtlMs });
     const app = new EffectApplication({ resolve: async ref => ref.id === descriptor.operation.id && ref.version === descriptor.operation.version ? descriptor : null },
-      { resolve: kind => kind === target.kind ? target : null }, store, broker, sessions, new OperationPolicyAuthorization(policy), clock);
+      { resolve: kind => kind === target.kind ? target : null }, store, broker, sessions, new OperationPolicyAuthorization(policy), clock, { producer: PRINCIPAL_EFFECT_PRODUCER });
     const result = [];
     for (const command of commands) {
       let outcome = await app.submit('execute', command);

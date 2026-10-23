@@ -657,3 +657,30 @@ Kaynak: ana oturum (lead 4d4830b2). Lead toplu 2026-10-22'yi ayrı alpha.52 sür
 - **Yönetim:** lead projeyi skill'lerle yönetir, işçilere de skill kullandırır.
 - **Sıradaki owner adımı:** owner test senaryosunu yapıp Deckent'in kontrolünü yeniden ele alır.
 - **Beta geçişi:** npm paketi yayını; owner: scope'suz `deckent` adı npm'de `dedent` benzerlik uyarısına takılıyor, "muhtemelen verhex/deckent alacağız" → scope'lu `@verhex/deckent` (`npm install -g @verhex/deckent`; @'siz `Verhex/deckent` GitHub kısayoludur), ad yayından önce kesinleşir; tüm dokümantasyonun güncellenmesi (kurulumu yapan AI/insan ne gerekir, ne yapabilir), deckent.ai sitesi ve docs sayfası; ardından beta iş maddelerinin yeniden sıralanması, dogfood ile geliştirme ve tam ürünleşme. Owner: ilk push 2026-09-16; ilk hedef tarihin gerisindeyiz.
+
+<a id="s6r-kayip-calisan-2026-10-23"></a>
+
+## Owner kararları — 2026-10-23: kaybolan çalışanın otomatik kurtarılması (S6R), K-B + A5 güncellemesi, KARAR 12 kapanışı
+
+Kaynak: ana oturum (lead 4d4830b2) PROGRAM Q3 yanıtı ("Otomatik kurtarma … ilgili çalışan front model görüp aksiyonu almalı manuel süreçleri azaltıp otomasyon kontrol güvenlik hız prensipleriyle ilerlemeliyiz"); tasarım dış `proof/ORCHESTRATION-2026-10-23/S6R-DESIGN.md` (rev 2, kanun denetimi yeniden denetimde PASS); owner yanıtları 2026-10-23 (AskUserQuestion, hepsi önerilen): Q-R1 + Q-R5 yetkiler tasarlandığı gibi (sahipsiz konteyner durdurma dahil sabit deterministik adımlar; model yalnız yeni Attempt ile insana devir arasında seçer; bu durum için "yeni Attempt asla otomatik değil" istisnası), Q-R2 önce gölge sonra yalnız düşük riskli WorkClass'lar (sayısal çıkış ölçütleri, müşteri varsayılanı kapalı), Q-R3 kayıp görev başına en fazla 1 otomatik devam, görev başına toplam 3 deneme (registry), Q-R4 başlatıcı ölü + konteyner çalışıyor = kayıp. Bu bölüm 2026-10-11 K-B ve 2026-10-14 A5 satırlarını yalnız bu durum için günceller; eski satırlar yerinde kalır. Uygulama dilimleri S6R-1…S6R-6 (alpha.55'ten itibaren); ilk çit kodu S6R-3'tedir.
+
+- **K-B + A5 güncellemesi (owner 2026-10-23, Q3):** Nervous sürekli ihlal gözcüsüdür; deterministik kurallarla algılar, durum yazmaz,
+  yalnız durdurma önerir; öneriyi kalıcı onayla aracı (broker) mevcut uygulamalardan yürütür. Kalıcı durdurma listesi: Attempt'i çitleme/Run'ı
+  bekletme, sahipsiz konteyneri iptal, servis bileşenini yeniden başlatma, Brain'e uyarı, insana devir. Nervous model çağırmaz.
+  Sonlanma kanıtıyla slot bırakma ve belirsiz etkinin uzlaştırılması sabit sıralı deterministik adımdır. Kaybolan çalışanın görevi için
+  yeni Attempt yalnız şu durumda açılır: sorumlu frontier-tier model mühürlü kanıtı okuyup tipli seçim yapar, slot kanıtla bırakılmış ve
+  tüm etkiler uzlaşmıştır, görev başına sınır ve değişmiş-kanıt şartı sağlanmıştır. Belirsiz etki varken model çağrılmaz, insana devredilir.
+  Dış sistemde tamamlanmış (settled) iş, ancak işlemi katalogda görev-kapsamlı idempotency bildiriyorsa yeni Attempt'e engel olmaz ve
+  yeni Attempt'e yalnız bilgi olarak verilir; bildirmiyorsa insana gider. Görev başına toplam Attempt tavanı (takılma + kayıp + ileride
+  RETRY) registry'dedir, başlangıç değeri 3.
+  R3 takılma yeniden denemesi (D4a/D5a) aynen kalır; kalite başarısızlığı RETRY tasarımına aittir.
+- **KARAR 12 kapanışı:** slot bırakma = dispatch çiti + aynı çalışan kimliğine bağlı sonlanma kanıtı (sistem, K-B kalıcı onay); kanıtsızda
+  `hold-manual` ve insana devir. İlk çit artık Nervous kuralıyla yazılır (MARK-LOST-ATOMIC); elle `mark-lost` komutu yoktur.
+
+Bu kararla güncellenen doküman satırlarının eski metni (birebir korunur; yeni metin ARCHITECTURE ve PLAN'dadır):
+
+```text
+(`DISPATCH_FENCED`/`DISPATCH_CORRUPT`); operation-evidence evaluator (settled no earlier than the launch grant, Run principal chain, same Run only, `OPERATION_EVIDENCE_OTHER_RUN`); without trusted effect-to-Attempt provenance or an exact settlement digest already accepted by a Task of this Run, a pre-grant settlement remains `unknown` with `OPERATION_EVIDENCE_EARLIER`, including the wall-skew window. Evaluation returns a complete Run view and requires Run `inspect` before mutation or replay; denial writes no evaluation. Evaluation reply and Run inspection share result briefs and delivery outlook under per-Attempt `read-output` authority; a denied Attempt has no `resultBrief` or delivery observation (replay pins the receipt snapshot). Delivery receipts retain producer Attempt identity and are filtered by that producer's read-output authority before aggregation; unattributed receipts are withheld, and output-derived Run outlook is withheld without every bound producer's authority. Internal lost-dispatch recovery revalidates binding, fence and termination against the current Run snapshot and releases custody with its revision CAS; absent Run/Attempt rows refuse with `DISPATCH_NOT_ADMITTED`. No initial production fence trigger is added.
+  retained container incarnation plus exit/absence proof, else `hold-manual`), but no production path writes the first fence yet (automatic mark-lost is MARK-LOST-ATOMIC / KARAR 12, owner-deferred). A late exit keeps a durable unknown Attempt observation (`settle.ts`); the lock is Attempt-level, not effect-level (C11).
+- **Dalga 2 takipleri:** patch-prepare reddi tipli makbuz, `LayoutError` insan metni, MARK-LOST-ATOMIC (KARAR 12).
+```

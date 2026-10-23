@@ -86,6 +86,7 @@ export class SqliteAttemptStore implements AttemptStore, DispatchStore, RunBound
   async listRunLifecycleDue(query: ProgressionQuery & { readonly now: number }) { return new SqliteRunProgression(this.db).listRunLifecycleDue(query); }
   async hasTaskEvaluation(identity: unknown, revision: number) { return new SqliteRunProgression(this.db).hasTaskEvaluation(identity, revision); }
   async loadRunReceipt(scopeId: string, commandId: string) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).loadRunReceipt(scopeId, commandId); }
+  async retainDispatchContainer(...args: Parameters<SqliteDispatchJournal['retainDispatchContainer']>) { return new SqliteDispatchJournal(this.db).retainDispatchContainer(...args); }
   async retainDispatchWorker(...args: Parameters<SqliteDispatchJournal['retainDispatchWorker']>) { return new SqliteDispatchJournal(this.db).retainDispatchWorker(...args); }
   async releaseLostDispatch(...args: Parameters<SqliteRunJournal['releaseLostDispatch']>) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).releaseLostDispatch(...args); }
   async fenceLostDispatch(...args: Parameters<import('#engine/index.js').LostDispatchStore['fenceLostDispatch']>) { return new SqliteRunJournal(this.db, undefined, this.lifecycleTiming).fenceLostDispatch(...args); }
