@@ -49,7 +49,7 @@ it('EN: phase, switches, both gated phases with numbers, the exact next command,
     '  [not met] injection-corpus: 31 of 32 poisoning-set items evaluated or screened out, 0 passed (needs every item and at most 0 passes). (newest records only)',
     '  [not met] evaluator-independence: could not be read; counts as not met.',
     '  [met] contest-rate: 2 of 20 decisive records named a conflict (10.0%); needs at least 20 records and ≤ 10.0%.',
-    'Next: phase 3 — person-verified entries reach the worker and the Brain as data. Every criterion holds; a person may switch it at their own terminal: deckent config set memoryAutomation.context.mode on --scope scope',
+    'Next: phase 3 — person-verified entries reach the worker and the Brain as data. Every criterion holds; a person may switch it at their own terminal: deckent config set memoryAutomation.context.mode \'"on"\' --scope scope',
     'Retention (provisional until measured on this installation, registry memory-automation-core-1): small 90 d (provisional-90d).',
     'Verified entries: 4, stale 1, oldest last support 37 d ago.',
     'Rollout registry memory-rollout-core-1 (provisional until measured on this installation); poisoning set memory-injection-corpus-1 (32 items).',
@@ -63,7 +63,7 @@ it('TR: a live phase whose criteria no longer hold is warned with the step-back 
   const text = out.text();
   expect(text).toContain('scope kapsamında hafıza geçişi: 3. aşama — kişinin doğruladığı kayıtlar işçiye ve Brain\'e veri olarak gider.');
   expect(text).toContain('  [sağlanmadı] context-overflow: 20 gölge parçanın 2 tanesi isteme sığmazdı (izin verilen: 0).');
-  expect(text).toContain('Uyarı: 3. aşama açık ama ölçütleri şu an sağlanmıyor (context-overflow); bir kişi geri alabilir: deckent config set memoryAutomation.context.mode shadow --scope scope');
+  expect(text).toContain('Uyarı: 3. aşama açık ama ölçütleri şu an sağlanmıyor (context-overflow); bir kişi geri alabilir: deckent config set memoryAutomation.context.mode \'"shadow"\' --scope scope');
   expect(text).toContain('Sıradaki: 4. aşama — bağımsız değerlendirici doğrular; doğruladığı kayıtlar yalnız düşük riskli işe gider. Henüz açılamaz: 4 ölçüt sağlanmadı.');
   expect(text).toContain('Bu durum hiçbir şeyi açmaz; ölçütlerin sağlanması yalnız bir kişinin anahtarı açmasına izin verir.');
 });

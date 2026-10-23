@@ -24,8 +24,9 @@ const METRIC: Readonly<Record<MemoryRolloutMetric, (values: Values, locale: Loca
   'context-integrity-violations': (values, locale) => t('memory.rollout.metric.context-integrity-violations', values, locale),
   'candidate-secret-findings': (values, locale) => t('memory.rollout.metric.candidate-secret-findings', values, locale),
   'purge-replay-pending': (values, locale) => t('memory.rollout.metric.purge-replay-pending', values, locale) };
-/** The exact person command for one switch value (a person's terminal; the config write measures the criteria again). */
-const command = (section: string, mode: string, scopeId: string) => `deckent config set memoryAutomation.${section}.mode ${mode} --scope ${scopeId}`;
+/** The exact person command for one switch value (a person's terminal; the config write measures the criteria again). The value is the JSON
+ * string `config set` takes, quoted for the shell. */
+const command = (section: string, mode: string, scopeId: string) => `deckent config set memoryAutomation.${section}.mode '${JSON.stringify(mode)}' --scope ${scopeId}`;
 const percent = (perMille: number) => `${Math.floor(perMille / 10)}.${perMille % 10}%`;
 const ratio = (count: number, sample: number) => sample ? percent(Math.floor(count * PER_MILLE / sample)) : '-';
 function criterionLine(row: MemoryRolloutCriterionView, locale: Locale): string {
