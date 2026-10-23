@@ -81,6 +81,9 @@
   },
   "cancellation": null,
   "cancellationRuntime": null,
+  "catalogEvolution": {
+    "mode": "off"
+  },
   "cli": {
     "agentEnvironment": [
       "CLAUDECODE",

@@ -29,17 +29,17 @@ const entry = { scopeId: 's', entryId: 'e1', revision: 1, content: { kind: 'fact
 
 describe('ledger v65 memory automation migration', () => {
   it('pins the step: v65 is the memory automation step and the current ledger', () => {
-    expect(MEMORY_AUTOMATION_LEDGER_VERSION).toBe(65); expect(CURRENT_LEDGER_VERSION).toBe(67);
+    expect(MEMORY_AUTOMATION_LEDGER_VERSION).toBe(65); expect(CURRENT_LEDGER_VERSION).toBe(69);
   });
   it('backs up a v64 ledger and adds only the empty memory automation tables', async () => {
     const f = await v64();
     expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
     const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-23T00:00:00Z'));
-    expect(upgrade).toMatchObject({ from: 64, to: 67 });
+    expect(upgrade).toMatchObject({ from: 64, to: 69 });
     const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true }), db = new DatabaseSync(f.path, { readOnly: true });
     try {
       expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(64); expect(tables(backup)).toEqual([]);
-      expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(67); expect(tables(db)).toEqual(TABLES);
+      expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(69); expect(tables(db)).toEqual(TABLES);
       for (const table of TABLES) expect(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.['n']).toBe(0);
     } finally { backup.close(); db.close(); }
   });
@@ -111,7 +111,7 @@ describe('ledger v65 memory automation migration', () => {
       migrateLedger(db, 'allow'); expect(tables(db)).toEqual(TABLES);
       db.exec(DOWNGRADE_TO_V64_LEDGER_SQL); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(64); expect(tables(db)).toEqual([]);
       expect(db.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name='memory_entry_revisions_no_update'").get()).toBeDefined();
-      migrateLedger(db, 'allow'); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(67); expect(tables(db)).toEqual(TABLES);
+      migrateLedger(db, 'allow'); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(69); expect(tables(db)).toEqual(TABLES);
     } finally { db.close(); }
   });
   it('negative: the step never adopts an existing table, and a build refuses a ledger newer than its own', async () => {
