@@ -1224,7 +1224,7 @@
     },
     "doctor.firstJob.execution": {
       "before": "İşin nerede çalışacağını söyleyin: o imaj kimliği ile docker ve git yolları (command -v docker, command -v git)",
-      "after": "Worker imajını derleyin ya da benimseyin ve çalıştırma ayarlarını yazın (deckent init önce kartta sorar)"
+      "after": "Worker imajını derleyin ya da hazır imajı kullanın ve çalıştırma ayarlarını yazın (deckent init önce kartta sorar)"
     },
     "cli.coding.instructions.help": {
       "before": "deckent coding instructions [status] [--json] [--lang en|tr]\nÇalışma hedefinin worker talimat dosyasını gösterir (execution.workerInstructions; çalışma hedefi tanımlı değilse proje kökü): yol, boyut, SHA-256 ve worker'ların dosyayı şu an alıp almadığı.\ndeckent coding instructions trust|revoke [--target <id>] --scope <id> [--lang en|tr]\nDosyanın yalnızca şu anki içeriğine o klasör için güvenir (ya da güveni geri alır). Kendi terminalinizdeki kart yolu, boyutu, SHA-256 değerini ve ilk satırları gösterir; yapay zekâ araçları, MCP, boru (pipe) ve --json reddedilir. Karar execution.workerInstructions için config yazma iznine göre verilir ve denetim kaydına yazılır. Değişen dosya yeniden güvenilmez olur.",
@@ -1237,6 +1237,66 @@
     "memory.help.detail": {
       "before": "deckent memory [--scope <id>] [--state candidate,verified,retired] [--json]\n  Kapsamın hafıza kayıtlarını en son değişen önce listeler (--state başka durum söylemezse aday ve doğrulanmış).\ndeckent memory search <kelimeler...> [--scope <id>] [--state ...] [--json]\n  Bütün kelimeleri içeren kayıtları bulur (büyük/küçük harf ve aksan yok sayılır).\ndeckent memory inspect <kayıt-id> [--scope <id>] [--json]\n  Bir kaydı kaynağı, doğrulaması ve bütün sürümleriyle gösterir.\ndeckent memory propose --input <dosya> [--scope <id>]\n  JSON dosyasındaki bilgiyi ya da dersi senin adınla aday olarak önerir.\ndeckent memory verify <kayıt-id> --note <metin> [--scope <id>]\n  Kendi incelemenden sonra bir adayı doğrular.\ndeckent memory retire <kayıt-id> --reason <metin> [--superseded-by <kayıt-id>] [--scope <id>]\n  Bir kaydı emekliye ayırır; kayıt ve sürümleri okunabilir kalır.\nÖnerme, doğrulama ve emekliye ayırma yalnız kendi terminalinde, her biri tek kartla çalışır; AI araçları, borular ve --json reddedilir. Bir kayıt yalnız bir kişinin incelemesiyle ya da bağımsız bir değerlendirme kaydıyla doğrulanır, AI kendisi asla doğrulamaz; hiçbir şey silinmez.",
       "after": "deckent memory [--scope <id>] [--state candidate,verified,retired] [--json]\n  Kapsamın hafıza kayıtlarını en son değişen önce listeler (--state başka durum söylemezse aday ve doğrulanmış).\ndeckent memory search <kelimeler...> [--scope <id>] [--state ...] [--json]\n  Bütün kelimeleri içeren kayıtları bulur (büyük/küçük harf ve aksan yok sayılır).\ndeckent memory inspect <kayıt-id> [--scope <id>] [--json]\n  Bir kaydı kaynağı, doğrulaması ve bütün sürümleriyle gösterir.\ndeckent memory propose --input <dosya> [--scope <id>]\n  JSON dosyasındaki bilgiyi ya da dersi senin adınla aday olarak önerir.\ndeckent memory verify <kayıt-id> --note <metin> [--scope <id>]\n  Kendi incelemenden sonra bir adayı doğrular.\ndeckent memory retire <kayıt-id> --reason <metin> [--superseded-by <kayıt-id>] [--scope <id>]\n  Bir kaydı emekliye ayırır; kayıt ve sürümleri okunabilir kalır.\ndeckent memory retire --source <run>[/<attempt>] --reason <metin> [--scope <id>]\n  Bir Run'dan (ya da onun bir denemesinden) gelen tüm kayıtları tek kartla emekliye ayırır.\ndeckent memory review [--note <metin>] [--reason <metin>] [--scope <id>]\n  Açık itirazları, adayları ve bayat kayıtları kanıtları ve tüm değerlendirici kayıtlarıyla tek tek kartla gösterir; her birini doğrular, emekliye ayırır, siler ya da karara bağlarsınız.\ndeckent memory purge <kayıt-id> | --source <run>[/<attempt>] [--scope <id>]\n  Bir kaydın tüm sürümlerdeki içeriğini ve değerlendirici çağrılarının saklanan istem ve cevaplarını siler; yalnız yeniden önerilmesini engelleyen anahtarlı özet kalır. Kart neyi silmediğini söyler.\nÖnerme, doğrulama, emekliye ayırma, inceleme ve silme yalnız kendi terminalinde, kartlarla çalışır; AI araçları, borular ve --json reddedilir. Bir kayıt yalnız bir kişinin incelemesiyle ya da bağımsız bir değerlendirme kaydıyla doğrulanır, AI kendisi asla doğrulamaz; içeriği yalnız bir kişinin silme kartı siler."
+    },
+    "terminal.slash.deliver": {
+      "before": "Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim et; seçilen doğrulama işiyle dala al",
+      "after": "Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim et; seçilen doğrulama işiyle dalı ilerlet"
+    },
+    "terminal.delivery.adoptionLater": {
+      "before": "Teslimden sonra dala alma ayrı bir seçimdir: {targets}",
+      "after": "Teslimden sonra dalı ilerletme ayrı bir seçimdir: {targets}"
+    },
+    "terminal.delivery.adoptPrompt": {
+      "before": "{commit} commit'i bir dala alınsın mı? Bu dalı ilerletir ve ayrı bir y ister.",
+      "after": "{commit} commit'i için bir dal ilerletilsin mi? Bu, dalı commit'e taşır ve ayrı bir y ister."
+    },
+    "terminal.delivery.adoptHints": {
+      "before": "y seçili dala al (yapılandırılmış doğrulama sonra seçilir) · ↑↓ dal · n/Esc dala almadan bitir",
+      "after": "y seçili dalı ilerlet (yapılandırılmış doğrulama sonra seçilir) · ↑↓ dal · n/Esc dalı ilerletmeden bitir"
+    },
+    "terminal.delivery.adopting": {
+      "before": "Dala alınıyor…",
+      "after": "Dal ilerletiliyor…"
+    },
+    "terminal.delivery.adopted": {
+      "before": "Dala alındı: {target} {from} → {to} · {verification} · dala alma komutu {command}",
+      "after": "Dal ilerletildi: {target} {from} → {to} · {verification} · dalı ilerletme komutu {command}"
+    },
+    "terminal.delivery.verifyWithout": {
+      "before": "{mark} Doğrulamasız dala al (bu kurulum izin veriyor; doğrulanmadı olarak kaydedilir)",
+      "after": "{mark} Doğrulamasız dalı ilerlet (bu kurulum izin veriyor; doğrulanmadı olarak kaydedilir)"
+    },
+    "terminal.delivery.verifyCheck": {
+      "before": "Dala alma, seçilen işin tam olarak bu teslim commit'ini güncel profil ve kurulumun ölçütleriyle doğruladığını denetler; değilse reddedilir ve dal taşınmaz.",
+      "after": "Dalı ilerletme, seçilen işin tam olarak bu teslim commit'ini güncel profil ve kurulumun ölçütleriyle doğruladığını denetler; değilse reddedilir ve dal taşınmaz."
+    },
+    "terminal.delivery.verifyHints": {
+      "before": "↑↓ seç · y seçimle dala al · r yeniden oku · n/Esc geri",
+      "after": "↑↓ seç · y seçimle dalı ilerlet · r yeniden oku · n/Esc geri"
+    },
+    "terminal.delivery.summaryAdopted": {
+      "before": "{target} dalına alındı: {from} → {to} ({verification}). Dala alma komutu {command} (deckent task integration-rollback --adoption-command-id), teslim komutu {delivery}.",
+      "after": "{target} dalı ilerletildi: {from} → {to} ({verification}). Dalı ilerletme komutu {command} (deckent task integration-rollback --adoption-command-id), teslim komutu {delivery}."
+    },
+    "terminal.delivery.summaryAdoptFailed": {
+      "before": "Dala alma yapılmadı; teslim {ref} referansında kalıyor — {reason}",
+      "after": "Dal ilerletilmedi; teslim {ref} referansında kalıyor — {reason}"
+    },
+    "terminal.delivery.summaryNotAdopted": {
+      "before": "Dala alınmadı; teslim {ref} referansında kalıyor.",
+      "after": "Dal ilerletilmedi; teslim {ref} referansında kalıyor."
+    },
+    "terminal.delivery.next.ADOPTION_TARGET_DENIED": {
+      "before": "Sonraki adım: teslim kendi referansında kalır. Burada dala almak için dalı execution.adoption.targets'a ekle (/config).",
+      "after": "Sonraki adım: teslim kendi referansında kalır. Burada dalı ilerletmek için dalı execution.adoption.targets'a ekle (/config)."
+    },
+    "terminal.delivery.next.ADOPTION_NOT_VERIFIED": {
+      "before": "Sonraki adım: teslim kendi referansında kalır, dal taşınmadı. Bu kurulum dalı yalnız teslim commit'inin kabul edilmiş bir doğrulama işi ile taşır: bu pencerede seçin (dalda y) ya da komut satırından dala alın: `deckent task integration-adopt --scope {scope} --run {run} --task {task} --attempt {attempt} --generation {generation} --layout-revision {layout} --command-id <new-id> --delivery-command-id {delivery} --target {target} --verification-run <run>`",
+      "after": "Sonraki adım: teslim kendi referansında kalır, dal taşınmadı. Bu kurulum dalı yalnız teslim commit'inin kabul edilmiş bir doğrulama işi ile taşır: bu pencerede seçin (dalda y) ya da komut satırından dalı ilerletin: `deckent task integration-adopt --scope {scope} --run {run} --task {task} --attempt {attempt} --generation {generation} --layout-revision {layout} --command-id <new-id> --delivery-command-id {delivery} --target {target} --verification-run <run>`"
+    },
+    "setup.execution.workerNone": {
+      "before": "Henüz worker imajı yok: Run'lar ve /do bir imaj ister. Terminalde deckent init imajı bir karttan sonra derler ya da --image-id ile verdiğiniz imajı benimser.",
+      "after": "Henüz worker imajı yok: Run'lar ve /do bir imaj ister. Terminalde deckent init imajı bir karttan sonra derler ya da --image-id ile verdiğiniz imajı kullanır."
     }
   }
 }

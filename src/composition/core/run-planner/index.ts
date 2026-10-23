@@ -1,6 +1,6 @@
-import { executionRegistrySchema, type BrainPlanCommand,
+import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, type BrainPlanCommand,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { BrainPlanApplication, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
+import { BrainPlanApplication, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -63,7 +63,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
         if (brainAssignsWorkers(context.config['brain_planner'])) {
           const catalog = await openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs });
           try { workerModels = await inspectAdmissibleWorkerModels(templates, command.scopeId, catalog, Date.now(),
-            { imageRefreshInProgress: await isToolchainRefreshInProgress(root, options) }); } finally { catalog.close(); }
+            { imageRefreshInProgress: await isToolchainRefreshInProgress(root, options), roles: composeModelRolePolicy(context.config['model_roles']), workerRole: WORK_CLASS_WORKER_ROLE }); } finally { catalog.close(); }
         }
         const kinds = registry.kinds.map(row => { const template = templates.find(value => value.profile.id === row.profile.id && value.profile.version === row.profile.version);
           const profile = template ? registry.profiles.find(value => value.id === row.profile.id && value.version === row.profile.version) : undefined;

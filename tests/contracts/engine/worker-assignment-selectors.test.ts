@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
-import { catalogModelSchema, parseProviderCatalogDocument, readWorkerModelPin, WORK_CLASS_LIMITS, workerAssignmentSchema, type CatalogModel, type ExecutionProfileDefinition,
+import { catalogModelSchema, parseProviderCatalogDocument, readWorkerModelPin, WORK_CLASS_LIMITS, WORK_CLASS_WORKER_ROLE, workerAssignmentSchema, type CatalogModel, type ExecutionProfileDefinition,
   type ModelCatalogActivationRecord, type ModelCatalogChannelRecord, type ModelCatalogModelRecord } from '#domain/index.js';
-import { assertRunExecution, composeModelRolePolicy, resolveWorkerEffortExecution, type ModelCatalogReader } from '#engine/index.js';
+import { assertRunExecution, composeModelRolePolicy, inspectAdmissibleWorkerModels, renderRunCreateApprovalSummary, resolveWorkerEffortExecution, type ModelCatalogReader } from '#engine/index.js';
 import { bindNativeWorkerEffort, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeWorkerEffortCapability } from '#adapters/index.js';
 
 // M3 (MODEL-INDEPENDENCE-AUDIT, owner 2026-10-23: a new model works through data only): WorkClass v5 candidate selectors expand through the
@@ -148,4 +148,29 @@ it('the v2 seal is exact: skips stay in order up to the chosen entry, and the co
   const rest = Object.fromEntries(Object.entries(seal).filter(([key]) => key !== 'selector'));
   expect(workerAssignmentSchema.parse({ ...rest, schemaVersion: 1, skipped: [seal.skipped[0]!] })).toMatchObject({ schemaVersion: 1 });
   expect(workerAssignmentSchema.safeParse({ ...seal, schemaVersion: 1 }).success).toBe(false);
+});
+
+it('the approval card says when the worker was chosen through a selector (seal v2) and says nothing for a v1 seal', async () => {
+  const id = 'acme-frontier-next', policy = roles([roleRow(id, 'frontier')]);
+  const card = async (reader: ModelCatalogReader, locale: 'en' | 'tr') => {
+    const planned = graph(), execution = await assign(reader, policy);
+    return renderRunCreateApprovalSummary({ schemaVersion: 1 as const, commandId: 'create', scopeId: 's', runId: 'run-a', graph: planned as never },
+      { commandId: 'create', actor: { id: 'o', issuer: 'test', subject: 'o' }, graph: planned as never, identity: { scopeId: 's', runId: 'run-a', layoutRevision: 'l' }, now: 1,
+        execution, policy: { schemaVersion: 2 as const, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } },
+      { decision: 'require-approval', revision: 'p1', reason: 'APPROVAL_REQUIRED' } as const, locale);
+  };
+  const viaSelector = await card(catalog([id], [newModel(id)]), 'en');
+  expect(viaSelector).toContain('chosen through a selector: model 1 of 1 it matched');
+  expect(await card(catalog([id], [newModel(id)]), 'tr')).toContain('seçiciyle seçildi: eşleşen 1 modelin 1. sırası');
+  // v1 seal (an exact candidate taken before any selector): no selector line.
+  expect(await card(catalog(['claude-opus-5-5'], [newModel(id)]), 'en')).not.toContain('chosen through a selector');
+});
+
+it('the Brain worker-model list applies the same worker role gate as assignment: no role row, no listing (fail closed)', async () => {
+  const id = 'acme-frontier-next', reader = catalog([id, 'claude-opus-5-5'], [newModel(id)]), templates = [{ profile: { id: 'claude-t', version: 1 }, provider: 'claude', cliVersion: '2.1.293 (Claude Code)' }];
+  const listed = async (policy: ReturnType<typeof roles>) => (await inspectAdmissibleWorkerModels(templates, 's', reader, context().nowMs, { roles: policy, workerRole: WORK_CLASS_WORKER_ROLE })).map(row => row.modelId);
+  expect(await listed(roles())).not.toContain(id);
+  expect(await listed(roles([roleRow(id, 'frontier')]))).toContain(id);
+  // A model whose row lacks the worker role is not listed either, though it is catalog-registered and active.
+  expect(await listed(roles([roleRow(id, 'frontier', ['brain'])]))).not.toContain(id);
 });

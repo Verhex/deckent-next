@@ -10,6 +10,7 @@
   "error.WORK_CLASS_CANDIDATES_NOT_REGISTERED": "Bir iş sınıfı, iş sınıfı kaydında tanımlı olmayan bir çalışan aday listesine başvuruyor. Kaydı düzeltin; Run oluşturulmadı.",
   "assignment.card.worker": "  çalışan: {modelId} ({channelId}) · effort: {effort} · {workClass} listesinden ({policy}), {position}. seçenek",
   "assignment.card.skipped": "  ondan önce atlananlar: {skipped}",
+  "assignment.card.selector": "  seçiciyle seçildi: eşleşen {expanded} modelin {position}. sırası (rol kaydı revizyonu {revision})",
   "assignment.effort.cliDefault": "CLI varsayılanı",
   "error.BRAIN_TIER_REFUSED": "Brain modeli {modelId} ({channelId}), model kademe/rol kaydına göre iş planlayamaz. Başka bir model seçilmedi; modele hiçbir şey gönderilmedi ve öneri oluşturulmadı.",
   "error.BRAIN_TIER_REFUSED.model-unknown": "Brain modeli {modelId} ({channelId}) model kademe/rol kaydında yok, bu yüzden iş planlayamaz. Başka bir model seçilmedi; modele hiçbir şey gönderilmedi ve öneri oluşturulmadı. /model ile frontier sınıfı bir Brain modeli seçin ya da kurulum sahibi bu modeli kayda eklesin.",
@@ -27,5 +28,6 @@
   "assignment.config.modelRoles": "Model kademe/rol kaydının kurulum ek katmanları: Brain, çalışan, kurtarma kararı ve hafıza değerlendirici rollerini hangi tam katalog modellerinin üstlenebileceği ve tarihli istisnalar. Yalnız global katman.",
   "error.MODEL_ROLE_CATALOG_UNKNOWN": "Bu tam model, bu kapsamın görebildiği model kataloğunda yok; bu yüzden ona kademe ya da rol verilemez. Hiçbir şey değişmedi; modeli listeleyen kataloğu kaydedin (deckent models catalog register) ve kanal ile model kimliğini deckent models roles ile denetleyin.",
   "error.MODEL_ROLE_COMMAND_INVALID": "Kademe/rol isteği geçerli değil (bilinmeyen kademe, iki kez yazılmış rol ya da bozuk bir model_roles bölümü). Hiçbir şey değişmedi; deckent models roles --help ile denetleyin.",
-  "error.MODEL_ROLE_STALE": "Model kademe/rol kaydı kart gösterildikten sonra değişti. Hiçbir şey değişmedi; güncel durumu görmek için komutu yeniden çalıştırın."
+  "error.MODEL_ROLE_STALE": "Model kademe/rol kaydı kart gösterildikten sonra değişti. Hiçbir şey değişmedi; güncel durumu görmek için komutu yeniden çalıştırın.",
+  "assignment.refusal.skippedMore": "+{count} daha"
 }

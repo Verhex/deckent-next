@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { workerEffortSchema, workerModelPinEvidenceShape, catalogPinModelEvidence, type ModelCatalogModelRecord } from '#domain/index.js';
+import { workerEffortSchema, workerModelPinEvidenceShape, catalogPinModelEvidence, eligibleRoleModels, roleModelKey, type ModelCatalogModelRecord, type ModelRolePolicy } from '#domain/index.js';
 import { compareToolchainVersions, extractToolchainVersion } from '#engine/core/toolchain-currency/index.js';
 import type { ModelCatalogReader } from './catalog.js';
 
@@ -18,7 +18,7 @@ export interface WorkerModelAdmissionDetail {
   readonly taskId: string; readonly channelId: string | null; readonly modelId: string | null;
   readonly exactModelId?: string; readonly minCliVersion?: string; readonly cliVersion?: string | null;
   /** ATAMA-1 refusals: the WorkClass whose candidate list was read and each skipped candidate with its typed reason (bounded by the list). */
-  readonly workClass?: string; readonly skipped?: string;
+  readonly workClass?: string; readonly skipped?: string; readonly skippedMore?: number;
 }
 /** Admission that passes with a visible caveat (WORKER-AUTO-REFRESH, owner K2): the pinned worker CLI is older than the model's minimum while
  * a worker image refresh is in flight, so the Run is admitted on the newest image it can use today. Never raised when no refresh runs. */
@@ -70,16 +70,25 @@ async function checkModel(reader: ModelCatalogReader, scopeId: string, taskId: s
 /** K3 work input as recorded in the Run graph: the requested pin and optional effort of a task compiled from a template. */
 export type WorkerTaskRequest = Readonly<{ id: string; workInput?: Readonly<{ model?: Readonly<{ channelId: string; modelId: string; auxiliaryModelIds: readonly string[] }> | undefined; effort?: string | undefined }> | undefined }>;
 
+/** The (channel, model) keys that hold the worker `role` (the WorkClass worker role id, registry data) in a scope today (tier/role registry; a dated exception counts only while its measured row is active).
+ * The one gate for system assignment and for the Brain's worker-model list, so the two cannot disagree. */
+export async function workerRoleKeys(roles: ModelRolePolicy, role: string, scopeId: string, reader: ModelCatalogReader, nowMs: number): Promise<ReadonlySet<string>> {
+  const measured = new Set<string>();
+  for (const row of roles.models) if (row.measured !== undefined && row.roles.includes(role) && (await reader.activation(scopeId, row.channelId, row.modelId))?.state === 'active') measured.add(roleModelKey(row));
+  return new Set(eligibleRoleModels(roles, role, { today: today(nowMs), active: measured }).map(roleModelKey));
+}
 export interface WorkerPlanningTemplate { readonly profile: { id: string; version: number }; readonly provider: string; readonly cliVersion: string }
-/** Read-only planner choices share the admission check, including scope activation, lifecycle, alias and CLI floor. */
+/** Read-only planner choices share the admission check, including scope activation, lifecycle, alias and CLI floor, and the assignment's
+ * `worker` role gate (`roles` is required: a model without the role is skipped, fail closed). */
 export async function inspectAdmissibleWorkerModels(templates: readonly WorkerPlanningTemplate[], scopeId: string, reader: ModelCatalogReader,
-  nowMs: number, options: WorkerAdmissionOptions = {}) {
-  const choices = [];
+  nowMs: number, options: WorkerAdmissionOptions & Readonly<{ roles: ModelRolePolicy; workerRole: string }>) {
+  const choices = [], workers = await workerRoleKeys(options.roles, options.workerRole, scopeId, reader, nowMs);
   const channels = await reader.channels();
   for (const template of templates) {
     for (const channel of channels.filter(row => row.channel.kind === 'native-cli' && row.channel.cli === template.provider)) {
       const admitted: Readonly<{ record: ModelCatalogModelRecord; warnings: readonly WorkerAdmissionWarning[] }>[] = [];
       for (const row of await reader.models(channel.channelId)) {
+        if (!workers.has(roleModelKey({ channelId: channel.channelId, modelId: row.modelId }))) continue;
         const warnings: WorkerAdmissionWarning[] = [];
         try {
           const record = await checkModel(reader, scopeId, template.profile.id, template.provider, template.cliVersion,

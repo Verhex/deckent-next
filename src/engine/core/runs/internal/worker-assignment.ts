@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { canonicalModelMaker, catalogDefaultEffort, catalogPinModelEvidence, eligibleRoleModels, isCandidateSelector, MODEL_TIERS, resolveTaskWorkClass, resolveWorkClassCandidates, roleModelKey, WORK_CLASS_LIMITS,
   WORK_CLASS_WORKER_ROLE, WorkerEffortError, type CandidateSelector, type CatalogModel, type CatalogPinModelEvidence, type ExecutionProfileDefinition, type ModelRolePolicy, type ReasoningEffort,
   type WorkClassRegistry, type WorkInput, type WorkerAssignment, type WorkerAssignmentSkip } from '#domain/index.js';
-import { admitWorkerModels, WorkerModelAdmissionError, type ModelCatalogReader } from '#engine/core/model-activation/index.js';
+import { admitWorkerModels, workerRoleKeys, WorkerModelAdmissionError, type ModelCatalogReader } from '#engine/core/model-activation/index.js';
 /** The admission facts a system assignment reads: the Run's scope (activation is per scope), admission time, the image-refresh caveat and
  * (M3) the composed tier/role registry (Core seed + the installation's `model_roles` overlays) that candidate roles and selectors read. */
 export interface WorkerAssignmentContext { readonly scopeId: string; readonly nowMs: number; readonly imageRefreshInProgress?: boolean; readonly roles: ModelRolePolicy }
@@ -15,7 +15,7 @@ const ROLE_REFUSED = 'WORKER_MODEL_ROLE_REFUSED';
 type Tried = Readonly<{ index: number; channelId: string; modelId: string; effort: ReasoningEffort | undefined;
   selector?: Readonly<{ roleRevision: string; expanded: number; position: number; expansionDigest: string }> }>;
 const tierRank = (tier: typeof MODEL_TIERS[number]) => MODEL_TIERS.indexOf(tier);
-const skippedText = (skipped: readonly WorkerAssignmentSkip[]) => skipped.map(row => `${row.channelId}/${row.modelId}: ${row.reason}`).join('; ');
+const skippedText = (skipped: readonly WorkerAssignmentSkip[]) => skipped.slice(0, WORK_CLASS_LIMITS.refusalSkippedShown).map(row => `${row.channelId}/${row.modelId}: ${row.reason}`).join('; '), skippedMore = (skipped: readonly WorkerAssignmentSkip[]) => Math.max(0, skipped.length - WORK_CLASS_LIMITS.refusalSkippedShown);
 /**
  * ATAMA-1 (owner ASS1, A5): the system — never the Brain — picks the worker of a task whose work input leaves the model open. The task's
  * WorkClass names one ordered candidate list; each candidate is tried in order through the SAME admission check a pinned model gets (catalog
@@ -33,7 +33,7 @@ export async function assignTaskWorker(task: Readonly<{ id: string; kind: string
   compile: (template: ExecutionProfileDefinition, input: WorkInput, evidence?: CatalogPinModelEvidence) => ExecutionProfileDefinition,
   context: WorkerAssignmentContext): Promise<PendingWorkerAssignment> {
   const refuse = (code: 'WORKER_ASSIGNMENT_NO_CANDIDATES' | 'WORKER_ASSIGNMENT_NONE', workClass: string | null, skipped: readonly WorkerAssignmentSkip[] = []): never => {
-    throw new WorkerModelAdmissionError(code, Object.freeze({ taskId: task.id, channelId: null, modelId: null, workClass: workClass ?? '-', skipped: skippedText(skipped) || '-' }));
+    throw new WorkerModelAdmissionError(code, Object.freeze({ taskId: task.id, channelId: null, modelId: null, workClass: workClass ?? '-', skipped: skippedText(skipped) || '-', ...(skippedMore(skipped) > 0 ? { skippedMore: skippedMore(skipped) } : {}) }));
   };
   let resolved;
   try { resolved = resolveTaskWorkClass(task.kind, task.workClass ?? input.workClass, registry); }
@@ -53,7 +53,7 @@ export async function assignTaskWorker(task: Readonly<{ id: string; kind: string
     for (const row of context.roles.models) if (row.measured !== undefined && row.roles.includes(roleId) && await active(row.channelId, row.modelId)) measured.add(roleModelKey(row));
     roleFacts.set(roleId, { today, active: measured }); return roleFacts.get(roleId)!; };
   let workers: ReadonlySet<string> | undefined, expandedTotal = 0, sawSelector = false;
-  const workerKeys = async () => workers ??= new Set(eligibleRoleModels(context.roles, WORK_CLASS_WORKER_ROLE, await facts(WORK_CLASS_WORKER_ROLE)).map(roleModelKey));
+  const workerKeys = async () => workers ??= await workerRoleKeys(context.roles, WORK_CLASS_WORKER_ROLE, context.scopeId, reader, context.nowMs);
   const expand = async (index: number, selector: CandidateSelector): Promise<readonly Tried[]> => {
     // An unregistered role is the registry's typed refusal (MODEL_ROLE_NOT_REGISTERED), never an empty silent list.
     const rows = eligibleRoleModels(context.roles, selector.role, await facts(selector.role)), allowed = await workerKeys(), found: { channelId: string; modelId: string }[] = [];

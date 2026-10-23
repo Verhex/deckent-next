@@ -10,6 +10,7 @@
   "error.WORK_CLASS_CANDIDATES_NOT_REGISTERED": "A work class names a worker candidate list that the work class registry does not declare. Correct the registry; no Run was created.",
   "assignment.card.worker": "  worker: {modelId} ({channelId}) · effort: {effort} · from the {workClass} list {policy}, choice {position}",
   "assignment.card.skipped": "  skipped before it: {skipped}",
+  "assignment.card.selector": "  chosen through a selector: model {position} of {expanded} it matched (role registry revision {revision})",
   "assignment.effort.cliDefault": "CLI default",
   "error.BRAIN_TIER_REFUSED": "The Brain model {modelId} ({channelId}) may not plan work under the model tier/role registry. No other model was chosen; nothing was sent to the model and no proposal was created.",
   "error.BRAIN_TIER_REFUSED.model-unknown": "The Brain model {modelId} ({channelId}) is not in the model tier/role registry, so it may not plan work. No other model was chosen; nothing was sent to the model and no proposal was created. Choose a frontier Brain model with /model, or have the installation owner declare this model in the registry.",
@@ -27,5 +28,6 @@
   "assignment.config.modelRoles": "Installation overlays of the model tier/role registry: which exact catalog models may serve the Brain, worker, recovery-decision and memory-evaluator roles, and dated exceptions. Global layer only.",
   "error.MODEL_ROLE_CATALOG_UNKNOWN": "That exact model is not in the model catalog this scope can see, so it cannot be given a tier or role. Nothing was changed; register the catalog that lists it (deckent models catalog register) and check the channel and model id with deckent models roles.",
   "error.MODEL_ROLE_COMMAND_INVALID": "The tier/role request is not valid (unknown tier, a role named twice, or a malformed model_roles section). Nothing was changed; check deckent models roles --help.",
-  "error.MODEL_ROLE_STALE": "The model tier/role registry changed after the card was shown. Nothing was changed; run the command again to see the current state."
+  "error.MODEL_ROLE_STALE": "The model tier/role registry changed after the card was shown. Nothing was changed; run the command again to see the current state.",
+  "assignment.refusal.skippedMore": "+{count} more"
 }

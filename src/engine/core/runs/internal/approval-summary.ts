@@ -17,9 +17,9 @@ function assignmentRows(assignment: WorkerAssignment | undefined, locale: Locale
   if (!assignment) return [];
   const worker = t('assignment.card.worker', { modelId: field(assignment.modelId, limits.assignmentChars, known), channelId: field(assignment.channelId, limits.assignmentChars, known),
     effort: assignment.effort.level ?? t('assignment.effort.cliDefault', {}, locale), workClass: field(assignment.workClass, limits.workClassChars, known),
-    policy: field(`${assignment.candidatePolicy.id}@${assignment.candidatePolicy.version}`, limits.workClassChars, known), position: assignment.candidateIndex + 1 }, locale);
-  return assignment.skipped.length ? [worker, t('assignment.card.skipped', { skipped: field(assignment.skipped.map(row => `${row.modelId} (${row.reason})`).join(', '),
-    limits.assignmentChars, known) }, locale)] : [worker];
+    policy: field(`${assignment.candidatePolicy.id}@${assignment.candidatePolicy.version}`, limits.workClassChars, known), position: assignment.candidateIndex + 1 }, locale), sel = 'selector' in assignment ? assignment.selector : undefined;
+  return [worker, ...(sel ? [t('assignment.card.selector', { position: sel.position + 1, expanded: sel.expanded, revision: field(sel.roleRevision, limits.workClassChars, known) }, locale)] : []),
+    ...(assignment.skipped.length ? [t('assignment.card.skipped', { skipped: field(assignment.skipped.map(row => `${row.modelId} (${row.reason})`).join(', '), limits.assignmentChars, known) }, locale)] : [])];
 }
 /** One catalog for the person's refusal and the model's 'unrecognised (advisory)' marker, so the two paths cannot diverge (accept_mark). */
 export function runProposalPermissionCatalog(registry: WorkClassRegistry | undefined): ProposalPermissionCatalog {
