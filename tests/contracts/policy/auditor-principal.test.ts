@@ -24,10 +24,11 @@ it('issues a verified workload principal that is AI and auditor, distinct from t
 
 it('refuses every non-read action of the whole vocabulary even when granted, and keeps reads policy-governed', () => {
   expect(AUDITOR_READ_ACTIONS).toEqual(['inspect', 'list', 'verify']);
+  // memory/verify is a lifecycle transition (S4), not a read: the AI hard floor refuses it for every AI principal, the auditor included.
   let reads = 0, writes = 0;
   for (const { kind, actions } of getPolicyVocabulary().resources) for (const action of actions) {
     const decision = evaluatePolicy(everything, { principal: auditor, scopeId: 's', action, resource: { kind, id: kind === 'config' ? 'project:language' : 'x' } });
-    if ((AUDITOR_READ_ACTIONS as readonly string[]).includes(action) && kind !== 'secret') { reads++; expect(decision).toMatchObject({ decision: 'allow', reason: 'GRANTED' }); }
+    if ((AUDITOR_READ_ACTIONS as readonly string[]).includes(action) && kind !== 'secret' && !(kind === 'memory' && action === 'verify')) { reads++; expect(decision).toMatchObject({ decision: 'allow', reason: 'GRANTED' }); }
     else { writes++; expect({ kind, action, ...decision }).toMatchObject({ kind, action, decision: 'deny', reason: 'AI_NON_DELEGABLE' }); }
   }
   expect(reads).toBeGreaterThan(0); expect(writes).toBeGreaterThan(reads);
