@@ -1063,7 +1063,7 @@
   "terminal.jobs.completed": "İş {run} [{state}] · kabul {accepted}, ret {rejected}, başarısız {failed}, iptal {cancelled}",
   "terminal.jobs.deliveryNext": "Teslim bekliyor. /deliver ile aç; ayrıntı: /run {run}.",
   "terminal.jobs.detailsUnavailable": "Ayrıntı okunamıyor: çıktı okuma izni veya kanıtı kullanılamıyor.",
-  "terminal.jobs.trackingFull": "Bitiş izleme sınırı dolu ({limit}). Run {run} başlatıldı; /run ile kontrol edin.",
+  "terminal.jobs.trackingFull": "Bitiş izleme sınırı dolu ({limit}). İş {run} başlatıldı; /run ile kontrol edin.",
   "terminal.jobs.deliveryCounts": "Teslim: gerekmiyor {none}{patch}, bekliyor {awaiting}, bilinmiyor {unknown}",
   "terminal.jobs.deliveryPatch": ", yama hazır değil {patch}",
   "tui.focus.composer": "Giriş odakta · Ctrl+O pencereye geç · Enter mesajı sıraya alır",

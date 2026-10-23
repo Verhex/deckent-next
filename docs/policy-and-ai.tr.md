@@ -129,10 +129,10 @@ tabanını aşmaz.
 
 ## Kipleri açmak ve sağlayıcı anahtarlarını paylaşmak
 
-İki eylem kişinin kendi terminalinde kalır. `deckent init policy --scope <id> --modes <liste>|none` kurulum sahibi için tam otomatik
+İki eylem kişinin kendi terminalinde kalır. `deckent init policy --scope <id> --modes <list>|none` kurulum sahibi için tam otomatik
 ve tam erişim kiplerini açar ya da kapatır; yapay zekâ araçları, borular ve CI yapamaz. Sağlayıcı anahtarları ana kasada
-(kurulumun kasası) ya da proje kasasındadır. Terminal dışında `deckent secret set AD` için `--main` ya da `--project` gerekir. Ana
-kasa anahtarı bir projede yalnız izinle kullanılır: solo terminalde kart ya da `deckent secret grant AD --scope <id>`. Proje
+(kurulumun kasası) ya da proje kasasındadır. Terminal dışında `deckent secret set NAME` için `--main` ya da `--project` gerekir. Ana
+kasa anahtarı bir projede yalnız izinle kullanılır: solo terminalde kart ya da `deckent secret grant NAME --scope <id>`. Proje
 anahtarları yalnız referans tutan bir `.deck` dosyası ister. Sınırlar (native macOS ve Windows'ta terminal tanığı yok, alpha.50'ye
 dönüş) [bilinen sınırlar](known-limits.tr.md) belgesindedir.
 

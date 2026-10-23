@@ -1156,7 +1156,7 @@
     },
     "terminal.jobs.trackingFull": {
       "before": "Bitiş izleme sınırı dolu ({limit}). İş {run} kabul edildi; /run ile kontrol edin.",
-      "after": "Bitiş izleme sınırı dolu ({limit}). Run {run} başlatıldı; /run ile kontrol edin."
+      "after": "Bitiş izleme sınırı dolu ({limit}). İş {run} başlatıldı; /run ile kontrol edin."
     },
     "cli.worker.model.notice": {
       "before": "Model kararı, işçinin bildirdiği modelleri (Claude kullanım verisi) bu makinede Run'ın sabitlediği modelle karşılaştırır; sağlayıcı onayı (attestation) değildir. Model kanıtı vermeyen CLI doğrulanmamış kalır; yalnız oturum başında model adını bildiren CLI ‘başlangıç adı eşleşti’ ya da ‘sağlayıcıya bırakıldı’ alır, hiçbir zaman doğrulandı almaz.",
