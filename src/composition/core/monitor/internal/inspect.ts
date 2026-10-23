@@ -10,6 +10,7 @@ import { loadConfiguredScopeContext } from '#composition/core/scoped-request/ind
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
 import { inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
 import { inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
+import { inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
 const DENIED = new Set(['POLICY_DENIED', 'POLICY_APPROVAL_UNSUPPORTED', 'SCOPE_UNKNOWN', 'APPROVAL_DENIED']); const granted = (check: () => Promise<unknown>) => check().then(() => true, (error: unknown) => { if (DENIED.has(queryFailure(error).code)) return false; throw error; });
 async function authorizeSurfaceRead(root: string, scopeId: string, options: ConfigLoadOptions) { try {
       const c = await loadConfiguredScopeContext(root, scopeId, { ...options, force: true }, 'read'), auth = contextDispatchAuthorization(c, c.document);
@@ -71,6 +72,13 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
             scopeId, active: model.availability.invocable, availability: model.availability });
         } catch (error) { modelDiagnostics.push(`model-state-unavailable:${queryFailure(error).code}`); }
       }
+      // M2 (f2): catalog models no tier/role row names, counted once across scopes (the same read as the doctor row). A scope that cannot read it adds nothing.
+      const pendingRoles = new Set<string>();
+      for (const scopeId of modelScopes) {
+        try { for (const entry of (await inspectConfiguredModelRoles(target.path, { schemaVersion: 1, scopeId }, { ...options, heal: false })).models)
+          if (entry.state === 'pending') pendingRoles.add(JSON.stringify([entry.channelId, entry.modelId])); } catch { /* read-soft, as the doctor row */ }
+      }
+      if (pendingRoles.size) modelDiagnostics.push(`model-roles-pending:${pendingRoles.size}`);
       const effective = { ...reading, runs: reading.runs.map(run => ({ ...run, costComparison: { registry: installedConfig.admission?.registry, policy: installedConfig.resourceObservation.recommendation } })), pools: reading.pools.map(pool => ({ ...pool,
         capacity: { executionSlots: pool.executionSlots, inFlightSlots: pool.inFlightSlots }, executionSlots: Math.min(pool.executionSlots, ceiling), inFlightSlots: Math.min(pool.inFlightSlots, ceiling) })),
         ...(reading.map ? { map: { ...reading.map, models } } : {}), diagnostics: [...reading.diagnostics, ...modelDiagnostics] };
