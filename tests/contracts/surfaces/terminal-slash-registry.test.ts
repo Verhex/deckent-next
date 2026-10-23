@@ -43,8 +43,8 @@ describe('terminal slash registry', () => {
     expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === 'runs')).toBe(true);
   });
 
-  it('reserves /rename (/copy landed in T1) without listing a command that does nothing', () => {
-    expect(RESERVED_SLASH_COMMAND_NAMES).toEqual(['rename']);
+  it('reserves no name now that /copy and /rename are registered', () => {
+    expect(RESERVED_SLASH_COMMAND_NAMES).toEqual([]);
     for (const name of RESERVED_SLASH_COMMAND_NAMES) expect(WORKLINE_SLASH_COMMANDS.some(cmd => cmd.name === name)).toBe(false);
   });
 

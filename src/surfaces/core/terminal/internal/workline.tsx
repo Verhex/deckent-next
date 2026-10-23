@@ -2,7 +2,7 @@ import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { renderToString, Box, Static, Text, useApp, useStdout, useWindowSize } from 'ink';
-import { runCopyCommand, runTerminalHost, type ClipboardResult, type CopyLabels } from '#surfaces/core/terminal-host/index.js';
+import { runCopyCommand, runTerminalHost, useAttentionNotice, type ClipboardResult, type CopyLabels } from '#surfaces/core/terminal-host/index.js';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
@@ -157,11 +157,15 @@ export interface WorklineProps {
   /** The full window's mouse wheel (SGR reports taken out of the input by `runTerminalWorkline`). */
   readonly wheel?: WheelSource;
   /** TERM-POLISH: the full window's left-button pointer (click-and-drag selection) and the clipboard write of the selection (OSC 52). */ readonly pointer?: PointerSource; readonly copyText?: (text: string) => void;
+  /** T2: rings the terminal bell while the window is in the background (the host decides); absent when the setting is off. */
+  readonly notify?: () => void;
   /** T1 `/copy`: the clipboard request writer of the host (any real TTY); absent = `/copy` says it is unavailable. */ readonly clipboard?: (text: string) => ClipboardResult;
   /** The opening frame drawn as the first block of the full-window conversation (until `/clear`). */
   readonly startup?: WorklineStartup;
   /** The full-window conversation as text, read once after the view closes so it is left in the terminal's own scrollback. */
   readonly transcriptExit?: { current: (() => string) | null };
+  /** T2: ask for terminal focus reports and ring BEL when work finishes or a card waits while the window is unfocused (`terminal.notify`). */
+  readonly attention?: boolean;
 }
 
 
@@ -523,7 +527,7 @@ export function WorklineApp(props: WorklineProps) {
       catch (error) { push([notice('error', errorText(error))]); }
       return true;
     }
-    if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'clear') {
+    if (slash.command === 'resume' || slash.command === 'context' || slash.command === 'clear' || slash.command === 'rename') {
       try {
         const sessionResult = await session.run(slash.command, rich && slash.command === 'resume' ? '' : slash.args, history, execution);
         const result = slash.command === 'context' ? { ...sessionResult, entries: [...sessionResult.entries, ...instructions.sourceLines().map(line => notice('info', line))] } : sessionResult;
@@ -636,6 +640,7 @@ export function WorklineApp(props: WorklineProps) {
   const ledgerLabels: LedgerEntryLabels = { system: labels.work?.jobs?.system ?? props.info?.labels.systemLabel, runCard: labels.runCard, workerCard: labels.workerCard, chatUser: labels.roleUser, chatAssistant: labels.roleAssistant,
     render: labels.render, ...(labels.work ? { workerLine: labels.work.workerLine } : {}) };
   // A window a slash command opened waits for the person, so the status row says Ready, not Working (an approval card during a turn keeps Working).
+  useAttentionNotice(props.notify, { working: turnRunning || doRunning, awaitingAnswer: Boolean(state.approval) || work.modalOpen });
   const choosing = resumePicker !== null || work.pickerOpen || (work.modalOpen && !turnRunning) || settings.openKind !== null || localWindowOpen || instructions.open;
   const fullAccessLine = mode.mode === 'full-access' ? labels.mode?.fullAccessLine : undefined, glyphs = useRenderGlyphs();
   // T2 T-MODE-CYCLE: Shift+Tab (Alt+M where the console cannot report Shift+Tab, e.g. Windows without VT input) steps the permission mode
@@ -683,9 +688,10 @@ export function WorklineApp(props: WorklineProps) {
     {deliveryShown ? deliveries.element : null}
     {resumePicker && !work.modalOpen && !work.pickerOpen
       ? <Window title={[span(labels.work?.window.resumeTitle ?? '/resume')]} status={[span(String(resumePicker.length))]} hints={labels.work?.window.pick ?? ''}
-        position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 2}
+        position={labels.work?.window.position ?? '{from}-{to}/{total}'} footerRows={ARROW_PICKER_ROWS + 3}
         footer={focused => <ArrowPicker rows={resumePicker.map(item => item.label)} styledRows={resumePicker.map(item => item.spans ?? [])} active={focused}
-          details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)} />} /> : null}
+          details={resumePicker.map(item => item.hiddenNotice)} onSelect={finishResume} onCancel={() => finishResume(null)}
+          {...(labels.sessions?.filter ? { filter: { prompt: (text: string) => fillTemplate(labels.sessions!.filter!.prompt, { text }), none: labels.sessions.filter.none } } : {})} />} /> : null}
     {settings.window}
     {/* The local window slot gives way to a decision card, picker, approval or settings window (approvals keep priority) and returns after it. */}
     <WindowOpeningContext.Provider value={turnRunning ? 'background' : 'foreground'}>
@@ -761,8 +767,11 @@ export interface WorklineRunOptions extends Omit<WorklineProps, 'labels'> {
 export async function runTerminalWorkline(options: WorklineRunOptions): Promise<void> {
   const { palette, stdin, stdout, signal, ascii, startup, ...props } = options;
   await runTerminalHost({ palette, ...(stdin ? { stdin } : {}), ...(stdout ? { stdout } : {}), ...(signal ? { signal } : {}), ...(ascii !== undefined ? { ascii } : {}),
+    ...(props.attention ? { attention: true } : {}),
     ...(props.clearScreen !== undefined ? { clearScreen: props.clearScreen } : {}), ...(props.fullscreen !== undefined ? { fullscreen: props.fullscreen } : {}),
     ...(startup ? { inlineStartup: out => writeStartup(out, startup, palette) } : {}),
     view: context => createElement(WorklineApp, { ...props, fullscreen: context.fullscreen, ...(context.fullscreen && startup ? { startup } : {}), transcriptExit: context.transcriptExit,
-      ...(context.wheel ? { wheel: context.wheel } : {}), ...(context.pointer ? { pointer: context.pointer } : {}), ...(context.copyText ? { copyText: context.copyText } : {}), ...(context.clipboard ? { clipboard: context.clipboard } : {}) }) });
+      ...(context.wheel ? { wheel: context.wheel } : {}), ...(context.pointer ? { pointer: context.pointer } : {}), ...(context.copyText ? { copyText: context.copyText } : {}),
+      ...(context.clipboard ? { clipboard: context.clipboard } : {}),
+      ...(context.notify ? { notify: context.notify } : {}) }) });
 }

@@ -249,6 +249,7 @@
     "clearOnStart": true,
     "layout": "fullscreen",
     "maxTrackedRuns": 128,
+    "notify": "bell",
     "persistHistory": true,
     "responseStyle": "standard",
     "serviceStartTimeoutMs": 20000,

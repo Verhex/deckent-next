@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { agentTurnMessageSchema, type AgentTurnMessage } from '#domain/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
+import titleLimits from './session-title-limits.json' with { type: 'json' };
 
 export const TERMINAL_SESSION_LIMITS = Object.freeze({ maxSessions: 50, maxFileBytes: 16 * 1024 * 1024, previewChars: 120 });
 const sessionIdSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
@@ -13,16 +14,23 @@ const snapshotSchema = z.object({ schemaVersion: z.literal(1), sessionId: sessio
 export type TerminalSessionSnapshot = z.infer<typeof snapshotSchema>;
 export interface TerminalSessionSummary {
   readonly sessionId: string; readonly updatedAtMs: number; readonly messages: number; readonly preview: string;
+  /** The name the person gave with `/rename` (T5); absent: the picker shows the first message. */
+  readonly title?: string;
 }
 export interface TerminalSessionStore {
   save(snapshot: TerminalSessionSnapshot): Promise<void>;
   /** Newest first, only this scope's sessions. */
   list(scopeId: string): Promise<readonly TerminalSessionSummary[]>;
   load(scopeId: string, sessionId: string): Promise<readonly AgentTurnMessage[] | null>;
+  /** Names one saved session of this scope; false when no such snapshot exists (nothing is written then). A title is display text, never authority. */
+  rename(scopeId: string, sessionId: string, title: string): Promise<boolean>;
 }
+const TITLE_SUFFIX = '.title';
 
 // Known secret shapes and control characters only; the text is never shortened here (the store bounds the file instead).
 const scrub = (text: string) => redactText(text, [], Number.MAX_SAFE_INTEGER);
+/** One line, control characters and known secret shapes out, bounded; empty means "no usable title". */
+const cleanTitle = (text: string) => terminalSafeText(scrub(text)).replace(/\s+/g, ' ').trim().slice(0, titleLimits.titleChars);
 const redacted = (message: AgentTurnMessage): AgentTurnMessage => message.role === 'assistant'
   ? { ...message, content: scrub(message.content), toolCalls: message.toolCalls.map(call => ({ ...call, argumentsJson: scrub(call.argumentsJson) })) }
   : { ...message, content: scrub(message.content) };
@@ -46,6 +54,18 @@ export function openTerminalSessionStore(directory: string, limits = TERMINAL_SE
       return parsed.success ? parsed.data : null;
     } catch { return null; } finally { await handle.close(); }
   };
+  const titlePath = (sessionId: string) => `${pathOf(sessionId)}${TITLE_SUFFIX}`;
+  // The title is a sidecar next to the snapshot, so the snapshot file keeps the shape the previous release reads (its listing only looks at `*.json`).
+  const readTitle = async (sessionId: string): Promise<string | undefined> => {
+    let handle;
+    try { handle = await open(titlePath(sessionId), constants.O_RDONLY | constants.O_NOFOLLOW); } catch { return undefined; }
+    try {
+      const stat = await handle.stat();
+      if (!stat.isFile() || stat.size > titleLimits.titleFileMaxBytes) return undefined;
+      const text = cleanTitle(await handle.readFile({ encoding: 'utf8' }));
+      return text || undefined;
+    } catch { return undefined; } finally { await handle.close(); }
+  };
   const all = async (): Promise<TerminalSessionSnapshot[]> => {
     let names: string[];
     try { names = (await readdir(directory)).filter(name => name.endsWith('.json')); } catch { return []; }
@@ -65,19 +85,34 @@ export function openTerminalSessionStore(directory: string, limits = TERMINAL_SE
       await rename(temporary, target);
       // The cap is per scope: only this scope's readable snapshots are ever pruned.
       const kept = (await all()).filter(other => other.scopeId === snapshot.scopeId);
-      await Promise.all(kept.slice(limits.maxSessions).map(old => unlink(pathOf(old.sessionId)).catch(() => undefined)));
+      await Promise.all(kept.slice(limits.maxSessions).flatMap(old => [unlink(pathOf(old.sessionId)), unlink(titlePath(old.sessionId))].map(removal => removal.catch(() => undefined))));
     },
     async list(scopeId) {
-      return Object.freeze((await all()).filter(snapshot => snapshot.scopeId === scopeId).map(snapshot => {
-        const first = snapshot.messages.find(message => message.role === 'user');
+      const own = (await all()).filter(snapshot => snapshot.scopeId === scopeId);
+      const titles = await Promise.all(own.map(snapshot => readTitle(snapshot.sessionId)));
+      return Object.freeze(own.map((snapshot, index) => {
+        const first = snapshot.messages.find(message => message.role === 'user'), title = titles[index];
         return Object.freeze({ sessionId: snapshot.sessionId, updatedAtMs: snapshot.updatedAtMs, messages: snapshot.messages.length,
-          preview: redactForRecord(terminalSafeText(redactForRecord(first?.content ?? '', displaySecrets)).replace(/\s+/g, ' '), displaySecrets).slice(0, limits.previewChars) });
+          preview: redactForRecord(terminalSafeText(redactForRecord(first?.content ?? '', displaySecrets)).replace(/\s+/g, ' '), displaySecrets).slice(0, limits.previewChars),
+          ...(title ? { title: redactForRecord(title, displaySecrets) } : {}) });
       }));
     },
     async load(scopeId, sessionId) {
       if (!sessionIdSchema.safeParse(sessionId).success) return null;
       const snapshot = await read(pathOf(sessionId));
       return snapshot && snapshot.scopeId === scopeId && snapshot.sessionId === sessionId ? Object.freeze(snapshot.messages.filter(message => message.role !== 'assistant' || message.content.trim() || message.toolCalls.length)) : null;
+    },
+    async rename(scopeId, sessionId, title) {
+      if (!sessionIdSchema.safeParse(sessionId).success) return false;
+      const snapshot = await read(pathOf(sessionId));
+      if (!snapshot || snapshot.scopeId !== scopeId || snapshot.sessionId !== sessionId) return false;
+      const clean = cleanTitle(title);
+      if (!clean) return false;
+      const target = titlePath(sessionId), temporary = `${target}.${process.pid}.tmp`;
+      const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      try { await handle.writeFile(clean); await handle.sync(); } finally { await handle.close(); }
+      await rename(temporary, target);
+      return true;
     },
   };
   return Object.freeze(store);

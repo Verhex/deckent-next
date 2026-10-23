@@ -8,6 +8,8 @@ import responseStyleData from './terminal-response-styles.json' with { type: 'js
 /** T2 presentation vocabularies (first entry = default); the workline's own copy (`TERMINAL_THEME_SETTINGS`) is tested equal. */
 export const TERMINAL_THEMES = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'ansi'] as const;
 export const TERMINAL_BANNERS = ['full', 'compact', 'off'] as const;
+/** T2 attention notices (first entry = default): the terminal bell while the window is unfocused, or nothing. */
+export const TERMINAL_NOTIFY = ['bell', 'off'] as const;
 /** T6 response style vocabulary: registry data (`terminal-response-styles.json`); `default` is the id that adds nothing to the model-facing instructions. */
 export const TERMINAL_RESPONSE_STYLES = Object.freeze(Object.keys(responseStyleData.styles)) as readonly [string, ...string[]];
 const DEFAULT_RESPONSE_STYLE = responseStyleData.default;
@@ -35,6 +37,8 @@ export const terminalConfigSchema = z.object({
   /** T6 (alpha.54): how the model words its answers (`standard` adds nothing; the other ids add one line to the model-facing instructions). Read per turn. */
   responseStyle: z.enum(TERMINAL_RESPONSE_STYLES).default(DEFAULT_RESPONSE_STYLE),
   layout: z.enum(['fullscreen', 'inline']).default('fullscreen'), // TERMINAL-SABIT-DUZEN: full window, or inline (native scrollback)
+  /** T2 (alpha.54): `bell` rings the terminal bell when work finishes or a card waits while the window reports it lost focus; `off` never does. */
+  notify: z.enum(TERMINAL_NOTIFY).default(TERMINAL_NOTIFY[0]),
   viewportRows: z.number().int().min(100).max(100_000).default(2_000), // rows the full-window conversation scrolls back through
   /** T4-B (owner 2026-10-08, Jev d84b248d): the person's own default terminal model — an exact catalog reference, nothing else. Only the user
    * (global) layer may hold it; precedence is in {@link resolveTerminalModel}. Additive optional key (the `readResultMaxBytes` pattern). */

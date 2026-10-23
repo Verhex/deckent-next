@@ -246,6 +246,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'terminal.clearOnStart': { kind: 'schema' },
   'terminal.responseStyle': { kind: 'schema' },
   'terminal.layout': { kind: 'schema' },
+  'terminal.notify': { kind: 'schema' },
   'terminal.viewportRows': { kind: 'numeric', unit: 'count', step: 100, presets: [500, 2000, 10000] },
   'terminal.defaultModel.providerId': { kind: 'hidden' },
   'terminal.defaultModel.providerVersion': { kind: 'hidden' },
