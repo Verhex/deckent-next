@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { vi } from 'vitest';
 import * as httpTransport from '#adapters/core/provider-http-json/index.js';
 import { encodeModelBindingDefinition } from '#domain/index.js';
@@ -9,7 +9,7 @@ import { readLocalOsIdentity, openSqliteModelActivationStore, compileNativeCodin
 import { ModelActivationApplication, ModelBindingApplication, modelInvocationTargetId, createModelInvocationResponseEvidence } from '#engine/index.js';
 import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { clearConfigCache } from '#platform/index.js';
+import { clearConfigCache, resolveGlobalConfigReadPath } from '#platform/index.js';
 import { applyModelCatalog } from '../../../src/index.js';
 import { seedCatalog, SEED_CHANNEL } from './model-catalog.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
@@ -19,7 +19,9 @@ import { proposalFixture } from './run-proposal.js';
 export async function brainProviderFixture(options: { standing?: boolean; budget?: number | null; model?: 'missing' | 'inactive'; response?: string; hold?: boolean;
   finishReason?: 'stop' | 'length'; maxOutputTokens?: number; responseMaxBytes?: number;
   thinking?: 'supported' | 'unsupported' | 'unknown' | 'wrong-version' | 'wrong-protocol';
-  noCharge?: boolean; subscription?: boolean; template?: boolean; contextWindow?: number; tokenCount?: { count: number; max_model_len?: number } | null; rejectStatus?: number } = {}) {
+  noCharge?: boolean; subscription?: boolean; template?: boolean; contextWindow?: number; tokenCount?: { count: number; max_model_len?: number } | null; rejectStatus?: number;
+  /** S2 tier/role registry overlay for the fixture Brain (installation layer): a frontier Brain row by default; `null` writes none. */
+  modelRoles?: unknown } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-brain-provider-'));
   const project = join(root, 'project'), data = join(root, 'data'), home = join(root, 'home');
   await mkdir(join(project, '.deckent'), { recursive: true });
@@ -88,8 +90,12 @@ export async function brainProviderFixture(options: { standing?: boolean; budget
     terminal: { scopeId: 's', chat: { schemaVersion: 1, ...(options.model === 'missing' ? {} : { reference }), maxCompletionTokens: 8 } },
     ...(options.budget === null ? {} : { provider_spending: { ...fixtureBudget('s'), budgets: [{ ...fixtureBudget('s').budgets[0]!, limitMinorUnits: options.budget ?? 1000 }] } }),
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 2, ordering: 'input-order', registry: { ...workerRegistry, workClasses } } };
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify(config));
   const env = { HOME: home, USERPROFILE: home, PATH: process.env.PATH ?? '' }, loadOptions = { env };
+  const modelRoles = options.modelRoles !== undefined ? options.modelRoles : { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'fixture-roles', roles: [],
+    models: [{ channelId: reference.providerId, modelId: model.nativeId, version: 1, tier: 'frontier', roles: ['brain'] }], exceptions: [] }] };
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify(config));
+  const globalPath = await resolveGlobalConfigReadPath(env);
+  await mkdir(dirname(globalPath), { recursive: true }); await writeFile(globalPath, JSON.stringify(modelRoles === null ? {} : { model_roles: modelRoles }));
   await loadComposedConfig(project, loadOptions);
   const { store, path } = await openConfiguredAttemptStore(project, loadOptions);
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } }); store.close();

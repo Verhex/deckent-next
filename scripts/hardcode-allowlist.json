@@ -306,7 +306,6 @@
   {"file":"src/domain/core/primitives/internal/json.ts","fingerprint":"46bbcbe4ecb1cbec7f587e8660d11845a4926d2329ab5d4961b66b696c363e96","rule":"G2"},
   {"file":"src/domain/core/primitives/internal/json.ts","fingerprint":"a8cef0c624a60aa2384940a25f8189701164824bfcf2ff31cf6c5afd37567cce","rule":"G2"},
   {"file":"src/domain/core/primitives/internal/json.ts","fingerprint":"c454089a42f37c93ea97ff113a21cf6e4d16cf85de905f37daf34b39fcda84b5","rule":"G2"},
-  {"file":"src/domain/core/provider-catalog/internal/catalog-values.ts","origin":"src/domain/core/provider-catalog/internal/catalog-document.ts","fingerprint":"2a492bf656111670da317be4322d5b3084454b7aa07ba9b8e423b602bcbc8a6d","rule":"G2"},
   {"file":"src/domain/core/provider-catalog/internal/catalog-values.ts","origin":"src/domain/core/provider-catalog/internal/catalog-document.ts","fingerprint":"f55e4d58174a8714af4f8e00d7f034cbf68e569d0020d5a484c023a03053891c","rule":"G2"},
   {"file":"src/domain/core/task-graph/internal/criteria.ts","fingerprint":"8069fc32785ca7e069305c9ac50d4ca95ee83c97249ec31d028f020422e15098","rule":"G2"},
   {"file":"src/domain/core/task-graph/internal/work-input.ts","fingerprint":"62be95badabb3a43220881563af65cb791914e43fa874c6093b68ec95efe7304","rule":"G2"},

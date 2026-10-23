@@ -1,5 +1,5 @@
 import { AuthorityChangeError, DecisionApplicationError, MemoryJournalError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
-import { TargetQueueError, CandidateBindingError, DecisionDelegationError, PolicyChangeError, PolicyLastAdminError, CommandIdError, DecisionError, MemoryError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError } from '#domain/index.js';
+import { TargetQueueError, CandidateBindingError, DecisionDelegationError, PolicyChangeError, PolicyLastAdminError, CommandIdError, DecisionError, MemoryError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError, ModelRoleError } from '#domain/index.js';
 import { ProviderSpendError, ModelInvocationStoreError, type ProviderSpendAccount } from '#engine/index.js';
 import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
 import { ModelActivationStoreError, AgentTurnStoreError, WorkerModelAdmissionError } from '#engine/index.js';
@@ -40,7 +40,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
     profile: error.deliveryFinding.profileId, surface: error.deliveryFinding.surface,
     required: error.deliveryFinding.requiredBytes, available: error.deliveryFinding.availableBytes } });
   if (error instanceof ModelInvocationError || error instanceof OpenAiChatHttpError
-    || error instanceof ModelActivationError || error instanceof ModelActivationStoreError || error instanceof ModelCatalogError) return registeredFailure(error.code);
+    || error instanceof ModelActivationError || error instanceof ModelActivationStoreError || error instanceof ModelCatalogError || error instanceof ModelRoleError) return registeredFailure(error.code);
   if (error instanceof WorkerModelAdmissionError) { const d = error.detail; return registeredFailure(error.code, { params: { taskId: d.taskId,
     channelId: d.channelId ?? '-', modelId: d.modelId ?? '-', minCliVersion: d.minCliVersion ?? '-', cliVersion: d.cliVersion ?? 'unparsed',
     ...(d.workClass !== undefined ? { workClass: d.workClass, skipped: d.skipped ?? '-' } : {}) } }); }

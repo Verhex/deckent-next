@@ -11,6 +11,8 @@ import { inspectConfiguredRunProposal, proposeConfiguredRun, readConfiguredRunBu
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
+import { gateConfiguredBrainModel } from './internal/model-roles.js';
+export { inspectConfiguredRoleModels } from './internal/model-roles.js';
 /** SDK application contract. CLI/MCP/Terminal use the same application with the existing runtime invocation transport. */
 export function planConfiguredRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
   return plan(root, input, options, (command, signal) => invokeConfiguredModel(root, command, options, signal), signal);
@@ -44,6 +46,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
         const registry = context.config.admission ? executionRegistrySchema.parse(context.config.admission.registry) : null;
         if (!registry) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');
         const selected = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: [], options }, false, command.reference);
+        await gateConfiguredBrainModel(context, selected.command); // S2: tier/role + activation, before the budget read or any provider effect
         const configured = context.config['provider_invocation_profiles'] as { profiles: unknown[] } | undefined;
         const profile = configured?.profiles.map(value => modelInvocationProfileSchema.parse(value)).find(value => value.scopeId === command.scopeId
           && JSON.stringify(value.reference) === JSON.stringify(selected.command.reference)) ?? null;

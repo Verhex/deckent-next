@@ -1,11 +1,12 @@
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
-  type RunProposal, type VerifiedPrincipal } from '#domain/index.js';
+  type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
 import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext, assertBrainLeavesAssignment,
   prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainRegistryContext } from '#capabilities/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
-import { modelInvocationRequestDigest, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
+import { modelInvocationRequestDigest, refuseInactiveModel, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
+import { composeModelRolePolicy, decideRoleModelInScope, roleModelPorts, type RoleModelSources } from '#engine/core/model-activation/index.js';
 import type { RunProposalQuery, RunProposalResult } from '#engine/core/run-proposal/index.js';
 export const brainRunId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-run:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export const brainInvocationCommandId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-invocation:1', { scopeId: command.scopeId, commandId: command.commandId }));
@@ -59,6 +60,22 @@ export interface BrainPlanPorts {
   remainingBudget?(scopeId: string): Promise<Readonly<{ currency: string; remainingMinorUnits: number }> | null>;
 }
 const assertActive = (signal?: AbortSignal) => { if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED'); };
+/** The tier/role registry role a Brain model must hold (owner BRAIN1: frontier only). */
+export const BRAIN_MODEL_ROLE = 'brain';
+/** S2 Brain gate (owner A2, A3): the exact model the planner is about to call — its bound definition re-resolved from the same declared catalog
+ * and digest-checked against the prepared command — must be eligible for the Brain role (tier, or a current dated exception) AND active in
+ * the scope. An inactive eligible model keeps the existing inactive-model refusal; anything else is one typed BRAIN_TIER_REFUSED naming the
+ * model and the reason. Never another model in its place. */
+export async function assertBrainModelRole(sources: RoleModelSources, command: ModelInvocationCommand, nowMs: number) {
+  const definition = sources.providerCatalog === undefined ? null : resolveModelBindingDefinition(parseProviderCatalog(sources.providerCatalog), command.reference);
+  if (!definition || sha256(encodeModelBindingDefinition(definition)) !== command.expectedBinding.digest) throw ErrorRegistry.createError('MODEL_INVOCATION_BINDING_CONFLICT');
+  const target = { channelId: definition.provider.id, modelId: definition.model.nativeId }, ports = roleModelPorts(sources);
+  const record = await ports.activation(command.scopeId, command.reference);
+  const decision = await decideRoleModelInScope(composeModelRolePolicy(sources.modelRoles), BRAIN_MODEL_ROLE, command.scopeId, target, ports, nowMs, record?.state === 'active');
+  if (decision.state === 'eligible') return decision;
+  if (decision.reason === 'not-active') refuseInactiveModel(command, record);
+  throw ErrorRegistry.createError('BRAIN_TIER_REFUSED', { params: { ...target, reason: decision.reason } });
+}
 /** Whether the configured Brain template leaves worker assignment to the system (callers then skip the worker-model catalog read). */
 export const brainAssignsWorkers = (config: unknown) => selectedBrainTemplate(config).modelAssignment !== 'system';
 /** One model step; no tool loop, retry, Run writer or approval decision. */
