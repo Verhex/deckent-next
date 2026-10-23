@@ -1650,6 +1650,7 @@
       "dependencies": [
         "src/domain/core/model-activation",
         "src/domain/core/primitives",
+        "src/domain/core/principal",
         "src/domain/core/provider-catalog"
       ],
       "plan": "PROVIDERS"

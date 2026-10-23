@@ -7,7 +7,7 @@
     "src/domain/core/policy/index.ts": "59975eb1090f60f4030a0e351bc5c819bf828ed1c45869ca93b045b3eaf9ba44",
     "src/domain/core/policy/internal/administer.ts": "7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004",
     "src/domain/core/policy/internal/administration.ts": "c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b",
-    "src/domain/core/policy/internal/ai-floor.ts": "5a38cd83addfd95ff7525582e3411e7a44c94af07f6db8af6b6cb399edac480c",
+    "src/domain/core/policy/internal/ai-floor.ts": "8615698686a2307802c4c529d7b6e4911c6766fd880503b93102421950c5f2b8",
     "src/domain/core/policy/internal/decision-step.ts": "70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe",
     "src/domain/core/policy/internal/delegations.ts": "c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320",
     "src/domain/core/policy/internal/describe.ts": "0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df",
@@ -32,10 +32,10 @@
     "src/domain/core/principal/internal/principal.ts": "8a4140ce51235c5410169bc77356c46abbd8edcd513fc482886f0610f147c1a2"
   },
   "summary": {
-    "routes": 301,
-    "floorRoutes": 220,
+    "routes": 309,
+    "floorRoutes": 228,
     "contexts": 6,
-    "policyChecks": 1806,
+    "policyChecks": 1854,
     "stepChecks": 48,
     "violations": 0
   },
@@ -9762,6 +9762,438 @@
     },
     {
       "kind": "config",
+      "id": "global:models",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:models",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:models.headless[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
       "id": "global:network",
       "action": "write",
       "floor": true,
@@ -18709,6 +19141,438 @@
     {
       "kind": "config",
       "id": "project:memory[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:models",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:models.headless[0]",
       "action": "write",
       "floor": true,
       "family": "configuration",

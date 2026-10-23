@@ -19,4 +19,12 @@ export const headlessErrors: ErrorDefinitions = Object.freeze({
   HEADLESS_PREFLIGHT_FAILED: { category: 'error', render: (p, l) => ({ message: preflight(p, l) }) },
   HEADLESS_LOGIN_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_LOGIN_REQUIRED', p, l) }) },
   HEADLESS_REQUEST_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_REQUEST_INVALID', p, l) }) },
+  HEADLESS_DELEGATION_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_DELEGATION_REFUSED', p, l) }) },
+  HEADLESS_PERSON_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_PERSON_REQUIRED', p, l) }) },
+  HEADLESS_KIND_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_KIND_UNAVAILABLE', p, l) }) },
+  HEADLESS_GUARD_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_GUARD_FAILED', p, l) }) },
+  HEADLESS_CREDITS_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_CREDITS_REQUIRED', p, l) }) },
+  // S9 card texts reused read-only: a known reset time names when to ask again; nothing waits or retries on its own.
+  HEADLESS_QUOTA_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: `${t('error.HEADLESS_QUOTA_EXHAUSTED', p, l)} ${typeof p['resetsAt'] === 'string'
+    ? t('quotaask.card.resetKnown', { time: p['resetsAt'] }, l) : t('quotaask.card.resetUnknown', {}, l)}` }) },
 });

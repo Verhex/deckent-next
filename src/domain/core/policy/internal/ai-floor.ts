@@ -72,6 +72,8 @@ const PROTECTED_CONFIG_PATHS = Object.freeze(['policy', 'approvals', 'identity',
   'memory', 'memoryAutomation',
   // S6R-5 (lead on s6r4 Q1): the recovery mode, which lets the recovery decision continue a lost task.
   'runRuntime.recovery',
+  // S3-3 (design §10, MINOR 4): the owner-only switch that makes the subscription Brain connect kind available on this installation.
+  'models.headless',
   'terminal.shell.realm', 'terminal.shell.environment', 'terminal.fetch.egress', 'terminal.fetch.allowedHosts']);
 export function protectedConfigKey(keyPath: string): boolean {
   const key = keyPath.replace(/\[[^\]]*\]/gu, '.0').replace(/\.+$/u, '');

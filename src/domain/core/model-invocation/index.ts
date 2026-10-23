@@ -31,5 +31,6 @@ export { modelInvocationBillingAxisSchema } from './internal/contract.js';
 export type { ModelInvocationBillingAxis } from './internal/contract.js';
 export { modelInvocationPlanUsageSchema } from './internal/plan-usage.js';
 export type { ModelInvocationPlanUsage } from './internal/plan-usage.js';
-export { DELEGATION_PRINCIPAL_CLASSES, delegatedUseConsentSchema, delegatedUseOf, subscriptionDelegationRefusal } from './internal/delegation.js';
+export { DELEGATION_PRINCIPAL_CLASSES, delegatedUseConsentSchema, delegatedUseOf, subscriptionDelegationRefusal, delegationPrincipalClass, delegationOwner } from './internal/delegation.js';
 export type { DelegatedUseConsent, DelegationPrincipalClass } from './internal/delegation.js';
+export { headlessRejectionBodySchema, readHeadlessRejection, type HeadlessRejectionBody } from './internal/headless-rejection.js';
