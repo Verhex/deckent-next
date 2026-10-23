@@ -27,14 +27,14 @@ const content = (title: string) => ({ kind: 'fact', title, body: 'İrsaliyesiz f
 const propose = (commandId: string, scopeId: string, title = 'Fatura eşleştirme İstanbul') => ({ schemaVersion: 1, commandId, scopeId, content: content(title), origin: { kind: 'human', ref: null } });
 
 describe('ledger v61 memory journal migration', () => {
-  it('pins the version: v61 is the memory journal and the current ledger', () => {
-    expect(MEMORY_JOURNAL_LEDGER_VERSION).toBe(61); expect(CURRENT_LEDGER_VERSION).toBe(61);
+  it('pins the version: v61 is the memory journal step', () => {
+    expect(MEMORY_JOURNAL_LEDGER_VERSION).toBe(61); expect(CURRENT_LEDGER_VERSION).toBe(62);
   });
   it('backs up v60 and adds only the memory tables; an older reader refuses the upgraded ledger', async () => {
     const f = await ledger(); const db = new DatabaseSync(f.path); db.exec(DOWNGRADE_TO_V60_LEDGER_SQL); db.close();
     expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
     const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-23T00:00:00Z'));
-    expect(upgrade).toMatchObject({ from: 60, to: 61 });
+    expect(upgrade).toMatchObject({ from: 60, to: CURRENT_LEDGER_VERSION });
     const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true }), current = new DatabaseSync(f.path, { readOnly: true });
     try {
       expect(backup.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'memory%'").all()).toEqual([]);

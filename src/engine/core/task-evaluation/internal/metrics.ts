@@ -62,7 +62,8 @@ export function deriveAcceptanceMetrics(command: string, input: RunSnapshot, pri
   return rows.map(({ identity, outcome, evaluation, kinds, references, measured, carried }) => {
     if (identity.scopeId !== run.identity.scopeId || identity.runId !== run.identity.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
     const reference = run.execution.tasks.find(row => row.taskId === identity.taskId)?.acceptance;
-    const pinned = readWorkerModelPin(run.execution.tasks.find(row => row.taskId === identity.taskId)?.profile.parameters), pin = pinned?.pin;
+    const frozen = run.execution.tasks.find(row => row.taskId === identity.taskId), pinned = readWorkerModelPin(frozen?.profile.parameters), pin = pinned?.pin;
+    const assigned = frozen?.assignment;
     return deriveDeckentMetrics({ identity: { scopeId: identity.scopeId, runId: identity.runId, taskId: identity.taskId, attemptId: identity.attemptId },
       workClass: evaluation?.acceptance?.workClass ?? reference?.workClass ?? null,
       policyRevision: evaluation?.acceptance?.policyRevision ?? reference?.policyRevision ?? null,
@@ -70,6 +71,8 @@ export function deriveAcceptanceMetrics(command: string, input: RunSnapshot, pri
       // S7 (agent/skill catalog) supplies the digest; until then the row says plainly that no skill set was recorded.
       skillSetDigest: null, model: pin ? { channelId: pin.channelId, modelId: pin.modelId } : null, outcome, attemptSequence: identity.generation,
       effort: pinned?.reasoningEffort ?? null, ...carried, evidenceKinds: kinds,
+      ...(assigned ? { assignment: { candidatePolicy: assigned.candidatePolicy, candidateIndex: assigned.candidateIndex, workClassRevision: assigned.workClassRevision,
+        catalogRevision: assigned.catalogRevision, modelRevision: assigned.modelRevision, activationRevision: assigned.activationRevision, effortSource: assigned.effort.source } } : {}),
       evidenceReferences: [...references].map(([id, digest]) => ({ id, digest })) }, measured);
   });
 }

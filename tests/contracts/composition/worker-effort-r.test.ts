@@ -66,7 +66,7 @@ describe.skipIf(process.platform === 'win32')('WORKER-EFFORT-R real admission â†
     expect(frozen.parameters.argv).not.toContain('model_reasoning_effort=ultra');
     expect(frozen.parameters.argv.some((arg: string) => arg.startsWith('model_reasoning_effort='))).toBe(false);
     const selected = { schemaVersion: 1, level: null, source: 'cli-default', status: 'ultra-opt-in-required', workClass: kind,
-      policyRevision: 'atama-0-2026-10-23', target: kind === 'small' ? 'high' : 'max' };
+      policyRevision: 'atama-1-2026-10-23', target: kind === 'small' ? 'high' : 'max' };
     expect(frozen.parameters.nativeSubscription.reasoningEffort).toEqual(selected);
     expect(created.admission.run.tasks[0]!.reasoningEffort).toEqual(selected);
     expect(() => assertNativeWorkerBinding(frozen)).not.toThrow();

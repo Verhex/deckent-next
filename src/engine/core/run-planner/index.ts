@@ -1,23 +1,28 @@
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
-import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
+import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand, type WorkClassPolicy,
   type RunProposal, type VerifiedPrincipal } from '#domain/index.js';
-import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext,
-  prepareBrainEvaluatorParameters, type BrainRegistryContext } from '#capabilities/index.js';
+import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext, assertBrainLeavesAssignment,
+  prepareBrainEvaluatorParameters, selectedBrainTemplate, type BrainRegistryContext } from '#capabilities/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { modelInvocationRequestDigest, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import type { RunProposalQuery, RunProposalResult } from '#engine/core/run-proposal/index.js';
+const without = <T extends object>(value: T, key: string): T => Object.fromEntries(Object.entries(value).filter(([name]) => name !== key)) as T;
 export const brainRunId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-run:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export const brainInvocationCommandId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-invocation:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: ExecutionRegistry,
   budget: { currency: string; limitMinorUnits: number } | null, config: unknown, known?: KnownSecretSnapshot,
   selections?: Readonly<{ kinds: BrainRegistryContext['kinds']; workerModels: BrainRegistryContext['workerModels'] }>) {
-  const workClasses = mergeWorkClassRegistries(CORE_WORK_CLASSES, registry.workClasses ? [registry.workClasses] : []);
+  // ATAMA-1: the Brain chooses a WorkClass, never its worker: the candidate lists stay out of the planning context (bytes and temptation).
+  const merged = mergeWorkClassRegistries(CORE_WORK_CLASSES, registry.workClasses ? [registry.workClasses] : []);
+  const workClasses: WorkClassPolicy = without({ ...merged, classes: merged.classes.map(row => without(row, 'candidatePolicyId')) }, 'candidatePolicies');
   const settings = brainPlannerConfigSchema.parse(config), limits = settings.context;
+  // ATAMA-1: a system-assignment template offers the model no worker models at all; the system assigns them at admission.
+  const offerModels = selectedBrainTemplate(settings).modelAssignment !== 'system';
   const order = <T>(rows: readonly T[], key: (row: T) => string) => [...rows].sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
   const context = boundBrainContext(command.scopeId, workClasses, { schemaVersion: 2, registryRevision: registry.revision,
     kinds: order(selections?.kinds ?? registry.kinds.map(row => ({ kind: row.kind, profile: row.profile, type: 'prepared' as const })), row => row.kind),
-    workerModels: order(selections?.workerModels ?? [], row => JSON.stringify([row.profile.id, row.profile.version, row.channelId, row.modelId])),
+    workerModels: order(offerModels ? selections?.workerModels ?? [] : [], row => JSON.stringify([row.profile.id, row.profile.version, row.channelId, row.modelId])),
     evaluators: order(registry.evaluators.map(row => ({ id: row.id, version: row.version, parameters: prepareBrainEvaluatorParameters(row) })), row => JSON.stringify([row.id, row.version])),
     // Only stable budget facts enter the prompt: the remaining money moves with every charge (this call's own included), and a retried
     // plan must resend the byte-identical request; the system caps the ceiling at the remaining money after the call instead.
@@ -56,6 +61,8 @@ export interface BrainPlanPorts {
   remainingBudget?(scopeId: string): Promise<Readonly<{ currency: string; remainingMinorUnits: number }> | null>;
 }
 const assertActive = (signal?: AbortSignal) => { if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED'); };
+/** Whether the configured Brain template leaves worker assignment to the system (callers then skip the worker-model catalog read). */
+export const brainAssignsWorkers = (config: unknown) => selectedBrainTemplate(config).modelAssignment !== 'system';
 /** One model step; no tool loop, retry, Run writer or approval decision. */
 export class BrainPlanApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly ports: BrainPlanPorts) {}
@@ -95,6 +102,7 @@ export class BrainPlanApplication {
       ? ErrorRegistry.createError('BRAIN_OUTPUT_TRUNCATED', { params: { maxCompletionTokens: typeof outputCap === 'number' ? outputCap : 'unknown' } })
       : ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'content' } });
     const draft = parseBrainDraft(text, this.ports.knownSecrets, { requireCurrentGraph: true }), usage = openAiChatUsageSchema.safeParse(result.response?.usage);
+    if (prepared.prompt.modelAssignment === 'system') assertBrainLeavesAssignment(draft);
     if (prepared.kinds && draft.graph.tasks.some(task => !prepared.kinds!.includes(task.kind))) {
       throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_KIND_NOT_REGISTERED' } });
     }

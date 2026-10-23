@@ -1,5 +1,5 @@
 import { advisoryProposalPermissions, dependencyTaskId, getPolicyVocabulary, isConflictEdge, isRecognisedProposalPermission, resolveTaskWorkClass,
-  type PolicyDecision, type ProposalPermissionCatalog, type WorkClassRegistry } from '#domain/index.js';
+  type PolicyDecision, type ProposalPermissionCatalog, type WorkClassRegistry, type WorkerAssignment } from '#domain/index.js';
 import { currencyAmountText, redactForRecord, terminalSafeText, t, type KnownSecretSnapshot, type Locale } from '#platform/index.js';
 import type { BoundRunAdmission } from './admission.js';
 import type { RunCreate } from './store.js';
@@ -12,6 +12,15 @@ const field = (raw: string, max: number, known?: KnownSecretSnapshot): string =>
   return clean.length > max ? clean.slice(0, max - 1) + '…' : clean;
 };
 
+/** ATAMA-1: the worker the system chose for a task (sealed in the admission input the person approves) and the listed ones it skipped. */
+function assignmentRows(assignment: WorkerAssignment | undefined, locale: Locale, known?: KnownSecretSnapshot): string[] {
+  if (!assignment) return [];
+  const worker = t('assignment.card.worker', { modelId: field(assignment.modelId, limits.assignmentChars, known), channelId: field(assignment.channelId, limits.assignmentChars, known),
+    effort: assignment.effort.level ?? t('assignment.effort.cliDefault', {}, locale), workClass: field(assignment.workClass, limits.workClassChars, known),
+    policy: field(`${assignment.candidatePolicy.id}@${assignment.candidatePolicy.version}`, limits.workClassChars, known), position: assignment.candidateIndex + 1 }, locale);
+  return assignment.skipped.length ? [worker, t('assignment.card.skipped', { skipped: field(assignment.skipped.map(row => `${row.modelId} (${row.reason})`).join(', '),
+    limits.assignmentChars, known) }, locale)] : [worker];
+}
 /** One catalog for the person's refusal and the model's 'unrecognised (advisory)' marker, so the two paths cannot diverge (accept_mark). */
 export function runProposalPermissionCatalog(registry: WorkClassRegistry | undefined): ProposalPermissionCatalog {
   return [...getPolicyVocabulary().resources, ...(resolveTaskWorkClass('', undefined, registry).policy.proposalPermissions ?? [])];
@@ -24,11 +33,11 @@ export function renderRunCreateApprovalSummary(command: BoundRunAdmission, creat
   // A proposal's checked set is system-derived from the graph; its own list is advisory only (live 2026-10-18) and shown as such.
   const tasks = create.graph.tasks, permissions = command.proposal ? advisoryProposalPermissions(command.proposal.requiredPermissions, command.graph) : undefined;
   const unknown = t('approval.plan.undeclared', {}, locale);
-  const taskRows = tasks.slice(0, limits.taskRows).map(task => t('approval.plan.task', {
+  const taskRows = tasks.slice(0, limits.taskRows).map(task => [t('approval.plan.task', {
     title: field(task.workInput?.title ?? task.workInput?.task ?? task.id, limits.titleChars, known),
     kind: field(task.kind, limits.taskKindChars, known), workClass: field(create.execution.tasks.find(row => row.taskId === task.id)?.acceptance?.workClass
       ?? task.workClass ?? task.workInput?.workClass ?? unknown, limits.workClassChars, known),
-  }, locale));
+  }, locale), ...assignmentRows(create.execution.tasks.find(row => row.taskId === task.id)?.assignment, locale, known)].join('\n'));
   const catalog = runProposalPermissionCatalog(registry); // accept_mark (owner 2026-10-18): an unrecognised model entry is marked, never refused.
   const permissionRows = (permissions ?? []).slice(0, limits.permissionRows).map(permission => {
     const params = { kind: field(permission.kind, limits.permissionKindChars, known), action: field(permission.action, limits.permissionActionChars, known), resource: field(permission.resourceId, limits.permissionResourceChars, known) };

@@ -77,6 +77,8 @@ export function compileNativeCodingWorkInput(template: ExecutionProfileDefinitio
   if (!workInput.success) throw new NativeCodingProfileError('NATIVE_CODING_INVOCATION_INVALID');
   const { docker, invocation: { composition, maxTurns, ...invocation } } = parseTemplate(template);
   const { model, task, scope, acceptance } = workInput.data; const turns = workInput.data.maxTurns ?? maxTurns;
+  // ATAMA-1: a v2 input without a model is compiled only after the system assigned one; reaching here without it is a typed refusal.
+  if (!model) throw new NativeCodingProfileError('WORKER_MODEL_UNASSIGNED');
   if (maxTurns !== undefined && turns !== undefined && turns > maxTurns) throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE');
   const base = { schemaVersion: 1 as const, ...composition, task, scope: renderWorkScope(scope.paths), acceptance };
   const admitted = context.length ? { ...base, context: [...(composition?.context ?? []), ...context] } : base;
@@ -87,10 +89,10 @@ export function compileNativeCodingWorkInput(template: ExecutionProfileDefinitio
 }
 
 /** Registry code for a refused compilation: exact-model and turn-limit refusals stay typed; anything else is an invalid profile. */
-export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'WORKER_INSTRUCTIONS_TOO_LARGE' | 'EXECUTION_PROFILE_INVALID' {
+export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORKER_MODEL_UNASSIGNED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'WORKER_INSTRUCTIONS_TOO_LARGE' | 'EXECUTION_PROFILE_INVALID' {
   if (!(error instanceof NativeCodingProfileError)) return 'EXECUTION_PROFILE_INVALID';
   if (error.code === 'NATIVE_CODING_CONTEXT_OVERFLOW') return 'WORKER_INSTRUCTIONS_TOO_LARGE';
-  return (error.code === 'WORKER_MODEL_ALIAS_REFUSED' || error.code === 'WORKER_EFFORT_UNSUPPORTED') ? error.code : error.code === 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' ? 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'
+  return (error.code === 'WORKER_MODEL_ALIAS_REFUSED' || error.code === 'WORKER_EFFORT_UNSUPPORTED' || error.code === 'WORKER_MODEL_UNASSIGNED') ? error.code : error.code === 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' ? 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'
     : error.code === 'NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE' ? 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' : 'EXECUTION_PROFILE_INVALID';
 }
 

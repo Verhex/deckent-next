@@ -29,8 +29,9 @@ export function createRunAdmissionContext(config: Pick<CoreConfig, 'admission' |
     try {
       const stall = config.runRuntime?.stallRecovery, deadline = ports.silenceDeadline;
       const validation = stall && deadline ? { ...ports.validation, silence: { policy: { warnAfterMs: stall.warnAfterMs, stopAfterMs: stall.stopAfterMs, maxRetries: stall.maxRetries }, deadline } } : ports.validation;
-      execution = await resolveWorkerEffortExecution(admitted.graph, profile.registry, catalog, validation, ports.compiler);
-      ports.warnings(await admitWorkerModels(execution.tasks, admitted.scopeId, catalog, ports.now(), admitted.graph.tasks, { imageRefreshInProgress: await ports.refreshing() }));
+      const imageRefreshInProgress = await ports.refreshing(), nowMs = ports.now();
+      execution = await resolveWorkerEffortExecution(admitted.graph, profile.registry, catalog, validation, ports.compiler, { scopeId: admitted.scopeId, nowMs, imageRefreshInProgress });
+      ports.warnings(await admitWorkerModels(execution.tasks, admitted.scopeId, catalog, nowMs, admitted.graph.tasks, { imageRefreshInProgress }));
     } finally { catalog.close(); }
     return { execution, layoutRevision, now: ports.now(), policy: { schemaVersion: 2, poolId: profile.poolId,
       capacity: { executionSlots: Math.min(profile.executionSlots, typeof config.max_workers === 'number' ? config.max_workers : Infinity),

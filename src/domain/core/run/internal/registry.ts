@@ -3,6 +3,7 @@ import { identitySchema, counterSchema, immutableJsonObjectSchema, type JsonValu
 import { encodeDeckentJson } from '#domain/core/task-graph/index.js';
 import { frozenWorkClassProfileSchema, taskAcceptanceReferenceSchema } from './acceptance.js';
 import { workClassRegistrySchema } from './work-class.js';
+import { workerAssignmentSchema } from './assignment.js';
 /** Registry entries are product data; installed implementations own parameter semantics. */
 export const implementationReferenceSchema = z.object({ id: identitySchema, version: counterSchema.positive() }).strict().readonly();
 export const executionProfileDefinitionSchema = z.object({ id: identitySchema, version: counterSchema.positive(),
@@ -52,7 +53,9 @@ export type TaskStallPolicy = z.infer<typeof taskStallPolicySchema>;
 /** The selected definitions belong to the Run, not the current installation config. */
 export const runExecutionSnapshotSchema = z.object({ schemaVersion: z.literal(1), registryRevision: identitySchema,
   workClassProfiles: z.array(frozenWorkClassProfileSchema).max(256).readonly().optional(),
-  tasks: z.array(z.object({ taskId: identitySchema, acceptance: taskAcceptanceReferenceSchema.optional(), profile: executionProfileDefinitionSchema, workspaceDelivery: workspaceDeliveryDeclarationSchema.optional(), stall: taskStallPolicySchema.optional() }).strict().readonly()).min(1).readonly(),
+  tasks: z.array(z.object({ taskId: identitySchema, acceptance: taskAcceptanceReferenceSchema.optional(), profile: executionProfileDefinitionSchema, workspaceDelivery: workspaceDeliveryDeclarationSchema.optional(), stall: taskStallPolicySchema.optional(),
+    /** ATAMA-1: present only when the system assigned the worker (work input v2 without a model); older snapshots keep their exact bytes. */
+    assignment: workerAssignmentSchema.optional() }).strict().readonly()).min(1).readonly(),
   criteria: z.array(z.object({ criterionId: identitySchema, evaluator: evaluatorDefinitionSchema,
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   }).strict().readonly()).min(1).readonly(),

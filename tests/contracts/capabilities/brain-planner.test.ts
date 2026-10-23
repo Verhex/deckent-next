@@ -64,9 +64,10 @@ it.each([
   expect(() => parseBrainDraft(JSON.stringify({ ...draft, graph: { ...graph, tasks: [task] } })))
     .toThrow(expect.objectContaining({ code: 'BRAIN_GRAPH_INVALID', params: { rule } }));
 });
-it('supplies criterion-id annotation and selects v2 while keeping v1 available', () => {
+it('supplies criterion-id annotation and selects v3 (ATAMA-1) while keeping v1 and v2 available', () => {
   const current = prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, {});
-  expect(current.template.version).toBe(2);
+  expect(current.template.version).toBe(3);
+  expect(prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 2 } }).template.version).toBe(2);
   const schema = JSON.parse(current.messages[1]!.content).schema;
   expect(schema.properties.graph.properties.tasks.items.properties.acceptanceCriteria.description).toContain('criterionDefinitions ids');
   const old = prepareBrainPrompt(command, CORE_WORK_CLASSES, {}, { selected: { id: 'run-proposal', version: 1 } });

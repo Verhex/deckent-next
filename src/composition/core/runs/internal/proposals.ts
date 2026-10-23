@@ -2,7 +2,7 @@ import { withPlanningSpending } from './planning-spending.js';
 import { userInfo } from 'node:os';
 import type { RunProposal } from '#domain/index.js';
 import { SystemTrustedClock, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
-import { openSqliteRunProposalStore, openSqliteRunProposalReader, extractOpenAiChatTextFromInvocation } from '#adapters/index.js';
+import { openSqliteRunProposalStore, openSqliteRunProposalReader, openSqliteModelCatalogReader, extractOpenAiChatTextFromInvocation } from '#adapters/index.js';
 import { assertRunProposalSource, configuredProposalRegistry, RunProposalApplication, RunProposalInspectionApplication, RunPolicyAuthorization, parseRunProposal,
   runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -20,7 +20,8 @@ export async function proposeConfiguredRun(projectRoot: string, input: RunPropos
         return await new RunProposalApplication(store, { verify: async () => context.principal }, authority, runs, {
           registry: configuredProposalRegistry(context.config.admission), clock: new SystemTrustedClock(),
           loadBudget: scopeId => readConfiguredRunBudget(projectRoot, scopeId, options),
-          classifySpending: value => classifyConfiguredRunSpending(projectRoot, value, options),
+          classifySpending: value => classifyConfiguredRunSpending(projectRoot, value, options,
+            async () => openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs })),
           async verifySource(value) {
             if (value.source.kind === 'human') return;
             const reference = value.source.receipt;

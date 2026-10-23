@@ -27,11 +27,12 @@ it.each([{}, { context: { ...brainPlannerConfigSchema.parse({}).context, maxKind
     contextBytes: new TextEncoder().encode(JSON.stringify(context)).length, messagesBytes: new TextEncoder().encode(JSON.stringify(prompt.messages)).length,
     truncation: context.context.truncation, contextDigest: prompt.contextDigest }));
 });
+// Model pins are offered only by a template that lets the Brain pin (v2); v3 (ATAMA-1) offers none (brain-assignment.test.ts).
 it('preserves template metadata, model pins and both evaluator schemas without execution parameters', () => {
   const model = { profile: { id: 'template', version: 1 }, channelId: 'subscription-channel', modelId: 'exact-native-model', auxiliaryModelIds: ['exact-helper'],
     availableAuxiliaryModelIds: ['exact-helper'], billing: 'subscription', efforts: ['high'] };
   const projected = prepareBrainRegistryPrompt(command, { ...fixture, evaluators: [...fixture.evaluators,
-    { id: 'customer-readback', version: 2, implementation: { id: 'operation-evidence', version: 1 } }] }, null, {}, undefined,
+    { id: 'customer-readback', version: 2, implementation: { id: 'operation-evidence', version: 1 } }] }, null, { selected: { id: 'run-proposal', version: 2 } }, undefined,
     { kinds: [{ kind: 'purchase', profile: model.profile, type: 'template', provider: 'registered-provider' }], workerModels: [model] });
   const context = JSON.parse(projected.messages[1]!.content).context.context;
   expect(context.workerModels).toEqual([model]); expect(context.kinds[0].type).toBe('template');
