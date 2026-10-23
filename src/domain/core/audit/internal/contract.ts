@@ -6,6 +6,8 @@ import limits from './limits.json' with { type: 'json' };
 const MEMORY_EVALUATION_RECORD_MODES = Object.freeze(['shadow', 'live'] as const);
 /** S4B-5: the context modes that read and seal (`off` reads nothing, so it is never recorded). */
 const MEMORY_CONTEXT_RECORD_MODES = Object.freeze(['shadow', 'on'] as const);
+/** S6R-5: the recovery decision modes that seal (the recovery domain's frozen Run modes; `off` decides nothing, so it is never recorded). */
+const RECOVERY_DECISION_RECORD_MODES = Object.freeze(['shadow', 'live'] as const);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** The MCP registry scopes (the adapter's own list; the audit contract stays dependency-free). */
 const MCP_REGISTRY_SCOPES = ['managed', 'local', 'project', 'user'] as const;
@@ -318,6 +320,20 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
     disposition: z.enum(['shadow-only', 'proposal-only', 'execute']),
     target: z.object({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, generation: counterSchema.positive().nullable() }).strict().nullable(),
     evidence: recoveryEvidenceSchema, evidenceDigest: digest, standingRef: identitySchema.optional() }).strict(),
+  /**
+   * S6R-5 (S6R-DESIGN §6, §9; owner Q-R1/Q-R2): one recovery decision, sealed by the recovery principal before its apply (live) or as the only record
+   * (shadow: nothing else happens). `model` is the one call's channel, exact model, template and input/output digests (null: the gate, a bound, the
+   * owner's grant, the role registry, the consent rule or the breaker decided without a model). `code` is the escalation code (null for a
+   * continuation); `failure` the typed reason a call or its answer failed; `note` the registry note code passed on. Codes only, never model text.
+   */
+  z.object({ kind: z.literal('recovery-decision'), caseId: digest, mode: z.enum(RECOVERY_DECISION_RECORD_MODES), evidenceDigest: digest,
+    target: z.object({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, generation: counterSchema.positive() }).strict(),
+    gate: z.object({ result: z.enum(['clear', 'reconciled', 'open']), settled: z.enum(['none', 'task-idempotent', 'not-declared', 'over-bound']), intents: counterSchema }).strict(),
+    terminationReceiptId: identitySchema,
+    model: z.object({ channelId: identitySchema, modelId: identitySchema, template: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(),
+      registryRevision: identitySchema, inputDigest: digest, outputDigest: digest.nullable(), invocationId: identitySchema.nullable() }).strict().nullable(),
+    action: z.enum(['continue-new-attempt', 'escalate-human']), causeClass: z.enum(['infra-transient', 'infra-persistent', 'task-induced', 'unknown']).nullable(),
+    note: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(), code: identitySchema.nullable(), failure: identitySchema.nullable(), standingRef: identitySchema.nullable() }).strict(),
 ]);
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,

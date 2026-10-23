@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
-  matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipal, memoryDistillerPrincipalRef, memoryEvaluatorPrincipal, memoryEvaluatorPrincipalRef, namedPersonPolicyAdditions, resolvePolicyBindings,
+  matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipal, memoryDistillerPrincipalRef, memoryEvaluatorPrincipal, memoryEvaluatorPrincipalRef, namedPersonPolicyAdditions, recoveryPrincipalRef, resolvePolicyBindings,
   upgradeFirstRunPolicy } from '#domain/index.js';
 import { FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
 
@@ -31,7 +31,9 @@ it('v15 adds exactly the person\'s memory propose, the distiller D1+D2, D4 and D
     scoped('first-run-memory-evaluator', evaluatorRef, 'memory', ['inspect', 'verify', 'contest']),
     scoped('first-run-memory-evaluator-runs', evaluatorRef, 'run', ['inspect']), scoped('first-run-memory-evaluator-model', evaluatorRef, 'model-invocation', ['invoke']),
     // S4B-4 (owner S-M12, A11): the named person retires and purges memory (the purge card); no model-invocation grant (lead review 2026-10-23).
-    scoped('first-run-memory-purge', person, 'memory', ['retire', 'purge'])]);
+    scoped('first-run-memory-purge', person, 'memory', ['retire', 'purge']),
+    // S6R-5: the recovery principal invokes its recovery-decision role model (its floor refuses every other pair).
+    scoped('first-run-recovery-model', recoveryPrincipalRef(person), 'model-invocation', ['invoke'])]);
   expect(firstRunPolicyTemplate({ ...input, principal: mcpRef }).policy.grants.filter(rule => ids.includes(rule.id)).map(rule => rule.id)).toEqual([FIRST_RUN_UPGRADE_RULE_IDS.observeAgentCatalog]);
 });
 

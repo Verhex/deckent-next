@@ -214,6 +214,9 @@
       "maxWaitMs": 18000000,
       "schemaVersion": 1
     },
+    "recovery": {
+      "mode": "off"
+    },
     "stallRecovery": {
       "backoffMs": 30000,
       "maxRetries": 1,

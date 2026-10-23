@@ -1,4 +1,4 @@
-import { isMcpPrincipal, isWorkloadPrincipalRef, mcpPrincipalRef, memoryDistillerPrincipalRef, memoryEvaluatorPrincipalRef } from '#domain/core/principal/index.js';
+import { isMcpPrincipal, isWorkloadPrincipalRef, mcpPrincipalRef, memoryDistillerPrincipalRef, memoryEvaluatorPrincipalRef, recoveryPrincipalRef } from '#domain/core/principal/index.js';
 import { IDENTITY_MAX_LENGTH, identitySchema } from '#domain/core/primitives/index.js';
 import { bindingsFileSchema, policyFileSchema, policyGrantSchema, type PolicyFile, type PolicyGrant } from './schema.js';
 import { policyResources } from './vocabulary.js';
@@ -212,12 +212,12 @@ export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mc
   memoryPropose: 'first-run-memory-propose', distillerMemory: 'first-run-memory-distiller', distillerRuns: 'first-run-memory-distiller-runs', distillerOutput: 'first-run-memory-distiller-output',
   agentCatalog: 'first-run-agent-catalog', observeAgentCatalog: 'first-run-mcp-observe-agent-catalog',
   memoryReview: 'first-run-memory-review', evaluatorMemory: 'first-run-memory-evaluator', evaluatorRuns: 'first-run-memory-evaluator-runs', evaluatorModel: 'first-run-memory-evaluator-model',
-  memoryPurge: 'first-run-memory-purge' });
+  memoryPurge: 'first-run-memory-purge', recoveryModel: 'first-run-recovery-model' });
 /** The v15 delta (S4B-1 + S7, owner 2026-10-23): what `policy upgrade --template current --rollback` removes. It never removes earlier versions' rules: the
  * v14 memory reads stay once added, like every older version's administration or observation authority. */
 export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze([FIRST_RUN_UPGRADE_RULE_IDS.memoryPropose, FIRST_RUN_UPGRADE_RULE_IDS.distillerMemory, FIRST_RUN_UPGRADE_RULE_IDS.distillerRuns,
   FIRST_RUN_UPGRADE_RULE_IDS.distillerOutput, FIRST_RUN_UPGRADE_RULE_IDS.agentCatalog, FIRST_RUN_UPGRADE_RULE_IDS.observeAgentCatalog, FIRST_RUN_UPGRADE_RULE_IDS.memoryReview, FIRST_RUN_UPGRADE_RULE_IDS.evaluatorMemory,
-  FIRST_RUN_UPGRADE_RULE_IDS.evaluatorRuns, FIRST_RUN_UPGRADE_RULE_IDS.evaluatorModel, FIRST_RUN_UPGRADE_RULE_IDS.memoryPurge]);
+  FIRST_RUN_UPGRADE_RULE_IDS.evaluatorRuns, FIRST_RUN_UPGRADE_RULE_IDS.evaluatorModel, FIRST_RUN_UPGRADE_RULE_IDS.memoryPurge, FIRST_RUN_UPGRADE_RULE_IDS.recoveryModel]);
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
 const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'] as const;
@@ -435,7 +435,10 @@ function v15Rules(person: Person, scopes: readonly string[]): readonly PolicyGra
   return [rule(ids.memoryPropose, person, vocabulary.memory.kind, ['propose']), rule(ids.distillerMemory, distiller, vocabulary.memory.kind, ['inspect', 'propose']), rule(ids.distillerRuns, distiller, vocabulary.run.kind, ['inspect']),
     rule(ids.distillerOutput, distiller, vocabulary.attempt.kind, ['read-output']), rule(ids.agentCatalog, person, vocabulary.agentCatalog.kind, ['inspect', 'define']), observe,
     rule(ids.memoryReview, person, vocabulary.memory.kind, ['verify', 'contest']), ...evaluatorRules(memoryEvaluatorPrincipalRef(person), rule),
-    rule(ids.memoryPurge, person, vocabulary.memory.kind, ['retire', 'purge'])];
+    rule(ids.memoryPurge, person, vocabulary.memory.kind, ['retire', 'purge']),
+    // S6R-5: the recovery principal (`<person>/recovery`, composition root only) invokes its `recovery-decision` role model; its floor refuses every
+    // other pair, the role registry restricts which rows, and a continuation still needs the person's own standing grant (`recovery-action`).
+    rule(ids.recoveryModel, recoveryPrincipalRef(person), vocabulary.modelInvocation.kind, ['invoke'])];
 }
 function evaluatorRules(evaluator: Person, rule: (id: string, principal: Person, kind: string, actions: readonly string[]) => PolicyGrant): readonly PolicyGrant[] {
   const ids = FIRST_RUN_UPGRADE_RULE_IDS, vocabulary = policyResources;

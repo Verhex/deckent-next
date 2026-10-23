@@ -425,6 +425,21 @@ describe.skipIf(process.platform === 'win32')('R3 silence policy through the rea
   });
 });
 
+/** S6R-5 (lead decision on s6r4 Q1; S6R-DESIGN §8, §11): admission freezes the registry recovery bounds with the protected `runRuntime.recovery.mode`. */
+describe.skipIf(process.platform === 'win32')('recovery bounds through the real admission composition', () => {
+  it('off (the default) freezes nothing (N27: never continued); shadow and live freeze the seed bounds with that mode', async () => {
+    const off = await seeded();
+    await createRun(off.project, run('off', 'coding', workInput()), off.options);
+    expect((off.snapshotProfile('off') as { recovery?: unknown }).recovery).toBeUndefined();
+    for (const mode of ['shadow', 'live'] as const) {
+      const f = await seeded(registry, undefined, { runRuntime: { recovery: { mode } } });
+      await createRun(f.project, run(mode, 'coding', workInput()), f.options);
+      expect((f.snapshotProfile(mode) as { recovery?: unknown }).recovery).toEqual({ schemaVersion: 1, registryRevision: 'core-2026-10-23', mode, maxLostContinuationsPerTask: 1,
+        maxRecoveryActionsPerRun: 4, maxAttemptsPerTask: 3, maxGateIntents: 64, settledFacts: { maxCount: 16, maxBytes: 16384 } });
+    }
+  });
+});
+
 /** DECKENT-MD-WORKERS (owner Q3 2026-10-23): the project's worker instruction snapshot enters the compiled prompt at admission. */
 describe.skipIf(process.platform === 'win32')('worker instruction snapshot through the real admission composition', () => {
   const execution = (workerInstructions?: object) => ({ execution: { docker: { executable: '/usr/bin/docker', imageId: docker.imageId },

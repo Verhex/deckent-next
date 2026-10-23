@@ -83,7 +83,8 @@ export class SqliteRecoveryStore implements RecoveryStore {
       const priorSignatures = this.db.prepare("SELECT record FROM recovery_cases WHERE scope_id=? AND run_id=? AND task_id=? AND state='applied'")
         .all(identity.scopeId, identity.runId, identity.taskId).map(row => { const value = parse(() => recoveryCaseSchema.parse(JSON.parse(String(row['record']))));
           return value.decision?.action === 'continue-new-attempt' ? value.decision.signature : null; }).filter((value): value is string => value !== null);
-      const { snapshot } = continueLostTask(run, run.revision, identity, { decisionId: write.decision.decisionId, signature: write.decision.signature, gate, priorSignatures },
+      const { snapshot } = continueLostTask(run, run.revision, identity, { decisionId: write.decision.decisionId, signature: write.decision.signature, gate, priorSignatures,
+        note: write.decision.note ?? null },
         { now: write.now, timeoutMs: write.timeoutMs });
       const updated = this.db.prepare('UPDATE runs SET revision=?,snapshot=? WHERE scope_id=? AND run_id=? AND revision=?')
         .run(snapshot.revision, JSON.stringify(snapshot), identity.scopeId, identity.runId, run.revision);

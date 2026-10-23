@@ -7,7 +7,9 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { afterEach, expect, it, vi } from 'vitest';
 import { clearConfigCache, inspectProductFile, jsonRecordDirectory, loadConfig, prepareProductDirectory } from '#platform/index.js';
 import { DockerCommandFailure, DockerSupervisor, identifyDockerRequest, type DockerCommandRunner } from '#adapters/index.js';
-import { DispatchPreparationGuard } from '#engine/index.js';
+import { AuditApplication, DispatchPreparationGuard, RecoveryApplication, nervousCaseId, recoveryContinuationApproval } from '#engine/index.js';
+import { RECOVERY_POLICY_SEED, freezeRecoveryPolicy, loadRecoveryPolicy, recoveryPrincipal } from '#domain/index.js';
+import { openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteRecoveryStore } from '#adapters/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { prepareConfiguredReconciliationRuntime } from '../../../src/composition/core/runtime/index.js';
 import { registerConfiguredScopesAtStart } from '../../../src/composition/core/scoped-request/index.js';
@@ -36,7 +38,7 @@ async function poll<T>(read: () => Promise<T | undefined>, label: string): Promi
 const containerId = 'b'.repeat(64), startedAt = '2026-10-23T10:00:00.000000000Z';
 type Retained = 'incarnation' | 'container' | 'none';
 
-async function fixture(input: { status: 'running' | 'missing' | 'created'; retained: Retained; standing?: boolean; lostKills?: number }) {
+async function fixture(input: { status: 'running' | 'missing' | 'created'; retained: Retained; standing?: boolean; lostKills?: number; recovery?: boolean }) {
   const root = await mkdtemp(join(tmpdir(), 'dk-nervous-live-')); roots.push(root);
   const project = join(root, 'p'), data = join(root, 'd');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
@@ -66,7 +68,7 @@ async function fixture(input: { status: 'running' | 'missing' | 'created'; retai
   const supervisor = new DockerSupervisor(docker, runner), profile = await supervisor.captureProfile();
   const restore = DockerSupervisor.restoreProfile.bind(DockerSupervisor);
   vi.spyOn(DockerSupervisor, 'restoreProfile').mockImplementation(profileInput => restore(profileInput, runner));
-  await admitRunAttempts(opened.store, [identity]);
+  await admitRunAttempts(opened.store, [identity], input.recovery ? { recovery: freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live') } : {});
   const claim = { request, owner: 'original-controller' };
   await opened.store.claimDispatch({ ...claim, profile });
   await opened.store.grantLaunch({ claim, principal: custodyPrincipal, now: 1 });
@@ -86,9 +88,14 @@ async function fixture(input: { status: 'running' | 'missing' | 'created'; retai
   ] }), { mode: 0o600 });
   const scopes = await registerConfiguredScopesAtStart(await loadConfig(project, options));
   const errors: string[] = [], pages: unknown[] = [];
-  const prepared = await prepareConfiguredReconciliationRuntime(project, { onPage(_command, page) { pages.push(page); }, onError(_command, error) { errors.push(error.code); } },
-    options, scopes!.policyScopeIds);
-  const controller = new AbortController(), done = prepared.run(controller.signal); loops.push({ controller, done });
+  // A service (re)start: a fresh runtime with fresh Nervous memory over the same installation.
+  const start = async () => {
+    const prepared = await prepareConfiguredReconciliationRuntime(project, { onPage(_command, page) { pages.push(page); }, onError(_command, error) { errors.push(error.code); } },
+      options, scopes!.policyScopeIds);
+    const controller = new AbortController(), done = prepared.run(controller.signal); loops.push({ controller, done });
+    return async () => { controller.abort(); await done; };
+  };
+  const stop = await start();
   const ledger = await inspectProductFile(opened.layout, 'ledger', ['-wal', '-shm', '-journal']);
   const audit = (kind: string) => { const db = new DatabaseSync(ledger, { readOnly: true }); try {
     return (db.prepare('SELECT record FROM audit_events WHERE kind=? ORDER BY sequence').all(kind) as { record: string }[]).map(row => JSON.parse(row.record).event);
@@ -99,7 +106,7 @@ async function fixture(input: { status: 'running' | 'missing' | 'created'; retai
   const state = async () => ({ dispatch: await opened.store.readDispatch(request), attempt: await opened.store.load('s', 'a'), run: await opened.store.loadRun('s', 'r') });
   // The launcher's records of this Attempt (preparation left at `dispatch`, captured launcher evidence): pruned when its case ends in a release.
   const launcherRecords = async () => (await Promise.all(['dispatch-preparation', 'dispatch-launcher'].map(name => readdir(join(crashes, name)).catch(() => [])))).flat();
-  return { errors, pages, commands, container, audit, counts, state, launcherRecords, before: await state(), async stop() { controller.abort(); await done; } };
+  return { errors, pages, commands, container, audit, counts, state, launcherRecords, before: await state(), stop, start, identity, project, options, layout: opened.layout, ledger };
 }
 const task = (run: unknown) => (run as { progress: { taskId: string; phase: string; unresolvedEffects: boolean; workerCustody?: { state: string } }[] }).progress[0]!;
 
@@ -181,5 +188,40 @@ it.skipIf(process.platform === 'win32')('Q3: a created, never-started container 
   expect(task((await f.state()).run)).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
   expect(f.counts()).toEqual({ attempts: 1, dispatches: 1 });
   expect(await f.launcherRecords()).toEqual([]);
+  expect(f.errors).toEqual([]);
+});
+
+it.skipIf(process.platform === 'win32')('S6R-5 (lead on s6r4 Q4): after the lost task continued, a restart re-applies the old sealed execute case as a no-op — no fence, stop, hold or slot on the new task', async () => {
+  const f = await fixture({ status: 'running', retained: 'none', recovery: true });
+  await poll(async () => task((await f.state()).run).workerCustody?.state === 'released' ? true : undefined, 'RELEASE_TIMEOUT');
+  await f.stop();
+  // The continuation a live decision applies (S6R-4 application, recovery principal, the owner's standing grant).
+  const config = await loadConfig(f.project, f.options), integrity = await openLocalIntegrityAuthority(f.layout, config.approvals.keyFile, true);
+  const owner = { id: 'owner', issuer: hostname(), subject: String(userInfo().uid), assurance: 'os-user' as const, scopeIds: ['s'] };
+  const standing = { schemaVersion: 1, revision: 'fixture-policy', restrictions: [], grants: [{ id: 'recovery-standing', effect: 'allow', actions: ['apply'], scopes: ['s'],
+    principals: [{ issuer: owner.issuer, subject: owner.subject }], resource: { kind: 'recovery-action', ids: ['continue-new-attempt'] } }] };
+  const options = { busyTimeoutMs: 1000, journalMode: 'wal' as const, durability: 'full' as const };
+  const cases = openSqliteRecoveryStore(f.ledger, options), audit = await openSqliteAuditStore(f.ledger, options);
+  try {
+    const app = new RecoveryApplication({ store: cases, detections: new AuditApplication(audit, integrity), recorder: target => new AuditApplication(target, integrity),
+      approval: async scopeId => recoveryContinuationApproval(standing, owner, scopeId, 30), hold: async () => { throw new Error('UNEXPECTED_HOLD'); }, policyRevision: 'fixture-policy',
+      now: Date.now, timeoutMs: 1000 }, { async verify() { return recoveryPrincipal(owner, ['s']); } });
+    const caseId = nervousCaseId('s', 'launcher-dead-orphan', { kind: 'attempt', identity: f.identity });
+    const gated = await app.assess({ schemaVersion: 1, scopeId: 's', caseId });
+    expect(await app.continueLostTask({ schemaVersion: 1, scopeId: 's', caseId, evidenceDigest: gated.evidenceDigest, causeClass: 'infra-transient' })).toMatchObject({ kind: 'continued' });
+  } finally { cases.close(); audit.close(); }
+  const continued = (await f.state()).run, kills = f.commands.filter(command => command === 'kill').length, lifecycle = f.audit('run-lifecycle').length, pages = f.pages.length;
+  const inspects = f.commands.filter(command => command === 'inspect').length;
+  // The old dispatch stays granted and unsettled in the inventory: the restarted Nervous meets it and replays its sealed `execute` case.
+  expect((await f.state()).dispatch).toMatchObject({ launch: 'granted', terminal: null });
+  expect(task(continued)).toMatchObject({ phase: 'pending', unresolvedEffects: false }); expect(task(continued).workerCustody).toBeUndefined();
+  // Restart: fresh Nervous memory meets the old fenced dispatch again and replays its sealed execute case.
+  const stop = await f.start();
+  await poll(async () => f.pages.length >= pages + 6 ? true : undefined, 'PAGES_TIMEOUT'); await stop();
+  expect((await f.state()).run).toEqual(continued);
+  expect(f.commands.filter(command => command === 'kill')).toHaveLength(kills);
+  expect(f.commands.filter(command => command === 'inspect').length).toBeGreaterThan(inspects);
+  expect(f.audit('run-lifecycle')).toHaveLength(lifecycle); expect(f.audit('recovery-detection')).toHaveLength(1);
+  expect(f.counts()).toEqual({ attempts: 1, dispatches: 1 });
   expect(f.errors).toEqual([]);
 });

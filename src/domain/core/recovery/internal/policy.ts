@@ -12,13 +12,18 @@ const bounds = { maxLostContinuationsPerTask: counterSchema, maxRecoveryActionsP
   maxGateIntents: counterSchema.positive(), settledFacts: z.object({ maxCount: counterSchema, maxBytes: counterSchema.positive() }).strict() };
 export const recoveryPolicyRegistrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']), ...bounds }).strict().readonly();
 export type RecoveryPolicyRegistry = z.infer<typeof recoveryPolicyRegistrySchema>;
-/** The bounds a Run freezes at admission (like `stall`). Absent on a Run (admitted before the switch, or with recovery off): no continuation ever. */
-export const runRecoveryPolicySchema = z.object({ schemaVersion: z.literal(1), registryRevision: identitySchema, ...bounds }).strict().readonly();
+/** S6R-5 (lead on s6r4 Q1): the protected `runRuntime.recovery.mode` a Run froze at admission. `shadow` seals what a decision would do and changes
+ * nothing; `live` may continue. `off` freezes no recovery section at all. The stricter of the frozen and the current mode applies. */
+export const RECOVERY_RUN_MODES = Object.freeze(['shadow', 'live'] as const);
+export type RecoveryRunMode = typeof RECOVERY_RUN_MODES[number];
+/** The bounds a Run freezes at admission (like `stall`) with its recovery mode. Absent on a Run (admitted before the switch, or with recovery off): no
+ * continuation ever. */
+export const runRecoveryPolicySchema = z.object({ schemaVersion: z.literal(1), registryRevision: identitySchema, mode: z.enum(RECOVERY_RUN_MODES), ...bounds }).strict().readonly();
 export type RunRecoveryPolicy = z.infer<typeof runRecoveryPolicySchema>;
 export const RECOVERY_POLICY_SEED: unknown = Object.freeze(seed);
 export function loadRecoveryPolicy(input: unknown): RecoveryPolicyRegistry { return recoveryPolicyRegistrySchema.parse(input); }
-export function freezeRecoveryPolicy(registry: RecoveryPolicyRegistry): RunRecoveryPolicy {
+export function freezeRecoveryPolicy(registry: RecoveryPolicyRegistry, mode: RecoveryRunMode): RunRecoveryPolicy {
   const value = recoveryPolicyRegistrySchema.parse(registry);
-  return runRecoveryPolicySchema.parse({ schemaVersion: 1, registryRevision: value.revision, maxLostContinuationsPerTask: value.maxLostContinuationsPerTask,
+  return runRecoveryPolicySchema.parse({ schemaVersion: 1, registryRevision: value.revision, mode, maxLostContinuationsPerTask: value.maxLostContinuationsPerTask,
     maxRecoveryActionsPerRun: value.maxRecoveryActionsPerRun, maxAttemptsPerTask: value.maxAttemptsPerTask, maxGateIntents: value.maxGateIntents, settledFacts: value.settledFacts });
 }

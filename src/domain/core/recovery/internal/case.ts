@@ -10,9 +10,13 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/);
 export const RECOVERY_CASE_STATES = Object.freeze(['open', 'gated', 'decided', 'applied', 'escalated'] as const);
 /** S6R-DESIGN §6 output enum (shared with S6R-5's chooser). */
 export const RECOVERY_CAUSE_CLASSES = Object.freeze(['infra-transient', 'infra-persistent', 'task-induced', 'unknown'] as const);
-/** Why a case went to a person: a gate or bound refusal, the Run closing, or the decision itself (`human-chosen`). Stable codes, no prose. */
+/** Why a case went to a person: a gate or bound refusal, the Run closing, or the decision itself (`human-chosen`). S6R-5 adds the decision path's own:
+ * no owner standing grant for a continuation, no eligible role model, no delegated-use consent for a subscription (Q-H3), the call failed, the answer
+ * was invalid, the circuit breaker is open. Stable codes, no prose. */
 export const RECOVERY_ESCALATION_CODES = Object.freeze(['effects-open', 'settled-not-idempotent', 'settled-over-bound', 'continuation-bound', 'attempt-ceiling', 'run-bound',
-  'same-evidence', 'run-closed', 'human-chosen'] as const);
+  'same-evidence', 'run-closed', 'human-chosen', 'continuation-not-approved', 'no-eligible-model', 'consent-required', 'model-failed', 'answer-invalid', 'breaker-open'] as const);
+/** A note code: the only thing of a decision that may reach the next Attempt, as its registry text (v1 never forwards free model text). */
+export const recoveryNoteCodeSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u);
 export type RecoveryEscalationCode = typeof RECOVERY_ESCALATION_CODES[number];
 const ESCALATIONS: Readonly<Partial<Record<RecoveryErrorCode, RecoveryEscalationCode>>> = Object.freeze({ RECOVERY_EFFECTS_OPEN: 'effects-open',
   RECOVERY_SETTLED_NOT_IDEMPOTENT: 'settled-not-idempotent', RECOVERY_SETTLED_OVER_BOUND: 'settled-over-bound', RECOVERY_CONTINUATION_BOUND: 'continuation-bound',
@@ -21,7 +25,9 @@ const ESCALATIONS: Readonly<Partial<Record<RecoveryErrorCode, RecoveryEscalation
 export function recoveryEscalationCode(error: unknown): RecoveryEscalationCode | null { return error instanceof RecoveryError ? ESCALATIONS[error.code] ?? null : null; }
 
 export const recoveryDecisionSchema = z.discriminatedUnion('action', [
-  z.object({ action: z.literal('continue-new-attempt'), decisionId: digest, causeClass: z.enum(RECOVERY_CAUSE_CLASSES), signature: digest, standingRef: identitySchema }).strict(),
+  z.object({ action: z.literal('continue-new-attempt'), decisionId: digest, causeClass: z.enum(RECOVERY_CAUSE_CLASSES), signature: digest, standingRef: identitySchema,
+    /** S6R-5: the registry note code the decision passes to the next Attempt (absent: none). */
+    note: recoveryNoteCodeSchema.optional() }).strict(),
   z.object({ action: z.literal('escalate-human'), code: z.enum(RECOVERY_ESCALATION_CODES) }).strict(),
 ]).readonly();
 export type RecoveryDecision = z.infer<typeof recoveryDecisionSchema>;
