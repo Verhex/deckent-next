@@ -20,6 +20,8 @@ export interface AdminCommandContext extends CliBaseContext, Pick<TerminalLaunch
   verifyAudit?: AuditVerifyHandler;
   rebaselineAudit?: AuditRebaselineHandler;
   executeBackup?: BackupHandler;
+  /** S4B-4 §6.6: after a restore, how many memory purges the journal holds that the restored ledger lacks (re-applied before work starts). */
+  countMemoryPurgesPending?: (root: string, options: ConfigLoadOptions) => Promise<number>;
   // C-ADMIN: the default recovery folder's sets, read without the passphrase (`deckent backup`, the verify/restore picker).
   inspectBackupSets?: BackupSetsHandler;
   // C-ADMIN: the real runtime socket, MCP definition files and secret-store files (`deckent paths`, `deckent runtime`).

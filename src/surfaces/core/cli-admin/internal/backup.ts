@@ -102,6 +102,12 @@ export async function backupCommand(argv: readonly string[], context: AdminComma
   const result = await context.executeBackup(root, input.data, passphrase, options);
   if (!json) emit(scopeNotice(scope, locale), adminSinks(context));
   emit(result, { json, render: data => renderResult(data, locale), ...adminSinks(context) });
+  // S4B-4 §6.6: the purges recorded after this set are re-applied at the next start; an unreadable journal is named, never passed over.
+  if (action === 'restore' && !json && context.countMemoryPurgesPending) {
+    const pending = await context.countMemoryPurgesPending(root, options).catch(() => null);
+    if (pending === null) emit(t('error.MEMORY_PURGE_REPLAY_HELD', {}, locale), { level: 'warning', ...adminSinks(context) });
+    else if (pending) emit(t('backup.restore.memoryPurges', { count: pending }, locale), adminSinks(context));
+  }
 }
 
 async function listCommand(argv: readonly string[], context: AdminCommandContext): Promise<void> {

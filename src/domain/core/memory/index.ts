@@ -7,3 +7,6 @@ export type { MemoryAutomation, MemoryWorkClassRow, MemoryExtractionSource, Memo
 export { memoryModelRefSchema, memoryEvaluationRecordSchema, memoryEvaluationSpendSchema, memoryContestSchema, parseMemoryEvaluationRecord, readMemoryEvaluatorAnswer,
   memoryContestTargets, assertMemoryEvaluationIndependent, MEMORY_EVALUATION_VERDICTS, MEMORY_EVALUATION_MODES } from './internal/evaluation.js';
 export type { MemoryModelRef, MemoryEvaluationRecord, MemoryEvaluationSpend, MemoryContest, MemoryEvaluatorAnswer, MemoryEvaluationVerdict } from './internal/evaluation.js';
+export { memoryPurgeRecordSchema, parseMemoryPurgeRecord, MEMORY_PURGE_REASONS, assertMemoryPerson, memoryTombstoneOf, tombstoneMemoryRevision, MEMORY_CONTEST_DECISIONS,
+  memoryContestResolutionSchema, memoryRetentionMs, memoryEntryStale } from './internal/purge.js';
+export type { MemoryPurgeRecord, MemoryContestResolution, MemoryContestDecision } from './internal/purge.js';

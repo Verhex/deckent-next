@@ -8,16 +8,12 @@ import { safeCell, scopeNotice, type CliCardRequest, type ScopeResolution } from
 import { sinksOf } from '#surfaces/core/cli-approval/index.js';
 import type { MemoryCommandContext } from './context.js';
 import type { Parsed } from './command.js';
-import { view } from './render.js';
+import { contentLines, view } from './render.js';
 
-interface WriteContext { readonly root: string; readonly options: ConfigLoadOptions; readonly locale: Locale; readonly scope: ScopeResolution; readonly inputMaxBytes: number;
+export interface WriteContext { readonly root: string; readonly options: ConfigLoadOptions; readonly locale: Locale; readonly scope: ScopeResolution; readonly inputMaxBytes: number;
   readonly ask: (request: CliCardRequest) => Promise<string | null>; readonly resolve: (id: string) => Promise<MemoryInspection> }
-const options = (locale: Locale) => [{ id: 'apply', label: t('memory.card.apply', {}, locale), key: 'y' }, { id: 'cancel', label: t('memory.card.cancel', {}, locale), key: 'n' }];
-function content(value: MemoryContent, locale: Locale): string[] {
-  const lesson = value.lesson;
-  return [safeCell(value.title), safeCell(value.body), ...(value.tags.length ? [t('memory.view.tags', { tags: value.tags.map(tag => safeCell(tag)).join(', ') }, locale)] : []),
-    ...(lesson ? [t('memory.view.lesson', { source: safeCell(lesson.source), cause: safeCell(lesson.cause), correction: safeCell(lesson.correction), evidence: safeCell(lesson.evidence) }, locale)] : [])];
-}
+export const cardOptions = (locale: Locale) => [{ id: 'apply', label: t('memory.card.apply', {}, locale), key: 'y' }, { id: 'cancel', label: t('memory.card.cancel', {}, locale), key: 'n' }];
+const content = (value: MemoryContent, locale: Locale): string[] => [safeCell(value.title), ...contentLines(value, locale)];
 
 /**
  * `deckent memory propose --input <file> | verify <id> --note <text> | retire <id> --reason <text> [--superseded-by <id>]` (lead 2026-10-23): only on the
@@ -33,7 +29,7 @@ export async function memoryWrite(args: Parsed, context: MemoryCommandContext, i
       { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
     const parsed = memoryContentSchema.safeParse(input);
     if (!parsed.success) throw ErrorRegistry.createError('MEMORY_ENTRY_INVALID');
-    if (await io.ask({ title: t('memory.card.propose.title', {}, locale), body: [...content(parsed.data, locale), '', t('memory.card.propose.body', {}, locale)], options: options(locale) }) !== 'apply') return cancelled();
+    if (await io.ask({ title: t('memory.card.propose.title', {}, locale), body: [...content(parsed.data, locale), '', t('memory.card.propose.body', {}, locale)], options: cardOptions(locale) }) !== 'apply') return cancelled();
     const result = await context.proposeMemory(io.root, { schemaVersion: 1, commandId: randomUUID(), scopeId: scope.scopeId, content: parsed.data, origin: { kind: 'human', ref: null } }, io.options);
     emit(t('memory.done.proposed', { id: result.entry.entryId }, locale), sinks); return;
   }
@@ -44,7 +40,7 @@ export async function memoryWrite(args: Parsed, context: MemoryCommandContext, i
   if (verify ? !context.verifyMemory : !context.retireMemory) throw ErrorRegistry.createError('MEMORY_UNAVAILABLE');
   const body = [view(entry, found.history, locale), '', verify ? t('memory.card.verify.body', { note: safeCell(args.note!) }, locale)
     : t('memory.card.retire.body', { reason: safeCell(args.reason!), replacement: safeCell(args.supersededBy ?? '-') }, locale)];
-  if (await io.ask({ title: verify ? t('memory.card.verify.title', {}, locale) : t('memory.card.retire.title', {}, locale), body, options: options(locale) }) !== 'apply') return cancelled();
+  if (await io.ask({ title: verify ? t('memory.card.verify.title', {}, locale) : t('memory.card.retire.title', {}, locale), body, options: cardOptions(locale) }) !== 'apply') return cancelled();
   const base = { schemaVersion: 1 as const, commandId: randomUUID(), scopeId: scope.scopeId, entryId: entry.entryId, expectedRevision: entry.revision };
   const result = verify ? await context.verifyMemory!(io.root, { ...base, basis: { kind: 'human-review', note: args.note! } }, io.options)
     : await context.retireMemory!(io.root, { ...base, reason: args.reason!, supersededBy: args.supersededBy ?? null }, io.options);

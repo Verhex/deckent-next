@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { clientCommandIdSchema, identitySchema, counterSchema, memoryAudienceSchema, memoryContentSchema, memoryOriginSchema, memoryVerificationBasisSchema, MEMORY_LIMITS, MEMORY_STATES,
-  type AuditEvent, type MemoryContest, type MemoryEntry, type MemoryEvaluationRecord, type MemoryEvaluationRef, type MemoryModelRef, type MemoryResolvedEvaluation, type MemoryState,
-  type VerifiedPrincipal } from '#domain/index.js';
+  MEMORY_PURGE_REASONS, MEMORY_CONTEST_DECISIONS, type AuditEvent, type MemoryContest, type MemoryContestResolution, type MemoryEntry, type MemoryEvaluationRecord, type MemoryEvaluationRef,
+  type MemoryModelRef, type MemoryPurgeRecord, type MemoryResolvedEvaluation, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 
@@ -38,6 +38,20 @@ export const memoryInspectQuerySchema = z.object({ ...scoped, entryId: identityS
 /** Default states: candidate and verified (retired entries are shown only when asked for). */
 export const memoryListQuerySchema = z.object({ ...scoped, states, limit }).strict();
 export const memorySearchQuerySchema = z.object({ ...scoped, query: z.string(), states, limit }).strict();
+/** S4B-4 (§6.6, A11): a person's purge of one entry at the revision the card showed. */
+export const memoryPurgeCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, entryId: identitySchema, expectedRevision: counterSchema.positive(),
+  reasonCode: z.enum(MEMORY_PURGE_REASONS) }).strict();
+/** S4B-4 (§6.5, A9): a person's decision on one open contest. */
+export const memoryContestResolveCommandSchema = z.object({ ...scoped, commandId: clientCommandIdSchema, contestId: identitySchema,
+  decision: z.enum(MEMORY_CONTEST_DECISIONS) }).strict();
+/** S4B-4 review card: candidates, contested and stale entries of the scope with their evidence and evaluator verdicts (bounded page). */
+export const memoryReviewQuerySchema = z.object({ ...scoped, limit }).strict();
+/** S4B-4 (§6.5 bulk response): the entries derived from one Run (or one Attempt of it), for `retire --source` and `purge --source`. */
+export const memorySourceQuerySchema = z.object({ ...scoped, source: z.object({ runId: identitySchema, attemptId: identitySchema.nullable() }).strict(), limit }).strict();
+export type MemoryPurgeCommand = z.infer<typeof memoryPurgeCommandSchema>;
+export type MemoryContestResolveCommand = z.infer<typeof memoryContestResolveCommandSchema>;
+export type MemoryReviewQuery = z.infer<typeof memoryReviewQuerySchema>;
+export type MemorySourceQuery = z.infer<typeof memorySourceQuerySchema>;
 export type MemoryProposeCommand = z.infer<typeof memoryProposeCommandSchema>;
 export type MemoryVerifyCommand = z.infer<typeof memoryVerifyCommandSchema>;
 export type MemoryRetireCommand = z.infer<typeof memoryRetireCommandSchema>;
@@ -46,7 +60,7 @@ export type MemoryListQuery = z.infer<typeof memoryListQuerySchema>;
 export type MemorySearchQuery = z.infer<typeof memorySearchQuerySchema>;
 
 /** A read that could not be completed holds: the caller never receives an empty memory in place of a failed read (K-D, design note §3). */
-export type MemoryHoldCode = 'MEMORY_UNAVAILABLE' | 'MEMORY_CORRUPT';
+export type MemoryHoldCode = 'MEMORY_UNAVAILABLE' | 'MEMORY_CORRUPT' | 'MEMORY_PURGE_REPLAY_HELD';
 export interface MemoryHeld { readonly schemaVersion: 1; readonly status: 'held'; readonly code: MemoryHoldCode }
 export type MemoryInspection = { readonly schemaVersion: 1; readonly status: 'ok'; readonly entry: MemoryEntry; readonly history: readonly MemoryEntry[] }
   | { readonly schemaVersion: 1; readonly status: 'not-found'; readonly entryId: string } | MemoryHeld;
@@ -57,6 +71,39 @@ export type MemoryListing = { readonly schemaVersion: 1; readonly status: 'ok'; 
 export type MemorySearchResult = { readonly schemaVersion: 1; readonly status: 'ok'; readonly scopeId: string; readonly terms: readonly string[];
   readonly method: 'full-text' | 'scan'; readonly complete: boolean; readonly entries: readonly MemoryEntry[]; readonly withheld: number } | MemoryHeld;
 export interface MemoryMutationResult { readonly schemaVersion: 1; readonly replayed: boolean; readonly entry: MemoryEntry }
+/** One entry on the review card: its evidence (support rows), the evaluator's sealed records (newest first; shadow ones too), the open contests
+ * naming it, and whether it is stale (`retentionMs` null: no retention known for its WorkClass family). */
+export interface MemoryReviewItem { readonly entry: MemoryEntry; readonly support: readonly MemorySupport[]; readonly evaluations: readonly MemoryEvaluationRecord[];
+  readonly contests: readonly MemoryContest[]; readonly stale: boolean; readonly retentionMs: number | null; readonly lastSupportAtMs: number | null }
+export type MemoryReview = { readonly schemaVersion: 1; readonly status: 'ok'; readonly scopeId: string; readonly items: readonly MemoryReviewItem[];
+  readonly contests: readonly MemoryContest[]; readonly withheld: number; readonly complete: boolean } | MemoryHeld;
+export type MemorySourceEntries = { readonly schemaVersion: 1; readonly status: 'ok'; readonly scopeId: string; readonly entries: readonly MemoryEntry[]; readonly withheld: number;
+  readonly complete: boolean } | MemoryHeld;
+export interface MemoryPurgeResult { readonly schemaVersion: 1; readonly replayed: boolean; readonly entry: MemoryEntry; readonly record: MemoryPurgeRecord;
+  readonly invocations: { readonly purged: number; readonly absent: number } }
+export interface MemoryContestResolveResult { readonly schemaVersion: 1; readonly replayed: boolean; readonly resolution: MemoryContestResolution; readonly retired: MemoryEntry | null }
+export interface MemoryPurgeReplay { readonly schemaVersion: 1; readonly records: number; readonly applied: number; readonly invocationsPurged: number }
+/**
+ * S4B-4 (§6.6 restore safety): the sealed purge journal outside the ledger (it survives a backup restore). `list` throws on any unreadable or
+ * altered line (a replay then holds); `append` is idempotent by purge id (another record under the same id conflicts).
+ */
+export interface MemoryPurgeJournal {
+  list(): Promise<readonly MemoryPurgeRecord[]>;
+  append(record: MemoryPurgeRecord): Promise<{ readonly replayed: boolean }>;
+}
+/** One stored model invocation as the purge checks it: which command claimed it, who invoked it, its reference and content digest (null: no
+ * content held — never captured or already purged). */
+export interface MemoryEvaluatorInvocation { readonly commandId: string; readonly invokedBy: { readonly issuer: string; readonly subject: string; readonly assurance?: string };
+  readonly reference: unknown; readonly contentDigest: string | null }
+/**
+ * S4B-4 (lead review 2026-10-23): the evaluator invocations a purge may reach. No model-invocation grant: the content is removed under the purge
+ * record's own `memory`/`purge` decision, and only for invocations the engine has bound to the entry's evaluation records.
+ */
+export interface MemoryEvaluatorInvocations {
+  load(scopeId: string, invocationId: string): Promise<MemoryEvaluatorInvocation | null>;
+  purgeContent(input: { readonly scopeId: string; readonly invocationId: string; readonly commandId: string; readonly reference: unknown; readonly expectedContentDigest: string;
+    readonly actor: VerifiedPrincipal; readonly decision: { readonly revision: string; readonly ruleId: string }; readonly atMs: number }): Promise<{ readonly replayed: boolean }>;
+}
 
 /** Idempotency record of one command: the fingerprint of (command, principal) and the revision it produced. */
 export interface MemoryReceipt { readonly scopeId: string; readonly commandId: string; readonly entryId: string; readonly revision: number; readonly digest: string }
@@ -99,9 +146,23 @@ export interface MemoryJournalStore {
   /** S4B-3 A9: an open contest with its audit event (append-only; S4B-4 resolves it once). */
   openContest?(contest: MemoryContest, event: AuditEvent): Promise<{ readonly replayed: boolean }>;
   contestCount?(scopeId: string, sinceMs: number): Promise<number>;
+  /** S4B-4 (§6.6): one sealed transaction — the purge record (with its audit event), every revision and the current row rewritten to the tombstone,
+   * the search row deleted. An absent entry records the purge only (a replay of an entry the restored ledger never held still blocks re-proposal).
+   * Same purge id: replay; another record under it: conflict. */
+  tombstone?(record: MemoryPurgeRecord, event: AuditEvent): Promise<{ readonly replayed: boolean; readonly revisions: number }>;
+  purgeRecord?(scopeId: string, purgeId: string): Promise<MemoryPurgeRecord | null>;
+  /** An entry's sealed evaluation records, newest first, at most `limit`. */
+  evaluationsFor?(scopeId: string, entryId: string, limit: number): Promise<readonly { readonly record: MemoryEvaluationRecord; readonly digest: string }[]>;
+  /** Open (unresolved) contests of the scope, newest first, at most `limit`. */
+  listContests?(scopeId: string, limit: number): Promise<readonly MemoryContest[]>;
+  loadContest?(scopeId: string, contestId: string): Promise<{ readonly contest: MemoryContest; readonly resolution: MemoryContestResolution | null } | null>;
+  /** The contest's one resolution with its audit event (a second, different one conflicts; the same one replays). */
+  resolveContest?(resolution: MemoryContestResolution, event: AuditEvent): Promise<{ readonly replayed: boolean }>;
+  /** Ids of the entries with a support row from the Run (or that Attempt of it), oldest support first, at most `limit`. */
+  sourceEntryIds?(scopeId: string, source: { readonly runId: string; readonly attemptId: string | null }, limit: number): Promise<readonly string[]>;
   close(): void;
 }
-export type MemoryAction = 'inspect' | 'propose' | 'verify' | 'retire' | 'contest';
+export type MemoryAction = 'inspect' | 'propose' | 'verify' | 'retire' | 'contest' | 'purge';
 /** A pure policy view over one loaded document for the read filter: whether the caller may take `action` on `resource`. */
 export type MemoryReadFilter = (resource: { readonly kind: string; readonly id: string }, action: string) => boolean;
 export interface MemoryJournalDependencies {
@@ -120,6 +181,10 @@ export interface MemoryJournalDependencies {
   readonly knownSecrets?: KnownSecretSnapshot;
   /** S4B-3 §6.3: the sealed sources of an entry's support rows; verify re-derives the source worker models through it (absent: independence fails closed). */
   readonly evaluationSources?: MemoryEvaluationSources;
+  /** S4B-4: the purge journal (absent: no purge is possible and nothing is pending) and the evaluator-content purge (absent: a purge naming an
+   * invocation fails closed before any effect). */
+  readonly purgeJournal?: MemoryPurgeJournal;
+  readonly evaluatorInvocations?: MemoryEvaluatorInvocations;
   readonly now: () => number;
   readonly eventId: () => string;
 }
@@ -147,14 +212,14 @@ export interface MemoryEvaluatorPorts {
     readonly messages: readonly { readonly role: 'system' | 'user'; readonly content: string }[] }): Promise<MemoryEvaluatorCall>;
 }
 export type MemoryEvaluationAlertKey = 'memory.alert.evaluationDailyCap' | 'memory.alert.spendCap' | 'memory.alert.evaluatorBreaker' | 'memory.alert.contestBound';
-export type MemoryEvaluationSkip = 'not-system' | 'source-not-accepted' | 'maker-unknown' | 'no-independent-evaluator' | 'evaluated';
+export type MemoryEvaluationSkip = 'not-system' | 'source-not-accepted' | 'maker-unknown' | 'no-independent-evaluator' | 'evaluated' | 'purged';
 export interface MemoryEvaluationPass { readonly schemaVersion: 1; readonly mode: 'shadow' | 'live'; readonly calls: number;
   readonly records: readonly { readonly entryId: string; readonly recordId: string; readonly verdict: MemoryEvaluationRecord['verdict']; readonly verified: boolean; readonly contests: number }[];
   readonly skipped: readonly { readonly entryId: string; readonly reason: MemoryEvaluationSkip }[];
   readonly alerts: readonly { readonly key: MemoryEvaluationAlertKey; readonly scopeId: string }[] }
 export type MemoryJournalErrorCode = MemoryHoldCode | 'MEMORY_COMMAND_CONFLICT' | 'MEMORY_REVISION_CONFLICT' | 'MEMORY_NOT_FOUND' | 'MEMORY_OUTCOME_UNKNOWN'
   | 'MEMORY_ENTRY_WITHHELD' | 'MEMORY_PURGED_CONTENT' | 'MEMORY_EXTRACTION_BOUND' | 'MEMORY_CANDIDATE_SECRET' | 'MEMORY_CANDIDATE_QUARANTINED' | 'MEMORY_DISTILLER_REQUIRED'
-  | 'MEMORY_EVALUATOR_REQUIRED';
+  | 'MEMORY_EVALUATOR_REQUIRED' | 'MEMORY_PURGE_REPLAY_HELD' | 'MEMORY_CONTEST_RESOLVED' | 'MEMORY_PURGE_INVOCATION_REFUSED';
 export class MemoryJournalError extends Error {
   constructor(readonly code: MemoryJournalErrorCode) { super(code); this.name = 'MemoryJournalError'; }
 }

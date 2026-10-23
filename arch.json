@@ -3613,7 +3613,8 @@
         "src/adapters/core/sqlite-ledger",
         "src/platform/core/integrity",
         "src/domain/core/primitives",
-        "src/adapters/core/attempt-store"
+        "src/adapters/core/attempt-store",
+        "src/platform/core/config"
       ],
       "plan": "MEMORY"
     },
@@ -3644,7 +3645,10 @@
         "src/domain/core/attempt",
         "src/domain/core/memory",
         "src/domain/core/principal",
-        "src/capabilities/core/artifacts"
+        "src/capabilities/core/artifacts",
+        "src/platform/core/host",
+        "src/platform/core/integrity",
+        "src/composition/core/root"
       ],
       "plan": "MEMORY"
     },
@@ -3909,6 +3913,7 @@
       "delivery",
       "memory",
       "memory-automation",
+      "memory-review",
       "assignment",
       "agents",
       "tuicopy",

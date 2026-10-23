@@ -233,6 +233,7 @@
   "cli.paths.resource.fileEffects": "recorded file changes",
   "cli.paths.resource.treeScanCache": "file tree scan cache",
   "cli.paths.resource.autonomyShadow": "delivery autonomy shadow records (rule off, advice only)",
+  "cli.paths.resource.memoryPurges": "memory purge journal (kept across a backup restore, re-applied before work starts)",
   "cli.paths.resource.scratch": "scratch space",
   "cli.paths.resource.audit": "audit records",
   "cli.paths.resource.approvals": "approvals and their key",

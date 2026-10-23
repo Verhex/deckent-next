@@ -110,6 +110,12 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('memory-evaluation'), recordId: identitySchema, entryId: identitySchema, revision: counterSchema.positive(), mode: z.enum(MEMORY_EVALUATION_RECORD_MODES),
     verdict: z.enum(['pass', 'fail', 'unknown']), recordDigest: digest, subjectDigest: digest }).strict(),
   z.object({ kind: z.literal('memory-contest'), contestId: identitySchema, entryId: identitySchema, candidateEntryId: identitySchema, recordId: identitySchema }).strict(),
+  /** S4B-4 (§6.6, §9): one purge of one entry (keyed content digest only; `replay`: re-applied from the purge journal after a restore) and one
+   * person's resolution of a contest. Ids and digests only, never content. */
+  z.object({ kind: z.literal('memory-purge'), purgeId: identitySchema, entryId: identitySchema, contentDigest: digest, revisions: counterSchema,
+    invocations: counterSchema, replay: z.boolean() }).strict(),
+  z.object({ kind: z.literal('memory-contest-resolution'), contestId: identitySchema, entryId: identitySchema, decision: z.enum(['retire-contested', 'retire-candidate', 'dismiss']),
+    retiredEntryId: identitySchema.nullable() }).strict(),
   /** S7 agent/skill catalog: one definition or import of one row (persona and skill text are never recorded, only their digests). */
   z.object({ kind: z.literal('agent-catalog'), item: z.enum(['agent', 'skill']), action: z.enum(['define', 'import']), id: identitySchema, commandId: identitySchema,
     revision: counterSchema.positive(), contentDigest: digest, skillSetDigest: digest.nullable() }).strict(),

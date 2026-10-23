@@ -131,13 +131,16 @@ export const CLI_CATALOG = [
     action('outcome', 'work', 'cli.help.action.outcome', 'cli.help.decide', { requires: INPUT }),
     action('inspect', 'work', 'cli.help.action.decide.inspect', 'cli.help.decide', { requires: INPUT }),
   ] },
-  // S4 memory journal v1: reads (list by default, search, inspect) and a person's terminal-card writes (propose, verify, retire).
+  // S4 memory journal v1: reads (list by default, search, inspect) and a person's terminal-card writes (propose, verify, retire; S4B-4 review, purge).
   { name: 'memory', group: 'observe', summary: 'memory.help.summary', detail: 'memory.help.detail', args: '[--scope <id>] [--state <name>] [--json]', bare: 'handler', children: [
     action('search', 'observe', 'memory.help.action.search', 'memory.help.detail', { requires: ['<text>'] }),
     action('inspect', 'observe', 'memory.help.action.inspect', 'memory.help.detail', { requires: ['<id>'] }),
     action('propose', 'observe', 'memory.help.action.propose', 'memory.help.detail', { requires: ['--input <file>'] }),
     action('verify', 'observe', 'memory.help.action.verify', 'memory.help.detail', { requires: ['<id>', '--note <text>'] }),
-    action('retire', 'observe', 'memory.help.action.retire', 'memory.help.detail', { requires: ['<id>', '--reason <text>'] }),
+    action('retire', 'observe', 'memory.help.action.retire', 'memory.help.detail', { requires: ['<id> | --source <run>[/<attempt>]', '--reason <text>'] }),
+    // S4B-4: the person's review card (candidates, contests, stale entries) and the purge card.
+    action('review', 'observe', 'memory.help.action.review', 'memory.help.detail'),
+    action('purge', 'observe', 'memory.help.action.purge', 'memory.help.detail', { requires: ['<id> | --source <run>[/<attempt>]'] }),
   ] },
   // S7 agent/skill catalog core: reads (agents by default, inspect, skills, skill) and a person's terminal-card writes (define, define-skill).
   { name: 'agents', group: 'observe', summary: 'agents.help.summary', detail: 'agents.help.detail', args: '[--scope <id>] [--json]', bare: 'handler', children: [

@@ -93,7 +93,8 @@ describe('memory journal application (sole transition owner)', () => {
     expect(view).toMatchObject({ status: 'ok', entry: { state: 'retired', revision: 2 } });
     expect(view.status === 'ok' && view.history.map(entry => entry.state)).toEqual(['candidate', 'retired']);
     expect(await application.inspect({ schemaVersion: 1, scopeId: 's', entryId: 'nope' })).toEqual({ schemaVersion: 1, status: 'not-found', entryId: 'nope' });
-    expect(Object.getOwnPropertyNames(MemoryJournalApplication.prototype).filter(name => /delete|purge|remove/i.test(name))).toEqual([]);
+    // Nothing deletes a row; S4B-4 (owner S-M12) adds exactly the person's purge, which tombstones content in place, and its replay.
+    expect(Object.getOwnPropertyNames(MemoryJournalApplication.prototype).filter(name => /delete|purge|remove/i.test(name))).toEqual(['purge', 'replayPurges']);
   });
   it('search and list stay inside the requested scope (no cross-scope result)', async () => {
     const { application } = app(); await application.propose(propose('m1', 's')); await application.propose(propose('m2', 'other'));

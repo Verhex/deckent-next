@@ -211,12 +211,13 @@ export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mc
   observePool: 'first-run-mcp-observe-pool', memoryInspect: 'first-run-memory-inspect', observeMemory: 'first-run-mcp-observe-memory',
   memoryPropose: 'first-run-memory-propose', distillerMemory: 'first-run-memory-distiller', distillerRuns: 'first-run-memory-distiller-runs', distillerOutput: 'first-run-memory-distiller-output',
   agentCatalog: 'first-run-agent-catalog', observeAgentCatalog: 'first-run-mcp-observe-agent-catalog',
-  memoryReview: 'first-run-memory-review', evaluatorMemory: 'first-run-memory-evaluator', evaluatorRuns: 'first-run-memory-evaluator-runs', evaluatorModel: 'first-run-memory-evaluator-model' });
+  memoryReview: 'first-run-memory-review', evaluatorMemory: 'first-run-memory-evaluator', evaluatorRuns: 'first-run-memory-evaluator-runs', evaluatorModel: 'first-run-memory-evaluator-model',
+  memoryPurge: 'first-run-memory-purge' });
 /** The v15 delta (S4B-1 + S7, owner 2026-10-23): what `policy upgrade --template current --rollback` removes. It never removes earlier versions' rules: the
  * v14 memory reads stay once added, like every older version's administration or observation authority. */
 export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze([FIRST_RUN_UPGRADE_RULE_IDS.memoryPropose, FIRST_RUN_UPGRADE_RULE_IDS.distillerMemory, FIRST_RUN_UPGRADE_RULE_IDS.distillerRuns,
   FIRST_RUN_UPGRADE_RULE_IDS.distillerOutput, FIRST_RUN_UPGRADE_RULE_IDS.agentCatalog, FIRST_RUN_UPGRADE_RULE_IDS.observeAgentCatalog, FIRST_RUN_UPGRADE_RULE_IDS.memoryReview, FIRST_RUN_UPGRADE_RULE_IDS.evaluatorMemory,
-  FIRST_RUN_UPGRADE_RULE_IDS.evaluatorRuns, FIRST_RUN_UPGRADE_RULE_IDS.evaluatorModel]);
+  FIRST_RUN_UPGRADE_RULE_IDS.evaluatorRuns, FIRST_RUN_UPGRADE_RULE_IDS.evaluatorModel, FIRST_RUN_UPGRADE_RULE_IDS.memoryPurge]);
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
 const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'] as const;
@@ -417,10 +418,12 @@ function v14Rules(person: Person, scopes: readonly string[]): readonly PolicyGra
  * distiller D2); the memory distiller (`<person>/memory-distiller`, a workload the composition root issues) gets D1+D2 (`memory` inspect, propose),
  * D4 (`run`/inspect) and, as its own rule, D3 (`attempt`/read-output: the raw sealed output of accepted Attempts, A2b); the named person inspects
  * and defines in the agent/skill catalog (`import` stays a separate decision behind the signed floor) and the MCP actor inspects it. The person's
- * retire and purge stay ungranted (S4B-4's card decides them). S4B-3 (owner S-M3/S-M5, A6/A7): the person may verify (human review, terminal
+ * retire and purge come from S4B-4. S4B-3 (owner S-M3/S-M5, A6/A7): the person may verify (human review, terminal
  * witness) and open a contest — the delegation bound needs both before they can grant the evaluator V2/V3 — and the memory evaluator
  * (`<person>/memory-evaluator`, composition root only) gets V1–V3 (`memory` inspect, verify, contest), V4 (`run`/inspect) and, as its own rule, V5
- * (`model-invocation`/invoke; the role registry restricts it to `memory-evaluator` rows). Its floor refuses every other pair.
+ * (`model-invocation`/invoke; the role registry restricts it to `memory-evaluator` rows). Its floor refuses every other pair. S4B-4 (owner S-M12,
+ * A11): the named person retires and purges memory (their review card; both stay floored for every AI). The purge removes the stored content
+ * of exactly the evaluator calls its entry's sealed evaluation records name, under that same memory/purge decision: no model-invocation grant.
  */
 function v15Rules(person: Person, scopes: readonly string[]): readonly PolicyGrant[] {
   const ids = FIRST_RUN_UPGRADE_RULE_IDS, vocabulary = policyResources;
@@ -431,7 +434,8 @@ function v15Rules(person: Person, scopes: readonly string[]): readonly PolicyGra
   const distiller = memoryDistillerPrincipalRef(person);
   return [rule(ids.memoryPropose, person, vocabulary.memory.kind, ['propose']), rule(ids.distillerMemory, distiller, vocabulary.memory.kind, ['inspect', 'propose']), rule(ids.distillerRuns, distiller, vocabulary.run.kind, ['inspect']),
     rule(ids.distillerOutput, distiller, vocabulary.attempt.kind, ['read-output']), rule(ids.agentCatalog, person, vocabulary.agentCatalog.kind, ['inspect', 'define']), observe,
-    rule(ids.memoryReview, person, vocabulary.memory.kind, ['verify', 'contest']), ...evaluatorRules(memoryEvaluatorPrincipalRef(person), rule)];
+    rule(ids.memoryReview, person, vocabulary.memory.kind, ['verify', 'contest']), ...evaluatorRules(memoryEvaluatorPrincipalRef(person), rule),
+    rule(ids.memoryPurge, person, vocabulary.memory.kind, ['retire', 'purge'])];
 }
 function evaluatorRules(evaluator: Person, rule: (id: string, principal: Person, kind: string, actions: readonly string[]) => PolicyGrant): readonly PolicyGrant[] {
   const ids = FIRST_RUN_UPGRADE_RULE_IDS, vocabulary = policyResources;

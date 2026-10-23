@@ -7,6 +7,7 @@ import type { ArtifactReceipt } from '#capabilities/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { contextDispatchAuthorization } from '#composition/core/policy/index.js';
+import { memoryPurgeJournalOf } from './journal.js';
 /**
  * S4B-1 (owner S-M1/S-M11/S-M14): the memory distiller off the hot path — one bounded page of a scope's accepted Tasks per reconciliation pass,
  * under the composition-root workload identity `<owner>/memory-distiller` (floor D1–D4). `memoryAutomation.extraction.mode` off (default: nothing
@@ -19,7 +20,9 @@ export function prepareConfiguredMemoryExtraction(projectRoot: string, options: 
     const c = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write'), path = await c.path(), integrity = await openLocalIntegrityAuthority(c.layout, c.config.approvals.keyFile, true);
     const policy = new MemoryPolicyAuthorization({ async load() { return c.document; } }), distiller = memoryDistillerFor(c.principal, scopeId);
     const app = new MemoryJournalApplication({ verifier: { verify: async () => distiller }, authorize: (...args) => policy.authorize(...args), keyedDigest: memoryKeyedDigest(integrity),
-      openStore: async access => openSqliteMemoryJournalStore(path, c.config.storage.sqlite, integrity, access), automation: c.config.memoryAutomation.overlay, now: Date.now, eventId: randomUUID });
+      openStore: async access => openSqliteMemoryJournalStore(path, c.config.storage.sqlite, integrity, access), automation: c.config.memoryAutomation.overlay, now: Date.now, eventId: randomUUID,
+      // S4B-4: a purge the ledger lacks holds the distiller too (the service start replays first; this keeps the engine rule for every writer).
+      purgeJournal: memoryPurgeJournalOf(c.layout, async () => integrity) });
     const registry = c.config.admission ? executionRegistrySchema.parse(c.config.admission.registry).workClasses : undefined;
     let artifacts: FileArtifactStore | undefined;
     const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });

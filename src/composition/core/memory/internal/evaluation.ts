@@ -7,6 +7,7 @@ import { extractOpenAiChatTextFromInvocation, memoryKeyedDigest, openLocalIntegr
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
+import { memoryPurgeJournalOf } from './journal.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
 import { invokeConfiguredModelAs } from '#composition/core/model-invocation/index.js';
 
@@ -67,7 +68,8 @@ export function prepareConfiguredMemoryEvaluation(projectRoot: string, options: 
       try {
         const openStore = async (access: 'read' | 'write') => openSqliteMemoryJournalStore(path, c.config.storage.sqlite, integrity, access);
         const deps = { verifier: { verify: async () => evaluator }, authorize: (...args: Parameters<MemoryPolicyAuthorization['authorize']>) => policy.authorize(...args),
-          keyedDigest: memoryKeyedDigest(integrity), openStore, automation: c.config.memoryAutomation.overlay, now: Date.now, eventId: randomUUID, evaluationSources: sources };
+          keyedDigest: memoryKeyedDigest(integrity), openStore, automation: c.config.memoryAutomation.overlay, now: Date.now, eventId: randomUUID, evaluationSources: sources,
+          purgeJournal: memoryPurgeJournalOf(c.layout, async () => integrity) };
         const journal = new MemoryJournalApplication({ ...deps, resolveEvaluation: memoryEvaluationResolver(openStore) });
         return await new MemoryEvaluationApplication({ deps, principal: evaluator, verify: command => journal.verify(command),
           evaluator: evaluatorPorts(projectRoot, options, { c, path, evaluator, facts, roles }) }).evaluatePage(scopeId, run);

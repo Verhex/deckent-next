@@ -16,12 +16,14 @@ export function memorySearchTerms(query: string): readonly string[] {
 }
 /** The folded text an index stores for an entry: title, body, tags and lesson fields. */
 export function memoryIndexText(entry: MemoryEntry): string {
+  // S4B-4: a purged entry has no text to index (only its tombstone is left), so no search reaches it.
+  if ('purged' in entry.content) return '';
   const lesson = entry.content.lesson;
   return foldMemoryText([entry.content.title, entry.content.body, ...entry.content.tags,
     ...(lesson ? [lesson.source, lesson.cause, lesson.correction, lesson.evidence] : [])].join(' '));
 }
 /** Scan fallback for a store without full-text search: every term must be a whole folded word of the entry. */
 export function memoryEntryMatches(entry: MemoryEntry, terms: readonly string[]): boolean {
-  const words = new Set(memoryIndexText(entry).split(' '));
+  const words = new Set(memoryIndexText(entry).split(' ').filter(Boolean));
   return terms.every(term => words.has(term));
 }

@@ -3,15 +3,17 @@ import { encodeCommandProjection, proposeMemoryEntry, verifyMemoryEntry, retireM
 import { sha256 } from '#platform/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
 import { memoryProposeCommandSchema, memoryVerifyCommandSchema, memoryRetireCommandSchema, memoryInspectQuerySchema, memoryListQuerySchema, memorySearchQuerySchema,
-  memoryExtractCommandSchema, MemoryJournalError, type MemoryAction, type MemoryHeld, type MemoryInspection, type MemoryJournalDependencies, type MemoryJournalStore, type MemoryListing,
-  type MemoryMutationResult, type MemorySearchResult, type MemorySupport, type MemoryDistilOutcome } from './contract.js';
+  memoryExtractCommandSchema, memoryReviewQuerySchema, memorySourceQuerySchema, MemoryJournalError, type MemoryAction, type MemoryHeld, type MemoryInspection, type MemoryJournalDependencies, type MemoryJournalStore, type MemoryListing,
+  type MemoryMutationResult, type MemorySearchResult, type MemorySupport, type MemoryDistilOutcome, type MemoryReview, type MemorySourceEntries, type MemoryPurgeResult,
+  type MemoryPurgeReplay, type MemoryContestResolveResult } from './contract.js';
 import { distilSource } from './distil.js';
 import type { MemoryReportClaims } from './source.js';
+import { assertNoPendingMemoryPurge, memorySourceEntries, purgeMemoryEntry, replayMemoryPurges, resolveMemoryContest, reviewMemory } from './purge.js';
 import { rederiveMemorySourceModels } from './evaluate.js';
 
 const DEFAULT_STATES: readonly MemoryState[] = Object.freeze(['candidate', 'verified']);
 const held = (error: unknown): MemoryHeld => ({ schemaVersion: 1, status: 'held',
-  code: error instanceof MemoryJournalError && error.code === 'MEMORY_CORRUPT' ? 'MEMORY_CORRUPT' : 'MEMORY_UNAVAILABLE' });
+  code: error instanceof MemoryJournalError && (error.code === 'MEMORY_CORRUPT' || error.code === 'MEMORY_PURGE_REPLAY_HELD') ? error.code : 'MEMORY_UNAVAILABLE' });
 const inScope = (entry: MemoryEntry, scopeId: string) => { if (entry.scopeId !== scopeId) throw new MemoryJournalError('MEMORY_CORRUPT'); return entry; };
 
 /** Sole owner of memory journal transitions (one writer per scope through the store's compare-and-set). Reads hold on failure; nothing deletes. */
@@ -26,7 +28,8 @@ export class MemoryJournalApplication {
     const { principal } = await this.admit('inspect', scopeId, credential);
     let store: MemoryJournalStore;
     try { store = await this.deps.openStore('read'); } catch (error) { return held(error); }
-    try { return await work(store, principal); }
+    // S4B-4 §6.6: a purge the journal holds and the ledger lacks (a restored backup) holds every read until it is re-applied.
+    try { await assertNoPendingMemoryPurge(this.deps, store, scopeId); return await work(store, principal); }
     catch (error) { if (error instanceof MemoryJournalError && error.code === 'MEMORY_ENTRY_WITHHELD') throw error; return held(error); } finally { store.close(); }
   }
   /**
@@ -108,6 +111,7 @@ export class MemoryJournalApplication {
     const store = await this.deps.openStore('write');
     try {
       if (!store.appendSupport || !store.listSupport || !store.findTombstone) throw new MemoryJournalError('MEMORY_UNAVAILABLE');
+      await assertNoPendingMemoryPurge(this.deps, store, scopeId);
       const existing = await store.load(scopeId, entryId);
       if (existing) {
         const rows = await store.listSupport(scopeId, entryId, bound);
@@ -173,6 +177,30 @@ export class MemoryJournalApplication {
     return this.mutate('retire', command, principal, authorization.revision, command.entryId, command.expectedRevision, previous =>
       retireMemoryEntry(previous!, { actor: principal, atMs: this.deps.now(), reason: command.reason, supersededBy: command.supersededBy }));
   }
+  /** S4B-4 review card read (candidates, contested and stale entries with evidence and evaluator records), through the source filter. */
+  async review(input: unknown, credential?: unknown): Promise<MemoryReview> {
+    const query = memoryReviewQuerySchema.parse(input);
+    return this.read(query.scopeId, credential, (store, principal) => reviewMemory(this.deps, store, principal, query, (...args) => this.visible(...args)));
+  }
+  /** S4B-4 §6.5: the entries derived from one Run or Attempt (`retire --source`, `purge --source`), through the source filter. */
+  async sourceEntries(input: unknown, credential?: unknown): Promise<MemorySourceEntries> {
+    const query = memorySourceQuerySchema.parse(input);
+    return this.read(query.scopeId, credential, (store, principal) => memorySourceEntries(this.deps, store, principal, query, (...args) => this.visible(...args)));
+  }
+  /** S4B-4 §6.6 (A11): a person's purge of one entry — keyed tombstone, purge journal, evaluator invocation content. */
+  async purge(input: unknown, credential?: unknown): Promise<MemoryPurgeResult> {
+    return purgeMemoryEntry(this.deps, input, (action, scopeId) => this.admit(action, scopeId, credential));
+  }
+  /** S4B-4 A9: a person's resolution of one open contest. */
+  async resolveContest(input: unknown, credential?: unknown): Promise<MemoryContestResolveResult> {
+    return resolveMemoryContest(this.deps, input, (action, scopeId) => this.admit(action, scopeId, credential), command => this.retire(command, credential),
+      (...args) => this.visible(...args));
+  }
+  /** S4B-4 §6.6 restore safety: the scope's journal records re-applied (service start, and before a person's write). The authority is the sealed
+   * journal record (a person's purge, already decided); the replay narrows only, so its events name the journal, not a policy rule. */
+  async replayPurges(scopeId: string, credential?: unknown, options: { readonly pendingOnly?: boolean } = {}): Promise<MemoryPurgeReplay> {
+    return replayMemoryPurges(this.deps, scopeId, await authenticate(this.deps.verifier, credential, scopeId), 'memory-purge-journal', options.pendingOnly ?? false);
+  }
   private async mutate(action: 'propose' | 'verify' | 'retire', command: { scopeId: string; commandId: string }, principal: VerifiedPrincipal, policyRevision: string,
     entryId: string, expectedRevision: number | null, next: (previous: MemoryEntry | null, store: MemoryJournalStore) => MemoryEntry | Promise<MemoryEntry>,
     support?: MemorySupport, fingerprinted: unknown = command): Promise<MemoryMutationResult> {
@@ -180,6 +208,7 @@ export class MemoryJournalApplication {
     const digest = this.deps.keyedDigest(`memory-${action}:2`, { command: fingerprinted, principal: { issuer: principal.issuer, subject: principal.subject } });
     const store = await this.deps.openStore('write');
     try {
+      await assertNoPendingMemoryPurge(this.deps, store, command.scopeId);
       const replay = await store.receipt(command.scopeId, command.commandId);
       if (replay) {
         const entry = replay.digest === digest && replay.entryId === entryId ? await store.loadRevision(command.scopeId, entryId, replay.revision) : null;

@@ -11,5 +11,6 @@
   "queryTermsMax": 8,
   "pageMax": 50,
   "scanMax": 500,
-  "historyMax": 64
+  "historyMax": 64,
+  "purgeInvocationsMax": 256
 }
