@@ -20,6 +20,6 @@ export const isNativeCliHeadlessAdapter = (adapter: Readonly<{ id: string; versi
   adapter.id === NATIVE_CLI_HEADLESS_ADAPTER.id && adapter.version === NATIVE_CLI_HEADLESS_ADAPTER.version;
 /** Typed refusals before any claim (EN/TR family `headless`). Params carry check names only: never a path, account field or output. */
 export type HeadlessRefusalCode = 'HEADLESS_CLI_UNAVAILABLE' | 'HEADLESS_OWNER_MISMATCH' | 'HEADLESS_PREFLIGHT_FAILED' | 'HEADLESS_LOGIN_REQUIRED' | 'HEADLESS_REQUEST_INVALID'
-  | 'HEADLESS_ISOLATION_UNAVAILABLE';
+  | 'HEADLESS_ISOLATION_UNAVAILABLE' | 'HEADLESS_LIMIT_REACHED' | 'HEADLESS_LOGIN_BUSY';
 export function refuse(code: HeadlessRefusalCode, params?: Record<string, string>): never { throw ErrorRegistry.createError(code, params ? { params } : undefined); }
 export { headlessRejectionBodySchema, type HeadlessRejectionBody } from '#domain/index.js';

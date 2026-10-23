@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import catalog from './providers.json' with { type: 'json' };
 import { NativeConnectionError, nativeProviderSpec, type NativeSubscription } from './credential.js';
 import { readNativeClientHello } from './tls-hello.js';
+import { HEADLESS_EGRESS_HOST, type HeadlessEgress } from '#domain/index.js';
 
 const denied = new BlockList();
 for (const [address, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
@@ -31,7 +32,8 @@ export interface NativeTunnelContext {
   /** Adds transferred bytes to the owner's budget; `false` = over it (the tunnel closes). */
   readonly count: (bytes: number) => boolean;
   readonly connected: () => void;
-  readonly rejected: () => void;
+  /** A refused request; `target` is the CONNECT target as asked (`host:port`), absent for a request that is not a CONNECT. */
+  readonly rejected: (target?: string) => void;
 }
 /**
  * One CONNECT request (workers' gateway and the isolated headless CLI alike): only `<allowlisted host>:443`, resolved once to public IPv4
@@ -61,11 +63,21 @@ export function tunnelNativeConnect(request: IncomingMessage, client: Socket, he
       context.connected(); count(hello); upstream.write(hello);
       client.pipe(upstream); upstream.pipe(client); client.resume();
     });
-  })().catch(() => { context.rejected(); client.destroy(); });
+  })().catch(() => { context.rejected(request.url ?? ''); client.destroy(); });
 }
 
+/** f5: the gateway's refusals by host name for doctor and the invocation record: a CONNECT target's host part when it is a valid lower-case DNS name,
+ * up to `refusedHostsMax` distinct names (`providers.json`); anything else (no host, a bracketed or malformed one, past the bound) counts as `other`. */
+function refusedHosts(max: number) {
+  const hosts: Record<string, number> = Object.create(null) as Record<string, number>; let other = 0;
+  return { add(target: string | undefined) {
+    const host = target === undefined ? '' : target.slice(0, Math.max(0, target.lastIndexOf(':'))).toLowerCase();
+    if (HEADLESS_EGRESS_HOST.test(host) && (Object.hasOwn(hosts, host) || Object.keys(hosts).length < max)) hosts[host] = (hosts[host] ?? 0) + 1; else other++;
+  }, view: () => Object.freeze({ hosts: Object.freeze({ ...hosts }), other }) };
+}
 /** The gateway limits a connection's server applies (`providers.json`), shared with the in-realm relay that feeds it. */
-export const nativeEgressLimits = () => Object.freeze({ connections: catalog.limits.connections, idleMs: catalog.limits.idleMs, headerBytes: catalog.limits.headerBytes });
+export const nativeEgressLimits = () => Object.freeze({ connections: catalog.limits.connections, idleMs: catalog.limits.idleMs, headerBytes: catalog.limits.headerBytes,
+  refusedHostsMax: catalog.limits.refusedHostsMax });
 /**
  * S3-5: the only way out of an isolated CLI's empty network namespace. A Unix-socket HTTP server in a fresh 0700 directory under `directory`
  * that answers nothing but CONNECT to the provider's `providers.json` destinations (the same allowlist, address check and ClientHello check as a
@@ -76,8 +88,9 @@ export async function openNativeEgressGateway(input: { readonly provider: Native
   const directory = await mkdtemp(join(input.directory, 'egress-')); await chmod(directory, 0o700);
   const socketPath = join(directory, 'gateway.sock');
   let closed = false, transferred = 0;
-  const sockets = new Set<Socket>(), statistics = { connected: 0, rejected: 0, bytes: 0 };
-  const server = createServer({ maxHeaderSize: limits.headerBytes }, (_request, response) => { statistics.rejected++; response.writeHead(403).end(); });
+  const sockets = new Set<Socket>(), statistics = { connected: 0, rejected: 0, bytes: 0 }, refused = refusedHosts(limits.refusedHostsMax);
+  const reject = (target?: string) => { statistics.rejected++; refused.add(target); };
+  const server = createServer({ maxHeaderSize: limits.headerBytes }, (_request, response) => { reject(); response.writeHead(403).end(); });
   server.maxConnections = limits.connections;
   server.headersTimeout = limits.idleMs; server.requestTimeout = limits.idleMs; server.keepAliveTimeout = 1;
   server.on('clientError', (_error, socket) => socket.destroy());
@@ -87,7 +100,7 @@ export async function openNativeEgressGateway(input: { readonly provider: Native
   });
   server.on('connect', (request, client, head) => tunnelNativeConnect(request, client as Socket, head, { destinations: spec.destinations, closed: () => closed, sockets,
     count: bytes => { transferred += bytes; statistics.bytes = transferred; return transferred <= limits.trafficBytes; },
-    connected: () => { statistics.connected++; }, rejected: () => { statistics.rejected++; } }));
+    connected: () => { statistics.connected++; }, rejected: reject }));
   const close = async () => {
     if (closed) return; closed = true;
     for (const socket of sockets) socket.destroy();
@@ -100,5 +113,7 @@ export async function openNativeEgressGateway(input: { readonly provider: Native
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(socketPath, resolve); });
     await chmod(socketPath, 0o600);
   } catch { await close(); throw new NativeConnectionError('NATIVE_CONNECTION_UNAVAILABLE'); }
-  return Object.freeze({ socketPath, statistics: () => Object.freeze({ ...statistics, closed }), close });
+  /** The call's gateway summary (counts and refused host names only; `HeadlessEgress` shape). */
+  const egress = (): HeadlessEgress => Object.freeze({ connected: statistics.connected, refused: statistics.rejected, ...refused.view() });
+  return Object.freeze({ socketPath, statistics: () => Object.freeze({ ...statistics, closed }), egress, close });
 }

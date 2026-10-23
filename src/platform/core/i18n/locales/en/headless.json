@@ -30,5 +30,15 @@
   "doctor.headless.isolationUnavailable": "; isolation unavailable (no usable bubblewrap: see the sandbox rows)",
   "doctor.headless.open": "open",
   "doctor.headless.closed": "closed",
-  "doctor.headless.none": "none (you only)"
+  "doctor.headless.none": "none (you only)",
+  "doctor.headless.egressRefused": "; network: {count} connection(s) outside the provider allowlist refused (hosts: {hosts}{more})",
+  "doctor.headless.egressMore": " and {count} more",
+  "models.invocation.headlessEgress": "Isolated network of this call: {connected} provider connection(s), {refused} refused (hosts: {hosts}; without a host name: {other})",
+  "error.HEADLESS_ISOLATION_UNAVAILABLE.limits": "The isolated subscription Brain could not set its process limits (CPU time, memory, process count): the limiter (util-linux prlimit) is missing or did not apply them, so the Claude CLI did not start. Nothing was sent, no model was called and no other model was chosen. Install util-linux; the check runs again on the next call.",
+  "error.HEADLESS_LIMIT_REACHED": "The isolated Claude CLI reached one of its process limits and was stopped. Nothing was accepted, nothing is retried on its own and no other model was chosen.",
+  "error.HEADLESS_LIMIT_REACHED.cpu-time": "The isolated Claude CLI used up its CPU time limit for one turn and was stopped. Nothing was accepted, nothing is retried on its own and no other model was chosen; the turn may already count against the subscription.",
+  "error.HEADLESS_LIMIT_REACHED.processes": "The isolated Claude CLI tried to start more processes or threads than its limit allows and stopped. Nothing was accepted, nothing is retried on its own and no other model was chosen; the turn may already count against the subscription.",
+  "error.HEADLESS_LIMIT_REACHED.memory": "The isolated Claude CLI ran out of its memory limit and stopped. Nothing was accepted, nothing is retried on its own and no other model was chosen; the turn may already count against the subscription.",
+  "error.HEADLESS_LOGIN_BUSY": "Another subscription Brain call is using the same Claude login right now, and it did not finish within the wait. Nothing was sent, no model was called and no other model was chosen; send the request again.",
+  "error.HEADLESS_LOGIN_BUSY.cli": "Your own Claude CLI is renewing its login (its refresh lock is in the login directory), so the subscription Brain did not start beside it. Nothing was sent, no model was called and no other model was chosen; try again in a moment. If this stays while no Claude session runs, a crashed session may have left its refresh lock behind: Deckent never opens or removes files in the login directory, so remove that lock yourself."
 }

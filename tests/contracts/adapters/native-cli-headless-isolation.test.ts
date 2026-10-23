@@ -7,8 +7,9 @@ import { createServer, type Server } from 'node:net';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { bubblewrapObservation } from '#adapters/index.js';
+import { readHeadlessRejection } from '#domain/index.js';
 import { prepareHeadlessConnection, readHeadlessLogins } from '#adapters/core/native-cli-headless/index.js';
-import { assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
+import { assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, type BoundProbe, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
 import { cleanupConnections, connection, testIsolation } from '../../fixtures/native-headless/connection.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 
@@ -67,6 +68,24 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI
     expect(env[headless.isolation.proxy.env[0]!]).toBe(`http://${headless.isolation.proxy.host}:${headless.isolation.proxy.port}`);
     for (const name of headless.isolation.proxy.clear) expect(env[name]).toBe('');
   });
+  it('f5: names the gateway refusals in the call record, the rejected body and the doctor record: counts and host names only', async () => {
+    const c = await connection();
+    const probe = { proxy: ['example.invalid:443', 'api.anthropic.com:80', 'Not_A_Host:443', 'example.invalid:443'] };
+    const responded = await c.call(happy(probe));
+    const egress = { connected: 0, refused: 4, hosts: { 'example.invalid': 2, 'api.anthropic.com': 1 }, other: 1 };
+    expect(responded).toMatchObject({ native: { headless: { guard: 'passed', egress } } });
+    // A rejected call carries the same summary in its adapter body (the guard stops the turn after the probe).
+    const rejected = await c.call([{ line: initLine() }, { isolation: { proxy: ['example.invalid:443'] } }, { line: assistantLine('x', 'other-model') }]);
+    expect(rejected).toMatchObject({ kind: 'rejected' });
+    const body = readHeadlessRejection((rejected as { evidence: Parameters<typeof readHeadlessRejection>[0] }).evidence);
+    expect(body).toMatchObject({ refusal: 'model-mismatch', egress: { connected: 0, refused: 1, hosts: { 'example.invalid': 1 }, other: 0 } });
+    // Doctor's record is cumulative over the connection's spawns and holds no target text beyond host names.
+    const record = await readFile(join(c.root, 'state', 'egress.json'), 'utf8');
+    expect(JSON.parse(record)).toMatchObject({ schemaVersion: 1, refused: 5, hosts: { 'example.invalid': 3, 'api.anthropic.com': 1 }, other: 1 });
+    expect(record).not.toMatch(/Not_A_Host|:443|:80/u);
+    const [login] = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+    expect(login?.egress).toMatchObject({ refused: 5, hosts: ['example.invalid', 'api.anthropic.com'], other: 1 });
+  });
   it('records the realm of a passing check for doctor (launcher kind and version, never a path)', async () => {
     const c = await connection({ steps: happy({}) });
     await c.call();
@@ -81,9 +100,40 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI
     expect(r.limits['core file size']).toBe('0');
     expect(r.limits['file size']).toBe(String(headless.isolation.limits.fileSizeBlocks * 512));
     expect(r.limits['open files']).toBe(String(headless.isolation.limits.openFiles));
+    // f5: CPU time (soft:hard), the realm's tasks and the data size come from the registry through the limiter.
+    const caps = headless.isolation.limits;
+    expect(r.limits['cpu time']).toBe(`${caps.cpuSeconds}:${caps.cpuSeconds + caps.cpuGraceSeconds}`);
+    expect(r.limits['processes']).toBe(String(caps.processes)); expect(r.limits['data size']).toBe(String(caps.dataBytes));
     if (existsSync('/usr/bin/unshare')) expect(r.userns).not.toBe(0);
     expect(r.tty).toMatch(/^error:/u);
   });
+  // f5: a bound that stops the CLI is a typed rejected receipt naming it; a crash away from every bound stays an unknown outcome.
+  const bounded = (probe: BoundProbe): FakeStep[] => [{ line: initLine() }, { bound: probe }];
+  const limitOf = async (probe: BoundProbe) => {
+    const c = await connection(), result = await c.call(bounded(probe));
+    expect(result).toMatchObject({ kind: 'rejected', evidence: { reason: 'response-limit' } });
+    return readHeadlessRejection((result as { evidence: Parameters<typeof readHeadlessRejection>[0] }).evidence);
+  };
+  it('f5: the CPU time bound stops a spinning CLI at the soft limit (SIGXCPU) and, when it ignores that, at the hard one', async () => {
+    expect(await limitOf({ lower: ['--cpu=1:2'], burn: 'cpu' })).toMatchObject({ refusal: 'resource-limit', field: 'cpu-time' });
+    expect(await limitOf({ lower: ['--cpu=1:2'], burn: 'cpu-ignore' })).toMatchObject({ refusal: 'resource-limit', field: 'cpu-time' });
+  }, 30_000);
+  it('f5: the realm task bound refuses one more process and the CLI that aborts on it is named', async () => {
+    expect(await limitOf({ burn: 'processes' })).toMatchObject({ refusal: 'resource-limit', field: 'processes' });
+  }, 30_000);
+  it('f5: the data size bound refuses memory and the CLI that aborts on it is named', async () => {
+    expect(await limitOf({ lower: ['--data=+134217728'], burn: 'memory' })).toMatchObject({ refusal: 'resource-limit', field: 'memory' });
+  }, 30_000);
+  it('f5 negative: a crash away from every bound, or a CLI exit with a reserved code, is never named a bound (unknown outcome)', async () => {
+    const c = await connection();
+    await expect(c.call(bounded({ burn: 'abort' }))).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
+    await expect(c.call([{ line: initLine() }, { exit: headless.isolation.limits.exits['cpu-time'] }])).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
+  }, 30_000);
+  it('f5 negative: an interrupted turn near the data bound is never named a bound (its outcome stays unknown)', async () => {
+    const c = await connection();
+    await expect(c.call(bounded({ lower: ['--data=+1048576'], burn: 'interrupt' }))).rejects.toThrow('HEADLESS_OUTCOME_UNKNOWN');
+    expect((await c.log()).map(entry => entry.mode)).toContain('interrupted');
+  }, 30_000);
   it('keeps SIGINT first through the realm: a cancelled turn is interrupted inside the sandbox, then the outcome is unknown', async () => {
     const c = await connection({ steps: [{ line: initLine() }, { hang: true }] }), controller = new AbortController();
     await c.port.preflight(c.profile);

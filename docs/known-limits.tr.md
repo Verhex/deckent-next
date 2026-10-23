@@ -528,8 +528,14 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   Bağlantı başına aynı anda tek çağrıya izin verir ve kendi Claude oturumlarınızla aynı abonelik kotasını ve giriş yenilemesini kullanır.
   Deckent kredi satın almaz ve CLI kredi gerektiğini söylediğinde durur; ama hesabınızda ek kullanım açıksa CLI onu çekebilir ve Deckent
   bunu göremez. AI ya da MCP üzerinden planlama ve arka plan rolleri onu yalnız sizin `--delegate` onayınızdan sonra kullanır. Korumalı
-  alan dosya boyutunu, açık dosya sayısını ve çekirdek dökümünü sınırlar; CPU süresi, bellek ve süreç sayısı henüz sınırlı değil.
-  <!-- TODO(f5): son cümleyi yalıtım alanının CPU/bellek/süreç sınırları, ağ geçidi ret sayıları ve ölçülen yenileme kilidi bulgusuyla değiştir. -->
+  alan dosya boyutunu, açık dosya sayısını, çekirdek dökümünü, CPU süresini (süreç başına 60 sn), belleği (süreç başına 2 GiB) ve süreç
+  sayısını (64) sınırlar; bir sınıra takılıp durdurulan CLI `HEADLESS_LIMIT_REACHED` ile reddedilir ve tur kotanıza şimdiden sayılmış
+  olabilir. Bu sınırlar `--help` ve `auth status` ölçümünden gelir; tam bir turun tepe değeri henüz ölçülmedi. Ağ geçidinin reddettiği
+  bağlantılar adres adlarıyla `deckent doctor` Brain girişi satırında sayılır. Kendi Claude oturumunuz girişini yenilerken (yenileme
+  kilidi giriş dizinindeyken) Deckent CLI'ı başlatmaz ve bir giriş dizininde aynı anda tek çalıştırma yapar; bu yüzden aynı girişteki
+  paralel Brain çağrıları bekler, bekleme aşılınca `HEADLESS_LOGIN_BUSY` ile reddedilir. Çöken bir Claude oturumunun bıraktığı kilit,
+  siz kaldırana kadar onu engeller, çünkü Deckent giriş dizinine dokunmaz. CLI'ın kendi kilit denetiminin korumalı alanın süreç ad
+  alanı üzerinden güvenli olup olmadığı doğrulanmadı.
   *Yol:* kullanılmasını istemiyorsanız Claude hesabınızda ek kullanımı kapalı tutun.
 - **Brain'in kota beklemesi kısadır ve yalnız izleyen bir yüzeyde olur.** Abonelik kotası tükendiğinde `/do` ve `deckent do` bilinen
   sıfırlanmayı en çok 15 dakika bekler (iki deneme, geçici) ve sonra bir kez daha planlar; daha uzak ya da bilinmeyen bir sıfırlanma ve

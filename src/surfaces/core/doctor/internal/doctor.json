@@ -11,6 +11,7 @@
   ],
   "backupPassphraseName": "BACKUP_PASSPHRASE",
   "pendingRoleRowsShown": 5,
+  "headlessRefusedHostsShown": 5,
   "fixes": [
     {
       "id": "toolchain-update",

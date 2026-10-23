@@ -30,5 +30,15 @@
   "doctor.headless.isolationUnavailable": "; yalıtım kullanılamıyor (kullanılabilir bubblewrap yok: sandbox satırlarına bakın)",
   "doctor.headless.open": "açık",
   "doctor.headless.closed": "kapalı",
-  "doctor.headless.none": "yok (yalnız siz)"
+  "doctor.headless.none": "yok (yalnız siz)",
+  "doctor.headless.egressRefused": "; ağ: sağlayıcı izin listesi dışında {count} bağlantı reddedildi (adresler: {hosts}{more})",
+  "doctor.headless.egressMore": " ve {count} tane daha",
+  "models.invocation.headlessEgress": "Bu çağrının yalıtılmış ağı: {connected} sağlayıcı bağlantısı, {refused} red (adresler: {hosts}; adres adı olmadan: {other})",
+  "error.HEADLESS_ISOLATION_UNAVAILABLE.limits": "Yalıtılmış abonelik Brain'i süreç sınırlarını (işlemci süresi, bellek, süreç sayısı) kuramadı: sınırlayıcı (util-linux prlimit) yok ya da sınırları uygulamadı, bu yüzden Claude CLI başlamadı. Hiçbir şey gönderilmedi, model çağrılmadı ve başka model seçilmedi. util-linux'u kurun; denetim bir sonraki çağrıda yeniden koşar.",
+  "error.HEADLESS_LIMIT_REACHED": "Yalıtılmış Claude CLI süreç sınırlarından birine ulaştı ve durduruldu. Hiçbir şey kabul edilmedi, kendiliğinden yeniden denenmez ve başka model seçilmedi.",
+  "error.HEADLESS_LIMIT_REACHED.cpu-time": "Yalıtılmış Claude CLI bir tur için işlemci süresi sınırını doldurdu ve durduruldu. Hiçbir şey kabul edilmedi, kendiliğinden yeniden denenmez ve başka model seçilmedi; tur aboneliğe şimdiden sayılmış olabilir.",
+  "error.HEADLESS_LIMIT_REACHED.processes": "Yalıtılmış Claude CLI sınırın izin verdiğinden çok süreç ya da iş parçacığı başlatmaya çalıştı ve durdu. Hiçbir şey kabul edilmedi, kendiliğinden yeniden denenmez ve başka model seçilmedi; tur aboneliğe şimdiden sayılmış olabilir.",
+  "error.HEADLESS_LIMIT_REACHED.memory": "Yalıtılmış Claude CLI bellek sınırını doldurdu ve durdu. Hiçbir şey kabul edilmedi, kendiliğinden yeniden denenmez ve başka model seçilmedi; tur aboneliğe şimdiden sayılmış olabilir.",
+  "error.HEADLESS_LOGIN_BUSY": "Aynı Claude girişini şu anda başka bir abonelik Brain çağrısı kullanıyor ve bekleme süresi içinde bitmedi. Hiçbir şey gönderilmedi, model çağrılmadı ve başka model seçilmedi; isteği yeniden gönderin.",
+  "error.HEADLESS_LOGIN_BUSY.cli": "Kendi Claude CLI'ınız girişini yeniliyor (yenileme kilidi giriş dizininde), bu yüzden abonelik Brain'i onun yanında başlamadı. Hiçbir şey gönderilmedi, model çağrılmadı ve başka model seçilmedi; birazdan yeniden deneyin. Açık bir Claude oturumu yokken bu sürerse çöken bir oturum yenileme kilidini geride bırakmış olabilir: Deckent giriş dizinindeki dosyaları asla açmaz ya da silmez, o kilidi kendiniz kaldırın."
 }

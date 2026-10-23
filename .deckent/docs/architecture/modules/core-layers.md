@@ -127,7 +127,19 @@ usable realm the kind is refused with `HEADLESS_ISOLATION_UNAVAILABLE`; there is
 customers wherever the realm works. One call is in flight per connection. An AI/MCP actor or a background role (recovery decision,
 memory evaluator) uses the subscription only after the owner's consent on the connection (`--delegate ai,system`); otherwise
 `HEADLESS_DELEGATION_REFUSED`.
-<!-- TODO(f5): CPU time, memory and process-count bounds of the realm, gateway refusal counts on inspect and doctor, OAuth refresh-lock location, models.headless.preview choice removal. -->
+Inside the realm the registry's limiter (util-linux `prlimit`) sets per-process CPU time (soft limit SIGXCPU, hard limit SIGKILL), data
+size (`RLIMIT_DATA`, which covers `mmap` since Linux 4.7) and the realm's task count (`RLIMIT_NPROC`, counted per user namespace since
+Linux 5.14) before the relay starts; the relay checks those bounds on itself, samples the realm, and names a bound that stopped the CLI by
+a reserved exit code. A named bound becomes a rejected receipt (`resource-limit`, field `cpu-time`, `processes` or `memory`; Brain:
+`HEADLESS_LIMIT_REACHED`); an interrupted turn is never named a bound, and data and task attribution is sampled, not kernel-reported.
+The gateway keeps its refusals as counts and DNS host names (bounded by `providers.json`): each call's record carries them (the responded
+`headless.egress` block or the rejected body; shown by `deckent models invocation` when content is retained), and a 0600 `egress.json`
+beside the preflight record feeds the doctor Brain-login line. The CLI's OAuth refresh lock is a name beside its login in the login
+directory (registry `refreshLock.names`; none exists at rest and none appeared during in-realm `--version`, `--help` and `auth status`); the
+realm binds that directory itself, so file exclusion is shared with the person's own sessions, but a process-id staleness check would see
+across PID namespaces wrongly, and Deckent cannot serialize sessions it does not start. Deckent therefore starts no spawn while such a name
+exists and serializes its own spawns per login directory with a 0600 lock in the global headless root; past the registry wait it refuses
+with `HEADLESS_LOGIN_BUSY`. The S3-3 switch `models.headless.preview` is retired: the key still parses and is no longer offered.
 
 When a subscription quota is exhausted, the Brain waits visibly and cancellably if the known reset is within
 `brain_planner.quotaWait.maxWaitMs` (15 minutes, provisional, at most two attempts) and then plans once more under a new derived command

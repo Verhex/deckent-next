@@ -528,8 +528,14 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   It allows one call at a time per connection, and it uses the same subscription quota and login refresh as your own Claude sessions.
   Deckent buys no credit and stops when the CLI reports that credits are required, but if extra usage is enabled on your account the CLI
   may draw on it and Deckent cannot see that. AI or MCP planning and background roles use it only after your `--delegate` consent.
-  The sandbox limits file size, open files and core dumps; CPU time, memory and process count are not bounded yet.
-  <!-- TODO(f5): replace the last sentence with the realm CPU/memory/process bounds, gateway refusal counts and the measured refresh-lock finding. -->
+  The sandbox limits file size, open files, core dumps, CPU time (60 s per process), memory (2 GiB per process) and the number of
+  processes (64); a CLI stopped by a bound is refused with `HEADLESS_LIMIT_REACHED`, and the turn may already count against your quota.
+  These bounds come from measuring `--help` and `auth status`; a full turn's peak has not been measured yet. Connections the gateway
+  refused are counted with their host names on the `deckent doctor` Brain-login line. Deckent does not start the CLI while your own
+  Claude session is renewing its login (its refresh lock is in the login directory) and runs one spawn per login directory at a time, so
+  parallel Brain calls on one login wait and, past the wait, are refused with `HEADLESS_LOGIN_BUSY`; a lock left by a crashed Claude
+  session blocks it until you remove that lock, because Deckent never touches the login directory. Whether the CLI's own lock check is
+  safe across the sandbox's process namespace is not verified.
   *Workaround:* keep extra usage off in your Claude account if you do not want it used.
 - **The Brain's quota wait is short and only on a watching surface.** When the subscription quota is exhausted, `/do` and `deckent do`
   wait at most 15 minutes for the known reset (two attempts, provisional) and then plan once more; a longer reset, an unknown reset or

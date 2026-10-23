@@ -544,10 +544,6 @@
       "before": "Agent catalog aggregation (protected; no AI may change it): mode turns on the pass that records agent and skill statistics from sealed metrics (off, shadow records only, on records only in this release); overlay replaces registry rule rows or lowers its bounds.",
       "after": "Agent catalog aggregation (protected; no AI may change it): mode turns on the pass that records agent and skill statistics and sealed suggestions from sealed metrics (off; shadow: suggestions as evidence only, no card or narrowing; on: suggestions for cards, narrowing only on calibrated rules); the pass writes only signed by the aggregator's own key; overlay replaces registry rule rows or lowers its bounds."
     },
-    "config.field.models": {
-      "before": "Model display settings: how many days before a switched-on model's retirement `deckent models` and doctor warn",
-      "after": "Model settings: how many days before a switched-on model's retirement `deckent models` and doctor warn, and headless.preview — the installation owner's switch (user layer only, default off) for preview connection kinds such as the subscription Brain through the person's own CLI"
-    },
     "tui.provider.kind.claudeCliSubscription": {
       "before": "Claude subscription (your own claude CLI, preview)",
       "after": "Claude subscription (your own claude CLI, isolated)"
@@ -1337,10 +1333,6 @@
     "agentstats.config.section": {
       "before": "Ajan kataloğu toplaması (korumalı; hiçbir AI değiştiremez): mode mühürlü metriklerden ajan ve skill istatistiği kaydeden geçişi açar (off kapalı, shadow yalnız kayıt, on bu sürümde yalnız kayıt); overlay registry kural satırlarını değiştirir ya da sınırlarını yalnız düşürür.",
       "after": "Ajan kataloğu toplaması (korumalı; hiçbir AI değiştiremez): mode mühürlü metriklerden ajan ve skill istatistiği ile mühürlü öneri kaydeden geçişi açar (off kapalı; shadow öneriler yalnız kanıt, kart ve daraltma yok; on öneriler kart için, daraltma yalnız ölçümle onaylanmış kurallarda); geçiş yalnız toplayıcının kendi anahtarıyla imzalayarak yazar; overlay registry kural satırlarını değiştirir ya da sınırlarını yalnız düşürür."
-    },
-    "config.field.models": {
-      "before": "Model gösterim ayarları: açık bir modelin emekliliğinden kaç gün önce `deckent models` ve doctor uyarır",
-      "after": "Model ayarları: açık bir modelin emekliliğinden kaç gün önce `deckent models` ve doctor uyarır; headless.preview — kişinin kendi CLI'ı üzerinden abonelik Brain'i gibi önizleme bağlantı türleri için kurulum sahibinin anahtarı (yalnız kullanıcı katmanı, varsayılan kapalı)"
     },
     "tui.provider.kind.claudeCliSubscription": {
       "before": "Claude aboneliği (kendi claude CLI'niz, önizleme)",

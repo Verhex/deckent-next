@@ -11,7 +11,7 @@ describe('/help grouped', () => {
       'Commands', 'Info', '  /status  Show whether Deckent is running, its version and the model', '  /context  Show how full the model\'s context window is',
       '  /monitor  Monitor window: stuck runs, workers, approvals, pools and installs (--install/--scope: text snapshot)', '  /model  Choose this session\'s model; models that cannot be used show why',
       '  /usage  Show this conversation\'s token usage', '  /doctor  Run the installation health report', '  /scope  Show scope, project, mode and surface access',
-      '  /help  List the commands by group'].join('\n'));
+      '  /roles  Show which models hold which tier and roles (read-only)', '  /help  List the commands by group'].join('\n'));
   });
   it('TR', () => {
     const text = slashHelpText(terminalComposerLabels('tr').slash);
@@ -39,8 +39,8 @@ describe('/help grouped', () => {
   it('lists every registry command exactly once, each on a single line', () => {
     for (const locale of ['en', 'tr'] as const) {
       const rows = slashHelpText(terminalComposerLabels(locale).slash).split('\n').filter(line => line.startsWith('  /'));
-      expect(rows).toHaveLength(34); // alpha.54 T1 adds /copy, T5 adds /rename; Brain adds /do; MCP-GRANT-WINDOW adds /policy; TESLIM-PENCERESI adds /deliver.
-      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(34);
+      expect(rows).toHaveLength(35); // alpha.54 T1 adds /copy, T5 adds /rename; Brain adds /do; MCP-GRANT-WINDOW adds /policy; TESLIM-PENCERESI adds /deliver; alpha.55 f2 adds /roles.
+      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(35);
     }
   });
 });

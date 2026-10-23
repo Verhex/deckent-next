@@ -30,7 +30,9 @@ export interface DoctorCheckFacts {
   /** S3-3: each subscription Brain connection of the scope (from its profile and last preflight record; no spawn): login kind, plan, directory,
    * channel state and consent; `state: unknown` when no check ran yet. Absent or null when not read. */
   readonly headlessLogins?: readonly Readonly<{ state: 'open' | 'closed' | 'unknown'; authMethod: string | null; subscriptionType: string | null; configDir: string;
-    consent: readonly string[]; isolation?: Readonly<{ launcher: string; version: string }> | 'unavailable' | null }>[] | null;
+    consent: readonly string[]; isolation?: Readonly<{ launcher: string; version: string }> | 'unavailable' | null;
+    /** f5: the realm gateway's cumulative refusals (host names most refused first, `other` without a valid name); null: none recorded. */
+    egress?: Readonly<{ refused: number; hosts: readonly string[]; other: number }> | null }>[] | null;
   /** `missing`: the admission names a pool whose ledger row does not exist yet (`deckent init pool` provisions it). */
   readonly poolStatus: 'ready' | 'drift' | 'unavailable' | 'unconfigured' | 'missing';
   /** I-S7: whether an execution section (worker image) and an admission registry are configured; absent → the pool status alone decides. */
@@ -162,9 +164,13 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
     // S3-5: the realm the last passing check ran in, or that the realm itself closed the channel.
     const isolated = !login.isolation ? '' : login.isolation === 'unavailable' ? t('doctor.headless.isolationUnavailable', {}, l)
       : t('doctor.headless.isolated', { version: terminalSafeText(login.isolation.version), launcher: terminalSafeText(login.isolation.launcher) }, l);
+    // f5: what the isolated CLI tried to reach outside the provider allowlist (counts and host names only).
+    const shownHosts = login.egress?.hosts.slice(0, registry.headlessRefusedHostsShown).map(host => terminalSafeText(host)) ?? [];
+    const refused = !login.egress ? '' : t('doctor.headless.egressRefused', { count: login.egress.refused, hosts: shownHosts.length ? shownHosts.join(', ') : '-',
+      more: login.egress.hosts.length > shownHosts.length ? t('doctor.headless.egressMore', { count: login.egress.hosts.length - shownHosts.length }, l) : '' }, l);
     rows.push(login.state === 'unknown' ? row('work', 'work.brainLogin', 'untested', t('doctor.headless.loginUnknown', { dir }, l))
       : row('work', 'work.brainLogin', login.state === 'open' ? 'ok' : 'warning', t('doctor.headless.login', { method: terminalSafeText(login.authMethod ?? '-'),
-        plan: login.subscriptionType ? ` (${terminalSafeText(login.subscriptionType)})` : '', dir, state: login.state === 'open' ? t('doctor.headless.open', {}, l) : t('doctor.headless.closed', {}, l), consent }, l) + isolated,
+        plan: login.subscriptionType ? ` (${terminalSafeText(login.subscriptionType)})` : '', dir, state: login.state === 'open' ? t('doctor.headless.open', {}, l) : t('doctor.headless.closed', {}, l), consent }, l) + isolated + refused,
       login.state === 'open' ? undefined : scoped('deckent models connect --connection claude-cli-subscription', f)));
   }
   // S6R-6: lost-worker recovery — the protected modes and the owner's standing grant; live without the grant sends every case to a person.
