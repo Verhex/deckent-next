@@ -10,6 +10,7 @@ import { runNodeProcess, type ProcessCommand, type ProcessEvidence, type Process
 import { isolatedProcessCommand, verifyBubblewrapLauncher } from '#adapters/core/shell-sandbox-bwrap/index.js';
 import { refuse } from './contract.js';
 import type { HeadlessEntry } from './env.js';
+import { withLoginLock } from './login-lock.js';
 
 /** S3-5: the host's bubblewrap measurement the realm launches with (composition: the service's own, under the global state root). */
 export type HeadlessIsolation = () => Promise<BubblewrapCapability>;
@@ -132,6 +133,11 @@ type Bounds = Omit<Extract<ProcessCommand, { schemaVersion: 2 }>, 'requestId' | 
  * exactly as long as the process. A realm that could not start is a typed isolation refusal; no path runs the CLI outside it.
  */
 export async function runHeadlessIsolated(entry: HeadlessEntry, isolation: HeadlessIsolation, spawn: HeadlessSpawn, bounds: Bounds, signal?: AbortSignal,
+  onLine?: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: HeadlessLimit | null }> {
+  // f5: one spawn per login dir across the person's connections, none while the CLI's own refresh lock exists (item 5).
+  return withLoginLock(entry, spawn.configDir, spawn.stateDir, spawn.now, () => runLocked(entry, isolation, spawn, bounds, signal, onLine), signal);
+}
+async function runLocked(entry: HeadlessEntry, isolation: HeadlessIsolation, spawn: HeadlessSpawn, bounds: Bounds, signal?: AbortSignal,
   onLine?: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress; limit: HeadlessLimit | null }> {
   const seal = await headlessIsolationSeal(isolation), realm = entry.headless.isolation, provider = nativeCliIdSchema.safeParse(entry.id);
   if (!provider.success) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
