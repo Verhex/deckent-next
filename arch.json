@@ -1778,7 +1778,8 @@
         "src/adapters/core/provider-anthropic-messages",
         "src/adapters/core/provider-decision-http",
         "src/adapters/core/workspace-read",
-        "src/composition/core/secrets"
+        "src/composition/core/secrets",
+        "src/adapters/core/native-cli-headless"
       ],
       "plan": "PROVIDERS"
     },
@@ -3802,6 +3803,20 @@
         "src/adapters/core/sqlite-ledger"
       ],
       "plan": "EXECUTION"
+    },
+    "src/adapters/core/native-cli-headless": {
+      "dependencies": [
+        "src/adapters/core/native-cli-registry",
+        "src/adapters/core/native-connection",
+        "src/adapters/core/process-runner",
+        "src/domain/core/model-invocation",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/primitives",
+        "src/engine/core/model-invocation",
+        "src/engine/core/toolchain-currency",
+        "src/platform/core/errors"
+      ],
+      "plan": "PROVIDERS"
     }
   },
   "composition": {
@@ -3922,7 +3937,8 @@
       "tuieditor",
       "tuisession",
       "termanswer",
-      "quotaask"
+      "quotaask",
+      "headless"
     ]
   },
   "literals": {

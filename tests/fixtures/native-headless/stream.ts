@@ -59,7 +59,7 @@ const chunks = []; process.stdin.on('data', chunk => chunks.push(chunk)); proces
   log({ mode: 'call', stdin: Buffer.concat(chunks).toString('utf8'), system: fs.readFileSync(promptFile, 'utf8'), systemMode: fs.statSync(promptFile).mode & 0o777,
     entries: fs.readdirSync('.').sort() });
   for (const step of s.steps) {
-    if (step.line !== undefined) { const line = typeof step.line === 'string' ? step.line : JSON.stringify(step.line.subtype === 'init' && s.initCwd === 'actual' ? { ...step.line, cwd: process.cwd() } : step.line); process.stdout.write(line + '\\n'); }
+    if (step.line !== undefined) { const line = typeof step.line === 'string' ? step.line : JSON.stringify(step.line.subtype === 'init' && s.initCwd === 'actual' && step.line.cwd === '/run/dir' ? { ...step.line, cwd: process.cwd() } : step.line); process.stdout.write(line + '\\n'); }
     else if (step.sleepMs !== undefined) await new Promise(resolve => setTimeout(resolve, step.sleepMs));
     else if (step.floodBytes !== undefined) process.stdout.write('x'.repeat(step.floodBytes));
     else if (step.hang) { if (step.ignoreInterrupt) process.on('SIGINT', () => log({ mode: 'interrupted' })); else process.on('SIGINT', () => { log({ mode: 'interrupted' }); process.exit(130); }); setInterval(() => {}, 1000); return; }
