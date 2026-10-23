@@ -6,9 +6,7 @@ import { assignTaskWorker, type PendingWorkerAssignment, type WorkerAssignmentCo
 export interface WorkerEffortCompiler {
   capability(profile: ExecutionProfileDefinition): Readonly<{ mode: 'arguments' | 'model-id'; levels: readonly string[] }> | null;
   /** `evidence`: the catalog's session-start names / provider-choice flag for the pinned model, frozen into the profile pin (owner K1/K2). */
-  /** `task` (S4B-5): the graph task the final compilation is for, so trusted composition adds that task's admitted context (memory); a
-   * candidate probe during worker assignment passes none. */
-  compile(template: ExecutionProfileDefinition, input: WorkInput, effort?: WorkerEffort, evidence?: CatalogPinModelEvidence, task?: { readonly taskId: string }): ExecutionProfileDefinition;
+  compile(template: ExecutionProfileDefinition, input: WorkInput, effort?: WorkerEffort, evidence?: CatalogPinModelEvidence, task?: { readonly taskId: string } /* S4B-5: final compile only; adds the task's admitted memory context */): ExecutionProfileDefinition;
   bind(profile: ExecutionProfileDefinition, effort: WorkerEffort, evidence?: CatalogPinModelEvidence): ExecutionProfileDefinition;
 }
 /** Read-only preparation inside new-Run admission. The application chooses once; adapters own transport, the Run owns its frozen profile.
