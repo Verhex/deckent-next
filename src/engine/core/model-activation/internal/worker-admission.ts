@@ -29,7 +29,13 @@ export interface WorkerImageRefreshingWarning {
 export interface WorkerInstructionsWithheldWarning {
   readonly code: 'WORKER_INSTRUCTIONS_WITHHELD'; readonly source: string; readonly reason: 'absent' | 'untrusted' | 'unsafe' | 'unreadable'; readonly digest: string | null;
 }
-export type WorkerAdmissionWarning = WorkerImageRefreshingWarning | WorkerInstructionsWithheldWarning;
+/** S4B-5 (§7.3): memory left out of one task's worker prompt, the Run admitted without it. `policy`: the admitting principal may not inspect the
+ * scope's memory; `sources`: `count` eligible entries come from work it may not read (a count only); `budget`: the prompt had no room for the part;
+ * `contests`: more contests are open than one bounded read shows. */
+export interface MemoryContextWithheldWarning {
+  readonly code: 'MEMORY_CONTEXT_WITHHELD'; readonly taskId: string | null; readonly reason: 'policy' | 'sources' | 'budget' | 'contests'; readonly count: number;
+}
+export type WorkerAdmissionWarning = WorkerImageRefreshingWarning | WorkerInstructionsWithheldWarning | MemoryContextWithheldWarning;
 export type WorkerAdmissionOptions = Readonly<{ imageRefreshInProgress?: boolean }>;
 export class WorkerModelAdmissionError extends Error {
   constructor(readonly code: WorkerModelAdmissionCode, readonly detail: WorkerModelAdmissionDetail) { super(code); this.name = 'WorkerModelAdmissionError'; }

@@ -482,7 +482,7 @@
     },
     "memory.config.section": {
       "before": "Memory automation (protected; no AI may change it): extraction.mode turns on candidates from accepted work (off, shadow records only, live writes candidates); automation narrows the Core bounds and WorkClass rows.",
-      "after": "Memory automation (protected; no AI may change it): extraction.mode turns on candidates from accepted work (off, shadow records only, live writes candidates); verification.mode turns on the independent evaluator (off, shadow seals its records and verifies nothing, on verifies); automation narrows the Core bounds and WorkClass rows."
+      "after": "Memory automation (protected; no AI may change it): extraction.mode turns on candidates from accepted work (off, shadow records only, live writes candidates); verification.mode turns on the independent evaluator (off, shadow seals its records and verifies nothing, on verifies); context.mode lets verified entries reach worker prompts at Run admission (off, shadow seals what would be sent and sends nothing, on sends); automation narrows the Core bounds and WorkClass rows."
     },
     "limits.window_week_fable": {
       "before": "Week (Fable)",
@@ -1144,7 +1144,7 @@
     },
     "memory.config.section": {
       "before": "Hafıza otomasyonu (korumalı; hiçbir AI değiştiremez): extraction.mode kabul edilen işten aday kaydı açar (off kapalı, shadow yalnız kayıt tutar, live aday yazar); automation Core sınırlarını ve iş türü satırlarını yalnız daraltır.",
-      "after": "Hafıza otomasyonu (korumalı; hiçbir AI değiştiremez): extraction.mode kabul edilen işten aday kaydı açar (off kapalı, shadow yalnız kayıt tutar, live aday yazar); verification.mode bağımsız değerlendiriciyi açar (off kapalı, shadow kaydını mühürler ve hiçbir şeyi doğrulamaz, on doğrular); automation Core sınırlarını ve iş türü satırlarını yalnız daraltır."
+      "after": "Hafıza otomasyonu (korumalı; hiçbir AI değiştiremez): extraction.mode kabul edilen işten aday kaydı açar (off kapalı, shadow yalnız kayıt tutar, live aday yazar); verification.mode bağımsız değerlendiriciyi açar (off kapalı, shadow kaydını mühürler ve hiçbir şeyi doğrulamaz, on doğrular); context.mode doğrulanmış kayıtları Run kabulünde işçi istemine taşır (off kapalı, shadow gönderileceği mühürler ve hiçbir şey göndermez, on gönderir); automation Core sınırlarını ve iş türü satırlarını yalnız daraltır."
     },
     "limits.window_week_fable": {
       "before": "Hafta (Fable)",

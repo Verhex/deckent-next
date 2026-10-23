@@ -7,3 +7,4 @@ export { MemoryEvaluationApplication, memoryEvaluationResolver, memoryEvaluation
 export type { MemoryEvaluationDependencies } from './internal/evaluate.js';
 export { MEMORY_EVALUATOR_ROLE, memoryCatalogFacts, memoryCatalogKey, memoryEvaluatorReference, memoryEvaluatorRows, memoryEvaluationDue, memoryEvaluatorView } from './internal/evaluator-models.js';
 export type { MemoryCatalogFact, MemoryEvaluatorPrice } from './internal/evaluator-models.js';
+export { selectMemoryContext, memoryContextTasks, MEMORY_CONTEXT_HEADER, type MemoryContextRequest, type MemoryContextSelection, type MemoryContextTaskPart, type MemoryContextEntryRef } from './internal/context.js';

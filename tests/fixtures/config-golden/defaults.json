@@ -139,6 +139,9 @@
     "responseMaxBytes": 1048576
   },
   "memoryAutomation": {
+    "context": {
+      "mode": "off"
+    },
     "extraction": {
       "mode": "off"
     },

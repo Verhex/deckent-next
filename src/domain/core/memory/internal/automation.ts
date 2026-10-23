@@ -4,6 +4,7 @@ import automationSeed from '../../../../../assets/memory/automation.json' with {
 import extractorsSeed from '../../../../../assets/memory/extractors.json' with { type: 'json' };
 import templatesSeed from '../../../../../assets/memory/templates.json' with { type: 'json' };
 import { CORE_WORK_CLASSES, mergeWorkClassRegistries, type WorkClassRegistry } from '#domain/core/run/index.js';
+import { AUDIT_MEMORY_CONTEXT_ENTRIES_MAX } from '#domain/core/audit/index.js';
 import { MEMORY_LIMITS, MemoryError, memoryLessonClaimSchema } from './contract.js';
 
 /**
@@ -15,7 +16,10 @@ const positive = z.number().int().positive().safe();
 const workClassRowSchema = z.object({ workClassId: identitySchema, retentionProfile: z.object({ id: identitySchema, entryMaxAgeMs: positive }).strict().readonly(),
   personalData: z.enum(['none', 'possible']), extraction: z.boolean() }).strict().readonly();
 const boundsSchema = z.object({ perAttempt: positive, perRun: positive, perScopePerDay: positive, supportPerEntry: positive, loopPage: positive }).strict();
-const contextSchema = z.object({ maxEntries: positive, maxBytes: positive, maxSourcesChecked: positive }).strict();
+/** S4B-5 §7.1: entries and bytes per worker part, sources checked per entry; `candidatePool` verified entries read per admission (most recently
+ * changed first) and `termsMax` work-input words used to rank them. `maxEntries` never exceeds what one sealed `memory-context` event can name. */
+const contextSchema = z.object({ maxEntries: positive.max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), maxBytes: positive, maxSourcesChecked: positive, candidatePool: positive,
+  termsMax: positive }).strict();
 /** S4B-3 (§6.2, §10, owner S-M5/S-M10): evaluator calls, contests, unknown answers (the circuit breaker) and settled spend (minor units of the
  * scope's spend currency) per scope per UTC day; the answer's token and byte caps; how many verified titles are offered for conflicts. */
 const evaluationSchema = z.object({ perScopePerDay: positive, contestsPerScopePerDay: positive, unknownPerScopePerDay: positive, spendMinorUnitsPerScopePerDay: positive,

@@ -104,10 +104,12 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
   /** S4B-1 (owner S-M1/S-M11/S-M14; A10: the whole subtree is protected, no AI writes it): `extraction.mode` off (customer default) | shadow
    * (receipts only, no candidate) | on (inert candidates); `overlay` narrows the Core `memory-automation` registry, checked by the memory domain at
    * use (a widening overlay is MEMORY_AUTOMATION_INVALID). S4B-3 (owner S-M3/S-M14): `verification.mode` off (customer default) | shadow (sealed
-   * evaluation records, nothing verified) | on (an independent pass verifies). The context mode joins with S4B-5. */
+   * evaluation records, nothing verified) | on (an independent pass verifies). S4B-5 (owner S-M6/S-M8/S-M9): `context.mode` off (customer default:
+   * no memory read at Run admission) | shadow (the worker part is computed and sealed, never sent) | on (verified entries reach the worker prompt). */
   memoryAutomation: field('memory.config.section', { state: 'bound', consumers: ['src/composition/core/memory'] }, 'live', z.object({
     extraction: z.object({ mode: z.enum(['off', 'shadow', 'on']).default('off') }).strict().default({}),
-    verification: z.object({ mode: z.enum(['off', 'shadow', 'on']).default('off') }).strict().default({}), overlay: z.record(z.string(), z.unknown()).optional() }).strict().default({})),
+    verification: z.object({ mode: z.enum(['off', 'shadow', 'on']).default('off') }).strict().default({}),
+    context: z.object({ mode: z.enum(['off', 'shadow', 'on']).default('off') }).strict().default({}), overlay: z.record(z.string(), z.unknown()).optional() }).strict().default({})),
   runRuntime: field('config.field.runRuntime', { state: 'bound', consumers: ['src/composition/core/run-progression'] }, 'restart', z.object({
     parking: RUN_PARKING_SETTINGS.default({ schemaVersion: 1 }),
     quotaRecovery: QUOTA_RECOVERY_SETTINGS.default({ schemaVersion: 1 }),

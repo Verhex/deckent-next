@@ -10,6 +10,8 @@ import { distilSource } from './distil.js';
 import type { MemoryReportClaims } from './source.js';
 import { assertNoPendingMemoryPurge, memorySourceEntries, purgeMemoryEntry, replayMemoryPurges, resolveMemoryContest, reviewMemory } from './purge.js';
 import { rederiveMemorySourceModels } from './evaluate.js';
+import { selectMemoryContext, type MemoryContextRequest, type MemoryContextSelection } from './context.js';
+import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
 
 const DEFAULT_STATES: readonly MemoryState[] = Object.freeze(['candidate', 'verified']);
 const held = (error: unknown): MemoryHeld => ({ schemaVersion: 1, status: 'held',
@@ -85,6 +87,21 @@ export class MemoryJournalApplication {
       return { ...ok, method: 'scan' as const, complete: scanned.length <= MEMORY_LIMITS.scanMax,
         ...await this.visible(store, principal, query.scopeId, scanned.slice(0, MEMORY_LIMITS.scanMax).filter(entry => memoryEntryMatches(entry, terms)).slice(0, query.limit)) };
     });
+  }
+  /**
+   * S4B-5 (§7.1, §7.3): the worker memory of one Run admission, read as the admitting principal. A refusal of its `memory/inspect` is a withheld
+   * part (the Run goes on without memory, visibly); an unreadable policy, store, key or index, or a purge the ledger lacks, is a typed hold.
+   */
+  async contextFor(request: MemoryContextRequest, credential?: unknown): Promise<MemoryContextSelection> {
+    let admitted;
+    try { admitted = await this.admit('inspect', request.scopeId, credential); }
+    catch (error) { if (error instanceof PolicyAuthorizationError && error.code !== 'POLICY_UNAVAILABLE') return { schemaVersion: 1, status: 'withheld', reason: 'policy' }; throw error; }
+    let store: MemoryJournalStore;
+    try { store = await this.deps.openStore('read'); } catch (error) { return held(error); }
+    try {
+      await assertNoPendingMemoryPurge(this.deps, store, request.scopeId);
+      return await selectMemoryContext(this.deps, store, admitted.principal, admitted.authorization.revision, request, (...args) => this.visible(...args));
+    } catch (error) { return held(error); } finally { store.close(); }
   }
   async propose(input: unknown, credential?: unknown): Promise<MemoryMutationResult> {
     const command = memoryProposeCommandSchema.parse(input), { principal, authorization } = await this.admit('propose', command.scopeId, credential);

@@ -6,7 +6,9 @@ import { assignTaskWorker, type PendingWorkerAssignment, type WorkerAssignmentCo
 export interface WorkerEffortCompiler {
   capability(profile: ExecutionProfileDefinition): Readonly<{ mode: 'arguments' | 'model-id'; levels: readonly string[] }> | null;
   /** `evidence`: the catalog's session-start names / provider-choice flag for the pinned model, frozen into the profile pin (owner K1/K2). */
-  compile(template: ExecutionProfileDefinition, input: WorkInput, effort?: WorkerEffort, evidence?: CatalogPinModelEvidence): ExecutionProfileDefinition;
+  /** `task` (S4B-5): the graph task the final compilation is for, so trusted composition adds that task's admitted context (memory); a
+   * candidate probe during worker assignment passes none. */
+  compile(template: ExecutionProfileDefinition, input: WorkInput, effort?: WorkerEffort, evidence?: CatalogPinModelEvidence, task?: { readonly taskId: string }): ExecutionProfileDefinition;
   bind(profile: ExecutionProfileDefinition, effort: WorkerEffort, evidence?: CatalogPinModelEvidence): ExecutionProfileDefinition;
 }
 /** Read-only preparation inside new-Run admission. The application chooses once; adapters own transport, the Run owns its frozen profile.
@@ -49,7 +51,7 @@ export async function prepareWorkerEffortAdmission(graphInput: unknown, registry
     compile(template, input, kind, taskId) {
       const pending = assigned.get(taskId), chosen = pending?.input ?? input;
       if (!chosen.model) throw new WorkerModelAdmissionError('WORKER_ASSIGNMENT_NO_CANDIDATES', { taskId, channelId: null, modelId: null });
-      const effort = select(template, kind, taskId, chosen.model, chosen), profile = compiler.compile(template, chosen, effort, evidence.get(key(chosen.model)));
+      const effort = select(template, kind, taskId, chosen.model, chosen), profile = compiler.compile(template, chosen, effort, evidence.get(key(chosen.model)), { taskId });
       if (pending) { const { effortSource, ...seal } = pending.seal;
         sealed.set(taskId, workerAssignmentSchema.parse({ ...seal, effort: { level: readWorkerModelPin(profile.parameters)?.reasoningEffort?.level ?? null, source: effortSource } })); }
       return profile;
