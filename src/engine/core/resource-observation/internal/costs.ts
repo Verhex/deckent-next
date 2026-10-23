@@ -24,13 +24,17 @@ export function projectAttemptWorkCost(run: RunSnapshot, identity: AttemptIdenti
   const matchingMetric = metric?.identity.scopeId === identity.scopeId && metric.identity.runId === identity.runId
     && metric.identity.taskId === identity.taskId && metric.identity.attemptId === identity.attemptId ? metric : undefined;
   const subscription = profile.parameters['nativeSubscription'] !== undefined;
+  // ATAMA-0: a v2 row says whether a person decided the Task and what the worker reported; a substituted model is never shown as the request.
+  const current = matchingMetric?.schemaVersion === 2 && matchingMetric.outcome.kind === 'task' ? matchingMetric : undefined;
+  const verdict = current?.actualModel?.evidence === 'sealed' ? current.actualModel.verdict : undefined;
+  const modelEvidence = verdict === 'verified' ? 'verified' as const : verdict === 'substituted' ? 'unknown' as const : 'requested' as const;
   return workCostSchema.parse({ schemaVersion: 1, identity, profile: { id: profile.id, version: profile.version },
-    model: pin ? { channelId: pin.pin.channelId, modelId: pin.pin.modelId, evidence: 'requested' } : null,
+    model: pin ? { channelId: pin.pin.channelId, modelId: pin.pin.modelId, evidence: modelEvidence } : null,
     effort: pin?.reasoningEffort?.level ?? null, acceptance: deriveAcceptanceView(run, identity.taskId, evaluation),
     axes: { cpuSeconds: resources.cpuSeconds, sampledPeakBytes: resources.sampledPeakBytes, kernelPeakBytes: resources.latest?.kernelPeakBytes ?? null,
       wallMs, apiMoney: matchingMetric?.cost ?? null,
       subscription: subscription ? { calls: null, durationMs: usage?.durationMs ?? null, limit: null } : null,
-      localModel: null, humanInterventions: null },
+      localModel: null, humanInterventions: current && current.outcome.kind === 'task' ? current.outcome.decision === 'human' ? 1 : 0 : null },
     quality: { reworkCount: null,
       rollbackCount: null, interventionCount: null, followup: 'unknown' }, coverage: 'partial', sampleCount: resources.sampleCount, gapCount: resources.gapCount });
 }

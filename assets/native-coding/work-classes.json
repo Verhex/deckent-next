@@ -1,13 +1,19 @@
 {
-  "schemaVersion": 1,
-  "revision": "worker-effort-2026-10-03",
+  "schemaVersion": 2,
+  "revision": "atama-0-2026-10-23",
   "classes": [
-    { "id": "small", "defaultEffort": "high" },
-    { "id": "test", "defaultEffort": "high" },
-    { "id": "feature", "defaultEffort": "xhigh" },
-    { "id": "design", "defaultEffort": "max" },
-    { "id": "architecture", "defaultEffort": "max" },
-    { "id": "security-critical", "defaultEffort": "max" }
+    { "id": "small", "defaultEffort": "high", "proposalAdmission": { "risk": "low", "standingAdmission": false },
+      "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} },
+    { "id": "test", "defaultEffort": "high", "proposalAdmission": { "risk": "normal", "standingAdmission": false },
+      "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} },
+    { "id": "feature", "defaultEffort": "xhigh", "proposalAdmission": { "risk": "normal", "standingAdmission": false },
+      "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} },
+    { "id": "design", "defaultEffort": "max", "proposalAdmission": { "risk": "high", "standingAdmission": false },
+      "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} },
+    { "id": "architecture", "defaultEffort": "max", "proposalAdmission": { "risk": "high", "standingAdmission": false },
+      "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} },
+    { "id": "security-critical", "defaultEffort": "max", "proposalAdmission": { "risk": "high", "standingAdmission": false },
+      "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} }
   ],
   "bindings": [
     { "kind": "coding", "classId": "feature" },

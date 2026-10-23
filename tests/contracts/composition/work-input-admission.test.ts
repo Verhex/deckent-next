@@ -12,7 +12,7 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { changeConfiguredWorkerInstructionTrust, classifyConfiguredRunSpending, inspectConfiguredWorkerInstructions } from '../../../src/composition/core/runs/index.js';
 import { admittedToolchains } from '../../../src/engine/core/toolchain-currency/index.js';
 import { assertNativeWorkerBinding, compileNativeCodingDockerProfile, FileArtifactStore, nativeCodingTemplateBase, openHostProjectInstructionReader, openSqliteAttemptStore } from '#adapters/index.js';
-import { encodeExecutionProfileDefinition, readWorkerModelPin, validateTaskGraph, TASK_GRAPH_SCHEMA_VERSION, type AttemptIdentity } from '#domain/index.js';
+import { bindTaskAcceptance, encodeExecutionProfileDefinition, readWorkerModelPin, validateTaskGraph, TASK_GRAPH_SCHEMA_VERSION, type AttemptIdentity } from '#domain/index.js';
 import { clearConfigCache, prepareProductDirectory } from '#platform/index.js';
 import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
 import { loadMonitorSurface } from '#surfaces/core/monitor/index.js';
@@ -36,7 +36,7 @@ const workInput = (modelId = 'claude-sonnet-5-5', extra: object = {}, auxiliaryM
 const handPrepared = (id: string, maxTurns = 40, policy = false) => ({ ...compileNativeCodingDockerProfile(
   { id: 'coding', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { argv: ['unused'], ...docker } },
   { schemaVersion: 4, ...claudeInvocation, maxTurns, model: { channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [HAIKU] },
-    composition: { schemaVersion: 1, ...parts, task: TASK, scope: 'note.txt\nsrc/notes/**', acceptance: ACCEPTANCE } }, policy ? { schemaVersion: 1, level: 'xhigh', source: 'policy-default', status: 'selected', workClass: 'feature', policyRevision: 'worker-effort-2026-10-03', target: 'xhigh' } : undefined), id });
+    composition: { schemaVersion: 1, ...parts, task: TASK, scope: 'note.txt\nsrc/notes/**', acceptance: ACCEPTANCE } }, policy ? { schemaVersion: 1, level: 'xhigh', source: 'policy-default', status: 'selected', workClass: 'feature', policyRevision: 'atama-0-2026-10-23', target: 'xhigh' } : undefined), id });
 const profiles = [template('coding', claudeInvocation), template('codex-coding', codexInvocation), handPrepared('hand')];
 const registry = { schemaVersion: 1 as const, revision: 'k3', profiles, kinds: [{ kind: 'coding', profile: { id: 'coding', version: 1 } },
   { kind: 'codex-coding', profile: { id: 'codex-coding', version: 1 } }, { kind: 'hand', profile: { id: 'hand', version: 1 } }],
@@ -98,8 +98,9 @@ async function terminal(f: Awaited<ReturnType<typeof seeded>>, runId: string, id
       const model = { provider: pin.provider, evidenceCapability: pin.evidenceCapability, requested: pin.pin, init: null, usage: null,
         verdict: 'unverified' as const, unexpected: [], evidence: 'absent' as const };
       await writer.commitTaskEvaluation({ commandId: `evaluate-${runId}`, actor: { id: 'fixture', issuer: 'test', subject: 'service' }, expectedRevision: current.revision,
-        dispatch, evaluation: { schemaVersion: 1, evaluationId: `evaluate-${runId}`, identity, graphRevision: 1, attemptRevision: (await writer.load('s', identity.attemptId))!.revision,
-          criteria: [{ criterionId: 'exit', verdict: 'unknown', evidenceIds: [] }], model } });
+        // The evaluation owner binds the Core seed's frozen acceptance profile (ATAMA-0); this fixture commits what it would commit.
+        dispatch, evaluation: bindTaskAcceptance(current, { schemaVersion: 1, evaluationId: `evaluate-${runId}`, identity, graphRevision: 1, attemptRevision: (await writer.load('s', identity.attemptId))!.revision,
+          criteria: [{ criterionId: 'exit', verdict: 'unknown', evidenceIds: [] }], model }) });
       // Durable metrics carry the primary identity; the canonical native pin retains its auxiliary models.
       const db = new DatabaseSync(f.path, { readOnly: true });
       try {
@@ -303,7 +304,7 @@ describe.skipIf(process.platform === 'win32')('fixed-Ultra opt-in producer to su
     const request = run(`fixed-${choice}`, kind, input), created = await createRun(f.project, request, f.options);
     const boundary = choice === 'unmapped' || choice === 'design';
     const selected = boundary ? { schemaVersion: 1, level: null, source: 'cli-default', status: 'ultra-opt-in-required', ...(choice === 'design' ? {
-      workClass: 'design', policyRevision: 'worker-effort-2026-10-03', target: 'max' } : {}) }
+      workClass: 'design', policyRevision: 'atama-0-2026-10-23', target: 'max' } : {}) }
       : choice === 'explicit' ? { schemaVersion: 1, level: 'ultra', source: 'explicit', status: 'selected' }
         : { schemaVersion: 1, level: 'ultra', source: 'policy-default', status: 'selected', workClass: 'deep', policyRevision: 'deliberate-ultra', target: 'ultra' };
     const frozen = f.snapshotProfile(request.runId).tasks[0]!.profile;

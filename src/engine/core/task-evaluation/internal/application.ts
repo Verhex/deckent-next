@@ -20,6 +20,8 @@ import { verifyRetainedOutputEnvelope } from '#engine/core/dispatch/index.js';
 import { evaluationRecovery } from './recovery.js';
 import { operationEvidenceBinding } from './operation-binding.js';
 import type { ReattemptEffects } from '#engine/core/workspace-patch/index.js';
+import { coreEvidenceTypeSchema } from '#domain/index.js';
+const RETAINED_OUTPUT_EVIDENCE = coreEvidenceTypeSchema.enum['retained-artifact'];
 /** R3 retry inputs: the installation backoff and the one adapter effect classifier (shared with the delivery re-attempt). */
 export interface StallRecovery { readonly backoffMs: number; effects(profile: RunSnapshot['execution']['tasks'][number]['profile']): ReattemptEffects }
 
@@ -187,7 +189,9 @@ export class TaskEvaluationApplication {
       const selected = run.execution.criteria.find(value => value.criterionId === item.criterionId)!;
       const result = workerExit ? 'unknown' : await this.evaluator.evaluate(selected.evaluator, criterion, dispatch.terminal,
         { identity, ...(selected.evaluator.implementation.id === 'operation-evidence' && binding ? { binding } : {}) });
-      criteria.push(typeof result === 'string' ? { ...item, verdict: result } : { ...item, ...result });
+      // ATAMA-0: a plain verdict rests on the verified retained dispatch output, so a pass names that evidence type for the class's
+      // acceptance profile; an evaluator that reports its own evidence types (operation evidence) keeps exactly those.
+      criteria.push(typeof result === 'string' ? { ...item, verdict: result, ...(result === 'pass' ? { evidenceTypes: [RETAINED_OUTPUT_EVIDENCE] } : {}) } : { ...item, ...result });
     }
     const output = verifyRetainedOutputEnvelope(await this.artifacts.read(identity.scopeId, dispatch.output), identity);
     const handoff = evaluateHandoff(output);
