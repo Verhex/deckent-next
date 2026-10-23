@@ -204,7 +204,11 @@
           "none"
         ],
         "maxTurns": 1,
-        "connect": { "configDirDefault": ".claude", "configDirSource": "owner Q-H1 2026-10-23: the standard login directory under the person's home", "pathSearchDirectories": 64, "pathSearchTimeoutMs": 5000, "maxInFlight": 1, "maxInFlightSource": "S3-DESIGN §7 seed 1 (provisional): one run dir per connection; send empties it, so calls on one connection never overlap" },
+        "connect": { "configDirSource": "owner 2026-10-24 (Jev 1d5e4879 deckent_owned_dir 0.92; replaces Q-H1 ~/.claude): without --config-dir the Brain uses its own login dir <Deckent state root>/<layout headlessLogins>/<this CLI id> (0700, never backed up, never read by Deckent), signed in by `deckent models login`; a connection sealed to another dir keeps working until reconnect", "pathSearchDirectories": 64, "pathSearchTimeoutMs": 5000, "maxInFlight": 1, "maxInFlightSource": "S3-DESIGN §7 seed 1 (provisional): one run dir per connection; send empties it, so calls on one connection never overlap" },
+        "login": { "args": ["auth", "login", "--claudeai"], "ssoFlag": "--sso", "timeoutMs": 540000,
+          "env": { "inherit": ["HOME", "PATH", "TERM", "COLORTERM", "LANG", "LC_ALL", "DISPLAY", "WAYLAND_DISPLAY", "BROWSER", "XDG_RUNTIME_DIR", "WSL_DISTRO_NAME", "WSL_INTEROP"],
+            "fixed": { "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1" } },
+          "source": "s3c lane 2026-10-24 from CLI 2.1.309 `auth login --help` (empty config dir, no login run): --claudeai = Claude subscription (the default, named so a Console login is never chosen), --sso forces the SSO flow. The CLI's own sign-in runs in the person's terminal with inherited stdio, outside the realm (its browser OAuth needs the person's browser and the sign-in hosts, which the realm's API-only gateway does not reach); Deckent captures none of its bytes. Inherited names: the browser opener and terminal of the person (unmeasured against a real sign-in until the lead's run); every deny name stays out. timeoutMs stays below refreshLock.staleMs: the login holds the login dir's lock." },
         "systemPromptFlag": "--system-prompt-file",
         "systemPromptFile": "system.txt",
         "forbiddenFlags": [

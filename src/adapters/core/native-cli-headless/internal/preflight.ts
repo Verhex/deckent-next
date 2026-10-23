@@ -6,6 +6,7 @@ import { compareToolchainVersions } from '#engine/index.js';
 import { refuse, type NativeCliHeadlessDefinition } from './contract.js';
 import { buildHeadlessEnv, headlessFlagSetDigest, headlessRequiredFlags, type HeadlessEntry } from './env.js';
 import { headlessIsolationSeal, runHeadlessIsolated, type HeadlessIsolation, type HeadlessIsolationSeal } from './realm.js';
+import { loginRecordPath } from './login-lock.js';
 
 /** What a passing preflight proved for one executable state; the call's init guard compares the reported CLI version with it. */
 export interface HeadlessPreflight { readonly version: string; readonly flagSetDigest: string; readonly runDir: string; readonly env: Readonly<Record<string, string>>;
@@ -14,7 +15,7 @@ export interface HeadlessPreflight { readonly version: string; readonly flagSetD
  * realm's launcher (S3-5: a passing check is always an isolated one). */
 const passed = new Map<string, HeadlessPreflight>();
 const AUTH_FIELDS = ['loggedIn', 'authMethod', 'apiProvider', 'subscriptionType', 'configDirectory'] as const;
-async function privateDir(path: string, uid: number): Promise<void> {
+export async function privateDir(path: string, uid: number): Promise<void> {
   await mkdir(path, { recursive: true, mode: 0o700 });
   const info = await lstat(path);
   if (!info.isDirectory() || info.uid !== uid || (info.mode & 0o077) !== 0) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'state-dir' });
@@ -24,7 +25,7 @@ export async function emptyRunDir(runDir: string): Promise<void> {
   for (const entry of await readdir(runDir)) await rm(join(runDir, entry), { recursive: true, force: true });
 }
 /** Field allowlist at the parser: account identity fields (email, organization) are dropped here and never reach a record or log. */
-function authStatus(stdout: string): Partial<Record<(typeof AUTH_FIELDS)[number], unknown>> | null {
+export function authStatus(stdout: string): Partial<Record<(typeof AUTH_FIELDS)[number], unknown>> | null {
   try {
     const value: unknown = JSON.parse(stdout);
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -58,7 +59,9 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
   };
   // S3-5: checked on every call, cached or not: a launcher that is gone or changed closes the channel before any claim.
   const seal = await headlessIsolationSeal(isolation).catch(closed), isolated = Object.freeze({ launcher: seal.launcher, version: seal.version });
-  const key = JSON.stringify([executable, info.size, info.mtimeMs, info.ino, definition.configDir, definition.minCliVersion, flagSetDigest, seal.path, seal.version]);
+  // s3c: a sign-in through `models login` since the last check (Deckent's own record, not the login dir) re-runs it: the account may have changed.
+  const login = await stat(loginRecordPath(definition.configDir, definition.stateDir)).then(record => [record.ino, record.mtimeMs], () => null);
+  const key = JSON.stringify([executable, info.size, info.mtimeMs, info.ino, definition.configDir, definition.minCliVersion, flagSetDigest, seal.path, seal.version, login]);
   const cached = passed.get(key);
   if (cached) return cached;
   const env = buildHeadlessEnv(headless, runDir, definition.configDir);

@@ -122,6 +122,15 @@ describe('doctor rows (pure)', () => {
       .toBe('Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent ai, system');
     for (const value of [[], null, undefined]) expect(doctorChecks(report, facts({ headlessLogins: value }), 'en').some(row => row.id === 'work.brainLogin')).toBe(false);
   });
+  it('s3c "Brain girişi" names the Brain\'s own login dir; a connection sealed to another dir keeps working and the next step is the move', () => {
+    const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.deckent/headless/logins/claude', owned: true, consent: [] },
+      { state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', owned: false, consent: [] }];
+    expect(doctorChecks(report, facts({ headlessLogins: logins }), 'en').filter(row => row.id === 'work.brainLogin').map(row => [row.state, row.text, row.next])).toEqual([
+      ['ok', 'Brain login: claude.ai (max), directory /home/p/.deckent/headless/logins/claude, channel open, consent none (you only); the Brain\'s own login directory', undefined],
+      ['ok', 'Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent none (you only); not the Brain\'s own login directory (it keeps working): sign the '
+        + 'Brain\'s own in, then connect again', 'deckent models login --connection claude-cli-subscription']]);
+    expect(doctorChecks(report, facts({ headlessLogins: logins.slice(1) }), 'tr').find(row => row.id === 'work.brainLogin')?.text).toContain("Brain'in kendi giriş dizini değil");
+  });
   it('S3-5 "Brain girişi" names the isolation realm of the last passing check, or that the realm closed the channel', () => {
     const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', consent: [], isolation: { launcher: 'bundled', version: '0.13.0' } },
       { state: 'closed' as const, authMethod: null, subscriptionType: null, configDir: '/home/p/.claude', consent: [], isolation: 'unavailable' as const }];

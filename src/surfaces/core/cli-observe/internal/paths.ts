@@ -41,7 +41,7 @@ const descriptions = (locale: Locale): Readonly<Record<string, string>> => ({
   instructionTrust: t('cli.paths.resource.instructionTrust', {}, locale),
   installationIdentity: t('cli.paths.resource.installationIdentity', {}, locale),
   projectIdentity: t('cli.paths.resource.projectIdentity', {}, locale),
-  ledgerBackups: t('cli.paths.resource.ledgerBackups', {}, locale),
+  ledgerBackups: t('cli.paths.resource.ledgerBackups', {}, locale), headlessLogins: t('cli.paths.resource.headlessLogins', {}, locale),
   runtimeSocket: t('cli.paths.resource.runtimeSocket', {}, locale),
   runtimeLog: t('cli.paths.resource.runtimeLog', {}, locale),
   locks: t('cli.paths.resource.locks', {}, locale),

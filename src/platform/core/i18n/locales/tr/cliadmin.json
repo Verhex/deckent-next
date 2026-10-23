@@ -235,6 +235,7 @@
   "cli.paths.resource.autonomyShadow": "teslim özerkliği gölge kayıtları (kural kapalı, yalnız öneri)",
   "cli.paths.resource.memoryPurges": "hafıza silme günlüğü (yedek geri yüklemede korunur, iş başlamadan yeniden uygulanır)",
   "cli.paths.resource.brainWaits": "Run oluşmadan önce süren Brain kota beklemeleri (bekleme bitince silinir; kanıt değildir)",
+  "cli.paths.resource.headlessLogins": "abonelik Brain'inin kendi Claude girişi (her CLI için bir klasör, 0700; CLI yazar, Deckent hiç okumaz; hiçbir yedeğe girmez)",
   "cli.paths.resource.scratch": "geçici çalışma alanı",
   "cli.paths.resource.audit": "audit kayıtları",
   "cli.paths.resource.approvals": "onaylar ve anahtarları",

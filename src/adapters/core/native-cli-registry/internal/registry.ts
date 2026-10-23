@@ -36,9 +36,12 @@ const proxyNames = z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/)).readonly
  * bounds are data; a forbidden flag (fallback model, bare mode, permission bypass, extra config) can never be part of the argv. */
 export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), revision: argument, source: argument,
   args: z.array(z.string().refine(value => !value.includes('\0'))).readonly(), maxTurns: positive,
-  /** S3-3 connect defaults: the login directory under the person's home (owner Q-H1) and the bounded PATH search for the executable. */
-  connect: z.object({ configDirDefault: z.string().regex(/^[A-Za-z0-9._-]+$/), configDirSource: argument, pathSearchDirectories: positive, pathSearchTimeoutMs: positive,
-    maxInFlight: positive, maxInFlightSource: argument }).strict().readonly(), systemPromptFlag: flag, systemPromptFile: z.string().regex(/^[a-z][a-z0-9.-]*$/),
+  /** S3-3 connect: the bounded PATH search for the executable; s3c (owner 2026-10-24): the default login dir is the Brain's own (layout data, not here).
+   * `login`: the CLI's own sign-in the person runs in their terminal (argv, SSO switch, bound, inherited and fixed names; never a deny name). */
+  connect: z.object({ configDirSource: argument, pathSearchDirectories: positive, pathSearchTimeoutMs: positive,
+    maxInFlight: positive, maxInFlightSource: argument }).strict().readonly(), login: z.object({ args: argumentsSchema, ssoFlag: flag, timeoutMs: positive,
+    env: z.object({ inherit: names, fixed: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string().refine(value => !value.includes('\0'))).readonly() }).strict().readonly(),
+    source: argument }).strict().readonly(), systemPromptFlag: flag, systemPromptFile: z.string().regex(/^[a-z][a-z0-9.-]*$/),
   forbiddenFlags: z.array(flag).min(1).readonly(),
   /** `hiddenFlags`: options the CLI accepts but its help does not list, each proven by the parser refusing a bad value (every fragment must appear);
    * `max-turns-capability` = the capability's own hidden-help probe (one source). Every other required flag must be listed by help. */
@@ -69,7 +72,9 @@ export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), r
       boundsSource: argument, limiter: z.string().startsWith('/'), limiterSource: argument }).strict().readonly() }).strict().readonly(),
 }).strict().refine(value => {
   const built = [...Object.keys(value.env.fixed), ...value.env.runDir, value.env.configDir, ...value.isolation.proxy.env, ...value.isolation.proxy.clear];
+  const login = [...value.login.env.inherit, ...Object.keys(value.login.env.fixed), value.env.configDir];
   return new Set(built).size === built.length && !built.some(name => value.env.deny.includes(name)) && value.isolation.refreshLock.names.every(name => value.isolation.configVisible.includes(name))
+    && new Set(login).size === login.length && !login.some(name => value.env.deny.includes(name)) && value.login.timeoutMs < value.isolation.refreshLock.staleMs
     && !value.args.some(arg => value.forbiddenFlags.some(forbidden => arg === forbidden || arg.startsWith(forbidden + '=')));
 }).readonly();
 export type NativeCliHeadless = z.infer<typeof nativeCliHeadlessSchema>;

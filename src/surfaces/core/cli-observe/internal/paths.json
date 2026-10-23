@@ -4,7 +4,7 @@
   "groups": {
     "configuration": ["config", "installationJournal", "policy", "bindings"],
     "records": ["ledger", "runs", "tasks", "artifacts", "workspaces", "integrations", "brain", "memory", "fileEffects", "treeScanCache", "scratch", "autonomyShadow", "memoryPurges"],
-    "security": ["audit", "approvals", "signers", "approvalPreviews", "instructionTrust", "installationIdentity", "projectIdentity", "ledgerBackups"],
+    "security": ["audit", "approvals", "signers", "approvalPreviews", "instructionTrust", "installationIdentity", "projectIdentity", "ledgerBackups", "headlessLogins"],
     "runtime": ["runtimeSocket", "runtimeLog", "locks", "crashes", "brainWaits"],
     "terminal": ["terminalHistory", "terminalSessions"]
   }

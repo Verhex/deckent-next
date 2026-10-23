@@ -8,6 +8,7 @@ import { modelActivationCommand } from './model-activation.js';
 import { modelSpendingCommand } from './model-spending.js';
 import { modelCatalogCommand } from './model-catalog.js';
 import { modelConnectCommand } from './model-connect.js';
+import { modelLoginCommand } from './model-login.js';
 import { modelRolesCommand } from './model-roles.js';
 import { renderModelsTable } from './models-table.js';
 import { modelsInteractive, retirementWarningDays } from './io.js';
@@ -86,6 +87,7 @@ export async function modelsCommand(argv: readonly string[], context: ModelComma
   // WORKER-CURRENCY-2: the ledger model catalog; `models catalog activate` never reaches the chat activation command above.
   if (argv[1] === 'catalog') return modelCatalogCommand(argv, context);
   if (argv[1] === 'connect') return modelConnectCommand(argv, context);
+  if (argv[1] === 'login') return modelLoginCommand(argv, context);
   // M2: which exact catalog model serves which role; `set` is a person's card.
   if (argv[1] === 'roles') return modelRolesCommand(argv, context);
   const parsed = parse(argv), env = context.env ?? process.env, locale = commandLocale(context, parsed.language);

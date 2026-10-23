@@ -26,7 +26,7 @@ export const modelConnectCommandSchema = z.object({
   endpoint: z.string().min(1).max(2048).nullable().default(null),
   /** An exact API id from the kind's seed or freshly read endpoint list, or a previously declared exact catalog reference. */
   model: z.union([z.object({ nativeId: exactModelIdSchema }).strict(), z.object({ reference: modelReferenceSchema }).strict()]),
-  /** S3-3, a CLI kind only (additive): the absolute executable and login directory (absent: the first in PATH, the registry default under home). */
+  /** S3-3, a CLI kind only (additive): the absolute executable and login directory (absent: the first in PATH; s3c the Brain's own login dir). */
   cli: z.object({ executable: absolutePath.optional(), configDir: absolutePath.optional() }).strict().readonly().optional(),
   /** S3-3 delegated-use consent (owner Q-H3), written only by the person: who besides them may spend the login. Absent keeps it; [] withdraws it. */
   delegate: z.array(z.enum(['ai', 'system'])).max(2).readonly().optional(),
@@ -52,8 +52,8 @@ export type ModelConnectResult = Readonly<{
   carriedModels: readonly z.infer<typeof modelReferenceSchema>[];
   /** `published`: the profile carries the vendor's published tariff; `unmetered`: the adapter takes only a zero-rate tariff, spend is not metered. */
   tariff: 'published' | 'unmetered';
-  /** S3-3, a CLI kind only: the connected login directory and who besides the person may spend it (empty: nobody). */
-  cli?: Readonly<{ configDir: string; delegate: readonly ('ai' | 'system')[] }>;
+  /** S3-3, a CLI kind only: the connected login directory (s3c `owned`: the Brain's own) and who besides the person may spend it (empty: nobody). */
+  cli?: Readonly<{ configDir: string; owned?: boolean; delegate: readonly ('ai' | 'system')[] }>;
   /** The pending approval that stopped the run (the same command continues after it is allowed). */
   approval: Readonly<{ approvalId: string; keyPath: string; layer: 'project' | 'global' }> | null;
   /** The running service against the configuration on disk (restart-apply sections): `stale` = restart to apply; null = not asked. */

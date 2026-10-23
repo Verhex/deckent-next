@@ -19,6 +19,15 @@ export function buildHeadlessEnv(headless: NativeCliHeadless, runDir: string, co
   if (Object.keys(env).some(name => headless.env.deny.includes(name))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'environment' });
   return Object.freeze(env);
 }
+/** s3c: the environment of the CLI's own sign-in in the person's terminal: the registry's inherited names from the person's environment (browser opener,
+ * terminal), its fixed names and the login dir; built, never passed through whole, so no credential override reaches it. */
+export function headlessLoginEnv(headless: NativeCliHeadless, person: Readonly<Record<string, string | undefined>>, configDir: string): Readonly<Record<string, string>> {
+  const env: Record<string, string> = {};
+  for (const name of headless.login.env.inherit) { const value = person[name]; if (typeof value === 'string' && !value.includes('\0')) env[name] = value; }
+  Object.assign(env, headless.login.env.fixed); env[headless.env.configDir] = configDir;
+  if (Object.keys(env).some(name => headless.env.deny.includes(name))) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'environment' });
+  return Object.freeze(env);
+}
 /** Every flag the call uses (fixed argv, model, turn bound, system prompt file and the effort flags); the preflight requires each one. */
 export function headlessRequiredFlags({ command, headless }: HeadlessEntry): readonly string[] {
   return [...new Set([...headless.args.filter(arg => arg.startsWith('--')), command.modelFlag, headless.systemPromptFlag,
