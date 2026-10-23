@@ -6,7 +6,7 @@ import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativ
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
-import { invokeConfiguredModel, measureConfiguredModel } from '#composition/core/model-invocation/index.js';
+import { inspectConfiguredModelInvocation, invokeConfiguredModel, measureConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredRunProposal, proposeConfiguredRun, readConfiguredRunBudget } from '#composition/core/runs/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -43,6 +43,10 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
       inspect: query => inspectConfiguredRunProposal(root, query, options), invoke,
       propose: propose ?? (proposal => proposeConfiguredRun(root, proposal, options)), text: extractOpenAiChatTextFromInvocation,
       stoppedAtLength: openAiChatStoppedAtLength,
+      // S3-4: the adapter's typed refusal body of a rejected planning call (the subscription CLI names quota, login, credits, guard there).
+      async rejectionBody(result) { const content = (await inspectConfiguredModelInvocation(root, { schemaVersion: 2, scopeId: result.receipt.request.scopeId,
+        invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, options)).responseContent;
+      return content?.kind === 'response-body' ? content.data : null; },
       async prepare(command) {
         const registry = context.config.admission ? executionRegistrySchema.parse(context.config.admission.registry) : null;
         if (!registry) throw ErrorRegistry.createError('RUN_ADMISSION_NOT_CONFIGURED');

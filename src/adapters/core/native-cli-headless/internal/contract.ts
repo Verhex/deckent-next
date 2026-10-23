@@ -1,10 +1,10 @@
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
-import { counterSchema, delegatedUseConsentSchema } from '#domain/index.js';
+import { NATIVE_CLI_HEADLESS_ADAPTER_ID, counterSchema, delegatedUseConsentSchema } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 
 /** S3 headless model step: the unmodified CLI as one tool-less, MCP-less turn behind the model-invocation port (design S3 rev 2). */
-export const NATIVE_CLI_HEADLESS_ADAPTER = Object.freeze({ id: 'native-cli-headless', version: 1 });
+export const NATIVE_CLI_HEADLESS_ADAPTER = Object.freeze({ id: NATIVE_CLI_HEADLESS_ADAPTER_ID, version: 1 });
 const path = z.string().min(1).max(4096).refine(value => isAbsolute(value) && !value.includes('\0') && !/\/\.\.?(?:\/|$)/u.test(value));
 /**
  * The sealed adapter definition (written by the connect path, S3-3): the executable's realpath, the person's uid and CLI config directory,

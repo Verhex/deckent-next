@@ -485,20 +485,21 @@
     "src/composition/core/terminal-chat": {
       "dependencies": [
         "src/adapters/core/contract",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/native-cli-registry",
+        "src/adapters/core/provider-openai-chat",
+        "src/composition/core/config",
         "src/composition/core/provider-catalog",
+        "src/composition/core/root",
+        "src/composition/core/scoped-request",
+        "src/composition/core/secrets",
         "src/domain/core/model-invocation",
         "src/domain/core/primitives",
         "src/domain/core/provider-catalog",
+        "src/engine/core/agent-turn",
         "src/engine/core/model-invocation",
         "src/platform/core/config",
-        "src/platform/core/errors",
-        "src/engine/core/agent-turn",
-        "src/adapters/core/provider-openai-chat",
-        "src/composition/core/root",
-        "src/composition/core/config",
-        "src/adapters/core/local-principal",
-        "src/composition/core/secrets",
-        "src/composition/core/scoped-request"
+        "src/platform/core/errors"
       ],
       "plan": "SURFACES"
     },

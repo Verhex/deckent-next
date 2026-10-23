@@ -33,4 +33,4 @@ export { modelInvocationPlanUsageSchema } from './internal/plan-usage.js';
 export type { ModelInvocationPlanUsage } from './internal/plan-usage.js';
 export { DELEGATION_PRINCIPAL_CLASSES, delegatedUseConsentSchema, delegatedUseOf, subscriptionDelegationRefusal, delegationPrincipalClass, delegationOwner } from './internal/delegation.js';
 export type { DelegatedUseConsent, DelegationPrincipalClass } from './internal/delegation.js';
-export { headlessRejectionBodySchema, readHeadlessRejection, type HeadlessRejectionBody } from './internal/headless-rejection.js';
+export { headlessRejectionBodySchema, readHeadlessRejection, NATIVE_CLI_HEADLESS_ADAPTER_ID, type HeadlessRejectionBody } from './internal/headless-rejection.js';

@@ -11,9 +11,11 @@ export const headlessRejectionBodySchema = z.object({ schemaVersion: z.literal(1
   field: z.string().max(64).optional(), subtype: z.string().max(64).optional(), resetsAtMs: counterSchema.nullable().optional(), status: counterSchema.nullable().optional(),
 }).strict().readonly();
 export type HeadlessRejectionBody = z.infer<typeof headlessRejectionBodySchema>;
+/** The headless step's adapter id (its evidence is the only one whose body is read as this shape). */
+export const NATIVE_CLI_HEADLESS_ADAPTER_ID = 'native-cli-headless';
 /** The headless body of a rejected receipt's evidence (base64 JSON), or null when the evidence is another adapter's or not this shape. */
-export function readHeadlessRejection(evidence: Readonly<{ adapter: Readonly<{ id: string }>; body: Readonly<{ data: string }> }>, adapterId: string): HeadlessRejectionBody | null {
-  if (evidence.adapter.id !== adapterId) return null;
+export function readHeadlessRejection(evidence: Readonly<{ adapter: Readonly<{ id: string }>; body: Readonly<{ data: string }> }>): HeadlessRejectionBody | null {
+  if (evidence.adapter.id !== NATIVE_CLI_HEADLESS_ADAPTER_ID) return null;
   try { const parsed = headlessRejectionBodySchema.safeParse(JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(evidence.body.data), char => char.charCodeAt(0))))); return parsed.success ? parsed.data : null; }
   catch { return null; }
 }

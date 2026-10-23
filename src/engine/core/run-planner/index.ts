@@ -1,6 +1,7 @@
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
-  type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition } from '#domain/index.js';
+  type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, readHeadlessRejection,
+  type ModelInvocationResponseEvidence } from '#domain/index.js';
 import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext, assertBrainLeavesAssignment,
   prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainMemoryContext, type BrainRegistryContext } from '#capabilities/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
@@ -62,6 +63,8 @@ export interface BrainPlanPorts {
   text(result: ModelInvocationResult): string | null;
   stoppedAtLength(result: ModelInvocationResult): boolean;
   propose(proposal: RunProposal): Promise<RunProposalResult>;
+  /** S3-4: a rejected call's retained adapter body (base64) read under the caller's content right; null when not retained or not readable. */
+  rejectionBody?(result: ModelInvocationResult): Promise<string | null>;
   /** The scope's remaining money after the planning call, when observable; null when no budget is readable. */
   remainingBudget?(scopeId: string): Promise<Readonly<{ currency: string; remainingMinorUnits: number }> | null>;
 }
@@ -86,6 +89,21 @@ export async function assertBrainModelRole(sources: RoleModelSources, command: M
 export const brainTakesMemory = (config: unknown) => selectedBrainTemplate(config).contextVersion === 3;
 /** Whether the configured Brain template leaves worker assignment to the system (callers then skip the worker-model catalog read). */
 export const brainAssignsWorkers = (config: unknown) => selectedBrainTemplate(config).modelAssignment !== 'system';
+/**
+ * S3-4: the typed cause of a rejected planning call. The subscription CLI step's own adapter body names it (quota with its reset, credits, login,
+ * a stopped guard, an output the CLI itself refused); any other adapter, or another cause, keeps BRAIN_PROVIDER_REJECTED. Nothing is retried.
+ */
+function brainRejection(evidence: Readonly<{ adapter: ModelInvocationResponseEvidence['adapter']; reason: string; httpStatus: number | null }>, data: string | null) {
+  const body = data === null ? null : readHeadlessRejection({ adapter: evidence.adapter, body: { data } }), create = (code: string, options?: Parameters<typeof ErrorRegistry.createError>[1]) => ErrorRegistry.createError(code, options);
+  switch (body?.refusal) {
+    case 'quota': return create('HEADLESS_QUOTA_EXHAUSTED', { params: typeof body.resetsAtMs === 'number' ? { resetsAtMs: body.resetsAtMs } : {} });
+    case 'credits-required': return create('HEADLESS_CREDITS_REQUIRED');
+    case 'login-required': return create('HEADLESS_LOGIN_REQUIRED');
+    case 'guard': case 'model-mismatch': return create('HEADLESS_GUARD_FAILED', { params: { field: body.field ?? body.refusal } });
+    case 'invalid-output': return create('BRAIN_OUTPUT_INVALID', { params: { stage: body.subtype ?? 'result' } });
+    default: return create('BRAIN_PROVIDER_REJECTED', { params: { reason: body?.refusal ?? evidence.reason, status: evidence.httpStatus ?? 'unknown' } });
+  }
+}
 /** One model step; no tool loop, retry, Run writer or approval decision. */
 export class BrainPlanApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly ports: BrainPlanPorts) {}
@@ -116,15 +134,22 @@ export class BrainPlanApplication {
       || receipt.request.expectedBinding.digest !== invocation.expectedBinding.digest
       || receipt.request.scopeId !== command.scopeId || encodeCommandProjection('actor', proposer)
         !== encodeCommandProjection('actor', { id: receipt.actor.id, issuer: receipt.actor.issuer, subject: receipt.actor.subject })) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
-    if (receipt.outcome?.state === 'rejected') throw ErrorRegistry.createError('BRAIN_PROVIDER_REJECTED', {
-      params: { reason: receipt.outcome.evidence.reason, status: receipt.outcome.evidence.httpStatus ?? 'unknown' } });
+    if (receipt.outcome?.state === 'rejected') throw brainRejection(receipt.outcome.evidence, await this.ports.rejectionBody?.(result).catch(() => null) ?? null);
     if (receipt.outcome?.state !== 'responded') throw ErrorRegistry.createError('BRAIN_OUTCOME_UNKNOWN');
     const text = this.ports.text(result);
     const outputCap = invocation.nativeRequest['max_completion_tokens'];
     if (!text) throw this.ports.stoppedAtLength(result)
       ? ErrorRegistry.createError('BRAIN_OUTPUT_TRUNCATED', { params: { maxCompletionTokens: typeof outputCap === 'number' ? outputCap : 'unknown' } })
       : ErrorRegistry.createError('BRAIN_OUTPUT_INVALID', { params: { stage: 'content' } });
-    const draft = parseBrainDraft(text, this.ports.knownSecrets, { requireCurrentGraph: true }), usage = openAiChatUsageSchema.safeParse(result.response?.usage);
+    let draft: ReturnType<typeof parseBrainDraft>;
+    // A JSON answer cut at the output limit is truncated, not invalid (2026-10-14 finding): the person raises the limit, not the template.
+    try { draft = parseBrainDraft(text, this.ports.knownSecrets, { requireCurrentGraph: true }); } catch (error) {
+      const failure = error as { code?: unknown; params?: { stage?: unknown } };
+      if (failure.code === 'BRAIN_OUTPUT_INVALID' && failure.params?.stage === 'json' && this.ports.stoppedAtLength(result)) throw ErrorRegistry.createError('BRAIN_OUTPUT_TRUNCATED',
+        { params: { maxCompletionTokens: typeof outputCap === 'number' ? outputCap : 'unknown' } });
+      throw error;
+    }
+    const usage = openAiChatUsageSchema.safeParse(result.response?.usage);
     if (prepared.prompt.modelAssignment === 'system') assertBrainLeavesAssignment(draft);
     if (prepared.kinds && draft.graph.tasks.some(task => !prepared.kinds!.includes(task.kind))) {
       throw ErrorRegistry.createError('BRAIN_GRAPH_INVALID', { params: { rule: 'TASK_KIND_NOT_REGISTERED' } });

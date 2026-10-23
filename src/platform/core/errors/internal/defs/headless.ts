@@ -1,4 +1,4 @@
-import { t, type Locale, type Params } from '#platform/core/i18n/index.js';
+import { clockText, t, type Locale, type Params } from '#platform/core/i18n/index.js';
 import type { ErrorDefinitions } from '../definition.js';
 /** The failed preflight check selects the sentence; a check this release does not know keeps the generic one. */
 const preflight = (p: Params, l: Locale) => {
@@ -25,6 +25,6 @@ export const headlessErrors: ErrorDefinitions = Object.freeze({
   HEADLESS_GUARD_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_GUARD_FAILED', p, l) }) },
   HEADLESS_CREDITS_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.HEADLESS_CREDITS_REQUIRED', p, l) }) },
   // S9 card texts reused read-only: a known reset time names when to ask again; nothing waits or retries on its own.
-  HEADLESS_QUOTA_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: `${t('error.HEADLESS_QUOTA_EXHAUSTED', p, l)} ${typeof p['resetsAt'] === 'string'
-    ? t('quotaask.card.resetKnown', { time: p['resetsAt'] }, l) : t('quotaask.card.resetUnknown', {}, l)}` }) },
+  HEADLESS_QUOTA_EXHAUSTED: { category: 'error', render: (p, l) => ({ message: `${t('error.HEADLESS_QUOTA_EXHAUSTED', p, l)} ${typeof p['resetsAtMs'] === 'number'
+    ? t('quotaask.card.resetKnown', { time: clockText(p['resetsAtMs']) }, l) : t('quotaask.card.resetUnknown', {}, l)}` }) },
 });
