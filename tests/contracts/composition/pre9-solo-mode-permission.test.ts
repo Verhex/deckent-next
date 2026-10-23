@@ -92,7 +92,7 @@ describe.skipIf(process.platform !== 'linux')('PRE-9: the installation owner ope
       { id: RULE_IDS['full-access'], effect: 'allow', actions: ['set'], scopes: [SCOPE], principals: named, resource: { kind: 'permission-mode', ids: ['full-access'] } },
     ]);
     const change = f.audit().map(event => event.subject).filter(subject => subject.kind === 'authority-change').at(-1);
-    expect(change).toMatchObject({ kind: 'authority-change', installer: { basis: 'first-run', template: { version: 14 } }, counts: { grantsAdded: 2, grantsRemoved: 0 } });
+    expect(change).toMatchObject({ kind: 'authority-change', installer: { basis: 'first-run', template: { version: 15 } }, counts: { grantsAdded: 2, grantsRemoved: 0 } });
     expect((change as { commandId: string }).commandId.startsWith(INSTALLER_PERMISSION_MODES_COMMAND_PREFIX)).toBe(true);
     // The same set again changes nothing.
     expect(await open(f.root, ['full-auto', 'full-access'])).toMatchObject({ status: 'current' });
@@ -264,7 +264,7 @@ it('the refusal texts point to the product command for the installation owner (E
 // Guards: they pin the invariants the design relies on.
 it('guard: the first-run template stays v14 and opens no mode by default (a fresh install runs standart until the owner opens one)', () => {
   const built = firstRunPolicyTemplate({ scopeId: SCOPE, principal: { issuer: 'host', subject: 'owner' }, ...FIRST_RUN_TOOL_NAMES });
-  expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(14);
+  expect(FIRST_RUN_POLICY_TEMPLATE_VERSION).toBe(15);
   expect(built.policy.schemaVersion === 2 && built.policy.grants.some(rule => rule.resource.kind === 'permission-mode')).toBe(false);
 });
 

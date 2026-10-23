@@ -574,7 +574,8 @@
         "src/engine/core/runtime",
         "src/platform/core/clock",
         "src/platform/core/config",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/composition/core/memory"
       ],
       "plan": "EXECUTION"
     },
@@ -1516,16 +1517,11 @@
         "src/domain/core/task-graph",
         "src/engine/core/attempts",
         "src/engine/core/dispatch",
-        "src/engine/core/model-invocation",
         "src/engine/core/runs",
         "src/engine/core/task-evaluation",
         "src/platform/core/config-fields",
-        "src/domain/core/model-invocation",
-        "src/engine/core/model-allocation",
-        "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend",
-        "src/engine/core/workspace-patch",
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/adapters/core/sqlite-ledger-migrations"
       ],
       "plan": "STORE"
     },
@@ -3535,7 +3531,8 @@
     "src/domain/core/memory": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/domain/core/run"
       ],
       "plan": "MEMORY"
     },
@@ -3549,7 +3546,13 @@
         "src/engine/core/authentication",
         "src/domain/core/policy",
         "src/engine/core/policy",
-        "src/domain/core/primitives"
+        "src/domain/core/primitives",
+        "src/platform/core/redaction",
+        "src/engine/core/agent-turn",
+        "src/domain/core/task-graph",
+        "src/domain/core/attempt",
+        "src/domain/core/run",
+        "src/domain/core/task-evaluation"
       ],
       "plan": "MEMORY"
     },
@@ -3561,7 +3564,9 @@
         "src/engine/core/memory",
         "src/adapters/core/audit-store",
         "src/adapters/core/sqlite-ledger",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/domain/core/primitives",
+        "src/adapters/core/attempt-store"
       ],
       "plan": "MEMORY"
     },
@@ -3576,7 +3581,9 @@
         "src/composition/core/policy",
         "src/composition/core/query-errors",
         "src/engine/core/runtime",
-        "src/adapters/core/local-principal"
+        "src/adapters/core/local-principal",
+        "src/domain/core/run",
+        "src/adapters/core/git-workspace"
       ],
       "plan": "MEMORY"
     },
@@ -3671,6 +3678,25 @@
         "src/surfaces/core/cli-terminal"
       ],
       "plan": "LEARNING"
+    },
+    "src/adapters/core/sqlite-ledger-migrations": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/model-invocation",
+        "src/engine/core/attempts",
+        "src/engine/core/model-invocation",
+        "src/domain/core/attempt",
+        "src/domain/core/run",
+        "src/engine/core/runs",
+        "src/engine/core/task-evaluation",
+        "src/engine/core/model-allocation",
+        "src/domain/core/provider-spend",
+        "src/engine/core/provider-spend",
+        "src/engine/core/workspace-patch",
+        "src/domain/core/task-graph",
+        "src/engine/core/dispatch"
+      ],
+      "plan": "STORE"
     }
   },
   "composition": {
@@ -3781,6 +3807,7 @@
       "termrun",
       "delivery",
       "memory",
+      "memory-automation",
       "assignment",
       "agents"
     ]

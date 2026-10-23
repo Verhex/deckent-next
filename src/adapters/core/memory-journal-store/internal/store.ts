@@ -2,15 +2,15 @@ import { createRequire } from 'node:module';
 import { isDeepStrictEqual } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
 import { encodeCommandProjection, memoryEntrySchema, memoryIndexText, type MemoryEntry, type MemoryState } from '#domain/index.js';
-import { AuditApplication, MemoryJournalError, type MemoryChange, type MemoryJournalStore, type MemoryReceipt } from '#engine/index.js';
+import { AuditApplication, MemoryJournalError, type MemoryChange, type MemoryExtractionReceipt, type MemoryJournalStore, type MemoryReceipt, type MemorySupport } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { openSqliteLedger, requireLedgerVersion, MEMORY_JOURNAL_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { openSqliteLedger, requireLedgerVersion, MEMORY_AUTOMATION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 
 const SEAL = 'memory-journal-store:1';
 const corrupt = () => new MemoryJournalError('MEMORY_CORRUPT');
 /**
- * Core SQLite adapter of the DB-neutral memory journal port, on the shared ledger (v61). Every row is sealed with the installation integrity
+ * Core SQLite adapter of the DB-neutral memory journal port, on the shared ledger (v61; S4B-1 support, extraction and purge tables at v65). Every row is sealed with the installation integrity
  * key and cross-checked against its columns on read. The FTS5 table indexes the domain-folded text (`memoryIndexText`) under the entry's explicit `id` (stable across VACUUM);
  * it is a derived index, never the record: hits are re-read and re-verified from `memory_entries` by the engine.
  */
@@ -65,6 +65,73 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
     return receipt;
   }
   async receipt(scopeId: string, commandId: string) { return this.read(() => this.loadReceipt(scopeId, commandId)); }
+  /** S4B-1 (v65): sealed, append-only support rows; a row whose seal or columns disagree is corruption. */
+  private supportRow(row: Record<string, unknown>, scopeId: string) {
+    const value = this.open(row['record']) as MemorySupport;
+    if (value.scopeId !== scopeId || value.entryId !== row['entry_id'] || value.supportId !== row['support_id']) throw corrupt();
+    return value;
+  }
+  async appendSupport(support: MemorySupport) {
+    return this.read(() => this.write(() => this.insertSupport(support)));
+  }
+  private insertSupport(support: MemorySupport) {
+    const prior = this.db.prepare('SELECT entry_id,support_id,record FROM memory_entry_support WHERE scope_id=? AND support_id=?').get(support.scopeId, support.supportId);
+    if (prior) { if (!isDeepStrictEqual({ ...this.supportRow(prior, support.scopeId), atMs: support.atMs }, support)) throw new MemoryJournalError('MEMORY_COMMAND_CONFLICT'); return { replayed: true }; }
+    const seq = Number(this.db.prepare('SELECT coalesce(max(seq),0)+1 AS seq FROM memory_entry_support WHERE scope_id=? AND entry_id=?').get(support.scopeId, support.entryId)?.['seq']);
+    this.db.prepare('INSERT INTO memory_entry_support(scope_id,entry_id,support_id,seq,record) VALUES(?,?,?,?,?)').run(support.scopeId, support.entryId, support.supportId, seq, this.seal(support));
+    return { replayed: false };
+  }
+  async listSupport(scopeId: string, entryId: string, limit: number) {
+    return this.read(() => this.db.prepare('SELECT entry_id,support_id,record FROM memory_entry_support WHERE scope_id=? AND entry_id=? ORDER BY seq LIMIT ?')
+      .all(scopeId, entryId, limit).map(row => this.supportRow(row, scopeId)));
+  }
+  async findTombstone(scopeId: string, contentDigest: string) {
+    return this.read(() => this.db.prepare('SELECT 1 FROM memory_purges WHERE scope_id=? AND content_digest=? LIMIT 1').get(scopeId, contentDigest) !== undefined);
+  }
+  async extractionReceipt(scopeId: string, source: MemorySupport['source']) {
+    return this.read(() => {
+      const row = this.db.prepare('SELECT record FROM memory_extraction_receipts WHERE scope_id=? AND run_id=? AND task_id=? AND attempt_id=?').get(scopeId, source.runId, source.taskId, source.attemptId);
+      if (!row) return null;
+      const value = this.open(row['record']) as MemoryExtractionReceipt;
+      if (value.scopeId !== scopeId || !isDeepStrictEqual(value.source, source)) throw corrupt();
+      return value;
+    });
+  }
+  async recordExtraction(receipt: MemoryExtractionReceipt) {
+    return this.read(() => this.write(() => {
+      const { scopeId, source } = receipt;
+      if (this.db.prepare('SELECT 1 FROM memory_extraction_receipts WHERE scope_id=? AND run_id=? AND task_id=? AND attempt_id=?').get(scopeId, source.runId, source.taskId, source.attemptId)) return { replayed: true };
+      this.db.prepare('INSERT INTO memory_extraction_receipts(scope_id,run_id,task_id,attempt_id,at_ms,proposed,record) VALUES(?,?,?,?,?,?,?)')
+        .run(scopeId, source.runId, source.taskId, source.attemptId, receipt.atMs, receipt.proposed, this.seal(receipt));
+      return { replayed: false };
+    }));
+  }
+  /** Counts read the indexed columns; the sealed records stay the evidence (an integrity read is the receipt itself). */
+  async extractionCounts(scopeId: string, runId: string, sinceMs: number) {
+    return this.read(() => {
+      const total = (sql: string, ...args: (string | number)[]) => Number(this.db.prepare(sql).get(...args)?.['n'] ?? 0);
+      return { run: total('SELECT coalesce(sum(proposed),0) AS n FROM memory_extraction_receipts WHERE scope_id=? AND run_id=?', scopeId, runId),
+        scope: total('SELECT coalesce(sum(proposed),0) AS n FROM memory_extraction_receipts WHERE scope_id=? AND at_ms>=?', scopeId, sinceMs) };
+    });
+  }
+  async extractionCursor(scopeId: string) {
+    return this.read(() => {
+      const row = this.db.prepare('SELECT record FROM memory_extraction_cursors WHERE scope_id=?').get(scopeId);
+      if (!row) return null;
+      const value = this.open(row['record']) as { scopeId: string; position: string };
+      if (value.scopeId !== scopeId || typeof value.position !== 'string') throw corrupt();
+      return value.position;
+    });
+  }
+  async advanceCursor(scopeId: string, position: string) {
+    this.read(() => this.write(() => this.db.prepare('INSERT INTO memory_extraction_cursors(scope_id,record) VALUES(?,?) ON CONFLICT(scope_id) DO UPDATE SET record=excluded.record')
+      .run(scopeId, this.seal({ scopeId, position }))));
+  }
+  private write<T>(work: () => T): T {
+    this.db.exec('BEGIN IMMEDIATE');
+    try { const result = work(); try { this.db.exec('COMMIT'); } catch { throw new MemoryJournalError('MEMORY_OUTCOME_UNKNOWN'); } return result; }
+    catch (error) { try { this.db.exec('ROLLBACK'); } catch { /* a lost result is resolved by the same idempotent write on retry */ } throw error; }
+  }
   async commit(change: MemoryChange) {
     const next = memoryEntrySchema.parse(change.next), { receipt } = change;
     if (next.revision !== (change.previous?.revision ?? 0) + 1 || next.scopeId !== receipt.scopeId || next.entryId !== receipt.entryId || next.revision !== receipt.revision) throw corrupt();
@@ -92,6 +159,7 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
     this.db.prepare('INSERT INTO memory_command_receipts(scope_id,command_id,entry_id,revision,record) VALUES(?,?,?,?,?)')
       .run(receipt.scopeId, receipt.commandId, receipt.entryId, receipt.revision, this.seal(receipt));
     this.db.prepare('DELETE FROM memory_search WHERE rowid=?').run(id!); this.db.prepare('INSERT INTO memory_search(rowid,text) VALUES(?,?)').run(id!, memoryIndexText(next));
+    if (change.support) this.insertSupport(change.support);
     return { replayed: false, entry: next };
   }
   close() { this.db.close(); }
@@ -102,5 +170,8 @@ export function openSqliteMemoryJournalStore(path: string, options: SqliteLedger
   if (access === 'write') return new SqliteMemoryJournalStore(openSqliteLedger(path, options, 'forbid'), integrity);
   const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   const db = new NativeDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
-  try { requireLedgerVersion(db, MEMORY_JOURNAL_LEDGER_VERSION); return new SqliteMemoryJournalStore(db, integrity); } catch (error) { db.close(); throw error; }
+  try { requireLedgerVersion(db, MEMORY_AUTOMATION_LEDGER_VERSION); return new SqliteMemoryJournalStore(db, integrity); } catch (error) { db.close(); throw error; }
 }
+/** S4B-1 §4.6 keyed digests: HMAC under the installation integrity key with its own label domain (`memory-purge:1/<label>`), so no content-derived
+ * digest or id is a plain hash. The key is the integrity key file itself: backed up and restored with it, never a second unbacked key. */
+export const memoryKeyedDigest = (integrity: IntegrityAuthority) => (label: string, value: unknown) => integrity.sign(encodeCommandProjection(`memory-purge:1/${label}`, value));

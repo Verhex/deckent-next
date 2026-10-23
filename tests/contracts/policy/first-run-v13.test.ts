@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
-  getPolicyVocabulary, matchFirstRunPolicyTemplate, mcpPrincipalRef, namedPersonPolicyAdditions, resolvePolicyBindings, upgradeFirstRunPolicy, type PolicyGrant } from '#domain/index.js';
+  getPolicyVocabulary, matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipalRef, namedPersonPolicyAdditions, resolvePolicyBindings, upgradeFirstRunPolicy, type PolicyGrant } from '#domain/index.js';
 import { FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, FIRST_RUN_TOOL_NAMES, PoolControlPolicyAuthorization } from '#engine/index.js';
 import { DecisionPolicyAuthorization } from '#engine/core/decision/index.js';
 
@@ -16,8 +16,9 @@ const colleague = { ...owner, id: 'colleague', subject: 'colleague' };
 const names = { proposeMcpToolName: FIRST_RUN_TOOL_NAMES.proposeMcpToolName, mcpCallOperationId: FIRST_RUN_TOOL_NAMES.mcpCallOperationId,
   policyAdministerOperationId: FIRST_RUN_TOOL_NAMES.policyAdministerOperationId, executionEnvironmentIds: FIRST_RUN_TOOL_NAMES.executionEnvironmentIds };
 const input = { scopeId: 'installation', principal: person, ...FIRST_RUN_TOOL_NAMES };
-// S4 (alpha.55): the current template is v14, an add-only delta over v13 (FIRST_RUN_CURRENT_UPGRADE_RULE_IDS); v13 is the current one without it.
-const current = firstRunPolicyTemplate(input), v14ids: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+// S4 + S4B-1 (alpha.55): the current template is v15; v14 (memory reads) and v15 (FIRST_RUN_CURRENT_UPGRADE_RULE_IDS) are add-only deltas over v13;
+// v13 is the current one without both (`v14ids` names every later rule).
+const current = firstRunPolicyTemplate(input), v14ids: readonly string[] = [FIRST_RUN_UPGRADE_RULE_IDS.memoryInspect, FIRST_RUN_UPGRADE_RULE_IDS.observeMemory, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 const v14 = current.policy.grants.filter(rule => v14ids.includes(rule.id));
 const built = { version: 13, bindings: current.bindings, policy: { ...current.policy, revision: 'first-run-template-v13', grants: current.policy.grants.filter(rule => !v14ids.includes(rule.id)) } };
 const v13ids: readonly string[] = [FIRST_RUN_UPGRADE_RULE_IDS.environmentInstall, FIRST_RUN_UPGRADE_RULE_IDS.installationRepair, FIRST_RUN_UPGRADE_RULE_IDS.modelDeactivation,
@@ -121,7 +122,7 @@ it('C3: a person who already holds `model-activation deactivate` by hand (live/N
   expect(plan.status === 'plan' ? plan.rules.map(rule => rule.id) : []).toEqual([...v13, ...v14].map(rule => rule.id).filter(id => id !== FIRST_RUN_UPGRADE_RULE_IDS.modelDeactivation));
 });
 
-it('live and N1 shapes (2026-10-19, hand-built): the named person gets only v13 rules, the hand-held deactivate is not duplicated, nothing conflicts', () => {
+it('live and N1 shapes (2026-10-19, hand-built): the named person gets only v13+ rules, the hand-held deactivate is not duplicated, nothing conflicts', () => {
   for (const name of ['live', 'n1'] as const) {
     const policy = shape(name);
     // Their configured runtime service id is `local` (live-service-shutdown), so the v12 stop rule is already covered.
@@ -129,8 +130,11 @@ it('live and N1 shapes (2026-10-19, hand-built): the named person gets only v13 
     expect(plan.status, name).toBe('plan'); if (plan.status !== 'plan') throw new Error(name);
     expect(plan.conflicts, name).toEqual([]);
     expect(plan.rules.map(rule => rule.id), name).toEqual(['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-decision-inspect',
-      'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory']);
-    for (const rule of plan.rules) expect(rule.principals, rule.id).toEqual([rule.id.startsWith('first-run-mcp-observe-') ? mcpPrincipalRef(shapePerson) : shapePerson]);
+      'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory',
+      // v15 (S4B-1 + S7): the memory distiller's D1–D4 and the agent catalog rules.
+      'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog']);
+    for (const rule of plan.rules) expect(rule.principals, rule.id).toEqual([rule.id.startsWith('first-run-mcp-observe-') ? mcpPrincipalRef(shapePerson)
+      : rule.id.startsWith('first-run-memory-distiller') ? memoryDistillerPrincipalRef(shapePerson) : shapePerson]);
     expect(plan.rules.filter(rule => rule.scopes !== 'all').every(rule => rule.scopes !== 'all' && rule.scopes.length === 1 && rule.scopes[0] === 'live')).toBe(true);
     // Applied, a second plan is current: no repeated additions.
     expect(namedPersonPolicyAdditions({ ...policy, grants: [...policy.grants, ...plan.rules] }, { ...names, person: shapePerson, scopeId: 'live', serviceId: 'local' }).status).toBe('current');
@@ -139,7 +143,7 @@ it('live and N1 shapes (2026-10-19, hand-built): the named person gets only v13 
 
 it('since v14 the rollback delta is v14\'s: no v13 rule is a rollback candidate (it stays like v11 and v12); doctor recognises v13', () => {
   const delta = firstRunTemplateRollback(current.policy, person, 'installation');
-  expect(delta.rules.map(rule => rule.id)).toEqual(v14.map(rule => rule.id)); expect(delta.conflicts).toEqual([]);
+  expect(delta.rules.map(rule => rule.id)).toEqual([...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS]); expect(delta.conflicts).toEqual([]);
   expect(delta.rules.some(rule => v13ids.includes(rule.id))).toBe(false);
   for (const id of [FIRST_RUN_UPGRADE_RULE_IDS.quotaRelease, FIRST_RUN_UPGRADE_RULE_IDS.integration, FIRST_RUN_UPGRADE_RULE_IDS.workTargetAdopt, ...v12ids]) expect(v14ids.includes(id), id).toBe(false);
   // A customized v13 rule is not part of the delta: neither removed nor reported.

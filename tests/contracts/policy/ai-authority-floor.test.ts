@@ -32,6 +32,9 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
   // S4 (law-audit fold 6): verified memory is a person's or an independent evaluation's, never the AI's; retiring is the same change.
   ['memory verify', 'memory', 'scope', 'verify'],
   ['memory retire', 'memory', 'scope', 'retire'],
+  // S4B-1 (A11): purging memory content is a person's act; a contest stays floored until S4B-3 relaxes it for the evaluator principal alone.
+  ['memory purge', 'memory', 'scope', 'purge'],
+  ['memory contest', 'memory', 'scope', 'contest'],
   ['secret-gate acknowledged deny paths', 'config', 'global:execution.secretGate.acknowledgedDenyPaths', 'write'],
   ['secret-gate section', 'config', 'project:execution.secretGate', 'write'],
   ['approval assurance producers', 'config', 'project:approvals.assuranceProducers', 'write'],

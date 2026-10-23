@@ -16,4 +16,12 @@ export const memoryErrors: ErrorDefinitions = Object.freeze({
   MEMORY_EVALUATION_NOT_PASSED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_EVALUATION_NOT_PASSED', p, l) }) },
   MEMORY_EVALUATION_OTHER_CONTENT: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_EVALUATION_OTHER_CONTENT', p, l) }) },
   MEMORY_QUERY_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MEMORY_QUERY_INVALID', p, l) }) },
+  // S4B-1 (texts in the `memory-automation` family).
+  MEMORY_ENTRY_WITHHELD: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_ENTRY_WITHHELD', p, l) }) },
+  MEMORY_PURGED_CONTENT: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_PURGED_CONTENT', p, l) }) },
+  MEMORY_EXTRACTION_BOUND: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_EXTRACTION_BOUND', p, l) }) },
+  MEMORY_CANDIDATE_SECRET: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_CANDIDATE_SECRET', p, l) }) },
+  MEMORY_CANDIDATE_QUARANTINED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_CANDIDATE_QUARANTINED', p, l) }) },
+  MEMORY_DISTILLER_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_DISTILLER_REQUIRED', p, l) }) },
+  MEMORY_AUTOMATION_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MEMORY_AUTOMATION_INVALID', p, l) }) },
 });

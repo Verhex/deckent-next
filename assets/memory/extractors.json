@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "revision": "memory-extractors-core-1",
+  "rules": [
+    { "id": "E1", "version": 1, "kind": "human-answer", "enabled": true },
+    { "id": "E2", "version": 1, "kind": "failure-fix", "enabled": true },
+    { "id": "E3", "version": 1, "kind": "worker-claim", "enabled": true }
+  ]
+}

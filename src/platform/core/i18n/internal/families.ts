@@ -34,6 +34,7 @@ import securityen from '../locales/en/security.json' with { type: 'json' };
 import terminalen from '../locales/en/terminal.json' with { type: 'json' };
 import deliveryen from '../locales/en/delivery.json' with { type: 'json' };
 import memoryen from '../locales/en/memory.json' with { type: 'json' };
+import memoryautomationen from '../locales/en/memory-automation.json' with { type: 'json' };
 import agentsen from '../locales/en/agents.json' with { type: 'json' };
 import assignmenten from '../locales/en/assignment.json' with { type: 'json' };
 import termrunen from '../locales/en/termrun.json' with { type: 'json' };
@@ -51,6 +52,7 @@ import securitytr from '../locales/tr/security.json' with { type: 'json' };
 import terminaltr from '../locales/tr/terminal.json' with { type: 'json' };
 import deliverytr from '../locales/tr/delivery.json' with { type: 'json' };
 import memorytr from '../locales/tr/memory.json' with { type: 'json' };
+import memoryautomationtr from '../locales/tr/memory-automation.json' with { type: 'json' };
 import agentstr from '../locales/tr/agents.json' with { type: 'json' };
 import assignmenttr from '../locales/tr/assignment.json' with { type: 'json' };
 import termruntr from '../locales/tr/termrun.json' with { type: 'json' };
@@ -82,6 +84,7 @@ export const families = [
   { en: termrunen, tr: termruntr },
   { en: deliveryen, tr: deliverytr },
   { en: memoryen, tr: memorytr },
+  { en: memoryautomationen, tr: memoryautomationtr },
   { en: assignmenten, tr: assignmenttr },
   { en: agentsen, tr: agentstr },
 ] as const;

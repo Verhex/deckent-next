@@ -17,7 +17,7 @@ const propose = (author: { issuer: string; subject: string; assurance: string } 
 describe('memory entry lifecycle', () => {
   it('a proposal is a revision-1 candidate with provenance and no verification', () => {
     const entry = propose();
-    expect(entry).toMatchObject({ schemaVersion: 1, scopeId: 's', entryId: 'm1', revision: 1, state: 'candidate', contentDigest: digest, verification: null, retirement: null,
+    expect(entry).toMatchObject({ schemaVersion: 2, audience: null, scopeId: 's', entryId: 'm1', revision: 1, state: 'candidate', contentDigest: digest, verification: null, retirement: null,
       provenance: { author: { issuer: 'local-os', subject: 'uid:1000', ai: false }, origin: { kind: 'human', ref: null }, proposedAtMs: 10, commandId: 'c1' } });
     expect(memoryEntrySchema.parse(entry)).toEqual(entry);
     expect(propose(mcp).provenance.author.ai).toBe(true);

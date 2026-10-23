@@ -138,6 +138,11 @@
     "maxServers": 20,
     "responseMaxBytes": 1048576
   },
+  "memoryAutomation": {
+    "extraction": {
+      "mode": "off"
+    }
+  },
   "models": {
     "retirementWarningDays": 15
   },

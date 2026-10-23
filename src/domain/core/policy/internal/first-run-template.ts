@@ -1,4 +1,4 @@
-import { isMcpPrincipal, mcpPrincipalRef } from '#domain/core/principal/index.js';
+import { isMcpPrincipal, isWorkloadPrincipalRef, mcpPrincipalRef, memoryDistillerPrincipalRef } from '#domain/core/principal/index.js';
 import { IDENTITY_MAX_LENGTH, identitySchema } from '#domain/core/primitives/index.js';
 import { bindingsFileSchema, policyFileSchema, policyGrantSchema, type PolicyFile, type PolicyGrant } from './schema.js';
 import { policyResources } from './vocabulary.js';
@@ -60,7 +60,12 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
 /** v14 (alpha.55 S4, lead 2026-10-23): two add-only rules (`FIRST_RUN_CURRENT_UPGRADE_RULE_IDS`): the named person and the MCP actor read the installed
  * scope's memory journal (`memory`/`inspect`). No memory change is granted to anyone (propose/verify/retire stay a separate decision); every rule is
  * revocable, and `policy upgrade --template current --rollback` removes exactly these two. */
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 14;
+/** v15 (alpha.55 S4B-1 + S7, owner S-M1/S-M2 2026-10-23): add-only rules (`FIRST_RUN_CURRENT_UPGRADE_RULE_IDS`): the named person may propose memory
+ * candidates (needed to delegate D2), the memory distiller workload reads
+ * and proposes in the installed scope's memory journal (D1, D2), reads Runs (D4) and, as its own rule, the raw sealed output of Attempts (D3, A2b);
+ * the named person inspects and defines in the agent/skill catalog, the MCP actor inspects it. Its floor allows nothing beyond D1–D4 whatever is
+ * granted; every rule is revocable, and `policy upgrade --template current --rollback` removes exactly these. */
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 15;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
 export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
@@ -105,7 +110,7 @@ export function firstRunServiceId(scopeId: string): string {
   const scope = identitySchema.parse(scopeId), suffix = '-runtime';
   return identitySchema.parse(`${scope.slice(0, IDENTITY_MAX_LENGTH - suffix.length)}${suffix}`);
 }
-function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14) {
+function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15) {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
@@ -146,6 +151,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
       ...(version >= 12 ? ownerServiceRules(principal, [scopeId], input.serviceId) : []),
       ...(version >= 13 ? v13Rules(principal, [scopeId], input.executionEnvironmentIds) : []),
       ...(version >= 14 ? v14Rules(principal, [scopeId]) : []),
+      ...(version >= 15 ? v15Rules(principal, [scopeId]) : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
@@ -154,7 +160,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
 
 /** Why an installation's policy cannot take the current template upgrade in place: it already is current, it is not exactly the v4 template this
  * installation's (scope, person) would get (hand-edited, administered since, another person's, or another version), or it is unreadable. */
-export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13; readonly policy: PolicyFile }
+export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14; readonly policy: PolicyFile }
   | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-v4-template' | 'invalid' };
 /**
  * The first-run exact-template migration (v5 owner decision 2026-10-07): only a policy document that is exactly an older template of this (scope, person) — the
@@ -167,7 +173,7 @@ export function upgradeFirstRunPolicy(current: unknown, input: FirstRunPolicyTem
   const target = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION).policy;
   if (canonicalJson(parsed.data) === canonicalJson(target)) return Object.freeze({ status: 'current' });
   // Exact older templates become the current one; edited policies take the explicit add-only plan.
-  for (const from of [13, 12, 11, 10, 9, 8, 7, 6, 5, 4] as const) {
+  for (const from of [14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4] as const) {
     if (canonicalJson(parsed.data) === canonicalJson(buildTemplate(input, from).policy)) return Object.freeze({ status: 'upgrade', from, policy: target });
   }
   return Object.freeze({ status: 'unavailable', reason: 'not-v4-template' });
@@ -202,10 +208,13 @@ export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mc
   scopeInspect: 'first-run-scope-inspect', serviceShutdown: 'first-run-service-shutdown',
   environmentInstall: 'first-run-execution-environment-install', installationRepair: 'first-run-installation-repair', modelDeactivation: 'first-run-model-deactivation',
   decisionInspect: 'first-run-decision-inspect', scopeDiagnostics: 'first-run-monitor-scope-diagnostics', standingGrantsAll: 'first-run-standing-grants-all',
-  observePool: 'first-run-mcp-observe-pool', memoryInspect: 'first-run-memory-inspect', observeMemory: 'first-run-mcp-observe-memory' });
-/** The v14 delta (S4, lead 2026-10-23): what `policy upgrade --template current --rollback` removes. It never removes earlier versions' rules: the v13
- * delta (owner A48-D3) stays once added, like every older version's administration or observation authority. */
-export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze([FIRST_RUN_UPGRADE_RULE_IDS.memoryInspect, FIRST_RUN_UPGRADE_RULE_IDS.observeMemory]);
+  observePool: 'first-run-mcp-observe-pool', memoryInspect: 'first-run-memory-inspect', observeMemory: 'first-run-mcp-observe-memory',
+  memoryPropose: 'first-run-memory-propose', distillerMemory: 'first-run-memory-distiller', distillerRuns: 'first-run-memory-distiller-runs', distillerOutput: 'first-run-memory-distiller-output',
+  agentCatalog: 'first-run-agent-catalog', observeAgentCatalog: 'first-run-mcp-observe-agent-catalog' });
+/** The v15 delta (S4B-1 + S7, owner 2026-10-23): what `policy upgrade --template current --rollback` removes. It never removes earlier versions' rules: the
+ * v14 memory reads stay once added, like every older version's administration or observation authority. */
+export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze([FIRST_RUN_UPGRADE_RULE_IDS.memoryPropose, FIRST_RUN_UPGRADE_RULE_IDS.distillerMemory, FIRST_RUN_UPGRADE_RULE_IDS.distillerRuns,
+  FIRST_RUN_UPGRADE_RULE_IDS.distillerOutput, FIRST_RUN_UPGRADE_RULE_IDS.agentCatalog, FIRST_RUN_UPGRADE_RULE_IDS.observeAgentCatalog]);
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
 const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'] as const;
@@ -265,13 +274,16 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     // v13 (owner A48-D3, MON-NAMES, CA-1, C3): the seven v13 rules, each its own id, added the same add-only way (named person; MCP pool observation).
     ...v13Rules(person, scopes, input.executionEnvironmentIds),
     // v14 (S4, lead 2026-10-23): memory journal reads for the named person and the MCP actor, added the same add-only way.
-    ...v14Rules(person, scopes)];
+    ...v14Rules(person, scopes),
+    // v15 (S4B-1 + S7, owner 2026-10-23): the memory distiller's D1–D4 and the agent catalog rules, added the same add-only way.
+    ...v15Rules(person, scopes)];
   const conflicts: string[] = [], rules: PolicyGrant[] = [];
   for (const want of wanted) {
     const same = grants.find(grant => grant.id === want.id);
     if (same) { if (!sameRule(same, want)) conflicts.push(want.id); continue; }
     const target = want.principals === 'all' ? person : want.principals[0]!;
-    const covered = grants.some(grant => grant.effect === 'allow' && (isMcpPrincipal(target) ? namesPerson(grant, target) : mine(grant)) && grant.resource.kind === want.resource.kind && coversAll(grant.actions, want.actions)
+    // A rule for another principal (the MCP actor, a workload such as the memory distiller) counts as held only when a rule names that principal.
+    const covered = grants.some(grant => grant.effect === 'allow' && (target.issuer !== person.issuer || target.subject !== person.subject ? namesPerson(grant, target) : mine(grant)) && grant.resource.kind === want.resource.kind && coversAll(grant.actions, want.actions)
       && coversAll(grant.resource.ids, want.resource.ids) && coversAll(grant.scopes, want.scopes));
     if (!covered) rules.push(want);
   }
@@ -297,7 +309,7 @@ export function policyNamedPeople(current: unknown, scopeId: string, limit: numb
   for (const grant of parsed.data.grants) {
     if (grant.effect !== 'allow' || grant.principals === 'all' || grant.scopes === 'all' || !grant.scopes.includes(scopeId)) continue;
     for (const item of grant.principals) {
-      if (isMcpPrincipal(item)) continue;
+      if (isWorkloadPrincipalRef(item)) continue;
       if (people.length >= limit) return Object.freeze(people);
       if (!people.some(held => held.issuer === item.issuer && held.subject === item.subject)) people.push(Object.freeze({ issuer: item.issuer, subject: item.subject }));
     }
@@ -398,7 +410,25 @@ function v14Rules(person: Person, scopes: readonly string[]): readonly PolicyGra
   return isMcpPrincipal(person) ? [observe] : [rule(ids.memoryInspect, person), observe];
 }
 
-/** Latest add-only delta (v14) by content: a same-id customization is preserved and reported, never deleted as a template rule. */
+/**
+ * v15 (S4B-1 + S7): the named person may propose memory candidates (their own card; the delegation bound needs it before they can grant the
+ * distiller D2); the memory distiller (`<person>/memory-distiller`, a workload the composition root issues) gets D1+D2 (`memory` inspect, propose),
+ * D4 (`run`/inspect) and, as its own rule, D3 (`attempt`/read-output: the raw sealed output of accepted Attempts, A2b); the named person inspects
+ * and defines in the agent/skill catalog (`import` stays a separate decision behind the signed floor) and the MCP actor inspects it. Verify,
+ * retire and purge stay ungranted (S4B-4's card decides them).
+ */
+function v15Rules(person: Person, scopes: readonly string[]): readonly PolicyGrant[] {
+  const ids = FIRST_RUN_UPGRADE_RULE_IDS, vocabulary = policyResources;
+  const rule = (id: string, principal: Person, kind: string, actions: readonly string[]) => policyGrantSchema.parse({ id, effect: 'allow', actions: [...actions], scopes: [...scopes],
+    principals: [principal], resource: { kind, ids: 'all' } });
+  const observe = rule(ids.observeAgentCatalog, mcpPrincipalRef(person), vocabulary.agentCatalog.kind, ['inspect']);
+  if (isMcpPrincipal(person)) return [observe];
+  const distiller = memoryDistillerPrincipalRef(person);
+  return [rule(ids.memoryPropose, person, vocabulary.memory.kind, ['propose']), rule(ids.distillerMemory, distiller, vocabulary.memory.kind, ['inspect', 'propose']), rule(ids.distillerRuns, distiller, vocabulary.run.kind, ['inspect']),
+    rule(ids.distillerOutput, distiller, vocabulary.attempt.kind, ['read-output']), rule(ids.agentCatalog, person, vocabulary.agentCatalog.kind, ['inspect', 'define']), observe];
+}
+
+/** Latest add-only delta (v15) by content: a same-id customization is preserved and reported, never deleted as a template rule. */
 export function firstRunTemplateRollback(current: unknown, person: Person, scopeId: string | undefined): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[]; readonly missing?: readonly string[] } {
   const policy = policyFileSchema.parse(current);
   if (policy.schemaVersion !== 2) return { rules: [], conflicts: [] };
@@ -406,7 +436,7 @@ export function firstRunTemplateRollback(current: unknown, person: Person, scope
   if (isMcpPrincipal(person)) return { rules: [], conflicts: [] };
   const scopes = read && read.scopes !== 'all' && namesPerson(read, person) ? read.scopes : scopeId ? [identitySchema.parse(scopeId)] : null;
   if (!scopes) return { rules: [], conflicts: [] };
-  const expected = v14Rules({ issuer: person.issuer, subject: person.subject }, scopes), rules: PolicyGrant[] = [], conflicts: string[] = [];
+  const expected = v15Rules({ issuer: person.issuer, subject: person.subject }, scopes), rules: PolicyGrant[] = [], conflicts: string[] = [];
   const missing: string[] = [];
   for (const want of expected) {
     const held = policy.grants.find(rule => rule.id === want.id);

@@ -684,3 +684,34 @@ Bu kararla güncellenen doküman satırlarının eski metni (birebir korunur; ye
   retained container incarnation plus exit/absence proof, else `hold-manual`), but no production path writes the first fence yet (automatic mark-lost is MARK-LOST-ATOMIC / KARAR 12, owner-deferred). A late exit keeps a durable unknown Attempt observation (`settle.ts`); the lock is Attempt-level, not effect-level (C11).
 - **Dalga 2 takipleri:** patch-prepare reddi tipli makbuz, `LayoutError` insan metni, MARK-LOST-ATOMIC (KARAR 12).
 ```
+
+<a id="s4b-hafiza-dolsun-2026-10-23"></a>
+
+## Owner kararları — 2026-10-23: hafıza kendiliğinden dolsun ve kullanılsın (S4B), K-D güncellemesi
+
+Kaynak: ana oturum (lead 4d4830b2) owner uyarısı "hız ve evrim için hafıza şart" (elle adım azalsın); tasarım dış `proof/ORCHESTRATION-2026-10-23/S4B-DESIGN.md` (rev 4; kanun denetimi rev 4 PASS, 4 MINOR S4B-0/S4B-1'e katlandı); owner yanıtları 2026-10-23 (AskUserQuestion, madde madde, hepsi önerilen). Bu bölüm 2026-10-11 K-D satırını (yukarıda "K-D Hafıza başlangıcı") günceller; eski satır yerinde kalır. Uygulama dilimleri S4B-1…S4B-7 (alpha.55'ten itibaren).
+
+Madde madde owner yanıtları (hepsi "evet"):
+- Yazma: S-M1 aday yazma (damıtıcı kimliği yalnız hafızayı okur, aday yazar, Run kaydını okur; adaylar işçiye ve Brain'e gitmez; N1'de hemen, müşteride kapalı), S-M2 kabul edilmiş işlerin mühürlü ham çıktısını (işçi raporu dahil) kendi kapsamında okuma, S-M11 aday yalnız saklama süresi tanımlı ve "kişisel veri yok" işaretli iş türlerinden, S-M14 aşamalı geçiş (aday canlı → gölge doğrulama → gölge okuma → insan doğruladıkları canlı → otomatik doğrulananlar canlı; eşikler uyum ≥0,90 en az 20 kararda, en az 30 kararda sıfır yanlış geçiş, zehirleme setinde sıfır geçiş).
+- Doğrulama: S-M3 bağımsız değerlendirici (izinleri yalnız hafızayı okuma, adayı doğrulama, çelişkide itiraz açma, Run kaydını okuma, değerlendirme modelini çağırma; aday yazamaz, emekliye ayıramaz, silemez, işçi ham çıktısını okuyamaz), S-M4 değerlendiricinin modeli her zaman işi yapan işçinin modelinden farklı üreticiden (katalogdaki üretici alanı; bilinmiyorsa doğrulama yok), S-M5 değerlendirici harcaması kapsam başına günlük çağrı ve harcama tavanıyla, abonelik kanalı önce, S-M10 itiraz (çelişen kayıt bağlamdan geçici çekilir, günlük sınırlı, kararı insan verir).
+- Okuma: S-M6 işçiye, S-M7 Brain'e (aynı kurallarla), S-M8 okuma hatası işi bekletir, S-M9 otomatik doğrulananlar yalnız düşük riskli iş türlerinde, insanın doğruladıkları her işte.
+- Silme: S-M12 purge kartı (dürüst kapsam metniyle), S-M13 saklama süresi dolunca kayıt bağlamdan çıkar ve silme kartına düşer.
+- Lead kararı (soru değil, sıkılaştırma): hafıza açma/kapama ayarlarını ve `memory.automation` listesini hiçbir AI değiştiremez (A10).
+
+- **K-D güncellemesi (owner 2026-10-23, hafıza dolsun ve kullanılsın):** Kabul edilen işin mühürlü kanıtından hafıza damıtıcısı kimliği aday kayıt
+  yazar; yalnız saklama süresi tanımlı ve kişisel veri içermeyen iş türlerinden; adaylar işçiye ve Brain'e gitmez. Doğrulama insan incelemesi ya da
+  bağımsız değerlendirme kaydıyla olur: değerlendirici ayrı kimliktir, işi yapan işçinin (mühürlü Run kaydından yeniden çıkarılan) model
+  üreticisinden (katalogdaki üretici alanı; bilinmiyorsa doğrulama yok) farklı üreticinin modeliyle çalışır; doğrulama açıksa aday metni bu ikinci
+  sağlayıcıya gönderilir; tek üretici bağlıysa değerlendirici çalışmaz ve kayıt aday kalır; kaydın içerik özetini mühürler; kaydı yazan AI kendi kaydını asla doğrulamaz. Yeni kimliklerin izinleri
+  tasarım §5'teki tam listedir; AI taban kuralı yalnız değerlendirici ve bu dayanak için gevşer; emekliye ayırma ve içerik silme (purge) insanındır.
+  Doğrulanmış kayıtlar yalnız Run'ın kapsamında, aynı iş türü ailesi ve hedefte, kabul eden kişinin kaynak işi okuyabildiği durumda, Run kabulünde
+  dondurularak, veri olarak, boyut sınırıyla ve mühürlü özetle işçiye (sonra Brain'e) verilir; okuma hatası bekletir. Otomatik doğrulananlar yalnız
+  düşük riskli iş türlerinde kullanılır. Çelişki ve bayatlık kaydı otomatik olarak bağlamdan çeker, kararı insan verir. Açma/kapama kapsam başına
+  korumalı ayardadır (AI değiştiremez). Kayıt listeleme, arama ve inceleme de (CLI ve MCP) kaynak işi okuyamayan kişiye kaydı göstermez, yalnız
+  gizlenen sayısını söyler. Purge hafıza kaydının içeriğini ve değerlendirici kayıtlarını siler, yedek geri yüklenince yeniden uygulanır; işçi çıktısı, Run'a dondurulmuş bağlam kopyası, mevcut yedekler ve
+  ikinci sağlayıcıdaki kopya silinmez. Bu paketin hafıza göçünden sonra (lane numarası v65; kesin numara landing'de verilir) içerikten türeyen her özet anahtarlıdır;
+  göçten önce mühürlenmiş denetim olayları, komut makbuzları ve istem parçasının düz özeti düz kalır. Legacy tek seferlik içe aktarma kararı aynen kalır.
+- **Model bağımsızlığı (owner kuralı 2026-10-23, lead iletimi):** değerlendirici modeli kodda adla seçilmez; uygunluk yalnız model rol/tier registry'sindeki
+  `memory-evaluator` rolü ve katalogdaki üretici alanından (`vendorId`) gelir. Yeni bir model yalnız veri güncellemesiyle (registry + katalog) uygun olur.
+  Owner'a gösterilen maliyet ya da uygunluk metni sabit fiyat yazmaz; güncel registry ve katalogdan hesaplanır. Uygun ve etkin bir farklı-üretici
+  satırı yoksa değerlendirici çalışmaz ve kayıtlar aday kalır.

@@ -1,5 +1,5 @@
 import { APPROVAL_ASSURANCE } from '#domain/core/approval/index.js';
-import { isMcpPrincipal } from '#domain/core/principal/index.js';
+import { isWorkloadPrincipalRef } from '#domain/core/principal/index.js';
 import { evaluatePolicy } from './evaluate.js';
 import { includes, policySchema, principalGrants, type Policy, type PolicyRule } from './schema.js';
 
@@ -17,7 +17,7 @@ export class PolicyLastAdminError extends Error {
 function people(policy: Policy): readonly Person[] {
   const refs = [...policy.grants.flatMap(rule => rule.principals === 'all' ? [] : rule.principals),
     ...(policy.schemaVersion === 2 ? policy.bindings.entries.flatMap(entry => entry.principals) : [])];
-  return refs.filter((ref, index) => !isMcpPrincipal(ref) && refs.findIndex(other => other.issuer === ref.issuer && other.subject === ref.subject) === index);
+  return refs.filter((ref, index) => !isWorkloadPrincipalRef(ref) && refs.findIndex(other => other.issuer === ref.issuer && other.subject === ref.subject) === index);
 }
 /** A witness outside every finite selector represents its remaining equivalence class, without randomness or a reserved policy id. */
 function remaining(values: readonly string[]): string {
