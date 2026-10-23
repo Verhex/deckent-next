@@ -60,6 +60,8 @@ export const standingBulkCommandSchema = z.object({ ...scoped, commandId: client
   targets: z.array(z.object(target).strict()).min(1).max(AGENT_CATALOG_LIMITS.agentsPerScopeMax) }).strict();
 export const suggestionListQuerySchema = z.object({ ...scoped, open: z.boolean().optional(), limit: z.number().int().min(1).max(AGENT_CATALOG_LIMITS.pageMax) }).strict();
 export const suggestionInspectQuerySchema = z.object({ ...scoped, suggestionId: digest }).strict();
+/** The promotions a revoked key signed that are still in effect (`keyId`: only that key's). */
+export const revokedPromotionsQuerySchema = z.object({ ...scoped, keyId: digest.optional() }).strict();
 export type StandingChangeCommand = z.infer<typeof standingChangeCommandSchema>;
 export type SuggestionDismissCommand = z.infer<typeof suggestionDismissCommandSchema>;
 export type StandingBulkCommand = z.infer<typeof standingBulkCommandSchema>;

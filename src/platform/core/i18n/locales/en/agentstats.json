@@ -40,5 +40,6 @@
   "error.CATALOG_EVOLUTION_POSITION_CONFLICT": "Another aggregation pass of this scope moved first. Nothing was written twice; the next pass continues from its position.",
   "agentstats.percent": "{n}%",
   "mcp.tool.inspectAgentStats": "Show agent statistics from sealed work: accepted outcomes with a confidence interval, time, measured cost, every failure kind and what was set apart, beside the WorkClass overall; with agentId also per revision, per model, per pinned skill and the team total. Associations, not causes; acceptance rates, not accuracy (read-only).",
-  "agentstats.config.name": "Agent catalog aggregation"
+  "agentstats.config.name": "Agent catalog aggregation",
+  "agentstats.help.action.stats": "show agent statistics from sealed work (associations, acceptance rates)"
 }

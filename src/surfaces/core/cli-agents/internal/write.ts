@@ -10,7 +10,9 @@ import type { AgentsCommandContext } from './context.js';
 import { agentLines } from './render.js';
 
 interface WriteContext { readonly root: string; readonly options: ConfigLoadOptions; readonly locale: Locale; readonly scope: ScopeResolution; readonly inputMaxBytes: number;
-  readonly ask: (request: CliCardRequest) => Promise<string | null> }
+  readonly ask: (request: CliCardRequest) => Promise<string | null>;
+  /** S8-4: the open `revise-agent` suggestion this new revision decides (`--suggestion`, full id). */
+  readonly suggestion?: string }
 const options = (locale: Locale) => [{ id: 'apply', label: t('agents.card.apply', {}, locale), key: 'y' }, { id: 'cancel', label: t('agents.card.cancel', {}, locale), key: 'n' }];
 const revisionLine = (previous: number | null, locale: Locale) => previous === null ? t('agents.card.new', {}, locale) : t('agents.card.revision', { from: previous, to: previous + 1 }, locale);
 
@@ -50,6 +52,7 @@ export async function agentsWrite(action: 'define' | 'define-skill', input: stri
   const previous = current.status === 'ok' ? current.item.revision : null;
   if (!await ask(previous === null ? t('agents.card.agent.new', {}, locale) : t('agents.card.agent.revise', {}, locale),
     [...agentLines(agentId, content, locale), '', revisionLine(previous, locale), t('agents.card.agent.body', {}, locale)])) return cancelled();
-  const result = await context.defineAgent!(io.root, { schemaVersion: 1, commandId: randomUUID(), scopeId, agentId, expectedRevision: previous, content }, io.options);
+  const result = await context.defineAgent!(io.root, { schemaVersion: 1, commandId: randomUUID(), scopeId, agentId, expectedRevision: previous, content,
+    ...(io.suggestion ? { fromSuggestion: io.suggestion } : {}) }, io.options);
   emit(t('agents.done.agent', { id: result.item.agentId, revision: result.item.revision }, locale), sinks);
 }

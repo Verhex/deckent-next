@@ -40,5 +40,6 @@
   "error.CATALOG_EVOLUTION_POSITION_CONFLICT": "Bu kapsamın başka bir toplama geçişi önce ilerledi. Hiçbir şey iki kez yazılmadı; sonraki geçiş onun konumundan devam eder.",
   "agentstats.percent": "%{n}",
   "mcp.tool.inspectAgentStats": "Mühürlü işten ajan istatistiklerini gösterir: güven aralığıyla kabul edilen sonuçlar, süre, ölçülen maliyet, her başarısızlık türü ve ayrı tutulanlar, yanında iş türünün geneli; agentId ile sürüm, model, sabitlenmiş skill ve ekip toplamı. İlişkidir, nedensellik değil; kabul oranıdır, doğruluk değil (salt okunur).",
-  "agentstats.config.name": "Ajan kataloğu toplaması"
+  "agentstats.config.name": "Ajan kataloğu toplaması",
+  "agentstats.help.action.stats": "mühürlü işten ajan istatistiklerini göster (ilişki, kabul oranı)"
 }

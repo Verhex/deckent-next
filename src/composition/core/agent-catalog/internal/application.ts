@@ -5,7 +5,7 @@ import { AgentCatalogApplication, AgentCatalogPolicyAuthorization, AgentCatalogS
   skillInspectQuerySchema as inspectSkill, skillListQuerySchema as listSkills, signerListQuerySchema as listSigners, signerEnrolCommandSchema as enrolSigner,
   signerAddCommandSchema as addSigner, signerRevokeCommandSchema as revokeSigner, signerRepairCommandSchema as repairSigners, suggestionListQuerySchema as listSuggestions,
   suggestionInspectQuerySchema as inspectSuggestion, standingChangeCommandSchema as changeStanding, suggestionDismissCommandSchema as dismissSuggestion,
-  standingBulkCommandSchema as bulkStanding, assertAuthorityWitness, type AgentCatalogDependencies, type AuthorityWitness } from '#engine/index.js';
+  standingBulkCommandSchema as bulkStanding, revokedPromotionsQuerySchema as listRevokedPromotions, assertAuthorityWitness, type AgentCatalogDependencies, type AuthorityWitness } from '#engine/index.js';
 import { executionRegistrySchema, type VerifiedPrincipal } from '#domain/index.js';
 import { openSqliteAgentCatalogStore, openLocalIntegrityAuthority, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, localSignerKeyCustody, FileSignerRevocationLog,
   NATIVE_PROMPT_LIMITS } from '#adapters/index.js';
@@ -16,10 +16,11 @@ import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { memoryJournalFor } from '#composition/core/memory/index.js';
 const schemas = { listAgents, inspectAgent, listSkills, inspectSkill, defineAgent, defineSkill, importSkill, listSigners, enrolSigner, addSigner, revokeSigner, repairSigners,
-  listSuggestions, inspectSuggestion, changeStanding, dismissSuggestion, bulkStanding };
+  listSuggestions, inspectSuggestion, changeStanding, dismissSuggestion, bulkStanding, listRevokedPromotions };
 /** S8-5 signer cards and S8-3/S8-4 standing and suggestion actions, and their application's method; every other action is the catalog application's. */
 const SIGNER_METHODS = { listSigners: 'list', enrolSigner: 'enrol', addSigner: 'add', revokeSigner: 'revoke', repairSigners: 'repair' } as const;
-const STANDING_METHODS = { listSuggestions: 'listSuggestions', inspectSuggestion: 'inspectSuggestion', changeStanding: 'change', dismissSuggestion: 'dismiss', bulkStanding: 'bulk' } as const;
+const STANDING_METHODS = { listSuggestions: 'listSuggestions', inspectSuggestion: 'inspectSuggestion', changeStanding: 'change', dismissSuggestion: 'dismiss', bulkStanding: 'bulk',
+  listRevokedPromotions: 'revokedPromotions' } as const;
 type Action = keyof typeof schemas;
 type Result<A extends Action> = A extends keyof typeof SIGNER_METHODS ? Awaited<ReturnType<SignerKeyApplication[(typeof SIGNER_METHODS)[A]]>>
   : A extends keyof typeof STANDING_METHODS ? Awaited<ReturnType<AgentStandingApplication[(typeof STANDING_METHODS)[A]]>>
@@ -52,7 +53,7 @@ const run = async <A extends Action>(root: string, action: A, input: unknown, op
   const target = (signer ? new SignerKeyApplication(deps) : standing ? new AgentStandingApplication(deps) : new AgentCatalogApplication(deps)) as unknown as Record<string, (value: unknown) => Promise<unknown>>;
   return await target[signer ?? standing ?? action]!(parsed) as Result<A>;
 };
-const READS = new Set<Action>(['listAgents', 'inspectAgent', 'listSkills', 'inspectSkill', 'listSigners', 'listSuggestions', 'inspectSuggestion']);
+const READS = new Set<Action>(['listAgents', 'inspectAgent', 'listSkills', 'inspectSkill', 'listSigners', 'listSuggestions', 'inspectSuggestion', 'listRevokedPromotions']);
 /** S7 agent/skill catalog on the Core SQLite adapter. Reads never create a key, database or migration. Create, revise, import, every signer card (S8-5)
  * and every standing or suggestion card (S8-4) are a person's terminal card (the default card, AJAN-ORG S6): the MCP actor, or a caller without the
  * terminal witness, is refused before any read. Imports verify against the scope's `import` signer rows; AI/system writes sign through the host custody. */
@@ -82,7 +83,7 @@ export const defineConfiguredAgent = bind('defineAgent'), defineConfiguredSkill 
 export const listConfiguredSigners = bind('listSigners'), enrolConfiguredSigner = bind('enrolSigner'), addConfiguredSigner = bind('addSigner'), revokeConfiguredSigner = bind('revokeSigner'),
   repairConfiguredSigners = bind('repairSigners');
 export const listConfiguredSuggestions = bind('listSuggestions'), inspectConfiguredSuggestion = bind('inspectSuggestion'), changeConfiguredStanding = bind('changeStanding'),
-  dismissConfiguredSuggestion = bind('dismissSuggestion'), bulkConfiguredStanding = bind('bulkStanding');
+  dismissConfiguredSuggestion = bind('dismissSuggestion'), bulkConfiguredStanding = bind('bulkStanding'), listConfiguredRevokedPromotions = bind('listRevokedPromotions');
 export const signedDefineConfiguredAgent = signedBind('defineAgent'), signedDefineConfiguredSkill = signedBind('defineSkill'), signedImportConfiguredSkill = signedBind('importSkill'),
   signedChangeConfiguredStanding = signedBind('changeStanding'), signedDismissConfiguredSuggestion = signedBind('dismissSuggestion');
 /** S8-5 at service start, before any work or signing: every logged revocation a (restored) scope ledger lacks is re-applied by the same revoke step.

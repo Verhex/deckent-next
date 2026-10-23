@@ -1,4 +1,4 @@
-import { AGENT_CATALOG_LIMITS, encodeCommandProjection, isMemoryTombstone, type MemoryEntry } from '#domain/index.js';
+import { AGENT_CATALOG_LIMITS, composeCatalogEvolutionRegistry, encodeCommandProjection, isMemoryTombstone, type MemoryEntry } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import type { CatalogSuggestion } from '#engine/core/agent-catalog/index.js';
 import { catalogDraftTemplate } from './rules.js';
@@ -37,3 +37,9 @@ export function renderCatalogDraft(record: CatalogSuggestion, entries: readonly 
 }
 /** The digest a draft card shows and its apply re-checks (the lessons readable or the template changed in between: a new card). */
 export const catalogDraftDigest = (draft: CatalogDraft) => sha256(encodeCommandProjection('catalog-draft:1', draft));
+/** The fewest readable lessons a skill draft needs (the registry's `propose-skill` rule; no rule: no draft), and whether the installation overlay composes. */
+export function catalogDraftMinLessons(overlay: unknown): number | null {
+  const rule = composeCatalogEvolutionRegistry(overlay).rules.find(row => row.kind === 'propose-skill');
+  return rule?.kind === 'propose-skill' ? rule.params.minLessons : null;
+}
+export function catalogEvolutionRegistryAvailable(overlay: unknown): boolean { try { composeCatalogEvolutionRegistry(overlay); return true; } catch { return false; } }

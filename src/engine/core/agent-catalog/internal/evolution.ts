@@ -5,7 +5,7 @@ import { authenticate } from '#engine/core/authentication/index.js';
 import { AgentCatalogStoreError, type AgentCatalogAction, type AgentCatalogDependencies, type AgentCatalogStore } from './contract.js';
 import { canSignCatalogActions, signCatalogActions } from './signing.js';
 import { catalogEvolutionActions, catalogSuggestionAuditSubject, catalogSuggestionStateSchema, catalogSuggestionWorkClass, standingBulkCommandSchema, standingChangeCommandSchema,
-  suggestionDismissCommandSchema, suggestionInspectQuerySchema, suggestionListQuerySchema, type CatalogEvolutionChange, type CatalogSuggestion, type CatalogSuggestionInspection,
+  suggestionDismissCommandSchema, suggestionInspectQuerySchema, suggestionListQuerySchema, revokedPromotionsQuerySchema, type CatalogEvolutionChange, type CatalogSuggestion, type CatalogSuggestionInspection,
   type CatalogSuggestionListing, type CatalogSuggestionState, type CatalogSuggestionView, type StoredCatalogSuggestion } from './suggestions.js';
 
 /** The composition root's catalog aggregator for one scope (the installation owner's `<issuer>/catalog-aggregator`, workload-verified). */
@@ -66,6 +66,21 @@ export class AgentStandingApplication {
         decidedBy: state.state === 'open' ? null : state.by, decision: state.decision, signerRevoked: revoked });
     }
     return out;
+  }
+  /**
+   * S8-4 (owner Q-S13): the current promotions (`active` standings of current revisions) whose basis a revoked key signed — they stay until a person
+   * demotes them; the revoke card lists them with a one-step demote and the monitor counts them ("imzalayan iptal edildi"). `keyId`: only that key's.
+   */
+  async revokedPromotions(query: unknown, credential?: unknown): Promise<readonly Readonly<{ keyId: string; standing: AgentStanding }>[]> {
+    const input = revokedPromotionsQuerySchema.parse(query), principal = await authenticate(this.deps.verifier, credential, input.scopeId);
+    await this.admit('inspect', input.scopeId, principal);
+    return this.withStore('read', async store => {
+      const out: { keyId: string; standing: AgentStanding }[] = [];
+      for (const key of (await store.signers(input.scopeId, AGENT_CATALOG_LIMITS.signersPerScopeMax)).filter(row => row.state === 'revoked' && (input.keyId === undefined || row.keyId === input.keyId)))
+        for (const standing of await store.signedStandings(input.scopeId, key.keyId, AGENT_CATALOG_LIMITS.agentsPerScopeMax))
+          if (standing.standing === 'active' && (await store.loadAgent(input.scopeId, standing.agentId))?.revision === standing.revision) out.push({ keyId: key.keyId, standing });
+      return out;
+    });
   }
   /** Whether the aggregator (this application's principal) can sign now; without a key the pass writes nothing (the monitor says so). */
   async ready(scopeId: string, credential?: unknown): Promise<boolean> {
