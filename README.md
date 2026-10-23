@@ -28,8 +28,8 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> **Pre-release `1.0.0-alpha.53`** (release candidate; the latest released version is the first dated line in
-> [CHANGELOG.md](CHANGELOG.md)). Deckent is not on npm yet: install it from source as shown in
+> This README describes **pre-release `1.0.0-alpha.53`**, the latest released version; [CHANGELOG.md](CHANGELOG.md)
+> lists every release, newest first. Deckent is not on npm yet: install it from source as shown in
 > [Get started](#get-started). An npm package is planned for the beta, probably as `@verhex/deckent` (the name is
 > not final yet).
 
@@ -45,15 +45,16 @@ policy, approval and budget. The work then runs in a sandbox or a Docker worker,
 to a durable ledger. For example, before a paid model call Deckent reserves the most the call could cost against the
 project's budget; if the price is unknown or the budget is too small, the call is refused before anything is sent.
 
-The same foundations serve one person on a laptop and a company with many teams. Software work is the first use:
+The same foundations are built to serve one person on a laptop and a company with many teams. Software work is the first use:
 coding workers (Claude Code, Codex and Cursor) do a task in Docker and Deckent delivers the change to Git. Business
-systems such as an ERP or a CRM use the same contract: a declared operation, a conditional write, a safe resend, acceptance
-on evidence and compensation when something must be reversed. Core ships that contract and a generic HTTP target; connectors
+systems such as an ERP or a CRM use the same contract: a declared operation, a write that applies only if the record is
+unchanged, a resend that can never apply twice, acceptance on evidence, and a planned undo (compensation) when something
+must be reversed. Core ships that contract and a generic HTTP target; connectors
 for specific ERP products are not built yet.
 
 The open-source Core (Apache-2.0) runs on its own. A proprietary Enterprise edition is planned as a separate distribution
-that adds to Core through its registry without editing it; Enterprise SSO, fleet management and ERP connectors belong
-there. The [glossary](docs/glossary.md) explains the terms used below, such as scope and realm.
+that plugs into Core's extension registry without editing Core; Enterprise SSO, fleet management and ERP connectors
+belong there. The [glossary](docs/glossary.md) explains the terms used below, such as scope, Run and approval.
 
 ## How it works
 
@@ -74,7 +75,7 @@ sequenceDiagram
   R->>P: may this tool call run here, for this person?
   alt needs approval
     P-->>You: approval window (what, where, who, risk, deadline)
-    You->>P: yes once · no · note
+    You->>P: yes once · no
   end
   P-->>R: allowed
   R->>B: run the command in the sandbox
@@ -88,11 +89,11 @@ Three jobs make this work:
 
 | | |
 |---|---|
-| 🗼 **Govern** | One identity, scope and policy model for people and AI agents. When something needs approval, the window shows exactly what: the full command, where it runs, on whose behalf, the risk, whether it can be undone and a deadline. A persona or a model's advice never grants authority. |
-| 🛫 **Execute** | Runs, tasks and workers are admitted, scheduled and recovered on your machines. Agent shell commands and MCP servers run in sandboxes (bubblewrap, Landlock); coding workers run in Docker. Models come from Anthropic, OpenAI, DeepSeek, Z.ai (GLM), OpenRouter, a local server or an OpenAI-compatible endpoint with published prices. |
-| 📜 **Prove** | Every decision and effect lands in a durable ledger and audit trail. Approvals are sealed, patches are retained, and a change is integrated in an isolated candidate before it is delivered. |
+| 🗼 **Govern** | One identity, scope and policy model for people and AI agents. When something needs approval, the window shows exactly what: the full command, where it runs, on whose behalf, the risk, whether it can be undone and a deadline. A role description (persona) or a model's advice never grants permission. |
+| 🛫 **Execute** | Runs, tasks and workers are admitted, scheduled and recovered on your machines. Agent shell commands and MCP servers run in sandboxes (bubblewrap, Landlock) where the host provides one; coding workers run in Docker. Models come from Anthropic, OpenAI, DeepSeek, Z.ai and Zhipu (GLM), OpenRouter, a local server or an OpenAI-compatible endpoint with published prices. |
+| 📜 **Prove** | Every decision and effect lands in a durable ledger and audit trail. Approvals are sealed, patches are retained, and a change is tried on a separate copy of your repository before it is delivered. |
 
-Every way in speaks the same typed contract. Operations that need the runtime go through one local runtime service per
+Every way in uses the same typed contract: one set of operations and checks. Operations that need the runtime go through one local runtime service per
 project, which checks identity, scope and policy on each call, writes the result to the ledger and lets effects happen
 only where policy allows. Setup, observation and some patch steps use the same contract locally, without the service.
 
@@ -117,10 +118,12 @@ flowchart LR
 
 ### Requirements
 
-- Linux or Windows through WSL2, on x86_64. Native Windows is not supported yet; macOS is only partly verified.
+- Linux, or Windows through WSL2, on x86_64. Native Windows is not supported, and on macOS the runtime service does not
+  run yet (see [Not yet](#not-yet)).
 - Node.js 24.22.1 or newer on 24.x, or 26.12.1 or newer (Node 25 is not supported).
-- Docker. The build uses it to compile the locked bubblewrap sandbox (0.13.0), and coding workers run in it. Your first
-  chat session needs neither Docker nor a paid call.
+- Docker. Building from source uses it to compile the locked bubblewrap sandbox (0.13.0), and coding workers run in it.
+  After the build, a first chat needs neither Docker nor a paid call if you use a local model server such as Ollama or
+  LM Studio.
 - Git and a C build toolchain (for the native sandbox helper).
 
 ### Install from source
@@ -138,7 +141,8 @@ npm link
 ```
 
 The build ends with `bubblewrap=present` or `bubblewrap=staged from …`. If it stops with `BUBBLEWRAP_BUILD_REQUIRED`,
-Docker was not reachable: start it and run the build again. On Ubuntu 24.04 and later the kernel may block the user
+Docker was not reachable: start it, run both `build-bwrap` commands again with a new `--out` directory (for example
+`.pack/bwrap/second-build`), then `npm run build`. On Ubuntu 24.04 and later the kernel may block the user
 namespaces bubblewrap needs; Deckent then says so and falls back to Landlock. The
 [operator reference](.deckent/docs/architecture/operator-reference.md#source-build-and-sandbox-posture) explains both
 cases and how an administrator lifts the restriction. The [contributor quickstart](CONTRIBUTING.md#a-30-minute-quickstart)
@@ -146,7 +150,7 @@ lists the prerequisites again and runs one test without a provider key.
 
 ### Your first session
 
-From an empty project to a governed chat and what it cost, without leaving Deckent. Change to your own project folder,
+This takes you from an empty project to a governed chat and its cost, without leaving Deckent. Change to your own project folder,
 outside the Deckent source checkout; from here on everything is `deckent`.
 
 ```mermaid
@@ -170,21 +174,26 @@ flowchart LR
 
    The policy lets you connect and call models, keep keys and set budgets in that scope; each of those actions is still
    checked and recorded. `deckent doctor` reports what is ready and exits non-zero if setup cannot start. `deckent init`
-   is the guided alternative: it walks through the same setup and lists what is still missing.
+   runs the same setup step by step and lists what is still missing.
 2. **Open the terminal** with `deckent`. It opens in the scope you just set up (`deckent --scope my-project` picks one
    explicitly) and starts the runtime service in the background.
 3. **Connect a provider** with `/provider`. Type the key into a masked field; Deckent checks it with a free request where
    the provider offers one and stores it under its name. The value is never shown again, and no agent or worker receives
-   it. Then choose **Connect a model** and pick an exact model from the provider's list.
+   it. Then choose **Connect a model** and pick an exact model from the provider's list. Connecting makes a model callable in
+   this scope; step 5 picks which connected model this session uses.
 4. **Set a budget.** Every paid API turn reserves money from one shared USD budget of the scope, so without a budget each
    paid turn is refused, and the windows say why. The first row of `/provider`, **Create budget**, offers 5 to 100 USD or
    another whole-dollar amount up to 1000, then a confirm step. Local models need no budget.
 5. **Choose a model** with `/model`, for this session or as your default. A model you cannot use yet is shown locked,
    with the reason and the fix.
-6. **Work.** Ask in plain words. Tool calls follow your company's policy and your permission mode; anything that needs
+6. **Work.** Ask in plain words. Tool calls follow your installation's policy and your permission mode; anything that needs
    you opens the approval window (see [Safety and control](#safety-and-control)).
 7. **Check usage** with `/usage`: the tokens this conversation used and the scope's budgets. It is Deckent's
    measurement, not the provider's invoice.
+
+These screens come from the real terminal, recorded on alpha.53 (120×36, the default full-window layout) in a throwaway
+project with a small local test model: no provider was called and no real key was used. The empty conversation rows above
+each window are trimmed; nothing else is changed.
 
 <table>
   <tr>
@@ -201,15 +210,16 @@ flowchart LR
   </tr>
 </table>
 
-The same steps work from the command line, which is how scripts and AI tools do them:
+Steps 3 and 4 also work from the command line, which is how scripts and AI tools do them:
 
 ```sh
 deckent secret set DECKENT_ANTHROPIC_KEY --main
-deckent models create-budget --scope my-project --usd 10
+deckent models create-budget --scope my-project --usd 20
 deckent models connect --scope my-project --connection anthropic-api --command-id connect-1 --model claude-sonnet-5-5
 ```
 
-`secret set` asks for the key in a hidden prompt and refuses a piped key. The
+`secret set` asks for the key in a hidden prompt and refuses a piped key. `--command-id` is any unique name you choose;
+repeating the same command with it never connects twice. The
 [operator reference](.deckent/docs/architecture/operator-reference.md#provider-connection-details) lists the secret name
 of every provider, the local and OpenAI-compatible options and what works with a subscription today.
 
@@ -223,15 +233,15 @@ flowchart LR
   S["Set up once<br/><sub>worker image · pool</sub>"] --> D["/do<br/><sub>plan · approval card</sub>"]
   D --> T["/tasks<br/><sub>watch the worker</sub>"]
   T --> L["/deliver<br/><sub>Git reference</sub>"]
-  L --> B["Adopt<br/><sub>into a branch, own y</sub>"]
+  L --> B["Adopt<br/><sub>into a branch, separate y</sub>"]
 ```
 
 Before you start: Docker is running; the project is a Git repository with at least one commit; a model with a budget is
 connected (see [Your first session](#your-first-session)); and the coding CLI you want as the worker is installed and
-logged in on this machine (`codex login`, or `claude` and then `/login` for Claude Code). The setup below was rehearsed on
-a clean machine up to the model step; the rest of the path is used every day in Deckent's own development but has not
-been rehearsed from scratch
-([known limits](docs/known-limits.md)).
+logged in on this machine (`codex login`, or `claude` and then `/login` for Claude Code). The worker uses that CLI's own
+login inside its container; your provider API keys are never passed to workers. On a clean machine we rehearsed everything
+up to connecting a model; the job steps below are used every day in Deckent's own development but have not been rehearsed
+from scratch yet ([known limits](docs/known-limits.md)).
 
 ### One-time setup
 
@@ -239,7 +249,8 @@ Four steps prepare where work runs. Each `--preview` shows what would change and
 `deckent doctor` list whichever of these steps are still missing, with the exact command.
 
 ```sh
-# 1. In the Deckent source checkout: build the worker image; it prints the image id (sha256:…)
+# 1. In the Deckent source checkout: build the worker image. The path is where the build receipt is written;
+#    the command prints the image id (sha256:…)
 npm run worker:image -- /abs/path/worker-images/r4-20260930.json
 
 # 2. In your project: tell Deckent where work runs (use the image id from step 1)
@@ -257,7 +268,9 @@ deckent init pool --scope my-project --apply
 deckent runtime restart
 ```
 
-The values are examples: choose the worker (`codex` or `claude`), the pool name and the capacity for your machine.
+The values are examples: choose the worker (`codex` or `claude`; a Cursor worker needs one more catalog step, see the
+operator reference), the pool name and the capacity for your machine. `--discovery repository` lets the worker CLI load
+your repository's own instruction files, hooks and MCP settings; leave it out to hide them (the default).
 The [operator reference](.deckent/docs/architecture/operator-reference.md#first-job-setup-in-detail) explains every value,
 what each preview checks, and what to do on an installation set up before the current first-run policy.
 
@@ -274,11 +287,14 @@ what each preview checks, and what to do on an installation set up before the cu
    Waiting for your TTY approval <approval-id>, expires <time>. The model cannot authorize this work.
    ```
 
+   *WorkClass* is the kind of effort the task needs; it selects the worker and the model.
+
 2. **Approve.** A card asks you to approve creating the Run. Judge the plan and its acceptance lines (the card's risk and
    undo lines are not classified yet for plans), then press `y`. The card expires after 10 minutes, and the model cannot
-   approve for you. "Admitted" then means the work started, not that its result was accepted.
-3. **Watch** with `/tasks`, or `/monitor` (`deckent monitor` outside the terminal). When the worker's result is accepted,
-   the task waits for delivery.
+   approve for you. The line `Run <run-id> admitted. Follow /tasks or /monitor.` then means the work started, not that its
+   result was accepted.
+3. **Watch** with `/tasks`, or `/monitor` (`deckent monitor` outside the terminal). When the worker finishes successfully (today
+   that means exit code 0; the content is not verified independently yet), the task waits for delivery.
 4. **Deliver** with `/deliver`. The window first sums up the work in plain words: its title, what changed, why it was
    accepted (the worker's own report is marked as a claim), the risk and what yes or no will do. It then lists the
    changed files. `y` writes the change only to a dedicated reference under `refs/deckent/deliveries/`, never to a branch,
@@ -291,14 +307,14 @@ what each preview checks, and what to do on an installation set up before the cu
    deckent config set execution.adoption.targets '["refs/heads/deckent/first-job"]'
    ```
 
-   Look at the result with `git log deckent/first-job` and merge it yourself. An adoption through the delivery queue can be
-   rolled back with its own confirmation; the
+   Look at the result with `git log deckent/first-job` and merge it yourself. If the project uses the delivery queue (the
+   service's per-branch queue of deliveries), an adoption can be rolled back with its own confirmation; the
    [operator reference](.deckent/docs/architecture/operator-reference.md#delivery-queue-inspect-and-undo) shows the
    commands.
 
 <img src=".github/assets/screenshots/en/16-tasks.png" alt="/tasks live window with no work yet" width="880">
 
-<sub><b>/tasks.</b> Workers and Runs in one live, read-only window (empty here: no background work yet).</sub>
+<sub><b>/tasks.</b> Workers and Runs in one live window; cancelling asks for approval (empty here: no background work yet).</sub>
 
 ## Everyday use
 
@@ -316,10 +332,6 @@ an approval. `/help` lists every command by purpose; the most used ones are:
 | Settings | `/provider` · `/model` · `/config` · `/mode` · `/mcp` · `/policy` |
 | Information | `/status` · `/usage` · `/context` · `/doctor` · `/monitor` · `/scope` · `/help` |
 
-These screens come from the real terminal, recorded on alpha.53 (120×36, the default full-window layout) in a throwaway
-project with a small local test model: no provider was called and no real key was used. The empty conversation rows above
-each window are trimmed; nothing else is changed.
-
 <table>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/en/02-chat.png" alt="A chat turn: your line marked You, the answer under Deckent"><br><sub><b>Chat.</b> Your lines and Deckent's answers are visibly distinct, with time and tokens per turn.</sub></td>
@@ -331,7 +343,7 @@ each window are trimmed; nothing else is changed.
   </tr>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/en/03-help.png" alt="/help window grouped by purpose"><br><sub><b>/help.</b> Commands grouped by purpose, one line each; the window scrolls.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/07-mcp.png" alt="/mcp window"><br><sub><b>/mcp.</b> Add a server step by step; configured servers with their trust state.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/07-mcp.png" alt="/mcp window"><br><sub><b>/mcp.</b> Add a server step by step; each configured server shows its trust state and where it runs (here a sandbox with network).</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/en/08-provider.png" alt="/provider window listing provider kinds"><br><sub><b>/provider.</b> Each provider with its connection state, OpenRouter included.</sub></td>
@@ -364,7 +376,9 @@ deckent policy grants --mine              # your standing "always" grants
 ### Connect an AI client over MCP
 
 MCP works in two directions. To give Deckent's own agent an MCP server, add it with `/mcp` or
-`deckent mcp add context7 -- npx -y @upstash/context7-mcp`; it runs sandboxed and starts only after you trust it.
+`deckent mcp add context7 -- npx -y @upstash/context7-mcp`. It starts only after you trust it, and by default it runs in a
+sandbox with network access and its own home folder; a server configured for `host` runs without a sandbox, and `/mcp`
+shows where each one runs.
 
 To let an outside AI client use Deckent, register `deckent-mcp`, Deckent's stdio MCP server, in that client; in Claude
 Code that is `claude mcp add deckent -- deckent-mcp --project /path/to/project`. Most of its tools need the runtime
@@ -392,7 +406,7 @@ older installations.
 
 ## Safety and control
 
-Two things decide every tool call an agent makes: your organization's policy and the permission mode you chose. Policy
+Two things decide every tool call an agent makes: your installation's policy and the permission mode you chose. Policy
 sets the limits; the mode only chooses how often you are asked inside them, and a deny always wins. You move between
 the modes you are allowed with <kbd>Shift</kbd>+<kbd>Tab</kbd> or `/mode`.
 
@@ -400,7 +414,7 @@ the modes you are allowed with <kbd>Shift</kbd>+<kbd>Tab</kbd> or `/mode`.
 flowchart LR
   S["Standard<br/><sub>edits run · shell and MCP ask</sub>"] -->|Shift+Tab| C["Careful<br/><sub>edits ask too</sub>"]
   C -->|Shift+Tab| A["Full auto<br/><sub>sandboxed shell and MCP run</sub>"]
-  A -->|Shift+Tab| F["Full access<br/><sub>company grant · this session · every call audited</sub>"]
+  A -->|Shift+Tab| F["Full access<br/><sub>owner grant · this session · every call audited</sub>"]
   F -->|Shift+Tab| S
   H[["Hard floor · closed in every mode<br/>Deckent state, policy, approvals, audit, credentials"]]
 ```
@@ -410,22 +424,25 @@ flowchart LR
 | **Standard** | Reads, ordinary file edits | Shell commands, protected paths, MCP calls |
 | **Careful** | Reads | Every edit as well |
 | **Full auto** | Edits, shell commands contained in the sandbox, MCP calls | Host shell, destructive commands (`rm -r`, …), protected paths |
-| **Full access** | Everything company policy allows above the hard floor; every call is audited | The hard floor and whatever company policy still requires; needs a company grant and lasts for this session |
+| **Full access** | Everything policy allows above the hard floor; every call is audited | The hard floor and whatever policy still requires; needs a grant from the installation owner (on a solo install, that is you) and lasts for this session |
 
 The installation owner opens full auto and full access with
 `deckent init policy --scope <id> --modes full-auto,full-access --preview` and then `--apply` at their own terminal;
 AI tools, pipes and CI cannot. Agent shell commands run in a sandbox: in the first three modes the project is writable
 within the call's approval, `.git` is read-only, your home folder is hidden and the network is off. Full access needs an
 open bubblewrap sandbox, which adds the network and your home folder but still hides Deckent's own state and known
-credential files. The [operator reference](.deckent/docs/architecture/operator-reference.md#sandbox-views) describes
-each view and its limits.
+credential files. If no sandbox is available, a closed mode falls back to the host and says so (the default
+`terminal.shell.realm: prefer-sandbox`); that fallback has no filesystem boundary, so set `require-sandbox` when
+confinement is mandatory. The [operator reference](.deckent/docs/architecture/operator-reference.md#sandbox-views)
+describes each view and its limits.
 
 ### Approvals
 
 When a call needs you, the approval window shows the full command, where it runs, on whose behalf, why it asks, the risk,
-whether it can be undone and how long you have; if nobody decides, nothing runs. Only the terminal that started the turn
-can answer, and a model can never approve. Answer once, for this session or always in this project where policy offers
-it; your "always" grants are listed with `deckent policy grants --mine` and removed with `deckent policy revoke`. For an
+whether it can be undone and how long you have; if nobody decides, nothing runs. A model can never approve. A tool call's approval can be answered only in the
+terminal that started that turn. Approvals that wait without a running turn, such as a `/do` plan, can be picked and
+answered with `/approvals` or `deckent approval list` at a verified terminal. You can answer once; where policy offers it,
+also for this session or always in this project; your "always" grants are listed with `deckent policy grants --mine` and removed with `deckent policy revoke`. For an
 operation on a business system the card names the operation, the target and a short digest of the input; the individual
 fields it will write are not shown yet.
 
@@ -459,11 +476,11 @@ OpenRouter settings.
 - **Ask for a job in plain words**: `/do` plans it with acceptance criteria, you approve, a coding worker (Claude Code,
   Codex or Cursor) does it in Docker, and `/deliver` writes the result to Git and adopts it into a branch only when you
   choose.
-- **Orchestrate work**: Runs, tasks and attempts are admitted, scheduled, held, resumed, cancelled and recovered, all
+- **Orchestrate work**: Runs, tasks and attempts (each try of a task) are admitted, scheduled, held, resumed, cancelled and recovered, all
   recorded in a durable SQLite ledger.
 - **Choose models and control cost**: connect your own key, pick a model per session or as default, run local models,
   use the Anthropic prompt cache, and keep every paid call inside a budget you set.
-- **Govern**: local identities, scoped company policy, one approval broker for every surface, standing grants you can
+- **Govern**: local identities, scoped policy, one approval broker for every surface, standing grants you can
   list and revoke, and an audit trail you can verify.
 - **Operate**: `deckent monitor` for a read-only view, `deckent doctor` for health, `deckent config` for settings, and
   `deckent backup create|verify|restore` for verifiable recovery sets on a schedule if you choose.
@@ -472,17 +489,22 @@ OpenRouter settings.
 
 - **No npm package.** Install from source until the beta.
 - **No Desktop app, Dashboard or remote HTTP API.** Use the terminal, the `deckent` command, MCP or the SDK.
-- **No coordination of multi-step business processes yet.** One request becomes one Run; Missions that coordinate
-  several rounds and waits are planned.
+- **No coordination of multi-step business processes yet.** One request becomes one Run; longer processes that
+  coordinate several rounds and waits are planned.
 - **No ERP or CRM connectors.** The operation contract and a generic HTTP target exist; product connectors do not.
 - **Delivery is never automatic.** A rule records whether it *would* deliver each queued item, but it only advises; every
   delivery, adoption and rollback waits for your `y`.
 - **Coding tasks are accepted on the worker's exit code.** The content is not verified independently yet, and the
   window says so.
 - **Subscriptions are partial.** A Claude Code worker runs with your own Claude login; chatting in the terminal with a
-  Claude subscription, a subscription-backed planner and Sign in with ChatGPT are not available yet.
-- **Platforms.** Native Windows is not supported, macOS is only partly verified and arm64 is not shipped. A Docker worker
-  shares the host kernel; it is not a virtual machine.
+  Claude subscription, a subscription-backed Brain (the planner behind `/do`, see [Roadmap](#roadmap)) and Sign in with
+  ChatGPT are not available yet.
+- **Platforms.** Native Windows is not supported. On macOS the local runtime service does not run yet (its socket is
+  Linux-only), so chat, jobs and backup cannot be used there. Delivery, adoption, rollback and key grants need a terminal
+  witness that exists only on Linux (WSL included) and are refused on other systems. arm64 is not shipped. A Docker
+  worker shares the host kernel; it is not a virtual machine.
+- **Recovery sets are not fully encrypted.** Only the authority key inside a set is encrypted with your passphrase; keep
+  sets on storage you trust.
 - **No Enterprise SSO, fleet management or central policy service** in Core.
 
 [Known limits](docs/known-limits.md) lists every open, untried or partial item with its impact and a workaround.
@@ -494,7 +516,7 @@ hardens them through real use, and Desktop app development starts alongside it.
 
 ```mermaid
 flowchart LR
-  N["Now · alpha.53 release candidate<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>backup and audit"] --> C["Before the beta · core layers<br/>memory · agent and skill emergence<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
+  N["Now · alpha.53<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>backup and audit"] --> C["Before the beta · core layers<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
   C --> B["Beta<br/>npm package<br/>layers improved through real use and tests<br/>Desktop app development in parallel"]
   B --> E["Enterprise · separate distribution<br/>SSO · fleet · central policy<br/>ERP connectors"]
 ```
