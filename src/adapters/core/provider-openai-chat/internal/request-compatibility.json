@@ -4,6 +4,11 @@
     "url": "https://api-docs.deepseek.com/api/create-chat-completion/",
     "observedOn": "2026-10-09"
   },
+  "vendors": ["openai", "deepseek", "zai"],
+  "responseDialects": {
+    "zai": { "responseObject": "optional", "finishReasons": ["sensitive", "model_context_window_exceeded", "network_error"] },
+    "deepseek": { "finishReasons": ["insufficient_system_resource", "aborted"] }
+  },
   "toolChoices": {
     "deepseek": [
       "auto",

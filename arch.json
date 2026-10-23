@@ -3887,7 +3887,21 @@
       "openrouter",
       "bedrock",
       "openai-compatible",
-      "local-llama"
+      "local-llama",
+      "deepseek",
+      "zai",
+      "zhipu"
+    ],
+    "modelFamilies": [
+      "opus",
+      "sonnet",
+      "haiku",
+      "fable",
+      "gpt-",
+      "sol",
+      "luna",
+      "astra",
+      "terra"
     ],
     "registryFiles": [],
     "vendorUnits": [

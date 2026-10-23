@@ -86,7 +86,7 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
 export function providerConnectModelPriced(kind: ProviderConnectKind, nativeId: string, address: string | null = kind.endpoint.default): boolean {
   const connect = kind.connect, base = address === null ? null : providerEndpoint(address);
   if (!connect || !base?.ok) return false;
-  if (connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID) return anthropicPublishedTariff(nativeId) !== null;
+  if (connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID) return anthropicPublishedTariff(nativeId) !== undefined;
   if (connect.metadataPricing) return connect.metadataPricing.routes.some(route => route.modelId === nativeId);
   const endpoint = `${base.base}${connect.chatPath}`;
   return isLiteralLoopbackHostname(new URL(endpoint).hostname) || lookupOpenAiCompatibleTariff(endpoint, nativeId) !== null;

@@ -559,6 +559,9 @@ function hardcodeInventory(sources, sourceChecker, policy) {
     }
   }
   const slugs = new Set(policy.slugs);
+  // G5: a model-family word (data list `modelFamilies`) inside a string literal of executable src. A new model must arrive as data, never as a code
+  // branch; comments are not literals and never match. A word ending in '-' is a prefix (gpt-); any other word must be a whole token.
+  const familyPatterns = (policy.modelFamilies ?? []).map(word => ({ word, pattern: new RegExp(`(?:^|[^a-z0-9])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${word.endsWith('-') ? '' : '(?:$|[^a-z0-9])'}`, 'i') }));
   const operational = /(?:Ms$|Timeout|Interval|Retry|Retries|Max|Limit|Bytes|Threshold|Ttl|TTL|TIMEOUT|INTERVAL|RETRY|RETRIES|MAX|LIMIT|BYTES|THRESHOLD|^(?:timeout|interval|retry|retries|max|limit|bytes|threshold|ttl))/;
   const ancestors = node => { const out = []; for (let p = node.parent; p && !ts.isSourceFile(p); p = p.parent) out.push(p); return out; };
   const symbolOf = node => ancestors(node).filter(p => (ts.isFunctionLike(p) || ts.isVariableDeclaration(p) || ts.isPropertyAssignment(p) || ts.isClassDeclaration(p)) && p.name)
@@ -595,6 +598,10 @@ function hardcodeInventory(sources, sourceChecker, policy) {
           || ts.isElementAccessExpression(contextParent) && contextParent.argumentExpression === expression
           || ts.isCallExpression(contextParent) && ts.isPropertyAccessExpression(contextParent.expression) && ['has', 'includes', 'indexOf'].includes(contextParent.expression.name.text);
         if (slugs.has(slug) && context && !policy.vendorUnits.some(entry => entry.unit === unit && entry.reason && entry.slugs.includes(slug))) add('G1', node, slug);
+      }
+      if (string && familyPatterns.length > 0 && !ts.isImportDeclaration(parent) && !ts.isExportDeclaration(parent) && !ts.isExternalModuleReference(parent)) {
+        const hit = familyPatterns.find(({ pattern }) => pattern.test(node.text));
+        if (hit) add('G5', node, node.text, hit.word);
       }
       const declaration = path.startsWith('src/platform/core/config-fields/') || schemas.has(node);
       if (numeric && !declaration && ![-1, 0, 1, 2].includes(value) && !(ts.isElementAccessExpression(parent) && parent.argumentExpression === node)) {
