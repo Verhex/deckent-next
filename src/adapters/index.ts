@@ -90,6 +90,7 @@ export * from '#adapters/core/decision-store/index.js';
 export * from '#adapters/core/memory-journal-store/index.js';
 export * from '#adapters/core/recovery-case-store/index.js';
 export * from '#adapters/core/agent-catalog-store/index.js';
+export * from '#adapters/core/catalog-evolution-store/index.js';
 export { readDecisionPolicy } from '#adapters/core/contract/index.js';
 export * from '#adapters/core/provider-connect/index.js';
 

@@ -110,6 +110,11 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     extraction: z.object({ mode: z.enum(['off', 'shadow', 'on']).default('off') }).strict().default({}),
     verification: z.object({ mode: z.enum(['off', 'shadow', 'on']).default('off') }).strict().default({}),
     context: z.object({ mode: z.enum(['off', 'shadow', 'on']).default('off') }).strict().default({}), overlay: z.record(z.string(), z.unknown()).optional() }).strict().default({})),
+  /** S8-2 (S8-DESIGN §4, §9; protected: no AI writes it): the catalog aggregator pass `mode` off (customer default: no pass runs) | shadow | on
+   * (S8-2 writes only the pass record in both; suggestions, cards and narrowing arrive in S8-3/S8-4); `overlay` replaces registry rule rows or
+   * lowers bounds of the Core `catalog-evolution` registry, checked by the domain at use (an invalid overlay is CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE). */
+  catalogEvolution: field('agentstats.config.section', { state: 'bound', consumers: ['src/composition/core/agent-catalog'] }, 'restart', z.object({
+    mode: z.enum(['off', 'shadow', 'on']).default('off'), overlay: z.record(z.string(), z.unknown()).optional() }).strict().default({})),
   runRuntime: field('config.field.runRuntime', { state: 'bound', consumers: ['src/composition/core/run-progression'] }, 'restart', z.object({
     parking: RUN_PARKING_SETTINGS.default({ schemaVersion: 1 }),
     quotaRecovery: QUOTA_RECOVERY_SETTINGS.default({ schemaVersion: 1 }),

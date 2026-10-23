@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "revision": "catalog-evolution-seed-1",
+  "status": "provisional",
+  "stats": {
+    "zMicro": 1960000,
+    "windowTasks": 50,
+    "durationPercentileMicro": 900000,
+    "windowMaxDays": 30,
+    "periodDays": 7,
+    "modelMixMax": 16,
+    "excludeUnknownEvidence": true,
+    "readRowsMax": 5000
+  },
+  "pass": { "passPageRows": 200, "maxKeysPerPass": 64 },
+  "suggestions": { "maxOpenSuggestions": 50, "suggestionTtlDays": 14, "cooldownTasks": 10 },
+  "inherit": { "recheckMinSamples": 10 },
+  "rollout": { "minSuggestions": 20, "minAgreementMicro": 800000, "maxReversalRateMicro": 100000, "minShadowNarrowings": 10 },
+  "rules": [
+    { "id": "promote-agent", "version": 1, "kind": "promote-agent", "status": "provisional",
+      "params": { "minSamples": 20, "lowerBoundMicro": 700000, "minModels": 2, "minPeriods": 2, "maxNonAttributableShareMicro": 200000 } },
+    { "id": "redesign-agent", "version": 1, "kind": "redesign-agent", "status": "provisional", "params": { "minSamples": 10, "upperBoundMicro": 500000 } },
+    { "id": "revise-agent", "version": 1, "kind": "revise-agent", "status": "provisional", "params": { "minSamples": 10, "effortRatioMicro": 1500000, "windows": 2 } },
+    { "id": "propose-agent", "version": 1, "kind": "propose-agent", "status": "provisional", "params": { "minTasks": 10 } },
+    { "id": "propose-skill", "version": 1, "kind": "propose-skill", "status": "provisional", "params": { "minLessons": 3 } }
+  ]
+}

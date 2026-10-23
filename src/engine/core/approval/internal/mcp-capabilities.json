@@ -466,6 +466,9 @@
             ],
             "inspect_skill": [
               "inspect"
+            ],
+            "inspect_agent_stats": [
+              "inspect"
             ]
           },
           "actions": [

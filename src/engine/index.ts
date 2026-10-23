@@ -80,6 +80,7 @@ export * from '#engine/core/config/index.js';
 export * from '#engine/core/decision/index.js';
 export * from '#engine/core/memory/index.js';
 export * from '#engine/core/agent-catalog/index.js';
+export * from '#engine/core/catalog-evolution/index.js';
 
 export { taskBriefSchema, resultBriefSchema, projectTaskBrief, projectResultBrief } from '#engine/core/runs/index.js';
 export type { TaskBrief, ResultBrief } from '#engine/core/runs/index.js';

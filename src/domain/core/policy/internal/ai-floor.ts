@@ -75,6 +75,8 @@ const PROTECTED_CONFIG_PATHS = Object.freeze(['policy', 'approvals', 'identity',
   'runRuntime.recovery', 'runRuntime.nervous',
   // S3-3 (design §10, MINOR 4): the owner-only switch that makes the subscription Brain connect kind available on this installation.
   'models.headless',
+  // S8-2 (S8-DESIGN §9): the catalog aggregator switch and the `catalog-evolution` registry overlay (thresholds, calibration) — no AI changes either.
+  'catalogEvolution',
   'terminal.shell.realm', 'terminal.shell.environment', 'terminal.fetch.egress', 'terminal.fetch.allowedHosts']);
 export function protectedConfigKey(keyPath: string): boolean {
   const key = keyPath.replace(/\[[^\]]*\]/gu, '.0').replace(/\.+$/u, '');

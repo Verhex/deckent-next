@@ -27,7 +27,7 @@ import { quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseR
 import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
 import { memoryListQuerySchema, memorySearchQuerySchema, memoryInspectQuerySchema, type MemoryListQuery, type MemoryListing, type MemorySearchQuery, type MemorySearchResult, type MemoryInspectQuery, type MemoryInspection } from '#engine/index.js';
 import { agentListQuerySchema, agentInspectQuerySchema, skillListQuerySchema, skillInspectQuerySchema, type AgentListQuery, type AgentListing, type AgentInspectQuery,
-  type AgentInspection, type SkillListQuery, type SkillListing, type SkillInspectQuery, type SkillInspection } from '#engine/index.js';
+  type AgentInspection, type SkillListQuery, type SkillListing, type SkillInspectQuery, type SkillInspection, agentStatsQuerySchema, type AgentStatsQuery, type AgentStatsView } from '#engine/index.js';
 import { policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/index.js';
 import { modelRoleQuerySchema, type ModelRoleInspection, type ModelRoleQuery } from '#engine/index.js';
 export interface McpApplications {
@@ -44,6 +44,8 @@ export interface McpApplications {
   listMemory?(query: MemoryListQuery): Promise<MemoryListing>; searchMemory?(query: MemorySearchQuery): Promise<MemorySearchResult>; inspectMemory?(query: MemoryInspectQuery): Promise<MemoryInspection>;
   /** S7 agent/skill catalog: read-only; creating, revising and importing stay a person's terminal card. */
   listAgents?(query: AgentListQuery): Promise<AgentListing>; inspectAgent?(query: AgentInspectQuery): Promise<AgentInspection>;
+  /** S8-2 agent statistics: the same `agent-catalog`/`inspect` read; numbers are associations and acceptance rates (labels on the view). */
+  inspectAgentStats?(query: AgentStatsQuery): Promise<AgentStatsView>;
   listSkills?(query: SkillListQuery): Promise<SkillListing>; inspectSkill?(query: SkillInspectQuery): Promise<SkillInspection>;
   renewApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   listApprovals?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
@@ -137,7 +139,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
     schema: memoryInspectQuerySchema, invoke: input => inspectMemory.call(applications, memoryInspectQuerySchema.parse(input)) });
   for (const [name, description, schema, invoke] of [['list_agents', t('mcp.tool.listAgents', {}, locale), agentListQuerySchema, applications.listAgents],
     ['inspect_agent', t('mcp.tool.inspectAgent', {}, locale), agentInspectQuerySchema, applications.inspectAgent], ['list_skills', t('mcp.tool.listSkills', {}, locale), skillListQuerySchema, applications.listSkills],
-    ['inspect_skill', t('mcp.tool.inspectSkill', {}, locale), skillInspectQuerySchema, applications.inspectSkill]] as const) {
+    ['inspect_skill', t('mcp.tool.inspectSkill', {}, locale), skillInspectQuerySchema, applications.inspectSkill],
+    ['inspect_agent_stats', t('mcp.tool.inspectAgentStats', {}, locale), agentStatsQuerySchema, applications.inspectAgentStats]] as const) {
     if (invoke) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name, description, schema,
       invoke: input => (invoke as (query: unknown) => Promise<unknown>).call(applications, schema.parse(input)) });
   }
