@@ -21,6 +21,11 @@ export const brainPlannerConfigSchema = z.object({ schemaVersion: z.literal(1).d
     maxEvaluators: z.number().int().positive().safe(), maxBytes: z.number().int().positive().safe(),
     requestMaxBytes: z.number().int().positive().safe(), tokenFramingAllowance: z.number().int().nonnegative().safe(),
   }).strict().default(templates.context),
+  /** f3 (owner Q-H4): a planning call the subscription refuses for quota waits visibly until the known reset plus `marginMs` only when that is at
+   * most `maxWaitMs` away, and plans again as a new derived attempt; `maxAttempts` counts the first call. 0 ms or 1 attempt: never wait. A short
+   * wait by definition: both times stay within the registry ceiling (which also keeps one timer delay inside its limit). */
+  quotaWait: z.object({ maxWaitMs: z.number().int().nonnegative().max(templates.quotaWaitCeilingMs), marginMs: z.number().int().nonnegative().max(templates.quotaWaitCeilingMs),
+    maxAttempts: z.number().int().positive().safe() }).strict().default(templates.quotaWait),
 }).strict();
 export type BrainPlannerConfig = z.infer<typeof brainPlannerConfigSchema>;
 export const brainDraftSchema = runProposalSchema.unwrap().pick({ graph: true, budgetCeiling: true, requiredPermissions: true }).strict().readonly();

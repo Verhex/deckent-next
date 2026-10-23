@@ -1,7 +1,7 @@
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
   type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, readHeadlessRejection,
-  type ModelInvocationResponseEvidence } from '#domain/index.js';
+  type ModelInvocationResponseEvidence, type BrainPlanObserver } from '#domain/index.js';
 import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext, assertBrainLeavesAssignment,
   prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainMemoryContext, type BrainRegistryContext } from '#capabilities/index.js';
 import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from '#platform/index.js';
@@ -9,6 +9,10 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import { modelInvocationRequestDigest, refuseInactiveModel, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { composeModelRolePolicy, decideRoleModelInScope, roleModelPorts, type RoleModelSources } from '#engine/core/model-activation/index.js';
 import type { PlanningMemoryNote, RunProposalQuery, RunProposalResult } from '#engine/core/run-proposal/index.js';
+import { brainQuotaAttemptCommandId, brainQuotaWaitUntil, waitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
+export { brainQuotaAttemptCommandId, brainQuotaWaitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
+/** f3: the configured `brain_planner.quotaWait` bounds (registry defaults when unset). */
+export const brainQuotaWaitPolicy = (config: unknown): BrainQuotaWaitPolicy => brainPlannerConfigSchema.parse(config).quotaWait;
 export const brainRunId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-run:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export const brainInvocationCommandId = (command: BrainPlanCommand) => sha256(encodeCommandProjection('brain-invocation:1', { scopeId: command.scopeId, commandId: command.commandId }));
 export function prepareBrainRegistryPrompt(command: BrainPlanCommand, registry: ExecutionRegistry,
@@ -54,7 +58,8 @@ export function assertBrainContextFits(command: ModelInvocationCommand, config: 
   }
 }
 export interface BrainPreparation { readonly invocation: ModelInvocationCommand; readonly prompt: ReturnType<typeof prepareBrainPrompt>; readonly kinds?: readonly string[];
-  /** S4B-6: the planning call's memory note for the card (response-only). */ readonly planningMemory?: PlanningMemoryNote }
+  /** S4B-6: the planning call's memory note for the card (response-only). */ readonly planningMemory?: PlanningMemoryNote;
+  /** f3 (owner Q-H4): the configured quota wait bounds; absent: a quota refusal is the typed refusal at once. */ readonly quotaWait?: BrainQuotaWaitPolicy }
 export interface BrainPlanPorts {
   readonly knownSecrets?: KnownSecretSnapshot | undefined;
   inspect(query: RunProposalQuery): Promise<RunProposalResult | null>;
@@ -67,6 +72,8 @@ export interface BrainPlanPorts {
   rejectionBody?(result: ModelInvocationResult): Promise<string | null>;
   /** The scope's remaining money after the planning call, when observable; null when no budget is readable. */
   remainingBudget?(scopeId: string): Promise<Readonly<{ currency: string; remainingMinorUnits: number }> | null>;
+  /** Wall clock of the quota wait (tests pin it); absent: Date.now. */
+  now?(): number;
 }
 const assertActive = (signal?: AbortSignal) => { if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED'); };
 /** The tier/role registry role a Brain model must hold (owner BRAIN1: frontier only). */
@@ -91,7 +98,8 @@ export const brainTakesMemory = (config: unknown) => selectedBrainTemplate(confi
 export const brainAssignsWorkers = (config: unknown) => selectedBrainTemplate(config).modelAssignment !== 'system';
 /**
  * S3-4: the typed cause of a rejected planning call. The subscription CLI step's own adapter body names it (quota with its reset, credits, login,
- * a stopped guard, an output the CLI itself refused); any other adapter, or another cause, keeps BRAIN_PROVIDER_REJECTED. Nothing is retried.
+ * a stopped guard, an output the CLI itself refused); any other adapter, or another cause, keeps BRAIN_PROVIDER_REJECTED. Nothing is retried (a quota wait
+ * starts a new derived attempt instead, see `plan`).
  */
 function brainRejection(evidence: Readonly<{ adapter: ModelInvocationResponseEvidence['adapter']; reason: string; httpStatus: number | null }>, data: string | null) {
   const body = data === null ? null : readHeadlessRejection({ adapter: evidence.adapter, body: { data } }), create = (code: string, options?: Parameters<typeof ErrorRegistry.createError>[1]) => ErrorRegistry.createError(code, options);
@@ -107,7 +115,9 @@ function brainRejection(evidence: Readonly<{ adapter: ModelInvocationResponseEvi
 /** One model step; no tool loop, retry, Run writer or approval decision. */
 export class BrainPlanApplication {
   constructor(private readonly verifier: PrincipalVerifier, private readonly ports: BrainPlanPorts) {}
-  async plan(input: unknown, credential?: unknown, signal?: AbortSignal): Promise<RunProposalResult> {
+  /** `observe`: the surface that shows progress. Only a caller that shows the wait gets one (owner Q-H4: a short VISIBLE wait); without it a
+   * quota refusal is the typed refusal at once. */
+  async plan(input: unknown, credential?: unknown, signal?: AbortSignal, observe?: BrainPlanObserver): Promise<RunProposalResult> {
     const parsed = brainPlanCommandInputSchema.safeParse(input);
     if (!parsed.success) throw ErrorRegistry.createError('BRAIN_INPUT_INVALID');
     const command = parsed.data, principal = await authenticate(this.verifier, credential, command.scopeId);
@@ -123,18 +133,33 @@ export class BrainPlanApplication {
     }
     const prepared = await this.ports.prepare(command, principal);
     assertActive(signal);
-    const invocation = { ...prepared.invocation, commandId: brainInvocationCommandId(command) };
-    let result: ModelInvocationResult;
-    try { result = await this.ports.invoke(invocation, signal); }
-    catch (error) { assertActive(signal); throw error; }
-    assertActive(signal);
+    let invocation = { ...prepared.invocation, commandId: brainInvocationCommandId(command) }, result: ModelInvocationResult;
+    const now = () => this.ports.now?.() ?? Date.now();
+    // f3 (owner Q-H4): a quota refusal whose reset is within the registry bound waits visibly, then the SAME prepared request goes out under a
+    // new derived command id (lineage: the refused call's ids); never the refused call again, never more than `maxAttempts` calls.
+    for (let attempt = 1; ; attempt++) {
+      try { result = await this.ports.invoke(invocation, signal); }
+      catch (error) { assertActive(signal); throw error; }
+      assertActive(signal);
+      const receipt = result.receipt;
+      if (receipt.request.requestDigest !== modelInvocationRequestDigest(invocation) || receipt.request.commandId !== invocation.commandId
+        || encodeCommandProjection('model-ref', receipt.request.reference) !== encodeCommandProjection('model-ref', invocation.reference)
+        || receipt.request.expectedBinding.digest !== invocation.expectedBinding.digest
+        || receipt.request.scopeId !== command.scopeId || encodeCommandProjection('actor', proposer)
+          !== encodeCommandProjection('actor', { id: receipt.actor.id, issuer: receipt.actor.issuer, subject: receipt.actor.subject })) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
+      if (receipt.outcome?.state !== 'rejected') break;
+      const data = await this.ports.rejectionBody?.(result).catch(() => null) ?? null;
+      const body = data === null ? null : readHeadlessRejection({ adapter: receipt.outcome.evidence.adapter, body: { data } });
+      const untilMs = observe && prepared.quotaWait ? brainQuotaWaitUntil(body, receipt.outcome.observedAtMs, now(), attempt, prepared.quotaWait) : null;
+      if (untilMs === null || typeof body?.resetsAtMs !== 'number') throw brainRejection(receipt.outcome.evidence, data);
+      const after = { commandId: invocation.commandId, invocationId: receipt.claim.invocationId };
+      observe!({ kind: 'quota-wait', attempt: attempt + 1, maxAttempts: prepared.quotaWait!.maxAttempts, resetsAtMs: body.resetsAtMs, untilMs, after });
+      await waitUntil(untilMs, now, signal);
+      assertActive(signal);
+      invocation = { ...prepared.invocation, commandId: brainQuotaAttemptCommandId(command, attempt + 1, after) };
+      observe!({ kind: 'planning', attempt: attempt + 1 });
+    }
     const receipt = result.receipt;
-    if (receipt.request.requestDigest !== modelInvocationRequestDigest(invocation) || receipt.request.commandId !== invocation.commandId
-      || encodeCommandProjection('model-ref', receipt.request.reference) !== encodeCommandProjection('model-ref', invocation.reference)
-      || receipt.request.expectedBinding.digest !== invocation.expectedBinding.digest
-      || receipt.request.scopeId !== command.scopeId || encodeCommandProjection('actor', proposer)
-        !== encodeCommandProjection('actor', { id: receipt.actor.id, issuer: receipt.actor.issuer, subject: receipt.actor.subject })) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
-    if (receipt.outcome?.state === 'rejected') throw brainRejection(receipt.outcome.evidence, await this.ports.rejectionBody?.(result).catch(() => null) ?? null);
     if (receipt.outcome?.state !== 'responded') throw ErrorRegistry.createError('BRAIN_OUTCOME_UNKNOWN');
     const text = this.ports.text(result);
     const outputCap = invocation.nativeRequest['max_completion_tokens'];

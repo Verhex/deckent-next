@@ -580,6 +580,7 @@
     },
     "src/composition/core/runtime": {
       "dependencies": [
+        "src/composition/core/agent-catalog",
         "src/composition/core/model-invocation",
         "src/composition/core/query-errors",
         "src/composition/core/runs",
@@ -589,8 +590,7 @@
         "src/platform/core/clock",
         "src/platform/core/config",
         "src/platform/core/errors",
-        "src/composition/core/memory",
-        "src/composition/core/agent-catalog"
+        "src/composition/core/memory"
       ],
       "plan": "EXECUTION"
     },
@@ -1199,7 +1199,8 @@
         "src/platform/core/common",
         "src/engine/core/run-proposal",
         "src/surfaces/core/terminal-conversation",
-        "src/surfaces/core/terminal-host"
+        "src/surfaces/core/terminal-host",
+        "src/domain/core/run"
       ],
       "plan": "SURFACES"
     },
@@ -2230,6 +2231,10 @@
     },
     "src/adapters/core/local-keyring": {
       "dependencies": [
+        "src/domain/core/agent-catalog",
+        "src/domain/core/command",
+        "src/domain/core/primitives",
+        "src/engine/core/agent-catalog",
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/platform/core/host",
@@ -3724,7 +3729,8 @@
     "src/domain/core/agent-catalog": {
       "dependencies": [
         "src/domain/core/primitives",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/domain/core/command"
       ],
       "plan": "LEARNING"
     },
@@ -3770,6 +3776,7 @@
         "src/adapters/core/local-principal",
         "src/platform/core/clock",
         "src/platform/core/config",
+        "src/composition/core/root",
         "src/composition/core/scoped-request",
         "src/composition/core/policy",
         "src/composition/core/query-errors",
@@ -3783,6 +3790,7 @@
     },
     "src/surfaces/core/cli-agents": {
       "dependencies": [
+        "src/platform/core/integrity",
         "src/platform/core/errors",
         "src/platform/core/output",
         "src/platform/core/config",
@@ -3948,7 +3956,7 @@
       "domain": 10000,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 32000,
+      "adapters": 33500,
       "surfaces": 45000,
       "composition": 9000
     },
@@ -4028,6 +4036,7 @@
       "memory-review",
       "assignment",
       "agents",
+      "agentsign",
       "tuicopy",
       "tuinotify",
       "tuiqueue",
@@ -4037,6 +4046,7 @@
       "quotaask",
       "headless",
       "recovery",
+      "brainwait",
       "agentstats"
     ]
   },

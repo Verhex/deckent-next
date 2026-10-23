@@ -11,7 +11,7 @@
   "cli.run.inspect.cancelRequested": "  Cancellation: request recorded; worker termination is not confirmed.",
   "cli.run.inspect.cancelNoWorker": "  Cancellation: request recorded; no worker was started for the cancelled work (stopped before launch).",
   "cli.run.inspect.cancelAbsent": "  Cancellation: no request recorded.",
-  "cli.run.inspect.unresolved": "  Worker outcome not confirmed: Deckent could not confirm whether the worker stopped or what it changed. The task stays held; nothing is retried, released or accepted, and no new attempt starts. While it runs, the runtime service checks the worker again; there is no automatic recovery in this release.",
+  "cli.run.inspect.unresolved": "  Worker outcome not confirmed: Deckent could not confirm whether the worker stopped or what it changed. The task stays held; nothing is accepted or released on its word. While it runs, the runtime service checks the worker again.",
   "cli.run.cancel.heading": "Run {run} | cancellation request recorded | command {command}",
   "cli.run.cancel.outcome": "  Task {task} / attempt {attempt}: {status}",
   "cli.run.cancel.terminal": "process exit recorded",

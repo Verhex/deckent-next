@@ -1,6 +1,6 @@
-import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, type BrainPlanCommand,
+import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, type BrainPlanCommand, type BrainPlanObserver,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { BrainPlanApplication, brainRunId, brainTakesMemory, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
+import { BrainPlanApplication, brainQuotaWaitPolicy, brainRunId, brainTakesMemory, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
 import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -14,11 +14,12 @@ import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index
 import { prepareConfiguredPlanningMemory } from '#composition/core/memory/index.js';
 import { gateConfiguredBrainModel } from './internal/model-roles.js';
 export { inspectConfiguredRoleModels } from './internal/model-roles.js';
-/** SDK application contract. CLI/MCP/Terminal use the same application with the existing runtime invocation transport. */
-export function planConfiguredRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
-  return plan(root, input, options, (command, signal) => invokeConfiguredModel(root, command, options, signal), signal);
+/** SDK application contract. CLI/MCP/Terminal use the same application with the existing runtime invocation transport. `observe`: a caller that
+ * shows planning progress (a quota wait, owner Q-H4) passes it; without it a quota refusal is the typed refusal at once. */
+export function planConfiguredRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, observe?: BrainPlanObserver) {
+  return plan(root, input, options, (command, signal) => invokeConfiguredModel(root, command, options, signal), signal, undefined, observe);
 }
-export function planRuntimeRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+export function planRuntimeRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, observe?: BrainPlanObserver) {
   const client = createConfiguredRuntimeClient(root, options);
   return plan(root, input, options, async (command, signal) => {
     const cancel = () => { void client.cancelModelInvocation({ schemaVersion: 1, commandId: command.commandId + '-cancel', scopeId: command.scopeId,
@@ -26,11 +27,11 @@ export function planRuntimeRun(root: string, input: BrainPlanCommand, options: C
     signal?.addEventListener('abort', cancel, { once: true });
     try { if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED'); return await client.invokeModel(command, undefined, signal); }
     finally { signal?.removeEventListener('abort', cancel); }
-  }, signal, proposal => client.proposeRun(proposal));
+  }, signal, proposal => client.proposeRun(proposal), observe);
 }
 async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOptions,
   invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<ModelInvocationResult>, signal?: AbortSignal,
-  propose?: (proposal: RunProposal) => ReturnType<typeof proposeConfiguredRun>) {
+  propose?: (proposal: RunProposal) => ReturnType<typeof proposeConfiguredRun>, observe?: BrainPlanObserver) {
   try {
     const parsed = brainPlanCommandInputSchema.safeParse(input);
     if (!parsed.success) throw ErrorRegistry.createError('BRAIN_INPUT_INVALID');
@@ -86,8 +87,9 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
         if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED');
         assertBrainContextFits(prepared.command, context.config['brain_planner'], profile?.contextWindowTokens ?? null, measured);
         const note = memory.note();
-        return { invocation: prepared.command, prompt, kinds: registry.kinds.map(row => row.kind), ...(note ? { planningMemory: note } : {}) };
+        return { invocation: prepared.command, prompt, kinds: registry.kinds.map(row => row.kind), ...(note ? { planningMemory: note } : {}),
+          quotaWait: brainQuotaWaitPolicy(context.config['brain_planner']) };
       },
-    }).plan(input, undefined, signal);
+    }).plan(input, undefined, signal, observe);
   } catch (error) { throw queryFailure(error); }
 }

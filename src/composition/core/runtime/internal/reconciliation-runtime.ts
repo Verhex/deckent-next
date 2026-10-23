@@ -4,7 +4,7 @@ import { ReconciliationRuntimeLoop, type ReconciliationRecoveryCommand, type Rec
 import { prepareConfiguredNervous, prepareConfiguredRecovery, recoverConfiguredReconciliation } from '#composition/core/runs/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { prepareConfiguredMemoryEvaluation, prepareConfiguredMemoryExtraction, replayConfiguredMemoryPurges } from '#composition/core/memory/index.js';
-import { prepareConfiguredCatalogAggregation } from '#composition/core/agent-catalog/index.js';
+import { prepareConfiguredCatalogAggregation, replayConfiguredSignerRevocations } from '#composition/core/agent-catalog/index.js';
 
 export interface ConfiguredReconciliationRuntimeObserver {
   onPage(command: ReconciliationRecoveryCommand, result: ReconciliationRecoveryPage): void | Promise<void>;
@@ -23,6 +23,8 @@ export async function prepareConfiguredReconciliationRuntime(projectRoot: string
   if (runtime.pageSize > config.inspection.maxPageSize) throw ErrorRegistry.createError('RECONCILIATION_RECOVERY_INVALID');
   // S4B-4 §6.6: every memory purge the journal holds is re-applied before this service admits work (a restore never un-purges); held on failure.
   await replayConfiguredMemoryPurges(projectRoot, options);
+  // S8-5: every logged signer revocation a restored ledger lacks is re-applied (same revoke step) before any work or signing.
+  await replayConfiguredSignerRevocations(projectRoot, options);
   if (!runtime.scopeIds.length) {
     const run: (signal: AbortSignal) => Promise<void> = async () => {};
     return Object.freeze({ run });

@@ -30,7 +30,8 @@ Başlarken:
       search | inspect | propose | verify | retire | review | purge
       [--scope <id>] [--state <ad>] [--json]
   agents      Kapsamın ajanlarını ve skill'lerini oku ve tanımla
-      inspect | skills | skill | define | define-skill
+      inspect | skills | skill | define | define-skill | signers |
+      enrol-signer | add-signer | revoke-signer | repair-signers | import-skill
       [--scope <id>] [--json]
 
 İş yürütme:

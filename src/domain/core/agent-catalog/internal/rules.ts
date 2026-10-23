@@ -4,6 +4,8 @@ import { AgentCatalogError, agentContentSchema, agentDefinitionSchema, skillCont
 
 interface Actor { readonly issuer: string; readonly subject: string; readonly assurance?: string }
 const who = (actor: Actor) => ({ issuer: actor.issuer, subject: actor.subject, ai: isAiPrincipal(actor) });
+type Signed = { readonly keyId: string; readonly signatureDigest: string } | undefined;
+const provenance = (author: Actor, commandId: string, definedAtMs: number, signed: Signed) => ({ author: who(author), commandId, definedAtMs, ...(signed ? { signed } : {}) });
 const next = <T extends { scopeId: string; revision: number }>(previous: T | null, scopeId: string, id: string, previousId: string | undefined) => {
   if (previous && (previous.scopeId !== scopeId || previousId !== id)) return null;
   return (previous?.revision ?? 0) + 1;
@@ -11,27 +13,25 @@ const next = <T extends { scopeId: string; revision: number }>(previous: T | nul
 
 /** A new agent (revision 1) or the next revision of `previous`. Digests are the engine's (the domain stays free of hashing). */
 export function defineAgentRevision(previous: AgentDefinition | null, input: { readonly scopeId: string; readonly agentId: string; readonly commandId: string;
-  readonly content: unknown; readonly personaDigest: string; readonly skillSetDigest: string; readonly author: Actor; readonly atMs: number }): AgentDefinition {
+  readonly content: unknown; readonly personaDigest: string; readonly skillSetDigest: string; readonly author: Actor; readonly atMs: number; readonly signed?: Signed }): AgentDefinition {
   const content = agentContentSchema.safeParse(input.content), revision = next(previous, input.scopeId, input.agentId, previous?.agentId);
   if (!content.success || revision === null) throw new AgentCatalogError('AGENT_DEFINITION_INVALID');
   if (content.data.parentAgentId === input.agentId) throw new AgentCatalogError('AGENT_ORG_CYCLE');
   const row = agentDefinitionSchema.safeParse({ schemaVersion: 1, scopeId: input.scopeId, agentId: input.agentId, revision, content: content.data,
-    personaDigest: input.personaDigest, skillSetDigest: input.skillSetDigest, tier: null,
-    provenance: { author: who(input.author), commandId: input.commandId, definedAtMs: input.atMs } });
+    personaDigest: input.personaDigest, skillSetDigest: input.skillSetDigest, tier: null, provenance: provenance(input.author, input.commandId, input.atMs, input.signed) });
   if (!row.success) throw new AgentCatalogError('AGENT_DEFINITION_INVALID');
   return row.data;
 }
 
 /** A new skill or its next revision. `signature` is `unsigned` for a person's local text, `verified` only after the import floor passed. */
 export function defineSkillRevision(previous: SkillDefinition | null, input: { readonly scopeId: string; readonly skillId: string; readonly commandId: string;
-  readonly content: unknown; readonly contentDigest: string; readonly source: unknown; readonly author: Actor; readonly atMs: number;
+  readonly content: unknown; readonly contentDigest: string; readonly source: unknown; readonly author: Actor; readonly atMs: number; readonly signed?: Signed;
   readonly signature: { readonly status: 'unsigned' } | ({ readonly status: 'verified' } & SkillSignature) }): SkillDefinition {
   const content = skillContentSchema.safeParse(input.content), source = skillSourceSchema.safeParse(input.source);
   const revision = next(previous, input.scopeId, input.skillId, previous?.skillId);
   if (!content.success || !source.success || revision === null) throw new AgentCatalogError('SKILL_DEFINITION_INVALID');
   const row = skillDefinitionSchema.safeParse({ schemaVersion: 1, scopeId: input.scopeId, skillId: input.skillId, revision, content: content.data,
-    contentDigest: input.contentDigest, source: source.data, signature: input.signature,
-    provenance: { author: who(input.author), commandId: input.commandId, definedAtMs: input.atMs } });
+    contentDigest: input.contentDigest, source: source.data, signature: input.signature, provenance: provenance(input.author, input.commandId, input.atMs, input.signed) });
   if (!row.success) throw new AgentCatalogError('SKILL_DEFINITION_INVALID');
   return row.data;
 }

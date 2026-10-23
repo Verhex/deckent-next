@@ -29,18 +29,23 @@ export function skillTable(items: readonly SkillDefinition[], locale: Locale, co
     { header: t('agents.column.source', {}, locale) }, { header: t('agents.column.digest', {}, locale) }, { header: t('agents.column.changed', {}, locale) }],
   items.map(item => [item.skillId, item.content.name, item.revision, source(item, locale), item.contentDigest.slice(0, 12), formatAgo(item.provenance.definedAtMs, now, locale)]), cliTableStyle(context));
 }
-const revisions = (history: readonly (AgentDefinition | SkillDefinition)[], locale: Locale) => [t('agents.view.history', {}, locale),
-  ...history.map(row => t('agents.view.revision', { revision: row.revision, by: who(row.provenance.author, locale), at: formatAgo(row.provenance.definedAtMs, Date.now(), locale) }, locale))];
+/** S8-5 (owner Q-S13): an AI/system revision names its signing key; one signed by a key revoked since then is marked "signer revoked". */
+type Signers = Readonly<Record<string, 'active' | 'revoked'>>;
+const signedMark = (row: AgentDefinition | SkillDefinition, signers: Signers, locale: Locale) => !row.provenance.signed ? '' : ` · ${t('agentsign.view.signed', { keyId: row.provenance.signed.keyId.slice(0, 12) }, locale)}${
+  signers[row.provenance.signed.keyId] === 'active' ? '' : ` · ${t('agentsign.view.signerRevoked', {}, locale)}`}`;
+const revisions = (history: readonly (AgentDefinition | SkillDefinition)[], locale: Locale, signers: Signers) => [t('agents.view.history', {}, locale),
+  ...history.map(row => t('agents.view.revision', { revision: row.revision, by: who(row.provenance.author, locale), at: formatAgo(row.provenance.definedAtMs, Date.now(), locale) }, locale)
+    + signedMark(row, signers, locale))];
 /** S8-1a: what the system may select the agent for — its standing per bound WorkClass (one fixed label per standing, EN/TR). */
 const standingLabel = (standing: AgentStanding['standing'], locale: Locale) => standing === 'active' ? t('agent.standing.active', {}, locale)
   : standing === 'candidate' ? t('agent.standing.candidate', {}, locale) : standing === 'retired' ? t('agent.standing.retired', {}, locale) : t('agent.standing.redesign-required', {}, locale);
 const standingLine = (standings: readonly AgentStanding[], locale: Locale) => standings.length ? t('agents.inspect.standings', { standings: standings
   .map(row => `${safeCell(row.workClass)} ${standingLabel(row.standing, locale)}`).join(', ') }, locale) : t('agents.inspect.standingNone', {}, locale);
-export function agentView(item: AgentDefinition, history: readonly AgentDefinition[], locale: Locale, standings: readonly AgentStanding[] = []): string {
+export function agentView(item: AgentDefinition, history: readonly AgentDefinition[], locale: Locale, standings: readonly AgentStanding[] = [], signers: Signers = {}): string {
   return [...agentLines(item.agentId, item.content, locale), t('agents.view.identity', { revision: item.revision, skillSet: item.skillSetDigest.slice(0, 12) }, locale),
-    t('agents.view.tier', {}, locale), standingLine(standings, locale), ...revisions(history, locale)].join('\n');
+    t('agents.view.tier', {}, locale), standingLine(standings, locale), ...revisions(history, locale, signers)].join('\n');
 }
-export function skillView(item: SkillDefinition, history: readonly SkillDefinition[], locale: Locale): string {
+export function skillView(item: SkillDefinition, history: readonly SkillDefinition[], locale: Locale, signers: Signers = {}): string {
   return [`${safeCell(item.skillId)} · ${safeCell(item.content.name)}`, safeCell(item.content.text), t('agents.skill.view.pin', { revision: item.revision, digest: item.contentDigest }, locale),
-    source(item, locale), ...revisions(history, locale)].join('\n');
+    source(item, locale), ...revisions(history, locale, signers)].join('\n');
 }

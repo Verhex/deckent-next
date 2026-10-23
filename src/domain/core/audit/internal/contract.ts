@@ -137,7 +137,12 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
       .min(1).max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), memoryDigest: digest, contextDigest: digest, omitted: counterSchema, withheld: counterSchema }).strict(),
   /** S7 agent/skill catalog: one definition or import of one row (persona and skill text are never recorded, only their digests). */
   z.object({ kind: z.literal('agent-catalog'), item: z.enum(['agent', 'skill']), action: z.enum(['define', 'import']), id: identitySchema, commandId: identitySchema,
-    revision: counterSchema.positive(), contentDigest: digest, skillSetDigest: digest.nullable() }).strict(),
+    revision: counterSchema.positive(), contentDigest: digest, skillSetDigest: digest.nullable(),
+    /** S8-5: an AI/system write — the action key and the digest of the signature verified in the commit transaction. */
+    signed: z.object({ keyId: digest, signatureDigest: digest }).strict().optional() }).strict(),
+  /** S8-5: a person's signer-key change (or the startup re-revocation from the append-only log); public facts only, never key material. */
+  z.object({ kind: z.literal('skill-signer'), action: z.enum(['enrol', 'add', 'revoke']), keyId: digest, purpose: z.enum(['action', 'import', 'publish', 'hub']),
+    custody: z.enum(['host', 'external']), commandId: identitySchema, revision: counterSchema.positive(), basis: z.enum(['person-card', 'revocation-log']) }).strict(),
   /** `person` null (MODES-3): the default `standart`, which no bindings entry names. */
   z.object({ kind: z.literal('permission-mode'), mode: z.enum(['auto-edit', 'full-auto', 'standart']), cell: z.enum(['edit-non-floor', 'shell-modify', 'mcp-call']),
     tool: toolRef, call: callRef, grants: z.object({ company: identitySchema, person: identitySchema.nullable() }).strict(),

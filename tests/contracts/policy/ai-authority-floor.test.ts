@@ -59,6 +59,8 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
   // S5b (Auditor owner decision 6): a safety hold is a person's to lift; the public operator hold stays policy-governed (run-decision resume).
   ['Nervous pause resume', 'run-hold', 'nervous', 'resume'],
   ['Auditor park resume', 'run-hold', 'auditor', 'resume'],
+  // S8-5 (N22): signer keys are a person's — enrol, add, revoke and repair are refused for every AI principal.
+  ...(['enrol', 'add', 'revoke', 'repair'] as const).map(action => [`signer key ${action}`, 'skill-signer', 's', action] as [string, string, string, string]),
 ];
 const grantAll = (kind: string, principal: VerifiedPrincipal) => ({ id: `all-${kind}`, effect: 'allow' as const, actions: 'all' as const, scopes: 'all' as const,
   principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind, ids: 'all' as const } });

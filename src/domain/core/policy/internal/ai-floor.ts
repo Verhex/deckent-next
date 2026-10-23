@@ -52,6 +52,8 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   if (resource.kind === 'secret') return true;
   // S6R-3: a standing approval of a Nervous stop action is the owner's; no AI holds it (Nervous itself proposes, the broker applies).
   if (resource.kind === 'recovery-action') return true;
+  // S8-5 (S8-DESIGN §9, N22): signer rows are a person's — enrol, add, revoke and log repair are refused for every AI principal.
+  if (resource.kind === 'skill-signer' && action !== 'inspect') return true;
   if (resource.kind === 'approval' && action === 'decide' && AUTHORITY_APPROVAL_IDS.includes(resource.id)) return true;
   if (resource.kind === 'audit' && !['inspect', 'verify'].includes(action)) return true;
   if (resource.kind === 'agent-tool-call' && ['edit-authority', 'edit-floor'].includes(resource.id)) return true;

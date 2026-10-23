@@ -66,7 +66,7 @@ it('the v69 → v67 down steps are exact; negative: an existing position table a
     db.exec('CREATE TABLE catalog_evolution_positions(x)');
     db.exec('BEGIN IMMEDIATE'); expect(() => migrateLedger(db, 'allow')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' })); db.exec('ROLLBACK');
     expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(68);
-    db.exec('DROP TABLE catalog_evolution_positions; PRAGMA user_version=67;'); migrateLedger(db, 'allow');
+    db.exec(DOWNGRADE_TO_V67_LEDGER_SQL); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(67); migrateLedger(db, 'allow');
     expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(69); expect(tables(db)).toEqual(['catalog_evolution_positions']);
   } finally { db.close(); }
 });

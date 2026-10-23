@@ -10,5 +10,6 @@
   "signatureMaxBytes": 4096,
   "pageMax": 50,
   "historyMax": 64,
-  "promptReservedTaskBytes": 12288
+  "promptReservedTaskBytes": 12288,
+  "signersPerScopeMax": 64
 }

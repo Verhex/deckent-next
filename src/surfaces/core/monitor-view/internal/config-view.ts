@@ -19,6 +19,7 @@ function fieldWords(locale: Locale): Readonly<Record<string, readonly [Section, 
     runRuntime: ['work', t('monitor.config.name.runRuntime', {}, locale)], toolchains: ['work', t('monitor.config.name.toolchains', {}, locale)],
     models: ['work', t('monitor.config.name.models', {}, locale)], // C-MODELS: models.retirementWarningDays
     resourceObservation: ['work', t('monitor.config.name.resourceObservation', {}, locale)], artifacts: ['work', t('monitor.config.name.artifacts', {}, locale)],
+    memoryAutomation: ['work', t('monitor.config.name.memoryAutomation', {}, locale)], // S4B-1: extraction / verification / context switches
     catalogEvolution: ['work', t('agentstats.config.name', {}, locale)], // S8-2: the protected catalog aggregator switch and registry overlay
     service: ['service', t('monitor.config.name.service', {}, locale)], cancellation: ['service', t('monitor.config.name.cancellation', {}, locale)],
     cancellationRuntime: ['service', t('monitor.config.name.cancellationRuntime', {}, locale)],

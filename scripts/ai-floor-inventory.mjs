@@ -40,6 +40,10 @@ export const floorFamilies = [
     whyEn: 'The recovery broker applies a sealed Nervous proposal, and the recovery system continues a lost task in a new Attempt, only under the owner\'s standing grant (K-B, S6R-3/S6R-4); no AI holds it, Nervous itself only proposes.',
     whyTr: 'Kurtarma aracısı mühürlü Nervous önerisini uygular, kurtarma sistemi kayıp görevi yeni Attempt ile sürdürür; ikisi de yalnız sahibin kalıcı izniyle (K-B, S6R-3/S6R-4); bu izni hiçbir AI taşımaz, Nervous yalnız önerir.',
     routes: ['fixture-target', 'fence-attempt', 'stop-orphan', 'hand-to-human', 'continue-new-attempt'].flatMap(id => ['apply', 'future-action'].map(action => ['recovery-action', id, action])) },
+  { id: 'signers', en: 'Signer key enrol, add, revoke and log repair', tr: 'İmza anahtarı ekleme, kaydetme, iptal ve kayıt onarımı',
+    whyEn: 'Only a person adds or revokes the keys AI and system principals sign catalog actions with (S8-5, owner 2026-10-23); an AI holding this would grant itself signing authority.',
+    whyTr: 'AI ve sistem kimliklerinin katalog eylemlerini imzaladığı anahtarları yalnız bir kişi ekler ya da iptal eder (S8-5, owner 2026-10-23); bunu taşıyan bir AI kendine imza yetkisi verirdi.',
+    routes: ['enrol', 'add', 'revoke', 'repair', 'future-action'].map(action => ['skill-signer', 'fixture-target', action]) },
 ];
 export const protectedPaths = ['policy', 'approvals', 'identity', 'security', 'storage', 'service', 'paths', 'shell', 'network', 'layout', 'execution',
   'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit', 'memory', 'memoryAutomation', 'runRuntime.recovery', 'runRuntime.nervous', 'models.headless',

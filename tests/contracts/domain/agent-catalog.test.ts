@@ -8,8 +8,8 @@ const person = { issuer: 'local-os', subject: 'uid:1000', assurance: 'os-user' }
 const d = (c: string) => c.repeat(64);
 const content = { name: 'Fatura denetçisi', persona: 'Faturaları siparişle eşleştirir; eşleşmeyeni onaya gönderir.', workClasses: ['code-change'],
   skills: [{ skillId: 'invoice-match', revision: 1, digest: d('a') }], parentAgentId: null };
-const agent = (previous: Parameters<typeof defineAgentRevision>[0], extra: Partial<typeof content> = {}) => defineAgentRevision(previous, { scopeId: 's',
-  agentId: 'invoice-auditor', commandId: 'c1', content: { ...content, ...extra }, personaDigest: d('b'), skillSetDigest: d('c'), author: person, atMs: 5 });
+const agent = (previous: Parameters<typeof defineAgentRevision>[0], extra: Partial<typeof content> = {}, signed?: { keyId: string; signatureDigest: string }) => defineAgentRevision(previous,
+  { scopeId: 's', agentId: 'invoice-auditor', commandId: 'c1', content: { ...content, ...extra }, personaDigest: d('b'), skillSetDigest: d('c'), author: person, atMs: 5, ...(signed ? { signed } : {}) });
 const tree = (rows: Record<string, string | null>) => new Map(Object.entries(rows));
 
 describe('agent definition rows', () => {
@@ -17,8 +17,12 @@ describe('agent definition rows', () => {
     const first = agent(null);
     expect(first).toMatchObject({ schemaVersion: 1, revision: 1, tier: null, personaDigest: d('b'), skillSetDigest: d('c'), provenance: { author: { ai: false }, commandId: 'c1' } });
     const second = defineAgentRevision(first, { scopeId: 's', agentId: 'invoice-auditor', commandId: 'c2', content: { ...content, name: 'Fatura denetçisi 2' },
-      personaDigest: d('b'), skillSetDigest: d('c'), author: ai, atMs: 6 });
-    expect(second).toMatchObject({ revision: 2, content: { name: 'Fatura denetçisi 2' }, provenance: { author: { ai: true } } });
+      personaDigest: d('b'), skillSetDigest: d('c'), author: ai, atMs: 6, signed: { keyId: d('e'), signatureDigest: d('f') } });
+    expect(second).toMatchObject({ revision: 2, content: { name: 'Fatura denetçisi 2' }, provenance: { author: { ai: true }, signed: { keyId: d('e') } } });
+    // S8-5: an AI/system-authored row exists only with the key and signature digest verified at commit; a person's row never carries one.
+    expect(() => defineAgentRevision(first, { scopeId: 's', agentId: 'invoice-auditor', commandId: 'c3', content, personaDigest: d('b'), skillSetDigest: d('c'), author: ai, atMs: 7 }))
+      .toThrow(expect.objectContaining({ code: 'AGENT_DEFINITION_INVALID' }));
+    expect(() => agent(null, {}, { keyId: d('e'), signatureDigest: d('f') })).toThrow(expect.objectContaining({ code: 'AGENT_DEFINITION_INVALID' }));
   });
   it('negative: the tier cannot be set (A4: it opens empty, tier grants nothing), a parent cannot be itself, and bounds come from limits data', () => {
     expect(agentDefinitionSchema.safeParse({ ...agent(null), tier: 'senior' }).success).toBe(false);

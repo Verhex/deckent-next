@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomBytes, sign, verify, type KeyObject } from 'node:crypto';
+import { generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteAgentCatalogStore } from '#adapters/index.js';
-import { AgentCatalogApplication, skillContentDigest, skillSetDigest, skillSignatureMessage, type AgentCatalogDependencies } from '#engine/index.js';
-import { AGENT_CATALOG_LIMITS } from '#domain/index.js';
-import { createHmacIntegrity } from '#platform/index.js';
+import { AgentCatalogApplication, SignerKeyApplication, skillContentDigest, skillSetDigest, skillSignatureMessage, type AgentCatalogDependencies } from '#engine/index.js';
+import { AGENT_CATALOG_LIMITS, SIGNATURE_LABELS, catalogActionBytes } from '#domain/index.js';
+import { createHmacIntegrity, ed25519KeyId, signatureMessage } from '#platform/index.js';
 
 // S7 agent/skill catalog core, engine contract over the Core SQLite store. The application is the single transition owner (create/revise by
 // expected-revision compare-and-set, command receipts, one audit event each); the store re-checks the org tree inside its write transaction.
@@ -18,19 +18,23 @@ const options = { busyTimeoutMs: 1000, journalMode: 'wal' as const, durability: 
 const integrity = createHmacIntegrity('catalog-key', randomBytes(32));
 const human = { id: 'h', issuer: 'local-os', subject: 'uid:1000', assurance: 'os-user' as const, scopeIds: ['s', 'other'] };
 const mcp = { id: 'm', issuer: 'local-os/mcp', subject: 'uid:1000', assurance: 'os-user' as const, scopeIds: ['s', 'other'] };
-const vendor = generateKeyPairSync('ed25519'), stranger = generateKeyPairSync('ed25519');
-/** A test verifier with one trusted key: Core composes none (fail closed); a hub/Enterprise adapter supplies its own trust anchors. */
-const trusted: AgentCatalogDependencies['verifySkillSignature'] = async (signature, message) => {
-  const key = ({ 'vendor-1': vendor.publicKey } as Record<string, KeyObject>)[signature.keyId];
-  return !key ? 'unknown-key' : verify(null, Buffer.from(message), key, Buffer.from(signature.value, 'base64')) ? 'valid' : 'invalid';
-};
+const vendor = generateKeyPairSync('ed25519'), stranger = generateKeyPairSync('ed25519'), host = generateKeyPairSync('ed25519');
+const der = (key: typeof vendor.publicKey) => key.export({ type: 'spki', format: 'der' }), vendorKey = ed25519KeyId(der(vendor.publicKey));
+/** S8-5: imports verify against the scope's `import` signer rows (registered below by a person); the MCP actor signs its own writes with a host key. */
+const custody: AgentCatalogDependencies['custody'] = { create: async () => ({ keyId: ed25519KeyId(der(host.publicKey)), publicKey: der(host.publicKey).toString('base64') }),
+  signAction: async (_keyId, action) => sign(null, signatureMessage(SIGNATURE_LABELS.catalogAction, catalogActionBytes(action)), host.privateKey).toString('base64') };
+async function trustVendor(deps: AgentCatalogDependencies, principal: typeof human, vendorToo = true) {
+  const signers = new SignerKeyApplication({ ...deps, verifier: { verify: async () => human }, authorizeSigner: async () => ({ revision: 'p', ruleId: 'r' }) });
+  if (vendorToo) await signers.add({ schemaVersion: 1, scopeId: 's', commandId: 'trust-vendor', purpose: 'import', publicKey: der(vendor.publicKey).toString('base64'), principal: null, label: 'vendor' });
+  if (principal !== human) await signers.enrol({ schemaVersion: 1, scopeId: 's', commandId: 'trust-mcp', principal: { issuer: principal.issuer, subject: principal.subject }, label: 'mcp' });
+}
 async function fixture(principal: typeof human = human, extra: Partial<AgentCatalogDependencies> = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dn-agent-catalog-')); roots.push(root);
   const path = join(root, 'ledger.db'); openSqliteLedger(path, options).close();
   let ids = 0;
   const deps: AgentCatalogDependencies = { verifier: { verify: async () => principal }, authorize: async () => ({ revision: 'p', ruleId: 'r' }),
     openStore: async access => openSqliteAgentCatalogStore(path, options, integrity, access), now: () => 1_000, eventId: () => `e${++ids}`, ...extra };
-  return { path, app: new AgentCatalogApplication(deps) };
+  return { path, deps, app: new AgentCatalogApplication(deps) };
 }
 const skillContent = (text = 'Siparişi faturayla eşle; eşleşmeyeni onaya gönder.') => ({ name: 'Fatura eşleştirme', text });
 const defineSkill = (commandId: string, skillId = 'invoice-match', expectedRevision: number | null = null, scopeId = 's', text?: string) =>
@@ -39,7 +43,7 @@ const agentContent = (skills: { skillId: string; revision: number; digest: strin
   ({ name: 'Fatura denetçisi', persona: 'Faturaları siparişle eşleştirirsin; emin değilsen onaya gönderirsin.', workClasses: ['code-change'], skills, parentAgentId });
 const defineAgent = (commandId: string, agentId: string, content: ReturnType<typeof agentContent>, expectedRevision: number | null = null, scopeId = 's') =>
   ({ schemaVersion: 1, scopeId, commandId, agentId, expectedRevision, content });
-const signed = (skillId: string, content: ReturnType<typeof skillContent>, key = vendor.privateKey, keyId = 'vendor-1') => {
+const signed = (skillId: string, content: ReturnType<typeof skillContent>, key = vendor.privateKey, keyId = vendorKey) => {
   const digest = skillContentDigest(content);
   return { pin: digest, signature: { algorithm: 'ed25519' as const, keyId, value: sign(null, Buffer.from(skillSignatureMessage({ skillId, contentDigest: digest })), key).toString('base64') } };
 };
@@ -121,25 +125,27 @@ describe('scope isolation', () => {
 
 describe('import hard floor (d): unpinned or unsigned skills are refused for every principal, whatever policy allows', () => {
   for (const [name, principal] of [['a person', human], ['the AI (MCP actor)', mcp]] as const) {
-    it(`negative: ${name} — no pin, a wrong pin, no signature, a bad or untrusted signature, or no verifier: nothing is written`, async () => {
-      const { app } = await fixture(principal, { verifySkillSignature: trusted });
-      const good = signed('invoice-match', skillContent());
+    it(`negative: ${name} — no pin, a wrong pin, no signature, a bad or untrusted signature, or no import key: nothing is written`, async () => {
+      const unwired = await fixture(principal, { custody }), good = signed('invoice-match', skillContent());
+      await trustVendor(unwired.deps, principal, false);
+      await expect(unwired.app.importSkill(importSkill('i7', good))).rejects.toMatchObject({ code: 'SKILL_IMPORT_SIGNATURE_UNVERIFIED' });
+      const { app, deps } = await fixture(principal, { custody });
+      await trustVendor(deps, principal);
       await expect(app.importSkill(importSkill('i1', { ...good, pin: null }))).rejects.toMatchObject({ code: 'SKILL_IMPORT_UNPINNED' });
       await expect(app.importSkill(importSkill('i2', { ...good, pin: 'e'.repeat(64) }))).rejects.toMatchObject({ code: 'SKILL_IMPORT_PIN_MISMATCH' });
       await expect(app.importSkill(importSkill('i3', { ...good, signature: null }))).rejects.toMatchObject({ code: 'SKILL_IMPORT_UNSIGNED' });
-      // Signed by a key nobody trusts; signed by the trusted key over other bytes; a signature for another skill id.
-      await expect(app.importSkill(importSkill('i4', signed('invoice-match', skillContent(), stranger.privateKey, 'stranger')))).rejects.toMatchObject({ code: 'SKILL_IMPORT_SIGNATURE_UNVERIFIED' });
+      // Signed by a key nobody registered; signed by the import key over other bytes; a signature for another skill id.
+      await expect(app.importSkill(importSkill('i4', signed('invoice-match', skillContent(), stranger.privateKey, ed25519KeyId(der(stranger.publicKey)))))).rejects.toMatchObject({ code: 'SKILL_IMPORT_SIGNATURE_UNVERIFIED' });
       await expect(app.importSkill(importSkill('i5', { pin: good.pin, signature: signed('invoice-match', skillContent('başka')).signature }))).rejects.toMatchObject({ code: 'SKILL_IMPORT_SIGNATURE_UNVERIFIED' });
       await expect(app.importSkill(importSkill('i6', signed('other-skill', skillContent())))).rejects.toMatchObject({ code: 'SKILL_IMPORT_SIGNATURE_UNVERIFIED' });
-      const unwired = await fixture(principal);
-      await expect(unwired.app.importSkill(importSkill('i7', good))).rejects.toMatchObject({ code: 'SKILL_IMPORT_SIGNATURE_UNVERIFIED' });
       expect(await app.listSkills({ schemaVersion: 1, scopeId: 's', limit: 10 })).toMatchObject({ items: [] });
     });
   }
-  it('positive twin: a pinned skill signed by a trusted key over exactly (id, content digest) is imported with its verified signature', async () => {
-    const { app } = await fixture(human, { verifySkillSignature: trusted });
+  it('positive twin: a pinned skill signed by a registered import key over exactly (id, content digest) is imported with its verified signature', async () => {
+    const { app, deps } = await fixture(human);
+    await trustVendor(deps, human);
     const made = await app.importSkill(importSkill('i1', signed('invoice-match', skillContent())));
-    expect(made.item).toMatchObject({ revision: 1, source: { kind: 'import', ref: 'hub:verhex/invoice-match' }, signature: { status: 'verified', keyId: 'vendor-1' },
+    expect(made.item).toMatchObject({ revision: 1, source: { kind: 'import', ref: 'hub:verhex/invoice-match' }, signature: { status: 'verified', keyId: vendorKey },
       contentDigest: skillContentDigest(skillContent()), provenance: { author: { ai: false } } });
   });
 });

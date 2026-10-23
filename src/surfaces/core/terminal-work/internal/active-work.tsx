@@ -18,11 +18,11 @@ export interface ActiveWorkLabels {
   readonly title: string; readonly focused: string;
   readonly doTitle: string; readonly planning: string; readonly waiting: string; readonly expired: string;
   readonly evaluating: string; readonly needsYou: string; readonly more: string;
-  /** TESLIM-PENCERESI: an accepted task whose patch awaits the person's delivery decision (its window opens on Enter). */
-  readonly deliveryWaiting?: string;
+  /** TESLIM-PENCERESI: an accepted task whose patch awaits the person's delivery decision (its window opens on Enter); f3 `quotaWait`: `/do` waits for the quota reset ({time}). */
+  readonly deliveryWaiting?: string; readonly quotaWait?: string;
 }
-/** The one `/do` this session is running (the panel runs one line at a time). `expiresAtMs`: its run-create approval's expiry. */
-export type ActiveDo = Readonly<{ title: string; phase: 'planning' | 'waiting'; sinceMs: number; expiresAtMs?: number | undefined }>;
+/** The one `/do` this session is running (one line at a time). `expiresAtMs`: its run-create approval's expiry; `untilText`: a quota wait's end. */
+export type ActiveDo = Readonly<{ title: string; phase: 'planning' | 'waiting' | 'quota-wait'; sinceMs: number; expiresAtMs?: number | undefined; untilText?: string | undefined }>;
 export type ActiveWorkTarget = Readonly<{ kind: 'do' }> | Readonly<{ kind: 'run'; run: RunView }> | Readonly<{ kind: 'delivery'; key: string }>;
 /** A delivery waiting for the person in this session (TESLIM-PENCERESI); `sinceMs`: when this session first saw it. */
 export type ActiveDelivery = Readonly<{ key: string; title: string; sinceMs: number }>;
@@ -55,8 +55,8 @@ export function activeWorkItems(input: { readonly active: ActiveDo | null; reado
   const items: ActiveWorkItem[] = [];
   if (active) {
     const left = active.expiresAtMs === undefined ? null : active.expiresAtMs - nowMs;
-    const state = active.phase === 'planning' ? labels.planning : left !== null && left <= 0 ? labels.expired
-      : fillTemplate(labels.waiting, { remaining: left === null ? jobs.unknown : formatDuration(left, input.duration) });
+    const state = active.phase === 'planning' ? labels.planning : active.phase === 'quota-wait' ? fillTemplate(labels.quotaWait ?? labels.planning, { time: active.untilText ?? jobs.unknown })
+      : left !== null && left <= 0 ? labels.expired : fillTemplate(labels.waiting, { remaining: left === null ? jobs.unknown : formatDuration(left, input.duration) });
     items.push({ key: 'do', title: fillTemplate(labels.doTitle, { title: active.title }), state, role: active.phase === 'planning' ? 'accent' : 'warning',
       elapsed: elapsed(active.sinceMs), target: { kind: 'do' } });
   }

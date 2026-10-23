@@ -24,7 +24,7 @@ async function v66() {
 }
 const insert = (db: DatabaseSync, standing: string, revision = 1) => db.prepare("INSERT INTO agent_standings(scope_id,agent_id,revision,work_class,standing,standing_revision,record) VALUES('s','a',1,'feature',?,?,'{}')").run(standing, revision);
 
-it('pins the step: v67 is agent standing (v69, the S8-2 pass position, is the current ledger)', () => {
+it('pins the step: v67 is agent standing (v69, the S8-2 pass position, is current)', () => {
   expect(AGENT_STANDING_LEDGER_VERSION).toBe(67); expect(CURRENT_LEDGER_VERSION).toBe(69);
 });
 it('N25: backs up a v66 ledger with no agents and adds only the empty standing tables; an older build refuses the result', async () => {

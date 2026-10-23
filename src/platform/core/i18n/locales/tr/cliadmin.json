@@ -237,6 +237,7 @@
   "cli.paths.resource.scratch": "geçici çalışma alanı",
   "cli.paths.resource.audit": "audit kayıtları",
   "cli.paths.resource.approvals": "onaylar ve anahtarları",
+  "cli.paths.resource.signers": "imza anahtarları (kayıtlı AI kimliklerinin özel anahtarları, hiç yedeklenmez) ve iptal kaydı",
   "cli.paths.resource.approvalPreviews": "onay önizlemeleri",
   "cli.paths.resource.instructionTrust": "güvenilen proje talimatları",
   "cli.paths.resource.installationIdentity": "kurulum kimliği",

@@ -35,6 +35,7 @@ const descriptions = (locale: Locale): Readonly<Record<string, string>> => ({
   memoryPurges: t('cli.paths.resource.memoryPurges', {}, locale),
   audit: t('cli.paths.resource.audit', {}, locale),
   approvals: t('cli.paths.resource.approvals', {}, locale),
+  signers: t('cli.paths.resource.signers', {}, locale),
   approvalPreviews: t('cli.paths.resource.approvalPreviews', {}, locale),
   instructionTrust: t('cli.paths.resource.instructionTrust', {}, locale),
   installationIdentity: t('cli.paths.resource.installationIdentity', {}, locale),

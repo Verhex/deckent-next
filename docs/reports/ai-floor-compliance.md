@@ -1,6 +1,6 @@
 # AI floor compliance / AI yetki tabanı uyumu
 
-ai-floor: routes=315 floor=234 policy=1890 steps=48 uyumlu=1938 İHLAL=0
+ai-floor: routes=321 floor=239 policy=1926 steps=48 uyumlu=1974 İHLAL=0
 
 Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.
 
@@ -1869,6 +1869,42 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | service / fixture-target / shutdown | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | service / fixture-target / shutdown | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | service / fixture-target / shutdown | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| skill-signer / fixture-target / add | signers | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / add | signers | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / add | signers | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| skill-signer / fixture-target / add | signers | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / add | signers | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / add | signers | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / enrol | signers | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / enrol | signers | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / enrol | signers | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| skill-signer / fixture-target / enrol | signers | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / enrol | signers | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / enrol | signers | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / future-action | signers | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / future-action | signers | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / future-action | signers | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| skill-signer / fixture-target / future-action | signers | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / future-action | signers | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / future-action | signers | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / inspect | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| skill-signer / fixture-target / inspect | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| skill-signer / fixture-target / inspect | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| skill-signer / fixture-target / inspect | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| skill-signer / fixture-target / inspect | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| skill-signer / fixture-target / inspect | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| skill-signer / fixture-target / repair | signers | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / repair | signers | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / repair | signers | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| skill-signer / fixture-target / repair | signers | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / repair | signers | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / repair | signers | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / revoke | signers | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / revoke | signers | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / revoke | signers | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| skill-signer / fixture-target / revoke | signers | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / revoke | signers | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| skill-signer / fixture-target / revoke | signers | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | task / fixture-target / execute | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
 | task / fixture-target / execute | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | task / fixture-target / execute | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -1966,12 +2002,12 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/index.ts`: `59975eb1090f60f4030a0e351bc5c819bf828ed1c45869ca93b045b3eaf9ba44`
 - `src/domain/core/policy/internal/administer.ts`: `7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004`
 - `src/domain/core/policy/internal/administration.ts`: `c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b`
-- `src/domain/core/policy/internal/ai-floor.ts`: `31ea785e4eac9d58290e34438a4bd99d3e61d80b3d8cccffaca77cf1f7057e95`
+- `src/domain/core/policy/internal/ai-floor.ts`: `1b696cfab92447a18bb28ffa58edd40ff16d94cf62e36ad139bc0853f7069d54`
 - `src/domain/core/policy/internal/decision-step.ts`: `70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe`
 - `src/domain/core/policy/internal/delegations.ts`: `c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320`
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
 - `src/domain/core/policy/internal/evaluate.ts`: `61b1172eabcab5da8a7a0935bc2d0bf523d5327a4c95e96b4a70ec7b191714f2`
-- `src/domain/core/policy/internal/first-run-template.ts`: `3541461e380ad916941ee390457a6b921e717a544aff9ac5f198e75368178b37`
+- `src/domain/core/policy/internal/first-run-template.ts`: `0aa99f7a0d31f7790301568a2cbc7071fa39c6367a9df75ea0238799029827ff`
 - `src/domain/core/policy/internal/mcp-capabilities.ts`: `c864257ab5ce5852f0799805d358f7b8790ec54fe8656157a1e4addd8cdeafb4`
 - `src/domain/core/policy/internal/mcp-grant.ts`: `8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a`
 - `src/domain/core/policy/internal/mode.ts`: `b1f9479911852c8b3842c6b2135156534e16a8e2016e3c7120c2b4f627f4c444`
@@ -1979,7 +2015,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/schema.ts`: `7ee507ceee1166b0f2fada5ad67e334ab5c883b47ad7a16f4ec3f0665220df9c`
 - `src/domain/core/policy/internal/scope.ts`: `7515bab07e7ee92d03be12c0a8710f72d6973419ca53a79fdeff61a84a496da4`
 - `src/domain/core/policy/internal/standing.ts`: `bb3b4f7c301474d2df1f690d85f3b1ea7219fbfe6f90af8b8d680017bb50d5db`
-- `src/domain/core/policy/internal/vocabulary.ts`: `89fa3a553737017e2a0df1876e2853a943e64528bd484c092e1328a69d5e76dd`
+- `src/domain/core/policy/internal/vocabulary.ts`: `9de24b8bd255caa184558323c985ee11c5a5ca59d2a9b33af7fb25fb7ea1010e`
 - `src/domain/core/primitives/index.ts`: `afa5a6e9acc3b73c157054ae1607652478b464a9da45b3ce27a46a6ec86e72a0`
 - `src/domain/core/primitives/internal/command-id.ts`: `69a16b34a9225fe7c8bb1047e9b9e99d03fd71573baf2281bfa8e870e1a219c9`
 - `src/domain/core/primitives/internal/hidden-paths.ts`: `0f7e83b0231ee7deaf9487bb1bdc8e6f7f27fd6cb914bae341a59462596f2916`
