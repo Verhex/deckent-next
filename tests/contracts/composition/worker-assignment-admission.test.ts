@@ -67,7 +67,7 @@ it('small work takes the active listed model; the Run freezes the pin and its se
   const created = await createRun(f.project, run('small', 'small'), f.options);
   const task = f.execution('small');
   expect(readWorkerModelPin(task.profile.parameters)!.pin).toEqual({ channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', auxiliaryModelIds: [] });
-  expect(task.assignment).toMatchObject({ workClass: 'small', workClassRevision: 'atama-1-2026-10-23', candidatePolicy: { id: 'light', version: 1 }, candidateIndex: 0,
+  expect(task.assignment).toMatchObject({ workClass: 'small', workClassRevision: 'atama-m3-2026-10-23', candidatePolicy: { id: 'light', version: 2 }, candidateIndex: 0,
     modelId: 'claude-sonnet-5-5', effort: { level: null, source: 'cli-default' }, skipped: [] });
   const replay = await createRun(f.project, run('small', 'small'), f.options);
   expect(replay.admission).toEqual(created.admission); expect(f.runs()).toBe(1);

@@ -22,8 +22,8 @@ export { reconcileRunLifecycle, advanceRunLifecycle, expireParkedRun, closeParke
 export type { RunLifecycleTiming, TaskDecisionReason } from './internal/lifecycle.js';
 
 export { workClassRegistrySchema, workClassAcceptanceProfileSchema, coreEvidenceTypeSchema, mergeWorkClassRegistries, resolveTaskWorkClass, evidenceExtensionSchema, CORE_WORK_CLASSES, selectWorkerEffort, WorkerEffortError, WorkClassRegistryError,
-  candidatePolicySchema, resolveWorkClassCandidates, catalogDefaultEffort } from './internal/work-class.js';
-export type { WorkClassRegistry, WorkClassAcceptanceProfile, WorkClassPolicy, CandidatePolicy } from './internal/work-class.js';
+  candidatePolicySchema, candidateSelectorSchema, isCandidateSelector, WORK_CLASS_WORKER_ROLE, WORK_CLASS_LIMITS, resolveWorkClassCandidates, catalogDefaultEffort } from './internal/work-class.js';
+export type { WorkClassRegistry, WorkClassAcceptanceProfile, WorkClassPolicy, CandidatePolicy, CandidateSelector, ExactCandidate } from './internal/work-class.js';
 export { workerAssignmentSchema, workerAssignmentSkipSchema } from './internal/assignment.js';
 export type { WorkerAssignment, WorkerAssignmentSkip } from './internal/assignment.js';
 export { holdRun, answerTaskInput, parkRunProgression } from './internal/lifecycle.js';

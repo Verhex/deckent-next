@@ -1,5 +1,5 @@
 import { executionRegistrySchema, type RunProposal } from '#domain/index.js';
-import { workSpendingBasis, configuredProviderSpendCheckpoint, assignTaskWorker, type ModelCatalogReader } from '#engine/index.js';
+import { workSpendingBasis, configuredProviderSpendCheckpoint, assignTaskWorker, composeModelRolePolicy, type ModelCatalogReader } from '#engine/index.js';
 import { assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, providerSpendingConfiguredBudget } from '#adapters/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
@@ -37,7 +37,8 @@ export async function classifyConfiguredRunSpending(root: string, proposal: RunP
         if (!input.model && catalog) {
           reader ??= await catalog();
           input = (await assignTaskWorker(task, input, profile, registry?.workClasses, reader, compile,
-            { scopeId: proposal.scopeId, nowMs: Date.now(), imageRefreshInProgress: await isToolchainRefreshInProgress(root, options) })).input;
+            { scopeId: proposal.scopeId, nowMs: Date.now(), imageRefreshInProgress: await isToolchainRefreshInProgress(root, options),
+              roles: composeModelRolePolicy(config['model_roles']) })).input;
         }
         selected = compile(profile, input);
       }

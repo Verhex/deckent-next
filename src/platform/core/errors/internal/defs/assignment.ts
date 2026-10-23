@@ -18,6 +18,9 @@ export const assignmentErrors: ErrorDefinitions = Object.freeze({
     : t('error.WORKER_ASSIGNMENT_NO_CANDIDATES.detail', p, l) }) },
   WORKER_ASSIGNMENT_NONE: { category: 'error', render: (p, l) => ({ message: p['workClass'] === undefined ? t('error.WORKER_ASSIGNMENT_NONE', {}, l)
     : t('error.WORKER_ASSIGNMENT_NONE.detail', p, l) }) },
+  // M3: a WorkClass list whose selectors expand to more models than the registry bound (work-class-limits.json); nothing is truncated.
+  WORKER_ASSIGNMENT_EXPANSION_LIMIT: { category: 'error', render: (p, l) => ({ message: p['workClass'] === undefined ? t('error.WORKER_ASSIGNMENT_EXPANSION_LIMIT', {}, l)
+    : t('error.WORKER_ASSIGNMENT_EXPANSION_LIMIT.detail', p, l) }) },
   WORKER_MODEL_UNASSIGNED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_MODEL_UNASSIGNED', p, l) }) },
   BRAIN_ASSIGNMENT_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.BRAIN_ASSIGNMENT_REFUSED', p, l) }) },
   WORK_CLASS_CANDIDATES_NOT_REGISTERED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_CLASS_CANDIDATES_NOT_REGISTERED', p, l) }) },

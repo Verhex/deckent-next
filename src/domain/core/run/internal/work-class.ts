@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
-import { exactModelIdSchema, REASONING_EFFORTS, workerEffortSchema, type CatalogModel, type ReasoningEffort, type WorkerEffort } from '#domain/core/provider-catalog/index.js';
+import { exactModelIdSchema, MODEL_TIERS, REASONING_EFFORTS, workerEffortSchema, type CatalogModel, type ReasoningEffort, type WorkerEffort } from '#domain/core/provider-catalog/index.js';
 import asset from '../../../../../assets/native-coding/work-classes.json' with { type: 'json' };
 import limits from './work-class-limits.json' with { type: 'json' };
+import assignmentData from './work-class-assignment.json' with { type: 'json' };
 /** Closed, business-neutral vocabulary: concrete evaluator/adapter semantics stay in their registries. */
 export const criterionTypeSchema = z.enum(['completion', 'correctness', 'safety', 'authorization']);
 export const coreEvidenceTypeSchema = z.enum(['retained-artifact', 'verification-result', 'operation-settlement', 'observed-readback', 'approval-receipt']);
@@ -60,23 +61,50 @@ const extendedRegistrySchema = currentRegistrySchema.extend({ schemaVersion: z.l
  * scope may use and seals the choice; nothing outside the list is ever chosen. `effort` is the class's deviation from the catalog's vendor
  * default; absent = the vendor default (or the CLI's own default when the catalog declares none). An overlay replaces a Core list only by a
  * compare-and-set against its version, never implicitly. */
-export const candidatePolicySchema = z.object({ id: identitySchema, version: z.number().int().positive().safe(),
-  candidates: z.array(z.object({ channelId: identitySchema, modelId: exactModelIdSchema, effort: z.enum(REASONING_EFFORTS).optional() }).strict().readonly())
-    .min(1).max(limits.candidatesPerPolicy).readonly(),
+const exactCandidateSchema = z.object({ channelId: identitySchema, modelId: exactModelIdSchema, effort: z.enum(REASONING_EFFORTS).optional() }).strict().readonly();
+const tierRank = (tier: typeof MODEL_TIERS[number]) => MODEL_TIERS.indexOf(tier);
+const selectorList = (max: number) => z.array(identitySchema).min(1).max(max).readonly().refine(unique);
+/** M3 (MODEL-INDEPENDENCE-AUDIT, owner 2026-10-23 "model bağımsız"): a candidate SELECTOR names no model. Assignment expands it, in the tier/role
+ * registry's order, to the exact catalog models that hold `role` (S2 `model_roles`, the only tier/role owner), pass the optional tier, maker
+ * (canonical, via the maker registry) and channel filters, are in the scope's catalog and active there; each expanded model then goes through
+ * the same admission check as an exact candidate and the seal records the concrete id plus the expansion digest. A model that is new data
+ * (catalog row + role row + activation) thus joins a list with no list or code edit. A maker filter never matches an unknown maker. */
+export const candidateSelectorSchema = z.object({ role: identitySchema, minTier: z.enum(MODEL_TIERS).optional(), maxTier: z.enum(MODEL_TIERS).optional(),
+  makerIn: selectorList(limits.selectorMakers).optional(), makerNotIn: selectorList(limits.selectorMakers).optional(),
+  channelIn: selectorList(limits.selectorChannels).optional(), effort: z.enum(REASONING_EFFORTS).optional(),
+}).strict().refine(value => (value.makerIn === undefined || value.makerNotIn === undefined)
+  && (value.minTier === undefined || value.maxTier === undefined || tierRank(value.minTier) <= tierRank(value.maxTier))).readonly();
+export type CandidateSelector = z.infer<typeof candidateSelectorSchema>;
+export type ExactCandidate = z.infer<typeof exactCandidateSchema>;
+export const isCandidateSelector = (entry: ExactCandidate | CandidateSelector): entry is CandidateSelector => 'role' in entry;
+const candidateKey = (entry: ExactCandidate | CandidateSelector) => isCandidateSelector(entry) ? JSON.stringify(entry) : JSON.stringify([entry.channelId, entry.modelId]);
+const policyShape = <T extends z.ZodTypeAny>(candidate: T) => z.object({ id: identitySchema, version: z.number().int().positive().safe(),
+  candidates: z.array(candidate).min(1).max(limits.candidatesPerPolicy).readonly(),
   override: z.object({ previousVersion: z.number().int().positive().safe() }).strict().readonly().optional(),
-}).strict().refine(value => unique(value.candidates.map(row => JSON.stringify([row.channelId, row.modelId])))
+}).strict().refine(value => unique((value.candidates as readonly (ExactCandidate | CandidateSelector)[]).map(candidateKey))
   && (value.override === undefined || value.override.previousVersion < value.version)).readonly();
+/** Registry v4 lists: exact candidates only (kept readable unchanged). */
+const exactCandidatePolicySchema = policyShape(exactCandidateSchema);
+/** Registry v5 lists (M3): exact candidates and selectors, in one declared order. */
+export const candidatePolicySchema = policyShape(z.union([exactCandidateSchema, candidateSelectorSchema]));
 export type CandidatePolicy = z.infer<typeof candidatePolicySchema>;
+/** The tier/role registry role a system-assigned worker must hold, exact candidates included (M3 closes the list-only bypass); registry data. */
+export const WORK_CLASS_WORKER_ROLE: string = identitySchema.parse(assignmentData.workerRole);
+/** Bounds of candidate lists and their selector expansion (`work-class-limits.json`). */
+export const WORK_CLASS_LIMITS = Object.freeze({ ...limits });
 const assignedRegistrySchema = extendedRegistrySchema.extend({ schemaVersion: z.literal(4),
   classes: z.array(z.object({ ...currentClassShape, candidatePolicyId: identitySchema.optional() }).strict().readonly()).min(1).max(256).readonly(),
+  candidatePolicies: z.array(exactCandidatePolicySchema).max(limits.candidatePolicies).readonly(),
+});
+const selectorRegistrySchema = assignedRegistrySchema.extend({ schemaVersion: z.literal(5),
   candidatePolicies: z.array(candidatePolicySchema).max(limits.candidatePolicies).readonly(),
 });
 /** V1 is an immutable historical complete policy. V2 may refer to Core parents/bindings; resolution validates the complete graph. */
-export const workClassRegistrySchema = z.discriminatedUnion('schemaVersion', [legacyRegistrySchema, currentRegistrySchema, extendedRegistrySchema, assignedRegistrySchema])
+export const workClassRegistrySchema = z.discriminatedUnion('schemaVersion', [legacyRegistrySchema, currentRegistrySchema, extendedRegistrySchema, assignedRegistrySchema, selectorRegistrySchema])
   .refine(value => unique(value.classes.map(row => row.id)) && unique(value.bindings.map(row => row.kind))
     && (value.schemaVersion !== 1 || value.bindings.every(row => value.classes.some(entry => entry.id === row.classId)))
     && (value.schemaVersion < 3 || ('evidenceExtensions' in value && unique(value.evidenceExtensions.map(row => row.id))))
-    && (value.schemaVersion !== 4 || ('candidatePolicies' in value && unique(value.candidatePolicies.map(row => row.id))))
+    && (value.schemaVersion < 4 || ('candidatePolicies' in value && unique(value.candidatePolicies.map(row => row.id))))
     && (value.schemaVersion >= 3 || value.schemaVersion === 1 || value.classes.every(row => row.acceptanceProfile.evidenceTypes.every(type => !type.startsWith('ext:'))))).readonly();
 export type WorkClassRegistry = z.infer<typeof workClassRegistrySchema>;
 export type WorkClassAcceptanceProfile = z.infer<typeof workClassAcceptanceProfileSchema>;
@@ -102,7 +130,7 @@ export function mergeWorkClassRegistries(coreInput: WorkClassRegistry, overlayIn
   const extensions = new Map(('evidenceExtensions' in core ? core.evidenceExtensions : []).map(row => [row.id, row]));
   const classes = new Map(core.classes.map(row => [row.id, row]));
   const bindings = new Map(core.bindings.map(row => [row.kind, row.classId]));
-  const policies = new Map((core.schemaVersion === 4 ? core.candidatePolicies : []).map(row => [row.id, row]));
+  const policies = new Map<string, CandidatePolicy>(('candidatePolicies' in core ? core.candidatePolicies : []).map(row => [row.id, row]));
   if ([...policies.values()].some(row => row.override !== undefined)) throw new WorkClassRegistryError('WORK_CLASS_OVERRIDE_DENIED');
   const permissions = [core, ...overlays].flatMap(row => row.schemaVersion === 1 ? [] : row.proposalPermissions ?? []);
   for (const overlay of overlays) {
@@ -110,7 +138,7 @@ export function mergeWorkClassRegistries(coreInput: WorkClassRegistry, overlayIn
       if (extensions.has(row.id)) throw new WorkClassRegistryError('WORK_CLASS_OVERRIDE_DENIED');
       extensions.set(row.id, row);
     }
-    for (const row of overlay.schemaVersion === 4 ? overlay.candidatePolicies : []) {
+    for (const row of 'candidatePolicies' in overlay ? overlay.candidatePolicies : []) {
       // A candidate list is replaced only by a compare-and-set against the version it replaces; a new id never claims an override.
       const previous = policies.get(row.id);
       if (previous ? row.override?.previousVersion !== previous.version : row.override !== undefined) throw new WorkClassRegistryError('WORK_CLASS_OVERRIDE_DENIED');

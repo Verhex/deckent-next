@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 4,
-  "revision": "atama-1-2026-10-23",
+  "schemaVersion": 5,
+  "revision": "atama-m3-2026-10-23",
   "classes": [
     { "id": "small", "candidatePolicyId": "light", "defaultEffort": "high", "proposalAdmission": { "risk": "low", "standingAdmission": false },
       "acceptanceProfile": {"schemaVersion": 1, "version": 1, "criterionTypes": ["completion"], "evidenceTypes": ["retained-artifact"], "rubric": [{"criterionType": "completion", "evidenceTypes": ["retained-artifact"], "weight": 1}], "ceilingRules": [{"when": "missing-evidence", "maxScore": 0}, {"when": "unsettled-effect", "maxScore": 0}], "decisionThresholds": {"rejectBelow": 0.5, "acceptAt": 1}} },
@@ -17,21 +17,24 @@
   ],
   "evidenceExtensions": [],
   "candidatePolicies": [
-    { "id": "light", "version": 1, "candidates": [
+    { "id": "light", "version": 2, "candidates": [
       { "channelId": "claude-cli-subscription", "modelId": "claude-sonnet-5-5" },
       { "channelId": "codex-cli-subscription", "modelId": "gpt-6-luna" },
-      { "channelId": "cursor-cli-subscription", "modelId": "composer-2.5" }
+      { "channelId": "cursor-cli-subscription", "modelId": "composer-2.5" },
+      { "role": "worker", "maxTier": "worker" }
     ] },
-    { "id": "standard", "version": 1, "candidates": [
+    { "id": "standard", "version": 2, "candidates": [
       { "channelId": "claude-cli-subscription", "modelId": "claude-opus-5-5" },
       { "channelId": "codex-cli-subscription", "modelId": "gpt-6.1-sol", "effort": "medium" },
-      { "channelId": "cursor-cli-subscription", "modelId": "claude-opus-5-thinking-high" }
+      { "channelId": "cursor-cli-subscription", "modelId": "claude-opus-5-thinking-high" },
+      { "role": "worker", "minTier": "frontier" }
     ] },
-    { "id": "deep", "version": 1, "candidates": [
+    { "id": "deep", "version": 2, "candidates": [
       { "channelId": "claude-cli-subscription", "modelId": "claude-opus-5-5", "effort": "high" },
       { "channelId": "claude-cli-subscription", "modelId": "claude-fable-5-1", "effort": "high" },
       { "channelId": "codex-cli-subscription", "modelId": "gpt-6.1-sol", "effort": "high" },
-      { "channelId": "cursor-cli-subscription", "modelId": "claude-opus-5-thinking-high" }
+      { "channelId": "cursor-cli-subscription", "modelId": "claude-opus-5-thinking-high" },
+      { "role": "worker", "minTier": "frontier", "effort": "high" }
     ] }
   ],
   "bindings": [
