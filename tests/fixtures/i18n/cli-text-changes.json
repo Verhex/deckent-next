@@ -483,6 +483,10 @@
     "terminal.slash.runs": {
       "before": "Every run of this scope; h hold, r resume, c close a parked run (each after its own y)",
       "after": "Every run of this scope; h hold, r resume, c close a parked run, a answer a worker's question (each after its own y)"
+    },
+    "cli.worker.model.notice": {
+      "before": "The model verdict compares the models the worker reported (Claude usage) with the Run's pin on this host; it is not provider attestation. A CLI without model evidence stays unverified; a CLI that reports only the model name at session start gets ‘start name matched’ or ‘left to the provider’, never verified.",
+      "after": "The model verdict compares the models the worker reported (Claude usage) with the Run's pin on this host; it is not provider attestation. A CLI without model evidence stays unverified; a CLI that reports only the model name at session start gets ‘start name matched’ or ‘left to the provider’, and a CLI whose own session log names the model gets ‘client-reported’ (the worker can rewrite that log); none of them is ever verified."
     }
   },
   "tr": {
@@ -632,7 +636,7 @@
     },
     "cli.run.create.result": {
       "before": "Run {run}, {revision} revizyonuyla kaydedildi. Görevler henüz başlatılmadı.",
-      "after": "Run {run}, {revision} revizyonuyla kabul edildi. Runtime yeni kabulleri güncel policy ile otomatik ilerletir."
+      "after": "Run {run}, {revision} revizyonuyla başlatıldı. Runtime başlatılan yeni Run'ları güncel policy ile otomatik ilerletir."
     },
     "error.CLI_GRAPH_INPUT_TTY": {
       "before": "Grafik JSON verisini stdin üzerinden pipe ile gönderin veya bir grafik dosyası belirtin. Etkileşimli stdin desteklenmiyor.",
@@ -844,7 +848,7 @@
     },
     "config.field.execution": {
       "before": "Açıkça tanımlanmış sabit Docker imajı ve Git yürütme ayarları; null yürütmeyi kapatır",
-      "after": "Sabit Docker ve Git yürütme ayarları; Docker memoryBytes, cpus ve pids her yeni Run profilini kabulde sınırlar. Null yürütmeyi kapatır."
+      "after": "Sabit Docker ve Git yürütme ayarları; Docker memoryBytes, cpus ve pids her yeni Run profilini başlatılırken sınırlar. Null yürütmeyi kapatır."
     },
     "cli.monitor.help": {
       "before": "monitor [--once|--json] [--install <id>] [--scope <id>] [--lang en|tr] [--no-color]\nGözlenen tüm kurulumları tek yerden izleyin: Run'lar ve neden takıldıkları, worker'lar, sizi bekleyen onaylar, havuzlar ve build'ler.\nTerminalde inspection.workers.heartbeatMs aralıkla yenilenen tam ekran görünüm açar (q çıkar, ? tuşları gösterir).\n--once tek bir düz metin görüntü basar (pipe'ta da); --json görüntüyü JSON olarak basar. Yalnız gözlem.",
@@ -1097,6 +1101,54 @@
     "terminal.slash.runs": {
       "before": "Bu kapsamın tüm işleri; h beklet, r sürdür, c bekleyen işi kapat (her biri kendi y'siyle)",
       "after": "Bu kapsamın tüm işleri; h beklet, r sürdür, c bekleyen işi kapat, a işçinin sorusunu cevapla (her biri kendi y'siyle)"
+    },
+    "error.BRAIN_CANCELLED": {
+      "before": "Planlama iptal edildi. Run kabul edilmedi. Sağlayıcı etkileri çağrı uzlaştırmasına tabidir.",
+      "after": "Planlama iptal edildi. Hiçbir Run başlatılmadı. Sağlayıcı etkileri çağrı uzlaştırmasına tabidir."
+    },
+    "brain.permissions": {
+      "before": "Kabulde politikayla denetlenen izinler: {permissions}",
+      "after": "Başlatılırken policy'nin denetlediği izinler: {permissions}"
+    },
+    "brain.next": {
+      "before": "Run {run} kabul edildi. /tasks veya /monitor ile izleyin.",
+      "after": "Run {run} başlatıldı. /tasks veya /monitor ile izleyin."
+    },
+    "brain.planning": {
+      "before": "Brain seçilen modelle plan hazırlıyor. Henüz Run kabul edilmedi.",
+      "after": "Brain seçilen modelle plan hazırlıyor. Henüz Run başlatılmadı."
+    },
+    "error.RUN_PROPOSAL_BUDGET_EXCEEDED": {
+      "before": "Beyan edilen tavan scope bütçesinin kalanını aşıyor veya hesap dondurulmuş. Run kabul edilmedi.",
+      "after": "Beyan edilen tavan scope bütçesinin kalanını aşıyor veya hesap dondurulmuş. Hiçbir Run başlatılmadı."
+    },
+    "error.RUN_PROPOSAL_BUDGET_EXCEEDED.ceiling": {
+      "before": "Beyan edilen tavan {ceiling}, scope bütçesinde kalan {remaining} tutarını aşıyor veya hesap dondurulmuş. Run kabul edilmedi.",
+      "after": "Beyan edilen tavan {ceiling}, scope bütçesinde kalan {remaining} tutarını aşıyor veya hesap dondurulmuş. Hiçbir Run başlatılmadı."
+    },
+    "error.RUN_PROPOSAL_BUDGET_EXCEEDED.remaining": {
+      "before": "Scope bütçesinde kalan {remaining} veya hesap dondurulmuş; plan beyan edilemez. Run kabul edilmedi.",
+      "after": "Scope bütçesinde kalan {remaining} veya hesap dondurulmuş; plan beyan edilemez. Hiçbir Run başlatılmadı."
+    },
+    "proposal.status.accepted": {
+      "before": "Run kabul edildi; görev sonuçları henüz kabul edilmedi",
+      "after": "Run başlatıldı; görev sonuçları henüz kabul edilmedi"
+    },
+    "approval.plan.checked": {
+      "before": "Kabulde politikayla denetlenen: {count} görevin her biri için task / execute",
+      "after": "Başlatılırken policy'nin denetlediği: {count} görevin her biri için task / execute"
+    },
+    "config.surface.restart": {
+      "before": "yeniden",
+      "after": "yeniden başlatınca"
+    },
+    "terminal.jobs.trackingFull": {
+      "before": "Bitiş izleme sınırı dolu ({limit}). İş {run} kabul edildi; /run ile kontrol edin.",
+      "after": "Bitiş izleme sınırı dolu ({limit}). Run {run} başlatıldı; /run ile kontrol edin."
+    },
+    "cli.worker.model.notice": {
+      "before": "Model kararı, işçinin bildirdiği modelleri (Claude kullanım verisi) bu makinede Run'ın sabitlediği modelle karşılaştırır; sağlayıcı onayı (attestation) değildir. Model kanıtı vermeyen CLI doğrulanmamış kalır; yalnız oturum başında model adını bildiren CLI ‘başlangıç adı eşleşti’ ya da ‘sağlayıcıya bırakıldı’ alır, hiçbir zaman doğrulandı almaz.",
+      "after": "Model kararı, işçinin bildirdiği modelleri (Claude kullanım verisi) bu makinede Run'ın sabitlediği modelle karşılaştırır; sağlayıcı onayı (attestation) değildir. Model kanıtı vermeyen CLI doğrulanmamış kalır; yalnız oturum başında model adını bildiren CLI ‘başlangıç adı eşleşti’ ya da ‘sağlayıcıya bırakıldı’ alır, modeli kendi oturum günlüğünde adlandıran CLI ‘istemci beyanı’ alır (işçi bu günlüğü değiştirebilir); hiçbiri doğrulandı almaz."
     }
   }
 }

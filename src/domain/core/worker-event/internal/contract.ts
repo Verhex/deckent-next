@@ -39,15 +39,21 @@ const recordedWorkerEventSchema = z.discriminatedUnion('kind', [
 export const WORKER_MODEL_VERIFICATION_SCHEMA_VERSION = 2;
 /** v3 (owner K1/K2 2026-10-22) carries only the two session-start-name verdicts, so every verdict a v2 reader knows is still written as v2. */
 export const WORKER_MODEL_VERIFICATION_START_NAME_SCHEMA_VERSION = 3;
+/** v4 (owner Q4 2026-10-23) carries only the two client-reported verdicts, by the same rule. */
+export const WORKER_MODEL_VERIFICATION_CLIENT_REPORTED_SCHEMA_VERSION = 4;
 const LEGACY_VERIFICATION_STATUSES = ['verified', 'substituted', 'unverified'] as const;
 const START_NAME_VERIFICATION_STATUSES = ['start-name-matched', 'provider-chosen'] as const;
-export type WorkerModelVerificationStatus = typeof LEGACY_VERIFICATION_STATUSES[number] | typeof START_NAME_VERIFICATION_STATUSES[number];
+const CLIENT_REPORTED_VERIFICATION_STATUSES = ['client-reported', 'client-reported-mismatch'] as const;
+export type WorkerModelVerificationStatus = typeof LEGACY_VERIFICATION_STATUSES[number] | typeof START_NAME_VERIFICATION_STATUSES[number]
+  | typeof CLIENT_REPORTED_VERIFICATION_STATUSES[number];
 const verificationFields = { ...base, kind: z.literal('model.verification'), evidenceCapability: modelUsageEvidenceSchema,
   admitted: text(256).nullable(), observed: z.array(text(128)).max(MAX_MODELS + 1).readonly(), unexpected: z.array(text(128)).max(MAX_MODELS + 1).readonly() };
 export const workerEventSchema = z.union([recordedWorkerEventSchema,
   z.object({ ...verificationFields, schemaVersion: z.literal(WORKER_MODEL_VERIFICATION_SCHEMA_VERSION), status: z.enum(LEGACY_VERIFICATION_STATUSES) }).strict(),
   z.object({ ...verificationFields, schemaVersion: z.literal(WORKER_MODEL_VERIFICATION_START_NAME_SCHEMA_VERSION),
-    evidenceCapability: z.literal('session-start-name'), status: z.enum(START_NAME_VERIFICATION_STATUSES) }).strict()]);
+    evidenceCapability: z.literal('session-start-name'), status: z.enum(START_NAME_VERIFICATION_STATUSES) }).strict(),
+  z.object({ ...verificationFields, schemaVersion: z.literal(WORKER_MODEL_VERIFICATION_CLIENT_REPORTED_SCHEMA_VERSION),
+    evidenceCapability: z.literal('client-reported'), status: z.enum(CLIENT_REPORTED_VERIFICATION_STATUSES) }).strict()]);
 export type WorkerEvent = z.infer<typeof workerEventSchema>;
 
 /** Deterministic, human-readable phase of a worker from its latest meaningful event (no model call, no scoring). */
@@ -116,10 +122,12 @@ export function summarizeWorkerEvents(events: readonly WorkerEvent[]): WorkerEve
 
 export type WorkerModelVerification = Readonly<{ status: WorkerModelVerificationStatus; admitted: string | null;
   observed: readonly string[]; unexpected: readonly string[] }>;
-/** Recorded schema version of a host verdict: v1 without capability (legacy), v3 for the two session-start-name verdicts, v2 otherwise. */
-export function modelVerificationSchemaVersion(verification: WorkerModelVerification | SealedWorkerModelVerification): 1 | 2 | 3 {
+/** Recorded schema version of a host verdict: v1 without capability (legacy), v3 for the two session-start-name verdicts, v4 for the two
+ * client-reported verdicts, v2 otherwise. */
+export function modelVerificationSchemaVersion(verification: WorkerModelVerification | SealedWorkerModelVerification): 1 | 2 | 3 | 4 {
   if (!('evidenceCapability' in verification)) return 1;
-  return (START_NAME_VERIFICATION_STATUSES as readonly string[]).includes(verification.status) ? WORKER_MODEL_VERIFICATION_START_NAME_SCHEMA_VERSION
+  if ((START_NAME_VERIFICATION_STATUSES as readonly string[]).includes(verification.status)) return WORKER_MODEL_VERIFICATION_START_NAME_SCHEMA_VERSION;
+  return (CLIENT_REPORTED_VERIFICATION_STATUSES as readonly string[]).includes(verification.status) ? WORKER_MODEL_VERIFICATION_CLIENT_REPORTED_SCHEMA_VERSION
     : WORKER_MODEL_VERIFICATION_SCHEMA_VERSION;
 }
 /**
@@ -131,6 +139,10 @@ export function modelVerificationSchemaVersion(verification: WorkerModelVerifica
  * a pin whose catalog entry leaves the choice to the provider is `provider-chosen` (the reported name is information, never compared); a name
  * the catalog records for the admitted model is `start-name-matched`; a name the catalog records for another model of the channel is
  * `substituted` (the name listed); no start name, or a name the catalog does not record, is `unverified`.
+ *
+ * `client-reported` (owner Q4 2026-10-23; the model name the client resolved, read from the client's own log, which the worker can rewrite) never
+ * yields `verified` or `substituted`: the admitted exact id or a catalog name of the admitted model is `client-reported`; any other name is
+ * `client-reported-mismatch` (listed; held for a human); no name is `unverified`.
  */
 export type SealedWorkerModelVerification = WorkerModelVerification & Readonly<{ evidenceCapability: ModelUsageEvidence }>;
 export function verifyWorkerModels(input: Readonly<{ provider?: z.infer<typeof workerProviderSchema>; evidenceCapability: ModelUsageEvidence;
@@ -139,6 +151,10 @@ export function verifyWorkerModels(input: Readonly<{ provider?: z.infer<typeof w
   const observed = Object.freeze([...new Set([...(input.startedModel === null ? [] : [input.startedModel]), ...(input.usedModels ?? [])])].sort());
   const admitted = input.admitted?.modelId ?? null, none = Object.freeze([]) as readonly string[];
   if (input.evidenceCapability === 'session-start-name' && input.admitted !== null) return verifyStartName(input.admitted, input.startedModel, admitted, observed);
+  if (input.evidenceCapability === 'client-reported' && input.admitted !== null && input.startedModel !== null) {
+    const own = input.startedModel === input.admitted.modelId || (input.admitted.reportedNames ?? []).includes(input.startedModel);
+    return Object.freeze({ status: own ? 'client-reported' : 'client-reported-mismatch', admitted, observed, unexpected: own ? none : Object.freeze([input.startedModel]) });
+  }
   if (input.evidenceCapability !== 'session-events' || input.admitted === null) return Object.freeze({ status: 'unverified', admitted, observed, unexpected: none });
   const allowed = new Set([input.admitted.modelId, ...input.admitted.auxiliaryModelIds]);
   const unexpected = new Set(observed.filter(model => !allowed.has(model)));

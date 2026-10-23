@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteModelCatalogReader, openSqliteModelCatalogStore, readMonitorLedger } from '#adapters/index.js';
-import { parseModelCatalogCommand, parseProviderCatalogDocument } from '#domain/index.js';
+import { catalogPinModelEvidence, parseModelCatalogCommand, parseProviderCatalogDocument } from '#domain/index.js';
 import { admitWorkerModels, inspectAdmissibleWorkerModels, type ModelCatalogAdmission } from '#engine/index.js';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -54,7 +54,10 @@ describe('catalog v3 packaged seeds through ledger and admission', () => {
       try {
         expect(await reader.activation('s', channelId, modelId)).toBeNull();
         expect((await reader.models(channelId)).find(m => m.modelId === modelId)!.model).toMatchObject({ vendorId: 'openai', canonicalModelId: modelId });
-        const task = (id = modelId, cliVersion = 'codex-cli 0.159.2') => [{ taskId: 't', profile: { parameters: { nativeSubscription: { schemaVersion: 4, provider: 'codex', preflight: { cliVersion }, model: { channelId, modelId: id, auxiliaryModelIds: [] } } } } }];
+        // The frozen pin carries the catalog's client-reported names exactly as admission stamps them (alpha.54 CX; owner K1/K2 rule).
+        const rows = (await reader.models(channelId)).map(row => row.model);
+        const task = (id = modelId, cliVersion = 'codex-cli 0.159.2') => [{ taskId: 't', profile: { parameters: { nativeSubscription: { schemaVersion: 4, provider: 'codex', preflight: { cliVersion },
+          model: { channelId, modelId: id, auxiliaryModelIds: [], ...catalogPinModelEvidence(rows, id) } } } } }];
         await apply({ action: 'activate', channelId, modelId: null, expectedRevision: 0 });
         await expect(admitWorkerModels(task(), 's', reader, Date.parse('2026-10-02'))).rejects.toMatchObject({ code: 'WORKER_MODEL_NOT_ACTIVE' });
         await expect(admitWorkerModels(task('default'), 's', reader, Date.parse('2026-10-02'))).rejects.toMatchObject({ code: 'WORKER_MODEL_ALIAS_REFUSED' });
