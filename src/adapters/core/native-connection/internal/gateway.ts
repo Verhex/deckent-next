@@ -10,13 +10,15 @@ import { readFile } from 'node:fs/promises';
 import catalog from './providers.json' with { type: 'json' };
 import { nativeSubscriptionSchema, NativeConnectionError, nativeProviderSpec, projectNativeCredential, type NativeSubscription } from './credential.js';
 import { scrubWorkerEvent } from './event-guard.js';
-import { secretValues } from './worker.js';
+import { secretValues, type QuotaPolicy } from './worker.js';
 import { nativeCliCommand } from '#adapters/core/native-cli-registry/index.js';
 import { readNativeClientHello } from './tls-hello.js';
 import { workerReportLimits, verifyWorkerModels, workerEventSchema, type WorkerEvent } from '#domain/index.js';
 
 /** One source for the gateway's NDJSON retention budget and the config-load artifact check. */
 export function nativeWorkerEventRetentionBytes(): number { return catalog.limits.maxEventBytes; }
+/** The one quota classification of native CLI evidence (`providers.json` quotaPolicy), shared by workers and the headless model port. */
+export function nativeQuotaPolicy(): QuotaPolicy { return catalog.quotaPolicy; }
 
 const denied = new BlockList();
 for (const [address, prefix] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],

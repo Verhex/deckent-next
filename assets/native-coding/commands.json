@@ -179,6 +179,150 @@
             "--effort"
           ]
         }
+      },
+      "headless": {
+        "schemaVersion": 1,
+        "revision": "headless-2026-10-23",
+        "source": "HEADLESS-0 measurement 2026-10-23 (CLI 2.1.309): --restricted keeps the login and drops user plugins; HOME=<run dir> + CLAUDE_CONFIG_DIR keeps the login",
+        "args": [
+          "--print",
+          "--output-format",
+          "stream-json",
+          "--verbose",
+          "--safe-mode",
+          "--restricted",
+          "--tools",
+          "",
+          "--strict-mcp-config",
+          "--disallowedTools",
+          "mcp__*",
+          "--disable-slash-commands",
+          "--no-session-persistence",
+          "--permission-mode",
+          "dontAsk",
+          "--permission-prompts",
+          "none"
+        ],
+        "maxTurns": 1,
+        "systemPromptFlag": "--system-prompt-file",
+        "systemPromptFile": "system.txt",
+        "forbiddenFlags": [
+          "--fallback-model",
+          "--bare",
+          "--dangerously-skip-permissions",
+          "--allow-dangerously-skip-permissions",
+          "--mcp-config",
+          "--settings",
+          "--setting-sources",
+          "--add-dir",
+          "--plugin-dir",
+          "--continue",
+          "--resume",
+          "--session-id",
+          "--system-prompt",
+          "--append-system-prompt",
+          "--json-schema",
+          "--include-partial-messages",
+          "--agents",
+          "--max-budget-usd"
+        ],
+        "preflight": {
+          "versionArgs": [
+            "--version"
+          ],
+          "versionPattern": "^(\\d+\\.\\d+\\.\\d+)",
+          "helpArgs": [
+            "--help"
+          ],
+          "authStatusArgs": [
+            "auth",
+            "status",
+            "--json"
+          ]
+        },
+        "auth": {
+          "authMethods": [
+            "claude.ai"
+          ],
+          "apiProviders": [
+            "firstParty"
+          ],
+          "configDirectoryMatch": true
+        },
+        "env": {
+          "fixed": {
+            "PATH": "/usr/bin:/bin",
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "CLAUDE_CODE_MAX_RETRIES": "0",
+            "DISABLE_AUTOUPDATER": "1",
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+            "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+            "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+            "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS": "1000"
+          },
+          "runDir": [
+            "HOME",
+            "TMPDIR"
+          ],
+          "configDir": "CLAUDE_CONFIG_DIR",
+          "deny": [
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "ANTHROPIC_PROFILE",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_FOUNDRY_API_KEY",
+            "AWS_BEARER_TOKEN_BEDROCK",
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_USE_VERTEX",
+            "CLAUDE_CODE_USE_FOUNDRY",
+            "CLAUDE_CODE_RETRY_WATCHDOG"
+          ]
+        },
+        "guards": {
+          "apiKeySources": [
+            "none"
+          ],
+          "permissionMode": "dontAsk",
+          "plugins": [
+            {
+              "name": "cc-plugin-agents-md",
+              "path": "builtin"
+            },
+            {
+              "name": "cc-plugin-plugin-authoring",
+              "path": "builtin"
+            }
+          ],
+          "lengthStopReasons": [
+            "max_tokens"
+          ],
+          "loginErrors": [
+            "authentication_failed",
+            "account_on_hold",
+            "oauth_org_not_allowed"
+          ],
+          "creditsErrors": [
+            "credits_required"
+          ],
+          "loginStatuses": [
+            401,
+            403
+          ],
+          "quotaStatuses": [
+            429
+          ]
+        },
+        "limits": {
+          "stdinMaxBytes": 10485760,
+          "maxLineBytes": 1048576,
+          "stderrMaxBytes": 65536,
+          "preflightTimeoutMs": 15000,
+          "preflightOutputBytes": 262144,
+          "killGraceMs": 3000,
+          "responseFramingBytes": 65536
+        }
       }
     },
     "cursor": {

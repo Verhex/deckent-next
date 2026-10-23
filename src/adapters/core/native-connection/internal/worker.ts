@@ -320,23 +320,65 @@ function relative(path: unknown, cwd: string): string | null {
   if (!path.startsWith('/')) return path.slice(0, 256);
   return '(outside-workspace)/' + (path.split('/').pop() ?? '').slice(0, 200);
 }
+type Json = Record<string, unknown>;
+const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+const text = (value: unknown) => typeof value === 'string' ? value : null;
+/** One Claude Code stream-json line as typed fields: the one parser of this wire, shared by the worker normalizer and the headless model port
+ * (S3-1). Pure and total: fields keep their wire values (callers bound, redact and convert); a missing or mistyped field is null. */
+export type ClaudeStreamLine = { readonly kind: 'invalid'; readonly reason: 'non-json' | 'non-object' | 'blank' }
+  | { readonly kind: 'init'; readonly data: Json; readonly cwd: string | null; readonly model: string | null; readonly cliVersion: string | null;
+    readonly apiKeySource: string | null; readonly permissionMode: string | null; readonly tools: unknown; readonly mcpServers: unknown; readonly skills: unknown;
+    readonly plugins: unknown; readonly pluginErrors: unknown }
+  | { readonly kind: 'system'; readonly data: Json; readonly subtype: string }
+  | { readonly kind: 'assistant'; readonly data: Json; readonly message: Json; readonly blocks: readonly Json[] }
+  | { readonly kind: 'user'; readonly data: Json; readonly message: Json; readonly blocks: readonly Json[] }
+  | { readonly kind: 'rate-limit'; readonly data: Json; readonly info: Json; readonly status: string | null; readonly resetsAt: unknown; readonly window: string | null;
+    readonly errorCode: string | null; readonly windows: readonly (readonly [string, Json])[] }
+  | { readonly kind: 'result'; readonly data: Json; readonly subtype: string; readonly isError: boolean; readonly usage: Json; readonly modelUsage: Readonly<Record<string, Json>> | null;
+    readonly stopReason: string | null; readonly result: string | null; readonly apiErrorStatus: number | null; readonly errors: readonly string[] }
+  | { readonly kind: 'other'; readonly data: Json; readonly type: string };
+export function parseClaudeStreamLine(line: string): ClaudeStreamLine {
+  let parsed: unknown;
+  try { parsed = JSON.parse(line); } catch { return { kind: 'invalid', reason: line.trim() ? 'non-json' : 'blank' }; }
+  const data = record(parsed);
+  if (!data) return { kind: 'invalid', reason: 'non-object' };
+  const type = typeof data.type === 'string' ? data.type : 'untyped', subtype = typeof data.subtype === 'string' ? data.subtype : '';
+  if (type === 'system' && subtype === 'init') return { kind: 'init', data, cwd: text(data.cwd), model: text(data.model), cliVersion: text(data.claude_code_version),
+    apiKeySource: text(data.apiKeySource), permissionMode: text(data.permissionMode), tools: data.tools, mcpServers: data.mcp_servers, skills: data.skills,
+    plugins: data.plugins, pluginErrors: data.plugin_errors };
+  if (type === 'system') return { kind: 'system', data, subtype };
+  if (type === 'assistant' || type === 'user') {
+    const message = record(data.message) ?? {}, blocks = Array.isArray(message.content) ? message.content.map(block => record(block) ?? {}) : [];
+    return type === 'assistant' ? { kind: type, data, message, blocks } : { kind: type, data, message, blocks };
+  }
+  if (type === 'rate_limit_event') {
+    const info = record(data.rate_limit_info) ?? {};
+    return { kind: 'rate-limit', data, info, status: text(info.status), resetsAt: info.resetsAt, window: text(info.rateLimitType), errorCode: text(info.errorCode),
+      windows: Object.entries(record(info.unifiedWindows) ?? {}).map(([key, value]) => [key, record(value) ?? {}] as const) };
+  }
+  if (type === 'result') {
+    const usage = record(data.modelUsage);
+    return { kind: 'result', data, subtype, isError: data.is_error === true, usage: record(data.usage) ?? {},
+      modelUsage: usage ? Object.fromEntries(Object.entries(usage).map(([key, value]) => [key, record(value) ?? {}])) : null,
+      stopReason: text(data.stop_reason), result: text(data.result), apiErrorStatus: typeof data.api_error_status === 'number' ? data.api_error_status : null,
+      errors: Array.isArray(data.errors) ? data.errors.filter((entry): entry is string => typeof entry === 'string') : [] };
+  }
+  return { kind: 'other', data, type };
+}
 /** Maps one line of Claude Code stream-json onto zero or more contract events. Thinking text and tool output content are never kept. */
 export function normalizeClaudeLine(line: string, state: NormalizerState, now = Date.now()): BridgeEvent[] {
   const events: BridgeEvent[] = [];
   const emit = (kind: string, body: Record<string, unknown>) => events.push({ schemaVersion: 1, sequence: ++state.sequence, atMs: Math.max(0, now - state.startMs), kind, ...body });
   const miss = (type: string) => countUnmapped(state, type);
   const red = (value: unknown, max: number) => redactText(typeof value === 'string' ? value : '', state.secrets, max);
-  let data: Record<string, unknown>;
-  try { const parsed: unknown = JSON.parse(line); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { miss('non-object'); return events; } data = parsed as Record<string, unknown>; }
-  catch { if (line.trim()) miss('non-json'); return events; }
-  const type = typeof data.type === 'string' ? data.type : 'untyped', subtype = typeof data.subtype === 'string' ? data.subtype : '';
-  if (type === 'system' && subtype === 'init') {
-    if (typeof data.cwd === 'string') state.cwd = data.cwd;
-    emit('session.started', { provider: 'claude', model: typeof data.model === 'string' ? data.model.slice(0, 128) : null,
-      cliVersion: typeof data.claude_code_version === 'string' ? data.claude_code_version.slice(0, 64) : null });
-  } else if (type === 'system') { if (!IGNORED_SYSTEM.has(subtype)) miss(`system:${subtype}`); }
-  else if (type === 'assistant') {
-    const message = (data.message ?? {}) as Record<string, unknown>;
+  const parsed = parseClaudeStreamLine(line), data = parsed.kind === 'invalid' ? {} : parsed.data;
+  if (parsed.kind === 'invalid') { if (parsed.reason !== 'blank') miss(parsed.reason); return events; }
+  if (parsed.kind === 'init') {
+    if (parsed.cwd !== null) state.cwd = parsed.cwd;
+    emit('session.started', { provider: 'claude', model: parsed.model?.slice(0, 128) ?? null, cliVersion: parsed.cliVersion?.slice(0, 64) ?? null });
+  } else if (parsed.kind === 'system') { if (!IGNORED_SYSTEM.has(parsed.subtype)) miss(`system:${parsed.subtype}`); }
+  else if (parsed.kind === 'assistant') {
+    const message = parsed.message;
     const id = typeof message.id === 'string' ? message.id : null, usage = (message.usage ?? null) as Record<string, unknown> | null;
     // All messages of one API response share its id; count their usage once.
     if (id && usage && !state.usageIds.has(id)) {
@@ -344,7 +386,7 @@ export function normalizeClaudeLine(line: string, state: NormalizerState, now = 
       emit('usage', { tokens: { input: num(usage.input_tokens), output: num(usage.output_tokens), cacheRead: num(usage.cache_read_input_tokens),
         cacheWrite: num(usage.cache_creation_input_tokens), thinking: null } });
     }
-    for (const block of Array.isArray(message.content) ? message.content as Record<string, unknown>[] : []) {
+    for (const block of parsed.blocks) {
       if (block.type === 'text') emit('message', { role: 'assistant', textBytes: Buffer.byteLength(String(block.text ?? '')), thinking: false, excerpt: red(block.text, 240) });
       else if (block.type === 'thinking' || block.type === 'redacted_thinking') emit('message', { role: 'assistant', textBytes: Buffer.byteLength(String(block.thinking ?? '')), thinking: true, excerpt: '' });
       else if (block.type === 'tool_use') {
@@ -358,31 +400,29 @@ export function normalizeClaudeLine(line: string, state: NormalizerState, now = 
         emit('tool.call', { toolId: red(block.id, 96), name, toolClass, target, detail: detail || null });
       } else miss(`assistant:${String(block.type ?? 'unknown')}`);
     }
-  } else if (type === 'user') {
-    const message = (data.message ?? {}) as Record<string, unknown>;
-    for (const block of Array.isArray(message.content) ? message.content as Record<string, unknown>[] : []) {
+  } else if (parsed.kind === 'user') {
+    for (const block of parsed.blocks) {
       if (block.type !== 'tool_result') continue;
       emit('tool.result', { toolId: String(block.tool_use_id ?? '').slice(0, 96), status: block.is_error === true ? 'error' : 'ok',
         bytes: Buffer.byteLength(typeof block.content === 'string' ? block.content : JSON.stringify(block.content ?? '')) });
     }
-  } else if (type === 'rate_limit_event') {
-    const info = (data.rate_limit_info ?? {}) as Record<string, unknown>, windows = (info.unifiedWindows ?? {}) as Record<string, Record<string, unknown>>;
-    if (typeof info.status === 'string' && state.quotaPolicy?.claudeRejectedStatuses.includes(info.status)) {
-      const resetsAtMs = typeof info.resetsAt === 'number' && Number.isSafeInteger(info.resetsAt * NATIVE_TIMESTAMP_SCALE) && info.resetsAt >= 0 ? info.resetsAt * NATIVE_TIMESTAMP_SCALE : null;
-      emit('quota-exhausted', { source: 'claude-rate-limit', resetsAtMs, ...(typeof info.rateLimitType === 'string' ? { window: red(info.rateLimitType, 32) } : {}) });
+  } else if (parsed.kind === 'rate-limit') {
+    const info = parsed.info, resetsAt = parsed.resetsAt;
+    if (parsed.status !== null && state.quotaPolicy?.claudeRejectedStatuses.includes(parsed.status)) {
+      const resetsAtMs = typeof resetsAt === 'number' && Number.isSafeInteger(resetsAt * NATIVE_TIMESTAMP_SCALE) && resetsAt >= 0 ? resetsAt * NATIVE_TIMESTAMP_SCALE : null;
+      emit('quota-exhausted', { source: 'claude-rate-limit', resetsAtMs, ...(parsed.window !== null ? { window: red(parsed.window, 32) } : {}) });
     }
-    for (const [window, value] of Object.entries(windows)) {
+    for (const [window, value] of parsed.windows) {
       const utilization = typeof value.utilization === 'number' ? Math.min(1, Math.max(0, value.utilization)) : null;
       if (utilization !== null) emit('quota', { window: window.slice(0, 32), utilization, resetsAtMs: typeof value.resetsAt === 'number' ? Math.round(value.resetsAt * NATIVE_TIMESTAMP_SCALE) : null,
         status: String(info.status ?? 'unknown').slice(0, 32) });
     }
-  } else if (type === 'result') {
-    const limit = { error_max_turns: 'max-turns', error_max_budget_usd: 'budget', error_max_structured_output_retries: 'structured-output' }[subtype];
+  } else if (parsed.kind === 'result') {
+    const subtype = parsed.subtype, limit = { error_max_turns: 'max-turns', error_max_budget_usd: 'budget', error_max_structured_output_retries: 'structured-output' }[subtype];
     if (limit) emit('limit', { limit, detail: subtype });
-    const usage = (data.usage ?? {}) as Record<string, unknown>, details = (usage.output_tokens_details ?? {}) as Record<string, unknown>;
-    const usage_ = data.modelUsage && typeof data.modelUsage === 'object' && !Array.isArray(data.modelUsage) ? data.modelUsage as Record<string, Record<string, unknown>> : null;
-    const models = Object.values(usage_ ?? {});
-    emit('session.ended', { outcome: subtype === 'success' && data.is_error !== true ? 'success' : limit ? 'limit' : 'error', turns: num(data.num_turns),
+    const usage = parsed.usage, details = record(usage.output_tokens_details) ?? {};
+    const usage_ = parsed.modelUsage, models = Object.values(usage_ ?? {});
+    emit('session.ended', { outcome: subtype === 'success' && !parsed.isError ? 'success' : limit ? 'limit' : 'error', turns: num(data.num_turns),
       durationMs: num(data.duration_ms), apiDurationMs: typeof data.duration_api_ms === 'number' ? num(data.duration_api_ms) : null,
       costUsd: typeof data.total_cost_usd === 'number' && Number.isFinite(data.total_cost_usd) && data.total_cost_usd >= 0 ? data.total_cost_usd : null,
       costBasis: typeof models[0]?.costBasis === 'string' ? String(models[0].costBasis).slice(0, 32) : null,
@@ -391,7 +431,7 @@ export function normalizeClaudeLine(line: string, state: NormalizerState, now = 
       permissionDenials: Array.isArray(data.permission_denials) ? data.permission_denials.length : 0,
       // Every model the session used (exact ids as keys), so the host can compare them with the admitted model (WORKER-CURRENCY-1).
       ...(usage_ ? { models: Object.keys(usage_).sort().slice(0, 16).map(key => key.slice(0, 128)) } : {}) });
-  } else miss(type);
+  } else miss(parsed.type);
   return events;
 }
 const CODEX_KNOWN = new Set(['thread.started', 'turn.started', 'item.updated']);
@@ -403,7 +443,6 @@ export interface CodexNormalizerState { readonly calls: Set<string>; turns: numb
   /** The first `thread.started.thread_id`, untrusted: the client-model reader validates it before it names a file. */
   threadId: string | null }
 export function createCodexState(): CodexNormalizerState { return { calls: new Set(), turns: 0, measured: false, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: null }, threadId: null }; }
-const record = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 /**
  * Maps one line of `codex exec --json` onto contract events (B09-3). Shapes follow the pinned Codex 0.155.1 SDK item types
  * (openai/codex rust-v0.155.1 sdk/typescript/src/items.ts): command_execution, file_change, mcp_tool_call, web_search,
