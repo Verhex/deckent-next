@@ -35,11 +35,11 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
   // One config load per target and inspection; its own configured scopes (service, terminal) are where `pool status` asks too.
   const installed = (path: string) => installs.get(path) ?? installs.set(path, loadComposedConfig(path, { ...options, heal: false }).then(value => ({ config: value, home: [
     ...(value.service.identity?.scopeId ? [value.service.identity.scopeId] : []), ...((value['terminal'] as { scopeId?: string } | undefined)?.scopeId ? [(value['terminal'] as { scopeId: string }).scopeId] : [])] }))).get(path)!;
-  // MON-CPU-FIX: one recall per target and inspection; its generation is the viewer, the ledger/policy/bindings stamps and the cached config object. Sources changed within the last heartbeat (finer than any file timestamp granularity) read through.
+  // MON-CPU-FIX: one recall per target and inspection; its generation is the viewer and the ledger/policy/bindings/config-file stamps. Sources changed within the last heartbeat (finer than any file timestamp granularity) read through.
   // Without a memo, reads (scope contexts, decisions) are still shared within this one inspection.
   const session = memo ?? new MonitorSourceMemo(), recalls = new Map<string, Promise<MonitorRecall>>(), recall = (path: string) => recalls.get(path) ?? recalls.set(path, !memo ? Promise.resolve(session.recall(path, null))
-    : installed(path).then(async ({ config: c }) => { const stamp = await stampMonitorInstall(c).catch(() => null), settled = stamp && new SystemTrustedClock().sample().wallMs - stamp.changedAtMs >= c.inspection.workers.heartbeatMs;
-      return memo.recall(path, settled ? `${stamp.stamp}\0${memo.identity(c)}` : null); })).get(path)!;
+    : installed(path).then(async ({ config: c }) => { const stamp = await stampMonitorInstall(c, options).catch(() => null), settled = stamp && new SystemTrustedClock().sample().wallMs - stamp.changedAtMs >= c.inspection.workers.heartbeatMs;
+      return memo.recall(path, settled ? stamp.stamp : null); })).get(path)!;
   const scope = async (path: string, scopeId: string) => (await recall(path))(`context\0${scopeId}\0${path}`, () => loadConfiguredScopeContext(path, scopeId, options, 'read'));
   return new MonitorApplication({ now: () => new SystemTrustedClock().sample().wallMs,
     readConfigFreshness: async (target, descriptor) => runtimeConfigFreshness(descriptor.configDigest, await loadComposedConfig(target.path, { ...options, heal: false }) as unknown as Record<string, unknown>),
@@ -77,11 +77,12 @@ export async function inspectMonitor(root: string, options: ConfigLoadOptions = 
             scopeId, active: model.availability.invocable, availability: model.availability });
         } catch (error) { modelDiagnostics.push(`model-state-unavailable:${queryFailure(error).code}`); }
       }
-      // M2 (f2): catalog models no tier/role row names, counted once across scopes (the same read as the doctor row). A scope that cannot read it adds nothing.
+      // M2 (f2): catalog models no tier/role row names, counted once across scopes (the same read as the doctor row), recalled per scope: the tier/role
+      // rows are config, the catalog is config and registry data. A scope that cannot read it adds nothing (a failed read is not kept).
       const pendingRoles = new Set<string>();
       for (const scopeId of modelScopes) {
-        try { for (const entry of (await inspectConfiguredModelRoles(target.path, { schemaVersion: 1, scopeId }, { ...options, heal: false })).models)
-          if (entry.state === 'pending') pendingRoles.add(JSON.stringify([entry.channelId, entry.modelId])); } catch { /* read-soft, as the doctor row */ }
+        try { for (const entry of await (await recall(target.path))(`roles\0${scopeId}`, async () => (await inspectConfiguredModelRoles(target.path, { schemaVersion: 1, scopeId }, { ...options, heal: false })).models
+          .filter(row => row.state === 'pending').map(row => JSON.stringify([row.channelId, row.modelId])))) pendingRoles.add(entry); } catch { /* read-soft, as the doctor row */ }
       }
       if (pendingRoles.size) modelDiagnostics.push(`model-roles-pending:${pendingRoles.size}`);
       // S8-4: the catalog lines, summed across scopes ("öneri bekliyor (N)", "imzalayan iptal edildi", "imza anahtarı yok"); a scope that cannot read adds nothing.

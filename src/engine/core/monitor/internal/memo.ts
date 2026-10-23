@@ -12,8 +12,6 @@ export const readThrough: MonitorRecall = (_key, compute) => compute();
  */
 export class MonitorSourceMemo {
   private readonly targets = new Map<string, { readonly generation: string; readonly entries: Map<string, Promise<unknown>> }>();
-  private readonly ids = new WeakMap<object, number>();
-  private next = 0;
   /** The recall for one inspection of `target`. `null` (no memo across reads, or sources unknown or changed too recently to trust their stamps)
    * shares reads within this inspection only and forgets the target. */
   recall(target: string, generation: string | null): MonitorRecall {
@@ -27,10 +25,5 @@ export class MonitorSourceMemo {
       entries.set(key, value); value.then(result => { if (keep && !keep(result)) forget(); }, forget);
       return value;
     };
-  }
-  /** A stable number per object: the composed config is the same cached object while its file stamps are unchanged. */
-  identity(value: object): number {
-    const known = this.ids.get(value); if (known !== undefined) return known;
-    this.next += 1; this.ids.set(value, this.next); return this.next;
   }
 }
