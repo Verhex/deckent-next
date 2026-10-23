@@ -83,3 +83,15 @@ it('historical v1 rows stay readable beside v2 rows', () => {
   expect(deckentMetricsSchema.parse(v1)).toEqual(v1);
   expect(() => deckentMetricsSchema.parse({ ...v1, schemaVersion: 2 })).toThrow();
 });
+it('ATAMA-1: a system-assigned Attempt row carries the sealed choice (list, position, revisions, effort source); a pinned row carries none', () => {
+  const { run } = evaluating(), before = pinned(run), copy = JSON.parse(JSON.stringify(before));
+  copy.execution.tasks[0].assignment = { schemaVersion: 1, workClass: 'business', workClassRevision: 'business-r1', candidatePolicy: { id: 'standard', version: 1 },
+    candidateIndex: 1, channelId: 'claude', modelId: 'claude-opus-5-5', catalogRevision: 'cat-1', modelRevision: 7, activationRevision: 5,
+    effort: { level: 'high', source: 'candidate' }, skipped: [{ index: 0, channelId: 'claude', modelId: 'claude-fable-5-1', reason: 'WORKER_MODEL_NOT_ACTIVE' }] };
+  const [metric] = deriveAcceptanceMetrics(evaluationCommand(copy, { model }), accepted(copy));
+  expect(metric!.assignment).toEqual({ candidatePolicy: { id: 'standard', version: 1 }, candidateIndex: 1, workClassRevision: 'business-r1', catalogRevision: 'cat-1',
+    modelRevision: 7, activationRevision: 5, effortSource: 'candidate' });
+  expect(deckentMetricsSchema.parse(metric)).toEqual(metric);
+  const [plain] = deriveAcceptanceMetrics(evaluationCommand(before, { model }), accepted(before));
+  expect(plain).not.toHaveProperty('assignment');
+});
