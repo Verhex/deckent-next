@@ -483,6 +483,22 @@
     "memory.config.section": {
       "before": "Memory automation (protected; no AI may change it): extraction.mode turns on candidates from accepted work (off, shadow records only, live writes candidates); automation narrows the Core bounds and WorkClass rows.",
       "after": "Memory automation (protected; no AI may change it): extraction.mode turns on candidates from accepted work (off, shadow records only, live writes candidates); verification.mode turns on the independent evaluator (off, shadow seals its records and verifies nothing, on verifies); automation narrows the Core bounds and WorkClass rows."
+    },
+    "limits.window_week_fable": {
+      "before": "Week (Fable)",
+      "after": null
+    },
+    "xverify.opt_author_model": {
+      "before": "Model id that authored the claimed work (canonical provider API id, e.g. claude-opus-5) — the verifier must run at an equal or higher capability tier. Omitted: the resolved default is used and recorded as low-confidence.",
+      "after": null
+    },
+    "xverify.opt_verifier_model": {
+      "before": "Explicit verifier model id (canonical provider API id, e.g. gpt-5.6-sol) — bypasses tier-equivalence resolution, never the author tier floor",
+      "after": null
+    },
+    "xverify.remedy.usage_unavailable": {
+      "before": "The Fable-to-Sol call dispatched, but the canonical transport reported no usable usage, so no numbers were fabricated and the package stays OPEN. Confirm the verifier CLI emits its token counters (provider version/flags), then rerun xverify.",
+      "after": null
     }
   },
   "tr": {
@@ -1097,6 +1113,22 @@
     "memory.config.section": {
       "before": "Hafıza otomasyonu (korumalı; hiçbir AI değiştiremez): extraction.mode kabul edilen işten aday kaydı açar (off kapalı, shadow yalnız kayıt tutar, live aday yazar); automation Core sınırlarını ve iş türü satırlarını yalnız daraltır.",
       "after": "Hafıza otomasyonu (korumalı; hiçbir AI değiştiremez): extraction.mode kabul edilen işten aday kaydı açar (off kapalı, shadow yalnız kayıt tutar, live aday yazar); verification.mode bağımsız değerlendiriciyi açar (off kapalı, shadow kaydını mühürler ve hiçbir şeyi doğrulamaz, on doğrular); automation Core sınırlarını ve iş türü satırlarını yalnız daraltır."
+    },
+    "limits.window_week_fable": {
+      "before": "Hafta (Fable)",
+      "after": null
+    },
+    "xverify.opt_author_model": {
+      "before": "İddia edilen işi üreten model kimliği (kanonik sağlayıcı API id, örn. claude-opus-5) — hakem eşit veya daha yüksek yetenek tier’ında çalışmak zorundadır. Verilmezse: çözümlenen varsayılan kullanılır ve düşük-güven olarak kaydedilir.",
+      "after": null
+    },
+    "xverify.opt_verifier_model": {
+      "before": "Açık hakem model kimliği (kanonik sağlayıcı API id, örn. gpt-5.6-sol) — tier-eşdeğerlik çözümlemesini atlar, yazar tier tabanını asla atlamaz",
+      "after": null
+    },
+    "xverify.remedy.usage_unavailable": {
+      "before": "Fable-Sol çağrısı yapıldı, ancak canonical transport kullanılabilir usage raporlamadı; hiçbir sayı uydurulmadı ve paket OPEN kalıyor. Hakem CLI'ının token sayaçlarını yaydığını doğrulayın (sağlayıcı sürümü/bayrakları), sonra xverify'ı yeniden çalıştırın.",
+      "after": null
     }
   }
 }
