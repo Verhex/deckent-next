@@ -40,12 +40,15 @@ it.skipIf(process.platform === 'win32').each([false, true])('installer template/
   expect(await readFile(f.path, 'utf8')).toBe(before);
   const applied = await f.upgrade(true, preview.expect!);
   expect(applied.status).toBe('upgraded');
-  expect(await f.upgrade(true)).toMatchObject({ status: 'current' });
+  // A named person's add-only plan is batched by POLICY_CHANGE_MAX: since S8-5/S8-3 the missing rules take a second batch (its own sealed event).
+  let batches = 1;
+  for (let next = await f.upgrade(true); next.status !== 'current'; next = await f.upgrade(true)) { expect(next.status).toBe('upgraded'); batches++; }
+  expect(batches).toBe(named ? 2 : 1);
   const store = await openSqliteAuditStore(productResourcePath(f.config.productLayout, 'ledger'), f.config.storage.sqlite);
   try {
     const integrity = await openLocalIntegrityAuthority(f.config.productLayout, f.config.approvals.keyFile);
     const records = new AuditApplication(store, integrity).list('s', 0, 100);
-    expect(records).toHaveLength(1);
+    expect(records).toHaveLength(named ? 2 : 1);
     const record = records[0]!;
     expect(record.event.subject).toMatchObject({ kind: 'authority-change', installer: { basis: named ? 'named-person' : 'first-run', person: f.person },
       revision: { before: 'first-run-template-v4', after: applied.revision }, counts: { grantsAdded: applied.rules.length, grantsRemoved: 0, bindingsAdded: 0, bindingsRemoved: 0 } });

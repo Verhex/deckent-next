@@ -438,7 +438,7 @@ function v15Rules(person: Person, scopes: readonly string[]): readonly PolicyGra
   if (isMcpPrincipal(person)) return [observe];
   const distiller = memoryDistillerPrincipalRef(person);
   return [rule(ids.memoryPropose, person, vocabulary.memory.kind, ['propose']), rule(ids.distillerMemory, distiller, vocabulary.memory.kind, ['inspect', 'propose']), rule(ids.distillerRuns, distiller, vocabulary.run.kind, ['inspect']),
-    rule(ids.distillerOutput, distiller, vocabulary.attempt.kind, ['read-output']), rule(ids.agentCatalog, person, vocabulary.agentCatalog.kind, ['inspect', 'define', 'promote', 'demote', 'restore', 'retire', 'dismiss']), observe,
+    rule(ids.distillerOutput, distiller, vocabulary.attempt.kind, ['read-output']), rule(ids.agentCatalog, person, vocabulary.agentCatalog.kind, ['inspect', 'define', 'promote', 'demote', 'restore', 'retire', 'dismiss', 'suggest', 'narrow']), observe,
     rule(ids.memoryReview, person, vocabulary.memory.kind, ['verify', 'contest']), ...evaluatorRules(memoryEvaluatorPrincipalRef(person), rule),
     rule(ids.memoryPurge, person, vocabulary.memory.kind, ['retire', 'purge']),
     // S6R-5: the recovery principal (`<person>/recovery`, composition root only) invokes its `recovery-decision` role model; its floor refuses every
@@ -447,6 +447,7 @@ function v15Rules(person: Person, scopes: readonly string[]): readonly PolicyGra
     // S8-5 (S8-DESIGN §9): the named person manages signer keys and imports signed skills (the pinned + signed floor still holds for every import).
     rule(ids.signers, person, vocabulary.skillSigner.kind, ['inspect', 'enrol', 'add', 'revoke', 'repair']), rule(ids.catalogImport, person, vocabulary.agentCatalog.kind, ['import']),
     // S8-3 (§9): the catalog aggregator (`<person>/catalog-aggregator`, composition root only) gets exactly its floor's list; it writes only signed by its own key.
+    // The person holds suggest/narrow above only so the delegation bound lets them grant or revoke these (the application refuses a person both).
     ...[[ids.aggregatorCatalog, vocabulary.agentCatalog.kind, ['inspect', 'suggest', 'narrow']], [ids.aggregatorRuns, vocabulary.run.kind, ['inspect']], [ids.aggregatorMemory, vocabulary.memory.kind, ['inspect']]]
       .map(([id, kind, actions]) => rule(id as string, catalogAggregatorPrincipalRef(person), kind as string, actions as string[]))];
 }

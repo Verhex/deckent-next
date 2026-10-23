@@ -27,7 +27,7 @@ it('v15 adds exactly the person\'s memory propose, the distiller D1+D2, D4 and D
   expect(built.version).toBe(15); expect(built.policy.revision).toBe('first-run-template-v15');
   expect(v15).toEqual([scoped('first-run-memory-propose', person, 'memory', ['propose']), scoped('first-run-memory-distiller', distillerRef, 'memory', ['inspect', 'propose']), scoped('first-run-memory-distiller-runs', distillerRef, 'run', ['inspect']),
     scoped('first-run-memory-distiller-output', distillerRef, 'attempt', ['read-output']),
-    scoped('first-run-agent-catalog', person, 'agent-catalog', ['inspect', 'define', 'promote', 'demote', 'restore', 'retire', 'dismiss']),
+    scoped('first-run-agent-catalog', person, 'agent-catalog', ['inspect', 'define', 'promote', 'demote', 'restore', 'retire', 'dismiss', 'suggest', 'narrow']),
     scoped('first-run-mcp-observe-agent-catalog', mcpRef, 'agent-catalog', ['inspect']), scoped('first-run-memory-review', person, 'memory', ['verify', 'contest']),
     scoped('first-run-memory-evaluator', evaluatorRef, 'memory', ['inspect', 'verify', 'contest']),
     scoped('first-run-memory-evaluator-runs', evaluatorRef, 'run', ['inspect']), scoped('first-run-memory-evaluator-model', evaluatorRef, 'model-invocation', ['invoke']),
@@ -57,9 +57,8 @@ it('the grants decide only inside the floor: the distiller proposes and reads, n
     expect(decide(built.policy, evaluator, kind!, action!).decision, `${kind}/${action}`).toBe('deny');
   expect(decide(built.policy, evaluator, 'memory', 'verify', 'other').decision).toBe('deny');
   expect(decide(built.policy, distiller, 'memory', 'verify').decision).toBe('deny');
-  // S8-4: the person's catalog cards (import behind floor (d), S8-5); suggest/narrow are the aggregator's only.
-  for (const action of ['inspect', 'define', 'import', 'promote', 'demote', 'restore', 'retire', 'dismiss']) expect(decide(built.policy, owner, 'agent-catalog', action).decision, action).toBe('allow');
-  for (const action of ['suggest', 'narrow']) expect(decide(built.policy, owner, 'agent-catalog', action).decision, action).toBe('deny');
+  // S8-4: the person's catalog cards (import behind floor (d), S8-5); suggest/narrow are held only to delegate them (the application refuses a person both).
+  for (const action of ['inspect', 'define', 'import', 'promote', 'demote', 'restore', 'retire', 'dismiss', 'suggest', 'narrow']) expect(decide(built.policy, owner, 'agent-catalog', action).decision, action).toBe('allow');
   const aggregator = catalogAggregatorPrincipal(person, ['installation', 'other']);
   for (const [kind, action] of [['agent-catalog', 'inspect'], ['agent-catalog', 'suggest'], ['agent-catalog', 'narrow'], ['run', 'inspect'], ['memory', 'inspect']])
     expect(decide(built.policy, aggregator, kind!, action!).decision, `${kind}/${action}`).toBe('allow');
