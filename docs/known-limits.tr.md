@@ -180,9 +180,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 
 ## Sağlayıcılar ve abonelikler
 
-- **Claude aboneliği:** Claude Code işçisi kendi Claude girişinizle çalışır. Abonelikli Brain (`/do`'nun arkasındaki planlayıcı)
-  hazırlanıyor ve henüz yok. Claude aboneliğiyle terminal sohbeti şu an desteklenmiyor. *Yol:* terminal sohbeti ve `/do`
-  planlaması için bir Anthropic API anahtarı kullanın.
+- **Claude aboneliği:** Claude Code işçisi kendi Claude girişinizle çalışır. alpha.55'ten beri Brain (`/do`'nun arkasındaki planlayıcı)
+  da yalıtılmış `claude-cli-subscription` bağlantısıyla kendi Claude aboneliğinizle planlayabilir; yalnız Deckent'in bubblewrap
+  korumalı alanının çalıştığı yerde (Linux ve WSL) çalışır, bkz. [çekirdek katmanlar](#çekirdek-katmanlar). Claude aboneliğiyle terminal
+  sohbeti şu an desteklenmiyor. *Yol:* terminal sohbeti için, korumalı alan yoksa `/do` planlaması için de bir Anthropic API anahtarı kullanın.
 - **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** İlk oturum yalnız abonelikle sohbet edemez; kapsam
   bütçesi olmadan ücretli API turu reddedilir. *Yol:* `/provider` ile API anahtarı bağlayın, bütçe koyun, `/model` seçin.
 - **Bugün işçi, girişinizi CLI'ın kendi kimlik dosyasını ev dizininizden okuyarak alır.** *Etki:* o dosya var olmalı ve
@@ -193,8 +194,12 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   dolana kadar abonelik hesabınız adına işlem yapabilir. *Yol:* yok; sınır, token'ın kendi süresidir.
 - **ChatGPT ile giriş henüz yok.** `/provider` bunu kullanılamıyor olarak listeler; görünür giriş beta sürecinde ele alınır. *Yol:* bir OpenAI API anahtarı ya da kendi
   girişiyle bir Codex işçisi.
-- **Aboneliklerden API modeline henüz otomatik geçiş yok.** Bir abonelik penceresi tükendiğinde Deckent kendiliğinden ücretli
-  bir API'ye geçmez; bildirilen aday listesi üzerinden yönlendirme planlı. *Yol:* bir API modelini kendiniz bağlayın ve seçin.
+- **Aboneliklerden API modeline otomatik geçiş yok.** Bir abonelik penceresi tükendiğinde Deckent kendiliğinden ücretli bir API'ye
+  geçmez. alpha.55'ten beri abonelik kotası yüzünden bekleyen bir işçi Run'ı en çok 5 saat bekler (`runRuntime.quotaRecovery.maxWaitMs`),
+  sonra size bir kartta beklemeye devam mı edileceğini yoksa WorkClass listesindeki sıradaki adayın mı kullanılacağını sorar; hiçbir şey
+  kendiliğinden iptal edilmez ve hiçbir AI cevap veremez. Yükseltmeden önce bekletilmiş bir Run o zaman mühürlediği süreyi korur (eski
+  varsayılan 7 gündü). *Yol:* `deckent run resume --quota wait` ya da `deckent run resume --quota next-candidate` ile cevaplayın ya da
+  bir API modelini kendiniz bağlayıp seçin.
 - **Doğrulanmış yayımlanmış fiyatı olmayan uzak model kilitlidir.** Zhipu GLM Çin, fiyatları CNY olduğu için kilitli kalır.
   DeepSeek yayımlanmış tepe fiyattan kesinleşir ve üst sınır olarak etiketlenir. *Yol:* fiyatı olan ya da yerel bir model kullanın.
 - **Başka bir makinedeki model sunucusu henüz bağlanamaz.** Düz `http` yalnız bu makinede (`127.0.0.1` ya da `[::1]`) kabul
@@ -443,10 +448,12 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yükseltme öncesi); günlük seçiliyse yükseltme yeni set almadan başlar ve dönüş yolu en yeni günlük settir, en fazla yaklaşık bir
   gün eskidir. *Yol:* yükseltmeden önce `deckent backup create --scope <id> --set <mutlak yol>` komutunu kendiniz çalıştırın ya
   da günlük yerine yükseltme öncesini seçin.
-- **Kaybolan bir işçi slotunu tutabilir ve henüz otomatik kurtarma yok.** Verilmiş bir deneme, saklama çözülene kadar etkin kalıp bir
-  yürütme slotunu tutabilir. `deckent run inspect` bunu söyler: görev bekletilir, hiçbir şey yeniden denenmez, serbest bırakılmaz ya da
-  kabul edilmez, yeni deneme başlamaz ve çalışan servis işçiyi yeniden kontrol eder. *Yol:* `deckent monitor` ile izleyin; slot yalnız
-  tipli manuel kararla ya da işçinin bittiğine dair kanıtla bırakılır. Otomatik kurtarma betadan önceki çekirdek katmanlarda planlı.
+- **Kaybolan bir işçi slotunu tutabilir; otomatik kurtarma kuruldu ama henüz devrede değil.** Verilmiş bir deneme, saklama çözülene
+  kadar etkin kalıp bir yürütme slotunu tutabilir. alpha.55 deterministik tespiti (Nervous) ve görevi yeni bir denemede sürdürebilen bir
+  kurtarma kararını ekler; ikisi de `off` başlar ve `live` kipte bile Nervous, owner ölçülmüş bir kuralı yükseltene kadar hiçbir şey
+  yürütmez: Core tohumundaki her kural hâlâ geçicidir ve kurtarma yalnız Nervous'un durdurma adımını gerçekten çalıştırdığı vakalara karar
+  verir. `deckent run inspect` Run'ın dondurduğu kurtarma kipini ve anlamını söyler. *Yol:* `deckent monitor` ile izleyin; slot yalnız
+  tipli manuel kararla ya da işçinin bittiğine dair kanıtla bırakılır.
 - **Temiz makine provası model adımında durdu.** 2026-10-15/16'da taze bir klon kurulum, `doctor`, politika, kayıt defteri ve
   havuza ulaştı. Model bağlantısı, `/do`, boş bir Docker daemon'unda işçi imajı derlemesi ve temiz daemon'da başlangıç
   araç zinciri tazelemesi orada denenmedi. *Yol:* README'deki ilk iş yolunu izleyin ve farkı bildirin.
@@ -466,6 +473,15 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yüklediği kodu kullanır. *Yol:* geçişten sonra istemciyi yeniden başlatın (Claude Code oturumu ya da terminali kapatıp yeniden
   açın); servisin hangi derlemeyle çalıştığını `deckent runtime describe` gösterir.
 
+- **alpha.55'e geçiş ve geri dönüş dikkat ister.** Defter v59'dan v70'e geçer ve alpha.54 onu açamaz; geri dönmek, geçişten hemen önce
+  alınan yedeği geri yüklemek demektir (günlük zamanlamada taze set alınmaz; `deckent backup create`'i kendiniz çalıştırın). Geri dönmeden
+  önce alpha.54'ün tanımadığı ayarları da kaldırın: `memoryAutomation`, `catalogEvolution`, `runRuntime.nervous`, `runRuntime.recovery`,
+  `runRuntime.quotaRecovery.maxRewaits`, `model_roles`, `models.headless` ve `brain_planner.quotaWait`. Geçişte: modeli model rol
+  registry'sinde frontier satırı olmayan bir Brain `BRAIN_TIER_REFUSED` ile reddedilir (`deckent models roles` ile bakın); eski bir
+  şablona sabitlenmiş `brain_planner.selected` işçi modelini Brain'e seçtirmeye devam eder, bu yüzden sistem ataması çalışmaz; 1.
+  sürümdeki bir Core aday listesine göre yazılmış WorkClass katmanı, bu listeler artık 2. sürüm olduğu için `WORK_CLASS_OVERRIDE_DENIED`
+  ile reddedilir; yeni kimlikler (hafıza damıtıcısı ve değerlendiricisi, kurtarma) haklarını ancak owner politika şablonu v15'i
+  uyguladıktan sonra alır. Runtime protocol v29 değişmedi.
 - **alpha.54'e geçiş ve geri dönüş dikkat ister.** alpha.54'ten önce sabitlenmiş Codex işçi profilleri eski `none` kanıt damgasını
   taşır ve Run oluşturulurken ya da bütçesi planlanırken `WORKER_MODEL_BINDING_MISMATCH` ile reddedilir: geçişten önce bekleyen Codex
   işini bitirin ve geçişten sonra Codex profillerini yeniden tanımlayın. alpha.53'e dönüş: `terminal.responseStyle` ve
@@ -478,6 +494,59 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   bırakın (klonları seyrektir); alpha.52 Codex ve Cursor `disabled` türlerini reddeder; geçişte teslim kuyruğu boş olsun (biletlerin
   başlığı farklı); alpha.52'nin denetim doğrulaması gölge deposunu görmez (zincirin dışındadır). Cursor kataloğu alpha.53 profilleri
   için kaydedildiyse yedeği geri yükleyin. Defter v59 ve çalışma protokolü v29 değişmedi.
+
+## Çekirdek katmanlar
+
+alpha.55 çekirdek katmanları ekler (hafıza, sistem ataması ve model rolleri, Auditor'ın mühürlü kararları, Nervous ve kurtarma, headless
+abonelik Brain'i, ajanlar). Bunlar koddur, henüz kabul edilmiş davranış değildir: her biri kapalı başlar ve testlerle ve sahte
+bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış çağrılarıyla), henüz gerçek N1 kullanımında değil. Ayrıntı:
+[çekirdek katmanlar](../.deckent/docs/architecture/modules/core-layers.md).
+
+- **Her çekirdek katman kapalı başlar ve onu yalnız bir kişi açar.** Anahtarlar (`memoryAutomation.extraction|verification|context.mode`,
+  `runRuntime.nervous.mode`, `runRuntime.recovery.mode`, `catalogEvolution.mode`) korumalıdır: hiçbir AI ve hiçbir MCP aktörü bunları
+  yazamaz. `shadow` (gölge) kip ne yapacağını kaydeder ve hiçbir şeyi değiştirmez. Yeni kimlikler tam haklarını yalnız politika şablonu
+  v15'ten alır. *Yol:* şablonu `deckent policy upgrade --template current --scope <id> --preview`, sonra `--apply` ile uygulayın; bir
+  katmanı önce gölgeye alın, örneğin `deckent config set memoryAutomation.extraction.mode '"shadow"' --scope <id>`.
+- **Sayılar ölçüm değil, başlangıç değeridir.** Nervous kuralları, kurtarma sınırları (kaybolan görev başına bir otomatik devam, görev
+  başına üç deneme), hafıza sınırları ve açılış eşikleri ile ajan istatistiği eşikleri N1 ölçene kadar geçici işaretlidir. Bir Nervous
+  kuralı `live` kipte ancak owner onu tam kimliği ve sürümüyle yükselttikten sonra çalışır.
+- **Hafıza yalnız bir iş türünden dolar.** Core registry yalnız `small` WorkClass'ının (geçici 90 günlük saklama, kişisel veri yok) hafıza
+  adayı üretmesine izin verir; başka türlerin kabul edilen işi, saklama süresi tanımlanana kadar hiçbir şey eklemez.
+- **Otomatik hafıza doğrulaması ikinci bir model üreticisi ister.** Değerlendiricinin modeli, kaynak işi yapan her modelden farklı bir
+  üreticiden gelmeli, `memory-evaluator` rolünü taşımalı ve etkin olmalıdır. Yalnız bir üretici bağlıysa hiçbir şey otomatik doğrulanmaz
+  ve kayıtlar aday kalır. Doğrulama açıkken aday metni o ikinci sağlayıcıya gönderilir. Kapsam başına günlük çağrı, harcama ve itiraz
+  sınırlıdır. *Yol:* kayıtları `deckent memory review` ile kendiniz inceleyip doğrulayın.
+- **Purge her kopyayı silmez.** `deckent memory purge` kaydın metnini, arama satırını ve değerlendirici çağrılarının içeriğini siler ve
+  yedek geri yüklendikten sonra yeniden uygulanır (o zamana kadar okumalar `MEMORY_PURGE_REPLAY_HELD` ile bekler). İşçi çıktısını,
+  Run bağlamına dondurulmuş kopyayı, mevcut yedekleri ve ikinci sağlayıcıdaki kopyayı silmez; değerlendirici çağrısının makbuzu isteğinin
+  düz bir özetini tutar. Veritabanının yazma öncesi günlüğü elden geldiğince temizlenir.
+- **Hafıza 3. ve 4. aşamaları yalnız ölçümden sonra açılır.** Bağlamı ya da doğrulamayı tam açmak, mühürlü kayıtlar ölçütleri karşılayana
+  kadar (örneğin 20 gölge kabul ya da 20 kör kararda en az %90 değerlendirici uyumu) `MEMORY_ROLLOUT_CRITERIA_UNMET` ile reddedilir.
+  *Yol:* `deckent memory rollout` her ölçütü sayılarıyla ve sıradaki komutu gösterir.
+- **Abonelik Brain'i bubblewrap ister ve kotanızı paylaşır.** `claude-cli-subscription` bağlantısı yalnız Deckent'in bubblewrap korumalı
+  alanı içinde çalışır; o yoksa bağlantı reddedilir (`HEADLESS_ISOLATION_UNAVAILABLE`), bu yüzden native Windows ve macOS kullanamaz.
+  Bağlantı başına aynı anda tek çağrıya izin verir ve kendi Claude oturumlarınızla aynı abonelik kotasını ve giriş yenilemesini kullanır.
+  Deckent kredi satın almaz ve CLI kredi gerektiğini söylediğinde durur; ama hesabınızda ek kullanım açıksa CLI onu çekebilir ve Deckent
+  bunu göremez. AI ya da MCP üzerinden planlama ve arka plan rolleri onu yalnız sizin `--delegate` onayınızdan sonra kullanır. Korumalı
+  alan dosya boyutunu, açık dosya sayısını ve çekirdek dökümünü sınırlar; CPU süresi, bellek ve süreç sayısı henüz sınırlı değil.
+  <!-- TODO(f5): son cümleyi yalıtım alanının CPU/bellek/süreç sınırları, ağ geçidi ret sayıları ve ölçülen yenileme kilidi bulgusuyla değiştir. -->
+  *Yol:* kullanılmasını istemiyorsanız Claude hesabınızda ek kullanımı kapalı tutun.
+- **Brain'in kota beklemesi kısadır ve yalnız izleyen bir yüzeyde olur.** Abonelik kotası tükendiğinde `/do` ve `deckent do` bilinen
+  sıfırlanmayı en çok 15 dakika bekler (iki deneme, geçici) ve sonra bir kez daha planlar; daha uzak ya da bilinmeyen bir sıfırlanma ve
+  MCP `plan_run` hemen sıfırlanma saatiyle tipli `HEADLESS_QUOTA_EXHAUSTED` reddini alır.
+- **Ajan terfisi, kurallar ölçülene kadar elle yapılır.** Yeni tanımlanan bir ajan aday olarak başlar ve her zaman Run kartı ister; onu
+  bir kişi kartla terfi ettirir (`deckent agents promote`) ya da ayrı anahtarlı ve izinli bir AI imzalı bir MCP komutuyla ettirir (o AI'ın
+  yazdığı sürüm için asla; bu yüzden tek AI kimliği olan bir kurulum bu yolu kullanamaz). Öneri kuralları geçicidir ve otomatik daraltma
+  yalnız `catalogEvolution.mode` `on` iken ölçümle onaylanmış bir kuralda çalışır, bu yüzden bugün hiçbir şey daraltılmaz. Ajan
+  istatistikleri yalnız işçiye ya da değerlendiriciye bağlanabilen başarısızlıkları sayar, nedensellik değil ilişkidir ve CLI işçileri
+  için token içermez (emek = süre, API maliyeti ve kota beklemeleri). *Yol:* `deckent agents suggestions` toplayıcının mühürlediği
+  önerileri listeler; her birine kendi kartında karar verin.
+- **İmza anahtarları host anahtar deposunu ister.** AI ve sistem katalog yazmaları bir kişinin kaydettiği imza anahtarını ister; native
+  Windows'ta host anahtar deposu yoktur ve bu yazmalar reddedilir. Bir anahtarı iptal etmek yeni ve bekleyen eylemlerini durdurur, ama
+  verdiği terfiler bir kişi geri alana kadar kalır (owner'ın seçimi). Skill'ler yalnız bir kişinin eklediği içe aktarma anahtarıyla içe
+  aktarılır; Deckent Hub alpha.56 ile gelir.
+- **Auditor'ın henüz canlı okuyucusu ve sınıflandırıcısı yok.** Politika turu kayıtları mühürlenir, ama izleme okuyucusunun çalışma zamanı
+  işlemi yoktur (sonraki protokol adımını bekler); Auditor'ın gölge sınıflandırıcısı ve K-C nöbetçileri kurulmadı (owner ayrıntısını bekler).
 
 ## Masaüstü ve diğer yüzeyler
 

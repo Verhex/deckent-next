@@ -182,9 +182,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 
 ## Providers and subscriptions
 
-- **Claude subscription:** a Claude Code worker runs with your own Claude login. A subscription-backed Brain (the planner
-  behind `/do`) is being prepared and is not available yet. Terminal chat with a Claude subscription is not supported for now.
-  *Workaround:* use an Anthropic API key for terminal chat and `/do` planning.
+- **Claude subscription:** a Claude Code worker runs with your own Claude login. Since alpha.55 the Brain (the planner behind `/do`)
+  can also plan with your own Claude subscription through the isolated `claude-cli-subscription` connection; it runs only where
+  Deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers). Terminal chat with a Claude subscription is not
+  supported for now. *Workaround:* use an Anthropic API key for terminal chat, and for `/do` planning where the sandbox is missing.
 - **Terminal chat needs a model connection and, for a paid API, a budget.** A first session cannot chat with a subscription alone;
   a paid API turn without a scope budget is refused. *Workaround:* connect an API key with `/provider`, set a budget, choose `/model`.
 - **Today the worker takes your login by reading the CLI's own credential file** in your home folder. *Impact:* that file
@@ -195,9 +196,12 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   until that token expires. *Workaround:* none; the token's own lifetime is the bound.
 - **Sign in with ChatGPT is not available yet.** `/provider` lists it as not available; a visible sign-in is worked on during the beta process. *Workaround:* an OpenAI API key, or a
   Codex worker with its own login.
-- **No automatic fallback from a subscription to an API model yet.** Deckent does not switch to a paid API by itself when a
-  subscription window is used up; routing across a declared candidate list is planned. *Workaround:* connect an API model
-  yourself and choose it.
+- **No automatic fallback from a subscription to an API model.** Deckent never switches to a paid API by itself when a subscription
+  window is used up. Since alpha.55 a worker Run parked on a subscription quota waits at most 5 hours
+  (`runRuntime.quotaRecovery.maxWaitMs`) and then asks you on a card whether to keep waiting or to use the next candidate of its
+  WorkClass list; nothing is cancelled on its own and no AI can answer. A Run that was parked before the upgrade keeps the deadline it
+  sealed then (the old default was 7 days). *Workaround:* answer with `deckent run resume --quota wait` or
+  `deckent run resume --quota next-candidate`, or connect an API model yourself and choose it.
 - **A remote model without a verified published price is locked.** Zhipu GLM China stays locked because its prices are in
   CNY. DeepSeek settles at the published peak price, labelled an upper bound. *Workaround:* use a priced model or a local
   one.
@@ -445,10 +449,12 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   before-upgrade), so with daily the upgrade starts without a fresh set and the way back is the newest daily set, up to about a
   day old. *Workaround:* before an upgrade run `deckent backup create --scope <id> --set <absolute path>` yourself, or choose
   before-upgrade instead of daily.
-- **A lost worker can keep its slot, and there is no automatic recovery yet.** A granted attempt can stay active and hold an execution
-  slot until custody is resolved. `deckent run inspect` says so: the task stays held, nothing is retried, released or accepted, no new
-  attempt starts, and the running service checks the worker again. *Workaround:* watch it with `deckent monitor`; the slot is freed
-  only by a typed manual decision or by evidence that the worker ended. Automatic recovery is planned for the core layers before beta.
+- **A lost worker can keep its slot; automatic recovery is built but not active yet.** A granted attempt can stay active and hold an
+  execution slot until custody is resolved. alpha.55 adds deterministic detection (Nervous) and a recovery decision that may continue the
+  task in a new attempt, but both start `off`, and even in `live` mode Nervous executes nothing until the owner promotes a measured rule:
+  every rule in the Core seed is still provisional, and recovery only decides cases whose stop step Nervous really ran.
+  `deckent run inspect` names the recovery mode the Run froze and what it means. *Workaround:* watch it with `deckent monitor`; the slot
+  is freed only by a typed manual decision or by evidence that the worker ended.
 - **The clean-machine rehearsal stopped at the model step.** A fresh clone on 2026-10-15/16 reached install, `doctor`, policy,
   registry and pool. The model connection, `/do`, a worker image build on an empty Docker daemon and the start-up
   toolchain refresh on a clean daemon were not exercised there. *Workaround:* follow the README first-job path and report what differs.
@@ -469,6 +475,15 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   restarts it. *Workaround:* after a switch, restart the client (the Claude Code session, or close and reopen the terminal);
   `deckent runtime describe` shows which build the service runs.
 
+- **Switching to alpha.55 and back needs care.** The ledger moves from v59 to v70 and alpha.54 cannot open it, so going back means
+  restoring the backup taken right before the switch (with the daily schedule no fresh set is taken; run `deckent backup create`
+  yourself). Before going back, also unset the settings alpha.54 does not know: `memoryAutomation`, `catalogEvolution`,
+  `runRuntime.nervous`, `runRuntime.recovery`, `runRuntime.quotaRecovery.maxRewaits`, `model_roles`, `models.headless` and
+  `brain_planner.quotaWait`. At the switch: a Brain whose model is not a frontier row of the model role registry is refused with
+  `BRAIN_TIER_REFUSED` (check `deckent models roles`); a `brain_planner.selected` pinned to an older template keeps the Brain choosing
+  worker models, so system assignment does not run; a WorkClass overlay written against a Core candidate list of version 1 is refused
+  with `WORK_CLASS_OVERRIDE_DENIED` because those lists are version 2 now; the new identities (memory distiller and evaluator, recovery)
+  get their rights only after the owner applies policy template v15. Runtime protocol v29 did not change.
 - **Switching to alpha.54 and back needs care.** Codex worker profiles pinned before alpha.54 carry the old `none` evidence stamp and
   are refused with `WORKER_MODEL_BINDING_MISMATCH` when a Run is created or its budget is planned: finish the waiting Codex work before
   the switch and declare the Codex profiles again after it. Going back to alpha.53: unset `terminal.responseStyle` and
@@ -480,6 +495,59 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   clones are sparse); Codex and Cursor `disabled` kinds are refused by alpha.52; have an empty delivery queue at the switch (tickets
   are titled differently); the alpha.52 audit verify does not see the shadow store (it is outside the chain). If the Cursor catalog was
   registered for alpha.53 profiles, restore the backup. Ledger v59 and runtime protocol v29 did not change.
+
+## Core layers
+
+alpha.55 adds the core layers (memory, system assignment and model roles, the Auditor's sealed decisions, Nervous and recovery, the
+headless subscription Brain, agents). They are code, not yet accepted behaviour: each one starts off and has been tried with tests and
+fakes (the subscription Brain also with real isolated calls by the lead), not yet in real N1 use. Detail: [core layers](../.deckent/docs/architecture/modules/core-layers.md).
+
+- **Every core layer starts off, and only a person turns it on.** The switches (`memoryAutomation.extraction|verification|context.mode`,
+  `runRuntime.nervous.mode`, `runRuntime.recovery.mode`, `catalogEvolution.mode`) are protected: no AI and no MCP actor may write them.
+  A `shadow` mode records what it would do and changes nothing. The new identities get their exact rights only from policy template
+  v15. *Workaround:* apply it with `deckent policy upgrade --template current --scope <id> --preview`, then `--apply`; turn a layer to
+  shadow first, for example `deckent config set memoryAutomation.extraction.mode '"shadow"' --scope <id>`.
+- **The numbers are seed values, not measurements.** Nervous rules, recovery bounds (one automatic continuation per lost task, three
+  attempts per task), memory bounds and rollout thresholds and the agent-statistics thresholds are marked provisional until N1 measures
+  them. A Nervous rule runs in `live` only after the owner promotes it by its exact id and version.
+- **Memory fills from one work kind only.** The Core registry lets only the `small` WorkClass (provisional 90-day retention, no personal
+  data) produce memory candidates; accepted work of other kinds adds nothing until its retention is declared.
+- **Automatic memory verification needs a second model maker.** The evaluator's model must come from a different maker than every
+  model that did the source work, and must hold the `memory-evaluator` role and be active. With only one maker connected nothing is
+  verified automatically and entries stay candidates. When verification is on, the candidate text is sent to that second provider.
+  Calls, spend and contests per scope per day are capped. *Workaround:* review and verify entries yourself with `deckent memory review`.
+- **Purge does not delete every copy.** `deckent memory purge` removes the entry's text, its search row and its evaluator calls'
+  content, and is applied again after a backup restore (reads wait with `MEMORY_PURGE_REPLAY_HELD` until then). It does not delete
+  worker output, the copy frozen into a Run's context, existing backups or the second provider's copy; the evaluator call receipt keeps
+  a plain digest of its request. The database's write-ahead log is cleared on a best-effort basis.
+- **Memory phases 3 and 4 open only after measurement.** Turning context or verification fully on is refused with
+  `MEMORY_ROLLOUT_CRITERIA_UNMET` until the sealed records meet the criteria (for example 20 shadow admissions, or evaluator agreement of
+  at least 90 % over 20 blind decisions). *Workaround:* `deckent memory rollout` shows each criterion with its numbers and the next command.
+- **The subscription Brain needs bubblewrap and shares your quota.** The `claude-cli-subscription` connection runs only inside Deckent's
+  bubblewrap sandbox; without it the connection is refused (`HEADLESS_ISOLATION_UNAVAILABLE`), so native Windows and macOS cannot use it.
+  It allows one call at a time per connection, and it uses the same subscription quota and login refresh as your own Claude sessions.
+  Deckent buys no credit and stops when the CLI reports that credits are required, but if extra usage is enabled on your account the CLI
+  may draw on it and Deckent cannot see that. AI or MCP planning and background roles use it only after your `--delegate` consent.
+  The sandbox limits file size, open files and core dumps; CPU time, memory and process count are not bounded yet.
+  <!-- TODO(f5): replace the last sentence with the realm CPU/memory/process bounds, gateway refusal counts and the measured refresh-lock finding. -->
+  *Workaround:* keep extra usage off in your Claude account if you do not want it used.
+- **The Brain's quota wait is short and only on a watching surface.** When the subscription quota is exhausted, `/do` and `deckent do`
+  wait at most 15 minutes for the known reset (two attempts, provisional) and then plan once more; a longer reset, an unknown reset or
+  MCP `plan_run` gets the typed refusal `HEADLESS_QUOTA_EXHAUSTED` with the reset time at once.
+- **Agent promotion is manual until the rules are measured.** A newly defined agent starts as a candidate and always needs the Run
+  card; a person promotes it on a card (`deckent agents promote`), or a separately keyed and granted AI does so through a signed MCP
+  command (never for a revision that AI wrote, so an installation with one AI principal cannot use this path). The suggestion rules are
+  provisional and automatic narrowing runs only for a calibrated rule with `catalogEvolution.mode` `on`, so nothing narrows today.
+  Agent statistics count only failures attributable to the worker or the evaluator, are an association and not a cause, and do not
+  include tokens for CLI workers (effort is time, API cost and quota parks). *Workaround:* `deckent agents suggestions` lists what the
+  aggregator sealed; decide each on its card.
+- **Signer keys need the host key store.** AI and system catalog writes need a signer key that a person enrolled; on native Windows
+  the host key store is not available and these writes are refused. Revoking a key stops its new and pending actions, but promotions it
+  already made stay until a person demotes them (owner's choice). Skills can be imported only with an import key a person added; the
+  Deckent Hub comes with alpha.56.
+- **The Auditor has no live reader or classifier yet.** Policy-turn records are sealed, but the follow-reader has no runtime operation
+  (it waits for the next protocol step), and the Auditor's shadow classifier and the K-C sentinels are not built (they wait for the
+  owner's detail).
 
 ## Desktop and other surfaces
 

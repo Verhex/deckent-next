@@ -506,6 +506,45 @@ already running continues. Answering a task's question and accepting or rejectin
   `identity preview` without a selected profile reports `IDENTITY_PROFILE_NOT_SELECTED`; `identity distribute --scope <id>
   [--apply]` on a terminal is chosen with arrow-key cards and a preview card.
 
+## Core layers: memory, agents, model roles, recovery
+
+alpha.55 adds these commands. Every core layer starts off; its switch is protected configuration that only a person writes, and the
+new identities get their rights from policy template v15 (`deckent policy upgrade --template current --scope <id> --preview`, then
+`--apply`). Behaviour and bounds: [core layers](modules/core-layers.md).
+
+- **Model roles.** `deckent models roles [show]` lists every catalog model the scope sees with its maker, tier, roles and state; a
+  model without a row is pending and no role may use it. `deckent models roles set --channel <id> --model <exact id> --tier
+  worker|frontier (--roles <role,role> | --no-roles)` opens one card on your own terminal and writes one row of the global
+  `model_roles` overlay by compare-and-set. The terminal `/roles` window, MCP `inspect_model_roles` and the SDK `inspectModelRoles`
+  show the same read; `deckent doctor` names pending rows.
+- **Memory.** `deckent memory` lists entries (`search <words>`, `inspect <id>`); `propose --input <file>`, `verify <id> --note <text>`,
+  `retire <id> | --source <run>[/<attempt>] --reason <text>`, `review` and `purge <id> | --source <run>[/<attempt>]` are cards on your
+  own terminal (AI tools, pipes and `--json` are refused). `deckent memory` also names the evaluator that would serve the scope and
+  the most its answers can cost a day; `deckent memory rollout [--scope <id>] [--json]` shows the phase, each criterion with its
+  numbers and the exact next `deckent config set memoryAutomation.<switch>.mode '"<mode>"' --scope <id>` command.
+- **Agents and skills.** `deckent agents` lists agents (`inspect <id>`, `skills`, `skill <id>`, `stats [<id>]`); `define --input <file>`
+  and `define-skill --input <file>` are cards on your own terminal. MCP `list_agents`, `inspect_agent`, `list_skills`, `inspect_skill`
+  and `inspect_agent_stats` are read-only.
+- **Agent suggestions and standing.** `deckent agents suggestions [list | show <suggestion-id>]` lists the sealed suggestions;
+  `promote|demote|restore|retire <agent-id> --work-class <id> [--suggestion <id>]`, `dismiss <suggestion-id>`,
+  `standing reset --work-class <id>` and `define|define-skill --from-suggestion <id> --id <new id>` are cards on your own terminal (the
+  draft is rendered at card time from what you may read). MCP `list_agent_suggestions` and `inspect_agent_suggestion` are read-only;
+  the signed write tools (`define_agent`, `define_skill`, `import_skill`, `change_agent_standing`, `dismiss_agent_suggestion`) work only
+  for an AI principal with its own active signer key and a scoped grant.
+- **Signer keys.** `deckent agents signers` lists keys; `enrol-signer --principal <issuer:subject> --label <text>` creates a host-kept
+  action key for one AI or system principal, `add-signer --input <file>` registers an external public key, `revoke-signer <key-id>`
+  stops its new, pending and replayed actions at once, `repair-signers` repairs a broken revocation log and `import-skill --input <file>`
+  imports a pinned skill signed by an import key of the scope. All are cards on your own terminal.
+- **Subscription Brain.** `deckent models connect claude-cli-subscription … [--executable <abs path>] [--config-dir <abs dir>]
+  [--delegate none|ai|system|ai,system]` connects your own Claude login (default `~/.claude`) for Brain planning; it is refused without a
+  usable bubblewrap sandbox. `--delegate` is your consent for AI or MCP planning and for background roles (recovery decision, memory
+  evaluator); absent keeps your earlier choice. `deckent doctor` shows a Brain login row per connection.
+- **Quota question.** A worker Run whose quota wait ended asks you: `deckent run resume --quota wait` keeps waiting,
+  `deckent run resume --quota next-candidate` uses the next candidate of the WorkClass list; closing the Run stays a separate choice.
+- **Recovery.** `deckent doctor` (row `work.recovery`) and the monitor show the Nervous and recovery modes and whether the owner's grant
+  `recovery-action`/`apply` `continue-new-attempt` exists (`deckent policy grants`); without the grant every lost-worker case goes to a
+  person. `deckent run inspect` names the Run's frozen recovery mode and shows hold reasons in words.
+
 ## Installation recovery sets
 
 `deckent backup create|verify|restore` uses one governed contract. The installation owner needs the installation-wide

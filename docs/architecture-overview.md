@@ -157,6 +157,11 @@ builds stage the locked bubblewrap (the build ends with `bubblewrap=present` or 
 stage it stops with `BUBBLEWRAP_BUILD_REQUIRED`, and only off Linux does it print `bubblewrap=absent (not Linux)`.
 See the [contributor quickstart](../CONTRIBUTING.md#a-30-minute-quickstart).
 
+Package `1.0.0-alpha.55` adds the core layers: system assignment of worker models and one model role registry, a scoped memory
+journal with independent verification, sealed Auditor records, Nervous detection with lost-worker recovery, the headless subscription
+Brain in a bubblewrap realm, and versioned agents with statistics, suggestions and signer keys. Each starts off until a person turns
+it on and is code, not accepted behaviour yet; see [core layers](../.deckent/docs/architecture/modules/core-layers.md).
+
 Mission-level coordination of multi-step business processes, a remote HTTP API,
 Desktop, Dashboard, Enterprise SSO/fleet management and microVM isolation remain future work.
 Local checks do not establish fleet-scale performance or a supported production deployment on

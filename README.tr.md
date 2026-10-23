@@ -28,7 +28,7 @@ npm rozetleri: ilk npm yayınından ve paket kimliği doğrulandıktan sonra aç
 -->
 
 > [!NOTE]
-> Bu README yayımlanmış son sürümü anlatır: **ön sürüm `1.0.0-alpha.54`**. [CHANGELOG.md](CHANGELOG.md) tüm
+> Bu README yayımlanmış son sürümü anlatır: **ön sürüm `1.0.0-alpha.55`**. [CHANGELOG.md](CHANGELOG.md) tüm
 > sürümleri en yenisi başta listeler. Deckent henüz npm'de yok: [Başlarken](#başlarken) bölümündeki gibi kaynaktan kurun. npm paketi beta için,
 > büyük olasılıkla `@verhex/deckent` adıyla planlanıyor (ad henüz kesin değil).
 
@@ -485,6 +485,11 @@ anlatır.
   kalıcı izinler ve doğrulayabileceğiniz bir denetim izi.
 - **İşletin**: salt okunur görünüm için `deckent monitor`, sağlık için `deckent doctor`, ayarlar için `deckent config`;
   isterseniz zamanlanmış, doğrulanabilir kurtarma setleri için `deckent backup create|verify|restore`.
+- **Siz açana kadar kapalı çekirdek katmanlar**: sistem her iş türü için işçi modelini görebildiğiniz bir listeden seçer;
+  hafıza kabul edilen işten dolar ve onu siz ya da bağımsız bir değerlendirici doğrular; kaybolan işçiler tespit edilir ve
+  belirli sınırlar içinde yeni bir denemede sürdürülebilir; Brain bir korumalı alan içinde kendi Claude aboneliğinizle
+  planlayabilir; ajanlar ve skill'ler sürümlüdür ve onlara yapılan her AI değişikliği imzalıdır. Her katman kapalı başlar ve
+  yalnız ne yapacağını kaydeden bir gölge kipi vardır ([bilinen sınırlar](docs/known-limits.tr.md#çekirdek-katmanlar)).
 
 ### Henüz olmayanlar
 
@@ -496,8 +501,9 @@ anlatır.
 - **Teslim hiçbir zaman kendiliğinden olmaz.** Bir kural kuyruktaki her iş için teslim *edip etmeyeceğini* kaydeder ama yalnız
   tavsiye verir; her teslim, dala alma ve geri alma sizin `y`'nizi bekler.
 - **Kodlama görevleri işçinin çıkış koduyla kabul edilir.** İçerik henüz bağımsız olarak doğrulanmıyor ve pencere bunu söyler.
-- **Abonelikler kısmi.** Claude Code işçisi kendi Claude girişinizle çalışır; Claude aboneliğiyle terminalde sohbet,
-  abonelikli Brain (`/do`'nun arkasındaki planlayıcı, bkz. [Yol haritası](#yol-haritası)) ve ChatGPT ile giriş henüz yok.
+- **Abonelikler kısmi.** Claude Code işçisi kendi Claude girişinizle çalışır; Brain (`/do`'nun arkasındaki planlayıcı) da
+  Deckent'in bubblewrap korumalı alanının çalıştığı yerde (Linux ve WSL) Claude aboneliğinizi kullanabilir. Claude aboneliğiyle
+  terminalde sohbet ve ChatGPT ile giriş henüz yok (bkz. [Yol haritası](#yol-haritası)).
 - **Platformlar.** Native Windows desteklenmiyor. macOS'ta yerel runtime servisi henüz çalışmıyor (soketi yalnız Linux'ta
   var); bu yüzden sohbet, işler ve yedekleme orada kullanılamaz. Teslim, dala alma, geri alma ve anahtar izni yalnız Linux'ta
   (WSL dahil) bulunan bir terminal tanığı ister, diğer sistemlerde reddedilir. arm64 paketlenmiyor. Docker işçisi host
@@ -510,12 +516,14 @@ Açık, denenmemiş ya da kısmi her maddeyi etkisi ve varsa çözüm yoluyla [b
 
 ## Yol haritası
 
-Tarih sözü verilmez; sıra verilir. Önce Deckent'in işi kendi başına yürütmesini sağlayan çekirdek katmanlar gelir. Beta bu
-katmanları gerçek kullanımla sağlamlaştırır; masaüstü uygulamasının geliştirilmesi de betayla birlikte başlar.
+Tarih sözü verilmez; sıra verilir. Önce Deckent'in işi kendi başına yürütmesini sağlayan çekirdek katmanlar gelir: alpha.55
+onları kod olarak getirir, her biri bir kişi açana kadar kapalıdır, betadan önce açılıp gerçek kullanımda kanıtlanırlar.
+Sonraki sürüm imzalı ajanlar ve skill'ler için Deckent Hub'ı ekler. Beta katmanları gerçek kullanımla sağlamlaştırır; masaüstü
+uygulamasının geliştirilmesi de betayla birlikte başlar.
 
 ```mermaid
 flowchart LR
-  N["Şimdi · alpha.54<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>yedek ve denetim"] --> C["Betadan önce · çekirdek katmanlar<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
+  N["Şimdi · alpha.55<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>çekirdek katmanlar kodda, varsayılan kapalı"] --> C["Betadan önce · çekirdek katmanlar açılır<br/>imzalı ajanlar ve skill'ler için Deckent Hub<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
   C --> B["Beta<br/>npm paketi<br/>katmanlar gerçek kullanım ve testlerle gelişir<br/>paralelde masaüstü uygulaması geliştirmesi"]
   B --> E["Enterprise · ayrı dağıtım<br/>SSO · filo · merkezi policy<br/>ERP bağlayıcıları"]
 ```
