@@ -87,6 +87,28 @@ describe('N22: signer rows are a person\'s', () => {
 });
 const sha256Der = (key: KeyObject) => ed25519KeyId(spki(key));
 
+describe('signer row bounds held by the store transaction', () => {
+  it('one active action key per principal even when two enrols race past the application check; the bound counts active keys only', async () => {
+    const f = await fixture(), first = (await f.signers.enrol(enrol('e1'))).item;
+    // A second enrol whose application check ran before the first committed: the store refuses it inside its transaction.
+    const store = await openSqliteAgentCatalogStore(f.path, options, integrity, 'write'), next = { ...first, keyId: 'd'.repeat(64), commandId: 'e2' };
+    try {
+      await expect(store.commitSigner({ previous: null, next, event: { schemaVersion: 1, eventId: 'x', scopeId: 's', principal: { issuer: human.issuer, subject: human.subject }, policyRevision: 'p', atMs: 1,
+        subject: { kind: 'skill-signer', action: 'enrol', keyId: next.keyId, purpose: 'action', custody: 'host', commandId: 'e2', revision: 1, basis: 'person-card' } },
+        receipt: { scopeId: 's', commandId: 'e2', keyId: next.keyId, revision: 1, digest: 'a'.repeat(64) } })).rejects.toMatchObject({ code: 'SKILL_SIGNER_INVALID' });
+    } finally { store.close(); }
+    // Rotation many times over: revoked rows stay, but only active keys count toward the bound, and the active key is always found first.
+    let current = first;
+    for (let round = 0; round < 70; round++) {
+      await f.signers.revoke({ schemaVersion: 1, scopeId: 's', commandId: `r${round}`, keyId: current.keyId });
+      current = (await f.signers.enrol(enrol(`e-${round}`))).item;
+    }
+    f.as(mcp);
+    expect((await f.catalog.defineSkill(skill('k1'))).item.provenance.signed?.keyId).toBe(current.keyId);
+    expect(count(f.path, 'skill_signer_keys')).toBe(71);
+  });
+});
+
 describe('N1/N38: AI/system writes are signed, verified at commit; revocation is immediate', () => {
   it('negative: an AI write without an enrolled key is refused; with a key revoked, another principal\'s key or a forged signature too; nothing is written', async () => {
     const f = await fixture();

@@ -92,8 +92,9 @@ class SqliteAgentCatalogStore implements AgentCatalogStore {
     return parsed.data;
   }
   private loadSigner(scopeId: string, keyId: string) { return this.signerRow(this.db.prepare('SELECT key_id,state,revision,record FROM skill_signer_keys WHERE scope_id=? AND key_id=?').get(scopeId, keyId), scopeId); }
-  async signers(scopeId: string, limit: number) { return this.read(() => this.db.prepare('SELECT key_id,state,revision,record FROM skill_signer_keys WHERE scope_id=? ORDER BY seq LIMIT ?')
+  async signers(scopeId: string, limit: number) { return this.read(() => this.db.prepare("SELECT key_id,state,revision,record FROM skill_signer_keys WHERE scope_id=? ORDER BY state='active' DESC,seq LIMIT ?")
     .all(scopeId, limit).map(row => this.signerRow(row, scopeId)!)); }
+  private signerRows(scopeId: string) { return this.db.prepare("SELECT key_id,state,revision,record FROM skill_signer_keys WHERE scope_id=? AND state='active'").all(scopeId).map(row => this.signerRow(row, scopeId)!); }
   async signer(scopeId: string, keyId: string) { return this.read(() => this.loadSigner(scopeId, keyId)); }
   async signerReceipt(scopeId: string, commandId: string) {
     return this.read(() => {
@@ -120,8 +121,11 @@ class SqliteAgentCatalogStore implements AgentCatalogStore {
       const current = this.loadSigner(next.scopeId, next.keyId);
       if (!change.previous && current) throw new AgentCatalogStoreError('AGENT_CATALOG_EXISTS');
       if (!isDeepStrictEqual(current, change.previous)) throw new AgentCatalogStoreError('AGENT_CATALOG_REVISION_CONFLICT');
-      if (!current && Number(this.db.prepare('SELECT count(*) AS n FROM skill_signer_keys WHERE scope_id=?').get(next.scopeId)?.['n']) >= AGENT_CATALOG_LIMITS.signersPerScopeMax)
+      // The bound counts active keys only (revoked rows stay forever); one active action key per bound principal, held here in the transaction.
+      if (!current && Number(this.db.prepare("SELECT count(*) AS n FROM skill_signer_keys WHERE scope_id=? AND state='active'").get(next.scopeId)?.['n']) >= AGENT_CATALOG_LIMITS.signersPerScopeMax)
         throw new AgentCatalogStoreError('AGENT_CATALOG_LIMIT');
+      if (!current && next.boundPrincipal && this.signerRows(next.scopeId).some(row => row.state === 'active' && row.purpose === 'action'
+        && row.boundPrincipal?.issuer === next.boundPrincipal!.issuer && row.boundPrincipal.subject === next.boundPrincipal!.subject)) throw new AgentCatalogError('SKILL_SIGNER_INVALID');
       this.audit.record(change.event);
       const record = this.seal(next);
       if (current) this.db.prepare('UPDATE skill_signer_keys SET state=?,revision=?,record=? WHERE scope_id=? AND key_id=?').run(next.state, next.revision, record, next.scopeId, next.keyId);
