@@ -3,7 +3,7 @@ import { encodeCommandProjection, proposeMemoryEntry, verifyMemoryEntry, retireM
 import { sha256 } from '#platform/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
 import { memoryProposeCommandSchema, memoryVerifyCommandSchema, memoryRetireCommandSchema, memoryInspectQuerySchema, memoryListQuerySchema, memorySearchQuerySchema,
-  memoryExtractCommandSchema, memoryReviewQuerySchema, memorySourceQuerySchema, MemoryJournalError, type MemoryAction, type MemoryHeld, type MemoryInspection, type MemoryJournalDependencies, type MemoryJournalStore, type MemoryListing,
+  memoryExtractCommandSchema, memoryReviewQuerySchema, memorySourceQuerySchema, memoryRolloutQuerySchema, MemoryJournalError, type MemoryAction, type MemoryHeld, type MemoryInspection, type MemoryJournalDependencies, type MemoryJournalStore, type MemoryListing,
   type MemoryMutationResult, type MemorySearchResult, type MemorySupport, type MemoryDistilOutcome, type MemoryReview, type MemorySourceEntries, type MemoryPurgeResult,
   type MemoryPurgeReplay, type MemoryContestResolveResult } from './contract.js';
 import { distilSource } from './distil.js';
@@ -12,6 +12,7 @@ import { assertNoPendingMemoryPurge, memorySourceEntries, purgeMemoryEntry, repl
 import { rederiveMemorySourceModels } from './evaluate.js';
 import { selectMemoryContext, selectMemoryPlanningContext, type MemoryContextRequest, type MemoryContextSelection, type MemoryPlanningRequest, type MemoryPlanningSelection } from './context.js';
 import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
+import { measureMemoryRollout, type MemoryRolloutPorts, type MemoryRolloutStatus } from './rollout.js';
 
 const DEFAULT_STATES: readonly MemoryState[] = Object.freeze(['candidate', 'verified']);
 const held = (error: unknown): MemoryHeld => ({ schemaVersion: 1, status: 'held',
@@ -220,6 +221,19 @@ export class MemoryJournalApplication {
   async resolveContest(input: unknown, credential?: unknown): Promise<MemoryContestResolveResult> {
     return resolveMemoryContest(this.deps, input, (action, scopeId) => this.admit(action, scopeId, credential), command => this.retire(command, credential),
       (...args) => this.visible(...args));
+  }
+  /**
+   * S4B-7 (§11): the rollout status of one scope — phase, every exit criterion with its measured numbers (counts only: no entry id, title or
+   * digest leaves), the provisional retention values — under the caller's `memory`/`inspect`. Read-only: it enables nothing; a source that
+   * cannot be read leaves its criteria unmet. Like every memory read (§6.6) it holds while a purge the journal holds is missing from the ledger.
+   */
+  async rollout(input: unknown, ports: MemoryRolloutPorts, credential?: unknown): Promise<MemoryRolloutStatus | MemoryHeld> {
+    const query = memoryRolloutQuerySchema.parse(input);
+    await this.admit('inspect', query.scopeId, credential);
+    let store: MemoryJournalStore;
+    try { store = await this.deps.openStore('read'); } catch (error) { return held(error); }
+    try { await assertNoPendingMemoryPurge(this.deps, store, query.scopeId); return await measureMemoryRollout(this.deps, store, query.scopeId, query.modes, ports); }
+    catch (error) { return held(error); } finally { store.close(); }
   }
   /** S4B-4 §6.6 restore safety: the scope's journal records re-applied (service start, and before a person's write). The authority is the sealed
    * journal record (a person's purge, already decided); the replay narrows only, so its events name the journal, not a policy rule. */

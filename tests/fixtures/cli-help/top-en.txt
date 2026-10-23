@@ -27,7 +27,7 @@ Observe:
       list | watch
       [--scope <id>] [--all | --since <12h>] [--verbose] [--limit <n>]
   memory      Read and curate the scope's memory journal: facts and lessons
-      search | inspect | propose | verify | retire | review | purge
+      search | inspect | propose | verify | retire | review | purge | rollout
       [--scope <id>] [--state <name>] [--json]
   agents      Read and define the scope's agents and skills
       inspect | skills | skill | define | define-skill | signers |

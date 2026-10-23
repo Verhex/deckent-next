@@ -83,7 +83,7 @@ describe.skipIf(process.platform === 'win32')('S4B-5 verified memory into the wo
     const prompt = f.delivery('on').task;
     expect(prompt).toContain(`### context:${ids[1]}@1\n${HEADER}\nm1@2 [human-review] Invoice approval — Invoices without a delivery note go to the approval queue.`);
     const [event] = f.events();
-    expect(event).toMatchObject({ kind: 'memory-context', runId: 'on', taskId: 't', mode: 'on', delivered: true, withheld: 0,
+    expect(event).toMatchObject({ kind: 'memory-context', runId: 'on', taskId: 't', mode: 'on', delivered: true, fit: true, withheld: 0,
       entries: [{ entryId: 'm1', revision: 2, basis: 'human-review', contentDigest: expect.stringMatching(/^[a-f0-9]{64}$/u) }] });
     expect(event.partDigest.slice(0, 16)).toBe(ids[1]!.slice('memory-'.length));
     expect(JSON.stringify(f.events())).not.toContain('Invoice'); // digests only
@@ -110,7 +110,7 @@ describe.skipIf(process.platform === 'win32')('S4B-5 verified memory into the wo
     expect((await createRun(f.project, run('shadow'), f.options)).warnings).toEqual([]);
     expect(f.contextIds('shadow')).toEqual(['repo-tooling']);
     expect(f.delivery('shadow').task).not.toContain('Deckent memory');
-    expect(f.events()).toEqual([expect.objectContaining({ kind: 'memory-context', mode: 'shadow', delivered: false, entries: [expect.objectContaining({ entryId: 'm1' })] })]);
+    expect(f.events()).toEqual([expect.objectContaining({ kind: 'memory-context', mode: 'shadow', delivered: false, fit: true, entries: [expect.objectContaining({ entryId: 'm1' })] })]);
   });
   it('N11: an unreadable memory store holds the Run before any Run effect; a refused memory/inspect admits it without memory, visibly', async () => {
     const f = await seeded('on');
@@ -139,7 +139,7 @@ describe.skipIf(process.platform === 'win32')('S4B-5 verified memory into the wo
     const created = await createRun(f.project, run('full'), f.options);
     expect(created.warnings).toEqual([{ code: 'MEMORY_CONTEXT_WITHHELD', taskId: 't', reason: 'budget', count: 1 }]);
     expect(f.contextIds('full')).toEqual(full.map(part => part.id));
-    expect(f.events()).toEqual([expect.objectContaining({ mode: 'on', delivered: false })]);
+    expect(f.events()).toEqual([expect.objectContaining({ mode: 'on', delivered: false, fit: false })]);
   });
   it('measures the admission time the memory read adds (6 verified entries; reported, not a product limit)', async () => {
     const samples = async (mode: 'off' | 'on') => {

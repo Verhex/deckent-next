@@ -12,6 +12,8 @@ import { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';
 
 export type { ConfigBinding, ConfigApplyMode, ConfigFieldMetadata } from './field.js';
 const SERVICE_EXECUTION_CAPACITY_DEFAULT = 8;
+/** S4B-1/3/5/7: the modes of every `memoryAutomation` switch, in rollout order (the memory rollout registry names them). */
+export const MEMORY_AUTOMATION_MODES = Object.freeze(['off', 'shadow', 'on'] as const);
 /** Single declaration of mutable config policy. Consumers derive, never duplicate, these values. */
 export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
   schema_version: field('config.field.schema_version', { state: 'bound', consumers: ['src/platform/core/config'] }, 'live', z.literal(CONFIG_SCHEMA_VERSION).default(CONFIG_SCHEMA_VERSION)),
@@ -107,9 +109,9 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
    * evaluation records, nothing verified) | on (an independent pass verifies). S4B-5 (owner S-M6/S-M8/S-M9): `context.mode` off (customer default:
    * no memory read at Run admission) | shadow (the worker part is computed and sealed, never sent) | on (verified entries reach the worker prompt). */
   memoryAutomation: field('memory.config.section', { state: 'bound', consumers: ['src/composition/core/memory'] }, 'live', z.object({
-    extraction: z.object({ mode: z.enum(['off', 'shadow', 'on']).default('off') }).strict().default({}),
-    verification: z.object({ mode: z.enum(['off', 'shadow', 'on']).default('off') }).strict().default({}),
-    context: z.object({ mode: z.enum(['off', 'shadow', 'on']).default('off') }).strict().default({}), overlay: z.record(z.string(), z.unknown()).optional() }).strict().default({})),
+    extraction: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off') }).strict().default({}),
+    verification: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off') }).strict().default({}),
+    context: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off') }).strict().default({}), overlay: z.record(z.string(), z.unknown()).optional() }).strict().default({})),
   /** S8-2 (S8-DESIGN §4, §9; protected: no AI writes it): the catalog aggregator pass `mode` off (customer default: no pass runs) | shadow | on
    * (S8-2 writes only the pass record in both; suggestions, cards and narrowing arrive in S8-3/S8-4); `overlay` replaces registry rule rows or
    * lowers bounds of the Core `catalog-evolution` registry, checked by the domain at use (an invalid overlay is CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE). */

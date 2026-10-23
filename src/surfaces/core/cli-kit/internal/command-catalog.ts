@@ -141,6 +141,8 @@ export const CLI_CATALOG = [
     // S4B-4: the person's review card (candidates, contests, stale entries) and the purge card.
     action('review', 'observe', 'memory.help.action.review', 'memory.help.detail'),
     action('purge', 'observe', 'memory.help.action.purge', 'memory.help.detail', { requires: ['<id> | --source <run>[/<attempt>]'] }),
+    // S4B-7: the read-only rollout status (phase, exit criteria with numbers, the next person action).
+    action('rollout', 'observe', 'memory.help.action.rollout', 'memory.help.detail'),
   ] },
   // S7 agent/skill catalog core: reads (agents by default, inspect, skills, skill) and a person's terminal-card writes (define, define-skill).
   { name: 'agents', group: 'observe', summary: 'agents.help.summary', detail: 'agents.help.detail', args: '[--scope <id>] [--json]', bare: 'handler', children: [
