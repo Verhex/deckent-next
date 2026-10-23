@@ -38,6 +38,13 @@ function capturePicker(view: PanelPickerView): PanelPickerView | null {
     Object.freeze({ itemHandle: item.itemHandle, presentationHandle: item.presentationHandle }))) });
 }
 
+/** T3: a still-queued input leaves the FIFO before it runs; the active input is no longer in `queue`, so it is never withdrawn. */
+function withdrawQueued(queue: { readonly inputId: string }[], inputId: string, publish: () => void): boolean {
+  const index = queue.findIndex(item => item.inputId === inputId);
+  if (index < 0) return false;
+  queue.splice(index, 1); publish(); return true;
+}
+
 /** One control owner, independent of React/Ink, storage, OS identity and runtime authority.
  * Terminal adoption injects the trusted installation/project identity and private application adapters. */
 export function createPanelController(ports: PanelPort<TerminalLocalContext>): PanelController<TerminalLocalContext>;
@@ -170,7 +177,7 @@ export function createPanelController<C extends PanelContext>(ports: PanelPort<C
         || (input.itemHandle !== null && !picker.view.items.some(item => item.itemHandle === input.itemHandle))) return false;
       finishPicker(input.itemHandle); publish(); return true;
     }
-    if (input.kind === 'decide-approval') return decide(input);
+    if (input.kind === 'decide-approval' || input.kind === 'withdraw-queued') return input.kind === 'decide-approval' ? decide(input) : withdrawQueued(queue, input.inputId, publish);
     const text = input.text.trim();
     if ((input.kind !== 'submit' && input.kind !== 'edit-queued') || !text || !input.inputId) return false;
     if (input.kind === 'edit-queued') {

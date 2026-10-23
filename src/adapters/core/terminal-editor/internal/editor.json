@@ -1,0 +1,6 @@
+{
+  "note": "T4 external editor (Ctrl+G): the largest edited draft read back, and the private temporary file's names. Data, not code.",
+  "maxBytes": 1048576,
+  "directoryPrefix": "deckent-draft-",
+  "fileName": "DECKENT_DRAFT.md"
+}

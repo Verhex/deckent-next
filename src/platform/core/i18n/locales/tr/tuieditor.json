@@ -1,1 +1,9 @@
-{}
+{
+  "tuieditor.shortcut": "Ctrl+G  taslağı kendi düzenleyicinde aç ($VISUAL veya $EDITOR)",
+  "tuieditor.noEditor": "Düzenleyici tanımlı değil: VISUAL ya da EDITOR değişkenini ayarla (örneğin EDITOR=nano) ve terminali yeniden başlat. Taslak değişmedi.",
+  "tuieditor.notStarted": "VISUAL ya da EDITOR içinde adı geçen düzenleyici başlatılamadı. Taslak değişmedi.",
+  "tuieditor.exit": "Düzenleyici hatayla kapandı; değişiklikleri alınmadı. Taslak değişmedi.",
+  "tuieditor.tooLarge": "Metin, düzenleyicinin geri verebileceği sınırdan büyük. Taslak değişmedi.",
+  "tuieditor.unsafe": "Taslak dosyasının yerine bir bağlantı ya da dosya olmayan bir şey kondu; okunmadı. Taslak değişmedi.",
+  "tuieditor.failed": "Düzenleyici kullanılamadı. Taslak değişmedi."
+}

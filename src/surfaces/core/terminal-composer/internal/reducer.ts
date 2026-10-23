@@ -52,7 +52,9 @@ export type ComposerDelete = 'back' | 'forward' | 'wordBack' | 'spaceWordBack' |
 
 export type ComposerKey =
   | { readonly type: 'text' | 'paste'; readonly text: string }
-  | { readonly type: 'submit' | 'newline' | 'tab' | 'escape' | 'interrupt' | 'eof' | 'search' | 'yank' | 'tick' | 'stash' | 'undo' }
+  | { readonly type: 'submit' | 'newline' | 'tab' | 'escape' | 'interrupt' | 'eof' | 'search' | 'yank' | 'tick' | 'stash' | 'undo' | 'withdraw' | 'editor' }
+  /** T3/T4: an entry the owner hands back (a withdrawn queued message, the editor's text) replaces the draft as one undo step. */
+  | { readonly type: 'restore'; readonly entry: ComposerHistoryEntry }
   | { readonly type: 'move'; readonly to: ComposerMove }
   | { readonly type: 'delete'; readonly span: ComposerDelete }
   | { readonly type: 'mentions'; readonly start: number; readonly query: string; readonly items: readonly string[] }
@@ -62,6 +64,10 @@ export type ComposerIntent =
   /** `mentions`: the draft's `@path` / `@"path"` mentions outside paste chips, exact paths; the owner attaches them through the service. */
   | { readonly type: 'submit'; readonly text: string; readonly entry: ComposerHistoryEntry; readonly mentions: readonly string[] }
   | { readonly type: 'cancel' | 'exit' }
+  /** T3: the owner takes its last queued message back (asked only on an empty draft). */
+  | { readonly type: 'withdraw' }
+  /** T4: the owner opens `text` (the draft with paste chips expanded) in the person's editor. */
+  | { readonly type: 'editor'; readonly text: string }
   | { readonly type: 'mention'; readonly start: number; readonly query: string };
 
 export interface ComposerContext {
@@ -71,6 +77,8 @@ export interface ComposerContext {
   readonly pasteChip: string;
   readonly policy?: PastePolicy;
   readonly commands?: readonly SlashCommand[];
+  /** T4: an external editor is wired; without one Ctrl+G stays the Esc it was. */
+  readonly editor?: boolean;
 }
 
 export interface ComposerStep {
@@ -284,6 +292,8 @@ export function reduceComposer(state: ComposerState, key: ComposerKey, context: 
   if (key.type === 'history') return step({ ...state, history: [...key.entries, ...state.history].slice(-COMPOSER_LIMITS.historyEntries) });
   if (key.type === 'mentions') return step(mentionResult(state, key));
   if (key.type === 'interrupt') return interrupt(state, context);
+  if (key.type === 'editor' && !context.editor) return reduceComposer(state, { type: 'escape' }, context);
+  if (key.type === 'restore') return step(restore(state, key.entry));
   if (state.search) return searchKey(state, key);
   if (state.shortcuts) {
     state = { ...state, shortcuts: false };
@@ -295,6 +305,8 @@ export function reduceComposer(state: ComposerState, key: ComposerKey, context: 
   const handled = menu && !walking && menuKey(state, key, menu);
   if (handled) return handled;
   if (key.type === 'stash') return step(stashKey(state));
+  if (key.type === 'withdraw') return state.text ? step(state) : step(state, { type: 'withdraw' });
+  if (key.type === 'editor') return step(state, { type: 'editor', text: expandChips(state.text, state.pastes) });
   if (key.type === 'undo') return step(undoKey(state));
   const editing = key.type === 'text' || key.type === 'paste' || key.type === 'newline' || key.type === 'delete' || key.type === 'yank';
   if (editing) {
@@ -318,6 +330,12 @@ function stashKey(state: ComposerState): ComposerState {
   if (state.text && state.stash) return state;
   if (state.text) return { ...load(state, EMPTY_COMPOSER, null), stash: bare(state), undo: [], typing: false };
   return state.stash ? { ...load(state, state.stash, null), stash: null, undo: [], typing: false } : state;
+}
+
+/** The draft before the restore stays one Ctrl+_ step back; the restored entry keeps its chips. */
+function restore(state: ComposerState, entry: ComposerHistoryEntry): ComposerState {
+  const next = edit({ ...state, pastes: entry.pastes, search: null, shortcuts: false, browsing: null, mentionDismissed: null }, 0, state.text.length, entry.text);
+  return { ...next, undo: [...state.undo, bare(state)].slice(-COMPOSER.undoSteps), typing: false };
 }
 
 function undoKey(state: ComposerState): ComposerState {

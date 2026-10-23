@@ -50,6 +50,7 @@ export * from '#adapters/core/npm-registry/index.js';
 export * from '#adapters/core/inference-metrics/index.js';
 export * from '#adapters/core/runtime-launcher/index.js';
 export * from '#adapters/core/terminal-history/index.js';
+export * from '#adapters/core/terminal-editor/index.js';
 export * from '#adapters/core/worker-image/index.js';
 export type { NativeJsonHttpAuthentication } from '#adapters/core/provider-http-json/index.js';
 

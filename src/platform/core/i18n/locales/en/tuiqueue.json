@@ -1,1 +1,4 @@
-{}
+{
+  "tuiqueue.shortcut": "Alt+Up  take the last queued message back to edit (empty line)",
+  "tuiqueue.withdrawn": "Taken back from the queue (it will not run): {text}"
+}

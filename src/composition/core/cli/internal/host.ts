@@ -5,7 +5,7 @@ import { executeConfiguredBackup, inspectConfiguredBackupSets, inspectConfigured
 import { inspectConfiguredAdminPaths } from './admin-paths.js';
 import { previewConfiguredIdentityProfile, listIdentityProfiles, listConfiguredIdentityDistributionChoices, previewConfiguredIdentityDistribution, applyConfiguredIdentityDistribution } from '#composition/core/identity-profile/index.js';
 import { ensureConfiguredTerminalIdentity, inspectConfiguredInstallationBinding, resolveConfiguredInstallationIdentity, loadConfiguredInstallationIdentity, loadConfiguredProjectIdentity } from '#composition/core/scoped-request/index.js';
-import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LEGACY_KEYS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind, providerConnectModelPriced, providerConnectSecretName, readProviderConnectSeed } from '#adapters/index.js';
+import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, openExternalEditor, PROVIDER_CONNECT_KINDS, PROVIDER_CONNECT_LEGACY_KEYS, probeProviderConnection, providerEndpoint, providerConnectFamily, providerConnectKind, providerConnectModelPriced, providerConnectSecretName, readProviderConnectSeed } from '#adapters/index.js';
 import { settledProviderCacheUsage } from '#engine/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, configuredConfigChoiceSources } from '#composition/core/config/index.js';
@@ -68,7 +68,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     restartRuntimeService: (projectRoot, options) => restartConfiguredRuntimeService(projectRoot, options, undefined, serviceEntry),
     openProjectInstructions: configuredProjectInstructions,
     openTerminalHistory: (projectRoot, options) => openConfiguredTerminalHistory(projectRoot, options),
-    openTerminalSessions: (projectRoot, options) => openConfiguredTerminalSessions(projectRoot, options),
+    openTerminalSessions: (projectRoot, options) => openConfiguredTerminalSessions(projectRoot, options), externalEditor: openExternalEditor({ env: process.env }),
     selfSourceProject: isSelfSourceProject,
     ensureTerminalIdentity: (projectRoot, scopeId, options) => ensureConfiguredTerminalIdentity(projectRoot, scopeId, options).catch(error => { throw queryFailure(error); }),
     resolveInstallationIdentity: resolveConfiguredInstallationIdentity, loadInstallationIdentity: loadConfiguredInstallationIdentity, loadProjectIdentity: loadConfiguredProjectIdentity,
