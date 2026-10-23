@@ -84,6 +84,14 @@ it('a scope without a memory grant is refused; a missing integrity key or ledger
   expect(code).toBe(1); expect(shown.text()).toContain('Memory could not be read'); expect(shown.text()).toContain('MEMORY_UNAVAILABLE');
 });
 
+it('inspect accepts the short id the list shows (unique prefix over the scope), and names an unknown one', async () => {
+  const f = await fixture(); await proposeConfiguredMemory(f.project, propose('lesson-fatura-1'), f.options);
+  const context = { root: f.project, env: f.options.env, listMemory: listConfiguredMemory, inspectMemory: inspectConfiguredMemory };
+  const shown = out(); await memoryCommand(['memory', 'inspect', 'lesson-f', '--scope', 'scope', '--lang', 'en'], { ...context, stdout: shown.sink });
+  expect(shown.text()).toContain('Siparişsiz fatura onaya düşer');
+  await expect(memoryCommand(['memory', 'inspect', 'zzzz-unknown', '--scope', 'scope', '--lang', 'en'], { ...context, stdout: out().sink })).rejects.toMatchObject({ code: 'CLI_ID_UNKNOWN' });
+});
+
 it('retiring keeps the entry and its revisions; retired entries appear only when asked for', async () => {
   const f = await fixture();
   await proposeConfiguredMemory(f.project, propose('m1'), f.options);

@@ -2,7 +2,7 @@ import { ErrorRegistry, emit, loadConfig, t, type ExitCode, type Locale } from '
 import { MEMORY_LIMITS, MEMORY_STATES, type MemoryEntry, type MemoryState } from '#domain/index.js';
 import type { MemoryHeld } from '#engine/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
-import { cliMode, cliTableStyle, displayId, formatAgo, renderCliTable, resolveCommandScope, safeCell, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
+import { cliMode, cliTableStyle, displayId, formatAgo, renderCliTable, requireIdPrefix, resolveCommandScope, safeCell, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { cardIo, sinksOf } from '#surfaces/core/cli-approval/index.js';
 import type { MemoryCommandContext } from './context.js';
 import limits from './limits.json' with { type: 'json' };
@@ -83,7 +83,13 @@ export async function memoryCommand(argv: readonly string[], context: MemoryComm
   };
   if (args.action === 'inspect') {
     if (!context.inspectMemory) throw ErrorRegistry.createError('MEMORY_UNAVAILABLE');
-    const result = await context.inspectMemory(root, { schemaVersion: 1, scopeId: scope.scopeId, entryId: args.words[0]! }, options);
+    const inspect = (entryId: string) => context.inspectMemory!(root, { schemaVersion: 1, scopeId: scope.scopeId, entryId }, options);
+    let result = await inspect(args.words[0]!);
+    // The list shows short ids: an unknown exact id is resolved as a unique prefix over the scope's entries (CLI_ID_UNKNOWN/AMBIGUOUS otherwise).
+    if (result.status === 'not-found' && context.listMemory) {
+      const listed = await context.listMemory(root, { schemaVersion: 1, scopeId: scope.scopeId, states: [...MEMORY_STATES], limit: MEMORY_LIMITS.pageMax }, options);
+      if (listed.status === 'ok') result = await inspect(requireIdPrefix(args.words[0]!, listed.entries.map(entry => entry.entryId)));
+    }
     if (args.json || result.status === 'held') return finish(result);
     lines.push(result.status === 'not-found' ? t('memory.notFound', { id: safeCell(result.entryId) }, locale) : view(result.entry, result.history, locale));
   } else if (args.action === 'search') {
