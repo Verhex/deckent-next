@@ -61,13 +61,19 @@ it('ordered revisions are deterministic, order-sensitive and punctuation cannot 
   expect(mergeWorkClassRegistries(base, []).revision).toBe(base.revision);
 });
 it('frozen historical v1 policies and selected revisions keep exact efor output over every legacy class and supported level set', () => {
-  const historical = workClassRegistrySchema.parse(JSON.parse(JSON.stringify(CORE_WORK_CLASSES)));
+  // The 2026-10-03 v1 seed as it shipped (literal): a frozen complete policy keeps its own revision; the ATAMA-0 seed changed no effort target.
+  const historical = workClassRegistrySchema.parse({ schemaVersion: 1, revision: 'worker-effort-2026-10-03',
+    classes: [{ id: 'small', defaultEffort: 'high' }, { id: 'test', defaultEffort: 'high' }, { id: 'feature', defaultEffort: 'xhigh' },
+      { id: 'design', defaultEffort: 'max' }, { id: 'architecture', defaultEffort: 'max' }, { id: 'security-critical', defaultEffort: 'max' }],
+    bindings: CORE_WORK_CLASSES.bindings });
   for (const row of historical.classes) for (const efforts of [capability.levels, ['high'], ['max'], ['ultra'], []]) {
     const input = { model: model(efforts), capability, kind: row.id };
-    const frozen = selectWorkerEffort(input);
-    expect(selectWorkerEffort({ ...input, policy: historical })).toEqual(frozen);
+    const frozen = selectWorkerEffort({ ...input, policy: historical }), current = selectWorkerEffort(input);
     expect(workerEffortSchema.parse(JSON.parse(JSON.stringify(frozen)))).toEqual(frozen);
-    if ('policyRevision' in frozen) expect(frozen.policyRevision).toBe(historical.revision);
+    if ('policyRevision' in frozen) {
+      expect(frozen.policyRevision).toBe(historical.revision);
+      expect(current).toEqual({ ...frozen, policyRevision: CORE_WORK_CLASSES.revision });
+    } else expect(current).toEqual(frozen);
   }
   const old = workClassRegistrySchema.parse({ schemaVersion: 1, revision: 'frozen-v1', classes: [{ id: 'custom', defaultEffort: 'high' }], bindings: [{ kind: 'old-kind', classId: 'custom' }] });
   expect(selectWorkerEffort({ model: model(capability.levels), capability, kind: 'old-kind', policy: old }))
