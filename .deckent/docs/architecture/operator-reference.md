@@ -280,15 +280,28 @@ person's terminal (hidden prompt): from a pipe, script, agent or CI it is refuse
 
 ## Provider keys, models and spending
 
-Keys: `deckent secret set NAME` (hidden prompt or piped stdin) writes to the store selected by `secrets.store`
-(`core.secret-store.env@1`, `core.secret-store.file@1`, `core.secret-store.encrypted-file@1`); `deckent secret store`
-copies every key to another registered store, verifies it, publishes the selection and then deletes the old copy (a move
-to a weaker store asks for approval; set, delete and switch share one installation-wide custody section). Workers never
-receive a key. `deckent doctor` names the active store and reports `unverified` when a store listing fails.
+Keys (PRE-8, alpha.51): there are two kinds of vault. The main vault is the installation's store selected by `secrets.store`
+(`core.secret-store.env@1`, `core.secret-store.file@1`, `core.secret-store.encrypted-file@1`); a project vault is an encrypted
+store that belongs to one project folder. `deckent secret set NAME --main|--project` takes the value only at the hidden prompt
+of your own terminal; a piped value is refused before it is read, a terminal without `--main`/`--project` asks on a card which
+vault, and `--json` without it is `SECRET_VAULT_REQUIRED`. A project uses its own key only when its `.deck` file declares
+`NAME=project`, and a main-vault key only after a grant. `.deck` holds references, never values, so it can be committed: the
+first entry is `DECK_FORMAT=1`, then one `NAME=main` or `NAME=project` per line (`#` comments and empty lines are allowed;
+at most 64 KiB and 256 entries); any other line refuses the whole file (`DECK_FILE_INVALID`, naming only the line number).
+A grant is a card at the person's own terminal: the first-use card in the solo terminal chat, or `deckent secret grant NAME
+--scope S`; `secret revoke NAME --scope S` takes it back, and AI sessions cannot grant. `secret handover --scope S` takes the
+key vault along when a project folder moves (refused while the original folder still holds it). `secret list` shows name ·
+vault · project · used by · `.deck` · grant · stored, never a value; `--all` lists every project vault of this main vault.
+The first-use card and `secret grant` need the Linux terminal witness (see known limits). `deckent secret store` copies every
+main-vault key to another registered store, verifies it, publishes the selection and then deletes the old copy (a move to a
+weaker store asks for approval; set, delete and switch share one installation-wide custody section). Workers never receive a
+key. `deckent doctor` names the active store, reports `unverified` when a store listing fails and names keys a model here
+cannot use, with the exact next command. Contract: [project key vault](modules/permission-modes.md#pre-8-project-key-vault-alpha51).
 
 Models: `deckent models connect --scope <id> --connection <kind> --command-id <id> (--model <id> | --reference <ref>)`
 declares a model from the kind's packaged catalog, writes the scope's invocation profile with the key name and activates
-it (kinds: anthropic-api, openai-api, deepseek-api, zai-api, zai-cn-api, openai-compatible, local-openai). A remote model
+it (kinds are the available rows of the provider-connect registry: anthropic-api, openai-api, deepseek-api, zai-api, zai-cn-api,
+openrouter, openai-compatible, local-openai). A remote model
 without a verified published tariff is refused and shown locked with the reason. `terminal.defaultModel` (user layer) is
 the terminal's default; the session pin from `/model` wins, then a project-authored reference.
 
@@ -299,6 +312,11 @@ form of that list (`models --declared --json`); `models --json` is the catalog i
 `models catalog activate|deactivate` and `models connect` without their long flags ask the scope, provider or channel and the exact
 model id (never an alias), read the binding digest and revisions themselves and confirm on a scoped card; the long flag forms are
 unchanged for AI tools. `models spending` without `--input` shows the scope's API budget (limit, used, held, left).
+Cursor workers (alpha.52): register the packaged Cursor subscription catalog with `deckent models catalog register --scope <id>
+--command-id <id> --seed cursor-cli-subscription`, then switch models on with `models catalog activate`. A Cursor attempt reports
+turns, tokens, duration and tool calls and ends with its report JSON; the model it really used is read from its session-start
+name (`start-name-matched`, `provider-chosen` for `auto`, `substituted`, or `unverified`). Cursor cost stays unreported
+(subscription).
 
 MCP and identity: `deckent mcp` / `mcp list` is a table (waiting servers first with their next step) and starts nothing; `--check`
 starts trusted servers only. Every trust decision (`mcp approve`, `mcp add` to a local or user scope) is a card on a person's terminal;
@@ -312,20 +330,39 @@ the pinned tariff (`measured-tariff`). The scope's first budget is created with 
 --usd <n>` (or the budget window, the first row of `/provider`), changed with `revise-budget [--unfreeze]`; a held call that never received
 final usage is resolved with `reconcile-spending`. Details: ARCHITECTURE "Spend settlement".
 
-### Delivery confirmation (TESLIM-GUVENLIK author candidate)
+### Delivery confirmation (TESLIM-GUVENLIK, alpha.36)
 
 `task integration-deliver`, `task integration-adopt` and `task integration-rollback` require one explicit `y` in a verified human terminal (a rollback moves the adopted branch back, so it asks like an adoption; its card shows the branch and current → previous commit). The card shows task title, Run/Task ids, reference/branch, from/to commits and changed files. Empty, `n`, EOF, redirected input/output and SDK/MCP new effects refuse. Prepare/check remain candidate-only. Completed replay and proven crash settlement do not ask again; an unfinished effect needs fresh confirmation. Adoption still requires `execution.adoption.targets`, policy, acceptance and configured verification; with `execution.adoption.verification` configured the terminal delivery window lets the person choose an accepted verification Run of the configured kind (see below); a refusal shows the reason and keeps the exact `task integration-adopt … --verification-run <run>` command as the command-line alternative. No autonomous policy is enabled. Known limit: the verified-terminal witness exists only on Linux (WSL included); on other hosts delivery, adoption and rollback are refused with `DELIVERY_INTERACTIVE_REQUIRED`.
 
 Delivery commits carry the admitted task title, ids and bounded acceptance state; author/committer time comes from the trusted delivery planning clock and is frozen by the intent for replay. Deckent is the default identity; `execution.git.deliveryIdentity` can set `authorName`/`authorEmail`. Preview Git objects are prepared only in the candidate before the answer; refusal writes no source Git object, ref, branch or delivery intent.
 
-### Run controls in the terminal (Y1 author candidate)
+### Run controls in the terminal (Y1, alpha.39)
 
 `/runs` lists the scope's Runs with a selection. When the terminal has the lifecycle handler (the CLI's in-process `run hold|resume|close` application), `h` holds a Run that is not finished, cancelling or already held, `r` resumes a Run parked by an operator hold or a failed progression (a question, a decision or a quota wait survives resume, so `r` is not offered there) and `c` closes a parked Run; the hint row names only the keys the selected Run's observed state offers. Each key re-reads the Run and opens a y/N card with what the control does, the state and the revision it will send; only a single typed `y` sends it (Ctrl/Alt chords, pasted or coalesced keys never do; `n`, Enter, Esc and Ctrl+C keep the Run). Hold takes the person's reason (Tab) or a default sentence as its note. The command is the CLI's own lifecycle command against the shown revision; policy (`run cancel` for hold/close, `run reserve` for resume) and the Run's state decide, and a refusal is the typed reason in the session language above the list. The result line names the state the Run is in afterwards and the command id. Hold stops new reservations; work already running continues. Answering a needs-input task and accepting or rejecting a task are separate decisions and are not keys here.
 
-### Delivery window in the terminal (TESLIM-PENCERESI author candidate)
+### Delivery window in the terminal (TESLIM-PENCERESI, alpha.36)
 
 When a Task of a Run that this terminal's `/do` admitted reaches "accepted · patch ready, awaiting delivery", a delivery window opens by itself without taking input (Ctrl+O, or "awaiting delivery" in the Active work strip with Ctrl+T and Enter, moves input to it); `/deliver` lists every waiting task of the scope and opens the chosen one with focus. The window shows the task title, Run/Task ids, the integration check of the current source (affected files match the base), the changed files with `patch-preview --stat` counts, that only a dedicated `refs/deckent/deliveries/` reference is written (branches, index and working tree stay unchanged) and, only when `execution.adoption.targets` is configured, the target branches as a later, separate choice. `y` checks, prepares and delivers in one flow through the same applications as `task integration-check|prepare|deliver` and the verified-terminal confirmation above: the window's `y` answers the confirmation only when its card shows exactly the operation, ids, command, file set and base the window showed; otherwise the exact card is shown and needs a fresh `y`. After delivery a configured branch is adopted only with a second `y` (↑↓ chooses the branch); `n`/Esc does nothing. With `execution.adoption.verification` configured (Y1), that `y` first opens a verification step: the scope's accepted Runs of the configured kind (one task), plus "adopt without verification" only when it is not required; ↑↓ chooses, a single typed `y` adopts with the choice (the kind is read from configuration at that moment, as `task integration-adopt --verification-run` does), `r` reads the list again, `n`/Esc go back. With none it says so and names `deckent run create … --delivery-command-id <this delivery>`. The adoption application still checks that the Run verified exactly this commit with the current profile and the installation's criteria; a refusal returns to the choice with its reason and a fresh adoption command. The delivered and adopted lines and the transcript summary show the delivery and adoption command ids (`task integration-rollback --adoption-command-id`). A typing `y` in the input never confirms. A stale base, a missing grant (`scope inspect` for the attempt lookup plus the integration actions) or a non-verified session is refused in plain words with the next step. Delivery never starts by itself; a future owner-set "autonomous by rule" broker would plug into the same confirmation port and is not implemented. The ready step also offers a read-only diff of each changed file (alpha.46; no new command): ↑↓/j/k choose a file, Enter opens its hunks with the attempt, base and proposal the preview was built from, ↑↓/j/k scroll, Esc returns to the list. The port carries per-file diff bodies of the same patch the counts come from, bounded by `deliver-port.json` (`maxDiffFiles`, `maxDiffLinesPerFile`, `maxDiffBytesPerFile`); a binary or over-large file shows "Cannot show: binary or too large" instead of a body and cut lines are counted. Every row passes the same redaction and terminal-text cleaning as the rest of the window. Viewing never prepares, delivers or adopts: inside a diff `y`, `n` and Enter do nothing, and delivery stays the list step's separate verified-terminal `y`. A stale base or a denied access is still the typed refusal row.
 
-### Approvals and decisions from the CLI (C-APPROVE author candidate)
+### Approvals and decisions from the CLI (C-APPROVE, alpha.48)
 
 `deckent approval list` (and bare `deckent approval` once the catalog reads `list`) reads the default scope (named on the first line; `--scope` overrides): waiting approvals first with the time left ("8 min left"), then the rest newest first, at most `approval.json` pages and rows, with "more"/"not scanned" lines instead of a silent cut; `--json` is the raw page. On a person's terminal a waiting approval can then be picked and answered on the terminal's card: once / no (a stored approval has no running turn, so the terminal offers no "this session"/"always" for it either; a hard-floor request says it can only be allowed once). Revision and command id come from the system, the channel is `local-cli`, the reason is the person's `--reason` or the default "Approved on the terminal"; a cancelled or silent card decides nothing, and the decision goes through the same runtime `decideApproval` (attested terminal, assurance minimum) as before. `approval decide` without `--input` is that same pick on a terminal and names the missing `--input` everywhere else. The JSON path (`--input`) is unchanged for AI tools; its input is checked against the application's schema first, so a wrong field is named (`CLI_INPUT_FIELD_INVALID`, exit 2, with an example) instead of `INVENTORY_QUERY_INVALID`, a decision without a reason is refused before anything is sent, results are readable text with raw JSON only with `--json`, and `--schema` prints the input contract. `deckent decide` without an action lists the scope's recent decisions (the decision port's `inspect` grant; a first-run v12 policy has none, so it is `POLICY_DENIED` until the v13 template); on a terminal one decision opens in a window with its options, advice, choice and outcome. `decide <action> --schema` and field-named input errors work as for `approval`. MCP still has no decide tool.
+
+## Permission modes and worker instructions (alpha.51, alpha.53)
+
+Modes (PRE-9): full-auto and full-access stay closed until the installation owner opens them for a scope with `deckent init policy
+--scope <id> --modes <list>|none --preview|--apply` (`<list>`: `full-auto`, `full-access` or both, comma-separated; `none` closes
+them; `--expect <rev>` guards against a concurrent change). The apply asks a y/N card at the owner's own terminal on the previewed
+revision and is audited; AI tools, pipes and CI cannot run it. A fresh first-run policy opens no mode. Contract:
+[owner-opened modes](modules/permission-modes.md#pre-9-solo-mod-izni-alpha51).
+
+Worker instructions (alpha.53): by default workers do not discover the developer's own `AGENTS.md` or `CLAUDE.md`. A Run passes the
+work target's worker instruction file instead, selected by `execution.workerInstructions.source`: `worker-md`
+(`.deckent/worker-instructions.md`, used by default when it exists), `agents-md` (`AGENTS.md`) or `none`. Without Git execution
+this is an explicit no-op. `deckent coding instructions` (or `status`) shows the file's path, size, SHA-256 and whether workers get
+it now. `deckent coding instructions trust|revoke [--target <id>] --scope <id>` trusts, or takes back, exactly the file's current
+content for that folder: a card at your own terminal shows the path, size, SHA-256 and first lines; AI tools, MCP, pipes and
+`--json` are refused; the decision uses the config write permission for `execution.workerInstructions` and is recorded in the
+audit log. A changed file is untrusted again. Until it is trusted, workers get the task text only and Run creation warns
+`WORKER_INSTRUCTIONS_WITHHELD`; a file that does not fit the prompt bounds refuses the Run (`WORKER_INSTRUCTIONS_TOO_LARGE`).
+Delivery refuses a worker change to those instruction paths unless the task scope names them (`PATCH_INSTRUCTION_SURFACE_WRITE`).

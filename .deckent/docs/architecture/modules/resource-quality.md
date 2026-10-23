@@ -1,6 +1,6 @@
 # Resource observation and quality
 
-Owner-admitted CARD: KAYNAK-KALITE-UYGULAMA, 2026-10-12; alpha.31 author candidate.
+Owner-admitted CARD: KAYNAK-KALITE-UYGULAMA, 2026-10-12; landed in alpha.31.
 
 The dispatch owner starts observation only after its durable launch grant. A service collector
 caps concurrent reads, schedules one cancellable read per worker at a configured interval and
