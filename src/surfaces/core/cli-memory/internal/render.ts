@@ -34,3 +34,12 @@ export function view(entry: MemoryEntry, history: readonly MemoryEntry[], locale
  * `deckent memory [search <words…> | inspect <id>]` (S4 v1, read-only). A read the journal could not complete is shown as held on stderr with
  * the next step and exits 1 (`--json` prints the held result); it is never shown as an empty memory.
  */
+/** S4B-3: one line per evaluator row (or that none is available), read-only; prices are catalog data, the caps are the registry's. */
+export function evaluatorLines(view: Awaited<ReturnType<NonNullable<MemoryCommandContext['inspectMemoryEvaluators']>>>, locale: Locale): string[] {
+  if (!view.available) return [t('memory.view.noIndependentEvaluator', {}, locale)];
+  const price = (row: typeof view.rows[number]) => row.price.kind === 'subscription' ? t('memory.view.evaluator.price.subscription', {}, locale)
+    : row.price.kind === 'per-token' ? t('memory.view.evaluator.price.perToken', { input: row.price.inputPerMTok, output: row.price.outputPerMTok, asOf: safeCell(row.price.asOf),
+      ceiling: row.price.answersPerDayCeiling, calls: view.callsPerDay, tokens: view.maxCompletionTokens }, locale) : t('memory.view.evaluator.price.notVerified', {}, locale);
+  return [...view.rows.filter(row => row.invocable && row.maker !== null).map(row => t('memory.view.evaluator', { model: safeCell(`${row.channelId}/${row.modelId}`),
+    maker: safeCell(row.maker!), price: price(row) }, locale)), t('memory.view.evaluator.independence', {}, locale)];
+}

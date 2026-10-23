@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { clientCommandIdSchema, identitySchema, counterSchema, memoryAudienceSchema, memoryContentSchema, memoryOriginSchema, memoryVerificationBasisSchema, MEMORY_LIMITS, MEMORY_STATES,
-  type AuditEvent, type MemoryEntry, type MemoryEvaluationRef, type MemoryResolvedEvaluation, type MemoryState, type VerifiedPrincipal } from '#domain/index.js';
+  type AuditEvent, type MemoryContest, type MemoryEntry, type MemoryEvaluationRecord, type MemoryEvaluationRef, type MemoryModelRef, type MemoryResolvedEvaluation, type MemoryState,
+  type VerifiedPrincipal } from '#domain/index.js';
 import type { KnownSecretSnapshot } from '#platform/index.js';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 
@@ -90,9 +91,17 @@ export interface MemoryJournalStore {
   extractionCounts?(scopeId: string, runId: string, sinceMs: number): Promise<{ readonly run: number; readonly scope: number }>;
   extractionCursor?(scopeId: string): Promise<string | null>;
   advanceCursor?(scopeId: string, cursor: string): Promise<void>;
+  /** S4B-3 (§6.1, §12): a sealed evaluation record with its audit event in one commit (same id + digest replays; another digest conflicts). */
+  putEvaluation?(record: MemoryEvaluationRecord, digest: string, event: AuditEvent): Promise<{ readonly replayed: boolean }>;
+  loadEvaluation?(scopeId: string, recordId: string): Promise<{ readonly record: MemoryEvaluationRecord; readonly digest: string } | null>;
+  /** The newest `limit` records of the scope, newest first (the daily caps read only today's of them). */
+  recentEvaluations?(scopeId: string, limit: number): Promise<readonly MemoryEvaluationRecord[]>;
+  /** S4B-3 A9: an open contest with its audit event (append-only; S4B-4 resolves it once). */
+  openContest?(contest: MemoryContest, event: AuditEvent): Promise<{ readonly replayed: boolean }>;
+  contestCount?(scopeId: string, sinceMs: number): Promise<number>;
   close(): void;
 }
-export type MemoryAction = 'inspect' | 'propose' | 'verify' | 'retire';
+export type MemoryAction = 'inspect' | 'propose' | 'verify' | 'retire' | 'contest';
 /** A pure policy view over one loaded document for the read filter: whether the caller may take `action` on `resource`. */
 export type MemoryReadFilter = (resource: { readonly kind: string; readonly id: string }, action: string) => boolean;
 export interface MemoryJournalDependencies {
@@ -109,11 +118,43 @@ export interface MemoryJournalDependencies {
   readonly automation?: unknown;
   /** Known secrets for candidate screening (§4.5); pattern secrets are refused without it too. */
   readonly knownSecrets?: KnownSecretSnapshot;
+  /** S4B-3 §6.3: the sealed sources of an entry's support rows; verify re-derives the source worker models through it (absent: independence fails closed). */
+  readonly evaluationSources?: MemoryEvaluationSources;
   readonly now: () => number;
   readonly eventId: () => string;
 }
+/** One sealed source as the evaluator reads it (built from the Run snapshot, the canonical evaluation and the effect ledger; never raw worker output). */
+export interface MemoryEvaluationSource { readonly accepted: boolean; readonly settled: boolean; readonly evaluationId: string;
+  readonly criteria: readonly { readonly criterionId: string; readonly status: string }[];
+  /** The worker models of the Attempt re-derived from the sealed Run (assignment or pin, auxiliary models, the evaluation's reported names), with makers. */
+  readonly models: readonly MemoryModelRef[] }
+export interface MemoryEvaluationSources {
+  /** null: the Run or its evaluation is gone (the entry then has no provable source and is never evaluated or verified). */
+  source(scopeId: string, attempt: MemorySupport['source']): Promise<MemoryEvaluationSource | null>;
+}
+/** One model the evaluator may use in the scope: an active `memory-evaluator` role row with its canonical maker and channel billing. `invocable`:
+ * an invocation path exists for it in this installation (a row without one is never selected). */
+export interface MemoryEvaluatorRow { readonly channelId: string; readonly modelId: string; readonly maker: string | null;
+  readonly billing: 'subscription' | 'local' | 'metered' | null; readonly invocable: boolean }
+export type MemoryEvaluatorCall = { readonly status: 'responded'; readonly text: string; readonly invocationId: string | null; readonly spend: MemoryEvaluationRecord['spend'] }
+  | { readonly status: 'failed'; readonly code: string; readonly invocationId: string | null; readonly spend: MemoryEvaluationRecord['spend'] };
+export interface MemoryEvaluatorPorts {
+  /** The scope's evaluator rows (S2 role registry × catalog), registry order. */
+  rows(scopeId: string): Promise<readonly MemoryEvaluatorRow[]>;
+  /** One call, no tools, no retry. Throws only when nothing was sent (a refusal before the provider effect: the pass stops, no record, the
+   * candidate is asked later); every failure after the claim is `failed` with the spend the ledger settled (sealed, never asked again). */
+  invoke(request: { readonly scopeId: string; readonly commandId: string; readonly row: MemoryEvaluatorRow; readonly maxCompletionTokens: number;
+    readonly messages: readonly { readonly role: 'system' | 'user'; readonly content: string }[] }): Promise<MemoryEvaluatorCall>;
+}
+export type MemoryEvaluationAlertKey = 'memory.alert.evaluationDailyCap' | 'memory.alert.spendCap' | 'memory.alert.evaluatorBreaker' | 'memory.alert.contestBound';
+export type MemoryEvaluationSkip = 'not-system' | 'source-not-accepted' | 'maker-unknown' | 'no-independent-evaluator' | 'evaluated';
+export interface MemoryEvaluationPass { readonly schemaVersion: 1; readonly mode: 'shadow' | 'live'; readonly calls: number;
+  readonly records: readonly { readonly entryId: string; readonly recordId: string; readonly verdict: MemoryEvaluationRecord['verdict']; readonly verified: boolean; readonly contests: number }[];
+  readonly skipped: readonly { readonly entryId: string; readonly reason: MemoryEvaluationSkip }[];
+  readonly alerts: readonly { readonly key: MemoryEvaluationAlertKey; readonly scopeId: string }[] }
 export type MemoryJournalErrorCode = MemoryHoldCode | 'MEMORY_COMMAND_CONFLICT' | 'MEMORY_REVISION_CONFLICT' | 'MEMORY_NOT_FOUND' | 'MEMORY_OUTCOME_UNKNOWN'
-  | 'MEMORY_ENTRY_WITHHELD' | 'MEMORY_PURGED_CONTENT' | 'MEMORY_EXTRACTION_BOUND' | 'MEMORY_CANDIDATE_SECRET' | 'MEMORY_CANDIDATE_QUARANTINED' | 'MEMORY_DISTILLER_REQUIRED';
+  | 'MEMORY_ENTRY_WITHHELD' | 'MEMORY_PURGED_CONTENT' | 'MEMORY_EXTRACTION_BOUND' | 'MEMORY_CANDIDATE_SECRET' | 'MEMORY_CANDIDATE_QUARANTINED' | 'MEMORY_DISTILLER_REQUIRED'
+  | 'MEMORY_EVALUATOR_REQUIRED';
 export class MemoryJournalError extends Error {
   constructor(readonly code: MemoryJournalErrorCode) { super(code); this.name = 'MemoryJournalError'; }
 }

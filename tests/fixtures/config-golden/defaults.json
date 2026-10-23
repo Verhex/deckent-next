@@ -141,6 +141,9 @@
   "memoryAutomation": {
     "extraction": {
       "mode": "off"
+    },
+    "verification": {
+      "mode": "off"
     }
   },
   "models": {

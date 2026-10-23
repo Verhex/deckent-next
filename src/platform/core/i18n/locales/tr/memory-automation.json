@@ -1,5 +1,5 @@
 {
-  "memory.config.section": "Hafıza otomasyonu (korumalı; hiçbir AI değiştiremez): extraction.mode kabul edilen işten aday kaydı açar (off kapalı, shadow yalnız kayıt tutar, live aday yazar); automation Core sınırlarını ve iş türü satırlarını yalnız daraltır.",
+  "memory.config.section": "Hafıza otomasyonu (korumalı; hiçbir AI değiştiremez): extraction.mode kabul edilen işten aday kaydı açar (off kapalı, shadow yalnız kayıt tutar, live aday yazar); verification.mode bağımsız değerlendiriciyi açar (off kapalı, shadow kaydını mühürler ve hiçbir şeyi doğrulamaz, on doğrular); automation Core sınırlarını ve iş türü satırlarını yalnız daraltır.",
   "memory.withheld": "{count} kayıt daha gizli: okuyamadığınız işten ya da kullanamadığınız bir hedeften geliyor.",
   "memory.alert.extractionBound": "{scope} kapsamında hafıza damıtma sınıra ulaştı: bu dönemde {count} aday yazılmadı (hiçbir metin kısaltılmadı).",
   "memory.alert.screening": "{scope} kapsamında hafıza damıtma {count} adayı reddetti: içlerinde gizli bilgi ya da görünmez karakter vardı.",
@@ -9,5 +9,19 @@
   "error.MEMORY_CANDIDATE_SECRET": "Hafıza adayı gizli bilgi içeriyor; reddedildi.",
   "error.MEMORY_CANDIDATE_QUARANTINED": "Hafıza adayı görünmez karakter içeriyor; reddedildi.",
   "error.MEMORY_DISTILLER_REQUIRED": "Sistem adaylarını yalnız bu kurulumun hafıza damıtıcısı yazar.",
-  "error.MEMORY_AUTOMATION_INVALID": "Hafıza otomasyonu ayarları geçersiz ya da bir Core sınırını genişletmeye çalışıyor; yalnız daraltma yapılabilir."
+  "error.MEMORY_AUTOMATION_INVALID": "Hafıza otomasyonu ayarları geçersiz ya da bir Core sınırını genişletmeye çalışıyor; yalnız daraltma yapılabilir.",
+  "memory.alert.evaluationDailyCap": "{scope} kapsamında hafıza değerlendiricisi günlük çağrı sınırına ulaştı; adaylar yarına kadar aday kalır.",
+  "memory.alert.spendCap": "{scope} kapsamında hafıza değerlendiricisi durdu: günlük harcama sınırına ulaşıldı ya da bir çağrının tutarı henüz kesinleşmedi; adaylar aday kalır.",
+  "memory.alert.evaluatorBreaker": "{scope} kapsamında hafıza değerlendiricisi durdu: bugün okunamayan cevap sayısı çok fazla; adaylar aday kalır.",
+  "memory.alert.contestBound": "{scope} kapsamında hafıza değerlendiricisi günlük itiraz sınırına ulaştı; bugün başka çelişen kayıt model bağlamından çekilmez.",
+  "memory.view.noIndependentEvaluator": "Bu kapsamda bağımsız değerlendirici yok: adaylar bir kişi doğrulayana kadar aday kalır.",
+  "memory.view.evaluator": "Bu kapsamın değerlendiricisi: {model} ({maker} üretimi), {price}.",
+  "memory.view.evaluator.price.perToken": "katalog fiyatı milyon token başına girdi {input} / çıktı {output} ({asOf} tarihli); günde en çok {calls} çağrı, her biri en çok {tokens} cevap tokenı, yani cevaplar günde en çok {ceiling} tutar",
+  "memory.view.evaluator.price.subscription": "abonelik kanalı (yalnız kota, para yok)",
+  "memory.view.evaluator.price.notVerified": "fiyat doğrulanmadı",
+  "memory.view.evaluator.independence": "Bir kaydı yalnız işi yapan modelden farklı üreticinin modeli değerlendirir; aday metni o modelin sağlayıcısına gönderilir.",
+  "memory.view.evaluator.unavailable": "Hafıza değerlendiricisi okunamadı; adaylar aday kalır.",
+  "error.MEMORY_EVALUATION_NOT_INDEPENDENT": "Değerlendirme işi yapan modellerden bağımsız değil; bu hafıza kaydını doğrulayamaz.",
+  "error.MEMORY_EVALUATION_MAKER_UNKNOWN": "Bu hafıza kaydının arkasındaki bir modelin üreticisi bilinmiyor; bağımsızlık gösterilemez, kayıt aday kalır.",
+  "error.MEMORY_EVALUATOR_REQUIRED": "Kendi değerlendirmesini yalnız bu kurulumun hafıza değerlendiricisi uygular; başka hiçbir AI hafızayı doğrulamaz."
 }

@@ -1,6 +1,7 @@
-import { isAiPrincipal } from '#domain/core/principal/index.js';
+import { isAiPrincipal, isMemoryDistillerPrincipal, isMemoryEvaluatorPrincipal } from '#domain/core/principal/index.js';
 import { MEMORY_LIMITS, MEMORY_SCHEMA_VERSION, MemoryError, memoryAudienceSchema, memoryContentSchema, memoryEntrySchema, memoryOriginSchema, memoryVerificationBasisSchema,
   type MemoryEntry, type MemoryResolvedEvaluation } from './contract.js';
+import { assertMemoryEvaluationIndependent } from './evaluation.js';
 
 interface Actor { readonly issuer: string; readonly subject: string; readonly assurance?: string }
 const same = (a: { issuer: string; subject: string }, b: { issuer: string; subject: string }) => a.issuer === b.issuer && a.subject === b.subject;
@@ -21,10 +22,13 @@ export function proposeMemoryEntry(input: { readonly scopeId: string; readonly e
 
 /**
  * candidate → verified. A human review needs a human principal (never the MCP actor or a workload: `isAiPrincipal`). An independent evaluation needs
- * the resolved record: passed, judging exactly this content digest, by an evaluator that is not the entry's author. No record resolved: fail closed.
+ * the resolved record: live (never a shadow record), passed, judging exactly this content digest, by an evaluator that is neither the entry's
+ * author nor the distiller; from an AI actor only when that actor is the memory evaluator that produced the record (S4B-3 A5, fold 6: the
+ * proposing AI never verifies its own entry). Its models must be independent of the source worker models the engine re-derived from the sealed
+ * Runs (`sourceModels`, §6.3). No record resolved: fail closed.
  */
 export function verifyMemoryEntry(previous: MemoryEntry, input: { readonly actor: Actor; readonly atMs: number; readonly basis: unknown;
-  readonly evaluation?: MemoryResolvedEvaluation | null }): MemoryEntry {
+  readonly evaluation?: MemoryResolvedEvaluation | null; readonly sourceModels?: MemoryResolvedEvaluation['sourceModels'] | null }): MemoryEntry {
   const basis = memoryVerificationBasisSchema.safeParse(input.basis);
   if (!basis.success) throw new MemoryError('MEMORY_ENTRY_INVALID');
   if (previous.state !== 'candidate') throw new MemoryError('MEMORY_TRANSITION_INVALID');
@@ -37,8 +41,11 @@ export function verifyMemoryEntry(previous: MemoryEntry, input: { readonly actor
     if (!evaluation) throw new MemoryError('MEMORY_EVALUATION_UNAVAILABLE');
     if (evaluation.record.kind !== record.kind || evaluation.record.id !== record.id || evaluation.record.digest !== record.digest
       || evaluation.subjectDigest !== previous.contentDigest) throw new MemoryError('MEMORY_EVALUATION_OTHER_CONTENT');
-    if (same(evaluation.evaluator, previous.provenance.author)) throw new MemoryError('MEMORY_SELF_VERIFICATION');
+    if (same(evaluation.evaluator, previous.provenance.author) || isMemoryDistillerPrincipal(evaluation.evaluator)) throw new MemoryError('MEMORY_SELF_VERIFICATION');
+    if (isAiPrincipal(input.actor) && (!isMemoryEvaluatorPrincipal(input.actor) || !same(input.actor, evaluation.evaluator))) throw new MemoryError('MEMORY_EVALUATOR_REQUIRED');
+    if (evaluation.mode !== 'live') throw new MemoryError('MEMORY_EVALUATION_UNAVAILABLE');
     if (evaluation.verdict !== 'pass') throw new MemoryError('MEMORY_EVALUATION_NOT_PASSED');
+    assertMemoryEvaluationIndependent(evaluation, input.sourceModels ?? null);
     verification = { basis: 'independent-evaluation', evaluator: { issuer: evaluation.evaluator.issuer, subject: evaluation.evaluator.subject }, record, verifiedAtMs: input.atMs };
   }
   return entry({ ...previous, revision: previous.revision + 1, state: 'verified', verification, updatedAtMs: input.atMs });

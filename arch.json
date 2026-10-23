@@ -3535,7 +3535,8 @@
       "dependencies": [
         "src/domain/core/primitives",
         "src/domain/core/principal",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "MEMORY"
     },
@@ -3555,7 +3556,12 @@
         "src/domain/core/task-graph",
         "src/domain/core/attempt",
         "src/domain/core/run",
-        "src/domain/core/task-evaluation"
+        "src/domain/core/task-evaluation",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/worker-event",
+        "src/engine/core/provider-spend",
+        "src/domain/core/model-invocation",
+        "src/engine/core/model-activation"
       ],
       "plan": "MEMORY"
     },
@@ -3586,7 +3592,13 @@
         "src/engine/core/runtime",
         "src/adapters/core/local-principal",
         "src/domain/core/run",
-        "src/adapters/core/git-workspace"
+        "src/adapters/core/git-workspace",
+        "src/composition/core/terminal-chat",
+        "src/composition/core/model-invocation",
+        "src/adapters/core/sqlite-model-activation",
+        "src/adapters/core/sqlite-model-invocation",
+        "src/adapters/core/provider-openai-chat",
+        "src/engine/core/model-activation"
       ],
       "plan": "MEMORY"
     },

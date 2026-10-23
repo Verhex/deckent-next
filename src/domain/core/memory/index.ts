@@ -4,3 +4,6 @@ export { foldMemoryText, memorySearchTerms, memoryIndexText, memoryEntryMatches 
 export { composeMemoryAutomation, memoryAutomationOverlaySchema, memoryExtractionAllowed, MEMORY_EXTRACTORS, MEMORY_TEMPLATES, memoryTemplate, memoryExtractionSourceSchema,
   distilMemoryCandidates, memoryWorkClassOf } from './internal/automation.js';
 export type { MemoryAutomation, MemoryWorkClassRow, MemoryExtractionSource, MemoryCandidate } from './internal/automation.js';
+export { memoryModelRefSchema, memoryEvaluationRecordSchema, memoryEvaluationSpendSchema, memoryContestSchema, parseMemoryEvaluationRecord, readMemoryEvaluatorAnswer,
+  memoryContestTargets, assertMemoryEvaluationIndependent, MEMORY_EVALUATION_VERDICTS, MEMORY_EVALUATION_MODES } from './internal/evaluation.js';
+export type { MemoryModelRef, MemoryEvaluationRecord, MemoryEvaluationSpend, MemoryContest, MemoryEvaluatorAnswer, MemoryEvaluationVerdict } from './internal/evaluation.js';

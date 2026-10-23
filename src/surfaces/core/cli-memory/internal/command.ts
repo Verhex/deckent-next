@@ -6,7 +6,7 @@ import { cliMode, requireIdPrefix, resolveCommandScope, safeCell, scopeLister, s
 import { cardIo, sinksOf } from '#surfaces/core/cli-approval/index.js';
 import type { MemoryCommandContext } from './context.js';
 import { memoryWrite } from './write.js';
-import { table, view } from './render.js';
+import { evaluatorLines, table, view } from './render.js';
 import limits from './limits.json' with { type: 'json' };
 
 export interface Parsed { action: 'search' | 'inspect' | 'propose' | 'verify' | 'retire' | null; words: string[]; states?: MemoryState[]; scope?: string; language?: string;
@@ -93,6 +93,8 @@ export async function memoryCommand(argv: readonly string[], context: MemoryComm
     if (args.json || result.status === 'held') return finish(result);
     lines.push(result.entries.length ? table(result.entries, locale, context) : t('memory.none', {}, locale));
     if (result.withheld) lines.push(t('memory.withheld', { count: result.withheld }, locale));
+    if (context.inspectMemoryEvaluators) lines.push(...await context.inspectMemoryEvaluators(root, scope.scopeId, options).then(view => evaluatorLines(view, locale),
+      () => [t('memory.view.evaluator.unavailable', {}, locale)]));
   }
   emit(lines.join('\n'), sinks);
 }

@@ -222,6 +222,7 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'model_roles.overlays': { kind: 'document' },
   // S4B-1: the memory automation switch is chosen from its schema; the narrowing overlay is a structured document (read-only here). S6R-2's Nervous switch likewise.
   'memoryAutomation.extraction.mode': { kind: 'schema' },
+  'memoryAutomation.verification.mode': { kind: 'schema' },
   'memoryAutomation.overlay': { kind: 'document' },
   'runRuntime.nervous.mode': { kind: 'schema' },
   'brain_planner.reasoning': { kind: 'schema' },

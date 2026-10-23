@@ -67,15 +67,17 @@ describe('memory journal application (sole transition owner)', () => {
     expect(verified.entry).toMatchObject({ revision: 2, state: 'verified', verification: { basis: 'human-review' } });
     expect(store.events.at(-1)!.subject).toMatchObject({ action: 'verify', revision: 2, basis: 'human-review' });
   });
-  it('an independent evaluation basis fails closed when no evaluation resolver is wired, and verifies through one that resolves a passing record', async () => {
+  it('an independent evaluation basis fails closed when no evaluation resolver is wired; S4B-3: an AI actor other than the memory evaluator is refused even with a passing record', async () => {
     const basis = { kind: 'independent-evaluation', record: { kind: 'task-evaluation', id: 'r1/t1/a1', digest: 'b'.repeat(64) } };
     const closed = app(); await closed.application.propose(propose());
     await expect(closed.application.verify({ schemaVersion: 1, commandId: 'v', scopeId: 's', entryId: 'm1', expectedRevision: 1, basis }))
       .rejects.toMatchObject({ code: 'MEMORY_EVALUATION_UNAVAILABLE' });
     let digest = '';
-    const open = app({ principal: mcp, evaluation: async (scopeId, record) => scopeId === 's' ? { record, evaluator: { issuer: 'deckent-evaluator', subject: 'exit' }, verdict: 'pass', subjectDigest: digest } : null });
+    const open = app({ principal: mcp, evaluation: async (scopeId, record) => scopeId === 's' ? { record, evaluator: { issuer: 'deckent-evaluator', subject: 'exit' }, verdict: 'pass',
+      subjectDigest: digest, mode: 'live', evaluatorModel: { channelId: 'c2', modelId: 'm2', maker: 'maker-b' }, sourceModels: [] } : null });
     digest = (await open.application.propose(propose())).entry.contentDigest;
-    expect((await open.application.verify({ schemaVersion: 1, commandId: 'v', scopeId: 's', entryId: 'm1', expectedRevision: 1, basis })).entry.state).toBe('verified');
+    // The full evaluator path (live record, re-derived source models) is tests/contracts/engine/memory-evaluate.test.ts.
+    await expect(open.application.verify({ schemaVersion: 1, commandId: 'v', scopeId: 's', entryId: 'm1', expectedRevision: 1, basis })).rejects.toMatchObject({ code: 'MEMORY_EVALUATOR_REQUIRED' });
   });
   it('a stale expected revision is a conflict, never a silent overwrite', async () => {
     const { application } = app(); await application.propose(propose());

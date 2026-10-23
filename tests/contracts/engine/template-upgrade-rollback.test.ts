@@ -12,7 +12,7 @@ import { effectWireKey } from '#engine/core/effect/index.js';
 import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, policyChangeSchema, policyGrantSchema } from '#domain/index.js';
 
 const names = { proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer', executionEnvironmentIds: ['docker'] };
-// S4B-1 (alpha.55): the rolled-back delta is v15's six rules (person propose, distiller D1–D4, agent catalog); it was v14's two memory reads through v14, v13's seven through v13.
+// S4B-1 + S4B-3 (alpha.55): the rolled-back delta is v15's ten rules (person propose, distiller D1–D4, agent catalog, person review, evaluator V1–V5); it was v14's two memory reads through v14, v13's seven through v13.
 const deltaIds: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
 const closers: (() => Promise<void> | void)[] = [];
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); });
@@ -28,7 +28,8 @@ async function fixture(edit: (grants: readonly PolicyGrant[]) => readonly unknow
   const original = { ...template.policy, revision: 'first-run-template-v10', grants: template.policy.grants.filter(rule => !deltaIds.includes(rule.id)) };
   await writeFile(policyPath, JSON.stringify(seededUpgrade ? original : template.policy), { mode: 0o600 });
   await writeFile(bindingsPath, JSON.stringify(template.bindings), { mode: 0o600 });
-  const source = new FilePolicySource({ path: policyPath, bindingsPath, archivePath: archive, ownerUid: process.getuid!(), maxBytes: 65_536 });
+  // 128 KiB (product default 1 MiB): an archive entry holds the policy twice, and the v15 template (S4B-3) outgrew a 64 KiB entry.
+  const source = new FilePolicySource({ path: policyPath, bindingsPath, archivePath: archive, ownerUid: process.getuid!(), maxBytes: 131_072 });
   if (seededUpgrade) expect(await upgradePolicyTemplate(source, { scopeId: 's', principal, apply: true, owner: true, peopleLimit: 10, now: () => 1000, audit: () => undefined,
     toolNames: { ...names, readToolNames: ['read_file'], scratchToolNames: ['scratch_write'], scratchWriteOperationId: 'workspace.scratch.write',
       editShellToolNames: ['edit_file', 'run_shell'], writeOperationId: 'workspace.file.write', shellOperationId: 'host.shell.run' } })).toMatchObject({ status: 'upgraded' });
@@ -54,7 +55,8 @@ async function fixture(edit: (grants: readonly PolicyGrant[]) => readonly unknow
 describe.skipIf(process.platform !== 'linux')('v15 rollback through the real approval and archived authority writer', () => {
   it('approves the operation card, removes only v15 rules, preserves the only administration grants, and refuses stale replay', async () => {
     const f = await fixture(), beforeBytes = await f.bytes(), before = JSON.parse(beforeBytes);
-    expect(deltaIds).toEqual(['first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog']);
+    expect(deltaIds).toEqual(['first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog',
+      'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model']);
     expect(await f.rollback('stale')).toMatchObject({ status: 'conflict' });
     expect(f.cards).toBe(0); expect(await f.bytes()).toBe(beforeBytes);
     expect(await f.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(',') });

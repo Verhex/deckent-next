@@ -1,13 +1,15 @@
 import { createRequire } from 'node:module';
 import { isDeepStrictEqual } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
-import { encodeCommandProjection, memoryEntrySchema, memoryIndexText, type MemoryEntry, type MemoryState } from '#domain/index.js';
+import { encodeCommandProjection, memoryContestSchema, memoryEntrySchema, memoryEvaluationRecordSchema, memoryIndexText, type MemoryContest, type MemoryEntry,
+  type MemoryEvaluationRecord, type MemoryState } from '#domain/index.js';
 import { AuditApplication, MemoryJournalError, type MemoryChange, type MemoryExtractionReceipt, type MemoryJournalStore, type MemoryReceipt, type MemorySupport } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openSqliteLedger, requireLedgerVersion, MEMORY_AUTOMATION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 
 const SEAL = 'memory-journal-store:1';
+type AuditEvent = MemoryChange['event'];
 const corrupt = () => new MemoryJournalError('MEMORY_CORRUPT');
 /**
  * Core SQLite adapter of the DB-neutral memory journal port, on the shared ledger (v61; S4B-1 support, extraction and purge tables at v65). Every row is sealed with the installation integrity
@@ -126,6 +128,44 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
   async advanceCursor(scopeId: string, position: string) {
     this.read(() => this.write(() => this.db.prepare('INSERT INTO memory_extraction_cursors(scope_id,record) VALUES(?,?) ON CONFLICT(scope_id) DO UPDATE SET record=excluded.record')
       .run(scopeId, this.seal({ scopeId, position }))));
+  }
+  /** S4B-3 (v65 tables): a sealed record with its digest, cross-checked against its columns; anything else is corruption. */
+  private evaluation(row: Record<string, unknown>, scopeId: string) {
+    const value = this.open(row['record']) as { record: unknown; digest: unknown }, parsed = memoryEvaluationRecordSchema.safeParse(value.record);
+    if (!parsed.success || parsed.data.scopeId !== scopeId || parsed.data.recordId !== row['record_id'] || parsed.data.entryId !== row['entry_id'] || typeof value.digest !== 'string') throw corrupt();
+    return { record: parsed.data, digest: value.digest };
+  }
+  async putEvaluation(record: MemoryEvaluationRecord, digest: string, event: AuditEvent) {
+    return this.read(() => this.write(() => {
+      const prior = this.db.prepare('SELECT record_id,entry_id,record FROM memory_evaluations WHERE scope_id=? AND record_id=?').get(record.scopeId, record.recordId);
+      if (prior) { if (this.evaluation(prior, record.scopeId).digest !== digest) throw new MemoryJournalError('MEMORY_COMMAND_CONFLICT'); return { replayed: true }; }
+      this.audit.record(event);
+      const seq = Number(this.db.prepare('SELECT coalesce(max(seq),0)+1 AS seq FROM memory_evaluations WHERE scope_id=?').get(record.scopeId)?.['seq']);
+      this.db.prepare('INSERT INTO memory_evaluations(scope_id,record_id,entry_id,seq,record) VALUES(?,?,?,?,?)').run(record.scopeId, record.recordId, record.entryId, seq, this.seal({ record, digest }));
+      return { replayed: false };
+    }));
+  }
+  async loadEvaluation(scopeId: string, recordId: string) {
+    return this.read(() => { const row = this.db.prepare('SELECT record_id,entry_id,record FROM memory_evaluations WHERE scope_id=? AND record_id=?').get(scopeId, recordId);
+      return row ? this.evaluation(row, scopeId) : null; });
+  }
+  async recentEvaluations(scopeId: string, limit: number) {
+    return this.read(() => this.db.prepare('SELECT record_id,entry_id,record FROM memory_evaluations WHERE scope_id=? ORDER BY seq DESC LIMIT ?').all(scopeId, limit)
+      .map(row => this.evaluation(row, scopeId).record));
+  }
+  async openContest(contest: MemoryContest, event: AuditEvent) {
+    const value = memoryContestSchema.parse(contest);
+    return this.read(() => this.write(() => {
+      const prior = this.db.prepare('SELECT record FROM memory_contests WHERE scope_id=? AND contest_id=?').get(value.scopeId, value.contestId);
+      if (prior) { if (!isDeepStrictEqual(this.open(prior['record']), value)) throw new MemoryJournalError('MEMORY_COMMAND_CONFLICT'); return { replayed: true }; }
+      this.audit.record(event);
+      this.db.prepare('INSERT INTO memory_contests(scope_id,contest_id,entry_id,opened_at_ms,record,resolution) VALUES(?,?,?,?,?,NULL)')
+        .run(value.scopeId, value.contestId, value.entryId, value.openedAtMs, this.seal(value));
+      return { replayed: false };
+    }));
+  }
+  async contestCount(scopeId: string, sinceMs: number) {
+    return this.read(() => Number(this.db.prepare('SELECT count(*) AS n FROM memory_contests WHERE scope_id=? AND opened_at_ms>=?').get(scopeId, sinceMs)?.['n'] ?? 0));
   }
   private write<T>(work: () => T): T {
     this.db.exec('BEGIN IMMEDIATE');
