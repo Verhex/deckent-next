@@ -1,4 +1,4 @@
-import type { AttemptIdentity, DispatchLossDecision } from '#domain/index.js';
+import { nervousHoldNote, type AttemptIdentity, type DispatchLossDecision, type NervousHoldCode } from '#domain/index.js';
 import type { NervousExecutors } from './broker.js';
 import type { NervousProposal } from './detect.js';
 
@@ -15,12 +15,13 @@ export interface NervousRecoveryPorts {
   /** The s5b Nervous safety hold of one Run, idempotent by its command id (a person resumes it). */
   hold(command: Readonly<{ schemaVersion: 1; scopeId: string; runId: string; commandId: string; holdReason: string }>): Promise<unknown>;
 }
-/** The hold a case leaves for a person: a command id derived from the case (a replay holds once) and a stable code note (EN/TR text is S6R-6). */
-export function nervousHoldCommand(proposal: NervousProposal, code: string) {
+/** The hold a case leaves for a person: a command id derived from the case (a replay holds once) and a stable code note (its EN/TR text is the
+ * shared hold renderer's, S6R-6). */
+export function nervousHoldCommand(proposal: NervousProposal, code: NervousHoldCode) {
   const runId = proposal.target.kind === 'attempt' ? proposal.target.identity.runId : proposal.target.kind === 'task' ? proposal.target.runId : null;
   if (runId === null) return null;
   return Object.freeze({ schemaVersion: 1 as const, scopeId: proposal.scopeId, runId, commandId: `nervous-hold:${proposal.caseId}`,
-    holdReason: `nervous:${code}:${proposal.rule.id}:${proposal.caseId.slice(0, 12)}` });
+    holdReason: nervousHoldNote(code, proposal.rule.id, proposal.caseId) });
 }
 /** Waiting is right only for a stop whose worker is still seen under its retained incarnation; every other missing proof is structural. */
 const pending = (result: NervousRecoveryResult) => result.disposition?.kind === 'hold-manual' && result.disposition.reason === 'termination-required' && result.retained === 'incarnation';
@@ -31,7 +32,7 @@ const pending = (result: NervousRecoveryResult) => result.disposition?.kind === 
  * the Run goes to a person through the Nervous safety hold. Alert-brain and restart-component have no executor (proposal only).
  */
 export function nervousExecutors(ports: NervousRecoveryPorts): NervousExecutors {
-  const hold = async (proposal: NervousProposal, code: string) => { const command = nervousHoldCommand(proposal, code); if (command) await ports.hold(command); return 'held' as const; };
+  const hold = async (proposal: NervousProposal, code: NervousHoldCode) => { const command = nervousHoldCommand(proposal, code); if (command) await ports.hold(command); return 'held' as const; };
   // `pending` lets the broker re-apply the case on a later page (the stop is sent again, a late proof releases); its last application holds instead.
   const lost = (step: 'fence' | 'stop') => async (proposal: NervousProposal, options?: Readonly<{ last: boolean }>) => {
     if (proposal.target.kind !== 'attempt') return 'refused' as const;

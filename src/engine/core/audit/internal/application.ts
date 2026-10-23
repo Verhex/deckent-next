@@ -58,6 +58,17 @@ export class AuditApplication {
       last = record.sequence; return record;
     }));
   }
+  /** S6R-6: verified records of one subject kind sealed at or after `sinceAtMs`, newest first, at most `limit` (the recovery breaker's window). */
+  listRecentKind(scopeId: string, kind: AuditEvent['subject']['kind'], sinceAtMs: number, limit: number): readonly AuditRecord[] {
+    if (!this.store.recentOfKind || !Number.isSafeInteger(sinceAtMs) || sinceAtMs < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new AuditError('AUDIT_INVALID');
+    const page = this.guard(() => this.store.recentOfKind!(scopeId, kind, sinceAtMs, limit));
+    let last = Number.MAX_SAFE_INTEGER;
+    return Object.freeze(page.map(row => {
+      const record = verifyAuditRecord(row, this.integrity);
+      if (record.event.scopeId !== scopeId || record.event.subject.kind !== kind || record.event.atMs < sinceAtMs || record.sequence >= last) throw new AuditError('AUDIT_INTEGRITY');
+      last = record.sequence; return record;
+    }));
+  }
   count(scopeId: string, counter: string, by: number, atMs: number): AuditCounter {
     if (!Number.isSafeInteger(by) || by < 1 || !Number.isSafeInteger(atMs) || atMs < 0) throw new AuditError('AUDIT_INVALID');
     return this.guard(() => this.store.increment(scopeId, counter, by, atMs));

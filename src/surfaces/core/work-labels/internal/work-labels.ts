@@ -54,7 +54,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
   return {
     runControl: { hints: t('terminal.runControl.hints', {}, locale), keyHold: t('terminal.runControl.keyHold', {}, locale),
       keyResume: t('terminal.runControl.keyResume', {}, locale), keyClose: t('terminal.runControl.keyClose', {}, locale),
-      noKeys: t('terminal.runControl.noKeys', {}, locale), holdTitle: t('terminal.runControl.holdTitle', {}, locale),
+      noKeys: t('terminal.runControl.noKeys', {}, locale), heldReason: t('recovery.hold.cardReason', {}, locale), holdTitle: t('terminal.runControl.holdTitle', {}, locale),
       resumeTitle: t('terminal.runControl.resumeTitle', {}, locale), closeTitle: t('terminal.runControl.closeTitle', {}, locale),
       holdDetail: t('terminal.runControl.holdDetail', {}, locale), resumeDetail: t('terminal.runControl.resumeDetail', {}, locale),
       closeDetail: t('terminal.runControl.closeDetail', {}, locale), state: t('terminal.runControl.state', {}, locale),

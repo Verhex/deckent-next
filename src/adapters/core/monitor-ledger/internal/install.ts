@@ -3,9 +3,9 @@ import { lstat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { CONFIG_FIELDS, createDefaultConfig, envValue, inspectProductDirectory, inspectProductFile, loadGlobalConfig, productResourcePath, readJsonFile, resolveGlobalConfigReadPath,
   resolveProductLayout, type Environment, type ResolvedConfig } from '#platform/index.js';
-import { fullAutoGrant, sameAttemptIdentity, executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent, type RunSnapshot } from '#domain/index.js';
+import { fullAutoGrant, isAiPrincipal, sameAttemptIdentity, executionRegistrySchema, workerEventSchema, type AttemptIdentity, type WorkerEvent, type RunSnapshot } from '#domain/index.js';
 import { readLocalOsIdentity } from '#adapters/core/local-principal/index.js';
-import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerIndex, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests, type MonitorReadScope } from '#engine/index.js';
+import { extractFirstFailure, extractFailedTests, parseRetainedOutputEnvelope, summarizeMonitorEvent, type MonitorWorkerContent, type MonitorEvent, type MonitorLedgerIndex, type MonitorLedgerReading, type MonitorMap, type MonitorFailedTests, type MonitorReadScope, recoveryGrantState, recoveryModeState, type RecoveryGrantState } from '#engine/index.js';
 import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 import { readWorkerEventTail, readWorkerSidecars } from '#adapters/core/worker-observation/index.js';
@@ -36,7 +36,7 @@ export async function prepareMonitorInstall(config: ResolvedConfig, env: Environ
   const diagnostics = [...scan.reading.diagnostics];
   const artifacts = FileArtifactStore.reader(() => inspectProductDirectory(layout, 'artifacts'), config.artifacts.maxBytes);
   const contentNamespace = JSON.stringify([productResourcePath(layout, 'artifacts'), config.artifacts.maxBytes]);
-  const map = run ? scan.reading.map ?? null : await installMap(config, env ?? process.env, scan.reading.map ?? null, diagnostics);
+  const map = run ? scan.reading.map ?? null : await installMap(config, env ?? process.env, scan.reading.map ?? null, diagnostics, scan.reading.scopeIds);
   const reading = await authorizeMonitorDelivery(Object.freeze({ ...scoped, map, diagnostics: Object.freeze([...diagnostics]) }), readOutput);
   // PRE-34: `failures` are failed tasks' attempts beyond the shown workers: only their first failing line is read (same read-output gate).
   return { reading, async readShown(identities: readonly AttemptIdentity[], failures: readonly AttemptIdentity[] = []): Promise<MonitorLedgerReading> {
@@ -116,7 +116,7 @@ async function sealedEvents(artifacts: ReturnType<typeof FileArtifactStore.reade
 }
 
 /** Install map: config layers (top-level section names only, never values), execution registry, model catalog, policy summary, memory. */
-async function installMap(config: ResolvedConfig, env: Environment, ledger: MonitorMap | null, diagnostics: string[]): Promise<MonitorMap> {
+async function installMap(config: ResolvedConfig, env: Environment, ledger: MonitorMap | null, diagnostics: string[], scopeIds: readonly string[]): Promise<MonitorMap> {
   const keys = (value: unknown) => value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).sort() : [];
   const projectPath = productResourcePath(resolveProductLayout({ projectRoot: config.projectRoot, platform: 'posix' }), 'config');
   const project = await readJsonFile(projectPath); const globalPath = await resolveGlobalConfigReadPath(env);
@@ -124,7 +124,7 @@ async function installMap(config: ResolvedConfig, env: Environment, ledger: Moni
   const environment = Object.entries(CONFIG_FIELDS).filter(([, field]) => field.environment.some(binding => binding.names.some(name => envValue(env, name) !== undefined)))
     .map(([key]) => key).sort();
   const registry = executionRegistrySchema.safeParse((config as unknown as { admission?: { registry?: unknown } | null }).admission?.registry);
-  let policy: MonitorMap['policy'] = null;
+  let policy: MonitorMap['policy'] = null, grant: RecoveryGrantState = 'unknown';
   try {
     const document = await new FilePolicySource({ path: productResourcePath(config.productLayout, 'policy'), bindingsPath: productResourcePath(config.productLayout, 'bindings'),
       ownerUid: userInfo().uid, maxBytes: config.inspection.policyMaxBytes }).load();
@@ -137,8 +137,11 @@ async function installMap(config: ResolvedConfig, env: Environment, ledger: Moni
       // PRE-9 (b): a stored full-auto reads as full-auto only where its grant allows it now (the decision's reading); otherwise it is not in effect.
       permissionModes: Object.freeze(modes.map(entry => Object.freeze({ principal: `${entry.principal.issuer}/${entry.principal.subject}`,
         mode: entry.mode === 'full-auto' && entry.scopes.some(scopeId => fullAutoGrant(document, { ...self, scopeIds: [scopeId] }, scopeId).decision !== 'allow') ? 'standart' : entry.mode }))) });
+    // S6R-6: the owner's standing continuation grant in every ledger scope (read for the local person only; an AI caller's view says "not read").
+    grant = isAiPrincipal(self) ? 'unknown' : recoveryGrantState(document, { ...self, scopeIds: [...scopeIds] }, scopeIds, Date.now());
   } catch (error) { diagnostics.push('map-policy-unavailable:' + code(error)); }
-  return Object.freeze({ models: ledger?.models ?? [], memory: { available: false },
+  const recovery = recoveryModeState({ nervous: config.runRuntime.nervous.mode, recovery: config.runRuntime.recovery.mode }, grant);
+  return Object.freeze({ models: ledger?.models ?? [], memory: { available: false }, recovery,
     config: Object.freeze([{ layer: 'default' as const, path: null, sections: keys(createDefaultConfig()) },
       { layer: 'global' as const, path: globalPath, sections: keys(global) },
       { layer: 'project' as const, path: projectPath, sections: project.kind === 'ready' ? keys(project.value) : [] },

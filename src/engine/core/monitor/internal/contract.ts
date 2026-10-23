@@ -155,6 +155,8 @@ export interface MonitorMap {
     readonly permissionModes: readonly { readonly principal: string; readonly mode: string }[] } | null;
   /** Next has no memory subsystem yet: always `{ available: false }` until the MEMORY card lands — shown honestly, never invented. */
   readonly memory: { readonly available: boolean };
+  /** S6R-6 (additive): lost-worker recovery — the protected Nervous and recovery modes and the owner's standing continuation grant. Absent: not read. */
+  readonly recovery?: import('#engine/core/recovery/index.js').RecoveryModeState;
 }
 export interface MonitorSnapshot {
   readonly schemaVersion: 1; readonly observedAt: number; readonly installs: readonly MonitorInstall[]; readonly control: 'observe-only';

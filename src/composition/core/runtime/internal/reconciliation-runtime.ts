@@ -30,7 +30,7 @@ export async function prepareConfiguredReconciliationRuntime(projectRoot: string
   // S6R-2/3: Nervous reads each page after reconciliation (shadow seals, live may act); its failure is reported, never a reconciliation failure.
   const nervous = prepareConfiguredNervous(projectRoot, options, config.runRuntime.nervous.mode, runtime.pageSize);
   // S6R-5: the recovery decision after Nervous, once per scope pass (first page); its failure is reported, never a reconciliation failure.
-  const recovery = prepareConfiguredRecovery(projectRoot, options, config.runRuntime.recovery.mode);
+  const recovery = prepareConfiguredRecovery(projectRoot, options, config.runRuntime.recovery.mode, runtime.scopeIds);
   // S4B-1: the memory distiller takes one bounded page per scope pass (first page only), off the hot path; its failure is reported, never a reconciliation failure.
   const memory = prepareConfiguredMemoryExtraction(projectRoot, options, config.memoryAutomation.extraction.mode);
   // S4B-3: the memory evaluator after the distiller, at most once per pass interval per scope; its failure is reported, never a reconciliation failure.

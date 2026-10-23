@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AUDIT_EVENT_SCHEMA_VERSION, RECOVERY_CAUSE_CLASSES, RECOVERY_ESCALATION_CODES, RecoveryError, recoveryNoteCodeSchema, assessRecoveryEffectGate, closeRecoveryCase, encodeCommandProjection,
-  encodeExecutionProfileDefinition, identitySchema, isRecoveryPrincipal, lostContinuationRefusal, recoveryCaseSchema, recoveryEscalationCode,
+  encodeExecutionProfileDefinition, identitySchema, isRecoveryPrincipal, lostContinuationRefusal, recoveryCaseSchema, recoveryEscalationCode, recoveryHoldNote,
   type AuditEvent, type AuditRecord, type RecoveryCase, type RecoveryEscalationCode, type RunSnapshot, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
@@ -97,7 +97,9 @@ export class RecoveryApplication {
     }
     if (current.state === 'escalated') throw new RecoveryError('RECOVERY_STALE');
     const approval = recoveryContinuationApprovalSchema.safeParse(await this.ports.approval(command.scopeId));
-    if (!approval.success || !approval.data.scopeIds.includes(command.scopeId)) throw new RecoveryError('RECOVERY_NOT_APPROVED');
+    // S6R-6: no owner standing grant (never given, or revoked after the decision) ends the case consistently: sealed escalated and the Run held for a
+    // person (`continuation-not-approved`), never a case left gated for a later pass to retry.
+    if (!approval.success || !approval.data.scopeIds.includes(command.scopeId)) return Object.freeze({ kind: 'escalated' as const, case: await this.close(current, 'continuation-not-approved') });
     const run = await this.ports.store.loadRun(command.scopeId, current.identity.runId);
     const profile = run?.execution.tasks.find(row => row.taskId === current.identity.taskId)?.profile;
     if (!run || !profile) throw new RecoveryError('RECOVERY_CORRUPT');
@@ -146,6 +148,6 @@ export class RecoveryApplication {
   }
   private async hold(closed: RecoveryCase, code: RecoveryEscalationCode) {
     if (code !== 'run-closed') await this.ports.hold({ schemaVersion: 1, scopeId: closed.identity.scopeId, runId: closed.identity.runId, commandId: `recovery-hold:${closed.caseId}`,
-      holdReason: `recovery:${code}:${closed.caseId.slice(0, 12)}` });
+      holdReason: recoveryHoldNote(code, closed.caseId) });
   }
 }

@@ -20,7 +20,8 @@ export const recoveryNoteCodeSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}
 export type RecoveryEscalationCode = typeof RECOVERY_ESCALATION_CODES[number];
 const ESCALATIONS: Readonly<Partial<Record<RecoveryErrorCode, RecoveryEscalationCode>>> = Object.freeze({ RECOVERY_EFFECTS_OPEN: 'effects-open',
   RECOVERY_SETTLED_NOT_IDEMPOTENT: 'settled-not-idempotent', RECOVERY_SETTLED_OVER_BOUND: 'settled-over-bound', RECOVERY_CONTINUATION_BOUND: 'continuation-bound',
-  RECOVERY_ATTEMPT_CEILING: 'attempt-ceiling', RECOVERY_RUN_BOUND: 'run-bound', RECOVERY_SAME_EVIDENCE: 'same-evidence', RECOVERY_RUN_CLOSED: 'run-closed' });
+  RECOVERY_ATTEMPT_CEILING: 'attempt-ceiling', RECOVERY_RUN_BOUND: 'run-bound', RECOVERY_SAME_EVIDENCE: 'same-evidence', RECOVERY_RUN_CLOSED: 'run-closed',
+  RECOVERY_NOT_APPROVED: 'continuation-not-approved' });
 /** The escalation a typed refusal means (null: a caller error, which writes nothing). */
 export function recoveryEscalationCode(error: unknown): RecoveryEscalationCode | null { return error instanceof RecoveryError ? ESCALATIONS[error.code] ?? null : null; }
 
