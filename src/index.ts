@@ -70,6 +70,9 @@ export { admitConfiguredModelActivation as admitModelActivation, inspectConfigur
 export { connectConfiguredModel as connectModel } from '#composition/index.js';
 export type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
 export type { ModelCatalogCommand, ModelCatalogQuery, ModelCatalogReceipt, WorkerModelView, TaskEvaluationModel } from '#domain/index.js';
+// M2 follow-up: the read-only roles view (`deckent models roles`, MCP `inspect_model_roles`, terminal `/roles`); assigning a tier/role stays a person's terminal act, so there is no SDK write.
+export { inspectConfiguredModelRoles as inspectModelRoles } from '#composition/index.js';
+export type { ModelRoleInspection, ModelRoleQuery, ModelRoleEntry } from '#engine/index.js';
 export type { ModelCatalogInspection, ModelCatalogChannelView, ModelCatalogResult, TaskWorkerModel } from '#engine/index.js';
 export type { ModelActivationCommand, ModelActivationQuery, ModelActivationRecord, ModelActivationReceipt } from '#domain/index.js';
 // K5 typed execution pool hold: the same application as CLI `pool hold|resume|status` and MCP `apply_pool_hold` / `inspect_pool_hold`.

@@ -54,3 +54,11 @@ it('the snapshot counts catalog models without a role row, in words in both loca
     f.options, { attest: async () => true });
   expect(await pendingCodes(f)).toEqual([]);
 });
+
+it('the SDK entry exports the same roles read (pending model visible) and no write', async () => {
+  const f = await fixture(), sdk = await import('../../../src/index.js');
+  const view = await sdk.inspectModelRoles(f.project, { schemaVersion: 1, scopeId: 'scope' }, f.options);
+  expect(view.models.find(row => row.modelId === NEW.modelId)).toMatchObject({ state: 'pending', tier: null, roles: [] });
+  expect(view.pending).toBe(1);
+  expect(Object.keys(sdk).filter(name => /role/iu.test(name))).toEqual(['inspectModelRoles']);
+});
