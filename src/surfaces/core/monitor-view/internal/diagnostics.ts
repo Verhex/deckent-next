@@ -60,6 +60,11 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'map-policy-unavailable': () => t('monitor.diagnostic.mapPolicyUnavailable', { detail }, locale),
     // M2 (f2): `model-roles-pending:<n>` mirrors the doctor row; a new catalog model refuses every role until a person assigns one.
     'model-roles-pending': () => t('monitor.diagnostic.modelRolesPending', { count: detail }, locale),
+    // S8-4: the agent catalog lines (summed across the viewer's scopes; each a read-soft read under the viewer's own decision).
+    'catalog-suggestions-open': () => t('agentsevo.monitor.open', { count: detail }, locale),
+    'catalog-signer-revoked': () => t('agentsevo.monitor.signerRevoked', { count: detail }, locale),
+    'catalog-aggregator-unsigned': () => t('agentsevo.monitor.unsigned', {}, locale),
+    'catalog-evolution-registry-unavailable': () => t('agentsevo.monitor.registry', {}, locale),
     'output-denied': () => t('monitor.diagnostic.outputDenied', {}, locale),
     // f4: the Brain quota wait store (host state): a failed read, waits in scopes the viewer may not read (a count, never a scope), more than the bound.
     'brain-waits-unavailable': () => t('brainwait.monitor.unavailable', { detail: detail ? ` (${detail})` : '' }, locale),
@@ -74,6 +79,9 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'runs-truncated': () => t('monitor.action.runsTruncated', {}, locale),
     'image-refresh-failed': () => t('monitor.action.imageRefreshFailed', {}, locale),
     'model-roles-pending': () => t('monitor.action.modelRolesPending', {}, locale),
+    'catalog-suggestions-open': () => t('agentsevo.monitor.openAction', {}, locale),
+    'catalog-signer-revoked': () => t('agentsevo.monitor.signerRevokedAction', {}, locale),
+    'catalog-aggregator-unsigned': () => t('agentsevo.monitor.unsignedAction', {}, locale),
   };
   return { code, note, text: Object.hasOwn(words, code) ? words[code]!() : body, ...(Object.hasOwn(actions, code) ? { action: actions[code]!() } : {}) };
 }

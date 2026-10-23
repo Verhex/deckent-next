@@ -469,6 +469,12 @@
             ],
             "inspect_agent_stats": [
               "inspect"
+            ],
+            "list_agent_suggestions": [
+              "inspect"
+            ],
+            "inspect_agent_suggestion": [
+              "inspect"
             ]
           },
           "actions": [

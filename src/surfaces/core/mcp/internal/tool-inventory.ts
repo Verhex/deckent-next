@@ -17,6 +17,10 @@ export const MCP_UNGROUPED_WRITE_TOOLS = Object.freeze({
   propose_run: 'run-create-policy-and-approval',
   // Writes plan/receipt/proposal artifacts under the installation's toolchains.update mode, never installed config.
   update_toolchains: 'toolchains-update-config-mode',
+  // S8-4 (S8-DESIGN §8, §9): signed catalog writes. AI grants are a separate person act scoped to exact ids (a WorkClass for standing actions), so no
+  // capability cell with `ids: all` offers them; each call needs the MCP actor's own active key and is verified at commit.
+  define_agent: 'signed-catalog-action-scoped-grant', define_skill: 'signed-catalog-action-scoped-grant', import_skill: 'signed-catalog-action-scoped-grant',
+  change_agent_standing: 'signed-catalog-action-scoped-grant', dismiss_agent_suggestion: 'signed-catalog-action-scoped-grant',
 } as const);
 
 export type McpWithheldTool = keyof typeof MCP_WITHHELD_TOOLS;

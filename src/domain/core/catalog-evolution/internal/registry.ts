@@ -13,6 +13,7 @@ const micro = z.number().int().nonnegative().safe();
 const statsSchema = z.object({ zMicro: positive, windowTasks: positive, durationPercentileMicro: positive, windowMaxDays: positive, periodDays: positive, modelMixMax: positive,
   excludeUnknownEvidence: z.boolean(), readRowsMax: positive }).strict();
 const passSchema = z.object({ passPageRows: positive, maxKeysPerPass: positive }).strict();
+const suggestionsSchema = z.object({ maxOpenSuggestions: positive, suggestionTtlDays: positive, cooldownTasks: positive }).strict();
 const rule = <K extends string, P extends z.ZodRawShape>(kind: K, params: P) => z.object({ id: identitySchema, version: positive, kind: z.literal(kind),
   status: z.enum(['provisional', 'calibrated']), params: z.object(params).strict().readonly() }).strict().readonly();
 /** The five rule kinds (§6); S8-3 evaluates them, S8-2 only carries and validates them. */
@@ -23,11 +24,11 @@ const ruleSchema = z.union([
   rule('propose-agent', { minTasks: positive }), rule('propose-skill', { minLessons: positive })]);
 const registrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'calibrated']),
   stats: statsSchema.readonly(), pass: passSchema.readonly(),
-  suggestions: z.object({ maxOpenSuggestions: positive, suggestionTtlDays: positive, cooldownTasks: positive }).strict().readonly(),
+  suggestions: suggestionsSchema.readonly(),
   inherit: z.object({ recheckMinSamples: positive }).strict().readonly(),
   rollout: z.object({ minSuggestions: positive, minAgreementMicro: micro, maxReversalRateMicro: micro, minShadowNarrowings: positive }).strict().readonly(),
   rules: z.array(ruleSchema).min(1).readonly() }).strict().refine(value => new Set(value.rules.map(row => row.id)).size === value.rules.length).readonly();
-export const catalogEvolutionOverlaySchema = z.object({ revision: identitySchema, stats: statsSchema.partial().optional(), pass: passSchema.partial().optional(),
+export const catalogEvolutionOverlaySchema = z.object({ revision: identitySchema, stats: statsSchema.partial().optional(), pass: passSchema.partial().optional(), suggestions: suggestionsSchema.partial().optional(),
   rules: z.array(ruleSchema).optional() }).strict().readonly();
 export type CatalogEvolutionRegistry = z.infer<typeof registrySchema>;
 export type CatalogEvolutionRule = CatalogEvolutionRegistry['rules'][number];
@@ -35,7 +36,7 @@ export class CatalogEvolutionError extends Error {
   constructor(readonly code: 'CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE' | 'CATALOG_EVOLUTION_CORRUPT' | 'CATALOG_EVOLUTION_POSITION_CONFLICT') { super(code); this.name = 'CatalogEvolutionError'; }
 }
 /** Resource bounds an overlay may only lower (it can never make a pass or a read bigger than the Core seed allows). */
-const NARROW_ONLY = new Set(['windowTasks', 'modelMixMax', 'readRowsMax', 'passPageRows', 'maxKeysPerPass']);
+const NARROW_ONLY = new Set(['windowTasks', 'modelMixMax', 'readRowsMax', 'passPageRows', 'maxKeysPerPass', 'maxOpenSuggestions']);
 /** The Core seed with the installation overlay applied. A malformed seed or overlay, a widened resource bound, a rule row without a newer version
  * or of another kind is `CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE` (never a default): no statistic, no pass record. `seedInput` is for tests only. */
 export function composeCatalogEvolutionRegistry(overlay?: unknown, seedInput: unknown = seed): CatalogEvolutionRegistry {
@@ -53,5 +54,6 @@ export function composeCatalogEvolutionRegistry(overlay?: unknown, seedInput: un
     rules.set(row.id, row);
   }
   return Object.freeze({ ...base.data, revision: extra.data.revision, stats: lowered(base.data.stats, extra.data.stats), pass: lowered(base.data.pass, extra.data.pass),
+    suggestions: lowered(base.data.suggestions, extra.data.suggestions),
     rules: Object.freeze([...rules.values()]) });
 }

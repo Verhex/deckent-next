@@ -90,6 +90,15 @@ export class MemoryJournalApplication {
     });
   }
   /**
+   * S8-3 (S8-DESIGN §6 S1): the scope's verified lesson refs for the catalog aggregator — entry id, revision, content digest and audience, never text (it
+   * stores refs only; a reader's card re-reads each entry through its own §7.4 filter). Bounded by `pageMax`; a failed read is a typed hold.
+   */
+  async lessonRefs(scopeId: string, credential?: unknown) {
+    return this.read(scopeId, credential, async store => ({ schemaVersion: 1 as const, status: 'ok' as const,
+      items: (await store.list(scopeId, ['verified'], MEMORY_LIMITS.pageMax)).slice(0, MEMORY_LIMITS.pageMax).map(entry => inScope(entry, scopeId))
+        .flatMap(entry => 'kind' in entry.content && entry.content.kind === 'lesson' ? [{ entryId: entry.entryId, revision: entry.revision, contentDigest: entry.contentDigest, audience: entry.audience ?? null }] : []) }));
+  }
+  /**
    * S4B-5 (§7.1, §7.3): the worker memory of one Run admission, read as the admitting principal. A refusal of its `memory/inspect` is a withheld
    * part (the Run goes on without memory, visibly); an unreadable policy, store, key or index, or a purge the ledger lacks, is a typed hold.
    */

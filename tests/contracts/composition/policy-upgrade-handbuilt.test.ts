@@ -152,7 +152,9 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
     // The same upgrade run again adds the remaining v15 rules (each run add-only and idempotent); a third run is current.
-    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded', rules: [{ id: 'first-run-memory-distiller-output' }, { id: 'first-run-agent-catalog' }, { id: 'first-run-mcp-observe-agent-catalog' }, { id: 'first-run-memory-review' }, { id: 'first-run-memory-evaluator' }, { id: 'first-run-memory-evaluator-runs' }, { id: 'first-run-memory-evaluator-model' }, { id: 'first-run-memory-purge' }, { id: 'first-run-recovery-model' }, { id: 'first-run-skill-signers' }, { id: 'first-run-agent-catalog-import' }] });
+    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded', rules: [{ id: 'first-run-memory-distiller-output' }, { id: 'first-run-agent-catalog' }, { id: 'first-run-mcp-observe-agent-catalog' }, { id: 'first-run-memory-review' }, { id: 'first-run-memory-evaluator' }, { id: 'first-run-memory-evaluator-runs' }, { id: 'first-run-memory-evaluator-model' }, { id: 'first-run-memory-purge' }, { id: 'first-run-recovery-model' }, { id: 'first-run-skill-signers' }, { id: 'first-run-agent-catalog-import' },
+      // S8-3: the catalog aggregator's exact list.
+      { id: 'first-run-catalog-aggregator' }, { id: 'first-run-catalog-aggregator-runs' }, { id: 'first-run-catalog-aggregator-memory' }] });
     const upgraded = await f.bytes();
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'current', basis: 'named-person', rules: [] });
     expect(await f.bytes()).toBe(upgraded);

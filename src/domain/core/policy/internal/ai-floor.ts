@@ -1,4 +1,4 @@
-import { isAiPrincipal, isAuditorPrincipal, isMemoryDistillerPrincipal, isMemoryEvaluatorPrincipal, isNervousPrincipal, isRecoveryPrincipal } from '#domain/core/principal/index.js';
+import { isAiPrincipal, isAuditorPrincipal, isCatalogAggregatorPrincipal, isMemoryDistillerPrincipal, isMemoryEvaluatorPrincipal, isNervousPrincipal, isRecoveryPrincipal } from '#domain/core/principal/index.js';
 /** S5 (AUDITOR-MODEL Q4): the only actions the auditor principal may ever be granted. A security invariant, never policy data. */
 export const AUDITOR_READ_ACTIONS = Object.freeze(['inspect', 'list', 'verify'] as const);
 /** S6 Nervous (K-B): the only actions the Nervous principal may ever be granted; it writes no state (the broker applies proposals). */
@@ -13,6 +13,8 @@ export const MEMORY_EVALUATOR_ALLOWED_PAIRS = Object.freeze([['memory', 'inspect
  * through its own application under the owner's standing grant (`recovery-action`, a person's), never through a policy grant of its own. S6R-5: it
  * invokes its `recovery-decision` role model (`model-invocation`/invoke; the role registry restricts which rows). */
 export const RECOVERY_ALLOWED_PAIRS = Object.freeze([['attempt', 'reconcile'], ['run', 'inspect'], ['model-invocation', 'invoke']] as const);
+/** S8-3 (S8-DESIGN §9): the catalog aggregator's exact allow-list — read the catalog, Runs and memory refs, suggest, narrow (each write signed by its own key). */
+export const CATALOG_AGGREGATOR_ALLOWED_PAIRS = Object.freeze([['agent-catalog', 'inspect'], ['agent-catalog', 'suggest'], ['agent-catalog', 'narrow'], ['run', 'inspect'], ['memory', 'inspect']] as const);
 const pairIn = (pairs: readonly (readonly [string, string])[], kind: string, action: string) => pairs.some(([allowedKind, allowed]) => allowedKind === kind && allowed === action);
 /**
  * Approval cards whose decision widens authority: identity profile distribution, MCP capability grants and the first-run template
@@ -36,6 +38,9 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   if (isMemoryDistillerPrincipal(actor) && !pairIn(MEMORY_DISTILLER_ALLOWED_PAIRS, resource.kind, action)) return true;
   if (isMemoryEvaluatorPrincipal(actor) && !pairIn(MEMORY_EVALUATOR_ALLOWED_PAIRS, resource.kind, action)) return true;
   if (isRecoveryPrincipal(actor) && !pairIn(RECOVERY_ALLOWED_PAIRS, resource.kind, action)) return true;
+  if (isCatalogAggregatorPrincipal(actor) && !pairIn(CATALOG_AGGREGATOR_ALLOWED_PAIRS, resource.kind, action)) return true;
+  // S8-3: only the aggregator suggests and narrows; every other AI catalog write needs its own active key's signature (verified at commit) and a grant.
+  if (resource.kind === 'agent-catalog' && ['suggest', 'narrow'].includes(action) && !isCatalogAggregatorPrincipal(actor)) return true;
   if (resource.kind === 'operation' && resource.id === 'policy.administer' && ['execute', 'compensate'].includes(action)) return true;
   if (['authority-document', 'authenticator', 'approval-assurance'].includes(resource.kind) && !['inspect', 'list'].includes(action)) return true;
   if (resource.kind === 'backup' && action === 'restore') return true;

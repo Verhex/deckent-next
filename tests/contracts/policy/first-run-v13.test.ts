@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   getPolicyVocabulary, matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipalRef, memoryEvaluatorPrincipalRef, namedPersonPolicyAdditions, recoveryPrincipalRef, resolvePolicyBindings, upgradeFirstRunPolicy, type PolicyGrant } from '#domain/index.js';
 import { FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, FIRST_RUN_TOOL_NAMES, PoolControlPolicyAuthorization } from '#engine/index.js';
 import { DecisionPolicyAuthorization } from '#engine/core/decision/index.js';
@@ -135,10 +135,12 @@ it('live and N1 shapes (2026-10-19, hand-built): the named person gets only v13+
       'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog',
       'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge',
       // S6R-5: the recovery principal's model rule. S8-5: the person's signer cards and signed skill import.
-      'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import']);
+      'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import',
+      // S8-3: the catalog aggregator's exact list.
+      'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory']);
     for (const rule of plan.rules) expect(rule.principals, rule.id).toEqual([rule.id.startsWith('first-run-mcp-observe-') ? mcpPrincipalRef(shapePerson)
       : rule.id.startsWith('first-run-memory-distiller') ? memoryDistillerPrincipalRef(shapePerson) : rule.id.startsWith('first-run-memory-evaluator') ? memoryEvaluatorPrincipalRef(shapePerson)
-        : rule.id === 'first-run-recovery-model' ? recoveryPrincipalRef(shapePerson) : shapePerson]);
+        : rule.id === 'first-run-recovery-model' ? recoveryPrincipalRef(shapePerson) : rule.id.startsWith('first-run-catalog-aggregator') ? catalogAggregatorPrincipalRef(shapePerson) : shapePerson]);
     expect(plan.rules.filter(rule => rule.scopes !== 'all').every(rule => rule.scopes !== 'all' && rule.scopes.length === 1 && rule.scopes[0] === 'live')).toBe(true);
     // Applied, a second plan is current: no repeated additions.
     expect(namedPersonPolicyAdditions({ ...policy, grants: [...policy.grants, ...plan.rules] }, { ...names, person: shapePerson, scopeId: 'live', serviceId: 'local' }).status).toBe('current');

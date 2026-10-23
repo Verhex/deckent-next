@@ -2676,6 +2676,7 @@
         "src/composition/core/model-activation",
         "src/composition/core/model-invocation",
         "src/engine/core/policy",
+        "src/composition/core/agent-catalog",
         "src/platform/core/managed-files",
         "src/adapters/core/brain-wait-store"
       ],
@@ -3813,7 +3814,13 @@
         "src/engine/core/model-activation",
         "src/engine/core/memory",
         "src/adapters/core/catalog-evolution-store",
-        "src/adapters/core/sqlite-model-activation"
+        "src/adapters/core/sqlite-model-activation",
+        "src/composition/core/memory",
+        "src/engine/core/policy",
+        "src/domain/core/principal",
+        "src/domain/core/primitives",
+        "src/domain/core/memory",
+        "src/platform/core/errors"
       ],
       "plan": "LEARNING"
     },
@@ -3939,7 +3946,9 @@
         "src/domain/core/provider-catalog",
         "src/platform/core/integrity",
         "src/engine/core/authentication",
-        "src/engine/core/agent-catalog"
+        "src/engine/core/agent-catalog",
+        "src/domain/core/command",
+        "src/domain/core/memory"
       ],
       "plan": "LEARNING"
     },
@@ -4087,7 +4096,8 @@
       "headless",
       "recovery",
       "brainwait",
-      "agentstats"
+      "agentstats",
+      "agentsevo"
     ]
   },
   "literals": {

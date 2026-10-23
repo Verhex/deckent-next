@@ -13,10 +13,12 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const actorSchema = z.object({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).strict().readonly();
 export const agentStandingSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, agentId: catalogIdSchema, revision: counterSchema.positive(),
   workClass: identitySchema, standing: z.enum(AGENT_STANDINGS), standingRevision: counterSchema.positive(),
-  /** Why the row holds its value: the definition (or the previous revision's promotion it inherited), a person's card, or a sealed rule suggestion. */
-  basis: z.object({ kind: z.enum(['definition', 'inherited', 'person-card', 'rule']), decidedBy: actorSchema, atMs: counterSchema, commandId: identitySchema.nullable(),
-    suggestionId: digest.nullable(), reasonCode: identitySchema.nullable(), fromRevision: counterSchema.positive().optional() }).strict()
-    .refine(basis => (basis.kind === 'inherited') === (basis.fromRevision !== undefined) && (basis.kind !== 'rule' || basis.suggestionId !== null)).readonly(),
+  /** Why the row holds its value: the definition (or the previous revision's promotion it inherited), a person's card, a signed AI/system command or a
+   * sealed rule suggestion (S8-4: the last two carry the action key and signature digest verified at commit). */
+  basis: z.object({ kind: z.enum(['definition', 'inherited', 'person-card', 'signed', 'rule']), decidedBy: actorSchema, atMs: counterSchema, commandId: identitySchema.nullable(),
+    suggestionId: digest.nullable(), reasonCode: identitySchema.nullable(), fromRevision: counterSchema.positive().optional(), signed: z.object({ keyId: digest, signatureDigest: digest }).strict().optional() }).strict()
+    .refine(basis => (basis.kind === 'inherited') === (basis.fromRevision !== undefined) && (basis.kind !== 'rule' || basis.suggestionId !== null)
+      && (basis.signed !== undefined) === (basis.kind === 'signed' || basis.kind === 'rule')).readonly(),
 }).strict().readonly();
 export type AgentStanding = z.infer<typeof agentStandingSchema>;
 /** The agent a Run task was admitted with (frozen task field `agent`, v1): exact revision, digests and pins, the standing it was chosen under and why. */
@@ -61,23 +63,28 @@ export function initialAgentStandings(next: AgentDefinition, previous: { readonl
 }
 
 type Action = 'promote' | 'demote' | 'restore' | 'retire' | 'narrow';
+type Ref = { readonly issuer: string; readonly subject: string };
 const FROM: Readonly<Record<Action, readonly AgentStanding['standing'][]>> = { promote: ['candidate', 'redesign-required'], demote: ['active'],
   restore: ['redesign-required'], retire: ['candidate', 'active', 'redesign-required'], narrow: ['active', 'candidate'] };
 const TO: Readonly<Record<Action, AgentStanding['standing']>> = { promote: 'active', demote: 'candidate', restore: 'candidate', retire: 'retired', narrow: 'redesign-required' };
 /**
- * The one standing transition table (versioned code). A person's card promotes, demotes, restores or retires; only a sealed rule suggestion
- * narrows (the aggregator, S8-3/S8-4). Every AI principal is refused until the signed path (S8-5) exists. `displaced`: the WorkClass's current
- * `active` agent, which a promotion turns into `candidate` in the same change. A stale `expectedStandingRevision` is a compare-and-set conflict.
+ * The one standing transition table (versioned code). A person's card (or, S8-4, an AI/system command signed by its own active key) promotes, demotes,
+ * restores or retires; only the aggregator's signed rule narrows, from a sealed suggestion. Self-approval guard (core vision, kept by owner Q-S12):
+ * a suggestion's producer never decides it, and an AI never promotes or restores a revision it authored (`author`) — another signed, granted AI may.
+ * `displaced`: the WorkClass's current `active` agent, which a promotion turns into `candidate` in the same change. A stale revision is a CAS conflict.
  */
 export function transitionAgentStanding(current: AgentStanding, input: { readonly action: Action; readonly expectedStandingRevision: number;
   readonly actor: z.infer<typeof actorSchema>; readonly atMs: number; readonly commandId: string | null; readonly suggestionId: string | null;
-  readonly reasonCode?: string; readonly displaced?: AgentStanding | null }): AgentStanding[] {
+  readonly reasonCode?: string; readonly displaced?: AgentStanding | null; readonly signed?: { readonly keyId: string; readonly signatureDigest: string };
+  readonly author?: Ref; readonly producer?: Ref | null }): AgentStanding[] {
   if (current.standingRevision !== input.expectedStandingRevision) throw new AgentCatalogError('AGENT_STANDING_CONFLICT');
-  const rule = input.action === 'narrow';
-  if (!FROM[input.action].includes(current.standing) || (rule ? input.suggestionId === null : input.actor.ai || input.commandId === null)
+  const rule = input.action === 'narrow', same = (ref?: Ref | null) => !!ref && ref.issuer === input.actor.issuer && ref.subject === input.actor.subject;
+  if (!FROM[input.action].includes(current.standing) || (rule ? input.suggestionId === null || !input.signed : input.actor.ai !== (input.signed !== undefined) || input.commandId === null)
+    || (!rule && same(input.producer)) || (input.actor.ai && (input.action === 'promote' || input.action === 'restore') && same(input.author))
     || (input.displaced && (input.action !== 'promote' || input.displaced.standing !== 'active' || input.displaced.workClass !== current.workClass
       || input.displaced.scopeId !== current.scopeId || input.displaced.agentId === current.agentId))) throw new AgentCatalogError('AGENT_STANDING_REFUSED');
-  const basis = { kind: rule ? 'rule' : 'person-card', decidedBy: input.actor, atMs: input.atMs, commandId: input.commandId, suggestionId: input.suggestionId, reasonCode: input.reasonCode ?? null };
+  const basis = { kind: rule ? 'rule' : input.signed ? 'signed' : 'person-card', decidedBy: input.actor, atMs: input.atMs, commandId: input.commandId, suggestionId: input.suggestionId,
+    reasonCode: input.reasonCode ?? null, ...(input.signed ? { signed: { keyId: input.signed.keyId, signatureDigest: input.signed.signatureDigest } } : {}) };
   const move = (row: AgentStanding, standing: AgentStanding['standing']) => agentStandingSchema.parse({ ...row, standing, standingRevision: row.standingRevision + 1, basis });
   return [move(current, TO[input.action]), ...(input.displaced ? [move(input.displaced, 'candidate')] : [])];
 }
