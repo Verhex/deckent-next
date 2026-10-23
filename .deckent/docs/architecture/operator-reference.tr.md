@@ -151,7 +151,8 @@ Bir kodlama işçisinin deponuz hakkında ne bildiğine birbirinden ayrı iki ş
   terminalinizdeki kart yolu, boyutu, SHA-256 değerini ve ilk satırları gösterir; yapay zekâ araçları, MCP, borular ve `--json`
   reddedilir; karar `execution.workerInstructions` için config yazma iznini kullanır ve denetim kaydına yazılır. Değişen dosya
   yeniden güvenilmez olur; iş hedefi varsa güven klasöre, ref'e ve içeriğe bağlıdır (aynı baytlı başka bir ref kendi güvenini
-  ister; alpha.53'te ya da hedef yokken verilen klasör ve içerik güveni yine sayılır, ref'teki geri alma onu da kaldırır), bu
+  ister; alpha.53'ten kalan klasör ve içerik güveni yine sayılır, sonradan hedef yokken ya da terminalde verilen sayılmaz; ref'teki
+  geri alma onu orada bitirir ama klasörün kendi güvenini korur), bu
   yüzden aynı baytlarla ilerleyen dal güvenilir kalır (commit gösterilir ve kaydedilir, karşılaştırılmaz); hedef yoksa güven
   klasöre ve içeriğe bağlıdır. Güvenilene dek işçiler yalnız görev metnini alır ve Run oluşturma `WORKER_INSTRUCTIONS_WITHHELD`
   uyarısı verir; istem sınırlarına sığmayan dosya Run'ı reddeder (`WORKER_INSTRUCTIONS_TOO_LARGE`).

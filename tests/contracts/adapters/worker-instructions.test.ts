@@ -170,26 +170,55 @@ describe.skipIf(process.platform === 'win32')('worker instruction file read from
     expect(await (await open(REF)).inspect()).toMatchObject({ status: 'trust-required', source: { content: 'changed on the branch' } });
   });
 
-  it('legacy rule: the alpha.53 folder + content record (exact bytes) is still honoured at a ref of that folder; a ref trust never writes it; a ref revoke removes it', async () => {
-    const root = await repository(), trust = await mkdtemp(join(tmpdir(), 'worker-trust-')); roots.push(trust); await chmod(trust, 0o700);
-    const open = (ref: string | null) => openProjectInstructionReader(root, trust, undefined, [FILE], ref === null ? undefined : committed(root, ref));
-    const digest = createHash('sha256').update('committed').digest('hex'), real = await realpath(root), info = await stat(real);
-    const folder = createHash('sha256').update(`${real}\0${info.dev}\0${info.ino}`).digest('hex');
-    const legacyName = createHash('sha256').update(`${folder}\0${digest}`).digest('hex');
-    // A ref trust in an empty store writes its own record, never the alpha.53 form.
-    expect((await (await open(REF)).trust(digest)).status).toBe('ready');
-    expect(await readdir(trust)).not.toContain(legacyName);
-    expect(await (await open(REF)).revoke(digest)).toBe(true);
-    expect(await readdir(trust)).toEqual([]);
-    // The record alpha.53 wrote (N1): sha256(sha256(real root \0 dev \0 ino) \0 digest), content = the digest, mode 0600.
-    await writeFile(join(trust, legacyName), digest, { mode: 0o600 });
-    expect(await (await open(REF)).inspect()).toMatchObject({ status: 'ready', source: { digest, identity: { kind: 'ref' } } });
-    expect(await (await open(null)).inspect()).toMatchObject({ status: 'ready' }); // the working tree (no target) reads it as before
+  // The legacy-rule fixtures use a trust folder the test controls, so the exact alpha.53 record bytes can be laid down before any access.
+  const store = async () => { const dir = await mkdtemp(join(tmpdir(), 'worker-trust-')); roots.push(dir); await chmod(dir, 0o700); return dir; };
+  const at = (root: string, trust: string, ref: string | null, file = FILE) => openProjectInstructionReader(root, trust, undefined, [file], ref === null ? undefined : committed(root, ref));
+  const sha = (text: string) => createHash('sha256').update(text).digest('hex');
+  /** The record alpha.53 wrote: sha256(sha256(real root \0 dev \0 ino) \0 digest), content = the digest, mode 0600. */
+  const legacyName = async (root: string, digest: string) => { const real = await realpath(root), info = await stat(real); return sha(`${sha(`${real}\0${info.dev}\0${info.ino}`)}\0${digest}`); };
+  const records = async (trust: string) => (await readdir(trust)).filter(name => /^[a-f0-9]{64}$/u.test(name)).sort();
+  const status = async (reader: Promise<{ inspect(): Promise<{ status: string }> }>) => (await (await reader).inspect()).status;
+
+  it('legacy rule: a folder + content record that existed before this release first opened the store (alpha.53, the N1 trust) unlocks a ref; a ref revoke ends that without dropping the folder trust', async () => {
+    const root = await repository(), trust = await store(), digest = sha('committed'), legacy = await legacyName(root, digest);
+    await writeFile(join(trust, legacy), digest, { mode: 0o600 }); // left by alpha.53 before this release ever opened the store
+    expect(await (await at(root, trust, REF)).inspect()).toMatchObject({ status: 'ready', source: { digest, identity: { kind: 'ref' } } });
+    expect(await status(at(root, trust, null))).toBe('ready'); // the working tree (no target) reads it as before
     await writeFile(join(root, 'other.txt'), 'unrelated'); await commit(root);
-    expect((await (await open(REF)).inspect()).status).toBe('ready');
-    // A revoke at the ref takes that consent back too: a sealed revoke never leaves the card trusted.
-    expect(await (await open(REF)).revoke(digest)).toBe(true);
-    expect([(await (await open(REF)).inspect()).status, (await (await open(null)).inspect()).status, await readdir(trust)]).toEqual(['trust-required', 'trust-required', []]);
+    expect(await status(at(root, trust, REF))).toBe('ready'); // the ref advancing with the same bytes
+    // A revoke at the ref: the ref is untrusted, the folder's own (working-tree, terminal) trust and its record stay.
+    expect(await (await at(root, trust, REF)).revoke(digest)).toBe(true);
+    expect([await status(at(root, trust, REF)), await status(at(root, trust, null)), await records(trust)]).toEqual(['trust-required', 'ready', [legacy]]);
+    // A new trust at the ref writes the ref form only, and its revoke leaves the folder trust alone.
+    expect((await (await at(root, trust, REF)).trust(digest)).status).toBe('ready');
+    expect((await records(trust)).length).toBe(2);
+    expect(await (await at(root, trust, REF)).revoke(digest)).toBe(true);
+    expect([await status(at(root, trust, REF)), await status(at(root, trust, null)), await records(trust)]).toEqual(['trust-required', 'ready', [legacy]]);
+    // Revoking the folder trust and giving it again on this release never revives the ref's legacy eligibility.
+    const again = await repository(), trust2 = await store(), legacy2 = await legacyName(again, digest);
+    await writeFile(join(trust2, legacy2), digest, { mode: 0o600 });
+    expect(await (await at(again, trust2, null)).revoke(digest)).toBe(true);
+    expect((await (await at(again, trust2, null)).trust(digest)).status).toBe('ready');
+    expect([await status(at(again, trust2, REF)), await status(at(again, trust2, null))]).toEqual(['trust-required', 'ready']);
+  });
+
+  it('a folder + content trust given on this release (no target, the terminal\'s AGENTS.md, a later record) never unlocks a ref, also when that write is the first access', async () => {
+    const root = await repository({ [FILE]: 'committed', 'AGENTS.md': 'agents' }), trust = await store(), digest = sha('committed');
+    // The very first access to an empty store is a no-target trust write.
+    expect((await (await at(root, trust, null)).trust(digest)).status).toBe('ready');
+    expect([await status(at(root, trust, null)), await status(at(root, trust, REF))]).toEqual(['ready', 'trust-required']);
+    // The terminal's trust of AGENTS.md in the same folder (default DECKENT.md → AGENTS.md lookup, working tree).
+    const terminal = await openProjectInstructionReader(root, trust);
+    expect((await terminal.trust(sha('agents'))).status).toBe('ready');
+    expect(await status(at(root, trust, REF, 'AGENTS.md'))).toBe('trust-required');
+    // Any folder + content record laid down after the store was first opened (here by hand) is not legacy either.
+    const late = await repository(), lateDigest = sha('committed'); await at(late, trust, null);
+    await writeFile(join(trust, await legacyName(late, lateDigest)), lateDigest, { mode: 0o600 });
+    expect([await status(at(late, trust, null)), await status(at(late, trust, REF))]).toEqual(['ready', 'trust-required']);
+    // The same process races a first no-target trust write against a ref reader's open on an empty store: the write is never legacy.
+    const raced = await repository(), racedStore = await store();
+    await Promise.all([(async () => (await at(raced, racedStore, null)).trust(digest))(), at(raced, racedStore, REF), (async () => (await at(raced, racedStore, null)).trust(digest))()]);
+    expect([await status(at(raced, racedStore, null)), await status(at(raced, racedStore, REF))]).toEqual(['ready', 'trust-required']);
   });
 });
 

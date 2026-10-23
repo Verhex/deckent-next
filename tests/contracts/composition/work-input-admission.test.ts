@@ -685,6 +685,20 @@ describe.skipIf(process.platform === 'win32')('R1: the trust card binds the exac
     await setTarget(A, undefined, OTHER); expect(await change('revoke', await status())).toMatchObject({ trusted: false, changed: true });
     expect([await stateAt(A), await stateAt(A, name, OTHER), sealed()]).toEqual(['trust-required', 'trust-required', 4]);
   });
+  it('REVISE 2738 R1 (lead): a folder trust given on this release before the target was configured never opens the ref; admission withholds it', async () => {
+    const { f, setTarget, status, stateAt, sealed, A } = await bound();
+    const policy = join(f.project, 'd', 'policy.json'), document = JSON.parse(await readFile(policy, 'utf8'));
+    await writeFile(policy, JSON.stringify({ ...document, grants: [...document.grants, { id: 'target', effect: 'allow', actions: ['use'], scopes: ['s'],
+      principals: [{ issuer: hostname(), subject: String(userInfo().uid) }], resource: { kind: 'work-target', ids: 'all' } }] }), { mode: 0o600 });
+    const reader = await openHostProjectInstructionReader(A, f.options.env, undefined, [name]), view = await reader.inspect(); // the folder's own file (no target)
+    if (view.status !== 'trust-required') throw new Error(view.status);
+    expect((await reader.trust(view.source.digest)).status).toBe('ready');
+    await setTarget(A);
+    expect(await status()).toMatchObject({ state: 'untrusted', ref: REF, digest: view.source.digest });
+    expect((await createRun(f.project, run('folder-trust', 'coding', workInput()), f.options)).warnings)
+      .toEqual([expect.objectContaining({ code: 'WORKER_INSTRUCTIONS_WITHHELD', reason: 'untrusted', digest: view.source.digest })]);
+    expect([await stateAt(A, name, null), await stateAt(A), sealed()]).toEqual(['ready', 'trust-required', 0]);
+  });
   it('the card carries the host-made canonical place: target, real root and its identity, source, file, ref, path, commit and blob, digest', async () => {
     const { status, setTarget, A } = await bound();
     await setTarget(A); const card = await status();
