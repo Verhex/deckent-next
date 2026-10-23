@@ -52,3 +52,15 @@ it('exact v13 becomes exactly v14; edited and hand-built policies get the two ru
   expect(matchFirstRunPolicyTemplate('first-run-template-v14')).toEqual({ id: 'first-run-template', version: 14 });
   expect(matchFirstRunPolicyTemplate('first-run-template-v15')).toBeNull();
 });
+
+it('law-audit fold 6: memory verify and retire are on the AI hard floor — a rule naming the AI or the MCP actor is refused, the person keeps them', async () => {
+  const workload = { ...owner, id: 'worker', issuer: 'deckent-worker', subject: 'attempt', assurance: 'workload-verified' as const };
+  const granted = { ...built.policy, revision: 'a-granted', grants: [...built.policy.grants, ...[mcpRef, person, { issuer: workload.issuer, subject: workload.subject }].map((who, index) => ({
+    id: `memory-write-${index}`, effect: 'allow', actions: ['propose', 'verify', 'retire'], scopes: ['installation'], principals: [who], resource: { kind: 'memory', ids: 'all' } }))] };
+  const decide = (who: typeof owner, action: string) => evaluatePolicy(resolvePolicyBindings(granted, built.bindings), { principal: who, scopeId: 'installation', action, resource: { kind: 'memory', id: 'installation' } });
+  for (const who of [mcp, workload]) for (const action of ['verify', 'retire']) expect(decide(who, action), `${who.id} ${action}`).toMatchObject({ decision: 'deny', reason: 'AI_NON_DELEGABLE' });
+  // The floor covers only the knowledge-changing actions: an AI candidate (propose) and every read stay policy decisions.
+  expect(decide(mcp, 'propose').decision).toBe('allow'); expect(decide(mcp, 'inspect').decision).toBe('allow');
+  for (const action of ['verify', 'retire']) expect(decide(owner, action).decision, `person ${action}`).toBe('allow');
+  await expect(new MemoryPolicyAuthorization(source(granted)).authorize('verify', 'installation', mcp)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+});

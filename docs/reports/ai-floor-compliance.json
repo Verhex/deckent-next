@@ -7,7 +7,7 @@
     "src/domain/core/policy/index.ts": "97f9ff96e4a906a101c2f34992e0ff2830aeed87362822a45b03ce8c6d9f791f",
     "src/domain/core/policy/internal/administer.ts": "7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004",
     "src/domain/core/policy/internal/administration.ts": "85ea655acb0a388542fae3740c47c81f6cfe7763434117e8d5aef10bc40c93b0",
-    "src/domain/core/policy/internal/ai-floor.ts": "e6c8c9d409cf13dfb21791759167db5fe1c97206c7e1a79d0264c4f11c1c3627",
+    "src/domain/core/policy/internal/ai-floor.ts": "5627c0e1c95e24b49e8947dd1539a7f8b3e1232f3f0f2d6c23eccfaab58d17c8",
     "src/domain/core/policy/internal/decision-step.ts": "70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe",
     "src/domain/core/policy/internal/delegations.ts": "c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320",
     "src/domain/core/policy/internal/describe.ts": "0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df",
@@ -33,7 +33,7 @@
   },
   "summary": {
     "routes": 266,
-    "floorRoutes": 186,
+    "floorRoutes": 188,
     "contexts": 6,
     "policyChecks": 1596,
     "stepChecks": 48,
@@ -22724,44 +22724,44 @@
       "kind": "memory",
       "id": "fixture-target",
       "action": "retire",
-      "floor": false,
-      "family": "vocabulary",
+      "floor": true,
+      "family": "memory",
       "context": "ai-no-cell",
       "expected": {
         "decision": "deny",
-        "reason": "NO_GRANT"
+        "reason": "AI_NON_DELEGABLE"
       },
       "actual": {
         "decision": "deny",
-        "reason": "NO_GRANT"
+        "reason": "AI_NON_DELEGABLE"
       },
       "verdict": "uyumlu",
-      "reason": "NO_GRANT"
+      "reason": "AI_NON_DELEGABLE"
     },
     {
       "kind": "memory",
       "id": "fixture-target",
       "action": "retire",
-      "floor": false,
-      "family": "vocabulary",
+      "floor": true,
+      "family": "memory",
       "context": "ai-granting-cell",
       "expected": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "actual": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "verdict": "uyumlu",
-      "reason": "GRANTED"
+      "reason": "AI_NON_DELEGABLE"
     },
     {
       "kind": "memory",
       "id": "fixture-target",
       "action": "retire",
-      "floor": false,
-      "family": "vocabulary",
+      "floor": true,
+      "family": "memory",
       "context": "human-tty-policy",
       "expected": {
         "decision": "allow",
@@ -22778,98 +22778,98 @@
       "kind": "memory",
       "id": "fixture-target",
       "action": "retire",
-      "floor": false,
-      "family": "vocabulary",
+      "floor": true,
+      "family": "memory",
       "context": "legacy-mcp-os-user-granted",
       "expected": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "actual": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "verdict": "uyumlu",
-      "reason": "GRANTED"
+      "reason": "AI_NON_DELEGABLE"
     },
     {
       "kind": "memory",
       "id": "fixture-target",
       "action": "retire",
-      "floor": false,
-      "family": "vocabulary",
+      "floor": true,
+      "family": "memory",
       "context": "workload-granted",
       "expected": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "actual": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "verdict": "uyumlu",
-      "reason": "GRANTED"
+      "reason": "AI_NON_DELEGABLE"
     },
     {
       "kind": "memory",
       "id": "fixture-target",
       "action": "retire",
-      "floor": false,
-      "family": "vocabulary",
+      "floor": true,
+      "family": "memory",
       "context": "token-granted",
       "expected": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "actual": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "verdict": "uyumlu",
-      "reason": "GRANTED"
+      "reason": "AI_NON_DELEGABLE"
     },
     {
       "kind": "memory",
       "id": "fixture-target",
       "action": "verify",
-      "floor": false,
-      "family": "vocabulary",
+      "floor": true,
+      "family": "memory",
       "context": "ai-no-cell",
       "expected": {
         "decision": "deny",
-        "reason": "NO_GRANT"
+        "reason": "AI_NON_DELEGABLE"
       },
       "actual": {
         "decision": "deny",
-        "reason": "NO_GRANT"
+        "reason": "AI_NON_DELEGABLE"
       },
       "verdict": "uyumlu",
-      "reason": "NO_GRANT"
+      "reason": "AI_NON_DELEGABLE"
     },
     {
       "kind": "memory",
       "id": "fixture-target",
       "action": "verify",
-      "floor": false,
-      "family": "vocabulary",
+      "floor": true,
+      "family": "memory",
       "context": "ai-granting-cell",
       "expected": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "actual": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "verdict": "uyumlu",
-      "reason": "GRANTED"
+      "reason": "AI_NON_DELEGABLE"
     },
     {
       "kind": "memory",
       "id": "fixture-target",
       "action": "verify",
-      "floor": false,
-      "family": "vocabulary",
+      "floor": true,
+      "family": "memory",
       "context": "human-tty-policy",
       "expected": {
         "decision": "allow",
@@ -22886,55 +22886,55 @@
       "kind": "memory",
       "id": "fixture-target",
       "action": "verify",
-      "floor": false,
-      "family": "vocabulary",
+      "floor": true,
+      "family": "memory",
       "context": "legacy-mcp-os-user-granted",
       "expected": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "actual": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "verdict": "uyumlu",
-      "reason": "GRANTED"
+      "reason": "AI_NON_DELEGABLE"
     },
     {
       "kind": "memory",
       "id": "fixture-target",
       "action": "verify",
-      "floor": false,
-      "family": "vocabulary",
+      "floor": true,
+      "family": "memory",
       "context": "workload-granted",
       "expected": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "actual": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "verdict": "uyumlu",
-      "reason": "GRANTED"
+      "reason": "AI_NON_DELEGABLE"
     },
     {
       "kind": "memory",
       "id": "fixture-target",
       "action": "verify",
-      "floor": false,
-      "family": "vocabulary",
+      "floor": true,
+      "family": "memory",
       "context": "token-granted",
       "expected": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "actual": {
-        "decision": "allow",
-        "reason": "GRANTED"
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
       },
       "verdict": "uyumlu",
-      "reason": "GRANTED"
+      "reason": "AI_NON_DELEGABLE"
     },
     {
       "kind": "model-activation",
