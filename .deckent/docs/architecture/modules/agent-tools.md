@@ -1,7 +1,7 @@
 # Agent tools: read, edit, scratch, shell, fetch, tool calls — module note
 
 Composer `@file`, file edits as C11 effects, scratch area, run_shell, fetch, tool-call transport and terminal direction (moved from ARCHITECTURE.md Packages 2026-10-05).
-Kaynak/Source: ARCHITECTURE.md @58537c7f lines 1128–1267, 1499–1648; text below is verbatim.
+Kaynak/Source: ARCHITECTURE.md @58537c7f lines 1128–1267, 1499–1648; the original text below is verbatim; later dated additions are marked separately.
 
 **Composer `@file` over the runtime (T-L5, protocol v15, owner 2026-09-27).** Two bounded control operations, current version only:
 `findWorkspaceFiles {scopeId, query ≤ 256, limit 1..50}` → `{paths, truncated, incomplete}` and `attachWorkspaceFile {scopeId, path,

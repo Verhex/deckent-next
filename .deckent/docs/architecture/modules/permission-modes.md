@@ -1,7 +1,7 @@
 # Permission modes, shell write postures and full access — module note
 
 MODES-3, slice 4a decisions/audit, write postures, full access, FA-TRACKED-WARN, `/mode` (moved from ARCHITECTURE.md Packages 2026-10-05).
-Kaynak/Source: ARCHITECTURE.md @58537c7f lines 1670–1951; text below is verbatim.
+Kaynak/Source: ARCHITECTURE.md @58537c7f lines 1670–1951; the original text below is verbatim; later dated additions are marked separately.
 
 **Permission modes (MODES-3, owner 2026-09-29; supersedes the slice 4a mode set).** Three modes: `standart` (the default — no bindings
 entry: reads, scratch and the in-project edits the company marked mode-eligible run without a card; shell and the write floor ask),

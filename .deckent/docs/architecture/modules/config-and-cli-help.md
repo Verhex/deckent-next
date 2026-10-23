@@ -1,7 +1,7 @@
 # Registry-driven config and CLI help — module note
 
 ConfigApplication, CLI config surface, help catalog (moved from ARCHITECTURE.md Packages 2026-10-05).
-Kaynak/Source: ARCHITECTURE.md @58537c7f lines 618–689; text below is verbatim.
+Kaynak/Source: ARCHITECTURE.md @58537c7f lines 618–689; the original text below is verbatim; later dated additions are marked separately.
 
 ### Registry-driven configuration contract (CONFIG-SURFACE, owner 2026-10-02)
 
