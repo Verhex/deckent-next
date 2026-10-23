@@ -489,20 +489,20 @@ OpenRouter settings.
 
 ## Roadmap
 
-Dates are not promised; the order is. The beta begins with the npm package and continues with orchestration, then the
-Desktop app.
+Dates are not promised; the order is. The core layers that let Deckent run work on its own come first. The beta then
+hardens them through real use, and Desktop app development starts alongside it.
 
 ```mermaid
 flowchart LR
-  N["Now · alpha.53 release candidate<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>backup and audit"] --> B1["Beta.1<br/>npm package · Node 26 verified<br/>Linux and WSL2"]
-  B1 --> O["Beta · orchestration first<br/>Brain plans and accepts · Nervous watches<br/>model chosen per kind of work<br/>delivery by rule, after its advisory phase"]
-  O --> D["Beta · then Desktop<br/>calm, chat-first app<br/>agent organization · native Windows and macOS"]
-  D --> E["Enterprise · separate distribution<br/>SSO · fleet · central policy<br/>ERP connectors"]
+  N["Now · alpha.53 release candidate<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>backup and audit"] --> C["Before the beta · core layers<br/>memory · agent and skill emergence<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
+  C --> B["Beta<br/>npm package<br/>layers improved through real use and tests<br/>Desktop app development in parallel"]
+  B --> E["Enterprise · separate distribution<br/>SSO · fleet · central policy<br/>ERP connectors"]
 ```
 
-In the beta the **Brain** is the planner that turns a request into a plan and accepts the results, and the **Nervous**
-layer watches running work and reacts when it stalls or fails. Both act only through the same policy and approvals as
-everything else.
+The **Brain** turns a request into a plan and accepts the results; the **Nervous** layer watches running work and
+recovers it automatically when it stalls or fails; the **Auditor** checks what was accepted. Assignment picks the worker
+and model for each kind of work, evaluation scores the outcomes, and memory carries what was learned to the next job.
+Every layer acts only through the same policy and approvals as everything else.
 
 ## Learn more
 

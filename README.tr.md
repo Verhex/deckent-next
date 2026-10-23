@@ -485,19 +485,20 @@ Açık, denenmemiş ya da kısmi her maddeyi etkisi ve varsa çözüm yoluyla [b
 
 ## Yol haritası
 
-Tarih sözü verilmez; sıra verilir. Beta npm paketiyle başlar, orkestrasyonla sürer, ardından masaüstü uygulaması gelir.
+Tarih sözü verilmez; sıra verilir. Önce Deckent'in işi kendi başına yürütmesini sağlayan çekirdek katmanlar gelir. Beta bu
+katmanları gerçek kullanımla sağlamlaştırır; masaüstü uygulamasının geliştirilmesi de betayla birlikte başlar.
 
 ```mermaid
 flowchart LR
-  N["Şimdi · alpha.53 sürüm adayı<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>yedek ve denetim"] --> B1["Beta.1<br/>npm paketi · Node 26 doğrulandı<br/>Linux ve WSL2"]
-  B1 --> O["Beta · önce orkestrasyon<br/>Brain planlar ve kabul eder · Nervous izler<br/>model iş türüne göre seçilir<br/>tavsiye aşamasından sonra kurala bağlı teslim"]
-  O --> D["Beta · ardından masaüstü<br/>sakin, sohbet odaklı uygulama<br/>ajan organizasyonu · native Windows ve macOS"]
-  D --> E["Enterprise · ayrı dağıtım<br/>SSO · filo · merkezi policy<br/>ERP bağlayıcıları"]
+  N["Şimdi · alpha.53 sürüm adayı<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>yedek ve denetim"] --> C["Betadan önce · çekirdek katmanlar<br/>hafıza · ajan ve yetenek oluşumu<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
+  C --> B["Beta<br/>npm paketi<br/>katmanlar gerçek kullanım ve testlerle gelişir<br/>paralelde masaüstü uygulaması geliştirmesi"]
+  B --> E["Enterprise · ayrı dağıtım<br/>SSO · filo · merkezi policy<br/>ERP bağlayıcıları"]
 ```
 
-Betada **Brain**, isteği plana çeviren ve sonuçları kabul eden planlayıcıdır; **Nervous** katmanı çalışan işi izler, iş
-takıldığında ya da başarısız olduğunda tepki verir. İkisi de yalnız diğer her şeyle aynı policy ve onaylar üzerinden hareket
-eder.
+**Brain** isteği plana çevirir ve sonuçları kabul eder; **Nervous** katmanı çalışan işi izler, iş takıldığında ya da
+başarısız olduğunda onu kendiliğinden kurtarır; **Auditor** kabul edileni denetler. Atama her iş türü için işçiyi ve modeli
+seçer, değerlendirme sonuçları puanlar, hafıza da öğrenileni bir sonraki işe taşır. Her katman yalnız diğer her şeyle aynı
+policy ve onaylar üzerinden hareket eder.
 
 ## Daha fazlası
 
