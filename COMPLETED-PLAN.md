@@ -22,8 +22,10 @@ Aşağıdaki bulgular kapandığı için PLAN Gelen kutusundan çıkarıldı. He
     - Kapanış: alpha.51 DOCTOR-STALE; `doctor` her istekte yeniden okunan yapılandırma için servisi eski saymaz (CHANGELOG alpha.51).
 - **Belge kayması:** DOGFOOD-PARALLEL-DELIVERY açık görünüyordu ama alpha.25'te indi (arşive taşındı).
     - Kapanış: kayıt düzeltmesiydi; iş alpha.25'te inmişti.
-    - `n1-switch.sh` N1 teslim klonunu eşitler (yapıldı 2026-10-22; alpha.52 geçişinde c6c4c020 → 4166bfbd hızlı ileri aldı; kuyruk açıksa ya da ata değilse çıkış 6).
+- `n1-switch.sh` N1 teslim klonunu eşitler (yapıldı 2026-10-22; alpha.52 geçişinde c6c4c020 → 4166bfbd hızlı ileri aldı; kuyruk açıksa ya da ata değilse çıkış 6).
     - Kapanış: araç düzeltmesi yapıldı; alpha.53 geçişinde de klon `4166bfbd` → `b10f46ae` ileri alındı.
+- Dalga 8 yeniden koşusu alpha.51'den sonra (kaynak: alpha.50 takipleri). Tur iptali etkisi için bkz. IPTAL-ETKI-DOGRULUGU.
+    - Kapanış: dalga 8 yeniden koşusu ve dalga 9 benimsendi ve main'de (PLAN Şimdi, 2026-10-22).
 
 ## alpha.52 — 2026-10-22 (PR #110, merge `4166bfbd`; canlı 20:20Z, N1 20:21Z; defter v59, runtime protocol v29)
 
