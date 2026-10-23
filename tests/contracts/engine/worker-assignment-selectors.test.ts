@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
-import { catalogModelSchema, parseProviderCatalogDocument, readWorkerModelPin, WORK_CLASS_LIMITS, workerAssignmentSchema, type CatalogModel, type ExecutionProfileDefinition,
+import { catalogModelSchema, parseProviderCatalogDocument, readWorkerModelPin, WORK_CLASS_LIMITS, WORK_CLASS_WORKER_ROLE, workerAssignmentSchema, type CatalogModel, type ExecutionProfileDefinition,
   type ModelCatalogActivationRecord, type ModelCatalogChannelRecord, type ModelCatalogModelRecord } from '#domain/index.js';
-import { assertRunExecution, composeModelRolePolicy, renderRunCreateApprovalSummary, resolveWorkerEffortExecution, type ModelCatalogReader } from '#engine/index.js';
+import { assertRunExecution, composeModelRolePolicy, inspectAdmissibleWorkerModels, renderRunCreateApprovalSummary, resolveWorkerEffortExecution, type ModelCatalogReader } from '#engine/index.js';
 import { bindNativeWorkerEffort, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeWorkerEffortCapability } from '#adapters/index.js';
 
 // M3 (MODEL-INDEPENDENCE-AUDIT, owner 2026-10-23: a new model works through data only): WorkClass v5 candidate selectors expand through the
@@ -164,4 +164,13 @@ it('the approval card says when the worker was chosen through a selector (seal v
   expect(await card(catalog([id], [newModel(id)]), 'tr')).toContain('seçiciyle seçildi: eşleşen 1 modelin 1. sırası');
   // v1 seal (an exact candidate taken before any selector): no selector line.
   expect(await card(catalog(['claude-opus-5-5'], [newModel(id)]), 'en')).not.toContain('chosen through a selector');
+});
+
+it('the Brain worker-model list applies the same worker role gate as assignment: no role row, no listing (fail closed)', async () => {
+  const id = 'acme-frontier-next', reader = catalog([id, 'claude-opus-5-5'], [newModel(id)]), templates = [{ profile: { id: 'claude-t', version: 1 }, provider: 'claude', cliVersion: '2.1.293 (Claude Code)' }];
+  const listed = async (policy: ReturnType<typeof roles>) => (await inspectAdmissibleWorkerModels(templates, 's', reader, context().nowMs, { roles: policy, workerRole: WORK_CLASS_WORKER_ROLE })).map(row => row.modelId);
+  expect(await listed(roles())).not.toContain(id);
+  expect(await listed(roles([roleRow(id, 'frontier')]))).toContain(id);
+  // A model whose row lacks the worker role is not listed either, though it is catalog-registered and active.
+  expect(await listed(roles([roleRow(id, 'frontier', ['brain'])]))).not.toContain(id);
 });

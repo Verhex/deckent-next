@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { openSqliteModelCatalogReader, openSqliteModelCatalogStore, readMonitorLedger } from '#adapters/index.js';
 import { catalogPinModelEvidence, parseModelCatalogCommand, parseProviderCatalogDocument } from '#domain/index.js';
-import { admitWorkerModels, inspectAdmissibleWorkerModels, type ModelCatalogAdmission } from '#engine/index.js';
+import { admitWorkerModels, composeModelRolePolicy, inspectAdmissibleWorkerModels, type ModelCatalogAdmission } from '#engine/index.js';
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const options = { busyTimeoutMs: 1000, journalMode: 'wal' as const, durability: 'full' as const };
@@ -67,17 +67,17 @@ describe('catalog v3 packaged seeds through ledger and admission', () => {
         await expect(admitWorkerModels(task(), 's', reader, Date.parse('2026-10-02'))).resolves.toEqual([]);
         await expect(admitWorkerModels(task(), 'other', reader, Date.parse('2026-10-02'))).rejects.toMatchObject({ code: 'WORKER_CHANNEL_NOT_ACTIVE' });
         const templates = [{ profile: { id: 'template', version: 1 }, provider: 'codex', cliVersion: 'codex-cli 0.159.2' }];
-        const now = Date.parse('2026-10-02'), choices = await inspectAdmissibleWorkerModels(templates, 's', reader, now);
+        const roles = composeModelRolePolicy(undefined), now = Date.parse('2026-10-02'), choices = await inspectAdmissibleWorkerModels(templates, 's', reader, now, { roles, workerRole: 'worker' });
         expect(choices).toEqual([{ profile: templates[0]!.profile, channelId, modelId, auxiliaryModelIds: [],
           availableAuxiliaryModelIds: [modelId], billing: 'subscription', efforts: (await reader.models(channelId)).find(row => row.modelId === modelId)!.model.efforts }]);
         for (const row of await reader.models(channelId)) {
           const admitted = await admitWorkerModels(task(row.modelId), 's', reader, now).then(() => true, () => false);
           expect(choices.some(choice => choice.modelId === row.modelId)).toBe(admitted);
         }
-        expect(await inspectAdmissibleWorkerModels(templates, 'other', reader, now)).toEqual([]);
+        expect(await inspectAdmissibleWorkerModels(templates, 'other', reader, now, { roles, workerRole: 'worker' })).toEqual([]);
         const oldCli = [{ ...templates[0]!, cliVersion: 'codex-cli 0.159.1' }];
-        expect(await inspectAdmissibleWorkerModels(oldCli, 's', reader, now)).toEqual([]);
-        expect((await inspectAdmissibleWorkerModels(oldCli, 's', reader, now, { imageRefreshInProgress: true })).map(row => row.modelId)).toEqual([modelId]);
+        expect(await inspectAdmissibleWorkerModels(oldCli, 's', reader, now, { roles, workerRole: 'worker' })).toEqual([]);
+        expect((await inspectAdmissibleWorkerModels(oldCli, 's', reader, now, { imageRefreshInProgress: true, roles, workerRole: 'worker' })).map(row => row.modelId)).toEqual([modelId]);
       } finally { reader.close(); }
       const map = (await readMonitorLedger(path, { busyTimeoutMs: 1000, maxRuns: 10 })).map;
       // MODEL-STATE-PARITY: the ledger adapter carries catalog metadata only; composition supplies scoped invocation readiness (never guessed here).
