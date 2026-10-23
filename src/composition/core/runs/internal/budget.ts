@@ -1,5 +1,5 @@
 import { executionRegistrySchema, type RunProposal } from '#domain/index.js';
-import { workSpendingBasis, configuredProviderSpendCheckpoint, assignTaskWorker, type ModelCatalogReader } from '#engine/index.js';
+import { workSpendingBasis, configuredProviderSpendCheckpoint, assignTaskWorker, composeModelRolePolicy, type ModelCatalogReader } from '#engine/index.js';
 import { assertNativeWorkerBinding, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeCodingRefusalCode, providerSpendingConfiguredBudget } from '#adapters/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
@@ -30,14 +30,15 @@ export async function classifyConfiguredRunSpending(root: string, proposal: RunP
       let selected = profile;
       if (profile && isNativeCodingTemplate(profile) && task.workInput) {
         if (instructions.oversize) throw ErrorRegistry.createError('WORKER_INSTRUCTIONS_TOO_LARGE'); // the same snapshot refusal as at creation
-        const compile = (template: typeof profile, input: typeof task.workInput) => {
-          try { return compileNativeCodingWorkInput(template, input, undefined, undefined, instructions.parts); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); }
+        const compile = (template: typeof profile, input: typeof task.workInput, evidence?: Parameters<typeof compileNativeCodingWorkInput>[3]) => {
+          try { return compileNativeCodingWorkInput(template, input, undefined, evidence, instructions.parts); } catch (error) { throw ErrorRegistry.createError(nativeCodingRefusalCode(error)); }
         };
         let input = task.workInput;
         if (!input.model && catalog) {
           reader ??= await catalog();
           input = (await assignTaskWorker(task, input, profile, registry?.workClasses, reader, compile,
-            { scopeId: proposal.scopeId, nowMs: Date.now(), imageRefreshInProgress: await isToolchainRefreshInProgress(root, options) })).input;
+            { scopeId: proposal.scopeId, nowMs: Date.now(), imageRefreshInProgress: await isToolchainRefreshInProgress(root, options),
+              roles: composeModelRolePolicy(config['model_roles']) })).input;
         }
         selected = compile(profile, input);
       }

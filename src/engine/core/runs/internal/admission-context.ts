@@ -1,5 +1,5 @@
 import { ErrorRegistry, type CoreConfig } from '#platform/index.js';
-import { admitWorkerModels, type ModelCatalogReader, type WorkerAdmissionWarning } from '#engine/core/model-activation/index.js';
+import { admitWorkerModels, composeModelRolePolicy, type ModelCatalogReader, type WorkerAdmissionWarning } from '#engine/core/model-activation/index.js';
 import { resolveWorkerEffortExecution, type WorkerEffortCompiler } from './worker-effort.js';
 import type { ExecutionRegistryValidation } from './registry.js';
 import { assertTaskGraphLimits } from './resource-ceilings.js';
@@ -15,7 +15,8 @@ export function runAdmissionStorePerCall(ports: { reader(): Promise<Pick<Store, 
   };
 }
 /** The same application-owned admission preparation is used for public Runs and private-candidate verification Runs. */
-export function createRunAdmissionContext(config: Pick<CoreConfig, 'admission' | 'max_workers'> & { runRuntime?: Pick<CoreConfig['runRuntime'], 'stallRecovery'> }, layoutRevision: string, ports: {
+/** `model_roles`: the installation's tier/role overlays (absent = the Core seed); system worker assignment reads the composed registry (M3). */
+export function createRunAdmissionContext(config: Pick<CoreConfig, 'admission' | 'max_workers'> & { runRuntime?: Pick<CoreConfig['runRuntime'], 'stallRecovery'>; readonly model_roles?: unknown }, layoutRevision: string, ports: {
   catalog(): Promise<ModelCatalogReader & { close(): void }>; validation: ExecutionRegistryValidation; compiler: WorkerEffortCompiler;
   refreshing(): Promise<boolean>; warnings(value: readonly WorkerAdmissionWarning[]): void; now(): number;
   /** R3: the deadline a watchable profile's silence policy must stop before; absent or null freezes no policy. */
@@ -30,7 +31,8 @@ export function createRunAdmissionContext(config: Pick<CoreConfig, 'admission' |
       const stall = config.runRuntime?.stallRecovery, deadline = ports.silenceDeadline;
       const validation = stall && deadline ? { ...ports.validation, silence: { policy: { warnAfterMs: stall.warnAfterMs, stopAfterMs: stall.stopAfterMs, maxRetries: stall.maxRetries }, deadline } } : ports.validation;
       const imageRefreshInProgress = await ports.refreshing(), nowMs = ports.now();
-      execution = await resolveWorkerEffortExecution(admitted.graph, profile.registry, catalog, validation, ports.compiler, { scopeId: admitted.scopeId, nowMs, imageRefreshInProgress });
+      execution = await resolveWorkerEffortExecution(admitted.graph, profile.registry, catalog, validation, ports.compiler,
+        { scopeId: admitted.scopeId, nowMs, imageRefreshInProgress, roles: composeModelRolePolicy(config.model_roles) });
       ports.warnings(await admitWorkerModels(execution.tasks, admitted.scopeId, catalog, nowMs, admitted.graph.tasks, { imageRefreshInProgress }));
     } finally { catalog.close(); }
     return { execution, layoutRevision, now: ports.now(), policy: { schemaVersion: 2, poolId: profile.poolId,

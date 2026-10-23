@@ -25,7 +25,8 @@ export async function prepareWorkerEffortAdmission(graphInput: unknown, registry
     const template = definition(task.kind);
     if (task.workInput && !task.workInput.model && template) {
       if (!context) throw new WorkerModelAdmissionError('WORKER_ASSIGNMENT_NO_CANDIDATES', { taskId: task.id, channelId: null, modelId: null });
-      assigned.set(task.id, await assignTaskWorker(task, task.workInput, template, registry.workClasses, reader, (value, input) => compiler.compile(value, input), context));
+      assigned.set(task.id, await assignTaskWorker(task, task.workInput, template, registry.workClasses, reader,
+        (value, input, pinEvidence) => compiler.compile(value, input, undefined, pinEvidence), context));
     }
     const pin = assigned.get(task.id)?.input.model ?? task.workInput?.model ?? readWorkerModelPin(template?.parameters)?.pin;
     if (!pin || models.has(key(pin))) continue;

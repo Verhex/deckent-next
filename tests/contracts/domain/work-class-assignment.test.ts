@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
-import { catalogModelSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, parseProviderCatalogDocument, resolveWorkClassCandidates, selectWorkerEffort, workClassRegistrySchema,
-  workerAssignmentSchema, workInputSchema } from '#domain/index.js';
+import { catalogModelSchema, CORE_WORK_CLASSES, isCandidateSelector, mergeWorkClassRegistries, parseProviderCatalogDocument, resolveWorkClassCandidates, selectWorkerEffort,
+  WORK_CLASS_WORKER_ROLE, workClassRegistrySchema, workerAssignmentSchema, workInputSchema } from '#domain/index.js';
 
 // ATAMA-1 (owner ASS1, A1, A5, K10): the Core seed declares an ordered worker candidate list per WorkClass (registry v4); an overlay replaces a
 // list only by compare-and-set; work input v2 leaves the model to the system; the assignment seal is exact and bounded.
@@ -10,8 +10,8 @@ const profile = { schemaVersion: 1, version: 1, criterionTypes: ['completion'], 
 const overlay = (extra: object) => workClassRegistrySchema.parse({ schemaVersion: 4, revision: 'acme-1', classes: [{ id: 'acme', defaultEffort: 'high', acceptanceProfile: profile }],
   bindings: [], evidenceExtensions: [], candidatePolicies: [], ...extra });
 
-it('the Core seed is registry v4: every class names a declared candidate list of catalog channels and exact models, in owner order', async () => {
-  expect(CORE_WORK_CLASSES.schemaVersion).toBe(4); expect(CORE_WORK_CLASSES.revision).toBe('atama-1-2026-10-23');
+it('the Core seed is registry v5: every class names a declared list of exact catalog models in owner order, ending in one role selector', async () => {
+  expect(CORE_WORK_CLASSES.schemaVersion).toBe(5); expect(CORE_WORK_CLASSES.revision).toBe('atama-m3-2026-10-23');
   const policy = mergeWorkClassRegistries(CORE_WORK_CLASSES, []);
   const lists = Object.fromEntries(policy.classes.map(row => [row.id, resolveWorkClassCandidates(policy, row)?.id]));
   expect(lists).toEqual({ small: 'light', test: 'light', feature: 'standard', design: 'deep', architecture: 'deep', 'security-critical': 'deep' });
@@ -21,9 +21,16 @@ it('the Core seed is registry v4: every class names a declared candidate list of
     for (const provider of document.providers) known.set(provider.id, new Set(provider.models.filter(model => model.lifecycle.state === 'active').map(model => model.nativeId)));
   }
   // Every seed candidate is a current model of a packaged native CLI catalog (exact id, never an alias); activation stays the scope's decision.
-  for (const list of policy.candidatePolicies ?? []) for (const row of list.candidates) expect(known.get(row.channelId)?.has(row.modelId), `${row.channelId}/${row.modelId}`).toBe(true);
-  expect(policy.candidatePolicies?.find(row => row.id === 'standard')?.candidates.map(row => [row.modelId, row.effort ?? null]))
-    .toEqual([['claude-opus-5-5', null], ['gpt-6.1-sol', 'medium'], ['claude-opus-5-thinking-high', null]]);
+  for (const list of policy.candidatePolicies ?? []) for (const row of list.candidates) {
+    if (isCandidateSelector(row)) continue;
+    expect(known.get(row.channelId)?.has(row.modelId), `${row.channelId}/${row.modelId}`).toBe(true);
+  }
+  expect(policy.candidatePolicies?.find(row => row.id === 'standard')?.candidates.map(row => [isCandidateSelector(row) ? row.role : row.modelId, row.effort ?? null]))
+    .toEqual([['claude-opus-5-5', null], ['gpt-6.1-sol', 'medium'], ['claude-opus-5-thinking-high', null], [WORK_CLASS_WORKER_ROLE, null]]);
+  // M3: each Core list ends in exactly one selector of the worker role, so a model admitted as data (catalog + role row) joins it.
+  expect(Object.fromEntries((policy.candidatePolicies ?? []).map(list => [list.id, [list.version, list.candidates.filter(isCandidateSelector)]]))).toEqual({
+    light: [2, [{ role: 'worker', maxTier: 'worker' }]], standard: [2, [{ role: 'worker', minTier: 'frontier' }]], deep: [2, [{ role: 'worker', minTier: 'frontier', effort: 'high' }]] });
+  for (const list of policy.candidatePolicies ?? []) expect(isCandidateSelector(list.candidates.at(-1)!)).toBe(true);
   // The pinned-model path keeps the class targets unchanged (a person's explicit pin; A1 retuning applies to the system assignment).
   expect(Object.fromEntries(CORE_WORK_CLASSES.classes.map(row => [row.id, row.defaultEffort]))).toEqual({ small: 'high', test: 'high', feature: 'xhigh',
     design: 'max', architecture: 'max', 'security-critical': 'max' });
@@ -50,17 +57,20 @@ it('an overlay adds its own list, replaces a Core list only against its exact ve
     candidatePolicies: [{ id: 'acme-list', version: 1, candidates: [{ channelId: 'erp-cli', modelId: 'erp-model' }] }] });
   const merged = mergeWorkClassRegistries(CORE_WORK_CLASSES, [own]);
   expect(resolveWorkClassCandidates(merged, merged.classes.find(row => row.id === 'acme'))?.candidates).toEqual([{ channelId: 'erp-cli', modelId: 'erp-model' }]);
-  const replace = (override?: object, version = 2) => overlay({ candidatePolicies: [{ id: 'standard', version, ...(override ? { override } : {}), candidates: [{ channelId: 'c', modelId: 'm' }] }] });
+  const replace = (override?: object, version = 3) => overlay({ candidatePolicies: [{ id: 'standard', version, ...(override ? { override } : {}), candidates: [{ channelId: 'c', modelId: 'm' }] }] });
   expect(() => mergeWorkClassRegistries(CORE_WORK_CLASSES, [replace()])).toThrow('WORK_CLASS_OVERRIDE_DENIED');
-  expect(() => mergeWorkClassRegistries(CORE_WORK_CLASSES, [replace({ previousVersion: 2 }, 3)])).toThrow('WORK_CLASS_OVERRIDE_DENIED');
-  const replaced = mergeWorkClassRegistries(CORE_WORK_CLASSES, [replace({ previousVersion: 1 })]);
-  expect(replaced.candidatePolicies?.find(row => row.id === 'standard')).toMatchObject({ version: 2, candidates: [{ channelId: 'c', modelId: 'm' }] });
+  expect(() => mergeWorkClassRegistries(CORE_WORK_CLASSES, [replace({ previousVersion: 3 }, 4)])).toThrow('WORK_CLASS_OVERRIDE_DENIED');
+  // M3 bumped the Core lists to version 2: an overlay written against the alpha.54 list (version 1) no longer applies silently.
+  expect(() => mergeWorkClassRegistries(CORE_WORK_CLASSES, [replace({ previousVersion: 1 })])).toThrow('WORK_CLASS_OVERRIDE_DENIED');
+  // A v4 (exact-only) overlay still replaces a v5 Core list by compare-and-set.
+  const replaced = mergeWorkClassRegistries(CORE_WORK_CLASSES, [replace({ previousVersion: 2 })]);
+  expect(replaced.candidatePolicies?.find(row => row.id === 'standard')).toMatchObject({ version: 3, candidates: [{ channelId: 'c', modelId: 'm' }] });
   expect(() => mergeWorkClassRegistries(CORE_WORK_CLASSES, [overlay({ candidatePolicies: [{ id: 'fresh', version: 2, override: { previousVersion: 1 }, candidates: [{ channelId: 'c', modelId: 'm' }] }] })]))
     .toThrow('WORK_CLASS_OVERRIDE_DENIED');
   expect(() => mergeWorkClassRegistries(CORE_WORK_CLASSES, [overlay({ classes: [{ id: 'acme', candidatePolicyId: 'nobody', defaultEffort: 'high', acceptanceProfile: profile }] })]))
     .toThrow('WORK_CLASS_CANDIDATES_NOT_REGISTERED');
   // A Core registry cannot claim an override of nothing.
-  expect(() => mergeWorkClassRegistries(replace({ previousVersion: 1 }), [])).toThrow('WORK_CLASS_OVERRIDE_DENIED');
+  expect(() => mergeWorkClassRegistries(replace({ previousVersion: 2 }), [])).toThrow('WORK_CLASS_OVERRIDE_DENIED');
 });
 
 it('work input v2 may leave the model open; an effort without a model and a v1 input without one are refused', () => {
@@ -92,4 +102,23 @@ it('the assignment seal is exact: skipped rows are exactly the earlier candidate
   expect(workerAssignmentSchema.parse(seal)).toEqual(seal);
   for (const broken of [{ ...seal, skipped: [] }, { ...seal, skipped: [{ ...seal.skipped[0]!, index: 1 }] }, { ...seal, skipped: [{ ...seal.skipped[0]!, reason: 'free text' }] },
     { ...seal, effort: { level: null, source: 'brain' } }, { ...seal, extra: true }]) expect(workerAssignmentSchema.safeParse(broken).success).toBe(false);
+});
+
+it('registry v5 lists take exact candidates and role selectors; v4 lists stay exact-only; malformed selectors are refused', () => {
+  const v5 = (candidates: readonly object[]) => workClassRegistrySchema.safeParse({ schemaVersion: 5, revision: 'r', classes: [{ id: 'a', defaultEffort: 'high', acceptanceProfile: profile }],
+    bindings: [], evidenceExtensions: [], candidatePolicies: [{ id: 'x', version: 1, candidates }] });
+  const exact = { channelId: 'c', modelId: 'm' };
+  expect(v5([exact, { role: 'worker', minTier: 'worker', maxTier: 'frontier', makerIn: ['acme'], channelIn: ['c'], effort: 'high' }]).success).toBe(true);
+  expect(v5([{ role: 'worker', makerNotIn: ['acme'] }]).success).toBe(true);
+  for (const candidates of [[{ role: 'worker', makerIn: ['a'], makerNotIn: ['b'] }], [{ role: 'worker', minTier: 'frontier', maxTier: 'worker' }],
+    [{ role: 'worker' }, { role: 'worker' }], [{ role: 'worker', makerIn: [] }], [{ role: 'worker', channelIn: ['c', 'c'] }], [{ role: 'worker', tier: 'worker' }],
+    [{ role: 'worker', modelId: 'm' }], [{ role: 'worker', minTier: 'ultra' }]]) expect(v5(candidates).success, JSON.stringify(candidates)).toBe(false);
+  // A selector is a v5 field: a v4 list naming one is a schema refusal (alpha.54 policy unchanged).
+  expect(workClassRegistrySchema.safeParse({ schemaVersion: 4, revision: 'r', classes: [{ id: 'a', defaultEffort: 'high', acceptanceProfile: profile }], bindings: [],
+    evidenceExtensions: [], candidatePolicies: [{ id: 'x', version: 1, candidates: [{ role: 'worker' }] }] }).success).toBe(false);
+  // A v5 overlay adds its own selector list over the Core seed.
+  const own = workClassRegistrySchema.parse({ schemaVersion: 5, revision: 'acme-5', classes: [{ id: 'acme', candidatePolicyId: 'acme-list', defaultEffort: 'high', acceptanceProfile: profile }],
+    bindings: [], evidenceExtensions: [], candidatePolicies: [{ id: 'acme-list', version: 1, candidates: [{ role: 'worker', makerNotIn: ['acme'] }] }] });
+  const merged = mergeWorkClassRegistries(CORE_WORK_CLASSES, [own]);
+  expect(resolveWorkClassCandidates(merged, merged.classes.find(row => row.id === 'acme'))?.candidates).toEqual([{ role: 'worker', makerNotIn: ['acme'] }]);
 });

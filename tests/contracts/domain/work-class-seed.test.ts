@@ -5,10 +5,10 @@ import { resolveExecutionRegistry } from '#engine/index.js';
 
 // ATAMA-0 seed revision: every Core class carries an acceptance profile and the A8 proposal-admission data. Standing admission stays off
 // until the N1 class-consistency measurement (owner A8, O6); the gate itself is unchanged. Expected values are the owner decisions as literals.
-// ATAMA-1 (seed revision atama-1, registry v4) adds the worker candidate lists (work-class-assignment.test.ts) and keeps everything here.
-it('the Core seed is a v4 registry: each class has an acceptance profile and a declared proposal risk, none admits standing', () => {
-  expect(CORE_WORK_CLASSES.schemaVersion).toBe(4);
-  expect(CORE_WORK_CLASSES.revision).toBe('atama-1-2026-10-23');
+// ATAMA-1 (registry v4) added the worker candidate lists; M3 (seed revision atama-m3, registry v5) adds selector tails (work-class-assignment.test.ts).
+it('the Core seed is a v5 registry: each class has an acceptance profile and a declared proposal risk, none admits standing', () => {
+  expect(CORE_WORK_CLASSES.schemaVersion).toBe(5);
+  expect(CORE_WORK_CLASSES.revision).toBe('atama-m3-2026-10-23');
   const risks = Object.fromEntries(CORE_WORK_CLASSES.classes.map(row => [row.id, 'proposalAdmission' in row ? row.proposalAdmission : undefined]));
   expect(risks).toEqual({ small: { risk: 'low', standingAdmission: false }, test: { risk: 'normal', standingAdmission: false },
     feature: { risk: 'normal', standingAdmission: false }, design: { risk: 'high', standingAdmission: false },
@@ -39,7 +39,7 @@ const evaluation = (verdict: 'pass' | 'fail', evidenceTypes?: string[]): TaskEva
   criteria: [{ criterionId: 'exit', verdict, evidenceIds: ['dispatch-output'], ...(evidenceTypes ? { evidenceTypes } : {}) }] });
 it('a seed-bound task freezes the seed profile and keeps today\'s conclusions for a retained-artifact verdict', () => {
   const run = evaluatingSeedTask();
-  expect(run.execution.tasks[0]!.acceptance).toMatchObject({ workClass: 'small', policyRevision: 'atama-1-2026-10-23', profileVersion: 1 });
+  expect(run.execution.tasks[0]!.acceptance).toMatchObject({ workClass: 'small', policyRevision: 'atama-m3-2026-10-23', profileVersion: 1 });
   const passed = inspectTaskEvaluation(run, bindTaskAcceptance(run, evaluation('pass', ['retained-artifact'])));
   expect(passed.conclusion).toBe('pass'); expect(passed.evaluation.acceptance).toMatchObject({ score: 1, ceilingReasons: [] });
   expect(inspectTaskEvaluation(run, bindTaskAcceptance(run, evaluation('fail'))).conclusion).toBe('fail');

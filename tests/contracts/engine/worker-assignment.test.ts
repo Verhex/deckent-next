@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
-import { parseProviderCatalogDocument, readWorkerModelPin, type ExecutionProfileDefinition, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
-  type ModelCatalogModelRecord } from '#domain/index.js';
-import { assertRunExecution, assignTaskWorker, renderRunCreateApprovalSummary, resolveWorkerEffortExecution, type ModelCatalogReader } from '#engine/index.js';
+import { parseProviderCatalogDocument, readWorkerModelPin, type CatalogModel, type ExecutionProfileDefinition, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
+  type ModelCatalogModelRecord, type ModelRolePolicy } from '#domain/index.js';
+import { assertRunExecution, assignTaskWorker, composeModelRolePolicy, renderRunCreateApprovalSummary, resolveWorkerEffortExecution, type ModelCatalogReader } from '#engine/index.js';
 import { bindNativeWorkerEffort, compileNativeCodingWorkInput, isNativeCodingTemplate, nativeWorkerEffortCapability } from '#adapters/index.js';
 
 // ATAMA-1 (owner ASS1, A1, A5): a work input without a model gets its worker from the task's WorkClass candidate list, through the same
@@ -25,15 +25,16 @@ const compiler = { capability: nativeWorkerEffortCapability, bind: bindNativeWor
   compile: (value: ExecutionProfileDefinition, work: unknown, effort?: Parameters<typeof compileNativeCodingWorkInput>[2], evidence?: Parameters<typeof compileNativeCodingWorkInput>[3]) =>
     compileNativeCodingWorkInput(value, work, effort, evidence) };
 
-/** The packaged Claude and Codex catalog documents as ledger rows; activation rows per scope are the test's own. */
-async function catalog(active: Readonly<Record<string, readonly string[]>>) {
+/** The packaged Claude and Codex catalog documents as ledger rows; activation rows per scope are the test's own. `extra`: catalog rows a test
+ * adds as data only (M3 proof), appended to a packaged channel. */
+async function catalog(active: Readonly<Record<string, readonly string[]>>, extra: Readonly<Record<string, readonly CatalogModel[]>> = {}) {
   const channels: ModelCatalogChannelRecord[] = [], models = new Map<string, ModelCatalogModelRecord[]>();
   for (const name of ['claude-cli-subscription', 'codex-cli-subscription']) {
     const document = parseProviderCatalogDocument(JSON.parse(await readFile(new URL(`../../../assets/model-catalog/${name}.json`, import.meta.url), 'utf8')));
     for (const provider of document.providers) {
       channels.push({ schemaVersion: 1, channelId: provider.id, revision: 3, providerVersion: provider.version, channel: provider.channel, catalogRevision: document.revision });
-      models.set(provider.id, provider.models.map(model => ({ schemaVersion: 1, channelId: provider.id, modelId: model.nativeId, revision: 7, providerVersion: provider.version, model,
-        catalogRevision: document.revision })));
+      models.set(provider.id, [...provider.models, ...extra[provider.id] ?? []].map(model => ({ schemaVersion: 1, channelId: provider.id, modelId: model.nativeId, revision: 7,
+        providerVersion: provider.version, model, catalogRevision: document.revision })));
     }
   }
   const reads: string[] = [];
@@ -51,7 +52,7 @@ async function catalog(active: Readonly<Record<string, readonly string[]>>) {
   };
   return { reader, reads };
 }
-const context = (scopeId = 's') => ({ scopeId, nowMs: Date.parse('2026-10-23T12:00:00Z') });
+const context = (scopeId = 's', roles: ModelRolePolicy = composeModelRolePolicy(undefined)) => ({ scopeId, nowMs: Date.parse('2026-10-23T12:00:00Z'), roles });
 const standard = { channel: 'claude-cli-subscription', model: 'claude-opus-5-5' };
 
 it('takes the first admissible candidate of the WorkClass list and seals it; earlier candidates are kept with their typed refusal', async () => {
@@ -60,7 +61,7 @@ it('takes the first admissible candidate of the WorkClass list and seals it; ear
   const execution = await resolveWorkerEffortExecution(graph('coding'), registry(), reader, validation, compiler, context());
   const task = execution.tasks[0]!, pin = readWorkerModelPin(task.profile.parameters)!;
   expect(pin.pin).toEqual({ channelId: standard.channel, modelId: standard.model, auxiliaryModelIds: [] });
-  expect(task.assignment).toEqual({ schemaVersion: 1, workClass: 'feature', workClassRevision: 'atama-1-2026-10-23', candidatePolicy: { id: 'standard', version: 1 },
+  expect(task.assignment).toEqual({ schemaVersion: 1, workClass: 'feature', workClassRevision: 'atama-m3-2026-10-23', candidatePolicy: { id: 'standard', version: 2 },
     candidateIndex: 0, channelId: standard.channel, modelId: standard.model, catalogRevision: 'claude-cli-subscription-2026-10-08', modelRevision: 7, activationRevision: 5,
     // A1: the Claude catalog declares no vendor default and the list names no deviation, so the CLI's own default stays in place.
     effort: { level: null, source: 'cli-default' }, skipped: [] });
@@ -78,8 +79,8 @@ it('skips an inactive, an unknown-channel and a CLI-mismatched candidate with th
         + 'cursor-cli-subscription/claude-opus-5-thinking-high: WORKER_CHANNEL_NOT_ACTIVE' } });
   // The light list names gpt-6-luna second: it is chosen, its catalog vendor default (medium) is the effort, and the skip is sealed.
   const execution = await resolveWorkerEffortExecution(graph('codex-coding', input(), 'small'), registry(), reader, validation, compiler, context());
-  expect(execution.tasks[0]!.assignment).toMatchObject({ workClass: 'small', candidatePolicy: { id: 'light', version: 1 }, candidateIndex: 1, modelId: 'gpt-6-luna',
-    catalogRevision: 'codex-cli-subscription-2026-10-02', effort: { level: 'medium', source: 'catalog' },
+  expect(execution.tasks[0]!.assignment).toMatchObject({ workClass: 'small', candidatePolicy: { id: 'light', version: 2 }, candidateIndex: 1, modelId: 'gpt-6-luna',
+    catalogRevision: 'codex-cli-subscription-2026-10-23', effort: { level: 'medium', source: 'catalog' },
     skipped: [{ index: 0, channelId: 'claude-cli-subscription', modelId: 'claude-sonnet-5-5', reason: 'WORKER_CHANNEL_MISMATCH' }] });
   expect(readWorkerModelPin(execution.tasks[0]!.profile.parameters)!.reasoningEffort).toMatchObject({ level: 'medium', source: 'policy-default', workClass: 'small', target: 'medium' });
 });
@@ -87,7 +88,7 @@ it('skips an inactive, an unknown-channel and a CLI-mismatched candidate with th
 it('a candidate deviation is the effort target (A1), clamped to what the model supports, and recorded as the candidate\'s', async () => {
   const { reader } = await catalog({ 's/codex-cli-subscription': ['gpt-6.1-sol'] });
   const execution = await resolveWorkerEffortExecution(graph('codex-coding', input(), 'architecture'), registry(), reader, validation, compiler, context());
-  expect(execution.tasks[0]!.assignment).toMatchObject({ candidatePolicy: { id: 'deep', version: 1 }, candidateIndex: 2, modelId: 'gpt-6.1-sol', effort: { level: 'high', source: 'candidate' } });
+  expect(execution.tasks[0]!.assignment).toMatchObject({ candidatePolicy: { id: 'deep', version: 2 }, candidateIndex: 2, modelId: 'gpt-6.1-sol', effort: { level: 'high', source: 'candidate' } });
 });
 
 it('activation is per scope: the same plan is assigned in the scope that activated the model and refused in one that did not', async () => {
@@ -149,10 +150,10 @@ it('an Enterprise overlay replaces a Core list only by compare-and-set and the a
   const replaced = { schemaVersion: 4, revision: 'acme-1', classes: [{ id: 'acme-feature', candidatePolicyId: 'standard', defaultEffort: 'high', acceptanceProfile: {
     schemaVersion: 1, version: 1, criterionTypes: ['completion'], evidenceTypes: ['retained-artifact'], rubric: [{ criterionType: 'completion', evidenceTypes: ['retained-artifact'], weight: 1 }],
     ceilingRules: [], decisionThresholds: { rejectBelow: 0.5, acceptAt: 1 } } }], bindings: [], evidenceExtensions: [],
-    candidatePolicies: [{ id: 'standard', version: 2, override: { previousVersion: 1 }, candidates: [{ channelId: standard.channel, modelId: 'claude-sonnet-5-5', effort: 'medium' }] }] };
+    candidatePolicies: [{ id: 'standard', version: 3, override: { previousVersion: 2 }, candidates: [{ channelId: standard.channel, modelId: 'claude-sonnet-5-5', effort: 'medium' }] }] };
   const execution = await resolveWorkerEffortExecution(graph('coding'), registry(replaced), reader, validation, compiler, context());
-  expect(execution.tasks[0]!.assignment).toMatchObject({ workClass: 'feature', workClassRevision: JSON.stringify(['atama-1-2026-10-23', 'acme-1']),
-    candidatePolicy: { id: 'standard', version: 2 }, candidateIndex: 0, modelId: 'claude-sonnet-5-5', effort: { level: 'medium', source: 'candidate' } });
+  expect(execution.tasks[0]!.assignment).toMatchObject({ workClass: 'feature', workClassRevision: JSON.stringify(['atama-m3-2026-10-23', 'acme-1']),
+    candidatePolicy: { id: 'standard', version: 3 }, candidateIndex: 0, modelId: 'claude-sonnet-5-5', effort: { level: 'medium', source: 'candidate' } });
   const stale = { ...replaced, candidatePolicies: [{ ...replaced.candidatePolicies[0]!, override: undefined }] };
   await expect(resolveWorkerEffortExecution(graph('coding'), registry(JSON.parse(JSON.stringify(stale))), reader, validation, compiler, context()))
     .rejects.toThrow('WORK_CLASS_OVERRIDE_DENIED');
@@ -175,9 +176,9 @@ it('the approval card shows the assigned worker, its effort and the list positio
     execution, policy: { schemaVersion: 2 as const, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 }, ordering: ['t'] } };
   const verdict = { decision: 'require-approval', revision: 'p1', reason: 'APPROVAL_REQUIRED' } as const;
   const en = renderRunCreateApprovalSummary(command, create, verdict, 'en'), tr = renderRunCreateApprovalSummary(command, create, verdict, 'tr');
-  expect(en).toContain('worker: claude-fable-5-1 (claude-cli-subscription) · effort: high · from the design list deep@1, choice 2');
+  expect(en).toContain('worker: claude-fable-5-1 (claude-cli-subscription) · effort: high · from the design list deep@2, choice 2');
   expect(en).toContain('skipped before it: claude-opus-5-5 (WORKER_MODEL_NOT_ACTIVE)');
-  expect(tr).toContain('çalışan: claude-fable-5-1 (claude-cli-subscription) · effort: high · design listesinden (deep@1), 2. seçenek');
+  expect(tr).toContain('çalışan: claude-fable-5-1 (claude-cli-subscription) · effort: high · design listesinden (deep@2), 2. seçenek');
   expect(tr).toContain('ondan önce atlananlar: claude-opus-5-5 (WORKER_MODEL_NOT_ACTIVE)');
   // A pinned task's card is byte-identical to before: no worker line.
   const pinned = graph('coding', input({ model: { channelId: standard.channel, modelId: 'claude-fable-5-1', auxiliaryModelIds: [] } }));
