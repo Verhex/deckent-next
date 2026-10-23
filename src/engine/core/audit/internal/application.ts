@@ -1,4 +1,4 @@
-import { auditEventSchema, AuditError, isAuditorPrincipal, isNervousPrincipal, type AuditCounter, type AuditEvent, type AuditRecord } from '#domain/index.js';
+import { auditEventSchema, AuditError, isAuditorPrincipal, isNervousPrincipal, isRecoveryPrincipal, type AuditCounter, type AuditEvent, type AuditRecord } from '#domain/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 import { sealAuditRecord, verifyAuditRecord } from './integrity.js';
 import type { AuditStore } from './store.js';
@@ -21,7 +21,9 @@ export class AuditApplication {
     // S5: the read-only auditor writes no audit event (its own finding stream is a later, separate slice); an event naming it is refused.
     // S6R-2: a `recovery-detection` comes only from Nervous, and Nervous records nothing else (it writes no state).
     if (!parsed.success || isAuditorPrincipal(parsed.data.principal)
-      || isNervousPrincipal(parsed.data.principal) !== (parsed.data.subject.kind === 'recovery-detection')) throw new AuditError('AUDIT_INVALID');
+      || isNervousPrincipal(parsed.data.principal) !== (parsed.data.subject.kind === 'recovery-detection')
+      // S6R-4: a lost task's continuation comes only from the recovery principal, and it records nothing else.
+      || isRecoveryPrincipal(parsed.data.principal) !== (parsed.data.subject.kind === 'run-lifecycle' && parsed.data.subject.action === 'continue-lost-task')) throw new AuditError('AUDIT_INVALID');
     const event: AuditEvent = parsed.data;
     return this.guard(() => verifyAuditRecord(this.store.append(event, sequence => sealAuditRecord(event, sequence, this.integrity)), this.integrity));
   }

@@ -83,6 +83,13 @@ const digest = (value: string) => createHash('sha256').update(value).digest('hex
 export const effectInputDigest = (input: unknown) => digest(encodeCommandProjection('effect-input', input ?? null));
 export const effectWireKey = (command: EffectCommand) => digest(['effect-key:1', command.scopeId, command.target.kind, command.target.id,
   `${command.operation.id}@${command.operation.version}`, command.idempotencyKey].join('\0'));
+/**
+ * S6R-4 (lead note on the S6R design re-audit): the one derivation of a task-scoped idempotency key — from the task, the operation and the target
+ * only, never the Attempt — for an operation whose catalog entry declares `idempotencyScope: 'task'`. A new Attempt of a continued task produces the
+ * same key, so its repeat of settled work maps to the one existing intent (the ledger refuses a second record; the target dedups by the wire key).
+ */
+export const taskScopedIdempotencyKey = (taskId: string, operation: OperationRef, target: EffectTargetRef) =>
+  digest(['effect-task-key:1', taskId, target.kind, target.id, `${operation.id}@${operation.version}`].join('\0'));
 const binding = (descriptor: OperationDescriptor, target: EffectTarget) =>
   digest(`effect-binding:1\0${encodeCommandProjection('effect-descriptor', descriptor)}\0${target.identity()}`);
 /** Unwinds `run` at the gate with the pending outcome (an outcome, never surfaced as an error). */

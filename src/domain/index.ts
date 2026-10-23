@@ -5,6 +5,7 @@ export * from '#domain/core/provider-catalog/index.js';
 export * from '#domain/core/principal/index.js';
 export * from '#domain/core/policy/index.js';
 export * from '#domain/core/run/index.js';
+export * from '#domain/core/recovery/index.js';
 export * from '#domain/core/task-evaluation/index.js';
 export * from '#domain/core/model-activation/index.js';
 export * from '#domain/core/model-invocation/index.js';

@@ -1,4 +1,4 @@
-import { isAiPrincipal, isAuditorPrincipal, isMemoryDistillerPrincipal, isMemoryEvaluatorPrincipal, isNervousPrincipal } from '#domain/core/principal/index.js';
+import { isAiPrincipal, isAuditorPrincipal, isMemoryDistillerPrincipal, isMemoryEvaluatorPrincipal, isNervousPrincipal, isRecoveryPrincipal } from '#domain/core/principal/index.js';
 /** S5 (AUDITOR-MODEL Q4): the only actions the auditor principal may ever be granted. A security invariant, never policy data. */
 export const AUDITOR_READ_ACTIONS = Object.freeze(['inspect', 'list', 'verify'] as const);
 /** S6 Nervous (K-B): the only actions the Nervous principal may ever be granted; it writes no state (the broker applies proposals). */
@@ -9,6 +9,9 @@ export const MEMORY_DISTILLER_ALLOWED_PAIRS = Object.freeze([['memory', 'inspect
 /** S4B-3 (owner S-M3 2026-10-23, S4B-DESIGN §5 A5, approved verbatim): the memory evaluator's exact allow-list V1–V5 — read memory, verify a
  * candidate, open a contest, read Runs, invoke its model. No propose, retire, purge or raw worker output (`attempt/read-output`). */
 export const MEMORY_EVALUATOR_ALLOWED_PAIRS = Object.freeze([['memory', 'inspect'], ['memory', 'verify'], ['memory', 'contest'], ['run', 'inspect'], ['model-invocation', 'invoke']] as const);
+/** S6R-4 (S6R-DESIGN §9, lead on s6r3 Q4): the recovery principal's exact allow-list — reconcile an Attempt, read a Run. It continues a lost task only
+ * through its own application under the owner's standing grant (`recovery-action`, a person's), never through a policy grant of its own. */
+export const RECOVERY_ALLOWED_PAIRS = Object.freeze([['attempt', 'reconcile'], ['run', 'inspect']] as const);
 const pairIn = (pairs: readonly (readonly [string, string])[], kind: string, action: string) => pairs.some(([allowedKind, allowed]) => allowedKind === kind && allowed === action);
 /**
  * Approval cards whose decision widens authority: identity profile distribution, MCP capability grants and the first-run template
@@ -31,6 +34,7 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   if (isNervousPrincipal(actor) && !(NERVOUS_READ_ACTIONS as readonly string[]).includes(action)) return true;
   if (isMemoryDistillerPrincipal(actor) && !pairIn(MEMORY_DISTILLER_ALLOWED_PAIRS, resource.kind, action)) return true;
   if (isMemoryEvaluatorPrincipal(actor) && !pairIn(MEMORY_EVALUATOR_ALLOWED_PAIRS, resource.kind, action)) return true;
+  if (isRecoveryPrincipal(actor) && !pairIn(RECOVERY_ALLOWED_PAIRS, resource.kind, action)) return true;
   if (resource.kind === 'operation' && resource.id === 'policy.administer' && ['execute', 'compensate'].includes(action)) return true;
   if (['authority-document', 'authenticator', 'approval-assurance'].includes(resource.kind) && !['inspect', 'list'].includes(action)) return true;
   if (resource.kind === 'backup' && action === 'restore') return true;

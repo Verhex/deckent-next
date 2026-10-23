@@ -15,7 +15,11 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 65;
+export const CURRENT_LEDGER_VERSION = 66;
+// S6R-4 recovery cases (lane v66 after s4b1's v65; the lead renumbers at landing): one additive table, a case per lost Attempt and Nervous rule
+// (open → gated → decided → applied | escalated), moved only forward by one revision under compare-and-swap; a closed case is final and no row is
+// deleted. No earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v66).
+export const RECOVERY_CASES_LEDGER_VERSION = 66;
 // S4B-1 memory automation (lane v65 after s7's v64; the lead renumbers at landing): the one memory migration for S4B-1..S4B-7 — support rows,
 // extraction receipts + cursor, evaluation records, contests, purge records (all sealed; append-only except the cursor and a contest's single
 // resolution) and the revision trigger that allows only the tombstone rewrite of the same (scope, entry, revision): a sealed record whose
@@ -71,6 +75,14 @@ export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const append = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;`).join('');
 const memoryAppend = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;`).join('');
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  [RECOVERY_CASES_LEDGER_VERSION]: `CREATE TABLE recovery_cases(scope_id TEXT NOT NULL,case_id TEXT NOT NULL,run_id TEXT NOT NULL,task_id TEXT NOT NULL,attempt_id TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN('open','gated','decided','applied','escalated')),revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,case_id));
+    CREATE INDEX recovery_cases_task ON recovery_cases(scope_id,run_id,task_id,state);
+    CREATE TRIGGER recovery_cases_no_delete BEFORE DELETE ON recovery_cases BEGIN SELECT RAISE(ABORT,'RECOVERY_CASE_APPEND_ONLY'); END;
+    CREATE TRIGGER recovery_cases_forward_only BEFORE UPDATE ON recovery_cases WHEN NEW.scope_id IS NOT OLD.scope_id OR NEW.case_id IS NOT OLD.case_id
+      OR NEW.run_id IS NOT OLD.run_id OR NEW.task_id IS NOT OLD.task_id OR NEW.attempt_id IS NOT OLD.attempt_id OR NEW.revision IS NOT OLD.revision+1
+      OR OLD.state IN('applied','escalated') BEGIN SELECT RAISE(ABORT,'RECOVERY_CASE_APPEND_ONLY'); END;
+    PRAGMA user_version=66;`,
   [MEMORY_AUTOMATION_LEDGER_VERSION]: `CREATE TABLE memory_entry_support(scope_id TEXT NOT NULL,entry_id TEXT NOT NULL,support_id TEXT NOT NULL,seq INTEGER NOT NULL,record TEXT NOT NULL,
     PRIMARY KEY(scope_id,support_id),FOREIGN KEY(scope_id,entry_id) REFERENCES memory_entries(scope_id,entry_id));
     CREATE INDEX memory_entry_support_entry ON memory_entry_support(scope_id,entry_id,seq);
@@ -342,7 +354,7 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === 54) { migrateQuotaWaits(db); continue; }
     const sql = migrations[next];
     if (!sql) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
-    if (next === RUN_PROPOSAL_LEDGER_VERSION || next === MEMORY_AUTOMATION_LEDGER_VERSION) {
+    if (next === RUN_PROPOSAL_LEDGER_VERSION || next === MEMORY_AUTOMATION_LEDGER_VERSION || next === RECOVERY_CASES_LEDGER_VERSION) {
       // A previous version cannot contain proposal objects. Refuse a contradictory
       // schema; never silently adopt an existing table or bypass append-only triggers.
       try { db.exec(sql); } catch { throw new AttemptStoreError('ATTEMPT_STORE_VERSION'); }

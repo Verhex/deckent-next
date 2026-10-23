@@ -71,6 +71,7 @@ export * from '#engine/core/toolchain-currency/index.js';
 export * from '#engine/core/approval/index.js';
 export * from '#engine/core/audit/index.js';
 export * from '#engine/core/nervous/index.js';
+export * from '#engine/core/recovery/index.js';
 export * from '#engine/core/agent-turn/index.js';
 export * from '#engine/core/shell-classification/index.js';
 export * from '#engine/core/secret-store/index.js';

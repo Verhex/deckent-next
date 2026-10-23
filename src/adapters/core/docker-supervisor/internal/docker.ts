@@ -146,6 +146,18 @@ export class DockerSupervisor implements ExecutionSupervisor {
     if (!/^[a-f0-9]{64}$/.test(containerId)) throw new SupervisorError('SUPERVISOR_REQUEST_INVALID');
     return await this.inspect(containerId, this.identity(input).digest) === null ? Object.freeze({ kind: 'created-container-absent' as const, containerId }) : null;
   }
+  /** S6R-4 (lead on s6r3 Q3): a launcher that died between `create` and `start` leaves a container no stop can end. Only that exact id, only while
+   * Docker reports it `created` under this request's label, is removed — plain `rm` (Docker refuses a running container), never forced, never by
+   * name — and only a later explicit missing-object answer counts as removed. A started container is never removed here. */
+  async removeCreatedContainer(input: SandboxRequest, containerId: string): Promise<'removed' | 'absent' | 'not-created'> {
+    if (!/^[a-f0-9]{64}$/.test(containerId)) throw new SupervisorError('SUPERVISOR_REQUEST_INVALID');
+    const { digest } = this.identity(input), existing = await this.inspect(containerId, digest);
+    if (!existing) return 'absent';
+    if (existing.State.Status !== 'created' || existing.Id !== containerId) return 'not-created';
+    try { await this.command(['rm', containerId], this.options.controlTimeoutMs); } catch { /* absence decides */ }
+    if (await this.inspect(containerId, digest) !== null) throw new SupervisorError('SUPERVISOR_RELEASE_UNCONFIRMED');
+    return 'removed';
+  }
   async execute(input: SandboxRequest, signal?: AbortSignal, hooks?: SupervisorLaunchHooks): Promise<SandboxResult> {
     const { request, digest, handle } = this.identity(input);
     if (signal?.aborted) throw new SupervisorError('SUPERVISOR_CANCELLED');

@@ -36,7 +36,7 @@ async function poll<T>(read: () => Promise<T | undefined>, label: string): Promi
 const containerId = 'b'.repeat(64), startedAt = '2026-10-23T10:00:00.000000000Z';
 type Retained = 'incarnation' | 'container' | 'none';
 
-async function fixture(input: { status: 'running' | 'missing'; retained: Retained; standing?: boolean; lostKills?: number }) {
+async function fixture(input: { status: 'running' | 'missing' | 'created'; retained: Retained; standing?: boolean; lostKills?: number }) {
   const root = await mkdtemp(join(tmpdir(), 'dk-nervous-live-')); roots.push(root);
   const project = join(root, 'p'), data = join(root, 'd');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
@@ -56,10 +56,12 @@ async function fixture(input: { status: 'running' | 'missing'; retained: Retaine
     if (operation === 'context') return { stdout: JSON.stringify({ Host: 'unix:///fixture.sock' }), stderr: '' };
     if (operation === 'info') return { stdout: 'fixture-daemon', stderr: '' };
     if (operation === 'kill' && container.status === 'running') { if (container.lostKills-- <= 0) container.status = 'exited'; return { stdout: handle, stderr: '' }; }
+    // S6R-4 (lead on s6r3 Q3): only a never-started container, by its exact created id and never forced, may be removed.
+    if (operation === 'rm' && container.status === 'created' && args.length === 2 && args[1] === containerId) { container.status = 'missing'; return { stdout: containerId, stderr: '' }; }
     if (operation !== 'inspect') throw new Error('unexpected worker mutation: ' + operation);
     if (container.status === 'missing' || ![handle, containerId].includes(args[1]!)) throw new DockerCommandFailure('', 'Error: No such object: ' + args[1], 1, false);
     return { stdout: JSON.stringify([{ Id: containerId, Image: docker.imageId, Config: { Labels: { 'deckent.request': digest } },
-      State: { Status: container.status, ExitCode: container.status === 'exited' ? 137 : 0, StartedAt: startedAt, FinishedAt: container.status === 'exited' ? '2026-10-23T10:01:00Z' : '0001-01-01T00:00:00Z' } }]), stderr: '' };
+      State: { Status: container.status, ExitCode: container.status === 'exited' ? 137 : 0, StartedAt: container.status === 'created' ? '0001-01-01T00:00:00Z' : startedAt, FinishedAt: container.status === 'exited' ? '2026-10-23T10:01:00Z' : '0001-01-01T00:00:00Z' } }]), stderr: '' };
   };
   const supervisor = new DockerSupervisor(docker, runner), profile = await supervisor.captureProfile();
   const restore = DockerSupervisor.restoreProfile.bind(DockerSupervisor);
@@ -165,5 +167,19 @@ it.skipIf(process.platform === 'win32')('live without the owner\'s standing gran
   expect(after.attempt?.lastObservation).toBeNull();
   expect(task(after.run).workerCustody).toBeUndefined();
   expect(f.audit('run-lifecycle')).toEqual([]);
+  expect(f.errors).toEqual([]);
+});
+
+it.skipIf(process.platform === 'win32')('Q3: a created, never-started container of a dead launcher is removed by its exact id, then the slot is released on its proven absence', async () => {
+  const f = await fixture({ status: 'created', retained: 'container' });
+  await poll(async () => task((await f.state()).run).workerCustody?.state === 'released' ? true : undefined, 'RELEASE_TIMEOUT');
+  await f.stop();
+  expect(f.commands).toContain('rm'); expect(f.commands).not.toContain('kill');
+  expect(f.container.status).toBe('missing');
+  expect(f.audit('recovery-detection').map(event => [event.subject.rule.id, event.subject.action, event.subject.disposition])).toEqual([['launcher-dead-orphan', 'stop-orphan', 'execute']]);
+  expect(f.audit('run-lifecycle').map(event => event.subject.action)).toEqual(['hold', 'release-worker-custody']);
+  expect(task((await f.state()).run)).toMatchObject({ phase: 'reconciling', unresolvedEffects: true });
+  expect(f.counts()).toEqual({ attempts: 1, dispatches: 1 });
+  expect(await f.launcherRecords()).toEqual([]);
   expect(f.errors).toEqual([]);
 });

@@ -701,7 +701,8 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/worker-event",
         "src/domain/core/audit",
-        "src/domain/core/provider-spend"
+        "src/domain/core/provider-spend",
+        "src/domain/core/recovery"
       ],
       "plan": "CONTRACT"
     },
@@ -3747,6 +3748,45 @@
         "src/engine/core/dispatch"
       ],
       "plan": "STORE"
+    },
+    "src/domain/core/recovery": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/attempt",
+        "src/domain/core/effect",
+        "src/domain/core/audit"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/engine/core/recovery": {
+      "dependencies": [
+        "src/domain/core/recovery",
+        "src/domain/core/run",
+        "src/domain/core/attempt",
+        "src/domain/core/audit",
+        "src/domain/core/command",
+        "src/domain/core/effect",
+        "src/domain/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/principal",
+        "src/engine/core/audit",
+        "src/engine/core/authentication",
+        "src/platform/core/integrity"
+      ],
+      "plan": "EXECUTION"
+    },
+    "src/adapters/core/recovery-case-store": {
+      "dependencies": [
+        "src/domain/core/recovery",
+        "src/domain/core/run",
+        "src/domain/core/attempt",
+        "src/domain/core/effect",
+        "src/domain/core/primitives",
+        "src/engine/core/recovery",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/sqlite-ledger"
+      ],
+      "plan": "EXECUTION"
     }
   },
   "composition": {
