@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { CORE_MODEL_ROLES, eligibleRoleModels, decideRoleModel, mergeModelRoleRegistries, modelRoleConfigSchema, modelRoleRegistrySchema, parseProviderCatalogDocument,
   roleModelKey } from '#domain/index.js';
+import { modelRoleCoverage } from '#engine/index.js';
 
 // S2 (owner A2, A3, BRAIN1): a separate versioned tier/role registry. Tier is eligibility; activation is permission; a role asks for both.
 // The Brain role needs the frontier tier; the only way past it is a named, dated exception that drops once a measured frontier Brain is active.
@@ -24,14 +25,25 @@ it('the Core seed names exactly the owner Brain list as frontier Brain rows, and
   expect(policy.models.some(row => row.measured !== undefined)).toBe(false);
 });
 
-it('every packaged catalog model has exactly one tier row, and the registry names no model outside the packaged catalogs', async () => {
-  const dir = new URL('../../../assets/model-catalog/', import.meta.url), packaged = new Set<string>();
+it('every Core role row names a packaged catalog model; a packaged model without a row is shown pending and fails closed (M2)', async () => {
+  // Owner 2026-10-23 (M2): a new catalog model is a data update. It needs no seed edit in the same change: until a person assigns its tier and
+  // roles (`deckent models roles set`) it shows as pending and no role may use it.
+  const dir = new URL('../../../assets/model-catalog/', import.meta.url), packaged: { channelId: string; modelId: string }[] = [];
   for (const name of (await readdir(dir)).filter(file => file.endsWith('.json'))) {
     const document = parseProviderCatalogDocument(JSON.parse(await readFile(new URL(name, dir), 'utf8')));
-    for (const provider of document.providers) for (const model of provider.models) packaged.add(roleModelKey({ channelId: provider.id, modelId: model.nativeId }));
+    for (const provider of document.providers) for (const model of provider.models) packaged.push({ channelId: provider.id, modelId: model.nativeId });
   }
-  expect(new Set(CORE_MODEL_ROLES.models.map(row => roleModelKey(row)))).toEqual(packaged);
-  expect(CORE_MODEL_ROLES.models).toHaveLength(packaged.size);
+  const keys = new Set(packaged.map(roleModelKey));
+  expect(CORE_MODEL_ROLES.models.filter(row => !keys.has(roleModelKey(row)))).toEqual([]);
+  const policy = mergeModelRoleRegistries(CORE_MODEL_ROLES, []);
+  const facts = packaged.map(row => ({ ...row, displayName: null, maker: null, pricing: null }));
+  const coverage = modelRoleCoverage(policy, facts);
+  expect(coverage.map(roleModelKey)).toEqual(packaged.map(roleModelKey));
+  for (const row of coverage) {
+    const held = policy.models.some(entry => roleModelKey(entry) === roleModelKey(row));
+    expect(row.state).toBe(held ? 'assigned' : 'pending');
+    if (!held) expect(decideRoleModel(policy, 'brain', row, { today: '2026-10-23', active: new Set([roleModelKey(row)]) })).toEqual({ state: 'refused', reason: 'model-unknown' });
+  }
 });
 
 it('refuses a worker-tier Brain, an unknown model, a frontier row without the role and an unregistered role, typed', () => {

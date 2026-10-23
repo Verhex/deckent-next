@@ -99,6 +99,16 @@ describe('doctor rows (pure)', () => {
       .filter(row => row.state !== 'untested');
     expect(renderDoctorChecks(clean, 'en').split('\n')[0]).toBe('Status: ready · no warnings');
   });
+  it('M2: a catalog model with no tier/role row is a warning "new model: role pending" with its exact set command, bounded by the registry', () => {
+    const pending = Array.from({ length: 7 }, (_, index) => ({ modelId: `model-new-${index}`, channelId: 'anthropic-api' }));
+    const en = doctorChecks(report, facts({ pendingRoleModels: pending }), 'en').filter(row => row.id === 'work.modelRoles');
+    expect(en).toHaveLength(6);
+    expect(en[0]).toMatchObject({ state: 'warning', text: 'New model: role pending — model-new-0 (anthropic-api); no role may use it until a person assigns one',
+      next: 'deckent models roles set --channel anthropic-api --model model-new-0 --tier <tier> --roles <roles> --scope live' });
+    expect(en[5]).toMatchObject({ state: 'warning', text: 'New model: role pending — 2 more catalog models; see deckent models roles', next: 'deckent models roles --scope live' });
+    expect(doctorChecks(report, facts({ pendingRoleModels: pending.slice(0, 1) }), 'tr').find(row => row.id === 'work.modelRoles')?.text).toContain('Yeni model: rol bekliyor');
+    for (const value of [[], null, undefined]) expect(doctorChecks(report, facts({ pendingRoleModels: value }), 'en').some(row => row.id === 'work.modelRoles')).toBe(false);
+  });
   it('tool rows: stale offers the update fix, not-admitted and offline are "not tested" in words (no raw status code)', () => {
     const toolchains = { mode: 'report', registryEndpoint: 'https://registry.npmjs.org', providers: [
       { provider: 'claude', status: 'stale', admitted: [], latest: { version: '2.9.0' } }, { provider: 'codex', status: 'not-admitted', admitted: [], latest: null },

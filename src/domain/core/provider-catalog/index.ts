@@ -18,7 +18,7 @@ export { NativeCliRegistryError, nativeCliVocabulary, INSTRUCTION_SURFACE_PATHS,
 export { workerEffortSchema } from './internal/worker-effort.js';
 export { endpointMayCarryKey } from './internal/endpoint-key.js';
 export type { WorkerEffort, ReasoningEffort } from './internal/worker-effort.js';
-export { MODEL_TIERS, CORE_MODEL_ROLES, ModelRoleError, modelRoleRegistrySchema, modelRoleConfigSchema, mergeModelRoleRegistries, decideRoleModel, eligibleRoleModels,
+export { MODEL_TIERS, MODEL_ROLE_LIMITS, CORE_MODEL_ROLES, ModelRoleError, modelRoleRegistrySchema, modelRoleConfigSchema, mergeModelRoleRegistries, decideRoleModel, eligibleRoleModels,
   roleModelKey } from './internal/model-role.js';
 export type { ModelTier, ModelRoleRegistry, ModelRolePolicy, ModelRoleErrorCode, RoleModelTarget, RoleModelFacts, RoleModelRefusal, RoleModelDecision,
   RoleModelRow } from './internal/model-role.js';

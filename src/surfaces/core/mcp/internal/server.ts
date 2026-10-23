@@ -29,6 +29,7 @@ import { memoryListQuerySchema, memorySearchQuerySchema, memoryInspectQuerySchem
 import { agentListQuerySchema, agentInspectQuerySchema, skillListQuerySchema, skillInspectQuerySchema, type AgentListQuery, type AgentListing, type AgentInspectQuery,
   type AgentInspection, type SkillListQuery, type SkillListing, type SkillInspectQuery, type SkillInspection } from '#engine/index.js';
 import { policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/index.js';
+import { modelRoleQuerySchema, type ModelRoleInspection, type ModelRoleQuery } from '#engine/index.js';
 export interface McpApplications {
   inspectTargetQueue?(query: QueueQuery): Promise<unknown>;
   listTargetQueue?(query: QueueList): Promise<unknown>;
@@ -51,6 +52,8 @@ export interface McpApplications {
   admitModelActivation?(command: ModelActivationCommand): Promise<ModelActivationResult>;
   inspectModelCatalog?(query: ModelCatalogQuery): Promise<ModelCatalogInspection>;
   applyModelCatalog?(command: ModelCatalogCommand): Promise<ModelCatalogResult>;
+  /** M2: which exact catalog model serves which role (pending = no row, every role refuses it). Read-only: assigning stays a person's terminal card. */
+  inspectModelRoles?(query: ModelRoleQuery): Promise<ModelRoleInspection>;
   /** T4-B `models.connect`: the same application as CLI `models connect`, SDK `connectModel` and the terminal (secret names only, never a value). */
   connectModel?(command: ModelConnectCommand): Promise<ModelConnectResult>;
   releaseQuota?(command: QuotaReleaseCommand): Promise<QuotaReleaseReceipt>;
@@ -231,6 +234,11 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (inspectCatalog) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_model_catalog',
     description: t('mcp.tool.inspectModelCatalog', {}, locale), schema: modelCatalogQuerySchema,
     invoke: input => inspectCatalog.call(applications, modelCatalogQuerySchema.parse(input)) });
+  // M2 parity: the same read view as CLI `models roles` and doctor; there is no MCP write (a tier/role change needs the person's terminal).
+  const inspectRoles = applications.inspectModelRoles;
+  if (inspectRoles) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_model_roles',
+    description: t('mcp.tool.inspectModelRoles', {}, locale), schema: modelRoleQuerySchema,
+    invoke: input => inspectRoles.call(applications, modelRoleQuerySchema.parse(input)) });
   const applyCatalog = applications.applyModelCatalog;
   // Destructive but idempotent: adapters/core/sqlite-model-activation/internal/catalog.ts SqliteModelCatalogStore.apply returns the (scope, commandId) receipt before any row is written again.
   if (applyCatalog) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'apply_model_catalog',

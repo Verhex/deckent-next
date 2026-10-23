@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
+import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog,
+  inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
@@ -53,7 +54,7 @@ import { inspectMonitor } from '#composition/core/monitor/index.js';
     manageProviderSpend: (command, delivery) => runtime.manageProviderSpend(command, delivery),
     auditProviderSpendAccount: (command, delivery) => runtime.auditProviderSpendAccount(command, delivery),
     inspectModelActivation: query => inspectConfiguredModelActivation(root, query, { heal: false }),
-    admitModelActivation: command => admitConfiguredModelActivation(root, command), inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query, { heal: false }), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),
+    admitModelActivation: command => admitConfiguredModelActivation(root, command), inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query, { heal: false }), inspectModelRoles: query => inspectConfiguredModelRoles(root, query, { heal: false }), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),
     connectModel: command => connectConfiguredModel(root, command, {}, { listSecretNames: listConfiguredSecretNames }),
     applyPoolCapacity: command => applyConfiguredPoolCapacity(root, command), inspectPoolCapacity: query => inspectConfiguredPoolCapacity(root, query, { heal: false }),
     releaseQuota: command => releaseConfiguredQuota(root, command), inspectPoolHold: query => inspectConfiguredPoolHold(root, query, { heal: false }), applyPoolHold: command => applyConfiguredPoolHold(root, command),

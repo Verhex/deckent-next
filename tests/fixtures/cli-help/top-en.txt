@@ -60,7 +60,7 @@ Models:
       binding | activation | activate | deactivate | invoke | invocation |
       purge-content | cancel | spending | reconcile-spending | create-budget |
       revise-budget | audit-spending | connect |
-      catalog list|register|activate|deactivate
+      catalog list|register|activate|deactivate | roles show|set
       [--scope <id>] [--declared] [--catalog] [--verbose]
 
 Approvals:

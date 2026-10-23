@@ -121,5 +121,7 @@
   "memory.view.author.ai",
   "memory.view.revision",
   "agents.view.revision",
-  "agents.view.author.ai"
+  "agents.view.author.ai",
+  "climodels.roles.card.model",
+  "climodels.roles.tier.frontier"
 ]

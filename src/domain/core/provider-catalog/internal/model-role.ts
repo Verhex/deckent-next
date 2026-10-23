@@ -12,6 +12,8 @@ import limits from './model-role-limits.json' with { type: 'json' };
  * exception only by a compare-and-set against its version; it never redefines a role.
  */
 export const MODEL_TIERS = Object.freeze(['worker', 'frontier'] as const);
+/** The registry's bounds (`model-role-limits.json`), read by the typed role admission too (M2). */
+export const MODEL_ROLE_LIMITS = Object.freeze({ ...limits });
 export type ModelTier = typeof MODEL_TIERS[number];
 const rank = (tier: ModelTier) => MODEL_TIERS.indexOf(tier);
 const tierSchema = z.enum(MODEL_TIERS);
@@ -46,7 +48,9 @@ export type ModelRoleRegistry = z.infer<typeof modelRoleRegistrySchema>;
  * is not a section, so a default-filled or healed configuration never synthesizes one (nor writes it into a project layer). */
 export const modelRoleConfigSchema = z.object({ schemaVersion: z.literal(1), overlays: z.array(modelRoleRegistrySchema).max(limits.overlays) }).strict();
 export const CORE_MODEL_ROLES: ModelRoleRegistry = modelRoleRegistrySchema.parse(asset);
-export type ModelRoleErrorCode = 'MODEL_ROLE_OVERRIDE_DENIED' | 'MODEL_ROLE_NOT_REGISTERED' | 'MODEL_ROLE_TIER_INVALID' | 'MODEL_ROLE_REGISTRY_LIMIT' | 'MODEL_ROLE_REVISION_INVALID';
+export type ModelRoleErrorCode = 'MODEL_ROLE_OVERRIDE_DENIED' | 'MODEL_ROLE_NOT_REGISTERED' | 'MODEL_ROLE_TIER_INVALID' | 'MODEL_ROLE_REGISTRY_LIMIT' | 'MODEL_ROLE_REVISION_INVALID'
+  /** M2 typed role admission: a model outside the scope's catalog, a malformed request or section, a card older than the registry. */
+  | 'MODEL_ROLE_CATALOG_UNKNOWN' | 'MODEL_ROLE_COMMAND_INVALID' | 'MODEL_ROLE_STALE';
 export class ModelRoleError extends Error {
   constructor(readonly code: ModelRoleErrorCode) { super(code); this.name = 'ModelRoleError'; }
 }
