@@ -2,7 +2,7 @@ import { useInstructionContext, type ProjectInstructionLabels } from '#surfaces/
 import type { ProjectInstructionPort } from '#engine/index.js';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, createElement, type ComponentProps } from 'react';
 import { renderToString, Box, Static, Text, useApp, useStdout, useWindowSize } from 'ink';
-import { runTerminalHost } from '#surfaces/core/terminal-host/index.js';
+import { runCopyCommand, runTerminalHost, type ClipboardResult, type CopyLabels } from '#surfaces/core/terminal-host/index.js';
 import { useWorklinePanel, type LocalExecution, LedgerEntryRow, liveRunEntry, dispatchWorkCommand, openingWorkText, systemSummaryEntry, useRunCompletion, type LedgerEntryLabels, immediateSlashAction, type WatchState, type MonitorWindowLoader, type WorklineActionLabels, useWorkSurface,
   ActiveWorkStrip, ActiveWorkSummary, activeWorkItems, activeWorkModelNote, activeWorkRows, useActiveWorkClock, type ActiveDo, type ActiveWorkItem, isToolStep, rowSpaceBefore } from '#surfaces/core/terminal-work/index.js';
 import { WorklinePaletteProvider, useWorklinePalette, parseSlashLine, WORKLINE_SLASH_COMMANDS, isInspectSlashCommand, addSessionUsage, bindInspectPorts, EMPTY_SESSION_USAGE, type InspectSlashPorts, type SessionUsageView, useWorklineWatch, surfaceFollowLine, useSurfacePushFeed,
@@ -64,6 +64,8 @@ export interface WorklineLabels extends WorklineActionLabels {
   readonly reasoning?: WorklineReasoningLabels;
   /** `/scratch` notices (SCR-A); neutral text until the catalog carries `terminal.scratch.*` (`i18n-delta.json`). */
   readonly scratch?: WorklineScratchLabels;
+  /** T1 `/copy` words (`tuicopy.*`); without them `/copy` is unavailable. */
+  readonly copy?: CopyLabels;
   /** SLASH-WINDOWS (owner 2026-10-08): the words of the `/reasoning`, `/scratch` and unknown-command windows. Present = the rich terminal takes no typed slash arguments. */
   readonly windows?: SlashWindowLabels;
   /** TESLIM-PENCERESI: the delivery window's words (terminal.delivery.*); without them (or without the port) `/deliver` is unavailable. */
@@ -155,6 +157,7 @@ export interface WorklineProps {
   /** The full window's mouse wheel (SGR reports taken out of the input by `runTerminalWorkline`). */
   readonly wheel?: WheelSource;
   /** TERM-POLISH: the full window's left-button pointer (click-and-drag selection) and the clipboard write of the selection (OSC 52). */ readonly pointer?: PointerSource; readonly copyText?: (text: string) => void;
+  /** T1 `/copy`: the clipboard request writer of the host (any real TTY); absent = `/copy` says it is unavailable. */ readonly clipboard?: (text: string) => ClipboardResult;
   /** The opening frame drawn as the first block of the full-window conversation (until `/clear`). */
   readonly startup?: WorklineStartup;
   /** The full-window conversation as text, read once after the view closes so it is left in the terminal's own scrollback. */
@@ -470,6 +473,10 @@ export function WorklineApp(props: WorklineProps) {
       } catch (error) { push([notice('error', errorText(error))]); }
       return true;
     }
+    if (slash.command === 'copy') {
+      push([labels.copy ? (copied => notice(copied.level, copied.text))(runCopyCommand(slash.args, history.current, props.clipboard, labels.copy, props.knownSecrets)) : notice('error', fillTemplate(labels.commandUnavailable, { part: slash.command }))]);
+      return true;
+    }
     // SLASH-WINDOWS (owner 2026-10-08): with window words the rich terminal takes no typed arguments; a bare command opens its window or picker.
     const rich = labels.windows;
     if (rich && !WORKLINE_SLASH_COMMANDS.some(command => command.name === slash.command)) {
@@ -566,7 +573,7 @@ export function WorklineApp(props: WorklineProps) {
   const [argumentNote, setArgumentNote] = useState<WindowNote | null>(null);
   const perform = useCallback(async (line: string, mentioned: readonly string[], execution: LocalExecution, typedArgument = false): Promise<boolean> => {
     const slash = parseSlashLine(line), words = labels.windows;
-    if (!slash || slash.command === 'do' || !words || (!slash.args && !typedArgument)) return performLine(line, mentioned, execution);
+    if (!slash || slash.command === 'do' || slash.command === 'copy' || !words || (!slash.args && !typedArgument)) return performLine(line, mentioned, execution);
     const note: WindowNote = { text: words.typedArgument, consume: () => setArgumentNote(current => current === note ? null : current) };
     setArgumentNote(note);
     try { return await performLine(`/${slash.command}`, mentioned, execution); }
@@ -594,7 +601,7 @@ export function WorklineApp(props: WorklineProps) {
   };
   // I-1 (Astra 2456): in the rich terminal a slash argument is dropped before the line is queued, shown as queued or remembered in the
   // input history; only `/command` travels on, and the input id carries the fact that an argument was typed (for the window's one-time note).
-  const bareSlash = (text: string): string => { const slash = parseSlashLine(text); return slash?.command === 'do' ? redactForRecord(text, props.knownSecrets) : labels.windows && slash?.args ? `/${slash.command}` : text; };
+  const bareSlash = (text: string): string => { const slash = parseSlashLine(text); return slash?.command === 'do' ? redactForRecord(text, props.knownSecrets) : labels.windows && slash?.args && slash.command !== 'copy' ? `/${slash.command}` : text; };
   const submit = (typed: string, mentions: readonly string[] = []) => {
     const before = panel.controller.snapshot(), text = bareSlash(typed), inputId = `input-${++inputSequence.current}`;
     if (text !== typed) typedArgumentInputs.current.add(inputId);
@@ -757,5 +764,5 @@ export async function runTerminalWorkline(options: WorklineRunOptions): Promise<
     ...(props.clearScreen !== undefined ? { clearScreen: props.clearScreen } : {}), ...(props.fullscreen !== undefined ? { fullscreen: props.fullscreen } : {}),
     ...(startup ? { inlineStartup: out => writeStartup(out, startup, palette) } : {}),
     view: context => createElement(WorklineApp, { ...props, fullscreen: context.fullscreen, ...(context.fullscreen && startup ? { startup } : {}), transcriptExit: context.transcriptExit,
-      ...(context.wheel ? { wheel: context.wheel } : {}), ...(context.pointer ? { pointer: context.pointer } : {}), ...(context.copyText ? { copyText: context.copyText } : {}) }) });
+      ...(context.wheel ? { wheel: context.wheel } : {}), ...(context.pointer ? { pointer: context.pointer } : {}), ...(context.copyText ? { copyText: context.copyText } : {}), ...(context.clipboard ? { clipboard: context.clipboard } : {}) }) });
 }
