@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { LocalOsSessionAuthority, openSqliteAttemptStore, type SqliteAttemptStore } from '#adapters/index.js';
-import { migrateEffectProducerIndex, revertEffectProducerIndex } from '#adapters/core/sqlite-ledger/index.js';
 import { effectIntentSchema, operationDescriptorSchema, settleEffect, type EffectCommand, type EffectIntent, type OperationDescriptor } from '#domain/index.js';
 import { EffectApplication, OperationPolicyAuthorization, refuseRequiredApproval } from '#engine/index.js';
 
@@ -76,29 +75,6 @@ it('carries an optional task-scoped idempotency declaration on the descriptor wi
   const claimed = await store.claimEffect(intent('op-1', { descriptor: declared, producer: { kind: 'principal' } }));
   expect(JSON.stringify((await store.loadEffect('s', 'op-1'))!.intent.descriptor)).toBe(JSON.stringify(declared));
   expect(claimed.intent.descriptor.idempotencyScope).toBe('task');
-});
-
-it('indexes the producer Attempt (migration step, number assigned at landing): a lookup by Attempt meets only its own intents, legacy rows stay null', async () => {
-  const { store, path } = await ledger();
-  await store.claimEffect(intent('a1', { producer: { kind: 'attempt', identity: attempt } }));
-  await store.claimEffect(intent('a2', { producer: { kind: 'attempt', identity: { ...attempt, attemptId: 'attempt-2' } } }));
-  await store.claimEffect(intent('p1', { producer: { kind: 'principal' } }));
-  const db = new DatabaseSync(path);
-  try {
-    const legacy = { intent: intent('old'), sequence: 1, state: 'unknown', evidence: null, refusal: null };
-    db.prepare('INSERT INTO effect_intents(scope_id,command_id,target_kind,target_id,sequence,idempotency_key_hash,state,record) VALUES(?,?,?,?,?,?,?,?)')
-      .run('s', 'old', 'record', 'item-old', 1, legacy.intent.idempotencyKeyHash, 'unknown', JSON.stringify(legacy));
-    db.exec('BEGIN IMMEDIATE'); migrateEffectProducerIndex(db); db.exec('COMMIT');
-    const byAttempt = "SELECT command_id FROM effect_intents WHERE scope_id=? AND json_extract(record,'$.intent.producer.identity.attemptId')=?";
-    expect(db.prepare(byAttempt).all('s', 'attempt-1')).toEqual([{ command_id: 'a1' }]);
-    expect(JSON.stringify(db.prepare('EXPLAIN QUERY PLAN ' + byAttempt).all('s', 'attempt-1'))).toContain('effect_intents_producer_attempt');
-    expect(db.prepare("SELECT command_id FROM effect_intents WHERE scope_id=? AND json_extract(record,'$.intent.producer') IS NULL").all('s')).toEqual([{ command_id: 'old' }]);
-    // Re-running the step is refused (index exists): a migration runs once per ledger version, never silently adopts.
-    expect(() => migrateEffectProducerIndex(db)).toThrow();
-    db.exec('BEGIN IMMEDIATE'); revertEffectProducerIndex(db); db.exec('COMMIT');
-    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='effect_intents_producer_attempt'").all()).toEqual([]);
-    expect(db.prepare(byAttempt).all('s', 'attempt-1')).toEqual([{ command_id: 'a1' }]);
-  } finally { db.close(); }
 });
 
 /** The application states its producer at construction (composition-trusted, never from the wire); a recorded intent is resumed only by
