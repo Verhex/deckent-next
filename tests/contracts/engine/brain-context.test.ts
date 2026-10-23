@@ -15,7 +15,7 @@ it.each([{}, { context: { ...brainPlannerConfigSchema.parse({}).context, maxKind
   const context = JSON.parse(prompt.messages[1]!.content).context;
   expect(new TextEncoder().encode(JSON.stringify(context)).length).toBeLessThanOrEqual(brainPlannerConfigSchema.parse(config).context.maxBytes);
   expect(prompt.messages[1]!.content).not.toContain('PREPARED_PRIVATE_CARD');
-  expect(context.context.schemaVersion).toBe(2);
+  expect(context.context.schemaVersion).toBe(3); expect(context.context.memory).toBeNull(); // S4B-6: template v4 (default) plans with context v3
   expect(context.context.kinds.every((row: { type: string }) => row.type === 'prepared')).toBe(true);
   expect(context.context.truncation.omittedKinds).toBeGreaterThan(0);
   expect(context.context.truncation.reason).toBe(brainPlannerConfigSchema.parse(config).context.maxBytes === 4000 ? 'bytes' : 'count');

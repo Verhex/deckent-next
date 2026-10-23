@@ -8,7 +8,9 @@ const selected = z.object({ id: identitySchema, version: z.number().int().positi
 /** `modelAssignment: 'system'` (ATAMA-1, owner ASS1): the plan names tasks and WorkClasses only; the worker comes from the WorkClass candidate
  * list at admission. Absent = the earlier contract, where the plan pinned a worker model (v1/v2 rows keep their bytes and digest). */
 const template = selected.extend({ instruction: z.string().min(1).max(16_384), summaryChars: z.number().int().min(1).max(1024),
-  modelAssignment: z.enum(['brain', 'system']).optional() }).strict();
+  modelAssignment: z.enum(['brain', 'system']).optional(),
+  /** S4B-6: the planning context version the template is written for. Absent = 2 (v1–v3 rows keep their bytes and digest); 3 adds `memory`. */
+  contextVersion: z.literal(3).optional() }).strict();
 type BrainReasoning = 'model-default' | 'off';
 const reasoning = z.enum(templates.reasoningModes as [BrainReasoning, ...BrainReasoning[]]);
 export const brainPlannerConfigSchema = z.object({ schemaVersion: z.literal(1).default(1),
@@ -23,7 +25,7 @@ export const brainPlannerConfigSchema = z.object({ schemaVersion: z.literal(1).d
 export type BrainPlannerConfig = z.infer<typeof brainPlannerConfigSchema>;
 export const brainDraftSchema = runProposalSchema.unwrap().pick({ graph: true, budgetCeiling: true, requiredPermissions: true }).strict().readonly();
 export { boundBrainContext } from './internal/context.js';
-export type { BrainRegistryContext } from './internal/context.js';
+export type { BrainRegistryContext, BrainMemoryContext, BrainMemoryEntry } from './internal/context.js';
 export type BrainDraft = z.infer<typeof brainDraftSchema>;
 export const prepareBrainEvaluatorParameters = (evaluator: EvaluatorDefinition) => zodToJsonSchema(installedEvaluatorParameters(evaluator), { $refStrategy: 'none' });
 function redactJson(input: unknown, known?: KnownSecretSnapshot): unknown {

@@ -1,5 +1,6 @@
-import { composeMemoryAutomation, isMemoryTombstone, memoryContextEligible, memoryContextTerms, memoryEntryStale, memoryRetentionMs, memoryTemplate, memoryWorkClassOf,
-  rankMemoryContext, resolveTaskWorkClass, MEMORY_LIMITS, type MemoryContextTask, type MemoryEntry, type TaskGraph, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
+import { composeMemoryAutomation, isMemoryTombstone, memoryContextEligible, memoryContextTerms, memoryEntryStale, memoryPlanningEligible, memoryPlanningFamilies, memoryRetentionMs, memoryTemplate, memoryWorkClassOf,
+  rankMemoryContext, resolveTaskWorkClass, MEMORY_LIMITS, type MemoryAutomation, type MemoryContextTask, type MemoryContent, type MemoryEntry, type MemoryPlanningFamily, type TaskGraph,
+  type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
 import { redactForRecord } from '#platform/index.js';
 import { projectModelIngressField } from '#engine/core/agent-turn/index.js';
 import { MemoryJournalError, type MemoryHeld, type MemoryJournalDependencies, type MemoryJournalStore } from './contract.js';
@@ -43,6 +44,53 @@ function renderLine(entry: MemoryEntry, known: MemoryJournalDependencies['knownS
   return projected.disposition === 'quarantine' ? null : projected.modelText.replace(/\s*\n\s*/gu, ' ');
 }
 
+/** One bounded read of the scope for a context selection (worker part or planning block): the open contests and the newest verified entries,
+ * then, per examined entry, whether it is fresh and readable by the principal (memoised: the same entry is checked once per read). */
+interface ContextRead { readonly bounds: MemoryAutomation['context']; readonly contested: ReadonlySet<string>; readonly pool: readonly MemoryEntry[];
+  check(entry: MemoryEntry): Promise<'ok' | 'stale' | 'withheld'> }
+async function readContext(deps: MemoryJournalDependencies, store: MemoryJournalStore, principal: VerifiedPrincipal, scopeId: string, visible: Visible): Promise<ContextRead | null> {
+  const automation = composeMemoryAutomation(deps.automation), bounds = automation.context, now = deps.now();
+  if (!store.listSupport || !store.listContests) throw new MemoryJournalError('MEMORY_UNAVAILABLE');
+  const contests = await store.listContests(scopeId, MEMORY_LIMITS.scanMax);
+  if (contests.length >= MEMORY_LIMITS.scanMax) return null;
+  const contested = new Set(contests.flatMap(row => [row.entryId, row.candidateEntryId]));
+  const pool = (await store.list(scopeId, ['verified'], bounds.candidatePool)).slice(0, bounds.candidatePool);
+  if (pool.some(entry => entry.scopeId !== scopeId)) throw new MemoryJournalError('MEMORY_CORRUPT');
+  const usable = new Map<string, 'ok' | 'stale' | 'withheld'>();
+  return { bounds, contested, pool, async check(entry) {
+    const known = usable.get(entry.entryId);
+    if (known) return known;
+    const support = entry.audience ? await store.listSupport!(scopeId, entry.entryId, automation.bounds.supportPerEntry) : [];
+    const last = support.length ? Math.max(...support.map(row => row.atMs)) : null;
+    const state = memoryEntryStale(entry, last, memoryRetentionMs(automation, entry), now) ? 'stale' as const
+      : (await visible(store, principal, scopeId, [entry])).withheld ? 'withheld' as const : 'ok' as const;
+    usable.set(entry.entryId, state);
+    return state;
+  } };
+}
+/**
+ * In rank order, at most `maxEntries × maxSourcesChecked` entries examined: fresh and readable entries are rendered and added while the rendering
+ * stays within `budget` bytes (one that does not fit is left out, a smaller next one may fit); a quarantined rendering is left out. `omitted`
+ * counts the eligible entries the bounds left out (not fitting, over `maxEntries`, or never examined); stale and quarantined ones are not counted.
+ */
+async function pickEntries<T>(read: ContextRead, ranked: readonly MemoryEntry[], budget: number, render: (entry: MemoryEntry) => { readonly value: T; readonly bytes: number } | null) {
+  const picked: { readonly entry: MemoryEntry; readonly value: T }[] = [], { bounds } = read;
+  let size = 0, withheld = 0, examined = 0, omitted = 0;
+  for (const entry of ranked) {
+    if (picked.length >= bounds.maxEntries || examined >= bounds.maxEntries * bounds.maxSourcesChecked) { omitted += 1; continue; }
+    examined += 1;
+    const state = await read.check(entry);
+    if (state === 'withheld') withheld += 1;
+    const rendered = state === 'ok' && !isMemoryTombstone(entry.content) ? render(entry) : null;
+    if (rendered === null) continue;
+    if (size + rendered.bytes > budget) { omitted += 1; continue; }
+    size += rendered.bytes; picked.push({ entry, value: rendered.value });
+  }
+  return { picked, withheld, omitted };
+}
+const refOf = (deps: MemoryJournalDependencies, entry: MemoryEntry): MemoryContextEntryRef => ({ entryId: entry.entryId, revision: entry.revision,
+  contentDigest: deps.keyedDigest('memory-content:2', entry.content), basis: entry.verification!.basis });
+
 /**
  * S4B-5 (§7.1, §7.3): the verified entries one Run admission freezes into each task's worker prompt. One bounded read of the scope (the open
  * contests and the `candidatePool` most recently changed verified entries), then per task: the pure eligibility rule, rank by the task's words,
@@ -52,42 +100,61 @@ function renderLine(entry: MemoryEntry, known: MemoryJournalDependencies['knownS
  */
 export async function selectMemoryContext(deps: MemoryJournalDependencies, store: MemoryJournalStore, principal: VerifiedPrincipal, policyRevision: string,
   request: MemoryContextRequest, visible: Visible): Promise<MemoryContextSelection> {
-  const automation = composeMemoryAutomation(deps.automation), bounds = automation.context, now = deps.now();
-  if (!store.listSupport || !store.listContests) throw new MemoryJournalError('MEMORY_UNAVAILABLE');
-  const contests = await store.listContests(request.scopeId, MEMORY_LIMITS.scanMax);
-  if (contests.length >= MEMORY_LIMITS.scanMax) return { schemaVersion: 1, status: 'withheld', reason: 'contests' };
-  const contested = new Set(contests.flatMap(row => [row.entryId, row.candidateEntryId]));
-  const pool = (await store.list(request.scopeId, ['verified'], bounds.candidatePool)).slice(0, bounds.candidatePool);
-  if (pool.some(entry => entry.scopeId !== request.scopeId)) throw new MemoryJournalError('MEMORY_CORRUPT');
-  const usable = new Map<string, 'ok' | 'stale' | 'withheld'>();
-  const check = async (entry: MemoryEntry) => {
-    const known = usable.get(entry.entryId);
-    if (known) return known;
-    const support = entry.audience ? await store.listSupport!(request.scopeId, entry.entryId, automation.bounds.supportPerEntry) : [];
-    const last = support.length ? Math.max(...support.map(row => row.atMs)) : null;
-    const state = memoryEntryStale(entry, last, memoryRetentionMs(automation, entry), now) ? 'stale' as const
-      : (await visible(store, principal, request.scopeId, [entry])).withheld ? 'withheld' as const : 'ok' as const;
-    usable.set(entry.entryId, state);
-    return state;
-  };
+  const read = await readContext(deps, store, principal, request.scopeId, visible);
+  if (!read) return { schemaVersion: 1, status: 'withheld', reason: 'contests' };
   const header = memoryTemplate(MEMORY_CONTEXT_HEADER.id, MEMORY_CONTEXT_HEADER.version).replace('{scope}', request.scopeId), tasks: MemoryContextTaskPart[] = [];
   for (const task of request.tasks) {
-    const ranked = rankMemoryContext(pool.filter(entry => memoryContextEligible(entry, task, request, contested)), task.terms);
-    const lines: string[] = [], entries: MemoryContextEntryRef[] = [];
-    let size = bytes(header), withheld = 0, examined = 0;
-    for (const entry of ranked) {
-      if (entries.length >= bounds.maxEntries || examined >= bounds.maxEntries * bounds.maxSourcesChecked) break;
-      examined += 1;
-      const state = await check(entry);
-      if (state === 'withheld') withheld += 1;
-      const line = state === 'ok' ? renderLine(entry, deps.knownSecrets) : null;
-      if (line === null || size + bytes(`\n${line}`) > bounds.maxBytes || isMemoryTombstone(entry.content)) continue;
-      size += bytes(`\n${line}`); lines.push(line);
-      entries.push({ entryId: entry.entryId, revision: entry.revision, contentDigest: deps.keyedDigest('memory-content:2', entry.content), basis: entry.verification!.basis });
-    }
+    const ranked = rankMemoryContext(read.pool.filter(entry => memoryContextEligible(entry, task, request, read.contested)), task.terms);
+    const { picked, withheld } = await pickEntries(read, ranked, read.bounds.maxBytes - bytes(header), entry => {
+      const line = renderLine(entry, deps.knownSecrets);
+      return line === null ? null : { value: line, bytes: bytes(`\n${line}`) };
+    });
+    const entries = picked.map(row => refOf(deps, row.entry));
     if (!entries.length) { tasks.push({ taskId: task.taskId, part: null, partDigest: null, entries, withheld }); continue; }
-    const text = [header, ...lines].join('\n'), partDigest = deps.keyedDigest('memory-context:1', { scopeId: request.scopeId, text });
+    const text = [header, ...picked.map(row => row.value)].join('\n'), partDigest = deps.keyedDigest('memory-context:1', { scopeId: request.scopeId, text });
     tasks.push({ taskId: task.taskId, part: { id: `memory-${partDigest.slice(0, 16)}`, version: MEMORY_CONTEXT_HEADER.version, text }, partDigest, entries, withheld });
   }
   return { schemaVersion: 1, status: 'ok', policyRevision, tasks };
+}
+
+/** S4B-6 (§7.2): one planning request's question (trusted composition builds it; never a wire field). `runId` is the Brain's Run id. */
+export interface MemoryPlanningRequest { readonly scopeId: string; readonly runId: string; readonly workTargetId: string | null;
+  readonly families: readonly MemoryPlanningFamily[]; readonly terms: readonly string[] }
+/**
+ * The planning request as memory selection keys it (trusted composition passes what it loaded): every family of the installation's WorkClass
+ * registry at its highest class risk, and the ranking words of the redacted intent (bounded by the registry's `context.termsMax`).
+ */
+export function memoryPlanningRequest(input: Readonly<{ scopeId: string; runId: string; workTargetId: string | null; intent: string; workClasses: WorkClassRegistry | undefined;
+  automation: unknown; knownSecrets?: MemoryJournalDependencies['knownSecrets'] }>): MemoryPlanningRequest {
+  const termsMax = composeMemoryAutomation(input.automation).context.termsMax;
+  return Object.freeze({ scopeId: input.scopeId, runId: input.runId, workTargetId: input.workTargetId, families: memoryPlanningFamilies(input.workClasses),
+    terms: memoryContextTerms([redactForRecord(input.intent, input.knownSecrets)], termsMax) });
+}
+/** One entry as the Brain reads it (data): title and body redacted and projected like the worker line. */
+export interface MemoryPlanningRow { readonly entryId: string; readonly revision: number; readonly kind: MemoryContent['kind']; readonly title: string; readonly body: string }
+/** `withheld` here counts eligible entries from work the requesting person may not read; `omitted` those the registry bounds left out. */
+export type MemoryPlanningSelection = { readonly schemaVersion: 1; readonly status: 'ok'; readonly policyRevision: string; readonly entries: readonly MemoryPlanningRow[];
+  readonly refs: readonly MemoryContextEntryRef[]; readonly withheld: number; readonly omitted: number }
+  | { readonly schemaVersion: 1; readonly status: 'withheld'; readonly reason: 'policy' | 'contests' } | MemoryHeld;
+function planningRow(entry: MemoryEntry, known: MemoryJournalDependencies['knownSecrets']): MemoryPlanningRow | null {
+  if (isMemoryTombstone(entry.content)) return null;
+  const field = (text: string) => { const projected = projectModelIngressField(redactForRecord(text, known)); return projected.disposition === 'quarantine' ? null : projected.modelText; };
+  const title = field(entry.content.title), body = field(entry.content.body);
+  return title === null || body === null ? null : { entryId: entry.entryId, revision: entry.revision, kind: entry.content.kind, title, body };
+}
+/**
+ * S4B-6 (§7.2, §7.3; owner S-M7 "same rules as the worker"): the verified entries one planning request offers the Brain, through the same read,
+ * checks and bounds as the worker part (`maxEntries`, `maxBytes` over the JSON rows), keyed by every family the Brain may plan with at that
+ * family's risk (A8 by source family) and ranked by the intent's words. A planning request has no Run yet, so no support row of it exists.
+ */
+export async function selectMemoryPlanningContext(deps: MemoryJournalDependencies, store: MemoryJournalStore, principal: VerifiedPrincipal, policyRevision: string,
+  request: MemoryPlanningRequest, visible: Visible): Promise<MemoryPlanningSelection> {
+  const read = await readContext(deps, store, principal, request.scopeId, visible);
+  if (!read) return { schemaVersion: 1, status: 'withheld', reason: 'contests' };
+  const ranked = rankMemoryContext(read.pool.filter(entry => memoryPlanningEligible(entry, request.families, request, read.contested)), request.terms);
+  const { picked, withheld, omitted } = await pickEntries(read, ranked, read.bounds.maxBytes, entry => {
+    const row = planningRow(entry, deps.knownSecrets);
+    return row === null ? null : { value: row, bytes: bytes(JSON.stringify(row)) + 1 };
+  });
+  return { schemaVersion: 1, status: 'ok', policyRevision, entries: picked.map(row => row.value), refs: picked.map(row => refOf(deps, row.entry)), withheld, omitted };
 }

@@ -30,5 +30,14 @@
   "run.warning.MEMORY_CONTEXT_WITHHELD.sources": "Warning: task {taskId}: {count} memory entries were left out of the worker prompt; they come from work you may not read or a work target you may not use.",
   "run.warning.MEMORY_CONTEXT_WITHHELD.budget": "Warning: task {taskId}: the worker prompt had no room for project memory, so the worker runs without it.",
   "run.warning.MEMORY_CONTEXT_WITHHELD.contests": "Warning: workers in this Run get no project memory: more memory contests are open than can be checked; resolve them with deckent memory review.",
-  "inspect.context.memory": "Memory: {value} (verified entries, sent as data; they grant no permission)"
+  "inspect.context.memory": "Memory: {value} (verified entries, sent as data; they grant no permission)",
+  "error.BRAIN_MEMORY_CONTEXT_HELD": "Planning was refused: the project memory could not be read ({reason}). No model was called and no proposal was recorded.",
+  "memory.held.next.BRAIN_MEMORY_CONTEXT_HELD": "Run deckent doctor and repair the memory store, or have a person set memoryAutomation.context.mode to off at their own terminal; then ask for the plan again.",
+  "brain.memory.sent": "Memory: {count} verified entries went to planning as data; they grant no permission.",
+  "brain.memory.shadow": "Memory (shadow): {count} verified entries would have gone to planning; nothing was sent.",
+  "brain.memory.omitted": "Memory: {count} more entries were left out by the planning size limits.",
+  "brain.memory.withheld.sources": "Memory: {count} entries were hidden from planning: they come from work you may not read or a work target you may not use.",
+  "brain.memory.withheld.policy": "Memory: planning got no project memory: you may not read this scope's memory.",
+  "brain.memory.withheld.contests": "Memory: planning got no project memory: more memory contests are open than can be checked; resolve them with deckent memory review.",
+  "brain.memory.withheld.template": "Memory: the selected planning template does not take project memory, so none was read or sent."
 }

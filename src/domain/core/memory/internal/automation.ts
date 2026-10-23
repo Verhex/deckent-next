@@ -64,8 +64,16 @@ export const memoryExtractionAllowed = (automation: MemoryAutomation, workClassI
 /** The source class as the distiller keys it: its id, its family (root of the parent chain) and its proposal risk (unset → normal). Unknown → null. */
 export function memoryWorkClassOf(configured: WorkClassRegistry | undefined, classId: string | null): { id: string; family: string; risk: 'low' | 'normal' | 'high' } | null {
   if (classId === null) return null;
+  return memoryWorkClassIn(memoryWorkClassIndex(configured), classId);
+}
+type WorkClassRow = WorkClassRegistry['classes'][number];
+/** The installation's classes by id (the Core classes merged with a v2+ registry; a v1 registry stands alone), read once per selection. */
+export function memoryWorkClassIndex(configured: WorkClassRegistry | undefined): ReadonlyMap<string, WorkClassRow> {
   const policy = configured?.schemaVersion !== undefined && configured.schemaVersion !== 1 ? mergeWorkClassRegistries(CORE_WORK_CLASSES, [configured]) : configured ?? CORE_WORK_CLASSES;
-  const byId = new Map(policy.classes.map(row => [row.id, row] as const)), start = byId.get(classId);
+  return new Map(policy.classes.map(row => [row.id, row] as const));
+}
+export function memoryWorkClassIn(byId: ReadonlyMap<string, WorkClassRow>, classId: string): { id: string; family: string; risk: 'low' | 'normal' | 'high' } | null {
+  const start = byId.get(classId);
   if (!start) return null;
   let root = start;
   for (let hops = 0; 'parentClassId' in root && root.parentClassId !== undefined && hops < byId.size; hops++) root = byId.get(root.parentClassId) ?? root;

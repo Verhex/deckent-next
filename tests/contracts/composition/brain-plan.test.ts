@@ -77,7 +77,7 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     expect(first.proposal.status).toBe('pending'); expect(first.run).toBeNull(); expect(f.posts).toBe(1);
     const source = first.proposal.proposal.source;
     expect(source).toMatchObject({ kind: 'model', receipt: { reference: f.reference }, contribution: { schemaVersion: 2, billingAxis: 'metered', activationRevision: 1,
-      template: { version: 3 }, usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } } });
+      template: { version: 4 }, usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } } });
     expect(f.bodies[0]).not.toContain('sk-fixture-do-not-send'); expect(JSON.stringify(first)).not.toContain('sk-fixture-do-not-send');
     expect(f.bodies[0]).toContain('[REDACTED]');
     expect(await planRun(f.project, input, f.options)).toEqual(first); expect(f.posts).toBe(1);
