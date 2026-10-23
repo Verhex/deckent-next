@@ -487,6 +487,10 @@
     "cli.worker.model.notice": {
       "before": "The model verdict compares the models the worker reported (Claude usage) with the Run's pin on this host; it is not provider attestation. A CLI without model evidence stays unverified; a CLI that reports only the model name at session start gets ‘start name matched’ or ‘left to the provider’, never verified.",
       "after": "The model verdict compares the models the worker reported (Claude usage) with the Run's pin on this host; it is not provider attestation. A CLI without model evidence stays unverified; a CLI that reports only the model name at session start gets ‘start name matched’ or ‘left to the provider’, and a CLI whose own session log names the model gets ‘client-reported’ (the worker can rewrite that log); none of them is ever verified."
+    },
+    "cli.run.inspect.unresolved": {
+      "before": "  Effects unresolved; reconciliation required.",
+      "after": "  Worker outcome not confirmed: Deckent could not confirm whether the worker stopped or what it changed. The task stays held; nothing is retried, released or accepted, and no new attempt starts. While it runs, the runtime service checks the worker again; there is no automatic recovery in this release."
     }
   },
   "tr": {
@@ -1149,6 +1153,10 @@
     "cli.worker.model.notice": {
       "before": "Model kararı, işçinin bildirdiği modelleri (Claude kullanım verisi) bu makinede Run'ın sabitlediği modelle karşılaştırır; sağlayıcı onayı (attestation) değildir. Model kanıtı vermeyen CLI doğrulanmamış kalır; yalnız oturum başında model adını bildiren CLI ‘başlangıç adı eşleşti’ ya da ‘sağlayıcıya bırakıldı’ alır, hiçbir zaman doğrulandı almaz.",
       "after": "Model kararı, işçinin bildirdiği modelleri (Claude kullanım verisi) bu makinede Run'ın sabitlediği modelle karşılaştırır; sağlayıcı onayı (attestation) değildir. Model kanıtı vermeyen CLI doğrulanmamış kalır; yalnız oturum başında model adını bildiren CLI ‘başlangıç adı eşleşti’ ya da ‘sağlayıcıya bırakıldı’ alır, modeli kendi oturum günlüğünde adlandıran CLI ‘istemci beyanı’ alır (işçi bu günlüğü değiştirebilir); hiçbiri doğrulandı almaz."
+    },
+    "cli.run.inspect.unresolved": {
+      "before": "  Etkiler çözümlenmemiş; uzlaştırma gerekli.",
+      "after": "  Worker sonucu doğrulanmadı: Deckent worker'ın durup durmadığını ya da neyi değiştirdiğini doğrulayamadı. Görev bekletiliyor; hiçbir şey yeniden denenmez, serbest bırakılmaz ya da kabul edilmez ve yeni deneme başlamaz. Çalışırken runtime servisi worker'ı yeniden kontrol eder; bu sürümde otomatik kurtarma yok."
     }
   }
 }

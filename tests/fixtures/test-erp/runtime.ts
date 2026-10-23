@@ -60,6 +60,22 @@ export async function startFixtureRuntime(project: string, root: string, fixture
     if (status !== 0) refused(output);
     return result as T;
   };
+  /** The same installed entry without --json: what a person reads (BETA-RAKIP-3 next steps). A typed refusal is returned, not thrown. */
+  const human = async (argv: string[], input?: unknown) => {
+    const args = [...argv];
+    if (input !== undefined) {
+      const path = join(root, `cli-input-${++sequence}.json`);
+      await writeFile(path, JSON.stringify(input), { mode: 0o600 }); args.push('--input', path);
+    }
+    try {
+      const { stdout, stderr } = await promisify(execFile)(process.execPath, [cli, ...args], { cwd: project, env,
+        timeout: config.runtime.commandTimeoutMs, maxBuffer: config.runtime.outputMaxBytes });
+      return { status: 0, stdout, stderr };
+    } catch (error) {
+      if (!error || typeof error !== 'object' || !('code' in error) || typeof error.code !== 'number' || !('stderr' in error)) throw error;
+      return { status: error.code, stdout: 'stdout' in error ? String(error.stdout) : '', stderr: String(error.stderr) };
+    }
+  };
   const stop = async () => {
     if (!child || child.exitCode !== null || child.signalCode !== null) { await done; return; }
     child.kill('SIGTERM');
@@ -97,6 +113,6 @@ export async function startFixtureRuntime(project: string, root: string, fixture
   try {
     const identity = { cli, entrySha256: createHash('sha256').update(await readFile(cli)).digest('hex'),
       descriptor: await command<unknown>(['runtime', 'describe']) };
-    return { command, identity, calls, close: stop, restart: async () => { await stop(); await start(); } };
+    return { command, human, identity, calls, close: stop, restart: async () => { await stop(); await start(); } };
   } catch (error) { await stop(); throw error; }
 }
