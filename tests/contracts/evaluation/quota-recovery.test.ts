@@ -84,7 +84,8 @@ it.skipIf(process.platform === 'win32').each(['claude-rate-limit', 'codex-text',
   expect(attempt.lastObservation?.result).toMatchObject({ kind: 'quota-exhausted', quota: { source }, evidenceDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
   expect(await f.app.execute(command)).toEqual(first); expect((await f.store.loadRun('s', 'r'))!.revision).toBe(first.snapshot.revision);
   await expect(f.app.execute({ ...command, identity: { ...f.identity, generation: 2 } })).rejects.toThrow('RUN_COMMAND_CONFLICT');
-  const db = new DatabaseSync(f.path, { readOnly: true }); expect(db.prepare('SELECT count(*) n FROM acceptance_metrics').get()?.n).toBe(0); db.close();
+  // ATAMA-0: a park is its own quota-park metric row (no Task outcome); the immutable replay writes no second row.
+  const db = new DatabaseSync(f.path, { readOnly: true }); expect(db.prepare('SELECT outcome_kind FROM acceptance_metrics').all()).toEqual([{ outcome_kind: 'quota-park' }]); db.close();
 });
 it.skipIf(process.platform === 'win32')('resets once, retains the old quota Attempt across restart and reserves the same frozen profile with the next generation', async () => {
   const f = await fixture(); const parked = await f.evaluate();

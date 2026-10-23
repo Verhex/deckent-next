@@ -21,8 +21,8 @@ export type { RunLifecycleTiming, TaskDecisionReason } from './internal/lifecycl
 export { workClassRegistrySchema, workClassAcceptanceProfileSchema, mergeWorkClassRegistries, resolveTaskWorkClass, evidenceExtensionSchema, CORE_WORK_CLASSES, selectWorkerEffort, WorkerEffortError, WorkClassRegistryError } from './internal/work-class.js';
 export type { WorkClassRegistry, WorkClassAcceptanceProfile, WorkClassPolicy } from './internal/work-class.js';
 export { holdRun, answerTaskInput, parkRunProgression } from './internal/lifecycle.js';
-export { deckentMetricsSchema, deriveDeckentMetrics } from './internal/metrics.js';
-export type { DeckentMetrics, DeckentMetricsMeasurements } from './internal/metrics.js';
+export { deckentMetricsSchema, deriveDeckentMetrics, measuredCostSchema, METRIC_EVIDENCE_KINDS } from './internal/metrics.js';
+export type { DeckentMetrics, CurrentDeckentMetrics, DeckentMetricsMeasurements } from './internal/metrics.js';
 
 export { freezeTaskAcceptance, assertAcceptanceCriteria, frozenWorkClassProfileSchema, taskAcceptanceReferenceSchema, acceptanceCriterionSchema, AcceptanceProfileError } from './internal/acceptance.js';
 export type { FrozenWorkClassProfile, TaskAcceptanceReference } from './internal/acceptance.js';

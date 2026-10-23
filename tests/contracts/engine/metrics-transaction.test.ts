@@ -89,8 +89,8 @@ it('the producer key allows a new canonical evaluation of the same Attempt after
       returnEvidence: { kind: 'output', digest: 'b'.repeat(64) } });
     const second = await f.journal.commitTaskEvaluation({ ...f.input, commandId: 'new-evidence', expectedRevision: first.snapshot.revision, evaluation: next, dispatch: changed, now: 200 });
     expect(second.snapshot.progress[0]!.phase).toBe('accepted');
-    expect(f.db.prepare('SELECT producer_command_id FROM acceptance_metrics ORDER BY producer_command_id').all()).toEqual([
-      { producer_command_id: 'evaluation' }, { producer_command_id: 'new-evidence' }]);
+    expect(f.db.prepare('SELECT producer_command_id,superseded_by FROM acceptance_metrics ORDER BY producer_command_id').all()).toEqual([
+      { producer_command_id: 'evaluation', superseded_by: 'new-evidence' }, { producer_command_id: 'new-evidence', superseded_by: null }]);
   } finally { f.journal.close(); f.db.close(); }
 });
 
@@ -112,5 +112,24 @@ it('a Run incomplete observation is recorded by its lifecycle producer and repla
     expect(JSON.parse(String(row?.record)).metric.outcome).toEqual({ kind: 'run', status: 'incomplete' });
     expect(await f.journal.commitRunLifecycle(command, () => { audited++; })).toEqual(closed); expect(audited).toBe(1);
     expect(f.db.prepare('SELECT COUNT(*) AS n FROM acceptance_metrics').get()?.n).toBe(1);
+  } finally { f.journal.close(); f.db.close(); }
+});
+
+it('a human decision on an awaiting Task writes a human task row that supersedes the system row of its Attempt', async () => {
+  const f = await fixture();
+  try {
+    const first = await f.journal.commitTaskEvaluation({ ...f.input, evaluation: bindTaskAcceptance(f.run, evidence('unknown')) });
+    expect(first.snapshot.progress[0]!.phase).toBe('awaiting-decision');
+    const command = { schemaVersion: 1 as const, commandId: 'decide', scopeId: identity.scopeId, runId: identity.runId, expectedRevision: first.snapshot.revision,
+      action: 'accept' as const, taskId: identity.taskId, actor: { ...f.input.actor, assurance: 'os-user' as const }, now: 200, timeoutMs: 1000 };
+    const decided = await f.journal.commitRunLifecycle(command, () => undefined);
+    expect(decided.snapshot.progress[0]!.phase).toBe('accepted');
+    const rows = f.db.prepare('SELECT producer_command_id,superseded_by,record FROM acceptance_metrics ORDER BY rowid').all();
+    expect(rows.map(row => [row.producer_command_id, row.superseded_by])).toEqual([['evaluation', 'decide'], ['decide', null]]);
+    expect(JSON.parse(String(rows[1]!.record)).metric).toMatchObject({ schemaVersion: 2, outcome: { kind: 'task', status: 'accepted', decision: 'human' },
+      evidenceKinds: ['human-decision', 'unknown'], evidenceReferences: [{ id: 'dispatch-output', digest: 'a'.repeat(64) }] });
+    // The read path the cost report and monitor use returns the current (human) row of the Attempt.
+    const { readRunAcceptanceMetrics } = await import('#adapters/core/sqlite-ledger/index.js');
+    expect(readRunAcceptanceMetrics(f.db, decided.snapshot)[0]).toMatchObject({ outcome: { decision: 'human' } });
   } finally { f.journal.close(); f.db.close(); }
 });
