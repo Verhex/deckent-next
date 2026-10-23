@@ -78,7 +78,7 @@ export function workSurfaceLabels(locale: Locale): WorkSurfaceLabels {
       parkReasons: { 'dependency-failed': t('terminal.jobs.parked.dependency-failed', {}, locale), 'dependency-cancelled': t('terminal.jobs.parked.dependency-cancelled', {}, locale),
         'awaiting-decision': t('terminal.jobs.parked.awaiting-decision', {}, locale), 'evaluation-not-ready': t('terminal.jobs.parked.evaluation-not-ready', {}, locale),
         'needs-input': t('terminal.jobs.parked.needs-input', {}, locale), 'operator-hold': t('terminal.jobs.parked.operator-hold', {}, locale),
-        'progression-failed': t('terminal.jobs.parked.progression-failed', {}, locale), 'quota-exhausted': t('terminal.jobs.parked.quota-exhausted', {}, locale),
+        'progression-failed': t('terminal.jobs.parked.progression-failed', {}, locale), 'quota-exhausted': t('terminal.jobs.parked.quota-exhausted', {}, locale), 'quota-ask': t('quotaask.state', {}, locale),
         'environment-not-ready': t('terminal.jobs.parked.environment-not-ready', {}, locale) },
       heldOver: t('terminal.jobs.parked.heldOver', {}, locale), parkCode: t('terminal.jobs.parkCode', {}, locale), parkNote: t('terminal.jobs.parkNote', {}, locale) },
     workerLine: { numberLocale: locale, ordinal: t('terminal.worker.ordinal', {}, locale),

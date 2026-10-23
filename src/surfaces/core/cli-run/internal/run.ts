@@ -35,7 +35,7 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
   if (!hasCliAction('run', action)) throw usage();
   const control = action === 'cancel' || action === 'close' || action === 'hold' || action === 'resume';
   const allowed = action === 'list' ? ['--scope', '--limit', '--lang'] : action === 'inspect' ? ['--scope', '--id', '--lang'] : action === 'create'
-    ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch', '--delivery-command-id'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision', ...(action === 'hold' ? ['--reason'] : action === 'resume' ? ['--task', '--answer'] : [])];
+    ? ['--scope', '--id', '--lang', '--command-id', '--graph', '--branch', '--delivery-command-id'] : ['--scope', '--id', '--lang', '--command-id', '--expected-revision', ...(action === 'hold' ? ['--reason'] : action === 'resume' ? ['--task', '--answer', '--quota'] : [])];
   const values = new Map<string, string>(); let json = false, verbose = false;
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -58,9 +58,9 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
   // CLI review §run: on a person's terminal a control with neither --command-id nor --expected-revision picks, reads the revision and asks;
   // the AI and automation path keeps every typed flag mandatory (one of them typed: the usage error below, as before).
   if (control && interactive && !values.has('--command-id') && !values.has('--expected-revision')) {
-    const answer = values.get('--answer'), taskId = values.get('--task');
-    if ((answer !== undefined) !== (taskId !== undefined) || (answer !== undefined && !answer.trim())) throw usage('--answer');
-    await runControlFlow(action, context, await runHumanIo(context, locale), { scopeId: values.get('--scope'), runId: values.get('--id'), reason: values.get('--reason'), taskId, answer });
+    const answer = values.get('--answer'), taskId = values.get('--task'), quota = quotaChoice(values.get('--quota'), usage);
+    if ((answer !== undefined) !== (taskId !== undefined) || (answer !== undefined && !answer.trim()) || (quota !== undefined && answer !== undefined)) throw usage('--answer');
+    await runControlFlow(action, context, await runHumanIo(context, locale), { scopeId: values.get('--scope'), runId: values.get('--id'), reason: values.get('--reason'), taskId, answer, ...(quota ? { quota } : {}) });
     return;
   }
   // A change never takes a silent default: no --scope names the valid scopes (CLI_SCOPE_REQUIRED) instead of blaming another flag.
@@ -118,11 +118,12 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
     const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
     if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage('--expected-revision');
     if (!context.applyRunLifecycle) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-    const answer = values.get('--answer'), taskId = values.get('--task'), holdReason = values.get('--reason');
+    const answer = values.get('--answer'), taskId = values.get('--task'), holdReason = values.get('--reason'), quota = quotaChoice(values.get('--quota'), usage);
+    if (quota !== undefined && (action !== 'resume' || answer !== undefined)) throw usage('--quota');
     if (action === 'hold' && !holdReason?.trim()) throw usage('--reason');
     if (action === 'resume' && ((answer !== undefined) !== (taskId !== undefined) || (answer !== undefined && !answer.trim()))) throw usage('--answer');
     const result = await context.applyRunLifecycle(context.root ?? process.cwd(), runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId,
-      action: answer === undefined ? action : 'answer', ...(holdReason === undefined ? {} : { holdReason }),
+      action: quota ? 'quota-answer' : answer === undefined ? action : 'answer', ...(quota ? { choice: quota } : {}), ...(holdReason === undefined ? {} : { holdReason }),
       ...(answer === undefined ? {} : { answer, taskId }), expectedRevision: Number(revision) }), { env: context.env ?? process.env });
     emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => data ? t('cli.run.lifecycle.result', { run: runId, revision: data.lifecycle.run.revision,
       state: data.lifecycle.run.state.kind, reason: 'reason' in data.lifecycle.run.state ? data.lifecycle.run.state.reason : '—' }, locale) : '' }); return;
@@ -156,4 +157,11 @@ async function inspectRunAction(values: ReadonlyMap<string, string>, json: boole
   const result = await context.inspectRun(context.root ?? process.cwd(), { schemaVersion: 1, scopeId: scope.scopeId, runId }, { env: context.env ?? process.env });
   if (!result.run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: data => renderRunInspect(data, locale, verbose, scopeLine(scope, locale)) });
+}
+
+/** S9: `run resume --quota wait|next-candidate` answers an expired subscription-quota wait (a person's choice; the service refuses AI and scripts). */
+function quotaChoice(value: string | undefined, usage: (flag?: string) => Error): 'wait' | 'next-candidate' | undefined {
+  if (value === undefined) return undefined;
+  if (value !== 'wait' && value !== 'next-candidate') throw usage('--quota');
+  return value;
 }

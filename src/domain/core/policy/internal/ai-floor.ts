@@ -46,6 +46,8 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   // independent of the source worker model re-derived from the sealed Run); `contest` likewise only for it; retire and purge for every AI.
   // Proposing a candidate and every read stay policy decisions.
   if (resource.kind === 'memory' && ['verify', 'retire', 'purge', 'contest'].includes(action) && !(isMemoryEvaluatorPrincipal(actor) && ['verify', 'contest'].includes(action))) return true;
+  // S9 (owner L-A): the answer to an expired subscription-quota wait (keep waiting, next candidate) is a person's.
+  if (resource.kind === 'run-quota') return true;
   if (resource.kind === 'secret') return true;
   // S6R-3: a standing approval of a Nervous stop action is the owner's; no AI holds it (Nervous itself proposes, the broker applies).
   if (resource.kind === 'recovery-action') return true;

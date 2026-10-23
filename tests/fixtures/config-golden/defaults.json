@@ -199,7 +199,8 @@
     "pollIntervalMs": 1000,
     "quotaRecovery": {
       "maxResumes": 1,
-      "maxWaitMs": 604800000,
+      "maxRewaits": 3,
+      "maxWaitMs": 18000000,
       "schemaVersion": 1
     },
     "stallRecovery": {

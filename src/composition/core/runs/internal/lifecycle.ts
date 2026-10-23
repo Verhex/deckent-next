@@ -28,7 +28,8 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
           try { return await writer.commitRunLifecycle(write, audit); } finally { writer.close(); }
         } }, verifier, authorization,
         { authorize: (identity, actor) => policy.authorizeIdentity('evaluate', identity, actor) }, audit => new AuditApplication(audit, integrity!),
-        Date.now, config.runRuntime.parking.timeoutMs, document.revision, decisions);
+        Date.now, config.runRuntime.parking.timeoutMs, document.revision, decisions,
+        { maxWaitMs: config.runRuntime.quotaRecovery.maxWaitMs, maxRewaits: config.runRuntime.quotaRecovery.maxRewaits });
       const receipt = maintain === 'park' ? await app.parkProgression(command) : maintain === 'nervous' ? await app.holdOnce('nervous', command) : maintain ? await app.advance(command) : await app.execute(command);
       if (!receipt) return null;
       return Object.freeze({ schemaVersion: 1 as const, layout, lifecycle: { schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot) } });

@@ -39,6 +39,7 @@ import agentsen from '../locales/en/agents.json' with { type: 'json' };
 import assignmenten from '../locales/en/assignment.json' with { type: 'json' };
 import termrunen from '../locales/en/termrun.json' with { type: 'json' };
 import termansweren from '../locales/en/termanswer.json' with { type: 'json' };
+import quotaasken from '../locales/en/quotaask.json' with { type: 'json' };
 import helptr from '../locales/tr/help.json' with { type: 'json' };
 import cliruntr from '../locales/tr/clirun.json' with { type: 'json' };
 import clitasktr from '../locales/tr/clitask.json' with { type: 'json' };
@@ -68,6 +69,7 @@ import tuiqueuetr from '../locales/tr/tuiqueue.json' with { type: 'json' };
 import tuieditortr from '../locales/tr/tuieditor.json' with { type: 'json' };
 import tuisessiontr from '../locales/tr/tuisession.json' with { type: 'json' };
 import termanswertr from '../locales/tr/termanswer.json' with { type: 'json' };
+import quotaasktr from '../locales/tr/quotaask.json' with { type: 'json' };
 
 export const families = [
   { en: configen, tr: configtr },
@@ -95,6 +97,7 @@ export const families = [
   { en: terminalen, tr: terminaltr },
   { en: termrunen, tr: termruntr },
   { en: termansweren, tr: termanswertr },
+  { en: quotaasken, tr: quotaasktr },
   { en: deliveryen, tr: deliverytr },
   { en: memoryen, tr: memorytr },
   { en: memoryautomationen, tr: memoryautomationtr },

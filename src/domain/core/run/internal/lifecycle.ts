@@ -1,4 +1,4 @@
-import { resetRunQuota } from './quota.js';
+import { resetRunQuota, askRunQuota } from './quota.js';
 import { counterSchema } from '#domain/core/primitives/index.js';
 import { inspectTaskReadiness, blockingDependencyIds, type TaskProgress } from '#domain/core/task-graph/index.js';
 import { checkedRun, runSnapshotSchema, RunError, type RunHoldSource, type RunSnapshot } from './contract.js';
@@ -30,7 +30,7 @@ export function reconcileRunLifecycle(input: unknown, now: number, timeoutMs: nu
   const readiness = inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, now, progress: tasks });
   let state: RunSnapshot['state'];
   if (tasks.every(task => task.phase === 'accepted')) state = { kind: 'terminal', outcome: 'completed', reason: 'completed' };
-  else if (!run.cancelRequested && run.state.kind === 'parked' && ['operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason)) state = run.state;
+  else if (!run.cancelRequested && run.state.kind === 'parked' && ['operator-hold', 'progression-failed', 'quota-exhausted', 'quota-ask', 'environment-not-ready'].includes(run.state.reason)) state = run.state;
   else if (!run.cancelRequested && run.bindings.some(row => row.observedKind === 'quota-exhausted' && tasks.some(task => task.taskId === row.identity.taskId && task.phase === 'pending'))) {
     const waits = (run.quotaWaits ?? []).filter(wait => run.bindings.some(row => row.identity.attemptId === wait.identity.attemptId));
     state = { kind: 'parked', reason: 'quota-exhausted', since: Math.min(...waits.map(wait => wait.since)), deadline: Math.max(...waits.map(wait => wait.deadline)) };
@@ -60,6 +60,9 @@ export function advanceRunLifecycle(input: unknown, expectedRevision: number, no
   if (run.state.kind === 'terminal') return run;
   const reset = resetRunQuota(run, now);
   if (reset) return reset;
+  // S9: an expired quota wait asks a person; it never ends the Run. Every other park keeps its own deadline rule.
+  const ask = askRunQuota(run, now);
+  if (ask) return ask;
   const expired = run.progress.some(task => task.decision && task.decision.deadline <= now);
   const progress = run.progress.map(task => {
     if (run.state.kind === 'parked' && ['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason) && run.state.deadline <= now && task.phase === 'pending' && !task.unresolvedEffects) return { ...task, phase: 'cancelled' as const };
