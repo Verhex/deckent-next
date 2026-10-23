@@ -220,6 +220,10 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'brain_planner.templates': { kind: 'document' },
   'model_roles.schemaVersion': { kind: 'schema' },
   'model_roles.overlays': { kind: 'document' },
+  // S4B-1: the memory automation switch is chosen from its schema; the narrowing overlay is a structured document (read-only here). S6R-2's Nervous switch likewise.
+  'memoryAutomation.extraction.mode': { kind: 'schema' },
+  'memoryAutomation.overlay': { kind: 'document' },
+  'runRuntime.nervous.mode': { kind: 'schema' },
   'brain_planner.reasoning': { kind: 'schema' },
   'brain_planner.maxCompletionTokens': { kind: 'numeric', unit: 'count', step: 1024, presets: [4096, 8192, 16384, 32768, 65536] },
   'brain_planner.context.maxKinds': { kind: 'numeric', unit: 'count', step: 1, presets: [32, 64, 128, 256, 1024] },
