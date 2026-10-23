@@ -189,7 +189,7 @@ flowchart LR
 
 <table>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/09-model.png" alt="Bütçe yokken /model: iki model de nedeniyle kilitli"><br><sub><b>Bütçeden önce.</b> <code>/model</code> henüz kullanamayacağı her modeli kilitler; nedeni ve sonraki adımı söyler.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/09-model.png" alt="Bütçe yokken /model: Bütçe oluştur satırı, kullanılabilir yerel model, nedeniyle kilitli ikinci model"><br><sub><b>Bütçeden önce.</b> <code>/model</code> önce <b>Bütçe oluştur</b> satırını sunar. Yerel deneme modeli zaten kullanılabilir, çünkü yerel modeller bütçe istemez; bu kapsamın çağıramayacağı model nedeniyle kilitlidir.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/tr/08b-saglayici-butce-satiri.png" alt="İlk satırı Bütçe oluştur olan /provider ve sağlayıcı listesi"><br><sub><b>/provider.</b> Önce <b>Bütçe oluştur</b>, sonra her sağlayıcı bağlantı durumuyla.</sub></td>
   </tr>
   <tr>
@@ -197,7 +197,7 @@ flowchart LR
     <td width="50%"><img src=".github/assets/screenshots/tr/11-butce-adim.png" alt="20 USD'ye ayarlanmış bütçe adımlayıcısı"><br><sub><b>Başka tutar.</b> Tam dolar, 1 ile 1000 arası; onaylamadan hiçbir şey gönderilmez.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/12-model-hazir.png" alt="Bütçeden sonra /model: bir model hazır, diğeri bağlı değil diye kilitli"><br><sub><b>Bütçeden sonra.</b> Bağlı model hazır; diğeri bağlanana kadar kilitli kalır.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/12-model-hazir.png" alt="Bütçeden sonra /model: Bütçeyi değiştir satırı ve 20 USD bütçeyi kaydeden sistem satırı"><br><sub><b>Bütçeden sonra.</b> Çerçeveli sistem satırı bütçeyi kaydeder; ilk satır artık <b>Bütçeyi değiştir</b> der.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/tr/13-kullanim.png" alt="Bir sohbet turundan sonra /usage penceresi"><br><sub><b>/usage.</b> Bu konuşmanın ölçtüğü token'lar ve kapsamın bütçeleri.</sub></td>
   </tr>
 </table>
@@ -315,26 +315,25 @@ dönüşebilir. `/help` tüm komutları amaca göre listeler; en çok kullanıla
 | Ayarlar | `/provider` · `/model` · `/config` · `/mode` · `/mcp` · `/policy` |
 | Bilgi | `/status` · `/usage` · `/context` · `/doctor` · `/monitor` · `/scope` · `/help` |
 
-Bu ekranlar gerçek terminalden, alpha.17'de (120×36) geçici bir projede ve küçük bir yerel deneme modeliyle çekildi: hiçbir
-sağlayıcı çağrılmadı ve gerçek bir anahtar kullanılmadı. Satır içi düzeni (`terminal.layout: inline`) gösterirler;
-varsayılan tam pencere düzeni aynı pencereleri sabit bir giriş çubuğunun üstünde açar ve bazı pencerelere o zamandan beri
-yeni satırlar eklendi.
+Bu ekranlar gerçek terminalden, alpha.53'te (120×36, varsayılan tam pencere düzeni) geçici bir projede ve küçük bir yerel
+deneme modeliyle çekildi: hiçbir sağlayıcı çağrılmadı ve gerçek bir anahtar kullanılmadı. Her pencerenin üstündeki boş
+konuşma satırları kırpıldı; başka hiçbir şey değiştirilmedi.
 
 <table>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/tr/02-sohbet.png" alt="Sohbet turu: sizin satırınız Sen, yanıt Deckent başlığı altında"><br><sub><b>Sohbet.</b> Sizin satırlarınız ve Deckent'in yanıtları belirgin biçimde ayrışır; her turda süre ve token.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/tr/05-onay.png" alt="Kabuk komutu için onay penceresi"><br><sub><b>Onay penceresi.</b> Ne, nerede, kimin adına, kapsam, neden, risk, geri alma ve canlı süre. Güncel kartlar policy izin verdiğinde "bu oturum" ve "bu projede her zaman" seçeneklerini de sunar.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/05-onay.png" alt="Kabuk komutu için onay penceresi"><br><sub><b>Onay penceresi.</b> Ne, nerede, kimin adına, kapsam, neden, risk, geri alma ve canlı süre. Yanıtlar bir listedir; "bu oturum" ve "bu projede her zaman" yalnız policy sunduğunda görünür.</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/tr/04-durum.png" alt="/status penceresi"><br><sub><b>/status.</b> Önce insan dilinde özet; kimlikler, süreç ve build ayrıntıda.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/tr/06-tam-erisim.png" alt="Tam erişim modu göstergesi"><br><sub><b>Modlar.</b> <kbd>Shift</kbd>+<kbd>Tab</kbd> yetkili olduğunuz modlar arasında döner; tam erişim açıkça işaretlenir.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/03-yardim.png" alt="Amaca göre gruplu /help penceresi"><br><sub><b>/help.</b> Komutlar amaca göre gruplu, her biri tek satır (<code>/do</code> ve <code>/deliver</code> gibi yeni komutlar bu eski ekranda yok).</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/03-yardim.png" alt="Amaca göre gruplu /help penceresi"><br><sub><b>/help.</b> Komutlar amaca göre gruplu, her biri tek satır; pencere kaydırılır.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/tr/07-mcp.png" alt="/mcp penceresi"><br><sub><b>/mcp.</b> Adım adım sunucu ekleme; yapılandırılmış sunucular güven durumlarıyla.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/tr/08-saglayici.png" alt="Sağlayıcı türlerini listeleyen /provider penceresi"><br><sub><b>/provider.</b> Her sağlayıcının durumu. OpenRouter artık model bağlantıları sunar; bu ekran o değişiklikten öncedir.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/tr/08-saglayici.png" alt="Sağlayıcı türlerini listeleyen /provider penceresi"><br><sub><b>/provider.</b> OpenRouter dahil her sağlayıcı bağlantı durumuyla.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/tr/14-ayarlar.png" alt="Terminal temasını seçen /config penceresi"><br><sub><b>/config.</b> Bölüm, anahtar, sonra izin verilen değerlerden biri; geçerli olan işaretli.</sub></td>
   </tr>
   <tr>

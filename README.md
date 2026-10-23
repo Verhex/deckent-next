@@ -188,7 +188,7 @@ flowchart LR
 
 <table>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/09-model.png" alt="/model with no budget: both models locked with the reason"><br><sub><b>Before a budget.</b> <code>/model</code> locks each model it cannot use yet and names the reason and the next step.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/09-model.png" alt="/model with no budget: Create budget row, the local model usable, a second model locked with its reason"><br><sub><b>Before a budget.</b> <code>/model</code> offers <b>Create budget</b> first. The local test model is already usable, because local models need no budget; a model this scope may not call is locked with its reason.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/en/08b-provider-budget-row.png" alt="/provider with Create budget as its first row and the provider list"><br><sub><b>/provider.</b> <b>Create budget</b> first, then each provider with its connection state.</sub></td>
   </tr>
   <tr>
@@ -196,7 +196,7 @@ flowchart LR
     <td width="50%"><img src=".github/assets/screenshots/en/11-budget-stepper.png" alt="Budget stepper set to 20 USD"><br><sub><b>Another amount.</b> Whole dollars, 1 to 1000; nothing is sent before you confirm.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/12-model-ready.png" alt="/model after the budget: one model ready, one locked as not connected"><br><sub><b>After the budget.</b> The connected model is ready; the other stays locked until it is connected.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/12-model-ready.png" alt="/model after the budget: Change budget row and the system line recording 20 USD"><br><sub><b>After the budget.</b> The framed system line records the budget, and the first row now reads <b>Change budget</b>.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/en/13-usage.png" alt="/usage window after one chat turn"><br><sub><b>/usage.</b> Tokens this conversation measured and the scope's budgets.</sub></td>
   </tr>
 </table>
@@ -316,25 +316,25 @@ an approval. `/help` lists every command by purpose; the most used ones are:
 | Settings | `/provider` · `/model` · `/config` · `/mode` · `/mcp` · `/policy` |
 | Information | `/status` · `/usage` · `/context` · `/doctor` · `/monitor` · `/scope` · `/help` |
 
-These screens come from the real terminal, recorded on alpha.17 (120×36) in a throwaway project with a small local test
-model: no provider was called and no real key was used. They show the inline layout (`terminal.layout: inline`); the
-default full-window layout keeps the same windows above a fixed input bar, and some windows have gained rows since.
+These screens come from the real terminal, recorded on alpha.53 (120×36, the default full-window layout) in a throwaway
+project with a small local test model: no provider was called and no real key was used. The empty conversation rows above
+each window are trimmed; nothing else is changed.
 
 <table>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/en/02-chat.png" alt="A chat turn: your line marked You, the answer under Deckent"><br><sub><b>Chat.</b> Your lines and Deckent's answers are visibly distinct, with time and tokens per turn.</sub></td>
-    <td width="50%"><img src=".github/assets/screenshots/en/05-approval.png" alt="Approval window for a shell command"><br><sub><b>Approval window.</b> What, where, on whose behalf, scope, why, risk, undo and a live deadline. Current cards also offer "this session" and "always in this project" where policy allows.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/05-approval.png" alt="Approval window for a shell command"><br><sub><b>Approval window.</b> What, where, on whose behalf, scope, why, risk, undo and a live deadline. The answers are a list; "this session" and "always in this project" appear only where policy offers them.</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src=".github/assets/screenshots/en/04-status.png" alt="/status window"><br><sub><b>/status.</b> A human summary first; identities, process and build under the details.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/en/06-full-access.png" alt="Full access mode indicator"><br><sub><b>Modes.</b> <kbd>Shift</kbd>+<kbd>Tab</kbd> cycles the modes you are allowed; full access is clearly marked.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/03-help.png" alt="/help window grouped by purpose"><br><sub><b>/help.</b> Commands grouped by purpose, one line each (newer commands such as <code>/do</code> and <code>/deliver</code> are not in this older screen).</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/03-help.png" alt="/help window grouped by purpose"><br><sub><b>/help.</b> Commands grouped by purpose, one line each; the window scrolls.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/en/07-mcp.png" alt="/mcp window"><br><sub><b>/mcp.</b> Add a server step by step; configured servers with their trust state.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/en/08-provider.png" alt="/provider window listing provider kinds"><br><sub><b>/provider.</b> Each provider's state. OpenRouter now offers model connections; this screen predates them.</sub></td>
+    <td width="50%"><img src=".github/assets/screenshots/en/08-provider.png" alt="/provider window listing provider kinds"><br><sub><b>/provider.</b> Each provider with its connection state, OpenRouter included.</sub></td>
     <td width="50%"><img src=".github/assets/screenshots/en/14-config.png" alt="/config window choosing the terminal theme"><br><sub><b>/config.</b> Section, key, then one of the allowed values; the current one is marked.</sub></td>
   </tr>
   <tr>
