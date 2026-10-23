@@ -226,6 +226,9 @@ export const CONFIG_VALUE_CHOICES: Readonly<Record<string, ConfigChoiceDeclarati
   'memoryAutomation.verification.mode': { kind: 'schema' },
   'memoryAutomation.context.mode': { kind: 'schema' },
   'memoryAutomation.overlay': { kind: 'document' },
+  // S8-2: the catalog-evolution switch is chosen from its schema; its narrowing overlay is a structured document (read-only here).
+  'catalogEvolution.mode': { kind: 'schema' },
+  'catalogEvolution.overlay': { kind: 'document' },
   'runRuntime.nervous.mode': { kind: 'schema' },
   'runRuntime.recovery.mode': { kind: 'schema' },
   'brain_planner.reasoning': { kind: 'schema' },
