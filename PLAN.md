@@ -147,7 +147,7 @@ Eski tam metinler arşivde ("Eski Açık P0/P1 bulgular").
 - **SANDBOX-HOME-WALK:** bağımsız inceleme ve birleşik/hosted kabul açıktı; alpha.26+ içinde indi, kapanış doğrulaması arşiv metninde.
 - **OPENROUTER-GATE (owner ön koşulu):** ilk ücretli OpenRouter çağrısından önce "Prevent overrides" eklentisi yok ve OpenRouter kredi limiti Deckent bütçesinden yüksek değil.
 - **MODEL-INGRESS-P3:** native worker'ın kendi araçları Deckent giriş yolunun dışında.
-- **Dalga 2 takipleri:** patch-prepare reddi tipli makbuz, `LayoutError` insan metni, MARK-LOST-ATOMIC (KARAR 12).
+- **Dalga 2 takipleri:** patch-prepare reddi tipli makbuz, `LayoutError` insan metni, MARK-LOST-ATOMIC (KARAR 12 owner 2026-10-23 kapandı: ilk çit deterministik Nervous kuralıyla yazılır, S6R-3; kanıt temeli S6R-1 alpha.55; kayıp çalışan otomatik kurtarma S6R-2…S6R-6, owner-decisions "s6r-kayip-calisan-2026-10-23").
 - Etiketsiz açıklar (SBOM gömülü kopya, SURROGATE-CUT sınırları, terminal/provider): [open-findings](.deckent/docs/plan/open-findings.md).
 
 ## Owner karar indeksi
