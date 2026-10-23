@@ -59,6 +59,8 @@ import memorytr from '../locales/tr/memory.json' with { type: 'json' };
 import memoryautomationtr from '../locales/tr/memory-automation.json' with { type: 'json' };
 import memoryreviewtr from '../locales/tr/memory-review.json' with { type: 'json' };
 import agentstr from '../locales/tr/agents.json' with { type: 'json' };
+import agentsignen from '../locales/en/agentsign.json' with { type: 'json' };
+import agentsigntr from '../locales/tr/agentsign.json' with { type: 'json' };
 import assignmenttr from '../locales/tr/assignment.json' with { type: 'json' };
 import termruntr from '../locales/tr/termrun.json' with { type: 'json' };
 import tuicopyen from '../locales/en/tuicopy.json' with { type: 'json' };
@@ -111,6 +113,7 @@ export const families = [
   { en: memoryreviewen, tr: memoryreviewtr },
   { en: assignmenten, tr: assignmenttr },
   { en: agentsen, tr: agentstr },
+  { en: agentsignen, tr: agentsigntr },
   { en: tuicopyen, tr: tuicopytr },
   { en: tuinotifyen, tr: tuinotifytr },
   { en: tuiqueueen, tr: tuiqueuetr },

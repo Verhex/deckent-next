@@ -19,7 +19,7 @@ function v59() {
 const rows = (db: DatabaseSync) => db.prepare('SELECT rowid,producer_command_id,record,superseded_by FROM acceptance_metrics ORDER BY rowid').all();
 
 it('v59 upgrades to v60: rows and their order are kept, the older row of an Attempt is superseded by its successor', () => {
-  expect(METRICS_V2_LEDGER_VERSION).toBe(60); expect(CURRENT_LEDGER_VERSION).toBe(67);
+  expect(METRICS_V2_LEDGER_VERSION).toBe(60); expect(CURRENT_LEDGER_VERSION).toBe(68);
   const db = v59();
   try {
     expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(59);

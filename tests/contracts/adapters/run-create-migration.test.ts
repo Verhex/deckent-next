@@ -36,7 +36,7 @@ it('v51 refuses the new subject and forbid admission; v52 preserves every old se
     .run('s', 'new', 'run-create', 'b'.repeat(64), 0, '{}')).toThrow(/CHECK/); before.close();
   expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgraded = openSqliteLedger(f.path, options, 'allow');
-  expect(CURRENT_LEDGER_VERSION).toBe(67); expect(upgraded.prepare('PRAGMA user_version').get()!.user_version).toBe(67);
+  expect(CURRENT_LEDGER_VERSION).toBe(68); expect(upgraded.prepare('PRAGMA user_version').get()!.user_version).toBe(68);
   expect(upgraded.prepare('SELECT snapshot FROM runs').get()!.snapshot).toBe(oldRun);
   expect(upgraded.prepare('SELECT command,snapshot FROM run_receipts').get()).toEqual(receipt);
   expect(JSON.parse(String(oldRun))).not.toHaveProperty('authority'); expect(upgraded.prepare('SELECT count(*) AS n FROM audit_events').get()!.n).toBe(0); upgraded.close();

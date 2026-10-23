@@ -15,7 +15,10 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 67;
+export const CURRENT_LEDGER_VERSION = 68;
+// S8-5 signer keys (lane v68 after s81's v67; lead renumbers): one row per (scope, key) that moves only active → revoked (revision 1 → 2), append-only
+// revisions and command receipts. Additive; no earlier row is read or rewritten. Downgrade = restore the pre-switch backup.
+export const SIGNER_KEY_LEDGER_VERSION = 68;
 // S8-1a agent standing (lane v67 after s6r4's v66; lead renumbers): current standing per (agent revision, WorkClass), forward-only and undeletable, append-only
 // history and S8-4 command receipts. Additive; pre-v67 agents have no standing row (not selectable until revised). Downgrade = restore the pre-switch backup.
 export const AGENT_STANDING_LEDGER_VERSION = 67;
@@ -78,6 +81,13 @@ export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const append = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;`).join('');
 const memoryAppend = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;`).join('');
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  [SIGNER_KEY_LEDGER_VERSION]: `CREATE TABLE skill_signer_keys(scope_id TEXT NOT NULL,key_id TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN('active','revoked')),
+    revision INTEGER NOT NULL CHECK(revision IN(1,2)),seq INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,key_id));
+    CREATE TRIGGER skill_signer_keys_revoke_only BEFORE UPDATE ON skill_signer_keys WHEN NEW.scope_id IS NOT OLD.scope_id OR NEW.key_id IS NOT OLD.key_id OR OLD.state IS NOT 'active'
+      OR NEW.state IS NOT 'revoked' OR NEW.revision IS NOT 2 BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;
+    CREATE TABLE skill_signer_key_revisions(scope_id TEXT NOT NULL,key_id TEXT NOT NULL,revision INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,key_id,revision));
+    CREATE TABLE skill_signer_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id));
+    ${append('skill_signer_keys', 'DELETE')}${append('skill_signer_key_revisions', 'UPDATE', 'DELETE')}${append('skill_signer_receipts', 'UPDATE', 'DELETE')} PRAGMA user_version=68;`,
   [AGENT_STANDING_LEDGER_VERSION]: `CREATE TABLE agent_standings(scope_id TEXT NOT NULL,agent_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),work_class TEXT NOT NULL,
     standing TEXT NOT NULL CHECK(standing IN('candidate','active','redesign-required','retired')),standing_revision INTEGER NOT NULL CHECK(standing_revision>0),record TEXT NOT NULL,
     PRIMARY KEY(scope_id,agent_id,revision,work_class)); CREATE INDEX agent_standings_class ON agent_standings(scope_id,work_class,standing,agent_id);
@@ -365,7 +375,7 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === 54) { migrateQuotaWaits(db); continue; }
     const sql = migrations[next];
     if (!sql) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
-    if (next === RUN_PROPOSAL_LEDGER_VERSION || next === MEMORY_AUTOMATION_LEDGER_VERSION || next === RECOVERY_CASES_LEDGER_VERSION || next === AGENT_STANDING_LEDGER_VERSION) {
+    if (next === RUN_PROPOSAL_LEDGER_VERSION || next === MEMORY_AUTOMATION_LEDGER_VERSION || next === RECOVERY_CASES_LEDGER_VERSION || next === AGENT_STANDING_LEDGER_VERSION || next === SIGNER_KEY_LEDGER_VERSION) {
       // A previous version cannot contain proposal objects. Refuse a contradictory
       // schema; never silently adopt an existing table or bypass append-only triggers.
       try { db.exec(sql); } catch { throw new AttemptStoreError('ATTEMPT_STORE_VERSION'); }

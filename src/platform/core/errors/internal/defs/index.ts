@@ -12,6 +12,7 @@ import { setupErrors } from './setup.js';
 import { securityErrors } from './security.js';
 import { memoryErrors } from './memory.js';
 import { agentsErrors } from './agents.js';
+import { agentsignErrors } from './agentsign.js';
 import { assignmentErrors } from './assignment.js';
 import { headlessErrors } from './headless.js';
 
@@ -31,5 +32,6 @@ export const ERROR_DEFINITION_FRAGMENTS: readonly (readonly [string, ErrorDefini
   ['memory', memoryErrors],
   ['assignment', assignmentErrors],
   ['agents', agentsErrors],
+  ['agentsign', agentsignErrors],
   ['headless', headlessErrors],
 ]);

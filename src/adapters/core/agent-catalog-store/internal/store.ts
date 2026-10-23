@@ -1,12 +1,12 @@
 import { createRequire } from 'node:module';
 import { isDeepStrictEqual } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
-import { agentDefinitionSchema, agentStandingSchema, checkAgentOrgTree, encodeCommandProjection, AgentCatalogError, skillDefinitionSchema, AGENT_CATALOG_LIMITS, type AgentDefinition,
-  type AgentStanding, type SkillDefinition } from '#domain/index.js';
-import { AuditApplication, AgentCatalogStoreError, type AgentCatalogChange, type AgentCatalogReceipt, type AgentCatalogStore } from '#engine/index.js';
+import { agentDefinitionSchema, agentStandingSchema, catalogActionBytes, checkAgentOrgTree, encodeCommandProjection, requireActionSigner, signerKeySchema, AgentCatalogError,
+  skillDefinitionSchema, AGENT_CATALOG_LIMITS, SIGNATURE_LABELS, type AgentDefinition, type AgentStanding, type SignerKey, type SkillDefinition } from '#domain/index.js';
+import { AuditApplication, AgentCatalogStoreError, skillSignatureMessage, type AgentCatalogChange, type AgentCatalogReceipt, type AgentCatalogStore, type SignerChange } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
-import { openSqliteLedger, requireLedgerVersion, AGENT_STANDING_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
-import type { IntegrityAuthority } from '#platform/index.js';
+import { openSqliteLedger, requireLedgerVersion, SIGNER_KEY_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
+import { sha256, signatureMessage, verifyEd25519, type IntegrityAuthority } from '#platform/index.js';
 
 const SEAL = 'agent-catalog-store:1';
 const corrupt = () => new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT'), STANDING = 'agent_id,revision,work_class,standing,standing_revision,record';
@@ -14,7 +14,7 @@ type Kind = 'agent' | 'skill';
 const TABLE = { agent: { current: 'agent_definitions', revisions: 'agent_definition_revisions', id: 'agent_id' },
   skill: { current: 'skill_definitions', revisions: 'skill_definition_revisions', id: 'skill_id' } } as const;
 /**
- * Core SQLite adapter of the DB-neutral agent catalog port, on the shared ledger (v64; standings v67, which every read requires). Every row is sealed with the installation integrity key and
+ * Core SQLite adapter of the DB-neutral agent catalog port, on the shared ledger (v64; standings v67; signer keys v68, which every read requires). Every row is sealed with the installation integrity key and
  * cross-checked against its columns on read; revisions and receipts are append-only and current rows undeletable (ledger triggers). An agent
  * commit re-checks the scope's org tree (`checkAgentOrgTree`) over the rows it holds inside the same BEGIN IMMEDIATE transaction.
  */
@@ -84,19 +84,91 @@ class SqliteAgentCatalogStore implements AgentCatalogStore {
       ON d.scope_id=s.scope_id AND d.agent_id=s.agent_id AND d.revision=s.revision WHERE s.scope_id=? AND s.work_class=? AND s.standing IN('active','candidate') ORDER BY s.agent_id LIMIT ?`)
       .all(scopeId, workClass, limit).map(row => ({ standing: this.standing(row, scopeId), agent: this.row('agent', { agent_id: row['agent_id'], revision: row['d_revision'], parent_id: row['parent_id'], record: row['d_record'] }, scopeId) })));
   }
+  /** S8-5 (v68): a sealed signer row, cross-checked against its columns. */
+  private signerRow(row: Record<string, unknown> | undefined, scopeId: string): SignerKey | null {
+    if (!row) return null;
+    const parsed = signerKeySchema.safeParse(this.open(row['record']));
+    if (!parsed.success || parsed.data.scopeId !== scopeId || parsed.data.keyId !== row['key_id'] || parsed.data.state !== row['state'] || parsed.data.revision !== row['revision']) throw corrupt();
+    return parsed.data;
+  }
+  private loadSigner(scopeId: string, keyId: string) { return this.signerRow(this.db.prepare('SELECT key_id,state,revision,record FROM skill_signer_keys WHERE scope_id=? AND key_id=?').get(scopeId, keyId), scopeId); }
+  async signers(scopeId: string, limit: number) { return this.read(() => this.db.prepare('SELECT key_id,state,revision,record FROM skill_signer_keys WHERE scope_id=? ORDER BY seq LIMIT ?')
+    .all(scopeId, limit).map(row => this.signerRow(row, scopeId)!)); }
+  async signer(scopeId: string, keyId: string) { return this.read(() => this.loadSigner(scopeId, keyId)); }
+  async signerReceipt(scopeId: string, commandId: string) {
+    return this.read(() => {
+      const row = this.db.prepare('SELECT record FROM skill_signer_receipts WHERE scope_id=? AND command_id=?').get(scopeId, commandId);
+      const receipt = row ? this.open(row['record']) as SignerChange['receipt'] : null;
+      if (receipt && (receipt.scopeId !== scopeId || receipt.commandId !== commandId)) throw corrupt();
+      return receipt;
+    });
+  }
+  /** Committed agent and skill revisions whose provenance names `keyId` (they stay after a revoke and are shown as signed by a revoked key). */
+  async signedRows(scopeId: string, keyId: string) {
+    return this.read(() => ['agent_definition_revisions', 'skill_definition_revisions'].reduce((sum, table) => sum + Number(this.db.prepare(`SELECT count(*) AS n FROM ${table}
+      WHERE scope_id=? AND json_extract(record,'$.value.provenance.signed.keyId')=?`).get(scopeId, keyId)?.['n'] ?? 0), 0));
+  }
+  async commitSigner(change: SignerChange) {
+    const next = signerKeySchema.parse(change.next), { receipt } = change;
+    if (next.scopeId !== receipt.scopeId || next.keyId !== receipt.keyId || next.revision !== receipt.revision || next.revision !== (change.previous ? 2 : 1)) throw corrupt();
+    return this.transaction(() => {
+      const prior = this.db.prepare('SELECT record FROM skill_signer_receipts WHERE scope_id=? AND command_id=?').get(receipt.scopeId, receipt.commandId);
+      if (prior) {
+        const done = this.open(prior['record']) as SignerChange['receipt'], item = done.digest === receipt.digest ? this.loadSigner(done.scopeId, done.keyId) : null;
+        if (!item) throw new AgentCatalogStoreError('AGENT_CATALOG_COMMAND_CONFLICT'); return { replayed: true, item };
+      }
+      const current = this.loadSigner(next.scopeId, next.keyId);
+      if (!change.previous && current) throw new AgentCatalogStoreError('AGENT_CATALOG_EXISTS');
+      if (!isDeepStrictEqual(current, change.previous)) throw new AgentCatalogStoreError('AGENT_CATALOG_REVISION_CONFLICT');
+      if (!current && Number(this.db.prepare('SELECT count(*) AS n FROM skill_signer_keys WHERE scope_id=?').get(next.scopeId)?.['n']) >= AGENT_CATALOG_LIMITS.signersPerScopeMax)
+        throw new AgentCatalogStoreError('AGENT_CATALOG_LIMIT');
+      this.audit.record(change.event);
+      const record = this.seal(next);
+      if (current) this.db.prepare('UPDATE skill_signer_keys SET state=?,revision=?,record=? WHERE scope_id=? AND key_id=?').run(next.state, next.revision, record, next.scopeId, next.keyId);
+      else this.db.prepare('INSERT INTO skill_signer_keys(scope_id,key_id,state,revision,seq,record) VALUES(?,?,?,?,(SELECT coalesce(max(seq),0)+1 FROM skill_signer_keys WHERE scope_id=?),?)')
+        .run(next.scopeId, next.keyId, next.state, next.revision, next.scopeId, record);
+      this.db.prepare('INSERT INTO skill_signer_key_revisions(scope_id,key_id,revision,record) VALUES(?,?,?,?)').run(next.scopeId, next.keyId, next.revision, record);
+      this.db.prepare('INSERT INTO skill_signer_receipts(scope_id,command_id,record) VALUES(?,?,?)').run(receipt.scopeId, receipt.commandId, this.seal(receipt));
+      return { replayed: false, item: next };
+    });
+  }
+  /**
+   * S8-5 (S8-DESIGN §8, N21, N38, N44), inside the write transaction before any row: an imported skill's signature verifies under an active `import`
+   * key; an AI/system author's write carries an action signature by an active `action` key bound to the event's principal, over exactly this
+   * change's `catalog-action:1` bytes, and the row names that key. A person's row carries none. A key revoked before this point refuses the write.
+   */
+  private verifySignatures(change: AgentCatalogChange, next: AgentDefinition | SkillDefinition) {
+    const { signed, receipt, event } = change, mark = next.provenance.signed, b64 = (value: string) => Buffer.from(value, 'base64');
+    if ('skillId' in next && next.signature.status === 'verified') {
+      const key = this.loadSigner(next.scopeId, next.signature.keyId);
+      if (key?.state !== 'active' || key.purpose !== 'import'
+        || !verifyEd25519(b64(key.publicKey), skillSignatureMessage({ skillId: next.skillId, contentDigest: next.contentDigest }), b64(next.signature.value))) throw new AgentCatalogError('SKILL_IMPORT_SIGNATURE_UNVERIFIED');
+    }
+    if (next.provenance.author.ai !== (signed !== undefined)) throw new AgentCatalogError('CATALOG_SIGNATURE_REQUIRED');
+    if (!signed) return;
+    const key = requireActionSigner(this.loadSigner(next.scopeId, signed.keyId), next.scopeId, event.principal), a = signed.action;
+    const action = 'skillId' in next && next.source.kind === 'import' ? 'import' : 'define';
+    if (a.scopeId !== next.scopeId || a.action !== action || a.target.kind !== change.kind || a.target.id !== receipt.itemId || a.target.revision !== next.revision
+      || a.commandId !== receipt.commandId || a.contentDigest !== receipt.digest || a.principal.issuer !== event.principal.issuer || a.principal.subject !== event.principal.subject
+      || mark?.keyId !== key.keyId || mark.signatureDigest !== sha256(signed.signature)
+      || !verifyEd25519(b64(key.publicKey), signatureMessage(SIGNATURE_LABELS.catalogAction, catalogActionBytes(a)), b64(signed.signature))) throw new AgentCatalogError('CATALOG_SIGNATURE_INVALID');
+  }
+  private transaction<T>(work: () => T): T {
+    return this.read(() => {
+      this.db.exec('BEGIN IMMEDIATE');
+      try {
+        const result = work();
+        try { this.db.exec('COMMIT'); } catch { throw new AgentCatalogStoreError('AGENT_CATALOG_OUTCOME_UNKNOWN'); }
+        return result;
+      } catch (error) { try { this.db.exec('ROLLBACK'); } catch { /* A lost commit result is resolved by the same command receipt on retry. */ } throw error; }
+    });
+  }
   async commit(change: AgentCatalogChange) {
     const next = change.kind === 'agent' ? agentDefinitionSchema.parse(change.next) : skillDefinitionSchema.parse(change.next), { receipt } = change;
     const id = 'agentId' in next ? next.agentId : next.skillId;
     if (next.revision !== (change.previous?.revision ?? 0) + 1 || next.scopeId !== receipt.scopeId || id !== receipt.itemId || next.revision !== receipt.revision
       || change.kind !== receipt.kind) throw corrupt();
-    return this.read(() => {
-      this.db.exec('BEGIN IMMEDIATE');
-      try {
-        const result = this.apply(change.kind, next, change);
-        try { this.db.exec('COMMIT'); } catch { throw new AgentCatalogStoreError('AGENT_CATALOG_OUTCOME_UNKNOWN'); }
-        return result;
-      } catch (error) { try { this.db.exec('ROLLBACK'); } catch { /* A lost commit result is resolved by the same command receipt on retry. */ } throw error; }
-    });
+    return this.transaction(() => this.apply(change.kind, next, change));
   }
   private apply(kind: Kind, next: AgentDefinition | SkillDefinition, change: AgentCatalogChange) {
     const { receipt } = change, prior = this.loadReceipt(receipt.scopeId, receipt.commandId), t = TABLE[kind];
@@ -112,6 +184,7 @@ class SqliteAgentCatalogStore implements AgentCatalogStore {
       if (tree.size > AGENT_CATALOG_LIMITS.agentsPerScopeMax) throw new AgentCatalogStoreError('AGENT_CATALOG_LIMIT');
       checkAgentOrgTree(tree, AGENT_CATALOG_LIMITS.orgTreeDepthMax);
     }
+    this.verifySignatures(change, next);
     this.audit.record(change.event);
     const seq = Number(this.db.prepare(`SELECT coalesce(max(seq),0)+1 AS seq FROM ${t.current} WHERE scope_id=?`).get(next.scopeId)?.['seq']), record = this.seal(next);
     const parent = 'agentId' in next ? next.content.parentAgentId : null;
@@ -144,5 +217,5 @@ export function openSqliteAgentCatalogStore(path: string, options: SqliteLedgerO
   if (access === 'write') return new SqliteAgentCatalogStore(openSqliteLedger(path, options, 'forbid'), integrity);
   const { DatabaseSync: NativeDatabase } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   const db = new NativeDatabase(path, { readOnly: true, timeout: options.busyTimeoutMs });
-  try { requireLedgerVersion(db, AGENT_STANDING_LEDGER_VERSION); return new SqliteAgentCatalogStore(db, integrity); } catch (error) { db.close(); throw error; }
+  try { requireLedgerVersion(db, SIGNER_KEY_LEDGER_VERSION); return new SqliteAgentCatalogStore(db, integrity); } catch (error) { db.close(); throw error; }
 }

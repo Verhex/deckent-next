@@ -15,5 +15,5 @@ export { quotaHeldTasks, readQuotaHolds, persistQuotaAttempt } from './internal/
 export { migrateEffectProducerIndex, revertEffectProducerIndex } from '#adapters/core/sqlite-ledger-migrations/index.js';
 
 export { MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION, AUDIT_CHECKPOINT_LEDGER_VERSION, MEMORY_JOURNAL_LEDGER_VERSION, WORKER_ASSIGNMENT_LEDGER_VERSION, EFFECT_PRODUCER_LEDGER_VERSION, AGENT_CATALOG_LEDGER_VERSION,
-  MEMORY_AUTOMATION_LEDGER_VERSION, RECOVERY_CASES_LEDGER_VERSION, AGENT_STANDING_LEDGER_VERSION } from './internal/schema.js';
+  MEMORY_AUTOMATION_LEDGER_VERSION, RECOVERY_CASES_LEDGER_VERSION, AGENT_STANDING_LEDGER_VERSION, SIGNER_KEY_LEDGER_VERSION } from './internal/schema.js';
 export { readEnvironmentProbeHolds, commitEnvironmentProbeSettlement, writeEnvironmentProbeCustody, releaseEnvironmentProbeCustody, type EnvironmentProbeHold } from './internal/environment-probes.js';
