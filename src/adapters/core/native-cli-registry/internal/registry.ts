@@ -29,9 +29,29 @@ export const nativeCliCapabilitiesSchema = z.object({
   eventStream: z.enum(['claude-code-stream-json', 'codex-exec-json', 'cursor-agent-stream-json']),
 }).strict().readonly();
 export type NativeCliCapabilities = z.infer<typeof nativeCliCapabilitiesSchema>;
+const positive = z.number().int().positive().safe(), names = z.array(z.string().regex(/^[A-Z][A-Z0-9_]*$/)).readonly(), words = z.array(argument).readonly();
+/** S3 headless model step (HEADLESS-0, 2026-10-23): one tool-less, MCP-less turn of the unmodified CLI. Argv, environment, guard expectations and
+ * bounds are data; a forbidden flag (fallback model, bare mode, permission bypass, extra config) can never be part of the argv. */
+export const nativeCliHeadlessSchema = z.object({ schemaVersion: z.literal(1), revision: argument, source: argument,
+  args: z.array(z.string().refine(value => !value.includes('\0'))).readonly(), maxTurns: positive, systemPromptFlag: flag, systemPromptFile: z.string().regex(/^[a-z][a-z0-9.-]*$/),
+  forbiddenFlags: z.array(flag).min(1).readonly(),
+  preflight: z.object({ versionArgs: argumentsSchema, versionPattern: argument, helpArgs: argumentsSchema, authStatusArgs: argumentsSchema }).strict().readonly(),
+  auth: z.object({ authMethods: words, apiProviders: words, configDirectoryMatch: z.boolean() }).strict().readonly(),
+  env: z.object({ fixed: z.record(z.string().regex(/^[A-Z][A-Z0-9_]*$/), z.string().refine(value => !value.includes('\0'))).readonly(), runDir: names,
+    configDir: z.string().regex(/^[A-Z][A-Z0-9_]*$/), deny: names.refine(value => value.length > 0) }).strict().readonly(),
+  guards: z.object({ apiKeySources: words, permissionMode: argument, plugins: z.array(z.object({ name: argument, path: argument }).strict().readonly()).readonly(),
+    lengthStopReasons: words, loginErrors: words, creditsErrors: words, loginStatuses: z.array(positive).readonly(), quotaStatuses: z.array(positive).readonly() }).strict().readonly(),
+  limits: z.object({ stdinMaxBytes: positive, maxLineBytes: positive, stderrMaxBytes: positive, preflightTimeoutMs: positive, preflightOutputBytes: positive,
+    killGraceMs: positive, responseFramingBytes: positive }).strict().readonly(),
+}).strict().refine(value => {
+  const built = [...Object.keys(value.env.fixed), ...value.env.runDir, value.env.configDir];
+  return new Set(built).size === built.length && !built.some(name => value.env.deny.includes(name))
+    && !value.args.some(arg => value.forbiddenFlags.some(forbidden => arg === forbidden || arg.startsWith(forbidden + '=')));
+}).readonly();
+export type NativeCliHeadless = z.infer<typeof nativeCliHeadlessSchema>;
 const commandSchema = z.object({ executable: argument, args: argumentsSchema, modelFlag: flag, helpArgs: argumentsSchema,
   disabledArgs: argumentsSchema.nullable(), coreArgs: argumentsSchema, modelAliases: argumentsSchema,
-  capabilities: nativeCliCapabilitiesSchema }).strict().refine(value => (value.disabledArgs === null) === (value.capabilities.discovery === null)
+  capabilities: nativeCliCapabilitiesSchema, headless: nativeCliHeadlessSchema.optional() }).strict().refine(value => (value.disabledArgs === null) === (value.capabilities.discovery === null)
     && (value.capabilities.discovery === null || (value.disabledArgs!.length === 0) === (value.capabilities.discovery.checkout !== null))).readonly();
 const registrySchema = z.object({ schemaVersion: z.literal(3), adapters: z.record(z.string().regex(/^[a-z][a-z0-9-]*$/), commandSchema)
   .refine(value => Object.keys(value).length > 0).readonly(), instructionSurface: z.object({ hiddenPaths: workspaceHiddenPathsSchema }).strict().readonly() }).strict().readonly();
@@ -50,6 +70,11 @@ export function nativeCliCommand(provider: z.infer<typeof nativeCliIdSchema>) {
   return registry.adapters[parsed.data]!;
 }
 
+/** The CLI whose event stream is `protocolFamily` and that declares a headless model step; selected by data, never by a CLI name. */
+export function nativeCliHeadless(protocolFamily: string) {
+  const found = Object.values(registry.adapters).filter(command => command.headless && command.capabilities.eventStream === protocolFamily);
+  return found.length === 1 ? { command: found[0]!, headless: found[0]!.headless! } : null;
+}
 /** Generic registry interpolation only; the compiler and binding guard share the exact argv segment. */
 export function nativeEffortArgs(capability: NativeCliCapabilities['reasoningEffort'], input: WorkerEffort): readonly string[] {
   const selection = workerEffortSchema.parse(input);

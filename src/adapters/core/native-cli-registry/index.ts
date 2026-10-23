@@ -1,2 +1,2 @@
-export { nativeEffortArgs, nativeCliCommand, parseNativeCliRegistry, NativeCliRegistryError, nativeCliIds, nativeCliIdSchema, nativeCliCapabilitiesSchema } from './internal/registry.js';
-export type { NativeCliCapabilities } from './internal/registry.js';
+export { nativeEffortArgs, nativeCliCommand, nativeCliHeadless, nativeCliHeadlessSchema, parseNativeCliRegistry, NativeCliRegistryError, nativeCliIds, nativeCliIdSchema, nativeCliCapabilitiesSchema } from './internal/registry.js';
+export type { NativeCliCapabilities, NativeCliHeadless } from './internal/registry.js';

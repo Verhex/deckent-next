@@ -1,0 +1,13 @@
+{
+  "error.HEADLESS_CLI_UNAVAILABLE": "Abonelik Brain'i için Claude CLI bağlanan yolda bulunamadı ya da yeri değişti (örneğin Node.js veya CLI yeniden kurulunca). Modele hiçbir şey gönderilmedi, başka bir model seçilmedi. Abonelik Brain'ini yeni yolla yeniden bağlayın.",
+  "error.HEADLESS_OWNER_MISMATCH": "Abonelik Brain'i başka bir işletim sistemi kullanıcısına ait. Bir süreç yalnız kendi kişisinin Claude girişini kullanabilir; hiçbir şey başlatılmadı, başka bir model seçilmedi.",
+  "error.HEADLESS_PREFLIGHT_FAILED": "Abonelik Brain'inin kullanım öncesi denetimi geçmedi, kanal kapalı kalıyor. Hiçbir model çağrılmadı, başka bir model seçilmedi; denetim bir sonraki çağrıda yeniden koşar.",
+  "error.HEADLESS_PREFLIGHT_FAILED.version": "Kurulu Claude CLI sürümü bu modelin istediğinden eski ya da sürüm okunamadı. Kanal kapalı kalıyor; hiçbir model çağrılmadı, başka bir model seçilmedi. CLI'yi güncelleyip yeniden deneyin.",
+  "error.HEADLESS_PREFLIGHT_FAILED.flags": "Kurulu Claude CLI, abonelik Brain'inin gerektirdiği seçeneklerin hepsini sunmuyor (örneğin kısıtlı, araçsız mod). Kanal kapalı kalıyor; hiçbir model çağrılmadı, başka bir model seçilmedi.",
+  "error.HEADLESS_PREFLIGHT_FAILED.auth-status": "Claude CLI giriş durumunu okunabilir biçimde bildirmedi. Kanal kapalı kalıyor; hiçbir model çağrılmadı, başka bir model seçilmedi.",
+  "error.HEADLESS_PREFLIGHT_FAILED.config-dir": "Claude CLI bağlanandan farklı bir giriş dizini bildiriyor ya da o dizin size ait değil. Kanal kapalı kalıyor; hiçbir model çağrılmadı, başka bir model seçilmedi.",
+  "error.HEADLESS_PREFLIGHT_FAILED.state-dir": "Deckent'in abonelik Brain'i için özel çalışma dizini yalnız size ait değil (sahip ya da izinler). Kanal kapalı kalıyor; hiçbir model çağrılmadı.",
+  "error.HEADLESS_PREFLIGHT_FAILED.spawn": "Claude CLI denetimini zamanında bitirmedi ya da başlatılamadı. Kanal kapalı kalıyor; hiçbir model çağrılmadı, başka bir model seçilmedi.",
+  "error.HEADLESS_LOGIN_REQUIRED": "Claude CLI bir Claude aboneliğiyle (claude.ai) girişli değil. `claude auth login` komutunu kendiniz çalıştırın; Deckent girişi hiçbir zaman açmaz ve okumaz. Hiçbir şey gönderilmedi, başka bir model seçilmedi.",
+  "error.HEADLESS_REQUEST_INVALID": "Bu istek tek, araçsız bir abonelik Brain turu olarak çalışamaz (tam olarak bir talimat ve bir mesaj, sabitlenmiş model ve desteklenen bir çaba düzeyi gerekir). Hiçbir şey gönderilmedi."
+}

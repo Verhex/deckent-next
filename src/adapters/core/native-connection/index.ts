@@ -1,10 +1,10 @@
 export { nativeSubscriptionSchema, NativeConnectionError, readLocalNativeCredential, projectNativeCredential, nativeProviderSpec } from './internal/credential.js';
 export type { NativeSubscription } from './internal/credential.js';
-export { openNativeConnection, isPublicNativeAddress, nativeWorkerEventRetentionBytes } from './internal/gateway.js';
+export { openNativeConnection, isPublicNativeAddress, nativeWorkerEventRetentionBytes, nativeQuotaPolicy } from './internal/gateway.js';
 export { inspectNativeClientHello } from './internal/tls-hello.js';
 export { validateFinalReport } from './internal/report.js';
-export { normalizeClaudeLine, normalizeCodexLine, normalizeCursorLine, createCodexState, createCursorState, createClientModelReport, readCodexRolloutModel, createNativeLineObserver, createNormalizerState, flushUnmapped, redactText, secretValues } from './internal/worker.js';
-export type { NormalizerState, CursorNormalizerState, ClientModelReportLimits, ClientModelRead } from './internal/worker.js';
+export { parseClaudeStreamLine, normalizeClaudeLine, normalizeCodexLine, normalizeCursorLine, createCodexState, createCursorState, createClientModelReport, readCodexRolloutModel, createNativeLineObserver, createNormalizerState, flushUnmapped, redactText, secretValues } from './internal/worker.js';
+export type { ClaudeStreamLine, QuotaPolicy, NormalizerState, CursorNormalizerState, ClientModelReportLimits, ClientModelRead } from './internal/worker.js';
 export { nativePromptArguments, nativePreflightCapabilities, nativeReportArguments, nativeReportInstruction } from './internal/worker.js';
 export type { NativeWorkerCapabilities } from './internal/worker.js';
 // B7 generated mirror entries, exposed for parity/custody checks; product callers use the platform producer.

@@ -13,6 +13,7 @@ import { securityErrors } from './security.js';
 import { memoryErrors } from './memory.js';
 import { agentsErrors } from './agents.js';
 import { assignmentErrors } from './assignment.js';
+import { headlessErrors } from './headless.js';
 
 /** Family fragments merged after the core table, in this fixed order (alpha.48 A2); each lane writes only its own fragment file. */
 export const ERROR_DEFINITION_FRAGMENTS: readonly (readonly [string, ErrorDefinitions])[] = Object.freeze([
@@ -30,4 +31,5 @@ export const ERROR_DEFINITION_FRAGMENTS: readonly (readonly [string, ErrorDefini
   ['memory', memoryErrors],
   ['assignment', assignmentErrors],
   ['agents', agentsErrors],
+  ['headless', headlessErrors],
 ]);

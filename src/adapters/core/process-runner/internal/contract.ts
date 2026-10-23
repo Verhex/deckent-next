@@ -2,16 +2,22 @@ import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 // OS argv/environment cannot represent NUL or unpaired UTF-16 surrogates losslessly.
 const scalar = z.string().refine(value => !value.includes('\0') && !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value));
-export const processCommandSchema = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid(),
-  executable: scalar.refine(isAbsolute), args: z.array(scalar).readonly(), cwd: scalar.refine(isAbsolute),
-  env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), scalar).readonly(),
-  timeoutMs: z.number().int().positive().max(2_147_483_647), outputBytes: z.number().int().positive().safe(),
-}).strict().readonly();
-export type ProcessCommand = z.infer<typeof processCommandSchema>;
 const base64 = z.string().regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/)
   .refine(value => Buffer.from(value, 'base64').toString('base64') === value);
+const positive = z.number().int().positive().safe();
+/** v2 (S3-2, additive): bounded stdin bytes, a separate stderr bound, a line bound for the line callback, and a graceful stop — timeout and
+ * cancellation send SIGINT to the process group and SIGKILL only after `interruptGraceMs`. v1 keeps closed stdin and immediate SIGKILL. */
+export const processCommandSchema = (<S extends z.ZodRawShape & { timeoutMs: z.ZodNumber }>(shape: S) => z.discriminatedUnion('schemaVersion', [
+  z.object({ schemaVersion: z.literal(1), ...shape }).strict(),
+  z.object({ schemaVersion: z.literal(2), ...shape, stdinBase64: base64.optional(), stderrBytes: positive.optional(), maxLineBytes: positive.optional(),
+    interruptGraceMs: shape.timeoutMs.optional() }).strict()]).readonly())({ requestId: z.string().uuid(),
+  executable: scalar.refine(isAbsolute), args: z.array(scalar).readonly(), cwd: scalar.refine(isAbsolute),
+  env: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/), scalar).readonly(),
+  timeoutMs: z.number().int().positive().max(2_147_483_647), outputBytes: positive });
+export type ProcessCommand = z.infer<typeof processCommandSchema>;
 export const processEvidenceSchema = z.object({ schemaVersion: z.literal(1), requestId: z.string().uuid(), started: z.boolean(),
-  reason: z.enum(['exit', 'signal', 'timeout', 'cancelled', 'output-limit', 'start-failed']),
+  // `stopped`: the v2 line consumer ended the process; `line-limit`: one stdout line exceeded the command's line bound.
+  reason: z.enum(['exit', 'signal', 'timeout', 'cancelled', 'output-limit', 'start-failed', 'stopped', 'line-limit']),
   exitCode: z.number().int().nonnegative().safe().nullable(), signal: scalar.pipe(z.string().min(1)).nullable(),
   stdoutBase64: base64, stderrBase64: base64, stdoutTruncated: z.boolean(), stderrTruncated: z.boolean(),
   durationMs: z.number().nonnegative().finite(),
@@ -34,14 +40,15 @@ export function validateProcessEvidence(command: ProcessCommand, input: unknown)
   const checked = processCommandSchema.safeParse(command);
   if (!checked.success) throw new ProcessRunnerError('PROCESS_RUNNER_INVALID');
   const value = input as Partial<ProcessEvidence> | null;
-  const encodedLimit = Math.ceil(checked.data.outputBytes / 3) * 4;
+  const encodedLimit = (bytes: number) => Math.ceil(bytes / 3) * 4;
+  const outLimit = checked.data.outputBytes, errLimit = (checked.data.schemaVersion === 2 ? checked.data.stderrBytes : undefined) ?? outLimit;
   if (!value || typeof value.stdoutBase64 !== 'string' || typeof value.stderrBase64 !== 'string'
-    || value.stdoutBase64.length > encodedLimit || value.stderrBase64.length > encodedLimit) throw new ProcessRunnerError('PROCESS_RUNNER_RESPONSE_INVALID');
+    || value.stdoutBase64.length > encodedLimit(outLimit) || value.stderrBase64.length > encodedLimit(errLimit)) throw new ProcessRunnerError('PROCESS_RUNNER_RESPONSE_INVALID');
   const parsed = processEvidenceSchema.safeParse(input);
   if (!parsed.success || parsed.data.requestId !== checked.data.requestId) throw new ProcessRunnerError('PROCESS_RUNNER_RESPONSE_INVALID');
-  for (const [bytes, truncated] of [[parsed.data.stdoutBase64, parsed.data.stdoutTruncated], [parsed.data.stderrBase64, parsed.data.stderrTruncated]] as const) {
+  for (const [bytes, truncated, limit] of [[parsed.data.stdoutBase64, parsed.data.stdoutTruncated, outLimit], [parsed.data.stderrBase64, parsed.data.stderrTruncated, errLimit]] as const) {
     const size = Buffer.from(bytes, 'base64').length;
-    if (size > checked.data.outputBytes || (truncated && size !== checked.data.outputBytes)) throw new ProcessRunnerError('PROCESS_RUNNER_RESPONSE_INVALID');
+    if (size > limit || (truncated && size !== limit)) throw new ProcessRunnerError('PROCESS_RUNNER_RESPONSE_INVALID');
   }
   return parsed.data;
 }
