@@ -42,7 +42,7 @@ export function runStateWord(run: RunView, locale: Locale): string {
     'dependency-failed': () => t('terminal.jobs.parked.dependency-failed', {}, locale), 'dependency-cancelled': () => t('terminal.jobs.parked.dependency-cancelled', {}, locale),
     'awaiting-decision': () => t('terminal.jobs.parked.awaiting-decision', {}, locale), 'evaluation-not-ready': () => t('terminal.jobs.parked.evaluation-not-ready', {}, locale),
     'needs-input': () => t('terminal.jobs.parked.needs-input', {}, locale), 'operator-hold': () => t('terminal.jobs.parked.operator-hold', {}, locale),
-    'progression-failed': () => t('terminal.jobs.parked.progression-failed', {}, locale), 'quota-exhausted': () => t('terminal.jobs.parked.quota-exhausted', {}, locale),
+    'progression-failed': () => t('terminal.jobs.parked.progression-failed', {}, locale), 'quota-exhausted': () => t('terminal.jobs.parked.quota-exhausted', {}, locale), 'quota-ask': () => t('quotaask.state', {}, locale),
     'environment-not-ready': () => t('terminal.jobs.parked.environment-not-ready', {}, locale) };
   const reason = reasons[run.state.reason]();
   // A hold laid over another park keeps the park's own reason and says the hold too.

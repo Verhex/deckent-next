@@ -20,7 +20,7 @@ export class RunDecisionApprovalBroker implements RunDecisionAuthorization {
     // S5b (Auditor owner decision 6): hold is the ordinary control; every resume is a decision. A replay of a resume recorded as an
     // operator control before this release returns that receipt unchanged (the store writes nothing new for it).
     const ordinary = command.action === 'hold' || sameReplayActor && replay?.action === 'resume' && replay.decision?.step === 'operator-control';
-    const personOnly = command.action === 'resume' && (readRunHold(run.state)?.source ?? 'operator') !== 'operator';
+    const personOnly = command.action === 'quota-answer' || command.action === 'resume' && (readRunHold(run.state)?.source ?? 'operator') !== 'operator';
     const targetId = taskStep ? run.bindings.find(binding => binding.identity.taskId === command.taskId)?.identity.attemptId
       ?? run.progress.find(task => task.taskId === command.taskId)?.inputAnswer?.source.attemptId : command.runId;
     if (!targetId) throw new ApprovalError('APPROVAL_CONFLICT');
@@ -35,7 +35,7 @@ export class RunDecisionApprovalBroker implements RunDecisionAuthorization {
     if (command.action !== 'accept' && command.action !== 'reject') {
       if (witness) return sameReplayActor && replay?.decision ? replay.decision : evidence('human-tty');
       // A safety hold (Nervous pause, Auditor park) is lifted only by a witnessed person; no policy cell stands in for them.
-      if (personOnly) throw new RunLifecycleError('RUN_HOLD_PERSON_REQUIRED');
+      if (personOnly) throw new RunLifecycleError(command.action === 'quota-answer' ? 'RUN_QUOTA_PERSON_REQUIRED' : 'RUN_HOLD_PERSON_REQUIRED');
       if (ruleId) return sameReplayActor && replay?.decision ? replay.decision : evidence('ai-policy', ruleId);
       throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
     }

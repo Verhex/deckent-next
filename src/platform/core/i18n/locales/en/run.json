@@ -347,6 +347,8 @@
   "error.HANDOFF_INVALID": "The structured handoff note is invalid.",
   "error.HANDOFF_LIMIT_EXCEEDED": "Handoff notes exceed the configured limits.",
   "error.RUN_HOLD_PERSON_REQUIRED": "A safety hold (a monitor pause or an auditor park) is lifted only by a person at an interactive terminal; no policy grant replaces that. Nothing changed.",
+  "error.RUN_QUOTA_PERSON_REQUIRED": "A subscription quota wait that has run out is answered only by a person at an interactive terminal; no AI, policy cell or script can answer it.",
+  "error.RUN_QUOTA_WAIT_LIMIT": "Keeping the wait is no longer offered: the configured number of waits is used up. Choose the next candidate, or close the Run yourself; the Run is never cancelled for you.",
   "error.NERVOUS_RULES_UNREADABLE": "The Nervous rule registry could not be read or is invalid; the lost-worker detector did not start and no rule was skipped silently. Nothing changed.",
   "error.NERVOUS_SIGNAL_INVALID": "The Nervous detector refused a signal batch that names another scope or an out-of-order audit record; nothing was recorded.",
   "error.NERVOUS_ACTION_REFUSED": "The Nervous broker refused a proposal outside the standing stop list; nothing was recorded or run.",

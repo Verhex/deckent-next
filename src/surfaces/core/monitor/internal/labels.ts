@@ -157,6 +157,13 @@ export function deliveryOutlookDetail(outlook: MonitorDeliveryOutlook, locale: L
   return labels[outlook];
 }
 
+/** S9 (owner L-A): the card lines of an expired quota wait: what happened, the known reset (if any), the choices. Nothing here cancels. */
+export function quotaAskLines(resetsAtMs: readonly (number | null)[], locale: Locale): readonly string[] {
+  const known = resetsAtMs.length > 0 && resetsAtMs.every((reset): reset is number => reset !== null) ? Math.max(...resetsAtMs as number[]) : null;
+  return [t('quotaask.card.title', {}, locale), known === null ? t('quotaask.card.resetUnknown', {}, locale) : t('quotaask.card.resetKnown', { time: clockText(known) }, locale),
+    t('quotaask.card.options', {}, locale)];
+}
+
 export function quotaWaitText(deadline: number, resetKnown: boolean, locale: Locale, retryLimit = false, now = Date.now()): string {
   const hint = t('run.quota.releaseHint', {}, locale);
   if (retryLimit) return `${t('run.quota.retryLimit', {}, locale)} · ${hint}`;

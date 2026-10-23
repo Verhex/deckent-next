@@ -77,7 +77,9 @@ export const RUN_PARKING_SETTINGS = z.object({ schemaVersion: z.literal(1),
   timeoutMs: z.number().int().positive().safe().default(86_400_000) }).strict();
 
 export const QUOTA_RECOVERY_SETTINGS = z.object({ schemaVersion: z.literal(1), maxResumes: z.number().int().nonnegative().safe().default(quotaDefaults.maxResumes),
-  maxWaitMs: z.number().int().positive().safe().default(quotaDefaults.maxWaitMs) }).strict();
+  maxWaitMs: z.number().int().positive().safe().default(quotaDefaults.maxWaitMs),
+  /** S9: how often a person may choose to keep waiting after the ask; the ask itself never ends the Run. */
+  maxRewaits: z.number().int().nonnegative().safe().default(quotaDefaults.maxRewaits) }).strict();
 /** R3 (owner D4a): installation silence policy for watchable workers (frozen per task at admission; a work class may override warn/stop),
  * at most `maxRetries` automatic re-runs of a stalled Attempt after `backoffMs`. Warn must come before stop. */
 export const STALL_RECOVERY_SETTINGS = z.object({ schemaVersion: z.literal(1), warnAfterMs: z.number().int().positive().safe().default(stallDefaults.warnAfterMs),

@@ -28,7 +28,7 @@ export type RunHoldSource = typeof RUN_HOLD_SOURCES[number];
 export type SafetyHoldSource = z.infer<typeof safetyHoldSourceSchema>;
 export const runStateSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('running') }).strict(),
-  z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready']),
+  z.object({ kind: z.literal('parked'), reason: z.enum(['dependency-failed', 'dependency-cancelled', 'awaiting-decision', 'evaluation-not-ready', 'needs-input', 'operator-hold', 'progression-failed', 'quota-exhausted', 'quota-ask', 'environment-not-ready']),
     failureCode: identitySchema.optional(), operatorHold: z.object({ schemaVersion: z.literal(1), note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars),
       source: safetyHoldSourceSchema.optional() }).strict().optional(),
     note: z.string().trim().min(1).max(workerReportLimits.handoffOpenQuestionChars).optional(), holdSource: safetyHoldSourceSchema.optional(), since: counterSchema, deadline: counterSchema }).strict(),
@@ -39,7 +39,8 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
   authority: authorityAdmissionSchema.optional(),
   state: runStateSchema, branch: branchDecisionSchema.optional(), graph: taskGraphSchema, execution: runExecutionSnapshotSchema, progress: z.array(taskProgressSchema).readonly(), bindings: z.array(runBindingSchema).readonly(), cancelRequested: z.boolean(),
   quotaWaits: z.array(z.object({ identity: attemptIdentitySchema, channelId: z.string().min(1).max(256), quota: quotaExhaustedSchema,
-    evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/), since: counterSchema, deadline: counterSchema, maxResumes: counterSchema, resetBoundExceeded: z.boolean().optional(), releasedAtMs: counterSchema.optional() }).strict().readonly()).readonly().optional(),
+    evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/), since: counterSchema, deadline: counterSchema, maxResumes: counterSchema, resetBoundExceeded: z.boolean().optional(), releasedAtMs: counterSchema.optional(),
+    /* S9: how many times a person chose to keep waiting after the ask; absent on every earlier record. */ rewaits: counterSchema.optional() }).strict().readonly()).readonly().optional(),
   previousBindings: z.array(runBindingSchema).readonly().optional(),
 }).strict().superRefine((run, context) => {
   const invalid = () => context.addIssue({ code: z.ZodIssueCode.custom, message: 'RUN_SNAPSHOT_INCONSISTENT' });
@@ -59,7 +60,7 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
     || ['progression-failed', 'environment-not-ready'].includes(run.state.reason) !== (run.state.failureCode !== undefined)
     // PRE-7: an environment park names the unmet requirement (failureCode) and holds the attempt its preflight refused.
     || (run.state.reason === 'environment-not-ready' && !run.bindings.some(row => row.observedKind === 'launch-refused'))
-    || (!['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason) && run.progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase))))) invalid();
+    || (!['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted', 'quota-ask', 'environment-not-ready'].includes(run.state.reason) && run.progress.some(task => task.unresolvedEffects || ['active', 'evaluating', 'reconciling'].includes(task.phase))))) invalid();
   if (run.state.kind === 'terminal' && (run.progress.some(task => task.unresolvedEffects || ['pending', 'active', 'evaluating', 'reconciling', 'awaiting-decision'].includes(task.phase)) || (run.state.outcome === 'completed' && run.progress.some(task => task.phase !== 'accepted')) || (run.state.outcome === 'incomplete' && (!run.progress.some(task => task.phase === 'accepted') || run.progress.every(task => task.phase === 'accepted'))) || (['failed', 'cancelled'].includes(run.state.outcome) && run.progress.some(task => task.phase === 'accepted')))) invalid();
   const tasks = new Set(run.graph.tasks.map(task => task.id)); const bound = new Set<string>(); const attempts = new Set<string>();
   for (const binding of run.previousBindings ?? []) {
@@ -96,7 +97,7 @@ export const runSnapshotSchema = z.object({ schemaVersion: z.literal(4), identit
 export type RunIdentity = z.infer<typeof runIdentitySchema>;
 export type RunSnapshot = z.infer<typeof runSnapshotSchema>;
 export class RunError extends Error {
-  constructor(readonly code: 'RUN_INVALID' | 'RUN_REVISION_CONFLICT' | 'RUN_CANCEL_REQUESTED' | 'RUN_TASK_NOT_READY' | 'RUN_ATTEMPT_CONFLICT' | 'RUN_OBSERVATION_STALE' | 'RUN_PARKED' | 'RUN_TERMINAL' | 'RUN_NOT_PARKED' | 'RUN_DECISION_NOT_READY' | 'RUN_DECISION_EXPIRED') { super(code); this.name = 'RunError'; }
+  constructor(readonly code: 'RUN_INVALID' | 'RUN_REVISION_CONFLICT' | 'RUN_CANCEL_REQUESTED' | 'RUN_TASK_NOT_READY' | 'RUN_ATTEMPT_CONFLICT' | 'RUN_OBSERVATION_STALE' | 'RUN_PARKED' | 'RUN_TERMINAL' | 'RUN_NOT_PARKED' | 'RUN_DECISION_NOT_READY' | 'RUN_DECISION_EXPIRED' | 'RUN_QUOTA_WAIT_LIMIT' | 'RUN_QUOTA_PERSON_REQUIRED') { super(code); this.name = 'RunError'; }
 }
 export function checkedRun(input: unknown, expectedRevision: number): RunSnapshot {
   const parsed = runSnapshotSchema.safeParse(input); if (!parsed.success) throw new RunError('RUN_INVALID');

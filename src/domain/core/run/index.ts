@@ -1,5 +1,5 @@
-export { parkRunQuota, resetRunQuota, releaseRunQuota } from './internal/quota.js';
-export type { RunQuotaWait } from './internal/quota.js';
+export { parkRunQuota, resetRunQuota, releaseRunQuota, askRunQuota, answerRunQuota, QUOTA_ASK_OPEN, quotaAnswerFields, quotaAnswerShapeInvalid, withQuotaAnswer, answerRunQuotaWrite } from './internal/quota.js';
+export type { RunQuotaWait, RunQuotaChoice, RunQuotaAskPolicy } from './internal/quota.js';
 export { runIdentitySchema, runSnapshotSchema, runStateSchema, RunError, STALL_CAUSES, RUN_HOLD_SOURCES, safetyHoldSourceSchema } from './internal/contract.js';
 export type { RunHoldSource, SafetyHoldSource } from './internal/contract.js';
 export { readRunHold } from './internal/hold.js';

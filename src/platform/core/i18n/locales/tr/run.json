@@ -347,6 +347,8 @@
   "error.HANDOFF_INVALID": "Yapılandırılmış devir notu geçersiz.",
   "error.HANDOFF_LIMIT_EXCEEDED": "Devir notları yapılandırılmış sınırları aşıyor.",
   "error.RUN_HOLD_PERSON_REQUIRED": "Güvenlik bekletmesini (izleyici duraklatması veya denetçi parkı) yalnızca etkileşimli terminaldeki bir kişi kaldırır; hiçbir policy izni bunun yerini tutmaz. Hiçbir şey değişmedi.",
+  "error.RUN_QUOTA_PERSON_REQUIRED": "Süresi dolan abonelik kota beklemesini yalnızca etkileşimli terminaldeki bir kişi yanıtlar; hiçbir yapay zekâ, politika hücresi veya betik yanıtlayamaz.",
+  "error.RUN_QUOTA_WAIT_LIMIT": "Beklemeyi sürdürme artık sunulmuyor: ayarlanan bekleme sayısı doldu. Sıradaki adayı seçin veya Run'ı kendiniz kapatın; Run sizin yerinize hiçbir zaman iptal edilmez.",
   "error.NERVOUS_RULES_UNREADABLE": "Nervous kural kaydı okunamadı ya da geçersiz; kaybolan çalışan dedektörü başlamadı ve hiçbir kural sessizce atlanmadı. Hiçbir şey değişmedi.",
   "error.NERVOUS_SIGNAL_INVALID": "Nervous dedektörü başka bir kapsamı ya da sırası bozuk bir denetim kaydını içeren sinyal grubunu reddetti; hiçbir şey kaydedilmedi.",
   "error.NERVOUS_ACTION_REFUSED": "Nervous aracısı kalıcı durdurma listesi dışındaki bir öneriyi reddetti; hiçbir şey kaydedilmedi veya çalıştırılmadı.",

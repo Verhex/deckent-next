@@ -81,7 +81,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('config-change'), action: z.enum(['set', 'unset']), layer: z.enum(['project', 'global']),
     keyPath: identitySchema, commandId: identitySchema, beforeDigest: digest.nullable(), afterDigest: digest, approvalId: identitySchema.optional() }).strict(),
   // S6R-4: `continue-lost-task` — the recovery principal returned a lost Attempt's task to pending under the owner's standing grant (`decisionRuleId`).
-  z.object({ kind: z.literal('run-lifecycle'), action: z.enum(['close', 'resume', 'hold', 'answer', 'accept', 'reject', 'park-progression', 'release-worker-custody', 'continue-lost-task']),
+  z.object({ kind: z.literal('run-lifecycle'), action: z.enum(['close', 'resume', 'hold', 'answer', 'accept', 'reject', 'park-progression', 'release-worker-custody', 'continue-lost-task', 'quota-answer']),
     inputDigest: digest.optional(), deciderClass: z.enum(['human-tty', 'ai-policy', 'system']).optional(),
     decisionRuleId: identitySchema.optional(), approvalId: identitySchema.optional(),
     // S5b: present only for a safety hold and its resume, so every operator event keeps its earlier shape.

@@ -1,0 +1,11 @@
+{
+  "quotaask.state": "quota wait ended, waiting for your answer",
+  "quotaask.monitor": "quota wait ended, your answer is needed",
+  "quotaask.card.title": "The subscription quota wait has ended. Nothing is cancelled for you; choose what happens next.",
+  "quotaask.card.resetKnown": "Known quota reset: {time}.",
+  "quotaask.card.resetUnknown": "No quota reset time is known.",
+  "quotaask.card.options": "Keep waiting: deckent run resume --quota wait. Use the next candidate: deckent run resume --quota next-candidate. Closing the Run stays your separate choice (deckent run close).",
+  "quotaask.choice.wait": "keep waiting",
+  "quotaask.choice.next-candidate": "use the next candidate",
+  "quotaask.control.choice": "Your answer to the quota question: {choice}."
+}

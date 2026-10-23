@@ -49,8 +49,10 @@ export function proposeTaskEvaluationCommit(runInput: unknown, attemptInput: unk
     if (!pinned || pinned.pin.channelId !== evaluation.quota.channelId || evaluation.model?.verdict === 'substituted' || evaluation.workerExit || dispatch.terminal!.exitCode === 0 || dispatch.terminal!.interrupted !== false
       || !evaluation.evidenceDigests?.includes(evaluation.quota.evidenceDigest)) notReady();
     const { signal, channelId, evidenceDigest, maxResumes } = evaluation.quota;
-    const resetBoundExceeded = signal.resetsAtMs !== null && signal.resetsAtMs - timing.now > (evaluation.quota.maxWaitMs ?? timing.timeoutMs);
-    const deadline = signal.resetsAtMs !== null && signal.resetsAtMs > timing.now && !resetBoundExceeded ? signal.resetsAtMs : timing.now + timing.timeoutMs;
+    // S9 (owner L-A): the wait is at most the configured bound; a reset beyond it asks a person at once, an unknown one when the bound ends.
+    const bound = evaluation.quota.maxWaitMs ?? timing.timeoutMs;
+    const resetBoundExceeded = signal.resetsAtMs !== null && signal.resetsAtMs - timing.now > bound;
+    const deadline = signal.resetsAtMs !== null && signal.resetsAtMs > timing.now && !resetBoundExceeded ? signal.resetsAtMs : timing.now + bound;
     const proposed = parkRunQuota(run, expectedRunRevision, attempt, { identity: evaluation.identity, channelId, quota: signal, evidenceDigest, since: timing.now, deadline, maxResumes, ...(resetBoundExceeded ? { resetBoundExceeded: true } : {}) });
     return Object.freeze({ ...proposed, evaluation, conclusion: 'unknown' as const, output: dispatch.output });
   }

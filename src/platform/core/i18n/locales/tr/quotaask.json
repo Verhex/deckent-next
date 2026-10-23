@@ -1,0 +1,11 @@
+{
+  "quotaask.state": "kota beklemesi doldu, yanıtınız bekleniyor",
+  "quotaask.monitor": "kota beklemesi doldu, yanıtınız gerekiyor",
+  "quotaask.card.title": "Abonelik kotası beklemesi doldu. Sizin yerinize hiçbir şey iptal edilmez; sıradaki adımı siz seçin.",
+  "quotaask.card.resetKnown": "Bilinen kota sıfırlanma zamanı: {time}.",
+  "quotaask.card.resetUnknown": "Kotanın ne zaman sıfırlanacağı bilinmiyor.",
+  "quotaask.card.options": "Beklemeye devam: deckent run resume --quota wait. Sıradaki aday: deckent run resume --quota next-candidate. Run'ı kapatmak ayrı kararınız olarak kalır (deckent run close).",
+  "quotaask.choice.wait": "beklemeye devam",
+  "quotaask.choice.next-candidate": "sıradaki aday",
+  "quotaask.control.choice": "Kota sorusuna yanıtınız: {choice}."
+}

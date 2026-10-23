@@ -2,7 +2,7 @@ import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { acceptanceEvidenceText } from '#surfaces/core/cli-human/index.js';
 import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
 import type { RunView } from '#engine/index.js';
-import { briefQualifiesAcceptance, notAcceptedLabel, notAcceptedNextStep, quotaWaitText, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
+import { briefQualifiesAcceptance, notAcceptedLabel, notAcceptedNextStep, quotaWaitText, quotaAskLines, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 import { runTitle, shownId } from './run-human.js';
 import type { RunCommandContext } from './context.js';
 import REGISTRY from './run.json' with { type: 'json' };
@@ -90,7 +90,8 @@ export function renderRunInspect(data: InspectData, locale: Locale, verbose: boo
     ...(run.channelWaits ?? []).map(wait => `${wait.taskId}: ${quotaWaitText(wait.deadline, wait.resetsAtMs !== null, locale)}`),
     ...(run.state.kind === 'terminal' ? [t('cli.run.lifecycle.outcome', { outcome: run.state.outcome }, locale)] : []),
     ...(run.state.kind === 'parked' && run.state.reason === 'quota-exhausted' ? [quotaWaitText(run.state.deadline, (run.quotaWaits ?? []).every(wait => wait.resetsAtMs !== null), locale, (run.quotaWaits ?? []).some(wait => wait.retryLimitReached))] : []),
-    ...(run.state.kind === 'parked' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
+    ...(run.state.kind === 'parked' && run.state.reason === 'quota-ask' ? quotaAskLines((run.quotaWaits ?? []).map(wait => wait.resetsAtMs), locale) : []),
+    ...(run.state.kind === 'parked' && run.state.reason !== 'quota-ask' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
     // PRE-7: an environment park names the unmet requirement as an installation defect and its next step (fix, then resume: the preflight runs again).
     ...(run.state.kind === 'parked' && run.state.failureCode ? [run.state.reason === 'environment-not-ready' ? t('cli.run.lifecycle.environmentNotReady', { requirement: run.state.failureCode, run: runShown }, locale)
       : t('cli.run.lifecycle.failure', { code: run.state.failureCode }, locale)] : []),
