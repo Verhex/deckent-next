@@ -3,6 +3,7 @@
   "limits": {
     "credentialBytes": 65536,
     "connections": 24,
+    "refusedHostsMax": 16,
     "headerBytes": 8192,
     "idleMs": 30000,
     "trafficBytes": 67108864,

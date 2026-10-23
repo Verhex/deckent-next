@@ -1,7 +1,7 @@
 import { realpath, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { modelInvocationProfileSchema, parseModelBindingDefinition, splitModelInvocationDelta, type ModelInvocationDeltaSink, type ModelInvocationNativeResult,
-  type ModelInvocationProfile, type ModelInvocationRejectionReason } from '#domain/index.js';
+  type HeadlessEgress, type ModelInvocationProfile, type ModelInvocationRejectionReason } from '#domain/index.js';
 import { createModelInvocationResponseEvidence, modelInvocationNativeResponseUpperBound, type ModelInvocationNativePort } from '#engine/index.js';
 import { nativeCliHeadless, nativeEffortArgs } from '#adapters/core/native-cli-registry/index.js';
 import { nativeQuotaPolicy, parseClaudeStreamLine, type ClaudeStreamLine } from '#adapters/core/native-connection/index.js';
@@ -52,12 +52,12 @@ function resultRefusal(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prep
   return models.length === 1 && models[0] === prepared.model ? null : reject('model-mismatch', { refusal: 'model-mismatch', field: 'modelUsage' });
 }
 /** The governed result in the chat-completion shape the Brain reads; counters keep the reported model id and quota windows, never a cost. */
-function assemble(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared: Prepared, preflight: HeadlessPreflight, quota: Quota) {
+function assemble(line: Extract<ClaudeStreamLine, { kind: 'result' }>, prepared: Prepared, preflight: HeadlessPreflight, quota: Quota, egress: HeadlessEgress) {
   const usage = line.usage, input = count(usage.input_tokens), output = count(usage.output_tokens), cacheRead = count(usage.cache_read_input_tokens), cacheWrite = count(usage.cache_creation_input_tokens);
   const reported = line.modelUsage?.[prepared.model] ?? {};
   return Object.freeze({ schemaVersion: 1 as const, native: { object: 'chat.completion', model: prepared.model, choices: [{ index: 0, message: { role: 'assistant', content: line.result ?? '' },
     finish_reason: line.stopReason !== null && prepared.entry.headless.guards.lengthStopReasons.includes(line.stopReason) ? 'length' : 'stop' }],
-  headless: { cliVersion: preflight.version, flagSetDigest: preflight.flagSetDigest, guard: 'passed', stopReason: line.stopReason } },
+  headless: { cliVersion: preflight.version, flagSetDigest: preflight.flagSetDigest, guard: 'passed', stopReason: line.stopReason, egress } },
   usage: { prompt_tokens: input + cacheRead + cacheWrite, completion_tokens: output, total_tokens: input + cacheRead + cacheWrite + output, cache_read: cacheRead, cache_write: cacheWrite,
     modelUsage: { [prepared.model]: { inputTokens: count(reported.inputTokens), outputTokens: count(reported.outputTokens), cacheReadInputTokens: count(reported.cacheReadInputTokens),
       cacheCreationInputTokens: count(reported.cacheCreationInputTokens) } }, quota } });
@@ -133,13 +133,14 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
         // S3-5: the call runs in the realm like every preflight spawn; the prompt file is the only host file it sees in its private run dir.
         evidence = await runHeadlessIsolated(prepared.entry, options.isolation, { executable: prepared.definition.executable,
           args: headlessArgv(prepared.entry, preflight.runDir, prepared.model, prepared.effortArgs), env: preflight.env, stateDir: prepared.definition.stateDir,
-          runDir: preflight.runDir, configDir: prepared.definition.configDir, promptFile },
+          runDir: preflight.runDir, configDir: prepared.definition.configDir, promptFile, now: options.now },
         { timeoutMs: prepared.profile.limits.timeoutMs, outputBytes: 2 * prepared.profile.limits.responseMaxBytes + headless.limits.responseFramingBytes,
           stderrBytes: headless.limits.stderrMaxBytes, maxLineBytes: headless.limits.maxLineBytes, interruptGraceMs: headless.limits.killGraceMs,
           stdinBase64: Buffer.from(prepared.user, 'utf8').toString('base64') }, signal, onLine);
       } finally { await rm(promptFile, { force: true }); }
-      const settle = (value: Refusal) => Object.freeze({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER, value.reason, value.status,
-        Buffer.from(JSON.stringify(value.body), 'utf8'), true) });
+      // f5: every settled call names what the realm's gateway did (counts and refused host names only).
+      const { egress } = evidence, settle = (value: Refusal) => Object.freeze({ kind: 'rejected' as const, evidence: createModelInvocationResponseEvidence(NATIVE_CLI_HEADLESS_ADAPTER,
+        value.reason, value.status, Buffer.from(JSON.stringify({ ...value.body, egress }), 'utf8'), true) });
       const stopped = refusal as Refusal | null, finished = result as Extract<ClaudeStreamLine, { kind: 'result' }> | null;
       if (stopped) return settle(stopped);
       if (evidence.reason === 'output-limit' || evidence.reason === 'line-limit') return settle(reject('response-limit', { refusal: 'response-limit' }));
@@ -147,7 +148,7 @@ export function createNativeCliHeadlessPort(options: { readonly now: () => numbe
       const mapped = finished && evidence.reason === 'exit' ? resultRefusal(finished, prepared) : null;
       if (mapped) return settle(mapped);
       if (!finished || evidence.reason !== 'exit' || evidence.exitCode !== 0) throw new Error('HEADLESS_OUTCOME_UNKNOWN');
-      const response = assemble(finished, prepared, preflight, quota);
+      const response = assemble(finished, prepared, preflight, quota, egress);
       return Buffer.byteLength(JSON.stringify(response)) > prepared.profile.limits.responseMaxBytes ? settle(reject('response-limit', { refusal: 'response-limit' })) : response;
     },
   });

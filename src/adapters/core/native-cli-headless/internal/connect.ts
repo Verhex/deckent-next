@@ -1,12 +1,12 @@
 import { readFile, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
-import { delegatedUseConsentSchema, type DelegatedUseConsent, type JsonObject } from '#domain/index.js';
+import { delegatedUseConsentSchema, headlessEgressSchema, type DelegatedUseConsent, type JsonObject } from '#domain/index.js';
 import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { findExecutable } from '#adapters/core/setup-detect-execution/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, isNativeCliHeadlessAdapter, nativeCliHeadlessDefinitionSchema, refuse, type NativeCliHeadlessDefinition } from './contract.js';
 import { headlessPreflight } from './preflight.js';
-import { headlessIsolationSeal, type HeadlessIsolation } from './realm.js';
+import { HEADLESS_EGRESS_RECORD, headlessIsolationSeal, type HeadlessIsolation } from './realm.js';
 
 export type HeadlessConnectInput = Readonly<{ protocol: Readonly<{ family: string; version: string }>; minCliVersion: string; stateDir: string;
   executable?: string | undefined; configDir?: string | undefined; env: Readonly<Record<string, string | undefined>>; now: () => number; isolation: HeadlessIsolation;
@@ -48,8 +48,16 @@ export const headlessConnectionAdapter = (definition: NativeCliHeadlessDefinitio
   maxInFlight: nativeCliHeadless(protocol.family)?.headless.connect.maxInFlight ?? 1,
   adapter: { id: NATIVE_CLI_HEADLESS_ADAPTER.id, version: NATIVE_CLI_HEADLESS_ADAPTER.version, definition: nativeCliHeadlessDefinitionSchema.parse(definition) as unknown as JsonObject },
   protocol: { family: protocol.family, version: protocol.version }, tariff: 'unmetered' as const, billingAxis: 'subscription' as const });
+/** f5: the connection's cumulative gateway refusals (counts and host names, most refused first), or null when none was recorded. */
+async function readEgress(stateDir: string) {
+  const raw = await readFile(join(stateDir, HEADLESS_EGRESS_RECORD), 'utf8').then(text => JSON.parse(text) as unknown, () => null);
+  const { schemaVersion, lastRefusedAtMs, ...summary } = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const parsed = schemaVersion === 1 && typeof lastRefusedAtMs === 'number' ? headlessEgressSchema.safeParse(summary) : null;
+  return parsed?.success && parsed.data.refused > 0 ? Object.freeze({ refused: parsed.data.refused, lastRefusedAtMs: lastRefusedAtMs as number,
+    hosts: Object.entries(parsed.data.hosts).sort(([a, x], [b, y]) => y - x || a.localeCompare(b)).map(([host]) => host), other: parsed.data.other }) : null;
+}
 /** Doctor (read-soft, no spawn): each subscription connection of the scope with its last preflight record's state, login kind and isolation (S3-5:
- * the launcher a passing check ran in, or `unavailable` when the realm closed the channel; `unknown`: no record yet). */
+ * the launcher a passing check ran in, or `unavailable` when the realm closed the channel; `unknown`: no record yet) and, f5, its gateway refusals. */
 export async function readHeadlessLogins(section: unknown, scopeId: string) {
   const profiles = ((section as { profiles?: unknown } | undefined)?.profiles as { scopeId?: unknown; adapter?: { id: string; version: number; definition?: unknown } }[] | undefined) ?? [];
   const text = (value: unknown) => typeof value === 'string' ? value.slice(0, 64) : null;
@@ -60,6 +68,7 @@ export async function readHeadlessLogins(section: unknown, scopeId: string) {
     const isolation = record?.state === 'open' && text(record.isolation?.version) ? { launcher: text(record.isolation?.launcher) ?? '-', version: text(record.isolation?.version)! }
       : record?.refusal === 'HEADLESS_ISOLATION_UNAVAILABLE' ? 'unavailable' as const : null;
     return Object.freeze({ state: !record ? 'unknown' as const : record.state === 'open' ? 'open' as const : 'closed' as const, authMethod: text(record?.auth?.authMethod),
-      subscriptionType: text(record?.auth?.subscriptionType), configDir: definition.configDir, consent: definition.delegatedUse?.classes ?? [], isolation });
+      subscriptionType: text(record?.auth?.subscriptionType), configDir: definition.configDir, consent: definition.delegatedUse?.classes ?? [], isolation,
+      egress: await readEgress(definition.stateDir) });
   }));
 }

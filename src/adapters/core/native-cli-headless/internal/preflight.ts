@@ -64,7 +64,7 @@ export async function headlessPreflight(entry: HeadlessEntry, definition: Native
   const env = buildHeadlessEnv(headless, runDir, definition.configDir);
   const run = async (args: readonly string[], cwd = runDir, spawnEnv = env, configDir = definition.configDir): Promise<ProcessEvidence & { stdout: string; stderr: string }> => {
     // No emptying here: another process's preflight must never remove an in-flight call's prompt file (only `send` empties, under maxInFlight).
-    const result = await runHeadlessIsolated(entry, isolation, { executable, args, env: spawnEnv, stateDir: definition.stateDir, runDir: cwd, configDir },
+    const result = await runHeadlessIsolated(entry, isolation, { executable, args, env: spawnEnv, stateDir: definition.stateDir, runDir: cwd, configDir, now },
       { timeoutMs: headless.limits.preflightTimeoutMs, outputBytes: headless.limits.preflightOutputBytes }, signal);
     if (result.reason !== 'exit') refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'spawn' });
     return { ...result, stdout: Buffer.from(result.stdoutBase64, 'base64').toString('utf8'), stderr: Buffer.from(result.stderrBase64, 'base64').toString('utf8') };

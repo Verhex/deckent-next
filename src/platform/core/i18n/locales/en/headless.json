@@ -30,5 +30,8 @@
   "doctor.headless.isolationUnavailable": "; isolation unavailable (no usable bubblewrap: see the sandbox rows)",
   "doctor.headless.open": "open",
   "doctor.headless.closed": "closed",
-  "doctor.headless.none": "none (you only)"
+  "doctor.headless.none": "none (you only)",
+  "doctor.headless.egressRefused": "; network: {count} connection(s) outside the provider allowlist refused (hosts: {hosts}{more})",
+  "doctor.headless.egressMore": " and {count} more",
+  "models.invocation.headlessEgress": "Isolated network of this call: {connected} provider connection(s), {refused} refused (hosts: {hosts}; without a host name: {other})"
 }

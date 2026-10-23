@@ -30,5 +30,8 @@
   "doctor.headless.isolationUnavailable": "; yalıtım kullanılamıyor (kullanılabilir bubblewrap yok: sandbox satırlarına bakın)",
   "doctor.headless.open": "açık",
   "doctor.headless.closed": "kapalı",
-  "doctor.headless.none": "yok (yalnız siz)"
+  "doctor.headless.none": "yok (yalnız siz)",
+  "doctor.headless.egressRefused": "; ağ: sağlayıcı izin listesi dışında {count} bağlantı reddedildi (adresler: {hosts}{more})",
+  "doctor.headless.egressMore": " ve {count} tane daha",
+  "models.invocation.headlessEgress": "Bu çağrının yalıtılmış ağı: {connected} sağlayıcı bağlantısı, {refused} red (adresler: {hosts}; adres adı olmadan: {other})"
 }

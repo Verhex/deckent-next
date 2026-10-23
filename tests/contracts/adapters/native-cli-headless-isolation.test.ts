@@ -7,6 +7,7 @@ import { createServer, type Server } from 'node:net';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { bubblewrapObservation } from '#adapters/index.js';
+import { readHeadlessRejection } from '#domain/index.js';
 import { prepareHeadlessConnection, readHeadlessLogins } from '#adapters/core/native-cli-headless/index.js';
 import { assistantLine, headless, initLine, rateLimitLine, resultLine, uiLine, type FakeStep, type IsolationProbe } from '../../fixtures/native-headless/stream.js';
 import { cleanupConnections, connection, testIsolation } from '../../fixtures/native-headless/connection.js';
@@ -66,6 +67,24 @@ describe.skipIf(process.platform !== 'linux' || !sandbox)('S3-5 the headless CLI
     for (const answer of r.proxy) expect((answer as { response: string | null }).response ?? '').not.toMatch(/ 200 /u);
     expect(env[headless.isolation.proxy.env[0]!]).toBe(`http://${headless.isolation.proxy.host}:${headless.isolation.proxy.port}`);
     for (const name of headless.isolation.proxy.clear) expect(env[name]).toBe('');
+  });
+  it('f5: names the gateway refusals in the call record, the rejected body and the doctor record: counts and host names only', async () => {
+    const c = await connection();
+    const probe = { proxy: ['example.invalid:443', 'api.anthropic.com:80', 'Not_A_Host:443', 'example.invalid:443'] };
+    const responded = await c.call(happy(probe));
+    const egress = { connected: 0, refused: 4, hosts: { 'example.invalid': 2, 'api.anthropic.com': 1 }, other: 1 };
+    expect(responded).toMatchObject({ native: { headless: { guard: 'passed', egress } } });
+    // A rejected call carries the same summary in its adapter body (the guard stops the turn after the probe).
+    const rejected = await c.call([{ line: initLine() }, { isolation: { proxy: ['example.invalid:443'] } }, { line: assistantLine('x', 'other-model') }]);
+    expect(rejected).toMatchObject({ kind: 'rejected' });
+    const body = readHeadlessRejection((rejected as { evidence: Parameters<typeof readHeadlessRejection>[0] }).evidence);
+    expect(body).toMatchObject({ refusal: 'model-mismatch', egress: { connected: 0, refused: 1, hosts: { 'example.invalid': 1 }, other: 0 } });
+    // Doctor's record is cumulative over the connection's spawns and holds no target text beyond host names.
+    const record = await readFile(join(c.root, 'state', 'egress.json'), 'utf8');
+    expect(JSON.parse(record)).toMatchObject({ schemaVersion: 1, refused: 5, hosts: { 'example.invalid': 3, 'api.anthropic.com': 1 }, other: 1 });
+    expect(record).not.toMatch(/Not_A_Host|:443|:80/u);
+    const [login] = await readHeadlessLogins({ profiles: [c.profile] }, c.profile.scopeId);
+    expect(login?.egress).toMatchObject({ refused: 5, hosts: ['example.invalid', 'api.anthropic.com'], other: 1 });
   });
   it('records the realm of a passing check for doctor (launcher kind and version, never a path)', async () => {
     const c = await connection({ steps: happy({}) });

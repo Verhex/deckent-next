@@ -287,3 +287,20 @@ it.each(['en', 'tr'] as const)('renders non-monetary plan usage separately from 
     expect(output).not.toContain('USD'); expect(output).not.toContain('$0');
   }
 });
+it.each(['en', 'tr'] as const)('f5: names a subscription CLI call\'s isolated network from its retained content: counts and host names only (%s)', async language => {
+  const f = await fixture();
+  const egress = { connected: 2, refused: 3, hosts: { 'telemetry.example': 2 }, other: 1 };
+  const body = Buffer.from(JSON.stringify({ schemaVersion: 1, refusal: 'guard', field: 'tools', egress })).toString('base64');
+  for (const [content, shown] of [[{ kind: 'native-response', response: { native: { headless: { egress } } } }, true], [{ kind: 'response-body', data: body }, true], [null, false]] as const) {
+    let output = '';
+    const code = await main(['models', 'invocation', '--input', '-', '--lang', language], { ...f,
+      stdin: Readable.from([JSON.stringify({ ...query, includeResponseContent: true })]), stdout: { write(text) { output += text; } },
+      inspectModelInvocation: async () => ({ schemaVersion: 7, scopeId: 'scope', invocationId: 'call', reference,
+        invocation: { ...purgedReceipt, profile: { schemaVersion: 2, billingAxis: 'subscription', adapter: { id: 'native-cli-headless' } } }, control: null, spending: null,
+        contentStatus: 'retained', purge: null, historyIntegrity: 'not-recorded', planUsage: null, responseContent: content }) as never });
+    expect(code).toBe(0);
+    if (shown) expect(output).toContain(language === 'tr' ? 'Bu çağrının yalıtılmış ağı: 2 sağlayıcı bağlantısı, 3 red (adresler: telemetry.example; adres adı olmadan: 1)'
+      : 'Isolated network of this call: 2 provider connection(s), 3 refused (hosts: telemetry.example; without a host name: 1)');
+    else expect(output).not.toMatch(/Isolated network|yalıtılmış ağı/u);
+  }
+});

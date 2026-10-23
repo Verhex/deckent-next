@@ -1984,6 +1984,7 @@
       "dependencies": [
         "src/domain/core/primitives",
         "src/domain/core/worker-event",
+        "src/domain/core/model-invocation",
         "src/domain/core/provider-catalog",
         "src/adapters/core/native-cli-registry"
       ],

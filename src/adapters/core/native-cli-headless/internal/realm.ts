@@ -1,8 +1,8 @@
 import type { Dir } from 'node:fs';
-import { opendir } from 'node:fs/promises';
+import { opendir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { nativeCliIdSchema } from '#domain/index.js';
+import { headlessEgressSchema, nativeCliIdSchema, type HeadlessEgress } from '#domain/index.js';
 import type { BubblewrapCapability } from '#adapters/core/host-shell/index.js';
 import { nativeEgressLimits, openNativeEgressGateway } from '#adapters/core/native-connection/index.js';
 import { runNodeProcess, type ProcessCommand, type ProcessEvidence, type ProcessLineConsumer } from '#adapters/core/process-runner/index.js';
@@ -66,7 +66,25 @@ async function loginMasks(configDir: string, visible: readonly string[], maxEntr
 }
 
 export type HeadlessSpawn = Readonly<{ executable: string; args: readonly string[]; env: Readonly<Record<string, string>>; stateDir: string; runDir: string; configDir: string;
-  promptFile?: string | undefined }>;
+  promptFile?: string | undefined; now: () => number }>;
+/** f5: the connection's refusal record beside `preflight.json` (doctor reads it without a spawn). */
+export const HEADLESS_EGRESS_RECORD = 'egress.json';
+/**
+ * f5: adds one spawn's gateway refusals to the connection's cumulative record (0600, temporary file + rename; names past the gateway's host bound
+ * count as `other`). Read-modify-write: a concurrent preflight in another process may lose one update (last writer wins); counts only, never a payload.
+ */
+async function recordEgress(stateDir: string, egress: HeadlessEgress, now: () => number, hostsMax: number): Promise<void> {
+  if (egress.refused === 0) return;
+  const target = join(stateDir, HEADLESS_EGRESS_RECORD), raw = await readFile(target, 'utf8').then(text => JSON.parse(text) as unknown, () => null);
+  const { schemaVersion, lastRefusedAtMs, ...summary } = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const kept = schemaVersion === 1 && typeof lastRefusedAtMs === 'number' ? headlessEgressSchema.safeParse(summary) : { success: false as const };
+  const hosts: Record<string, number> = { ...(kept.success ? kept.data.hosts : {}) };
+  let other = (kept.success ? kept.data.other : 0) + egress.other;
+  for (const [host, count] of Object.entries(egress.hosts)) if (Object.hasOwn(hosts, host) || Object.keys(hosts).length < hostsMax) hosts[host] = (hosts[host] ?? 0) + count; else other += count;
+  const record = { schemaVersion: 1, connected: (kept.success ? kept.data.connected : 0) + egress.connected, refused: (kept.success ? kept.data.refused : 0) + egress.refused,
+    hosts, other, lastRefusedAtMs: now() }, temporary = `${target}.${randomUUID()}.tmp`;
+  await writeFile(temporary, JSON.stringify(record), { mode: 0o600, flag: 'wx' }); await rename(temporary, target);
+}
 type Bounds = Omit<Extract<ProcessCommand, { schemaVersion: 2 }>, 'requestId' | 'executable' | 'args' | 'cwd' | 'env' | 'schemaVersion'>;
 /**
  * The one way a headless CLI process starts (preflight probes and the call): inside the realm, with the connection's own gateway for the
@@ -74,7 +92,7 @@ type Bounds = Omit<Extract<ProcessCommand, { schemaVersion: 2 }>, 'requestId' | 
  * exactly as long as the process. A realm that could not start is a typed isolation refusal; no path runs the CLI outside it.
  */
 export async function runHeadlessIsolated(entry: HeadlessEntry, isolation: HeadlessIsolation, spawn: HeadlessSpawn, bounds: Bounds, signal?: AbortSignal,
-  onLine?: ProcessLineConsumer): Promise<ProcessEvidence> {
+  onLine?: ProcessLineConsumer): Promise<ProcessEvidence & { egress: HeadlessEgress }> {
   const seal = await headlessIsolationSeal(isolation), realm = entry.headless.isolation, provider = nativeCliIdSchema.safeParse(entry.id);
   if (!provider.success) refuse('HEADLESS_REQUEST_INVALID', { reason: 'definition' });
   // The relay runs on this process's own Node.js (bound read-only at its path: a test CLI's shebang names the same path).
@@ -89,7 +107,9 @@ export async function runHeadlessIsolated(entry: HeadlessEntry, isolation: Headl
     if (!command) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'config-dir' });
     const evidence = await runNodeProcess({ schemaVersion: 2, requestId: randomUUID(), executable: command.executable, args: [...command.args], cwd: spawn.runDir, env: spawn.env,
       ...bounds }, signal, onLine);
+    const egress = gateway.egress();
+    await recordEgress(spawn.stateDir, egress, spawn.now, nativeEgressLimits().refusedHostsMax).catch(() => undefined);
     if (evidence.reason === 'exit' && evidence.exitCode !== 0 && REALM_FAILURE.test(Buffer.from(evidence.stderrBase64, 'base64').toString('utf8'))) refuse('HEADLESS_ISOLATION_UNAVAILABLE', { check: 'realm' });
-    return evidence;
+    return { ...evidence, egress };
   } finally { await gateway.close(); }
 }

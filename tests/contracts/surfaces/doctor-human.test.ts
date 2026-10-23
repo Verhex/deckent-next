@@ -130,6 +130,16 @@ describe('doctor rows (pure)', () => {
       ['warning', 'Brain login: -, directory /home/p/.claude, channel closed, consent none (you only); isolation unavailable (no usable bubblewrap: see the sandbox rows)']]);
     expect(doctorChecks(report, facts({ headlessLogins: logins.slice(0, 1) }), 'tr').find(row => row.id === 'work.brainLogin')?.text).toContain('bubblewrap 0.13.0 (bundled) ile yalıtılmış');
   });
+  it('f5 "Brain girişi" names the realm gateway refusals: counts and host names (most refused first, bounded), never a payload', () => {
+    const egress = { refused: 9, hosts: ['h1.example', 'h2.example', 'h3.example', 'h4.example', 'h5.example', 'h6.example', 'h7.example'], other: 1 };
+    const login = { state: 'open' as const, authMethod: 'claude.ai', subscriptionType: null, configDir: '/home/p/.claude', consent: [], isolation: null, egress };
+    expect(doctorChecks(report, facts({ headlessLogins: [login] }), 'en').find(row => row.id === 'work.brainLogin')?.text).toBe('Brain login: claude.ai, directory '
+      + '/home/p/.claude, channel open, consent none (you only); network: 9 connection(s) outside the provider allowlist refused (hosts: h1.example, h2.example, h3.example, '
+      + 'h4.example, h5.example and 2 more)');
+    expect(doctorChecks(report, facts({ headlessLogins: [{ ...login, egress: { refused: 1, hosts: [], other: 1 } }] }), 'tr').find(row => row.id === 'work.brainLogin')?.text)
+      .toContain('; ağ: sağlayıcı izin listesi dışında 1 bağlantı reddedildi (adresler: -)');
+    expect(doctorChecks(report, facts({ headlessLogins: [{ ...login, egress: null }] }), 'en').find(row => row.id === 'work.brainLogin')?.text).not.toContain('network');
+  });
   it('tool rows: stale offers the update fix, not-admitted and offline are "not tested" in words (no raw status code)', () => {
     const toolchains = { mode: 'report', registryEndpoint: 'https://registry.npmjs.org', providers: [
       { provider: 'claude', status: 'stale', admitted: [], latest: { version: '2.9.0' } }, { provider: 'codex', status: 'not-admitted', admitted: [], latest: null },
