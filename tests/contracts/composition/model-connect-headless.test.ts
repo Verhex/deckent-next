@@ -1,6 +1,6 @@
 // S3-3 `models connect claude-cli-subscription` through the real configured paths (governed config writer, ledger catalog, activation, audit) with
 // a scripted fake CLI: no real CLI and no model call. Model ids come from the packaged seed, never from this file.
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, symlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -65,6 +65,16 @@ describe.skipIf(process.platform !== 'linux')('S3-3 models connect claude-cli-su
     expect((await h.profile())!.adapter.definition['delegatedUse']).toEqual(consent);
     expect(await h.connect('c-5', { delegate: [] })).toMatchObject({ steps: { profile: 'written' }, cli: { delegate: [] } });
     expect((await h.profile())!.adapter.definition['delegatedUse']).toBeNull();
+  });
+  it('without flags: the first CLI of the registry name in PATH (by realpath) and the standard login dir under HOME; none in PATH is refused typed', async () => {
+    const h = await harness(true), bin = join(h.f.data, 'path-bin'), home = h.f.env.HOME;
+    await mkdir(bin); await symlink(h.executable, join(bin, 'claude')); await mkdir(join(home, '.claude'), { mode: 0o700 });
+    const run = (env: Record<string, string>, commandId: string) => connectConfiguredModel(h.f.project, { schemaVersion: 1, commandId, scopeId: 'scope',
+      connection: 'claude-cli-subscription', endpoint: null, model: { nativeId } }, { env: { ...h.f.env, ...env } });
+    await expect(run({ PATH: join(h.f.data, 'empty-bin') }, 'c-0')).rejects.toMatchObject({ code: 'HEADLESS_CLI_UNAVAILABLE' });
+    expect(await h.spawns()).toEqual([]);
+    await expect(run({ PATH: bin }, 'c-1')).resolves.toMatchObject({ status: 'connected', cli: { configDir: join(home, '.claude') } });
+    expect((await h.profile())!.adapter.definition).toMatchObject({ executable: await realpath(h.executable), configDir: join(home, '.claude') });
   });
   it('N9: a CLI that is not logged in is refused typed and nothing is written', async () => {
     const h = await harness(true, { loggedIn: false });
