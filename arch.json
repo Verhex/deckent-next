@@ -3733,7 +3733,7 @@
       "engine": 60000,
       "adapters": 30600,
       "surfaces": 45000,
-      "composition": 8200
+      "composition": 9000
     },
     "totalSrcLines": 200000,
     "testCases": 8000,
