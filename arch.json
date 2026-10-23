@@ -2392,6 +2392,7 @@
     "src/engine/core/audit": {
       "dependencies": [
         "src/platform/core/redaction",
+        "src/domain/core/principal",
         "src/domain/core/audit",
         "src/domain/core/command",
         "src/platform/core/integrity"

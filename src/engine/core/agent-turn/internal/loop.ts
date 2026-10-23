@@ -29,8 +29,9 @@ export interface AgentTurnPorts {
   contextFailure?(): AgentContextFailure | null;
   invokeRound(input: { readonly round: number; readonly messages: readonly AgentTurnMessage[]; readonly tools: readonly AgentToolSpec[] },
     onDelta: (delta: { readonly kind: 'text' | 'reasoning'; readonly text: string }) => void, signal: AbortSignal): Promise<AgentRoundOutcome>;
-  /** Per call, with its checked arguments so a resource floor (e.g. writes to CI or hooks) can raise `allow` to `require-approval`. */
-  authorize(tool: AgentToolSpec, args?: Record<string, unknown>): Promise<'allow' | 'deny' | 'require-approval'>;
+  /** Per call, with its checked arguments so a resource floor (e.g. writes to CI or hooks) can raise `allow` to `require-approval`, and the
+   * call's position in the turn (the identity the turn's decision record names; never used for authority). */
+  authorize(tool: AgentToolSpec, args?: Record<string, unknown>, call?: { readonly round: number; readonly index: number; readonly callId: string }): Promise<'allow' | 'deny' | 'require-approval'>;
   /** Optional validation before authority is asked (an edit that cannot apply is an error, never an approval prompt). */
   prepare?(tool: AgentToolSpec, args: Record<string, unknown>, signal: AbortSignal): Promise<{ readonly ok: true; readonly requireApproval?: boolean } | { readonly ok: false; readonly text: string }>;
   /** Short display target of a call (a workspace path or pattern), never used for authority. */
@@ -390,7 +391,7 @@ export async function runAgentTurn(input: AgentTurnInput, ports: AgentTurnPorts)
         continue;
       }
       // Policy first: a denied call learns nothing from the target (a plan error would reveal content).
-      let decision = await ports.authorize(tool, checked.args);
+      let decision = await ports.authorize(tool, checked.args, { round: rounds, index, callId: call.id });
       if (decision === 'deny') { await result('denied', `[deckent] ${call.name}: error=denied-by-policy`); continue; }
       if (ports.prepare) {
         let prepared: Awaited<ReturnType<NonNullable<AgentTurnPorts['prepare']>>>;
