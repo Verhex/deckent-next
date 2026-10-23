@@ -84,7 +84,7 @@ out the base the watch resolved, re-verifies the uploaded `deps-watch-<attempt>`
 `scripts/publish-bwrap-refresh.mjs` to open a draft `build(bwrap): refresh pins (Alpine <release>)`
 pull request. It changes only the lock and generated runtime identity, reuses an existing PR and
 never force-updates or merges.
-Astra review and hosted CI remain mandatory. GitHub-token-created PRs need an explicit maintainer
+Independent maintainer review and hosted CI remain mandatory. GitHub-token-created PRs need an explicit maintainer
 CI dispatch on the candidate branch; their creation does not itself trigger the normal PR workflow.
 
 Check the compiled entry without linking a global executable:
