@@ -48,26 +48,27 @@ const GENESIS = '0'.repeat(64), SEAL = 'signer-revocations:1';
 /**
  * S8-5 revocation log `signers/revocations.log`: append-only JSONL, each line sealed with the installation integrity key over (entry, MAC of the
  * previous line), so a removed, reordered or altered line breaks the chain. It lives beside the ledger and is never backed up or restored over: a
- * restore can only add revocations. A torn final line (an append that never returned) is not a record and is closed by the next append. A broken
+ * restore can only add revocations. A torn final line (an append that never returned) is not a record and the next append cuts it off. A broken
  * chain refuses `list` and `append` (all AI/system signing stops) until a person's `repair` keeps the broken file aside and starts a new chain.
  */
 export class FileSignerRevocationLog implements SignerRevocationLog {
   constructor(private readonly layout: ProductLayout, private readonly integrity: () => Promise<IntegrityAuthority>) {}
   private async path(create: boolean) {
     try { return join(create ? await prepareProductDirectory(this.layout, 'signers') : await inspectProductDirectory(this.layout, 'signers'), limits.revocationLogFile); }
-    catch (error) { if (!create && (error as { code?: string }).code === 'MANAGED_FILE_MISSING') return null; throw unavailable(); }
+    // No store yet, or a platform without POSIX key custody (no key can exist there either): no revocation recorded.
+    catch (error) { if (!create && ['MANAGED_FILE_MISSING', 'MANAGED_FILE_UNSUPPORTED'].includes((error as { code?: string }).code ?? '')) return null; throw unavailable(); }
   }
-  private async read(path: string, lenient = false): Promise<{ entries: SignerRevocation[]; last: string; torn: boolean }> {
+  private async read(path: string, lenient = false): Promise<{ entries: SignerRevocation[]; last: string; valid: number }> {
     let handle: FileHandle;
     try { handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { entries: [], last: GENESIS, torn: false }; throw broken(); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { entries: [], last: GENESIS, valid: 0 }; throw broken(); }
     try {
       const info = await handle.stat();
       if (!info.isFile() || info.size > limits.revocationLogMaxBytes) throw broken();
-      const text = (await handle.readFile()).toString('utf8'), torn = text !== '' && !text.endsWith('\n'), entries: SignerRevocation[] = [];
+      const bytes = await handle.readFile(), valid = bytes.lastIndexOf('\n') + 1, text = bytes.subarray(0, valid).toString('utf8'), entries: SignerRevocation[] = [];
       const integrity = text ? await this.integrity() : null;
       let last = GENESIS;
-      for (const line of (torn ? text.split('\n').slice(0, -1) : text.split('\n')).filter(Boolean)) {
+      for (const line of text.split('\n').filter(Boolean)) {
         try {
           const row = lineSchema.parse(JSON.parse(line)), entry = entrySchema.parse(row.entry);
           if (!lenient && (row.prev !== last || !integrity!.verify(encodeCommandProjection(SEAL, { entry, prev: row.prev }), row.mac, row.keyId))) throw broken();
@@ -75,19 +76,22 @@ export class FileSignerRevocationLog implements SignerRevocationLog {
         } catch (error) { if (!lenient) throw broken(); void error; }
       }
       if (entries.length > limits.revocationLogMaxEntries) throw broken();
-      return { entries, last, torn };
+      return { entries, last, valid };
     } finally { await handle.close(); }
   }
-  private async write(path: string, lines: readonly SignerRevocation[], prev: string, flags: number, prefix = '') {
+  /** Writes `lines` chained from `prev` at byte `at` (the end of the last whole line: a torn tail is cut off, never kept as a record); `at` null creates the file. */
+  private async write(path: string, lines: readonly SignerRevocation[], prev: string, at: number | null) {
     const integrity = await this.integrity();
-    let text = prefix;
+    let text = '';
     for (const entry of lines) {
       const mac = integrity.sign(encodeCommandProjection(SEAL, { entry, prev }));
       text += `${JSON.stringify({ entry, prev, keyId: integrity.keyId, mac })}\n`; prev = mac;
     }
-    const handle = await open(path, flags | constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
-    try { if ((await handle.stat()).size + Buffer.byteLength(text) > limits.revocationLogMaxBytes) throw unavailable(); await handle.writeFile(text); await handle.sync(); }
-    finally { await handle.close(); }
+    const handle = await open(path, (at === null ? constants.O_EXCL : 0) | constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
+    try {
+      if ((at ?? 0) + Buffer.byteLength(text) > limits.revocationLogMaxBytes) throw unavailable();
+      await handle.truncate(at ?? 0); await handle.write(text, at ?? 0, 'utf8'); await handle.sync();
+    } finally { await handle.close(); }
   }
   async list() { const path = await this.path(false); return path ? Object.freeze((await this.read(path)).entries) : []; }
   async append(input: SignerRevocation) {
@@ -95,7 +99,7 @@ export class FileSignerRevocationLog implements SignerRevocationLog {
     await withConfigWriteLock(path, async () => {
       const current = await this.read(path);
       if (current.entries.length >= limits.revocationLogMaxEntries) throw unavailable();
-      await this.write(path, [entry], current.last, constants.O_APPEND, current.torn ? '\n' : '');
+      await this.write(path, [entry], current.last, current.valid);
     }, limits.lockTimeoutMs, { onWarning() { /* the revoke card prints its own outcome */ } });
   }
   async repair(add: readonly SignerRevocation[]) {
@@ -105,7 +109,7 @@ export class FileSignerRevocationLog implements SignerRevocationLog {
       for (const entry of [...kept, ...add.map(row => entrySchema.parse(row))]) if (!all.some(row => row.scopeId === entry.scopeId && row.keyId === entry.keyId)) all.push(entry);
       if (all.length > limits.revocationLogMaxEntries) throw unavailable();
       await rename(path, `${path}.broken-${Date.now()}`).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
-      await this.write(path, all, GENESIS, constants.O_EXCL);
+      await this.write(path, all, GENESIS, null);
       return Object.freeze(all);
     }, limits.lockTimeoutMs, { onWarning() { /* the repair card prints its own outcome */ } });
   }

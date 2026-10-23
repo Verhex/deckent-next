@@ -426,6 +426,8 @@ function v14Rules(person: Person, scopes: readonly string[]): readonly PolicyGra
  * A11): the named person retires and purges memory (their review card; both stay floored for every AI). The purge removes the stored content
  * of exactly the evaluator calls its entry's sealed evaluation records name, under that same memory/purge decision: no model-invocation grant.
  */
+/* S8-5 (S8-DESIGN §9): the named person also manages signer keys (`skill-signer` inspect/enrol/add/revoke/repair; floored for every AI) and imports
+ * signed skills (`agent-catalog`/import, always behind the pinned + signed floor (d)); no AI principal gets any signer or catalog-write grant here. */
 function v15Rules(person: Person, scopes: readonly string[]): readonly PolicyGrant[] {
   const ids = FIRST_RUN_UPGRADE_RULE_IDS, vocabulary = policyResources;
   const rule = (id: string, principal: Person, kind: string, actions: readonly string[]) => policyGrantSchema.parse({ id, effect: 'allow', actions: [...actions], scopes: [...scopes],

@@ -8,7 +8,9 @@ const person = { issuer: 'local-os', subject: 'uid:1000', assurance: 'os-user' }
 const d = (c: string) => c.repeat(64);
 const content = (workClasses = ['feature', 'docs']) => ({ name: 'Fatura denetçisi', persona: 'Faturaları siparişle eşleştirir.', workClasses, skills: [], parentAgentId: null });
 const define = (previous: AgentDefinition | null, author = person, workClasses?: string[], skillSetDigest = d('c')) => defineAgentRevision(previous, { scopeId: 's',
-  agentId: 'auditor', commandId: `c${(previous?.revision ?? 0) + 1}`, content: content(workClasses), personaDigest: d('b'), skillSetDigest, author, atMs: 5 });
+  agentId: 'auditor', commandId: `c${(previous?.revision ?? 0) + 1}`, content: content(workClasses), personaDigest: d('b'), skillSetDigest, author, atMs: 5,
+  // S8-5: an AI-authored row carries the key and signature digest verified at commit.
+  ...(author.issuer.endsWith('/mcp') ? { signed: { keyId: d('e'), signatureDigest: d('f') } } : {}) });
 const card = { issuer: 'local-os', subject: 'uid:1000', ai: false }, aiActor = { issuer: 'local-os/mcp', subject: 'uid:1000', ai: true };
 const promoted = (row: AgentStanding): AgentStanding => agentStandingSchema.parse({ ...row, standing: 'active', standingRevision: row.standingRevision + 1,
   basis: { kind: 'person-card', decidedBy: card, atMs: 9, commandId: 'p', suggestionId: null, reasonCode: null } });

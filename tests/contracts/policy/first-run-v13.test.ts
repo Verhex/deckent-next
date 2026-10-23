@@ -134,8 +134,8 @@ it('live and N1 shapes (2026-10-19, hand-built): the named person gets only v13+
       // v15 (S4B-1 + S7 + S4B-3): the memory distiller's D1–D4, the agent catalog rules, the person's review and the memory evaluator's V1–V5.
       'first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog',
       'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge',
-      // S6R-5: the recovery principal's model rule.
-      'first-run-recovery-model']);
+      // S6R-5: the recovery principal's model rule. S8-5: the person's signer cards and signed skill import.
+      'first-run-recovery-model', 'first-run-skill-signers', 'first-run-agent-catalog-import']);
     for (const rule of plan.rules) expect(rule.principals, rule.id).toEqual([rule.id.startsWith('first-run-mcp-observe-') ? mcpPrincipalRef(shapePerson)
       : rule.id.startsWith('first-run-memory-distiller') ? memoryDistillerPrincipalRef(shapePerson) : rule.id.startsWith('first-run-memory-evaluator') ? memoryEvaluatorPrincipalRef(shapePerson)
         : rule.id === 'first-run-recovery-model' ? recoveryPrincipalRef(shapePerson) : shapePerson]);
