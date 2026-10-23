@@ -3613,7 +3613,7 @@
       "engine": 60000,
       "adapters": 29900,
       "surfaces": 45000,
-      "composition": 7980
+      "composition": 7950
     },
     "totalSrcLines": 200000,
     "testCases": 8000,
