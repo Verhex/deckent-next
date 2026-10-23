@@ -31,7 +31,8 @@
     "instructionTrust": "state/instruction-trust",
     "treeScanCache": "state/tree-scan-cache",
     "autonomyShadow": "state/autonomy-shadow",
-    "memoryPurges": "state/memory-purges"
+    "memoryPurges": "state/memory-purges",
+    "brainWaits": "state/brain-waits"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal", "projectIdentity"],

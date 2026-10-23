@@ -2664,7 +2664,9 @@
         "src/composition/core/root",
         "src/composition/core/model-activation",
         "src/composition/core/model-invocation",
-        "src/engine/core/policy"
+        "src/engine/core/policy",
+        "src/platform/core/managed-files",
+        "src/adapters/core/brain-wait-store"
       ],
       "plan": "MONITOR"
     },
@@ -3158,7 +3160,9 @@
         "src/engine/core/model-activation",
         "src/adapters/core/sqlite-model-activation",
         "src/composition/core/toolchains",
-        "src/composition/core/memory"
+        "src/composition/core/memory",
+        "src/platform/core/managed-files",
+        "src/adapters/core/brain-wait-store"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -3872,6 +3876,14 @@
         "src/engine/core/recovery"
       ],
       "plan": "SURFACES"
+    },
+    "src/adapters/core/brain-wait-store": {
+      "dependencies": [
+        "src/domain/core/run",
+        "src/domain/core/command",
+        "src/platform/core/integrity"
+      ],
+      "plan": "M5-D5 Brain ve Auditor"
     }
   },
   "composition": {

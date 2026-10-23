@@ -61,6 +61,10 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     // M2 (f2): `model-roles-pending:<n>` mirrors the doctor row; a new catalog model refuses every role until a person assigns one.
     'model-roles-pending': () => t('monitor.diagnostic.modelRolesPending', { count: detail }, locale),
     'output-denied': () => t('monitor.diagnostic.outputDenied', {}, locale),
+    // f4: the Brain quota wait store (host state): a failed read, waits in scopes the viewer may not read (a count, never a scope), more than the bound.
+    'brain-waits-unavailable': () => t('brainwait.monitor.unavailable', { detail: detail ? ` (${detail})` : '' }, locale),
+    'brain-waits-hidden': () => t('brainwait.monitor.hidden', { count: detail }, locale),
+    'brain-waits-truncated': () => t('brainwait.monitor.truncated', {}, locale),
     'observation-unavailable': () => t('monitor.diagnostic.observationUnavailable', {}, locale),
     // `attempt-files-unavailable:<attempt key>:<CODE>`: the key may itself hold `/`; the code is the last part.
     'attempt-files-unavailable': () => t('monitor.diagnostic.attemptFilesUnavailable', { detail: detail.includes(':') ? detail.slice(0, detail.lastIndexOf(':')) : detail,

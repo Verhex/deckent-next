@@ -2,12 +2,12 @@
 // registry bound (`brain_planner.quotaWait`), cancellable, then plans once more under a NEW derived command id whose derivation seals the refused
 // call (lineage) — never a retry of the refused call. Beyond the bound, with no known reset, or with no surface that shows the wait: the typed
 // refusal (S9 card texts). A scripted fake CLI; no real CLI and no model call.
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { planRun } from '../../../src/index.js';
+import { inspectMonitor, planRun } from '../../../src/index.js';
 import { inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 import { brainInvocationCommandId, brainQuotaAttemptCommandId } from '#engine/index.js';
 import type { BrainPlanProgress } from '#domain/index.js';
@@ -36,6 +36,12 @@ async function fixture(stepsByCall: FakeStep[][], quotaWait?: Record<string, num
   return { f, calls };
 }
 const short = { maxWaitMs: 5_000, marginMs: 0, maxAttempts: 2 };
+/** The viewer's monitor scope decision (`scope inspect`), the same one its Runs need. */
+async function grantMonitor(data: string) {
+  const path = join(data, 'policy.json'), policy = JSON.parse(await readFile(path, 'utf8')) as { grants: Record<string, unknown>[] }, run = policy.grants[0]!;
+  policy.grants.push({ ...run, id: 'monitor-scope', actions: ['inspect'], resource: { kind: 'scope', ids: ['s'] } });
+  await writeFile(path, JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
+}
 
 describe.skipIf(process.platform !== 'linux')('f3 Q-H4 Brain quota: short visible wait, then a new derived attempt', () => {
   it('waits visibly until the reset and plans once more under a derived command id that seals the refused call; a replay sends nothing', async () => {
@@ -84,6 +90,35 @@ describe.skipIf(process.platform !== 'linux')('f3 Q-H4 Brain quota: short visibl
       .rejects.toMatchObject({ code: 'BRAIN_CANCELLED' });
     await new Promise(resolve => setTimeout(resolve, 2_200));
     expect(await h.calls()).toHaveLength(1);
+  });
+  // f4 item 1: the wait is visible to a surface that did not start it — the standalone monitor and MCP inspect_monitor (the same snapshot) — before any Run.
+  it('the standalone monitor shows the active wait before a Run exists; the record is gone once planning resumed', async () => {
+    const h = await fixture([quota(inSeconds(3)), answer()], short); await grantMonitor(h.f.data);
+    let during: Promise<Awaited<ReturnType<typeof inspectMonitor>>> | undefined;
+    await planRun(h.f.project, command, h.f.options, undefined, progress => { if (progress.kind === 'quota-wait') during = inspectMonitor(h.f.project, h.f.options); });
+    const install = (await during!).installs[0]!;
+    expect(install.brainWaits).toEqual([expect.objectContaining({ scopeId: 's', commandId: 'plan-quota', attempt: 2, maxAttempts: 2,
+      after: expect.objectContaining({ commandId: brainInvocationCommandId(command) }) })]);
+    expect(JSON.stringify(install.brainWaits)).not.toContain(command.intent);
+    const after = (await inspectMonitor(h.f.project, h.f.options)).installs[0]!;
+    expect(after.brainWaits).toBeUndefined();
+    expect((await readdir(join(h.f.data, 'state', 'brain-waits'))).filter(name => name.endsWith('.json'))).toEqual([]);
+  });
+  it('negative: cancelling during the wait removes the record; the monitor shows no wait afterwards', async () => {
+    const h = await fixture([quota(inSeconds(3)), answer()], short), controller = new AbortController(); await grantMonitor(h.f.data);
+    let during: Promise<Awaited<ReturnType<typeof inspectMonitor>>> | undefined;
+    await expect(planRun(h.f.project, command, h.f.options, controller.signal, progress => {
+      if (progress.kind === 'quota-wait') during = inspectMonitor(h.f.project, h.f.options).finally(() => controller.abort()); })).rejects.toMatchObject({ code: 'BRAIN_CANCELLED' });
+    expect((await during!).installs[0]!.brainWaits).toHaveLength(1);
+    expect((await inspectMonitor(h.f.project, h.f.options)).installs[0]!.brainWaits).toBeUndefined();
+  });
+  it('negative: a viewer without the scope decision sees no wait and no scope id, only the hidden count', async () => {
+    const h = await fixture([quota(inSeconds(3)), answer()], short);
+    let during: Promise<Awaited<ReturnType<typeof inspectMonitor>>> | undefined;
+    await planRun(h.f.project, command, h.f.options, undefined, progress => { if (progress.kind === 'quota-wait') during = inspectMonitor(h.f.project, h.f.options); });
+    const install = (await during!).installs[0]!;
+    expect(install.brainWaits).toBeUndefined(); expect(install.diagnostics).toContain('info:brain-waits-hidden:1');
+    expect(JSON.stringify(install)).not.toContain('plan-quota');
   });
   it('negative: refused again after the wait is the typed refusal; the attempt bound allows no second wait (no silent retry)', async () => {
     const h = await fixture([quota(inSeconds(1)), quota(inSeconds(1))], short), seen: BrainPlanProgress[] = [];

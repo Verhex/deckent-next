@@ -1,8 +1,8 @@
 import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, type BrainPlanCommand, type BrainPlanObserver,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
 import { BrainPlanApplication, brainQuotaWaitPolicy, brainRunId, brainTakesMemory, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
-import { ErrorRegistry, getConfigKnownSecrets, type ConfigLoadOptions } from '#platform/index.js';
-import { extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
+import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
+import { FileBrainQuotaWaitStore, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
@@ -44,6 +44,8 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
       inspect: query => inspectConfiguredRunProposal(root, query, options), invoke,
       propose: propose ?? (proposal => proposeConfiguredRun(root, proposal, options)), text: extractOpenAiChatTextFromInvocation,
       stoppedAtLength: openAiChatStoppedAtLength,
+      // f4: an active quota wait is host state the standalone monitor and MCP inspect_monitor read (state/brain-waits); not evidence.
+      quotaWaits: new FileBrainQuotaWaitStore(() => prepareProductDirectory(context.layout, 'brainWaits')),
       // S3-4: the adapter's typed refusal body of a rejected planning call (the subscription CLI names quota, login, credits, guard there).
       async rejectionBody(result) { const content = (await inspectConfiguredModelInvocation(root, { schemaVersion: 2, scopeId: result.receipt.request.scopeId,
         invocationId: result.receipt.claim.invocationId, reference: result.receipt.request.reference, includeResponseContent: true }, options)).responseContent;
