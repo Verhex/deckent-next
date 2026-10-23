@@ -263,7 +263,6 @@
         "src/adapters/core/installation-profile-file",
         "src/adapters/core/local-runtime-socket",
         "src/adapters/core/mcp-client",
-        "src/adapters/core/native-cli-headless",
         "src/adapters/core/provider-connect",
         "src/adapters/core/runtime-launcher",
         "src/adapters/core/secret-store",
@@ -1636,6 +1635,7 @@
         "src/adapters/core/audit-store",
         "src/adapters/core/contract",
         "src/adapters/core/local-keyring",
+        "src/adapters/core/local-principal",
         "src/adapters/core/native-cli-headless",
         "src/adapters/core/provider-anthropic-messages",
         "src/adapters/core/provider-connect",
@@ -1657,9 +1657,11 @@
         "src/engine/core/model-activation",
         "src/engine/core/model-invocation",
         "src/engine/core/policy",
+        "src/engine/core/runtime",
         "src/platform/core/config",
         "src/platform/core/errors",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/platform/core/managed-files"
       ],
       "plan": "PROVIDERS"
     },

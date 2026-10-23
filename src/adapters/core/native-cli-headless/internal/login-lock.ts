@@ -13,6 +13,9 @@ async function cliLockHeld(configDir: string, names: readonly string[]): Promise
   for (const name of names) if (await lstat(join(configDir, name)).then(() => true, () => false)) return true;
   return false;
 }
+const lockName = (configDir: string) => createHash('sha256').update(configDir).digest('hex').slice(0, 32);
+/** s3c: Deckent's own record of the last sign-in into a login dir, beside its lock (never inside the login dir); its identity keys the preflight. */
+export const loginRecordPath = (configDir: string, stateDir: string) => join(dirname(stateDir), LOCK_DIR, `${lockName(configDir)}.login`);
 /** A held Deckent lock is stale when unreadable, its process is gone or it is older than `staleMs` (a reused process id). */
 const read = (path: string) => readFile(path, 'utf8').then(text => text, () => null);
 /** The stale holder's exact text, or null when the lock is live. Removal compares that text again right before it (a narrow race remains between the
@@ -33,7 +36,7 @@ export async function withLoginLock<T>(entry: HeadlessEntry, configDir: string, 
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const info = await lstat(directory);
   if (!info.isDirectory() || info.uid !== process.getuid?.() || (info.mode & 0o077) !== 0) refuse('HEADLESS_PREFLIGHT_FAILED', { check: 'state-dir' });
-  const path = join(directory, `${createHash('sha256').update(configDir).digest('hex').slice(0, 32)}.lock`), token = randomUUID(), deadline = performance.now() + waitMs;
+  const path = join(directory, `${lockName(configDir)}.lock`), token = randomUUID(), deadline = performance.now() + waitMs;
   let holder: 'cli' | 'deckent';
   for (;;) {
     signal?.throwIfAborted();

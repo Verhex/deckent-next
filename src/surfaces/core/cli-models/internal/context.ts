@@ -7,6 +7,7 @@ import type { ModelInvocationCancellationHandler, ModelInvocationHandler, ModelI
 import type { ProviderSpendManagementHandler, ProviderSpendAccountInspectionHandler, ProviderSpendAuditHandler } from './model-spending.js';
 import type { ModelCatalogApplyHandler, ModelCatalogInspectionHandler } from './model-catalog.js';
 import type { ModelConnectHandler } from './model-connect.js';
+import type { HeadlessLoginHandler } from './model-login.js';
 import type { ModelRoleAssignHandler, ModelRoleInspectionHandler } from './model-roles.js';
 
 export type InferenceMetricsReading =
@@ -31,6 +32,8 @@ export interface ModelCommandContext extends CliBaseContext {
   applyModelCatalog?: ModelCatalogApplyHandler;
   /** T4-B `models.connect` (CLI `models connect`, the terminal's /provider model step). */
   connectModel?: ModelConnectHandler;
+  /** s3c `models login`: the person's sign-in of the subscription Brain's own login dir (CLI only: a person's terminal act). */
+  loginHeadless?: HeadlessLoginHandler;
   /** M2 `models roles`: the tier/role read view (catalog models with their row or pending) and the person's one-row write. */
   inspectModelRoles?: ModelRoleInspectionHandler;
   assignModelRole?: ModelRoleAssignHandler;

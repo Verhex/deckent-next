@@ -37,6 +37,9 @@ export type FakeStep = { line: Line | string } | { sleepMs: number } | { floodBy
 export interface FakeScenario {
   readonly logPath: string; readonly version?: string; readonly help?: string; readonly probeRefusal?: string | null; readonly systemProbeRefusal?: string | null;
   readonly auth?: Record<string, unknown>; readonly authExit?: number; readonly steps?: readonly FakeStep[]; readonly initCwd?: 'actual';
+  /** s3c: `auth login` writes a credential canary (mode 0000: nobody may read it, Deckent included) into CLAUDE_CONFIG_DIR and exits `loginExit`;
+   * with `authFromLogin`, `auth status` reports logged in exactly when that file exists (a name check: the fake never reads it either). */
+  readonly loginExit?: number; readonly authFromLogin?: boolean;
   /** The Nth model call (0-based) replays `stepsByCall[N]` when present, else `steps` (a quota refusal then an answer, for example). */
   readonly stepsByCall?: readonly (readonly FakeStep[])[];
 }
@@ -68,7 +71,9 @@ if (argv[0] === '--version') { log({ mode: 'version' }); process.stdout.write(s.
 if (argv[0] === '--help') { log({ mode: 'help' }); process.stdout.write(s.help); process.exit(0); }
 if (argv[0] === '--print' && argv.length === 2 && argv[1] === ${JSON.stringify(headless.systemPromptFlag)}) { log({ mode: 'probe-system', entries: fs.readdirSync('.') }); process.stderr.write('error: ' + (s.systemProbeRefusal && probeDir() ? s.systemProbeRefusal : "unknown option '" + argv[1] + "'") + '\\n'); process.exit(1); }
 if (argv[0] === '--max-turns') { log({ mode: 'probe' }); const refusal = s.probeRefusal && probeDir(); if (refusal) process.stderr.write('error: ' + s.probeRefusal + '\\n'); process.exit(refusal ? 1 : 0); }
-if (argv[0] === 'auth') { log({ mode: 'auth' }); process.stdout.write(JSON.stringify({ ...s.auth, configDirectory: s.auth.configDirectory ?? process.env.CLAUDE_CONFIG_DIR })); process.exit(s.authExit); }
+const credentials = () => require('node:path').join(process.env.CLAUDE_CONFIG_DIR, '.credentials.json');
+if (argv[0] === 'auth' && argv[1] === 'login') { log({ mode: 'login', tty: { stdin: process.stdin.isTTY === true } }); if (!s.loginExit) { fs.rmSync(credentials(), { force: true }); fs.writeFileSync(credentials(), 'CREDENTIAL-CANARY-91c2', { mode: 0 }); } process.exit(s.loginExit ?? 0); }
+if (argv[0] === 'auth') { log({ mode: 'auth' }); const logged = s.authFromLogin ? { loggedIn: fs.existsSync(credentials()) } : {}; process.stdout.write(JSON.stringify({ ...s.auth, ...logged, configDirectory: s.auth.configDirectory ?? process.env.CLAUDE_CONFIG_DIR })); process.exit(s.authExit); }
 async function isolation(p) {
   const net = require('node:net'), each = (list, fn) => Object.fromEntries((list ?? []).map(item => { try { return [item, fn(item)]; } catch (error) { return [item, 'error:' + error.code]; } }));
   const r = { read: each(p.read, file => fs.readFileSync(file, 'utf8')), list: each(p.list, dir => fs.readdirSync(dir).sort()), exists: each(p.exists, file => fs.existsSync(file)),

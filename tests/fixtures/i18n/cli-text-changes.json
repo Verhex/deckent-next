@@ -550,11 +550,15 @@
     },
     "headless.help.connect": {
       "before": "Subscription Brain (claude-cli-subscription, preview, owner only): no key and no address; the\nconnected CLI uses your own Claude login. [--executable <abs path>] (default: first in PATH)\n[--config-dir <abs dir>] (default: ~/.claude) [--delegate none|ai|system|ai,system] (who besides\nyou may use it; absent keeps your earlier choice). The installation owner first sets\nmodels.headless.preview=true on the user layer.",
-      "after": "Subscription Brain (claude-cli-subscription, owner only): no key and no address; the connected\nCLI uses your own Claude login and runs isolated (bubblewrap: only its login dir, no other files,\nnetwork to the provider only). [--executable <abs path>] (default: first in PATH)\n[--config-dir <abs dir>] (default: ~/.claude) [--delegate none|ai|system|ai,system] (who besides\nyou may use it; absent keeps your earlier choice). Without usable bubblewrap it is refused."
+      "after": "Subscription Brain (claude-cli-subscription, owner only): no key and no address; the connected\nCLI uses the Brain's own Claude login and runs isolated (bubblewrap: only its login dir, no other\nfiles, network to the provider only). [--executable <abs path>] (default: first in PATH)\n[--config-dir <abs dir>] (default: the Brain's own login dir, signed in by `deckent models login`;\nanother dir only when you name it) [--delegate none|ai|system|ai,system] (who besides you may use\nit; absent keeps your earlier choice). Without usable bubblewrap it is refused."
     },
     "error.HEADLESS_KIND_UNAVAILABLE": {
       "before": "The subscription Brain is not available on this installation. It is a preview for the owner's own installation until isolation lands: the owner turns it on with the installation setting `models.headless.preview` (user layer). Nothing was changed.",
       "after": null
+    },
+    "error.HEADLESS_LOGIN_REQUIRED": {
+      "before": "The Claude CLI is not logged in with a Claude subscription (claude.ai). Run `claude auth login` yourself; Deckent never opens or reads the login. Nothing was sent and no other model was chosen.",
+      "after": "The Claude CLI is not signed in with a Claude subscription (claude.ai) in the Brain's login directory. Sign it in with `deckent models login --connection claude-cli-subscription` (the CLI's own sign-in, in your terminal); Deckent never opens or reads the login. Nothing was sent and no other model was chosen."
     }
   },
   "tr": {
@@ -1340,11 +1344,15 @@
     },
     "headless.help.connect": {
       "before": "Abonelik Brain'i (claude-cli-subscription, önizleme, yalnız sahip): anahtar ve adres yok;\nbağlanan CLI kendi Claude girişinizi kullanır. [--executable <mutlak yol>] (varsayılan: PATH'te ilk)\n[--config-dir <mutlak dizin>] (varsayılan: ~/.claude) [--delegate none|ai|system|ai,system] (sizin\ndışınızda kimin kullanabileceği; verilmezse önceki seçiminiz kalır). Kurulum sahibi önce kullanıcı\nkatmanında models.headless.preview=true ayarlar.",
-      "after": "Abonelik Brain'i (claude-cli-subscription, yalnız sahip): anahtar ve adres yok; bağlanan CLI\nkendi Claude girişinizi kullanır ve yalıtılmış çalışır (bubblewrap: yalnız giriş dizini, başka dosya\nyok, ağ yalnız sağlayıcıya). [--executable <mutlak yol>] (varsayılan: PATH'te ilk)\n[--config-dir <mutlak dizin>] (varsayılan: ~/.claude) [--delegate none|ai|system|ai,system] (sizin\ndışınızda kimin kullanabileceği; verilmezse önceki seçiminiz kalır). Kullanılabilir bubblewrap yoksa reddedilir."
+      "after": "Abonelik Brain'i (claude-cli-subscription, yalnız sahip): anahtar ve adres yok; bağlanan CLI\nBrain'in kendi Claude girişini kullanır ve yalıtılmış çalışır (bubblewrap: yalnız giriş dizini, başka\ndosya yok, ağ yalnız sağlayıcıya). [--executable <mutlak yol>] (varsayılan: PATH'te ilk)\n[--config-dir <mutlak dizin>] (varsayılan: Brain'in kendi giriş dizini, `deckent models login` ile\ngiriş yapılır; başka dizin yalnız siz verirseniz) [--delegate none|ai|system|ai,system] (sizin\ndışınızda kimin kullanabileceği; verilmezse önceki seçiminiz kalır). Kullanılabilir bubblewrap yoksa reddedilir."
     },
     "error.HEADLESS_KIND_UNAVAILABLE": {
       "before": "Abonelik Brain'i bu kurulumda kullanılamıyor. Yalıtım inene kadar yalnız sahibin kendi kurulumu için önizlemedir: sahip onu kullanıcı katmanındaki `models.headless.preview` kurulum ayarıyla açar. Hiçbir şey değiştirilmedi.",
       "after": null
+    },
+    "error.HEADLESS_LOGIN_REQUIRED": {
+      "before": "Claude CLI bir Claude aboneliğiyle (claude.ai) girişli değil. `claude auth login` komutunu kendiniz çalıştırın; Deckent girişi hiçbir zaman açmaz ve okumaz. Hiçbir şey gönderilmedi, başka bir model seçilmedi.",
+      "after": "Claude CLI, Brain'in giriş dizininde bir Claude aboneliğiyle (claude.ai) girişli değil. `deckent models login --connection claude-cli-subscription` ile giriş yapın (CLI'nin kendi girişi, sizin terminalinizde); Deckent girişi hiçbir zaman açmaz ve okumaz. Hiçbir şey gönderilmedi, başka bir model seçilmedi."
     }
   }
 }
