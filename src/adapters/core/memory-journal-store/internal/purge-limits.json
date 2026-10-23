@@ -1,0 +1,7 @@
+{
+  "fileName": "purges.jsonl",
+  "maxLineBytes": 16384,
+  "maxFileBytes": 8388608,
+  "maxEntries": 20000,
+  "lockTimeoutMs": 5000
+}

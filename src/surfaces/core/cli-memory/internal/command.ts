@@ -6,21 +6,31 @@ import { cliMode, requireIdPrefix, resolveCommandScope, safeCell, scopeLister, s
 import { cardIo, sinksOf } from '#surfaces/core/cli-approval/index.js';
 import type { MemoryCommandContext } from './context.js';
 import { memoryWrite } from './write.js';
+import { memoryPurge, memoryRetireSource, memoryReview } from './review.js';
 import { evaluatorLines, table, view } from './render.js';
 import limits from './limits.json' with { type: 'json' };
 
-export interface Parsed { action: 'search' | 'inspect' | 'propose' | 'verify' | 'retire' | null; words: string[]; states?: MemoryState[]; scope?: string; language?: string;
-  input?: string; note?: string; reason?: string; supersededBy?: string; json: boolean; help: boolean }
-const VALUED: Readonly<Record<string, 'scope' | 'language' | 'input' | 'note' | 'reason' | 'supersededBy'>> = { '--scope': 'scope', '--lang': 'language', '--input': 'input',
-  '--note': 'note', '--reason': 'reason', '--superseded-by': 'supersededBy' };
-/** Which flags and how many words each action takes (null: the bare list). */
+export interface Parsed { action: 'search' | 'inspect' | 'propose' | 'verify' | 'retire' | 'review' | 'purge' | null; words: string[]; states?: MemoryState[]; scope?: string;
+  language?: string; input?: string; note?: string; reason?: string; supersededBy?: string; source?: { runId: string; attemptId: string | null }; json: boolean; help: boolean }
+const VALUED: Readonly<Record<string, 'scope' | 'language' | 'input' | 'note' | 'reason' | 'supersededBy' | 'source'>> = { '--scope': 'scope', '--lang': 'language', '--input': 'input',
+  '--note': 'note', '--reason': 'reason', '--superseded-by': 'supersededBy', '--source': 'source' };
+const ACTIONS = ['search', 'inspect', 'propose', 'verify', 'retire', 'review', 'purge'];
+/** Which flags and how many words each action takes (null: the bare list). S4B-4: `retire` and `purge` take one id or `--source <run>[/<attempt>]`. */
 const SHAPE = { list: { words: [0, 0], flags: ['--state'] }, search: { words: [1, Infinity], flags: ['--state'] }, inspect: { words: [1, 1], flags: [] },
-  propose: { words: [0, 0], flags: ['--input'] }, verify: { words: [1, 1], flags: ['--note'] }, retire: { words: [1, 1], flags: ['--reason', '--superseded-by'] } } as const;
+  propose: { words: [0, 0], flags: ['--input'] }, verify: { words: [1, 1], flags: ['--note'] }, retire: { words: [0, 1], flags: ['--reason', '--superseded-by', '--source'] },
+  review: { words: [0, 0], flags: ['--note', '--reason'] }, purge: { words: [0, 1], flags: ['--source'] } } as const;
+/** `<runId>` or `<runId>/<attemptId>` (ids as the Run inspection shows them). */
+function source(value: string): NonNullable<Parsed['source']> {
+  const [runId, attemptId, extra] = value.split('/');
+  if (!runId?.trim() || runId.trim() !== runId || extra !== undefined || (attemptId !== undefined && (!attemptId.trim() || attemptId.trim() !== attemptId)))
+    throw ErrorRegistry.createError('CLI_USAGE', { params: { flag: '--source' } });
+  return { runId, attemptId: attemptId ?? null };
+}
 function parse(argv: readonly string[]): Parsed {
   if (argv[0] !== 'memory') throw ErrorRegistry.createError('CLI_USAGE');
   const result: Parsed = { action: null, words: [], json: false, help: false }, seen = new Set<string>();
   let index = 1;
-  if (['search', 'inspect', 'propose', 'verify', 'retire'].includes(argv[1] ?? '')) { result.action = argv[1] as Parsed['action']; index = 2; }
+  if (ACTIONS.includes(argv[1] ?? '')) { result.action = argv[1] as Parsed['action']; index = 2; }
   const shape = SHAPE[result.action ?? 'list'];
   for (; index < argv.length; index++) {
     const key = argv[index] === '-h' ? '--help' : argv[index]!;
@@ -36,11 +46,14 @@ function parse(argv: readonly string[]): Parsed {
       result.states = [...new Set(states)] as MemoryState[];
     } else if (VALUED[key] && (key === '--scope' || key === '--lang' || (shape.flags as readonly string[]).includes(key))) {
       const value = argv[++index]; if (!value || (value.startsWith('-') && key !== '--input')) throw ErrorRegistry.createError('CLI_USAGE');
-      result[VALUED[key]!] = value;
+      if (key === '--source') result.source = source(value); else result[VALUED[key] as Exclude<typeof VALUED[string], 'source'>] = value;
     } else throw ErrorRegistry.createError('CLI_USAGE');
   }
   const required = result.action === 'propose' ? result.input : result.action === 'verify' ? result.note : result.action === 'retire' ? result.reason : '';
   if (!result.help && (result.words.length < shape.words[0] || result.words.length > shape.words[1] || required === undefined)) throw ErrorRegistry.createError('CLI_USAGE');
+  // One target: an id or a source, never both or neither; a replacement names one entry only.
+  if (!result.help && (result.action === 'retire' || result.action === 'purge')
+    && ((result.words.length === 1) === (result.source !== undefined) || (result.source && result.supersededBy !== undefined))) throw ErrorRegistry.createError('CLI_USAGE');
   return result;
 }
 /** One entry by its id or the unique short id the list shows (CLI_ID_UNKNOWN/AMBIGUOUS otherwise); `not-found` only without a list handler. */
@@ -51,10 +64,13 @@ async function resolveEntry(context: MemoryCommandContext, root: string, scopeId
   const listed = await context.listMemory(root, { schemaVersion: 1, scopeId, states: [...MEMORY_STATES], limit: MEMORY_LIMITS.pageMax }, options);
   return listed.status === 'ok' ? inspect(requireIdPrefix(id, listed.entries.map(entry => entry.entryId))) : listed;
 }
+/** The next step of a held read (S4B-4: a purge the restored ledger lacks names its own). */
+export const heldNext = (code: MemoryHeld['code'], locale: Parameters<typeof t>[2]) => code === 'MEMORY_CORRUPT' ? t('memory.held.next.MEMORY_CORRUPT', {}, locale)
+  : code === 'MEMORY_PURGE_REPLAY_HELD' ? t('memory.held.next.MEMORY_PURGE_REPLAY_HELD', {}, locale) : t('memory.held.next.MEMORY_UNAVAILABLE', {}, locale);
 export async function memoryCommand(argv: readonly string[], context: MemoryCommandContext = {}): Promise<void | ExitCode> {
   const args = parse(argv), locale = commandLocale(context, args.language), sinks = sinksOf(context);
   if (args.help) { emit(t('memory.help.detail', {}, locale), sinks); return; }
-  const writing = args.action === 'propose' || args.action === 'verify' || args.action === 'retire';
+  const writing = args.action === 'propose' || args.action === 'verify' || args.action === 'retire' || args.action === 'review' || args.action === 'purge';
   // A memory change is a person's terminal act (like `coding instructions trust`): an AI tool, CI, pipe or `--json` is refused before anything is read.
   const operation = `${argv[0]} ${args.action}`;
   if (writing && cliMode(context, args.json).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation } });
@@ -64,14 +80,18 @@ export async function memoryCommand(argv: readonly string[], context: MemoryComm
   const scope = await resolveCommandScope({ command: 'deckent memory', locale, explicit: args.scope, configured: typeof configured === 'string' ? configured : undefined,
     mutating: writing, interactive, listScopes: scopeLister(context, root, options), pick: ask });
   if (!scope) return writing ? 1 : undefined;
-  if (writing) return memoryWrite(args, context, { root, options, locale, scope, ask, inputMaxBytes: config.cli.invocationInputMaxBytes, resolve: id => resolveEntry(context, root, scope.scopeId, id, options) });
+  const io = { root, options, locale, scope, ask, inputMaxBytes: config.cli.invocationInputMaxBytes, resolve: (id: string) => resolveEntry(context, root, scope.scopeId, id, options) };
+  if (args.action === 'review') return memoryReview(args, context, io);
+  if (args.action === 'purge') return memoryPurge(args, context, io);
+  if (args.action === 'retire' && args.source) return memoryRetireSource(args, context, io);
+  if (writing) return memoryWrite(args, context, io);
   const base = { schemaVersion: 1 as const, scopeId: scope.scopeId, ...(args.states ? { states: args.states } : {}) };
   const lines = [scopeNotice(scope, locale)];
   const finish = (result: { readonly status: string }): ExitCode | undefined => {
     if (args.json) { emit(result, { ...sinks, json: true }); return result.status === 'held' ? 1 : undefined; }
     if (result.status !== 'held') return undefined;
     const { code } = result as MemoryHeld;
-    emit(t('memory.held', { code, next: code === 'MEMORY_CORRUPT' ? t('memory.held.next.MEMORY_CORRUPT', {}, locale) : t('memory.held.next.MEMORY_UNAVAILABLE', {}, locale) }, locale), { ...sinks, level: 'error' }); return 1;
+    emit(t('memory.held', { code, next: heldNext(code, locale) }, locale), { ...sinks, level: 'error' }); return 1;
   };
   if (args.action === 'inspect') {
     if (!context.inspectMemory) throw ErrorRegistry.createError('MEMORY_UNAVAILABLE');

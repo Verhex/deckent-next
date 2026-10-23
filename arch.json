@@ -3609,7 +3609,8 @@
         "src/adapters/core/sqlite-ledger",
         "src/platform/core/integrity",
         "src/domain/core/primitives",
-        "src/adapters/core/attempt-store"
+        "src/adapters/core/attempt-store",
+        "src/platform/core/config"
       ],
       "plan": "MEMORY"
     },
@@ -3632,7 +3633,12 @@
         "src/adapters/core/sqlite-model-activation",
         "src/adapters/core/sqlite-model-invocation",
         "src/adapters/core/provider-openai-chat",
-        "src/engine/core/model-activation"
+        "src/engine/core/model-activation",
+        "src/engine/core/policy",
+        "src/engine/core/model-invocation",
+        "src/platform/core/host",
+        "src/platform/core/integrity",
+        "src/composition/core/root"
       ],
       "plan": "MEMORY"
     },
@@ -3858,6 +3864,7 @@
       "delivery",
       "memory",
       "memory-automation",
+      "memory-review",
       "assignment",
       "agents",
       "tuicopy",

@@ -1,8 +1,9 @@
 import { createRequire } from 'node:module';
 import { isDeepStrictEqual } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
-import { encodeCommandProjection, memoryContestSchema, memoryEntrySchema, memoryEvaluationRecordSchema, memoryIndexText, type MemoryContest, type MemoryEntry,
-  type MemoryEvaluationRecord, type MemoryState } from '#domain/index.js';
+import { encodeCommandProjection, isMemoryTombstone, memoryContestResolutionSchema, memoryContestSchema, memoryEntrySchema, memoryEvaluationRecordSchema, memoryIndexText,
+  memoryPurgeRecordSchema, tombstoneMemoryRevision, type MemoryContest, type MemoryContestResolution, type MemoryEntry, type MemoryEvaluationRecord, type MemoryPurgeRecord,
+  type MemoryState } from '#domain/index.js';
 import { AuditApplication, MemoryJournalError, type MemoryChange, type MemoryExtractionReceipt, type MemoryJournalStore, type MemoryReceipt, type MemorySupport } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openSqliteLedger, requireLedgerVersion, MEMORY_AUTOMATION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
@@ -164,6 +165,87 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
       return { replayed: false };
     }));
   }
+  /** S4B-4 (§6.6, v65 tables): the purge in one transaction — purge record + audit event, every revision rewritten to the tombstone (the v65
+   * trigger allows exactly this rewrite of the same revision), the current row likewise, the search row deleted. */
+  async tombstone(record: MemoryPurgeRecord, event: AuditEvent) {
+    const value = memoryPurgeRecordSchema.parse(record);
+    return this.read(() => this.write(() => {
+      const prior = this.purge(value.scopeId, value.purgeId);
+      if (prior) { if (!isDeepStrictEqual(prior, value)) throw new MemoryJournalError('MEMORY_COMMAND_CONFLICT'); return { replayed: true, revisions: 0 }; }
+      this.audit.record(event);
+      const current = this.current(value.scopeId, value.entryId);
+      let revisions = 0;
+      if (current && !isMemoryTombstone(current.entry.content)) {
+        const rows = this.db.prepare('SELECT entry_id,revision,record FROM memory_entry_revisions WHERE scope_id=? AND entry_id=? ORDER BY revision').all(value.scopeId, value.entryId);
+        const rewrite = this.db.prepare('UPDATE memory_entry_revisions SET record=? WHERE scope_id=? AND entry_id=? AND revision=?');
+        for (const row of rows) {
+          const revision = this.entry(row, value.scopeId, value.entryId);
+          if (!isMemoryTombstone(revision.content)) { rewrite.run(this.seal(tombstoneMemoryRevision(revision, value)), value.scopeId, value.entryId, revision.revision); revisions++; }
+        }
+        this.db.prepare('UPDATE memory_entries SET record=? WHERE scope_id=? AND entry_id=? AND revision=?')
+          .run(this.seal(tombstoneMemoryRevision(current.entry, value)), value.scopeId, value.entryId, current.entry.revision);
+        this.db.prepare('DELETE FROM memory_search WHERE rowid=?').run(current.id);
+      }
+      this.db.prepare('INSERT INTO memory_purges(scope_id,purge_id,entry_id,content_digest,record) VALUES(?,?,?,?,?)')
+        .run(value.scopeId, value.purgeId, value.entryId, value.contentDigest, this.seal(value));
+      return { replayed: false, revisions };
+    }));
+  }
+  private purge(scopeId: string, purgeId: string): MemoryPurgeRecord | null {
+    const row = this.db.prepare('SELECT entry_id,content_digest,record FROM memory_purges WHERE scope_id=? AND purge_id=?').get(scopeId, purgeId);
+    if (!row) return null;
+    const parsed = memoryPurgeRecordSchema.safeParse(this.open(row['record']));
+    if (!parsed.success || parsed.data.scopeId !== scopeId || parsed.data.purgeId !== purgeId || parsed.data.entryId !== row['entry_id'] || parsed.data.contentDigest !== row['content_digest']) throw corrupt();
+    return parsed.data;
+  }
+  async purgeRecord(scopeId: string, purgeId: string) { return this.read(() => this.purge(scopeId, purgeId)); }
+  async evaluationsFor(scopeId: string, entryId: string, limit: number) {
+    return this.read(() => this.db.prepare('SELECT record_id,entry_id,record FROM memory_evaluations WHERE scope_id=? AND entry_id=? ORDER BY seq DESC LIMIT ?').all(scopeId, entryId, limit)
+      .map(row => this.evaluation(row, scopeId)));
+  }
+  private contest(row: Record<string, unknown>, scopeId: string): { contest: MemoryContest; resolution: MemoryContestResolution | null } {
+    const contest = memoryContestSchema.safeParse(this.open(row['record']));
+    if (!contest.success || contest.data.scopeId !== scopeId || contest.data.contestId !== row['contest_id'] || contest.data.entryId !== row['entry_id']) throw corrupt();
+    if (row['resolution'] === null || row['resolution'] === undefined) return { contest: contest.data, resolution: null };
+    const resolution = memoryContestResolutionSchema.safeParse(this.open(row['resolution']));
+    if (!resolution.success || resolution.data.contestId !== contest.data.contestId || resolution.data.scopeId !== scopeId) throw corrupt();
+    return { contest: contest.data, resolution: resolution.data };
+  }
+  async listContests(scopeId: string, limit: number) {
+    return this.read(() => this.db.prepare('SELECT contest_id,entry_id,record,resolution FROM memory_contests WHERE scope_id=? AND resolution IS NULL ORDER BY opened_at_ms DESC,contest_id LIMIT ?')
+      .all(scopeId, limit).map(row => this.contest(row, scopeId).contest));
+  }
+  async loadContest(scopeId: string, contestId: string) {
+    return this.read(() => { const row = this.db.prepare('SELECT contest_id,entry_id,record,resolution FROM memory_contests WHERE scope_id=? AND contest_id=?').get(scopeId, contestId);
+      return row ? this.contest(row, scopeId) : null; });
+  }
+  /** The v65 trigger lets the resolution column be set exactly once; a different second resolution is refused here first. */
+  async resolveContest(resolution: MemoryContestResolution, event: AuditEvent) {
+    const value = memoryContestResolutionSchema.parse(resolution);
+    return this.read(() => this.write(() => {
+      const row = this.db.prepare('SELECT contest_id,entry_id,record,resolution FROM memory_contests WHERE scope_id=? AND contest_id=?').get(value.scopeId, value.contestId);
+      if (!row) throw new MemoryJournalError('MEMORY_NOT_FOUND');
+      const held = this.contest(row, value.scopeId).resolution;
+      if (held) { if (!isDeepStrictEqual(held, value)) throw new MemoryJournalError('MEMORY_CONTEST_RESOLVED'); return { replayed: true }; }
+      this.audit.record(event);
+      this.db.prepare('UPDATE memory_contests SET resolution=? WHERE scope_id=? AND contest_id=? AND resolution IS NULL').run(this.seal(value), value.scopeId, value.contestId);
+      return { replayed: false };
+    }));
+  }
+  /** Support rows are read in order and each is re-verified (the json_extract filter is only an index, never the evidence). */
+  async sourceEntryIds(scopeId: string, source: { readonly runId: string; readonly attemptId: string | null }, limit: number) {
+    return this.read(() => {
+      const ids: string[] = [], rows = this.db.prepare(`SELECT entry_id,support_id,record FROM memory_entry_support WHERE scope_id=? AND json_extract(record,'$.value.source.runId')=?
+        ${source.attemptId === null ? '' : `AND json_extract(record,'$.value.source.attemptId')=?`} ORDER BY rowid`).iterate(scopeId, source.runId, ...(source.attemptId === null ? [] : [source.attemptId]));
+      for (const row of rows) {
+        const support = this.supportRow(row, scopeId);
+        if (support.source.runId !== source.runId || (source.attemptId !== null && support.source.attemptId !== source.attemptId)) throw corrupt();
+        if (!ids.includes(support.entryId)) ids.push(support.entryId);
+        if (ids.length >= limit) break;
+      }
+      return ids;
+    });
+  }
   async contestCount(scopeId: string, sinceMs: number) {
     return this.read(() => Number(this.db.prepare('SELECT count(*) AS n FROM memory_contests WHERE scope_id=? AND opened_at_ms>=?').get(scopeId, sinceMs)?.['n'] ?? 0));
   }
@@ -198,7 +280,9 @@ class SqliteMemoryJournalStore implements MemoryJournalStore {
     this.db.prepare('INSERT INTO memory_entry_revisions(scope_id,entry_id,revision,record) VALUES(?,?,?,?)').run(next.scopeId, next.entryId, next.revision, record);
     this.db.prepare('INSERT INTO memory_command_receipts(scope_id,command_id,entry_id,revision,record) VALUES(?,?,?,?,?)')
       .run(receipt.scopeId, receipt.commandId, receipt.entryId, receipt.revision, this.seal(receipt));
-    this.db.prepare('DELETE FROM memory_search WHERE rowid=?').run(id!); this.db.prepare('INSERT INTO memory_search(rowid,text) VALUES(?,?)').run(id!, memoryIndexText(next));
+    // A purged entry (S4B-4) keeps no search row: it has no text left.
+    const text = memoryIndexText(next);
+    this.db.prepare('DELETE FROM memory_search WHERE rowid=?').run(id!); if (text) this.db.prepare('INSERT INTO memory_search(rowid,text) VALUES(?,?)').run(id!, text);
     if (change.support) this.insertSupport(change.support);
     return { replayed: false, entry: next };
   }

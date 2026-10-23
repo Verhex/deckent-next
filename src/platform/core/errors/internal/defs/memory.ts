@@ -28,4 +28,8 @@ export const memoryErrors: ErrorDefinitions = Object.freeze({
   MEMORY_EVALUATION_NOT_INDEPENDENT: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_EVALUATION_NOT_INDEPENDENT', p, l) }) },
   MEMORY_EVALUATION_MAKER_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_EVALUATION_MAKER_UNKNOWN', p, l) }) },
   MEMORY_EVALUATOR_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_EVALUATOR_REQUIRED', p, l) }) },
+  // S4B-4 (texts in the `memory-review` family).
+  MEMORY_PURGE_REPLAY_HELD: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_PURGE_REPLAY_HELD', p, l), suggestion: t('memory.held.next.MEMORY_PURGE_REPLAY_HELD', p, l) }) },
+  MEMORY_PERSON_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_PERSON_REQUIRED', p, l) }) },
+  MEMORY_CONTEST_RESOLVED: { category: 'error', render: (p, l) => ({ message: t('error.MEMORY_CONTEST_RESOLVED', p, l) }) },
 });

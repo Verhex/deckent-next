@@ -1,5 +1,5 @@
 import { MEMORY_LIMITS, composeMemoryAutomation, encodeCommandProjection, independentMakerRows, isMemoryEvaluatorPrincipal, memorySearchTerms, memoryTemplate, parseMemoryEvaluationRecord,
-  readMemoryEvaluatorAnswer, memoryContestTargets, type AuditEvent, type MemoryAutomation, type MemoryEntry, type MemoryEvaluationRecord, type MemoryEvaluationRef,
+  readMemoryEvaluatorAnswer, memoryContestTargets, isMemoryTombstone, type AuditEvent, type MemoryAutomation, type MemoryEntry, type MemoryContent, type MemoryEvaluationRecord, type MemoryEvaluationRef,
   type MemoryEvaluationSpend, type MemoryModelRef, type MemoryResolvedEvaluation, type ModelInvocationReceipt, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { verifyInvocationSpendReservation } from '#engine/core/provider-spend/index.js';
@@ -111,6 +111,8 @@ export class MemoryEvaluationApplication {
     skipped: { entryId: string; reason: MemoryEvaluationSkip }[] }): Promise<MemoryEvaluationAlertKey | null> {
     const { deps } = this.ports, { entry } = candidate, skip = (reason: MemoryEvaluationSkip) => { pass.skipped.push({ entryId: entry.entryId, reason }); return null; };
     if (!entry.audience) return skip('not-system');
+    // S4B-4: a purged candidate has no text left; it is never sent to any model.
+    if (isMemoryTombstone(entry.content)) return skip('purged');
     const store = await deps.openStore('read');
     let prepared;
     try {
@@ -126,7 +128,7 @@ export class MemoryEvaluationApplication {
       if (!row || row.maker === null) return skip('no-independent-evaluator');
       const stop = capped(await store.recentEvaluations!(entry.scopeId, automation.evaluation.perScopePerDay + 1), deps.now(), automation);
       if (stop) return stop;
-      prepared = { sources, subjectDigest, row: { ...row, maker: row.maker }, titles: await this.conflictTitles(store, entry, automation) };
+      prepared = { sources, subjectDigest, row: { ...row, maker: row.maker }, content: entry.content, titles: await this.conflictTitles(store, { ...entry, content: entry.content }, automation) };
     } finally { store.close(); }
     const record = await this.call(candidate, mode, automation, prepared);
     pass.calls++;
@@ -134,23 +136,23 @@ export class MemoryEvaluationApplication {
   }
   /** §6.2 step 3: verified entries of the same audience that share a term with the candidate (one bounded search per term: a contradiction rarely
    * repeats every word), ids and titles only (never their bodies). */
-  private async conflictTitles(store: MemoryJournalStore, entry: MemoryEntry, automation: MemoryAutomation) {
+  private async conflictTitles(store: MemoryJournalStore, entry: MemoryEntry & { readonly content: MemoryContent }, automation: MemoryAutomation) {
     const terms = memorySearchTerms(`${entry.content.title} ${entry.content.body}`), max = automation.evaluation.conflictTitles, out = new Map<string, string>();
     if (!store.capabilities.fullTextSearch || !store.search) return [];
     for (const term of terms) {
       for (const id of (await store.search(entry.scopeId, [term], ['verified'], max)).slice(0, max)) {
         const other = out.size < max && !out.has(id) ? await store.load(entry.scopeId, id) : null;
-        if (other?.state === 'verified' && JSON.stringify(other.audience ?? null) === JSON.stringify(entry.audience)) out.set(other.entryId, other.content.title);
+        if (other?.state === 'verified' && !isMemoryTombstone(other.content) && JSON.stringify(other.audience ?? null) === JSON.stringify(entry.audience)) out.set(other.entryId, other.content.title);
       }
     }
     return [...out].map(([entryId, title]) => ({ entryId, title }));
   }
   private async call(candidate: Candidate, mode: 'shadow' | 'live', automation: MemoryAutomation,
     prepared: { sources: NonNullable<Awaited<ReturnType<typeof rederiveMemorySourceModels>>>; subjectDigest: string; row: MemoryEvaluatorRow & { maker: string };
-      titles: readonly { entryId: string; title: string }[] }) {
+      content: MemoryContent; titles: readonly { entryId: string; title: string }[] }) {
     const { deps, principal } = this.ports, { entry } = candidate, kd = deps.keyedDigest, { subjectDigest } = prepared;
     const data = { schemaVersion: 1, answerSchema: { schemaVersion: 1, entryId: 'string', subjectDigest: 'string', verdict: 'pass|fail|unknown', reasonCodes: 'string[]', conflicts: 'string[]' },
-      reasonCodes: automation.reasonCodes, entryId: entry.entryId, subjectDigest, candidate: { kind: entry.content.kind, title: entry.content.title, body: entry.content.body, lesson: entry.content.lesson },
+      reasonCodes: automation.reasonCodes, entryId: entry.entryId, subjectDigest, candidate: { kind: prepared.content.kind, title: prepared.content.title, body: prepared.content.body, lesson: prepared.content.lesson },
       evidence: prepared.sources.evidence, verifiedTitles: prepared.titles };
     const messages = [{ role: 'system' as const, content: memoryTemplate(TEMPLATE.id, TEMPLATE.version) }, { role: 'user' as const, content: JSON.stringify(data) }];
     const result = await this.ports.evaluator.invoke({ scopeId: entry.scopeId, commandId: candidate.recordId, row: prepared.row, messages, maxCompletionTokens: automation.evaluation.maxCompletionTokens });

@@ -31,7 +31,8 @@ export function verifyMemoryEntry(previous: MemoryEntry, input: { readonly actor
   readonly evaluation?: MemoryResolvedEvaluation | null; readonly sourceModels?: MemoryResolvedEvaluation['sourceModels'] | null }): MemoryEntry {
   const basis = memoryVerificationBasisSchema.safeParse(input.basis);
   if (!basis.success) throw new MemoryError('MEMORY_ENTRY_INVALID');
-  if (previous.state !== 'candidate') throw new MemoryError('MEMORY_TRANSITION_INVALID');
+  // S4B-4: purged content is gone; nothing is left to verify.
+  if (previous.state !== 'candidate' || 'purged' in previous.content) throw new MemoryError('MEMORY_TRANSITION_INVALID');
   let verification: MemoryEntry['verification'];
   if (basis.data.kind === 'human-review') {
     if (isAiPrincipal(input.actor)) throw new MemoryError('MEMORY_VERIFIER_NOT_HUMAN');

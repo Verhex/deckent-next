@@ -233,6 +233,7 @@
   "cli.paths.resource.fileEffects": "kaydedilen dosya değişiklikleri",
   "cli.paths.resource.treeScanCache": "dosya ağacı tarama önbelleği",
   "cli.paths.resource.autonomyShadow": "teslim özerkliği gölge kayıtları (kural kapalı, yalnız öneri)",
+  "cli.paths.resource.memoryPurges": "hafıza silme günlüğü (yedek geri yüklemede korunur, iş başlamadan yeniden uygulanır)",
   "cli.paths.resource.scratch": "geçici çalışma alanı",
   "cli.paths.resource.audit": "audit kayıtları",
   "cli.paths.resource.approvals": "onaylar ve anahtarları",

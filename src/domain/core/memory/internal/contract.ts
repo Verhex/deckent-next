@@ -31,6 +31,10 @@ export const memoryLessonClaimSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('lesson'), title: text(limits.titleMaxBytes), body: text(limits.bodyMaxBytes), cause: text(limits.lessonFieldMaxBytes),
     correction: text(limits.lessonFieldMaxBytes) }).strict(),
 ]);
+/** S4B-4 (§6.6, A11, owner S-M12): what a purge leaves of an entry's content in every revision — the keyed content digest (it blocks a
+ * re-proposal and reveals nothing), the purge record id and its reason code. No title, body, tag or lesson field survives. */
+export const memoryTombstoneSchema = z.object({ purged: z.literal(true), contentDigest: digest, digestKind: z.literal('keyed'), purgeRecordId: identitySchema,
+  reasonCode: identitySchema }).strict().readonly();
 export const memoryOriginSchema = z.object({ kind: z.enum(MEMORY_ORIGINS), ref: text(limits.originRefMaxBytes).nullable() }).strict().readonly();
 /** A reference to an evaluation record the engine resolves through its port (task evaluation, auditor verdict, ...): kind + id + digest. */
 export const memoryEvaluationRefSchema = z.object({ kind: identitySchema, id: identitySchema, digest }).strict().readonly();
@@ -43,7 +47,7 @@ const verificationSchema = z.discriminatedUnion('basis', [
   z.object({ basis: z.literal('independent-evaluation'), evaluator: actor, record: memoryEvaluationRefSchema, verifiedAtMs: counterSchema }).strict(),
 ]);
 export const memoryEntrySchema = z.object({ schemaVersion: z.union([z.literal(1), z.literal(MEMORY_SCHEMA_VERSION)]), scopeId: identitySchema, entryId: identitySchema,
-  revision: counterSchema.positive(), state: z.enum(MEMORY_STATES), content: memoryContentSchema, contentDigest: digest,
+  revision: counterSchema.positive(), state: z.enum(MEMORY_STATES), content: z.union([memoryContentSchema, memoryTombstoneSchema]), contentDigest: digest,
   provenance: z.object({ author: z.object({ issuer: identitySchema, subject: identitySchema, ai: z.boolean() }).strict().readonly(), origin: memoryOriginSchema,
     proposedAtMs: counterSchema, commandId: identitySchema }).strict().readonly(),
   verification: verificationSchema.nullable(),
@@ -57,8 +61,12 @@ export const memoryEntrySchema = z.object({ schemaVersion: z.union([z.literal(1)
   const consistent = entry.state === 'candidate' ? entry.verification === null && entry.retirement === null
     : entry.state === 'verified' ? entry.verification !== null && entry.retirement === null : entry.retirement !== null;
   if (!consistent || entry.retirement?.supersededBy === entry.entryId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'MEMORY_ENTRY_INVALID' });
+  if ('purged' in entry.content && entry.content.contentDigest !== entry.contentDigest) context.addIssue({ code: z.ZodIssueCode.custom, message: 'MEMORY_ENTRY_INVALID' });
 }).readonly();
 export type MemoryContent = z.infer<typeof memoryContentSchema>;
+export type MemoryTombstone = z.infer<typeof memoryTombstoneSchema>;
+/** Whether an entry's content was purged (only the tombstone is left). */
+export const isMemoryTombstone = (content: MemoryContent | MemoryTombstone): content is MemoryTombstone => 'purged' in content;
 export type MemoryAudience = z.infer<typeof memoryAudienceSchema>;
 export type MemoryLessonClaim = z.infer<typeof memoryLessonClaimSchema>;
 export type MemoryOrigin = z.infer<typeof memoryOriginSchema>;
@@ -74,7 +82,7 @@ export interface MemoryResolvedEvaluation { readonly record: MemoryEvaluationRef
   readonly sourceModels: readonly { readonly channelId: string; readonly modelId: string; readonly maker: string | null }[] }
 export type MemoryErrorCode = 'MEMORY_ENTRY_INVALID' | 'MEMORY_TRANSITION_INVALID' | 'MEMORY_VERIFIER_NOT_HUMAN' | 'MEMORY_SELF_VERIFICATION'
   | 'MEMORY_EVALUATION_UNAVAILABLE' | 'MEMORY_EVALUATION_NOT_PASSED' | 'MEMORY_EVALUATION_OTHER_CONTENT' | 'MEMORY_QUERY_INVALID' | 'MEMORY_AUTOMATION_INVALID'
-  | 'MEMORY_EVALUATION_NOT_INDEPENDENT' | 'MEMORY_EVALUATION_MAKER_UNKNOWN' | 'MEMORY_EVALUATOR_REQUIRED';
+  | 'MEMORY_EVALUATION_NOT_INDEPENDENT' | 'MEMORY_EVALUATION_MAKER_UNKNOWN' | 'MEMORY_EVALUATOR_REQUIRED' | 'MEMORY_PERSON_REQUIRED';
 export class MemoryError extends Error {
   constructor(readonly code: MemoryErrorCode) { super(code); this.name = 'MemoryError'; }
 }

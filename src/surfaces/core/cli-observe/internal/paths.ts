@@ -32,6 +32,7 @@ const descriptions = (locale: Locale): Readonly<Record<string, string>> => ({
   treeScanCache: t('cli.paths.resource.treeScanCache', {}, locale),
   scratch: t('cli.paths.resource.scratch', {}, locale),
   autonomyShadow: t('cli.paths.resource.autonomyShadow', {}, locale),
+  memoryPurges: t('cli.paths.resource.memoryPurges', {}, locale),
   audit: t('cli.paths.resource.audit', {}, locale),
   approvals: t('cli.paths.resource.approvals', {}, locale),
   approvalPreviews: t('cli.paths.resource.approvalPreviews', {}, locale),
