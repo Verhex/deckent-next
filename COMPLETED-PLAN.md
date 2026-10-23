@@ -1,5 +1,39 @@
 # Deckent Next — tamamlanan plan
 
+Bu belge inmiş sürümlerin ve kapanmış işlerin kaydıdır: her sürüm için paket, sürüm kanıtı (tam test, bağımsız inceleme, hosted CI), canlı geçiş ve açık kalan takipler. Kod inmesi kabul değildir; kabul kanıtı ayrıca yazılır. Sürümün özellik listesi [CHANGELOG](CHANGELOG.md)'dadır. Yeni sürümler en üste eklenir; 2026-10-14 ve öncesinden taşınan bölümler taşındıkları sırayla durur, bu yüzden aralarında tarih sırası karışıktır.
+
+## alpha.53 — 2026-10-23 (PR #111, merge `b10f46ae`; canlı 00:47Z, N1 00:48Z; defter v59, runtime protocol v29)
+
+- **Paket:** owner'ın 2026-10-22 gecesi öne çektiği beta işleri: TESLIM-KARTI-OZET (teslim, benimseme ve kuyruk kartlarında tek tipli `DeliverySummary` insan özeti), OTONOM-TESLIM'in ilk adımı (gölge kural `autonomy@1`; hiçbir şeyi yapmaz), BETA-ISCI-BAGLAM (Codex keşfi kapalı, Cursor seyrek checkout, proje başına işçi talimat özeti ve `deckent coding instructions` güveni), CLI-INSAN kalanı ve Docker yoklama zaman aşımı bekletmesi. Ayrıntı CHANGELOG alpha.53 satırı; owner seçimleri [owner-decisions](.deckent/docs/decisions/owner-decisions.md#alpha53-2026-10-23).
+- **Sürüm kanıtı:** yerel tam test `946e46e2` 1104 dosya / 10313 geçti / 2 başarısız / 8 atlandı; iki başarısız test eski doğrulama kimliğini bekliyordu ve yalnız test değişikliğiyle `ad02fc7e`'de düzeltildi. Astra REVISE 2734 (talimat kartı tam olarak gösterdiği yere ve içeriğe bağlanmalı; özetlerde config sırları maskelenmeli) düzeltildi, PASS 2736 `d58467023` üzerinde; hosted CI 40/40 yeşil.
+- **Canlı geçiş:** owner "Birleştir ve geç"; switch `b10f46ae8fd0-12aed6973728`; N1 teslim klonu `4166bfbd` → `b10f46ae` hızlı ileri alındı; proje-wsl yeniden başlatıldı. Geri alma: alpha.52 (`4166bfbd2892-e673f0035254`) işaretçi geçişi; okuma uyumu ve sınırlar known-limits "Rollback to alpha.52" bölümünde.
+- **Geçişten sonra bulunan boşluk:** işçi talimat özeti `.deckent/worker-instructions.md` iş hedefi klonunun çalışma ağacından okunuyordu; klonun HEAD'i benimsemeyle ilerlemediği için özet bulunamadı. N1'de klon geçiş commit'ine alındı ve `n1-switch.sh` bunu her geçişte yapar; ürün düzeltmesi (dosyayı hedef ref ağacından okumak) alpha.54 R1'dir.
+- **Açık takipler:** N1'de talimat güveni verildi; Codex/Cursor şablonunun yeniden bağlanması ve N1 önce/sonra ölçümü owner kartı olarak bekliyor; PLAN Gelen kutusu "alpha.53 takipleri".
+
+## PLAN Gelen kutusundan kapananlar — 2026-10-23 belge denetimi
+
+Aşağıdaki bulgular kapandığı için PLAN Gelen kutusundan çıkarıldı. Her maddenin özgün metni birebir durur; kapanış notu altındadır.
+
+- **`deckent-mcp --help` (2026-10-21, alpha.49):** yardım yerine `MCP_START_FAILED` basıp 0 ile çıkıyor; CLI-INSAN (Sıradaki 14) kapsamına aday.
+    - Kapanış: alpha.51'de düzeldi; `deckent-mcp --help` yardımı basıp 0 ile çıkar (CHANGELOG alpha.51, `composition/core/mcp/internal/entry.ts`).
+- **İlk dış proje kurulumunda (proje-wsl, 2026-10-21, alpha.49) üç kusur:** (1) `/model` "Yalnız bu oturum" seçimi, kalıcı proje/varsayılan model yokken ilk turda `TERMINAL_CHAT_NOT_CONFIGURED` ile düşer: `assertTerminalChatReady` (`src/composition/core/terminal-chat/internal/turn.ts:105`) oturum pinine bakmadan `describeTerminalChat` sonucu reddeder; PTY'de yeniden üretildi, "Bu oturum ve varsayılanım olsun" ile çalışıyor. (2) Yeni solo kurulumda tam otomatik ve tam erişim engelli: ilk kurulum şablonu v13'te `permission-mode`/`set` izni yok ve bunu veren ürün komutu yok (canlıda elle kurulmuş `live-permission-modes` izni var).
+    - Kapanış: (1) alpha.51 PRE-10 OTURUM-MODEL-PIN, (2) alpha.51 PRE-9 SOLO-MOD-IZNI. (3) ve host notu PLAN Gelen kutusunda açık kalır.
+- **alpha.50 takipleri (2026-10-21):** (a) `doctor` canlı, N1 ve proje-wsl'de alpha.50 başlangıcından sonra "Çalışan servis eski yapılandırmayla çalışıyor" diyor; başlangıçtaki işçi imajı yenilemesi (r22-20261021) yapılandırmayı yazar ve servis onu yeni Run'lara zaten uygular; uyarı yanıltıcı (kaynak: lead, 2026-10-21).
+    - Kapanış: alpha.51 DOCTOR-STALE; `doctor` her istekte yeniden okunan yapılandırma için servisi eski saymaz (CHANGELOG alpha.51).
+- **Belge kayması:** DOGFOOD-PARALLEL-DELIVERY açık görünüyordu ama alpha.25'te indi (arşive taşındı).
+    - Kapanış: kayıt düzeltmesiydi; iş alpha.25'te inmişti.
+- `n1-switch.sh` N1 teslim klonunu eşitler (yapıldı 2026-10-22; alpha.52 geçişinde c6c4c020 → 4166bfbd hızlı ileri aldı; kuyruk açıksa ya da ata değilse çıkış 6).
+    - Kapanış: araç düzeltmesi yapıldı; alpha.53 geçişinde de klon `4166bfbd` → `b10f46ae` ileri alındı.
+- Dalga 8 yeniden koşusu alpha.51'den sonra (kaynak: alpha.50 takipleri). Tur iptali etkisi için bkz. IPTAL-ETKI-DOGRULUGU.
+    - Kapanış: dalga 8 yeniden koşusu ve dalga 9 benimsendi ve main'de (PLAN Şimdi, 2026-10-22).
+
+## alpha.52 — 2026-10-22 (PR #110, merge `4166bfbd`; canlı 20:20Z, N1 20:21Z; defter v59, runtime protocol v29)
+
+- **Paket:** CURSOR-ISCI: Cursor işçileri birinci sınıf; PRE-3'ün ve BETA-SAGLAYICI-GOZLEM'in Cursor kısımları. Ayrıntı CHANGELOG alpha.52 satırı.
+- **Sürüm kanıtı:** yerel tam test bir kez `101bf1c1` üzerinde (10095 geçti / 0 başarısız); Astra REVISE 2730 (token sayaçları, son metin JSON dizisi) düzeltildi, PASS 2732 `0af045ba` üzerinde.
+- **Canlı geçiş:** owner "Birleştir ve geç"; switch `4166bfbd2892-e673f0035254`; geçişten önce var olan tutulan rezervasyonlar değişmedi; N1 teslim klonu `c6c4c020` → `4166bfbd` hızlı ileri alındı; proje-wsl yeniden başlatıldı. Kanıt dış `proof/CURSOR-2026-10-22/`.
+- **Açık takipler:** Cursor kataloğu `cursor-cli-subscription` canlıda ve N1'de henüz kayıtlı değil (owner kuralı: geçiş kalıcı olduktan sonra); kayıttan sonra alpha.51'e dönüş yalnız yedekten. C7 canlı kabul: N1'de konteynerde gerçek bir Cursor kartı uçtan uca.
+
 ## alpha.51 — 2026-10-21 (PR #108, merge `1e74dd23`; canlı 22:02Z, N1 22:02Z; defter v59, runtime protocol v29)
 
 - **Paket:** PRE-8 PROJE-ANAHTAR v2, PRE-9 SOLO-MOD-IZNI, PRE-10 OTURUM-MODEL-PIN, gelen kutusu düzeltmeleri ve alpha.50 takipleri; ayrıntı CHANGELOG alpha.51 satırı.
@@ -14,6 +48,28 @@
 - **Canlı öncesi gerçek binary denemesi (owner isteği) 4/4 geçti:** karşılanmayan gereksinim park eder; uyan gereksinim başlatır; probe sürerken iptal yuvayı tutar, ikinci Run `RUN_POOL_FULL` alır, probe bitince bir serbest bırakma; servis başlangıcı bu kurulumun artık probe konteynerini kaldırır, yabancı konteyneri dokunmaz.
 - **Açık takipler:** PLAN Gelen kutusu "alpha.50 takipleri" (a–e).
 
+## alpha.39–49 — 2026-10-15…20 (kısa kayıt; özellikler CHANGELOG'da)
+
+Bu sürümlerin ayrıntılı kapanış bölümü yazılmadı. Her satır CHANGELOG'daki sürüm satırının kimlik özetidir; kabul durumları PLAN'daki kapı ve kanıt satırlarındadır.
+
+| Sürüm | Tarih | Merge | PR | Canlı / N1 (UTC) | Defter | Paket |
+|---|---|---|---|---|---|---|
+| alpha.49 | 2026-10-20 | `ed767813` | #106 | 15:42 / 15:42 | v58 | SOLO-PROFILE, CONFIG-PARTIAL-NOTICE, Docker mimari çıkışı, pack-smoke koruması |
+| alpha.48 | 2026-10-20 | `b8b23600` | #104, #105 | 12:52 / 12:53 | v58 | CLI-İNSAN, rehberli kurulum, güvenlik (SEC-1…SEC-7), politika şablonu v13, monitor |
+| alpha.47 | 2026-10-19 | `98368e10` | #101, #103 | 16:28 / 16:29 | v58 | ALPHA47-RUNTIME R1–R6 (lead olmadan paralel teslim) |
+| alpha.46 | 2026-10-18 | `a4d2d444` | #100 | 11:20 / 11:42 | v58 | Beta adayı: PLAN-IZIN, S6-BAGIMLILIK, SANDBOX-SPAWN, TERMINAL-SABIT-DUZEN, TESLIM-FARK, HARNESS-FARK hızlı kazanımları |
+| alpha.45 | 2026-10-17 | `9b6af311` | #99 | 22:19 / 22:23 | v58 | QUEUE-HISTORY, PLAN-TAVAN, MONITOR-HIZ, TERMINAL-SERIT |
+| alpha.44 | 2026-10-17 | `f11c7617` | #97 | 11:43 / 11:43 | v58 | BENIMSEME-DEPO-KIMLIGI, NODE24-CRASH, CRASH-LOOP-BREAKER, ISCI-IMAJ-SAYAC, JEV-114 |
+| alpha.43 | 2026-10-16 | `eb91fa12` | #95, #96 | 23:43 / 23:43 | v57 | POLICY-V12, TESLIM-KUYRUGU |
+| alpha.42 | 2026-10-16 | `7ea62992` | #93, #94 | 15:34 / 15:34 | v56 | KUCUK-PAKET-2026-10-16, DO-HOTFIX |
+| alpha.41 | 2026-10-16 | `cf8915ff` | #91, #92 | 10-15 23:37 / 23:37 | v56 | BAGIMLILIK-TAZELEME, PLATFORM-TEMIZLIK |
+| alpha.40 | 2026-10-15 | `421813ec` | #89, #90 | 17:37 / 17:37 | v56 | POLICY-KILAVUZ, CI-BWRAP-CACHE, DEVIR-ARACI, BWRAP-LISANS-GOMULU |
+| alpha.39 | 2026-10-15 | `33acbbfe` | #88 | 12:32 / 12:32 | v56 | Beta öncesi dalga: S6 sır kapısı, NATIVE-BAGLAM, MCP AI aktörü, denetim kontrol noktaları, /runs tuşları, ilk registry, ücret ekseni |
+
+2026-10-23'e kadar PLAN "Şimdi" bölümünde duran iniş özeti (birebir):
+
+**İndi (kayıt, iş değil):** alpha.39 kapı kodlarını çıkardı: S6 sır kapısı, NATIVE-BAGLAM, MCP AI aktörü + taban, denetim kontrol noktaları, /runs tuşları (Y1), ilk registry, ücret ekseni. alpha.43 teslim kuyruğunu, alpha.44 defter v58 + crash-loop breaker'ı, alpha.45 sistem-kıskaçlı plan tavanını getirdi (PR #99 main'de). alpha.46 beta adayı paketi (plan izinlerini sistem türetir; S6 bağımlılık sınıfı); alpha.47 çalışma zamanı R1–R6, beta öncesi son kod paketi; alpha.48 CLI-İNSAN, rehberli kurulum ve güvenlik; alpha.49 solo profil ve küçük düzeltmeler; alpha.50 (2026-10-21, canlı 08:47Z) beta öncesi PRE-1…7 ve PB-COLDSTART faz A; alpha.51 (2026-10-21, canlı 22:02Z) PRE-8/9/10 ve gelen kutusu artıklarını getirdi. Bunların kabulü aşağıdaki kanıt satırlarındadır; kod inmesi kabul değildir.
+
 ## alpha.36–38 — 2026-10-14 (PR #85, #86, #87; PLAN satırlarının kapanışı)
 
 - **alpha.36 — canlıya + terminal teslim penceresi:** TERMINAL-SABIT R2 (sabit giriş alanı, odak kuralı, aktif iş şeridi), terminal `/deliver` penceresi, TESLIM-GUVENLIK (doğrulanmış insan y/N + anlamlı commit), KUCUK-DUZELTMELER; commit `c9b36b7c`, canlı + N1 2026-10-14 09:38Z.
@@ -21,11 +77,29 @@
 - **alpha.38 — CI-KARARLILIK:** servis kimliği bağlantı kabulünden önce yayımlanır, geri yükleme ve saat izlemeli kabuk yazma kümeleri; PR #87 ile main yeşil (hosted CI kapısı yeniden katı); commit `7eba8b1f`, canlı + N1 2026-10-14 17:03Z.
 - **Kapı 5 (main hosted CI yeşil):** 2026-10-14, `7eba8b1f` (CI-DEBT/CI-KARARLILIK satırı kapandı; node 26 MCP zaman aşımı açık sınır olarak CHANGELOG alpha.30/38'de).
 
-## alpha.24 — Unreleased (`wave/batch-e`, main'de: PR #67, merge `3e47aeab`)
+## alpha.25–35 — 2026-10-10…13 (kısa kayıt; özellikler CHANGELOG'da)
+
+Bu sürümlerin bir kısmının iş satırları [PLAN arşivinde](.deckent/docs/plan/archive-2026-10-14.md) "İnen ve kapanan işler" bölümündedir; burada yalnız kimlik özeti durur.
+
+| Sürüm | Tarih | Merge | PR | Canlı / N1 (UTC) | Paket |
+|---|---|---|---|---|---|
+| alpha.35 | 2026-10-13 | `ef1aecda` | #84 | 21:47 / 21:47 | POLITIKA-P0, SABLON-V11, RESPONSES-SIFRELI-DUSUNME; ilk canlı /do teslimleri |
+| alpha.34 | 2026-10-13 | `69d10569` | #83 | 17:09 / 17:09 | HAVUZ-KURULUM |
+| alpha.33 | 2026-10-13 | `25dd799a` | #82 | 14:53 / 14:53 | BRAIN-DUSUNME, Brain graf sürümü |
+| alpha.32 | 2026-10-13 | `7e87f03c` | #80 | 11:58 / 12:00 | DO uçtan uca dalgası: RUN-HAZIR-A/B, DONGU-KAPATMA, KOTA-D1/D1B, BRAIN-BAGLAM, DO-HATA-METINLERI |
+| alpha.31 | 2026-10-12 | `f92847b9` | #79 | 21:03 / 21:03 | EXECUTION dalgası 1: KARAR-KAYDI, DO-DİLİM-A, DO-DİLİM-B |
+| alpha.30 | 2026-10-12 | `187bb341` | #78 | 12:32 / 12:32 | Günlük düzeltme partisi: GUVENLIK-DUZELTME, CI-ONARIM |
+| alpha.29 | 2026-10-11 | `157d5db7` | #76 | 15:20 / 15:20 | M5-BIND dalgası: M5-D1, M5-D2, M5-D7 K10, M5-K8 |
+| alpha.28 | 2026-10-10 | `5716fd29` | #75 | 23:48 / 23:48 | BATCH-G: M5-D1/D2/K8/K10 temelleri, NEEDS-INPUT-RESUME |
+| alpha.27 | 2026-10-10 | `a73cef45` | #74 | 23:10 / 23:22 | SDK-IMPORT-FIX hotfix |
+| alpha.26 | 2026-10-10 | `98080410` | #72 | 17:29 / 17:29 | COMPACT-ADAPTERS, SANDBOX-HOME-WALK, MONITOR-SOURCE-FILTER, DOGFOOD düzeltmeleri |
+| alpha.25 | 2026-10-10 | `0cf65401` | #70 | 15:43 / 15:44 | COMPACT, DOGFOOD-PARALLEL-DELIVERY, CORE-BUDGET-HOLD, SECRET-HELPER, RESTART-RECOVERY, WORKER-NEEDS-INPUT |
+
+## alpha.24 — 2026-10-10 (`wave/batch-e`, main'de: PR #67, merge `3e47aeab`; canlı 09:47Z, N1 10:35Z)
 
 - **Aday içerik (batch E, lead bütçe bölünmesi 2026-10-10):** MCP-TURN-TRUST-CARD-I18N dilim 1 (dogfood benimsemesi `8208517a` → `0606d74c`: `describeMcpTrustCard` EN/TR katalogdan, EN baytları korunur; ilk dogfood işi, Codex worker, 2026-10-10), FLAKY-CLOCK-FIX, MAIN-RED-FIX, CONNECT-LOCALITY, SWITCH-TOOLING. Kalan hatlar batch E2'de (PLAN NEXT-PACKAGE-2026-10-10).
 - **Yazar kanıtı (bu host, bağımsız değil):** FLAKY-CLOCK 30× yük altında 30/30 (240 test); SWITCH-TOOLING host testleri 30/30; MAIN-RED-FIX 14/18 yeşil, 3'ü yalnız küçük HOME ile, 1 kırmızı (PLAN MAIN-RED-FIX). Sürümler değişmedi (protokol 26, ledger 50, policy v9).
-- **Durum:** main'e indi: PR #67, merge `3e47aeab` (2026-10-10), sürüm girdisi `9eb0f213`, `package.json` 1.0.0-alpha.24. Canlı/N1 geçişi: stage 2026-10-10 09:40Z başladı (`proof/ALPHA24-SWITCH-2026-10-10/`), sonuç kanıtta yok, doğrulanamadı. Astra toplu inceleme kanıtı yok, doğrulanamadı. Entegrasyon kanıtı `proof/BATCH-E-2026-10-10/WORKER.md`.
+- **Durum:** main'e indi: PR #67, merge `3e47aeab` (2026-10-10), sürüm girdisi `9eb0f213`, `package.json` 1.0.0-alpha.24. Canlı/N1 geçişi: stage 2026-10-10 09:40Z başladı (`proof/ALPHA24-SWITCH-2026-10-10/`); bu bölüm yazılırken sonuç kanıtta yoktu. Düzeltme 2026-10-23: CHANGELOG alpha.24 satırı canlı 09:47Z, N1 10:35Z ve switch `3e47aeababf1-b2dfbc5fb429` kaydeder. Astra toplu inceleme kanıtı yok, doğrulanamadı. Entegrasyon kanıtı `proof/BATCH-E-2026-10-10/WORKER.md`.
 
 ## alpha.23 — 2026-10-09 (PR #65)
 

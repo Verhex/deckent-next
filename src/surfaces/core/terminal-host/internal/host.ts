@@ -2,6 +2,7 @@ import { render, type Instance } from 'ink';
 import { createElement, type ReactElement } from 'react';
 import { WorklinePaletteProvider, type WorklineInkPalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
+import { createClipboardWriter, type ClipboardResult } from './clipboard.js';
 import { mainScreenOutput, mouseFilteredInput, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, osc52Copy, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
 
 /** The terminal bell: audible or a taskbar/tab flash by the terminal's own setting; the one signal every terminal and multiplexer passes through. */
@@ -19,6 +20,8 @@ export interface TerminalHostContext {
   readonly copyText?: (text: string) => void;
   /** Rings the terminal bell (BEL) only while the terminal has reported that its window lost focus; never when focus is unknown. Present only when attention notices are on. */
   readonly notify?: () => void;
+  /** T1 `/copy`: the clipboard request writer (OSC 52, tmux-wrapped, byte-capped); present on every real TTY, not only in the full window. */
+  readonly clipboard?: (text: string) => ClipboardResult;
 }
 
 export interface TerminalHostOptions {
@@ -58,7 +61,7 @@ export async function runTerminalHost(options: TerminalHostOptions): Promise<voi
   const realInput = stdin ?? process.stdin, mouse = (fullscreen || attention) && realInput.isTTY === true ? mouseFilteredInput(realInput) : null;
   const reportingOff = () => { try { out.write(`${fullscreen ? MOUSE_REPORTING_OFF : ''}${attention ? FOCUS_REPORTING_OFF : ''}`); } catch { /* the terminal is gone */ } };
   const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
-    options.view({ fullscreen, transcriptExit,
+    options.view({ fullscreen, transcriptExit, ...(out.isTTY === true ? { clipboard: createClipboardWriter(out) } : {}),
       ...(mouse && attention ? { notify: () => { if (mouse.focus.state() !== 'unfocused') return; try { out.write(ATTENTION_BELL); } catch { /* the terminal is gone */ } } } : {}),
       ...(mouse && fullscreen ? { wheel: mouse.wheel, pointer: mouse.pointer, copyText: (text: string) => { try { out.write(osc52Copy(text)); } catch { /* the terminal is gone */ } } } : {}) }));
   // Ink 7 treats CI env as non-interactive even on a TTY (ink.js resolveInteractiveOption); the workline runs on a TTY, so force it there.

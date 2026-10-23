@@ -251,6 +251,7 @@
     "maxTrackedRuns": 128,
     "notify": "bell",
     "persistHistory": true,
+    "responseStyle": "standard",
     "serviceStartTimeoutMs": 20000,
     "theme": "auto",
     "viewportRows": 2000

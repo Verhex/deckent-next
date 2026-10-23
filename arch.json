@@ -1171,6 +1171,7 @@
     },
     "src/surfaces/core/terminal-host": {
       "dependencies": [
+        "src/platform/core/redaction",
         "src/surfaces/core/terminal-kit",
         "src/surfaces/core/terminal-render",
         "src/surfaces/core/terminal-theme",
@@ -3633,7 +3634,8 @@
       "tuinotify",
       "tuiqueue",
       "tuieditor",
-      "tuisession"
+      "tuisession",
+      "termanswer"
     ]
   },
   "literals": {

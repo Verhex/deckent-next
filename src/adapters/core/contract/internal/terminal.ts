@@ -3,12 +3,16 @@ import { z } from 'zod';
 import { modelReferenceSchema, type ModelReference } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, isRecord, registerConfigSection } from '#platform/index.js';
 import chatDefaults from './terminal-chat-defaults.json' with { type: 'json' };
+import responseStyleData from './terminal-response-styles.json' with { type: 'json' };
 
 /** T2 presentation vocabularies (first entry = default); the workline's own copy (`TERMINAL_THEME_SETTINGS`) is tested equal. */
 export const TERMINAL_THEMES = ['auto', 'dark', 'light', 'dark-daltonized', 'light-daltonized', 'ansi'] as const;
 export const TERMINAL_BANNERS = ['full', 'compact', 'off'] as const;
 /** T2 attention notices (first entry = default): the terminal bell while the window is unfocused, or nothing. */
 export const TERMINAL_NOTIFY = ['bell', 'off'] as const;
+/** T6 response style vocabulary: registry data (`terminal-response-styles.json`); `default` is the id that adds nothing to the model-facing instructions. */
+export const TERMINAL_RESPONSE_STYLES = Object.freeze(Object.keys(responseStyleData.styles)) as readonly [string, ...string[]];
+const DEFAULT_RESPONSE_STYLE = responseStyleData.default;
 
 /** Operator terminal chat is a governed model invocation: the section names a declared catalog model;
  * catalog revision and binding are read fresh per turn and enforced by the model invocation service. */
@@ -30,6 +34,8 @@ export const terminalConfigSchema = z.object({
   banner: z.enum(TERMINAL_BANNERS).default(TERMINAL_BANNERS[0]),
   /** T2 (T-STARTUP): clear the visible screen (never the scrollback) when the interactive workline opens on a terminal. */
   clearOnStart: z.boolean().default(true),
+  /** T6 (alpha.54): how the model words its answers (`standard` adds nothing; the other ids add one line to the model-facing instructions). Read per turn. */
+  responseStyle: z.enum(TERMINAL_RESPONSE_STYLES).default(DEFAULT_RESPONSE_STYLE),
   layout: z.enum(['fullscreen', 'inline']).default('fullscreen'), // TERMINAL-SABIT-DUZEN: full window, or inline (native scrollback)
   /** T2 (alpha.54): `bell` rings the terminal bell when work finishes or a card waits while the window reports it lost focus; `off` never does. */
   notify: z.enum(TERMINAL_NOTIFY).default(TERMINAL_NOTIFY[0]),
@@ -119,6 +125,13 @@ export function readTerminalFetchConfig(config: Record<string, unknown>): Termin
   const fetch = config['terminal'] === undefined ? undefined : terminalConfigSchema.parse(config['terminal']).fetch;
   const { egress, allowedHosts, maxBytes, timeoutMs, maxRedirects } = fetch ?? terminalConfigSchema.shape.fetch.unwrap().parse({ schemaVersion: 1 });
   return Object.freeze({ egress, allowedHosts: Object.freeze([...allowedHosts]), maxBytes, timeoutMs, maxRedirects });
+}
+
+export type TerminalResponseStyle = { readonly id: string; readonly instruction: string | null };
+/** The configured response style with the instruction line it adds to a turn (null for the default style or an id without a line). */
+export function readTerminalResponseStyle(config: Record<string, unknown>): TerminalResponseStyle {
+  const id = config['terminal'] === undefined ? DEFAULT_RESPONSE_STYLE : terminalConfigSchema.parse(config['terminal']).responseStyle;
+  return Object.freeze({ id, instruction: (responseStyleData.styles as Readonly<Record<string, string | null>>)[id] ?? null });
 }
 
 /** Which setting chose the terminal's model: the session's pin, the project's `terminal.chat.reference`, the user's `terminal.defaultModel`, or the

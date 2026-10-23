@@ -40,6 +40,8 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   // T5: names the open conversation (`/rename <title>`); the /resume picker shows the title and filters by typed text.
   { name: 'rename', group: 'session', descriptionKey: 'terminal.slash.rename', argumentKey: 'terminal.slash.renameArgument' },
   { name: 'clear', group: 'session', descriptionKey: 'terminal.slash.clear' },
+  // T1: sends the latest (or n-th latest) answer to the terminal clipboard; the argument is typed, the palette row completes `/copy ` and waits for it.
+  { name: 'copy', group: 'session', descriptionKey: 'tuicopy.slash.copy', argumentKey: 'tuicopy.slash.copyArgument' },
   { name: 'mode', group: 'settings', descriptionKey: 'terminal.slash.mode', argumentKey: 'terminal.slash.modeArgument' },
   // TL-A D6: shows or hides the reasoning preview (toggle, or `on`/`off`); runs at once from the palette.
   { name: 'reasoning', group: 'settings', descriptionKey: 'terminal.slash.reasoning' },
@@ -64,10 +66,10 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
 ]);
 
 /**
- * Names alpha.54 terminal lanes (T1 `/copy`) will register. They are held out of `WORKLINE_SLASH_COMMANDS` until their behaviour exists, so the palette
+ * Names alpha.54 terminal lanes may still register. They are held out of `WORKLINE_SLASH_COMMANDS` until their behaviour exists, so the palette
  * and `/help` never list a command that does nothing; the lane that lands the behaviour moves its name into the registry and out of this list.
  */
-export const RESERVED_SLASH_COMMAND_NAMES: readonly string[] = Object.freeze(['copy']);
+export const RESERVED_SLASH_COMMAND_NAMES: readonly string[] = Object.freeze([]);
 
 /** Read-only inspect commands (S09). Each is answered by an optional port that re-reads a typed query per call; `status` keeps its static line without one. */
 export const INSPECT_SLASH_COMMANDS = Object.freeze(['status', 'model', 'usage', 'doctor', 'scope'] as const);
