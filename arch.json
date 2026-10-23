@@ -1516,16 +1516,11 @@
         "src/domain/core/task-graph",
         "src/engine/core/attempts",
         "src/engine/core/dispatch",
-        "src/engine/core/model-invocation",
         "src/engine/core/runs",
         "src/engine/core/task-evaluation",
         "src/platform/core/config-fields",
-        "src/domain/core/model-invocation",
-        "src/engine/core/model-allocation",
-        "src/domain/core/provider-spend",
-        "src/engine/core/provider-spend",
-        "src/engine/core/workspace-patch",
-        "src/domain/core/worker-event"
+        "src/domain/core/worker-event",
+        "src/adapters/core/sqlite-ledger-migrations"
       ],
       "plan": "STORE"
     },
@@ -3671,6 +3666,25 @@
         "src/surfaces/core/cli-terminal"
       ],
       "plan": "LEARNING"
+    },
+    "src/adapters/core/sqlite-ledger-migrations": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/model-invocation",
+        "src/engine/core/attempts",
+        "src/engine/core/model-invocation",
+        "src/domain/core/attempt",
+        "src/domain/core/run",
+        "src/engine/core/runs",
+        "src/engine/core/task-evaluation",
+        "src/engine/core/model-allocation",
+        "src/domain/core/provider-spend",
+        "src/engine/core/provider-spend",
+        "src/engine/core/workspace-patch",
+        "src/domain/core/task-graph",
+        "src/engine/core/dispatch"
+      ],
+      "plan": "STORE"
     }
   },
   "composition": {
