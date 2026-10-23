@@ -28,6 +28,8 @@ export const runLifecycleCommandSchema = z.discriminatedUnion('action', [
 export const runProgressionParkCommandSchema = base.extend({ failureCode: identitySchema }).strict();
 /** S5b: a safety hold's input; its source is bound by composition to the producer (Nervous pause, Auditor park), never by a caller. */
 export const runSafetyHoldCommandSchema = base.extend({ holdReason }).strict();
+/** S6R-3: the broker's hold input; the revision is read at write time (`holdOnce`). */
+export const runSafetyHoldOnceSchema = runSafetyHoldCommandSchema.omit({ expectedRevision: true });
 export type RunLifecycleCommand = z.infer<typeof runLifecycleCommandSchema>;
 /** Trusted, freshly authenticated application-to-ledger transition. */
 export const runLifecycleWriteSchema = base.extend({ action: z.enum(['close', 'resume', 'hold', 'answer', 'expire', 'park-task', 'park-progression', 'accept', 'reject']),
@@ -153,6 +155,16 @@ export class RunLifecycleApplication {
         subject: { kind: 'run-lifecycle', action: 'hold', deciderClass: 'system', holdSource, runId: command.runId, commandId: command.commandId,
           inputDigest: createHash('sha256').update(command.holdReason).digest('hex'), taskId: null, revision: snapshot.revision, evidence: null } });
     });
+  }
+  /** S6R-3: the Nervous broker's hold of one Run, replay-safe by its case-derived command id: a committed receipt is the result, a Run this source
+   * already holds stays as it is (null), otherwise the hold is written at the current revision (a CAS loss is retried by the next replay). */
+  async holdOnce(source: SafetyHoldSource, input: unknown, credential?: unknown) {
+    const command = runSafetyHoldOnceSchema.parse(input);
+    const prior = await this.store.loadRunReceipt?.(command.scopeId, command.commandId);
+    if (prior) return prior;
+    const run = runSnapshotSchema.parse(await this.store.loadRun(command.scopeId, command.runId));
+    if (readRunHold(run.state)?.source === source) return null;
+    return this.holdFrom(source, { ...command, expectedRevision: run.revision }, credential);
   }
   async execute(input: unknown, credential?: unknown) {
     const command = runLifecycleCommandSchema.parse(input);

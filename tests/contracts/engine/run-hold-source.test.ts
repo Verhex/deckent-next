@@ -124,3 +124,15 @@ it('a safety hold upgrades an operator hold, survives an overlay round trip, and
   f.as(human, true);
   expect((await f.lifecycle.execute(command('resume', held.snapshot.revision, { commandId: 'person' }))).snapshot.state).toEqual(progression.state);
 });
+
+it('S6R-3 holdOnce: the Nervous broker\'s hold is written at the current revision once; a replay returns its receipt and a Run already held by Nervous stays as it is', async () => {
+  const f = await fixture(baseRun());
+  const command = { schemaVersion: 1, scopeId: 's', runId: 'r', commandId: 'nervous-hold:case-a', holdReason: 'nervous:termination-required:launcher-dead-gone:abc' };
+  const first = await f.lifecycle.holdOnce('nervous', command);
+  expect((await f.read()).state).toMatchObject({ kind: 'parked', reason: 'operator-hold', holdSource: 'nervous', note: command.holdReason });
+  const raw = f.raw(), audits = f.audits.length;
+  expect(await f.lifecycle.holdOnce('nervous', command)).toEqual(first);
+  expect(await f.lifecycle.holdOnce('nervous', { ...command, commandId: 'nervous-hold:case-b' })).toBeNull();
+  expect(f.raw()).toBe(raw); expect(f.audits).toHaveLength(audits);
+  await expect(f.lifecycle.holdOnce('nervous', { ...command, expectedRevision: 0 })).rejects.toThrow();
+});

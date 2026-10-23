@@ -32,7 +32,7 @@ async function poll<T>(read: () => Promise<T | undefined>, label: string): Promi
 /** A process id that existed and has ended (the launcher that died). */
 const deadPid = () => spawnSync(process.execPath, ['-e', '']).pid!;
 
-async function fixture(nervous: Record<string, unknown> | undefined, status: string, launcherPid = deadPid()) {
+async function fixture(nervous: Record<string, unknown> | undefined, status: string, launcherPid = deadPid(), launcherStartedAt = Date.now()) {
   const root = await mkdtemp(join(tmpdir(), 'dk-nervous-')); roots.push(root);
   const project = join(root, 'p'), data = join(root, 'd');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
@@ -65,7 +65,7 @@ async function fixture(nervous: Record<string, unknown> | undefined, status: str
   // The launcher's preparation record, left at `dispatch` by a process that died while its worker ran (S6R-1 F6 evidence).
   const crashes = await prepareProductDirectory(opened.layout, 'crashes');
   const guard = new DispatchPreparationGuard(jsonRecordDirectory(join(crashes, 'dispatch-preparation')), { identity, principal: { issuer: 'host', subject: '1' }, policyRevision: 'p',
-    bound: 2, now: () => 5, instance: { id: '00000000-0000-4000-8000-000000000001', pid: launcherPid, startedAt: 1 }, launchers: jsonRecordDirectory(join(crashes, 'dispatch-launcher')),
+    bound: 2, now: () => 5, instance: { id: '00000000-0000-4000-8000-000000000001', pid: launcherPid, startedAt: launcherStartedAt }, launchers: jsonRecordDirectory(join(crashes, 'dispatch-launcher')),
     record: async () => undefined, parked: async () => false, loadRun: async () => null, park: async () => undefined });
   await guard.begin((await opened.store.loadRun('s', 'r'))!); await guard.enter('dispatch');
   const principals = [{ issuer: hostname(), subject: String(os.uid) }];
@@ -114,4 +114,12 @@ it.skipIf(process.platform === 'win32')('shadow: a running worker whose launcher
   const f = await fixture({ mode: 'shadow' }, 'running', process.ppid);
   await poll(async () => f.pages.length >= 6 ? true : undefined, 'PAGES_TIMEOUT'); await f.stop();
   expect(f.detections()).toEqual([]); expect(f.errors).toEqual([]); expect(await f.state()).toEqual(f.before);
+});
+
+it.skipIf(process.platform !== 'linux')('shadow (S6R-3 N7): a launcher pid now held by a process that started after the recorded launcher (PID reuse) is dead', async () => {
+  // The recorded launcher started at the epoch; the live parent process holding that pid now started long after it, so it is not that launcher.
+  const f = await fixture({ mode: 'shadow' }, 'running', process.ppid, 1);
+  await poll(async () => f.detections().length ? true : undefined, 'DETECTION_TIMEOUT'); await f.stop();
+  expect(f.detections().map(event => [event.subject.rule.id, event.subject.evidence.launcher])).toEqual([['launcher-dead-orphan', 'dead']]);
+  expect(await f.state()).toEqual(f.before);
 });

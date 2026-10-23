@@ -44,7 +44,7 @@ export type { WorkerAssignmentContext, PendingWorkerAssignment } from './interna
 export { taskBriefSchema, resultBriefSchema, projectTaskBrief, projectResultBrief } from './internal/brief.js';
 export type { TaskBrief, ResultBrief } from './internal/brief.js';
 export { recordAttemptClosure, classifyLaunchRefusal } from './internal/closure.js';
-export { runControlCommandSchema, runProgressionParkCommandSchema, proposeRunLifecycleWrite, matchRunLifecycleCommand } from './internal/lifecycle.js';
+export { runControlCommandSchema, runProgressionParkCommandSchema, runSafetyHoldOnceSchema, proposeRunLifecycleWrite, matchRunLifecycleCommand } from './internal/lifecycle.js';
 export { RunCreationAuthority } from './internal/authority.js';
 export { renderRunCreateApprovalSummary, runProposalPermissionCatalog } from './internal/approval-summary.js';
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DISPATCH_PREPARATION_PHASES, NERVOUS_ACTIVITY_STATES, NERVOUS_LAUNCHER_BASES, attemptIdentitySchema, counterSchema, recoveryEvidenceSchema, encodeCommandProjection,
+import { DISPATCH_PREPARATION_PHASES, NERVOUS_ACTIVITY_STATES, NERVOUS_RULE_STATUSES, NERVOUS_LAUNCHER_BASES, attemptIdentitySchema, counterSchema, recoveryEvidenceSchema, encodeCommandProjection,
   identitySchema, recoveryActionSchema, type AuditEvent } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import type { NervousRule, NervousRules } from './rules.js';
@@ -7,17 +7,18 @@ import type { NervousRule, NervousRules } from './rules.js';
 /**
  * S6R-2 detection input, gathered read-only by composition from existing signals: the supervisor's activity sample of one granted, unsettled,
  * unfenced dispatch (`control-failed`: the daemon did not answer) and its launcher (`dead`: the preparation record or captured launcher evidence
- * names another instance whose process is gone; `alive`/`same-process` never fire; `none`/`unreadable` prove nothing).
+ * names another instance whose process is gone; `alive`/`same-process` never fire; `none`/`unreadable` prove nothing). `fenced` (S6R-3): the
+ * dispatch already carries a fence, so its signal only re-applies a sealed case (stop issued, proof pending; a crash between seal and effect).
  */
 export const nervousAttemptSignalSchema = z.object({ identity: attemptIdentitySchema, activity: z.enum(NERVOUS_ACTIVITY_STATES),
   launcher: z.object({ basis: z.enum(NERVOUS_LAUNCHER_BASES), phase: z.enum(DISPATCH_PREPARATION_PHASES).nullable() }).strict(),
-  containerRecorded: z.boolean(), workerRecorded: z.boolean() }).strict().readonly();
+  containerRecorded: z.boolean(), workerRecorded: z.boolean(), fenced: z.boolean().optional() }).strict().readonly();
 export type NervousAttemptSignal = z.infer<typeof nervousAttemptSignalSchema>;
 export type NervousEvidence = z.infer<typeof recoveryEvidenceSchema>;
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** One typed proposal: the rule that fired, the one K-B action it names and what it names it for (an Attempt, a task's Attempt from an audit event, or the scope). */
 export const nervousProposalSchema = z.object({ schemaVersion: z.literal(1), caseId: digest, scopeId: identitySchema,
-  rule: z.object({ id: identitySchema, version: counterSchema.positive(), status: z.enum(['provisional', 'live']) }).strict(), registryRevision: identitySchema,
+  rule: z.object({ id: identitySchema, version: counterSchema.positive(), status: z.enum(NERVOUS_RULE_STATUSES) }).strict(), registryRevision: identitySchema,
   action: recoveryActionSchema, target: z.discriminatedUnion('kind', [z.object({ kind: z.literal('attempt'), identity: attemptIdentitySchema }).strict(),
     z.object({ kind: z.literal('task'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema }).strict(), z.object({ kind: z.literal('scope') }).strict()]),
   evidence: recoveryEvidenceSchema, evidenceDigest: digest }).strict().readonly();
@@ -49,8 +50,10 @@ export function detectNervousAttempt(rules: NervousRules, signal: NervousAttempt
   const { identity } = signal, target = { kind: 'attempt' as const, identity }, evidence = { activity: signal.activity, launcher: signal.launcher.basis,
     launcherPhase: signal.launcher.phase, absentObservations: absence?.count ?? 0, absentForMs: absence ? nowMs - absence.sinceMs : null,
     containerRecorded: signal.containerRecorded, workerRecorded: signal.workerRecorded };
-  if (signal.launcher.basis === 'dead' && ['running', 'created', 'paused'].includes(signal.activity)) return nervousProposal(identity.scopeId, rules, rules.rule('launcher-dead-orphan'), target, evidence);
-  if (signal.launcher.basis === 'dead' && signal.activity === 'missing') return nervousProposal(identity.scopeId, rules, rules.rule('launcher-dead-gone'), target, evidence);
+  // A dead launcher counts only at `dispatch`, the phase its worker runs in; any other phase on a granted dispatch is inconsistent evidence (lead, s6 Q2).
+  const dead = signal.launcher.basis === 'dead' && signal.launcher.phase === 'dispatch';
+  if (dead && ['running', 'created', 'paused'].includes(signal.activity)) return nervousProposal(identity.scopeId, rules, rules.rule('launcher-dead-orphan'), target, evidence);
+  if (dead && signal.activity === 'missing') return nervousProposal(identity.scopeId, rules, rules.rule('launcher-dead-gone'), target, evidence);
   const gone = rules.rule('container-gone');
   if (absence && absence.count >= gone.consecutiveAbsent && nowMs - absence.sinceMs >= gone.minAbsentMs) return nervousProposal(identity.scopeId, rules, gone, target, evidence);
   return null;

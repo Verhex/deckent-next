@@ -24,7 +24,7 @@ export async function prepareConfiguredReconciliationRuntime(projectRoot: string
     return Object.freeze({ run });
   }
   const clock = new SystemTrustedClock();
-  // S6R-2: the Nervous shadow detector reads each page after reconciliation; its failure is reported, never a reconciliation failure.
+  // S6R-2/3: Nervous reads each page after reconciliation (shadow seals, live may act); its failure is reported, never a reconciliation failure.
   const nervous = prepareConfiguredNervous(projectRoot, options, config.runRuntime.nervous.mode, runtime.pageSize);
   const loop = new ReconciliationRuntimeLoop(async command =>
     (await recoverConfiguredReconciliation(projectRoot, command, options, serviceScopeIds)).recovery,

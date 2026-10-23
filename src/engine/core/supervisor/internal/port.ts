@@ -36,6 +36,8 @@ export type SupervisorTermination = Readonly<{ worker: import('#domain/index.js'
 export interface ExecutionSupervisor {
   /** Exact retained incarnation lookup; missing names/PIDs cannot certify termination. */
   observeTermination?(request: SandboxRequest, worker: import('#domain/index.js').WorkerIncarnation): Promise<SupervisorTermination | null>;
+  /** S6R-3: absence of the exact container id `create` returned (no incarnation retained); null while that container exists. */
+  observeCreatedAbsence?(request: SandboxRequest, containerId: string): Promise<Readonly<{ kind: 'created-container-absent'; containerId: string }> | null>;
   /** Optional local data port; only stopped workers, never a launch or acceptance operation. */
   collectOutputFiles?(request: SandboxRequest): Promise<readonly CollectedOutputFile[]>;
   cancel(request: SandboxRequest): Promise<Pick<SandboxResult, 'handle' | 'result' | 'container' | 'worker'>>;

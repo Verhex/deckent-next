@@ -43,6 +43,8 @@ export async function readDispatchPreparationRecord(records: (name: string) => J
   const parsed = read.kind === 'ready' ? dispatchPreparationRecordSchema.safeParse(read.value) : null;
   return parsed?.success && sameAttemptIdentity(parsed.data.identity, identity) ? parsed.data : 'unreadable';
 }
+/** S6R-3: removes one Attempt's record from a preparation or launcher-evidence directory (absent is done) when its recovery case ends in a release. */
+export async function removeDispatchLaunchRecord(records: (name: string) => JsonRecordFile, identity: AttemptIdentity): Promise<void> { await records(recordName(identity)).remove(); }
 export type DispatchPreparationInstance = z.infer<typeof instanceSchema>;
 /** This process. In the runtime service one start is one instance: a record another instance never settled means that process died in it. */
 export const DISPATCH_PREPARATION_INSTANCE: DispatchPreparationInstance = Object.freeze({ id: randomUUID(), pid: process.pid, startedAt: Date.now() });

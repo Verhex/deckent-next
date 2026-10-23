@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "revision": "core-2026-10-23",
-  "tracking": { "maxAttempts": 4096, "feedPageSize": 256 },
+  "tracking": { "maxAttempts": 4096, "feedPageSize": 256, "maxApplications": 3 },
   "rules": [
     { "id": "container-gone", "version": 1, "status": "provisional", "action": "fence-attempt", "consecutiveAbsent": 3, "minAbsentMs": 60000 },
     { "id": "launcher-dead-orphan", "version": 1, "status": "provisional", "action": "stop-orphan" },
