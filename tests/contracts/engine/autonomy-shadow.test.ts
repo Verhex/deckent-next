@@ -24,10 +24,10 @@ describe('autonomy shadow record (pure)', () => {
       model: null, verification: { runId: 'queue-verify-1', run: run({ runId: 'queue-verify-1' }) }, change });
     const record = autonomyShadowRecord(ticket, summary, 1234);
     expect(autonomyShadowRecordSchema.parse(record)).toEqual(record);
-    expect(record).toEqual({ schemaVersion: 1, id: 'autonomy-shadow:q1:4', at: 1234, actor: 'system', scopeId: 'scope', commandId: 'q1', revision: 4,
+    expect(record).toEqual({ schemaVersion: 1, id: 'autonomy-shadow:scope:q1:4', at: 1234, actor: 'system', scopeId: 'scope', commandId: 'q1', revision: 4,
       rule: { id: 'autonomy', version: 1, digest: autonomyRuleDigest() }, verdict: 'would-hold', reasons: ['model-verdict-missing'], summaryDigest: deliverySummaryDigest(summary) });
     expect(autonomyShadowRecord(ticket, summary, 1234)).toEqual(record);
-    expect(autonomyShadowId('q1', 4)).toBe(record.id);
+    expect(autonomyShadowId('scope', 'q1', 4)).toBe(record.id); // REVISE 2734 R2: the queue key is scope + commandId
     expect(autonomyShadowDigest(record)).toMatch(/^[a-f0-9]{64}$/u);
     expect(autonomyShadowDigest({ ...record, verdict: 'would-deliver' })).not.toBe(autonomyShadowDigest(record));
     expect(deliverySummaryDigest({ ...summary, title: { source: 'untitled' } })).not.toBe(record.summaryDigest);
@@ -46,6 +46,9 @@ describe('autonomy shadow record (pure)', () => {
     expect(() => autonomyShadowRecordSchema.parse({ ...record, reasons: ['not-a-reason'] })).toThrow();
     expect(() => autonomyShadowRecordSchema.parse({ ...record, reasons: [...AUTONOMY_HOLD_REASONS, 'target-protected'] })).toThrow();
     expect(() => autonomyShadowRecordSchema.parse({ ...record, id: 'autonomy-shadow:other:4' })).toThrow();
+    expect(() => autonomyShadowRecordSchema.parse({ ...record, id: 'autonomy-shadow:other:q1:4' })).toThrow();
+    // A line written by ad02fc7ea (`autonomy-shadow:<commandId>:<revision>`) stays readable as the scope its own field names.
+    expect(autonomyShadowRecordSchema.parse({ ...record, id: 'autonomy-shadow:q1:4' })).toMatchObject({ scopeId: 'scope', commandId: 'q1', revision: 4 });
   });
 });
 

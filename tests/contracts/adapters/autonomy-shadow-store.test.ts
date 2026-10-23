@@ -3,13 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FileAutonomyShadowStore, AUTONOMY_SHADOW_STORE_LIMITS } from '#adapters/index.js';
-import { autonomyShadowDigest, autonomyShadowRecordSchema, type AutonomyShadowRecord } from '#engine/index.js';
+import { autonomyShadowDigest, autonomyShadowRecord, autonomyShadowRecordSchema, type AutonomyShadowRecord } from '#engine/index.js';
+import { deliverySummaryFixture } from '../support/delivery-summary-fixture.js';
 
 /** OTONOM-TESLIM shadow store (alpha.53 B1, law-audit fold 1): bounded append-only JSONL outside the audit chain, one line per evaluation with its
  * own sha256, idempotent by record id, private file mode, rotation by data bounds. A damaged line is skipped on read, never trusted. */
 const roots: string[] = [];
 afterEach(async () => { for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true }); });
 async function directory() { const root = await mkdtemp(join(tmpdir(), 'deckent-autonomy-shadow-')); roots.push(root); return root; }
+/** Records in the ad02fc7ea id format (`autonomy-shadow:<commandId>:<revision>`): such lines stay readable and are deduplicated by their ticket fields. */
 const record = (commandId: string, revision: number, overrides: Partial<AutonomyShadowRecord> = {}): AutonomyShadowRecord => autonomyShadowRecordSchema.parse({
   schemaVersion: 1, id: `autonomy-shadow:${commandId}:${revision}`, at: 1000 + revision, actor: 'system', scopeId: 'scope', commandId, revision,
   rule: { id: 'autonomy', version: 1, digest: 'a'.repeat(64) }, verdict: 'would-hold', reasons: ['model-verdict-not-eligible'], summaryDigest: 'b'.repeat(64), ...overrides });
@@ -67,5 +69,34 @@ describe('file autonomy shadow store', () => {
     expect(await readFile(join(elsewhere, 'target'), 'utf8')).toBe('');
     const tight = new FileAutonomyShadowStore(async () => elsewhere, { ...AUTONOMY_SHADOW_STORE_LIMITS, maxLineBytes: 64 });
     await expect(tight.append(record('q1', 4))).rejects.toThrow('AUTONOMY_SHADOW_LINE_LIMIT');
+  });
+});
+
+/** REVISE 2734 R2: the queue key is scope + commandId and one store serves every scope of the product layout, so a record is identified by
+ * (scope, commandId, revision); an old-format line counts for the scope its own field names and never blocks another scope. */
+describe('scope-qualified shadow records', () => {
+  const summary = deliverySummaryFixture(), ticket = (scopeId: string) => ({ scopeId, commandId: 'q1', revision: 4 });
+  it('writes both scopes of the same command id and revision, replays each idempotently and answers each scope its own latest', async () => {
+    const root = await directory(), store = new FileAutonomyShadowStore(async () => root);
+    const a = autonomyShadowRecord(ticket('scope-a'), summary, 10), b = autonomyShadowRecord(ticket('scope-b'), summary, 20);
+    expect(a.id).not.toBe(b.id);
+    expect(await store.append(a)).toBe('written');
+    expect(await store.append(b)).toBe('written');
+    expect(await store.append(autonomyShadowRecord(ticket('scope-a'), summary, 30))).toBe('exists');
+    expect(await store.append(autonomyShadowRecord(ticket('scope-b'), summary, 40))).toBe('exists');
+    expect((await readFile(fileOf(root), 'utf8')).split('\n').filter(Boolean)).toHaveLength(2);
+    expect(await store.latest('scope-a', 'q1')).toEqual(a);
+    expect(await store.latest('scope-b', 'q1')).toEqual(b);
+  });
+  it('reads an old-format line as its own scope and never lets it block a new scope', async () => {
+    const root = await directory(), store = new FileAutonomyShadowStore(async () => root);
+    const legacy = autonomyShadowRecordSchema.parse({ ...autonomyShadowRecord(ticket('scope-a'), summary, 10), id: 'autonomy-shadow:q1:4' });
+    await writeFile(fileOf(root), `${JSON.stringify({ sha256: autonomyShadowDigest(legacy), record: legacy })}\n`, { mode: 0o600 });
+    expect(await store.latest('scope-a', 'q1')).toEqual(legacy);
+    expect(await store.append(autonomyShadowRecord(ticket('scope-a'), summary, 30))).toBe('exists');
+    const b = autonomyShadowRecord(ticket('scope-b'), summary, 40);
+    expect(await store.append(b)).toBe('written');
+    expect(await store.latest('scope-b', 'q1')).toEqual(b);
+    expect(await store.latest('scope-a', 'q1')).toEqual(legacy);
   });
 });
