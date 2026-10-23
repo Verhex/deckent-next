@@ -172,3 +172,12 @@ it('the executors cover only the stop list the broker may run; alert, restart an
   expect(Object.keys(executors).sort()).toEqual(['fence-attempt', 'hand-to-human', 'hold-run', 'stop-orphan']);
   expect(Object.keys(executors).every(action => (RECOVERY_ACTIONS as readonly string[]).includes(action))).toBe(true);
 });
+
+it('one case\'s failed step never blocks the other cases of the page; the failure is still reported and that case is re-applied later', async () => {
+  const fake = ports(), recovery: NervousRecoveryPorts = { ...fake.recovery,
+    async recover(target, step) { if (target.attemptId === 'a1') throw new Error('ledger busy'); return fake.recovery.recover(target, step); } };
+  const h = await harness({ recovery });
+  await expect(h.app.observeAttempts('s', [signal(), signal({ identity: identity(2), activity: 'missing' })], h.context)).rejects.toThrow('ledger busy');
+  expect(fake.calls).toEqual([['recover', 'a2', 'fence']]);
+  expect(h.rows().map(row => row.target?.attemptId)).toEqual(['a1', 'a2']);
+});

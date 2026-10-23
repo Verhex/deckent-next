@@ -71,8 +71,12 @@ export class NervousApplication {
     return outcomes;
   }
   private async apply(proposals: readonly NervousProposal[], context: NervousContext, replayOnly: ReadonlySet<string> = new Set()): Promise<readonly NervousOutcome[]> {
-    const outcomes: NervousOutcome[] = [];
-    for (const proposal of proposals) { const outcome = await this.broker(proposal, context, replayOnly.has(proposal.caseId)); if (outcome) outcomes.push(outcome); }
+    // One case's failed step never blocks the other cases of the page: each is tried, the first failure is reported after all of them.
+    const outcomes: NervousOutcome[] = [], failures: unknown[] = [];
+    for (const proposal of proposals) {
+      try { const outcome = await this.broker(proposal, context, replayOnly.has(proposal.caseId)); if (outcome) outcomes.push(outcome); } catch (error) { failures.push(error); }
+    }
+    if (failures.length) throw failures[0];
     return Object.freeze(outcomes);
   }
   /**
