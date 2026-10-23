@@ -23,9 +23,12 @@ export const PREVIOUS_LEDGER_VERSION = 50;
  * repositories' rows of one target at the same sequence, makes it fail, as it must; restoring the pre-switch backup is the real path. */
 /** v59 → v58 (PRE-7): v59 widened only record vocabularies (environment park, `not-run` acceptance), so the version alone goes back —
  * exact for a ledger that holds none of them; restoring the pre-switch backup is the real path. */
+/** v66 → v65 (S6R-4 recovery cases): the additive table (with its index and triggers) is dropped; exact for a ledger without recovery cases;
+ * restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V65_LEDGER_SQL = 'DROP TABLE recovery_cases; PRAGMA user_version=65;';
 /** v65 → v64 (S4B-1 memory automation): the additive tables (with their indexes and triggers) are dropped and the v61 no-update trigger on revisions
  * is restored; exact for a ledger without automation rows or tombstones; restoring the pre-switch backup is the real path. */
-export const DOWNGRADE_TO_V64_LEDGER_SQL = 'DROP TABLE memory_purges; DROP TABLE memory_contests; DROP TABLE memory_evaluations; DROP TABLE memory_extraction_cursors; '
+export const DOWNGRADE_TO_V64_LEDGER_SQL = DOWNGRADE_TO_V65_LEDGER_SQL + ' DROP TABLE memory_purges; DROP TABLE memory_contests; DROP TABLE memory_evaluations; DROP TABLE memory_extraction_cursors; '
   + 'DROP TABLE memory_extraction_receipts; DROP TABLE memory_entry_support; DROP TRIGGER memory_entry_revisions_tombstone_only; '
   + "CREATE TRIGGER memory_entry_revisions_no_update BEFORE UPDATE ON memory_entry_revisions BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END; PRAGMA user_version=64;";
 /** v64 → v63 (S7 agent/skill catalog): the additive catalog tables (and with them their indexes and triggers) are dropped; exact for a ledger
