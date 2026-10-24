@@ -8,9 +8,11 @@ open. Owner decisions: [core layers](../../decisions/owner-decisions.md#cekirdek
 [S4B memory](../../decisions/owner-decisions.md#s4b-hafiza-dolsun-2026-10-23). Designs and acceptance packs are external
 (`proof/ORCHESTRATION-2026-10-23/`, `proof/ALPHA54-2026-10-23/S6R-ACCEPTANCE.md`, `S4B-ACCEPTANCE.md`).
 
-## One rule for every layer: off until a person turns it on
+## One rule for every switched layer: off until a person turns it on
 
-Every new behaviour ships shadow first and off. A shadow mode computes and seals what it would do and changes nothing. The switches
+Every switched behaviour ships shadow first and off. A shadow mode computes and seals what it would do and changes nothing. The
+headless Brain has no switch: S3-5 retired its preview key, so its connect kind is offered once the realm exists and is used only after
+the person's own login, connect and consent (see Headless subscription Brain). The switches
 are protected configuration: no AI principal and no MCP actor may write them (`PROTECTED_CONFIG_PATHS`,
 `src/domain/core/policy/internal/ai-floor.ts:71`). Bounds and thresholds are versioned registry data marked `provisional` until they
 are measured on N1; no number is a literal in logic.

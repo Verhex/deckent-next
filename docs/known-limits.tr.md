@@ -498,13 +498,14 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 ## Çekirdek katmanlar
 
 alpha.55 çekirdek katmanları ekler (hafıza, sistem ataması ve model rolleri, Auditor'ın mühürlü kararları, Nervous ve kurtarma, headless
-abonelik Brain'i, ajanlar). Bunlar koddur, henüz kabul edilmiş davranış değildir: her biri kapalı başlar ve testlerle ve sahte
+abonelik Brain'i, ajanlar). Bunlar koddur, henüz kabul edilmiş davranış değildir: her anahtar kapalı başlar, her katman testlerle ve sahte
 bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış çağrılarıyla), henüz gerçek N1 kullanımında değil. Ayrıntı:
 [çekirdek katmanlar](../.deckent/docs/architecture/modules/core-layers.md).
 
-- **Her çekirdek katman kapalı başlar ve onu yalnız bir kişi açar.** Anahtarlar (`memoryAutomation.extraction|verification|context.mode`,
+- **Her çekirdek katman anahtarı kapalı başlar ve onu yalnız bir kişi açar.** Anahtarlar (`memoryAutomation.extraction|verification|context.mode`,
   `runRuntime.nervous.mode`, `runRuntime.recovery.mode`, `catalogEvolution.mode`) korumalıdır: hiçbir AI ve hiçbir MCP aktörü bunları
-  yazamaz. `shadow` (gölge) kip ne yapacağını kaydeder ve hiçbir şeyi değiştirmez. Yeni kimlikler tam haklarını yalnız politika şablonu
+  yazamaz. Headless Brain'in anahtarı yoktur (S3-5 ön izleme anahtarını kaldırdı): yalnız kişinin kendi login, connect ve
+  onayından sonra çalışır. `shadow` (gölge) kip ne yapacağını kaydeder ve hiçbir şeyi değiştirmez. Yeni kimlikler tam haklarını yalnız politika şablonu
   v15'ten alır. *Yol:* şablonu `deckent policy upgrade --template current --scope <id> --preview`, sonra `--apply` ile uygulayın; bir
   katmanı önce gölgeye alın, örneğin `deckent config set memoryAutomation.extraction.mode '"shadow"' --scope <id>`.
 - **Sayılar ölçüm değil, başlangıç değeridir.** Nervous kuralları, kurtarma sınırları (kaybolan görev başına bir otomatik devam, görev
