@@ -60,7 +60,7 @@ and its receipts. Marked pre-push uses the hosted reader; unmarked author pushes
 PR and manual integration runs keep the full Ubuntu suite. `merge_group` is supported, but this candidate does not
 activate/change a remote merge queue or ruleset. Main push runs the same full sharded suite
 (owner 2026-10-06): admin merges bypass the PR gate, so this is main's post-merge full signal; on this public repository
-standard runners are free (billing usage 2026-10-06: $0 net), the limit is 60 concurrent jobs and one run opens 20. Native macOS/Windows full suites stay in a separate daily/manual
+standard runners are free (billing usage 2026-10-06: $0 net), the limit is 60 concurrent jobs and one run opens 36 (2 prepare, 32 test shards, 2 required verify). Native macOS/Windows full suites stay in a separate daily/manual
 workflow with visible failures; this scheduling does not resolve existing platform debt or claim platform acceptance.
 The full author scan exposed a genuine first integrity-key creation race during concurrent secret changes.
 Write-mode key custody now holds the existing bounded configuration path lock through create/read/fsync/close;
@@ -116,7 +116,7 @@ After setup-node, the workflow canonicalizes only the OS temporary parent into T
 Vitest, standalone host node:test and native children then allocate fixtures under the same real path.
 Explicit product roots and the managed-file symlink/permission floor remain unchanged.
 The existing job bound stays 30 minutes; verify has a 20-minute step bound, preserving time for always-run summary
-and SHA-pinned official upload-artifact v7.0.1. Host node:test replaces Infinity with a 180-second
+and SHA-pinned official upload-artifact v7.0.1 (current sharded workflow: prepare 8, test shard 6, required verify 3 minutes). Host node:test replaces Infinity with a 180-second
 execution bound (existing fixture subprocess ceiling); native node:test uses the existing 30-second Vitest ceiling,
 and each native compile/test invocation is capped at 180 seconds. Host/native test concurrency is two and their reporter is explicitly TAP so failed names/skip notes reach the collector. These bounds
 reduce unbounded defaults; they do not increase existing fixture or Vitest timeouts. Each job retains the original verify exit through bash pipefail,
@@ -159,7 +159,7 @@ claimed. Official [rename(2)](https://man7.org/linux/man-pages/man2/rename.2.htm
 [unix(7)](https://man7.org/linux/man-pages/man7/unix.7.html) verified 2026-10-03; author/hosted/review evidence is
 separate in external `proof/SOCKET-PUBLICATION-2026-10-03/`.
 
-**CI-WINDOWS-MACOS (owner 2026-10-01; verification tooling).** Each CI matrix job has a 30-minute ceiling,
+**CI-WINDOWS-MACOS (owner 2026-10-01; verification tooling).** Each CI matrix job has a 30-minute ceiling (current sharded workflow: prepare 8, test shard 6, required verify 3 minutes),
 with ~2.1x headroom over run36884716187's successful Linux jobs (14m05s/14m20s); cells cannot inherit
 the 360-minute GitHub default. Linux-only local runtime socket/live OS-session tests name their capability in
 collected test titles and skip only cases requiring it; portable policy/grammar and existing typed refusals stay
@@ -198,7 +198,12 @@ Not covered: macOS, Windows, the runner's `sudo sysctl` AppArmor step, hosted-ru
 precondition. Fail closed: an existing receipt is removed before any re-run, and the receipt is written atomically from
 `ci:local`'s own `result.json` and validated on read. `pre-push` runs the hosted `land:check` only for `refs/heads/main`
 and `refs/heads/wave/*` pushes marked `DECKENT_LANDING=1 git push ...`; unmarked pushes print a note and pass. Owner
-landing practice: Astra PASS → admin merge; hosted CI is a post-merge signal.
+landing practice: Astra PASS → admin merge; hosted CI is a post-merge signal. Owner landing rule (2026-10-18), which replaces that
+practice: each merge and each live/N1 switch needs owner approval, and hosted PR CI must be green on the exact head before merge.
 `npm run hooks:install` sets relative `core.hooksPath=scripts/git-hooks` (shared `.git/config` unless
 `extensions.worktreeConfig` is on, then per worktree); each worktree resolves it against its own root, so branches without
 the directory run no hooks, and clones do not inherit the setting. Measured times: external `proof/CI-LOCAL-2026-10-06/review.md`.
+
+Shard balance (alpha.55): shard 1 also runs the native, host and smoke suites after Vitest, so its bin starts at
+`shardOneReservedMs` (75 s, `scripts/ci-test-config.json`) and the planner (`scripts/ci-test-plan.mjs`) moves Vitest files to the other
+shards accordingly.

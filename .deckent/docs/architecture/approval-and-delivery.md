@@ -40,8 +40,8 @@ W3-AUTHORITY requires nonzero controlling-TTY evidence and matching terminal cha
 allow and deny; a client-declared channel or a turn capability does not bypass this. `APPROVAL_INTERACTIVE_REQUIRED` leaves the request
 pending and adds no decision. The session rechecks terminal evidence before privileged settlement. Hard-floor allow still requires
 at least turn-bound assurance (Core attests it with the initiating process's capability; selected extension producers may attest a stronger level). There is no automation exception; TTY attestation cannot prove human presence against a same-UID
-process that allocates its own PTY. MCP handlers run under the separate `<host>/mcp` actor, and protocol v26 carries that actor context through
-service calls (lifecycle `[26,25]`); model/spend mutations require a rule explicitly naming that actor. Template v9 adds only MCP observation,
+process that allocates its own PTY. MCP handlers run under the separate `<host>/mcp` actor; protocol v26 introduced that actor context on
+service calls (lifecycle `[26,25]` at the time) and the current runtime protocol (v29) still carries it; model/spend mutations require a rule explicitly naming that actor. Template v9 adds only MCP observation,
 including through add-only custom-policy upgrades. Existing owner rules/terminal spending authority are preserved.
 
 
@@ -139,6 +139,8 @@ applied, files at `before` → absent, anything else → unknown), and a cross-p
 lock `policy.json.write-lock`, 5 s bounded wait, typed `CONFIG_WRITE_LOCKED`). Measured (2–4 OS processes, 400–600 writes): without the
 lock 39–70 lost updates, with it 0. The `POLICY_*` refusal codes have en/tr texts but no surface maps them yet. Not yet: any surface
 (`/policy`, `deckent policy`, protocol v17), refusal audit events, last-owner guard, external-change detection, a sealed archive. MCP approval decisions were removed by owner amendment 2026-10-02.
+(Since POLICY-ADMIN P4/P5 the `deckent policy` family and the terminal `/policy` window exist, and the last-admin invariant refuses with
+`POLICY_LAST_ADMIN`; see "POLITIKA-P0" below.)
 
 **Authority hardening (POLICY-HARDEN P3-R, seventh batch).** `ApprovalApplication` takes a `restriction { catalog, surface?, refused? }`:
 an approval of an operation whose descriptor is `surface: 'authority'` is allowed only by the application built with `surface: 'authority'`;
@@ -222,8 +224,8 @@ reachable and `cleaned: false`; the same switch again (`status: current`) delete
 The running service resolves through the new selection without a restart. `deckent secret store` picks from the registered stores on a
 terminal (numbered list, y/N for a downgrade) or takes `--to <store>` / `--confirm-downgrade` / `--list`; `doctor` names leftover entries in a
 non-selected Core store (counts only) and a non-selected store it cannot list now as unverified (never as empty); a cleanup that cannot
-check a store returns `cleaned: false` (Astra 2456 N2). Fresh installs on Linux/WSL/macOS through `init policy --apply` (no policy before) run the same switch with
-zero entries (the Docker `init apply` path does not yet: its installations keep the environment store until switched); with no ledger yet its record is the command result (owner 2026-10-08, Jev 0950f08e). Concurrency (Astra 2456 P1-1, Jev ddfbc6b4): every
+check a store returns `cleaned: false` (Astra 2456 N2). Fresh installs on Linux/WSL/macOS through `init policy --apply` (no policy before)
+and through the Docker `init apply` path run the same switch with zero entries; with no ledger yet its record is the command result (owner 2026-10-08, Jev 0950f08e). Concurrency (Astra 2456 P1-1, Jev ddfbc6b4): every
 secret mutation runs inside the installation's custody section (`SecretCustody` port; adapter `createInstallationSecretCustody`: the
 cross-process config writer lock on `<installation config>.secret-custody`, dead owners reclaimed, the directory created owner-only) — the
 whole switch from the selection read to the last removal, and each set/delete, which re-reads the selection there and refuses
@@ -261,6 +263,9 @@ secret delete <NAME>`; the scope is `--scope` or `terminal.scopeId`. No MCP tool
 renders every `error.*` template (en/tr) with sample parameters — a secret's `{name}` as `OPENAI_API_KEY` — and requires `redactSensitive`
 to leave it unchanged. The approval/audit HMAC key stays in its 0600 file (S2). Not yet: OS keyring backend (K2, `@napi-rs/keyring`, S5),
 per-scope namespace (S4), a grant-editing surface for existing installations (`/policy`, POLICY-ADMIN P5).
+(Since SEC-1, alpha.48: `deckent secret set` runs only on a person's terminal; a pipe, script, agent or CI caller is refused with
+`SECRET_SET_TERMINAL_REQUIRED` before stdin is read, and `set` names its vault. Grants for existing installations go through
+`deckent secret grant|revoke` and `deckent policy upgrade` on the person's terminal, not by hand-editing policy.json.)
 **MCP client (MCP-CLIENT, owner 2026-09-28 S6 a; scoped registry files owner 2026-09-28).** Deckent is an MCP client of the owner's
 local stdio servers, managed like Claude Code's scoped files (code.claude.com/docs/en/mcp, checked 2026-09-28: local/project/user,
 managed on top, `mcp add|add-json|list|get|remove`), never in configuration: project `<project>/.deckent/mcp.json` (shared;
@@ -281,9 +286,11 @@ classification, bubblewrap mask, Landlock). The service owns one pool (`RuntimeC
 needs it, negotiates the era with SDK `versionNegotiation: auto` (2026-07-28 via `server/discover`, else the 2025-11-25 `initialize`; on
 stdio the SDK probes with a sibling process), is listed every turn and kept for the service's life; the client SDK loads with the first
 server start; a crash restarts on next use at most `maxRestarts` times; service stop awaits closing all of them (stdin, then
-SIGTERM/SIGKILL) before the endpoint and ledger custody are released. Realm per server like the shell (`prefer-sandbox` default:
-bubblewrap wraps the long-lived process through the optional `ShellSandbox.usable().launch`; no network, HOME hidden; `require-sandbox`
-refuses without it; `host` explicit; Landlock is not offered for MCP servers). A launch-capable provider that wins after a preferred one
+SIGTERM/SIGKILL) before the endpoint and ledger custody are released. Realm per stdio server (K4): the default is `sandbox-net`
+(bubblewrap wraps the long-lived process through the optional `ShellSandbox.usable().launch`, with network and a private persistent HOME
+for that server, the project read-only, and the user's HOME, project secrets and Deckent state hidden; without a usable sandbox it does
+not start); `prefer-sandbox`, `require-sandbox` and `host` are explicit choices, and only `prefer-sandbox` may run on the host, saying so;
+Landlock is not offered for MCP servers; an HTTP server has no local process and no realm. A launch-capable provider that wins after a preferred one
 was passed over adds the same `… instead of …` line to the server's posture (tools card, per-call approval card); the host fallback and a
 `require-sandbox` refusal name every reason with the same bound (REALM-NOTICE). With the shipped providers this path is not reachable
 today (Landlock has no long-lived launch: a refused bubblewrap means host or refusal, both already named). Open: the pre-start launch
@@ -317,7 +324,7 @@ before the decision; after sending, timeout/cancel/crash is `unknown` and never 
 pass `redactText`; the model is told they are untrusted data. The audit contract gained the additive `mcp-call` cell and
 `{kind: 'mcp', tool, argsDigest}` summary (event schema version 1). CLI: `deckent mcp add|add-json|list|get|remove|approve` (`list`
 reports connected/drifted/failed for approved servers and "pending approval" without starting others; `get` never starts). Not yet:
-a separate approval subject kind (the first-use card reuses `agent-tool-call`), `/mcp` texts beyond the catalog lines, company policy source (POLICY-ADMIN), http/sse/OAuth, MRTR input
+a separate approval subject kind (the first-use card reuses `agent-tool-call`), `/mcp` texts beyond the catalog lines, company policy source (POLICY-ADMIN), SSE and OAuth (Streamable HTTP servers with static headers exist since K4), MRTR input
 requests from servers (no elicitation/sampling/roots handler; an `input_required` server is untested), `subscriptions/listen`/listChanged
 (the list is re-read each turn),
 signed server bundles. The tool list is read with all its pages (SDK 2.2.0 follows `nextCursor`; at most 16 pages and 512 tools, more is
@@ -334,8 +341,8 @@ audit event written first. The turn asks first-use cards on the C12 approval pat
 `mcp_trust` (no approval schema change). `/mcp` lists servers and trust state and does approve (reset), reconnect (record counter; the
 service replaces the process on next use) and remove. The compiled `deckent-mcp` stdio entry serves both eras (`serveStdio`), proven with SDK clients in legacy, auto and
 pinned-2026 modes (`mcp-eras-process.test.ts`).
-A sandboxed MCP server's long-lived bubblewrap view keeps the write floor's existing paths read-only (third-party code that no card approves
-call by call; the MCP layout carries the write floor). The rest of the project stays writable for it; the host realm is unchanged.
+A sandboxed MCP server's long-lived bubblewrap view keeps the whole project read-only (C5, `longLivedWritePosture`: third-party code whose
+writes no card approves); the host realm is unchanged.
 The pool builds the SDK `Client` with `jsonSchemaValidator: new DeckentJsonSchemaValidator()` (Deckent's own validator,
 `src/platform/core/validate`; MCP-SCHEMA-VALIDATOR, eleventh batch, owner 2026-09-29 "problematic dependencies are not accepted"): a server's
 `outputSchema` is untrusted input and reaches neither the ajv 8.18 + fast-uri 3.1.0 copy bundled inside SDK 2.2.0 nor the SDK's
@@ -720,8 +727,8 @@ this floor, never the patch, criterion, model or profile gates. Report checks ma
 `role: acceptance | exploratory`; an acceptance check whose last outcome is not `passed` fails as `declared-check-not-passed`,
 exploratory and untyped checks never fail. Reasons have one owner (`inspectTaskEvaluation`); the report reason precedes
 `no-change-produced`. `worker-stalled` is reserved for the R3 silence retry. Report reasons are retry-classifiable; the bounded
-retry belongs to the run recovery owner (R3), not to evaluation. `unsupported` (a CLI without a structured result channel, today
-Cursor) is not gated and stays visible on the evaluation. Legacy receipts without `report` replay unchanged. Generic by design:
+retry belongs to the run recovery owner (R3), not to evaluation. `unsupported` (a CLI without a structured result channel; none of the
+packaged CLIs since alpha.52, where Cursor uses `final-text-json`) is not gated and stays visible on the evaluation. Legacy receipts without `report` replay unchanged. Generic by design:
 for an ERP/CRM operation the report is the worker's structured result, with no Git or test assumption. Since alpha.50 (PRE-1)
 the container bridge offers `checkId`/`role` in the CLI report schema (strict schemas: required nullable, null becomes absence before
 sealing), and the worker core prompt (`deckent-worker-core@2`) asks workers to type acceptance checks; an installed template that
@@ -975,6 +982,9 @@ signed. Author controls and open acceptance limits live in external POLITIKA-P0 
 
 ## First-run template v11 (SABLON-V11, owner 2026-10-13)
 
+(This section records the v11 delta. The current template is v15 and upgrades go to it; see
+[core layers](modules/core-layers.md#one-rule-for-every-switched-layer-off-until-a-person-turns-it-on) for both upgrade paths.)
+
 Fresh installs and installer `init policy --upgrade` add three named-person rules:
 `first-run-quota-release` grants pool `release-quota` for all ids and all scopes;
 `first-run-integration` grants attempt `prepare-integration`, `deliver-integration`,
@@ -1172,3 +1182,12 @@ outside the audit chain, so an older binary's audit verification is unaffected. 
 digests and queue state never read it, deleting or altering records changes none of them, and it must never appear on the y/N consent prompt
 (the shadow appears only as the `integration-queue-list` Rule column and an `integration-queue-inspect` line; no consent path accepts it). A later comparison joins it to the `target-batch-decision` audit by
 commandId; opening the rule (acting on it) is a separate owner decision.
+
+## Core layers additions (alpha.55)
+
+alpha.55 adds three approval and audit facts; [core layers](modules/core-layers.md) holds the details. A Nervous or Auditor safety hold
+is a person's to lift: resuming a Run held by any source other than the public `operator` control is on the AI hard floor
+(`src/domain/core/policy/internal/ai-floor.ts:66`) and needs a person at an interactive terminal (`RUN_HOLD_PERSON_REQUIRED`). Refused and
+plainly allowed agent tool decisions are summarised in at most one `policy-turn` audit record per turn, written best effort after the
+turn. The new system identities (`<person>/memory-distiller`, `<person>/memory-evaluator`, `<person>/recovery` and
+`<person>/catalog-aggregator`) get only their exact rights through first-run template v15.

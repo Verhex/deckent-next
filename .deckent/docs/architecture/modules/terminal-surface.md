@@ -69,12 +69,14 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   then the normal single-transaction migration runs and the service reports from/to versions. A missing or current
   ledger is untouched; clients and read paths never migrate. Typed error responses carry bounded message
   parameters (≤ 8 keys, strings ≤ 512 chars; omitted for older lifecycle versions), so a remote error renders the same
-  text as a local one. Open: idle stop policy for the background service.
+  text as a local one. Idle stop: a service the terminal started itself stops through the governed stop after
+  `service.idleShutdown.afterMs` (default 15 minutes) without requests or executions; a hand- or config-started service never does.
 - **Adapters:** `deckent terminal workline [--scope <id>]` is the Ink view and requires TTY stdin and stdout
   (`TERMINAL_TTY_REQUIRED` otherwise); `terminal session [--scope <id>]` is line mode and also serves piped
   input (slash input stays local: `/status` answers locally, unknown commands are reported, never sent to the model); `terminal status|chat-plan|snapshot` are one-shot JSON/text reads. Ink/React are Core runtime
   dependencies pinned exactly; `NO_COLOR`, `--no-color` and non-TTY stdout render without colour.
-- **Chat is one governed model invocation per turn:** the `terminal.chat` config section names a declared
+- **Chat is one governed agent turn per message** (model rounds with tools in the full window; line mode keeps the single invocation
+  described here): the `terminal.chat` config section names a declared
   catalog model and `maxCompletionTokens`; catalog revision and binding are read per turn; the turn goes
   through the runtime model client in the caller's `--scope` (same path as `models invoke`), so principal,
   policy, activation and spending apply. Abort (Esc, or Ctrl+C while busy) stops the wait and requests
@@ -129,7 +131,7 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   the pure `pickerReduce` core (filter, paging, levels, scope step, blocked rows with a reason, numbered text fallback) and `ListPicker`
   (`windowed`, `initial`, `onState`, `maxRows`, `embedded`). `terminal-panels` (L4): presentation-only `/mode`, `/config`, `/mcp` windows (ports and words
   from outside; the settings picker of the panel controller; any argument keeps the text command; no window on TERM=dumb; `/mode show` is the
-  text answer). TERM-PANEL (owner 2026-10-19, alpha.48): every panel window with a list (`/config` and `deckent config`, `/provider`, `/mcp`,
+  text answer; superseded in the window by owner I-1, see "Typed arguments" below). TERM-PANEL (owner 2026-10-19, alpha.48): every panel window with a list (`/config` and `deckent config`, `/provider`, `/mcp`,
   `/model`, `/mode`, budget, cache, workspace, config records) is a `PickerWindow`: one title (the window's, then the levels entered,
   `Title › section › key`), one key-hint row (the list's words for its stage — list, filter, scope — or the panel's more exact ones), and one
   height at every level, with a filter, a locked row's reason (it borrows list rows, the rest ends in an ellipsis) and on the Loading/busy
@@ -238,9 +240,10 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   (`approval.settled` deny for that call) prints "you declined" / "sen reddettin" in the muted tone; a policy rule's refusal keeps "denied by
   policy" / "kural izin vermedi". A call the owner allowed but policy denies on re-evaluation (contract §2) settles `allow` and is refused by
   policy (`error=denied-by-policy (approved, …)`), so it reads as the policy's refusal.
-- **Local/free models** use `openai-chat-http` v4 with an operator-declared `operator-static` tariff (v1: zero rates only).
-  The quote is reserved against the scope budget and a responded call settles `settled-local 0` in the spend ledger;
-  there is no unmetered bypass class. Positive chargeback rates need a separate measurement basis.
+- **Local/free models** use `openai-chat-http` with an operator-declared `operator-static` tariff (v1: zero rates only).
+  A literal zero tariff whose every declared endpoint is a literal loopback address runs without a money budget (owner 2026-10-09);
+  a frozen scope account still refuses it, and a zero tariff on any other host keeps the budget gate. A responded call settles
+  `settled-local 0` in the spend ledger. Positive chargeback rates need a separate measurement basis.
 - **Delivery fit (SESSION-RESULT-LIMIT-2026-09-28):** the worst-case delivered size of every declared provider profile —
   `modelInvocationNativeResponseUpperBound` (one formula shared by the adapters) plus the same arithmetic as
   `assertInvocationDeliveryFit` — is reported ahead of time by `deckent doctor` (`modelInvocationDelivery`, unconditional, `[]` when
@@ -259,7 +262,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   retain `MODEL_INVOCATION_ACTIVATION_CONFLICT`; binding conflicts retain their own code. No fallback or automatic inactive-model
   activation is introduced. These are source behavior contracts; local author checks are separate from installed/live acceptance.
 - **Ledger:** run/worker rows come from the same inspection handlers as `run inspect`/`workers list`.
-  TTY `/runs` reads the same inventory into a scrollable list window (SW-2, alpha.15); it does not create or cancel a run. Y1 (owner 2026-10-14): with the ledger port `controlRun` (cli-terminal over the CLI's `applyRunLifecycle`) and `runControl` words the list has a selection and `h`/`r`/`c` (hold, resume, close parked) keys offered by observed state; `terminal-work/run-control.tsx` owns the list, the y/N `DecisionCard` (Tab hold reason) and the loop; results and typed refusals stay above the list until Esc. Line/CLI text producers are unchanged.
+  TTY `/runs` reads the same inventory into a scrollable list window (SW-2, alpha.15); it does not create or cancel a run. Y1 (owner 2026-10-14): with the ledger port `controlRun` (cli-terminal over the CLI's `applyRunLifecycle`) and `runControl` words the list has a selection and `h`/`r`/`c` (hold, resume, close parked) keys offered by observed state, plus `a` (answer a waiting
+  task, alpha.54 BR2); `terminal-work/run-control.tsx` owns the list, the y/N `DecisionCard` (Tab hold reason) and the loop; results and typed refusals stay above the list until Esc. Line/CLI text producers are unchanged.
   Chat text is not run truth. **S18/S18B/S18B-AUTH (batch 36):** üretim yolu runtime SQLite ledger’ına salt okunur `fs.watch` + heartbeat takibidir; servis tek yazardır, okuyucu outbox silmez/etki açmaz. `inspectMonitor` ile ortak principal/scope/policy kapısı okuma öncesi ve takip boyunca yeniden değerlendirilir; ret/veri bağlamı değişimi takibi durdurur. R4 yetkili açılış snapshot’ı, sıra boşluğunda resync ve reconnect başlangıç cursor’ını; R5 çalışan worker’ın canlı panel gözlemini korur. Takip portu olmayan tüketici bounded single-flight poll kullanır. The Ink `Static`
   printer only appends; compaction starts a new epoch so rows past any count keep printing.
 - **Work surface (P4, 2026-09-24):** worker cards and a bounded live panel (dynamic region, shown while `/watch-workers`
@@ -296,7 +300,8 @@ Market notes live outside the repo (`/home/alperen/deckent-refactor-work/proof/T
   arguments are not used in the terminal; choose in the window." (`WindowNoteContext`, consumed when that window closes, never on an approval
   card); the typed text is never shown, and it is stripped before the queue, the "queued" notice and the composer's input history (recall and
   the persistent port keep only `/command`; Astra 2456). Without window words SW-1/SW-3 keep the text command, SW-2 job windows open bare and `/monitor <args>`
-  stays the text command. Line mode and the CLI keep arguments. **Opening (owner I-5, Jev 59f75361):** the first surface snapshot leaves one
+  stays the text command. Line mode and the CLI keep arguments. Exceptions in the window: `/do <text>` and `/copy [n]` keep their typed
+  argument (`src/surfaces/core/terminal/internal/workline.tsx:600`). **Opening (owner I-5, Jev 59f75361):** the first surface snapshot leaves one
   system line when runs or workers are active ("Work running: N runs, M workers · /runs /workers"), nothing when idle; the approval count
   stays in the status row. Settings windows (`/model` pin, `/config`, `/mcp`, `/provider`) report through the same system line.
   Proof: external `proof/SLASH-WINDOWS-2026-10-08/` (`SW1/2/3-WORKER.md`, `INTEGRATION-WORKER.md`, `INTEGRATION-DECISIONS.md`).
@@ -372,8 +377,8 @@ is unchanged. Opening (inline layout; the full window shows the banner as its fi
 workline first scrolls the visible rows into the scrollback (`rows` line feeds), then sends CUP home + ED 2 and prints the banner (catalog
 mark with an ASCII form, version, project and path, model, mode, `/help · Shift+Tab mode · ? shortcuts`), one line below 60 columns or
 with `terminal.banner: compact`, none with `off`; `terminal.clearOnStart: false` and `TERM=dumb` never clear; a pipe receives nothing.
-The opening never sends ED 3 (only `/clear` does, by owner decision 2026-10-08); Ink's own overflow redraw (`clearTerminal` when the live frame reaches the window height) still contains
-ED 3 — an open limit the bounded window (L1) and a decision on Ink's overflow path must close. Proof:
+The opening never sends ED 3 (only `/clear` does, by owner decision 2026-10-08); Ink's own overflow redraw (`clearTerminal` when the live frame reaches the window height) contained
+ED 3 at the time; the Workline output adapter now removes ED 3 from Ink's overflow clear (see above). Proof:
 `/home/alperen/deckent-refactor-work/proof/TUI2-2026-10-07/L2-review.md`.
 
 **Human output (TUI2 L3, T-HUMAN-OUTPUT, 2026-10-07).** The slash answers read as a person's summary first and keep identities under a
@@ -390,8 +395,8 @@ process state and who recorded it. Notices start with Info, Warning or Error (ca
 `warning` level); a typed failure prints its human message and `(code: X)` on its own line. The monitor prints the machine's local time
 with the zone offset (`Z` at UTC); the suite pins `TZ=UTC`. Turkish terms follow `terminology-tr.md` (iş, görev, işçi). Words reach the
 cards through `WorkerLineLabels.card` (`LedgerCardLabels`), so the run/worker/notice rows add no new label path to the window code.
-Open: context percentage in `/status`, a real principal name for `/scope` (the host user name is shown), the monitor window (T3),
-stream-failure footers.
+Open: context percentage in `/status`, a real principal name for `/scope` (the host user name is shown), stream-failure footers.
+(The monitor window has since landed: `/monitor`, see above.)
 
 **T2 integration (`wave/tui-2`, 2026-10-07; released with alpha.10, PR #37).** Shift+Tab/Alt+M step the mode only while the window stack is idle
 (`PermissionModeKeys` inside the `WindowStackProvider`): any open window owns them, not only a card or picker. Windows take the L2 roles
@@ -432,3 +437,10 @@ ends with the terminal process and is not durable notification, acceptance or de
 
 A session pin (`/model` -> this session only) is sufficient for a turn: readiness checks the pin as itself and refuses typed (naming it) when it is
 undeclared; the persistent model is never substituted.
+
+**alpha.54 and alpha.55 additions (HARNESS-FARK T0–T6, M2).** `/copy [n]` sends the latest (or n-th latest) answer to the terminal
+clipboard (OSC 52); a blank line separates the person's own messages; `terminal.responseStyle` (`standard`, `concise`, `explanatory`) and
+`terminal.notify` (a bell when work ends or a card waits while the window is in the background) are settings; `/rename <title>` names the
+open conversation and `/resume` filters by typed text; Alt+Up takes the last queued message back into an empty draft
+(`src/surfaces/core/terminal-composer/internal/keys.ts:35`); Ctrl+G edits the draft in `$VISUAL`/`$EDITOR`. alpha.55 adds `/roles`, a
+read-only view of which exact catalog model holds which tier and roles (assigning stays `deckent models roles set`).

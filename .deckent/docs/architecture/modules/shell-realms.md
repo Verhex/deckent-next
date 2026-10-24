@@ -165,3 +165,6 @@ with the general matcher is an oracle test. Measured on this repository (ext4/WS
 
 
 **Bubblewrap ad sızıntısı (SANDBOX-AD-SIZINTISI, 2026-10-06).** Yalnız ürün durumu tutan dizin boş salt-okunur tmpfs olur (`BubblewrapView.emptiedDirectories`, `--perms 0555 --tmpfs` + `--remount-ro`): içerik ve giriş adları görünmez; karma dizin (ürün durumu + proje dosyası yan yana) giriş-başı maskede kalır; scratch bağı içte yazılabilir kalır; layout kökü hiç emptied olmaz. Açık sınır: karma dizinlerde ürün dosyası adları listelenir (lead kabul); scratch yolu (`.deckent/.../state/scratch/…`) çağrının kendi TMPDIR'i olarak görünür kalır (taşınmadan gizlenemez).
+
+The headless subscription Brain's bubblewrap realm (`src/adapters/core/native-cli-headless/internal/realm.ts`) is a separate contract
+from the shell and MCP realms described here; see [core layers](core-layers.md#headless-subscription-brain-and-quota-s3-1s3-5-s9-f3-f4).

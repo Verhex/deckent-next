@@ -14,7 +14,9 @@ principal and existing engine admission own authority.
 
 The existing connected-model invocation owns activation, binding, credentials,
 spending, claim and response custody. Planning has one model step, no tool loop
-and no automatic retry. Before metered invocation, the ledger-first scope budget
+and no blind retry; a subscription quota refusal with a known reset within
+`brain_planner.quotaWait.maxWaitMs` (15 minutes) waits visibly and plans once more
+under a new derived command id (at most two attempts). Before metered invocation, the ledger-first scope budget
 (with configured fallback) must exist and have available capacity. A literal-zero
 tariff on exclusively literal-loopback endpoints needs no money budget; the
 invocation still owns validation, quote, freeze checks and reservations.
@@ -29,8 +31,9 @@ the response that recorded it. Selected subscription-only or explicitly local
 (`billingAxis: 'local'` on a Docker task profile without a subscription binding,
 Jev d8b2a0ce) worker bindings carry `budgetSemantics: not-metered` into the
 sealed admission; undeclared/unknown/mixed/API profiles keep the admission
-ceiling check. No total Run spending ceiling is enforced during execution. Native subscription planning transport is
-not installed; its future binding must reuse these gates without bypassing invocation authority.
+ceiling check. No total Run spending ceiling is enforced during execution. Since alpha.55 the
+`claude-cli-subscription` headless transport plans through the same invocation authority and gates (see
+[core layers](core-layers.md#headless-subscription-brain-and-quota-s3-1s3-5-s9-f3-f4)).
 
 The system, not the proposer, decides which permissions admission evaluates
 (live 2026-10-18: a model's invented `scope/inspect` and `model-invocation`
@@ -100,11 +103,11 @@ retry bound in the immutable evaluation receipt and Run snapshot. It records no
 acceptance metric and executes no business criterion or Git-specific retry flow.
 
 `runRuntime.quotaRecovery` v1 supplies `maxResumes` (zero disables automatic
-recovery; the shipped registry default allows one). Known future structured reset times within `runRuntime.quotaRecovery.maxWaitMs`
-set the deadline (registry default: seven days). An over-bound worker timestamp falls
-back to parking timeout and records `resetBoundExceeded` in the Run wait and classified
-Attempt observation; it never grants automatic recovery. Unknown or stale reset times use `runRuntime.parking.timeoutMs`
-and ordinary timeout closure; elapsed timeout is not reset evidence. After a
+recovery; the shipped registry default allows one). A known future structured reset time within `runRuntime.quotaRecovery.maxWaitMs`
+(registry default: 5 hours) sets the deadline. A reset beyond that bound records `resetBoundExceeded` in the Run wait and
+classified Attempt observation, never grants automatic recovery and asks a person at once; an unknown or stale reset waits the bound.
+When the wait ends the Run parks as `quota-ask` and is never cancelled on its own: the person keeps waiting (at most
+`maxRewaits`, 3 times) or takes the next candidate; an AI cannot answer. Elapsed waiting is not reset evidence. After a
 known reset, lifecycle advancement moves the finished binding to retained history
 once and allows a fresh generation with the exact frozen profile. Fresh admission,
 policy, approvals and launch authority still apply. Uncertain effects and
@@ -162,7 +165,9 @@ Author fixture/check evidence is outside Git in KOTA-D1 proof; paid, live, N1,
 browser, hosted and independent acceptance were not performed by this lane.
 
 
-BRAIN-BAGLAM (2026-10-13; landed in alpha.32): context projection v2 replaces raw
+BRAIN-BAGLAM (2026-10-13; landed in alpha.32; the worker-model choices below apply to the legacy templates v1/v2 only:
+since alpha.55 the selected template v4 names WorkClasses and the system assigns models, see
+[core layers](core-layers.md#system-assignment-and-model-roles-s0-s1-s2-m2m5)): context projection v2 replaces raw
 execution-registry serialization. It carries sorted kinds with `template`/`prepared`
 pairing and template provider, merged WorkClasses, installed evaluator parameter
 JSON schemas, policy vocabulary, applicable budget and scoped worker-model choices.
@@ -188,8 +193,8 @@ removed until the full scope/WorkClass/context envelope fits UTF-8 `maxBytes`.
 byte guards. Context declares paths `not-inspected`: this slice discovers no files,
 and v2 forbids invented paths beyond those explicitly supplied in intent.
 
-The selected `run-proposal` template is v2; v1 stays selectable and its digest is
-unchanged. Task `acceptanceCriteria` is described as criterionDefinitions ids.
+The selected `run-proposal` template is v4 (context v3 with memory); v1–v3 stay selectable and the
+v1 digest is unchanged (v2 was the selected template when this slice landed). Task `acceptanceCriteria` is described as criterionDefinitions ids.
 Projection version participates in contextDigest; contribution/input/output/receipt
 versions and successful replay semantics stay unchanged. A retained v1 proposal
 replays after v2 selection without another token count or model send.
@@ -258,3 +263,11 @@ next observation command, so additional budget/planning text cannot push that
 identity behind the details in a cancelled planning summary.
 Author evidence: external `proof/KUCUK-DUZELTMELER-2026-10-14/`; independent,
 hosted, built binary and live/N1 acceptance remain open.
+
+## alpha.55 additions
+
+alpha.55 adds four planning facts; [core layers](core-layers.md) holds the details. The Brain model must hold the `brain` role and be
+active in the scope, otherwise `BRAIN_TIER_REFUSED` before any budget read or model call. A reply that names a worker model or effort is
+refused with `BRAIN_ASSIGNMENT_REFUSED`; the system assigns models from the WorkClass candidate list. Templates written for context v3
+(the selected v4) receive the scope's verified memory as a labelled data part (`BRAIN_MEMORY_CONTEXT_HELD` on a failed read). A
+subscription quota refusal waits visibly within `brain_planner.quotaWait` and is shown in the monitor before a Run exists.

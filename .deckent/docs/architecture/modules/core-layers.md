@@ -10,7 +10,9 @@ open. Owner decisions: [core layers](../../decisions/owner-decisions.md#cekirdek
 
 ## One rule for every switched layer: off until a person turns it on
 
-Every switched behaviour ships shadow first and off. A shadow mode computes and seals what it would do and changes nothing. The
+Every switched behaviour ships shadow first and off. A shadow mode computes and seals what it would do and applies nothing. Memory-verification
+shadow and recovery shadow still call their configured model (the candidate text or sealed evidence goes to that provider; calls count against
+the daily caps); Nervous and agent-statistics shadow only write sealed records. The
 headless Brain has no switch: S3-5 retired its preview key, so its connect kind is offered once the realm exists and is used only after
 the person's own login, connect and consent (see Headless subscription Brain). The switches
 are protected configuration: no AI principal and no MCP actor may write them (`PROTECTED_CONFIG_PATHS`,
@@ -29,8 +31,11 @@ are measured on N1; no number is a literal in logic.
 The memory switches are declared in `src/platform/core/config-fields/internal/fields.ts` (`MEMORY_AUTOMATION_MODES`), and a newly set
 memory phase 3 or 4 is refused with `MEMORY_ROLLOUT_CRITERIA_UNMET` until its measured criteria hold (see Memory). The policy template
 that grants the new identities their exact rights is first-run template v15 (`FIRST_RUN_POLICY_TEMPLATE_VERSION`,
-`src/domain/core/policy/internal/first-run-template.ts:68`); an installation gets it only through the owner's
-`deckent policy upgrade --template current --scope <id> --preview`, then `--apply`.
+`src/domain/core/policy/internal/first-run-template.ts:68`). A fresh install gets template v15 directly. An existing installation gets
+it only through the owner's upgrade, previewed first and then applied: a policy installed from the first-run template upgrades with
+`deckent policy upgrade --template current --scope <id> --preview`, then `--apply`; a hand-written policy upgrades with
+`deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, then `--apply` (without `--person` it refuses and
+names the people of the scope).
 
 ## System assignment and model roles (S0, S1, S2, M2–M5)
 
@@ -88,7 +93,9 @@ verify, retire and purge are on the AI hard floor except for the evaluator's own
 
 ## Auditor and safety holds (S5, S5b)
 
-Every refused agent tool decision and every plain allow that ran is sealed in one `policy-turn` audit record per turn. AuditFollow reads
+Every refused agent tool decision and every plain allow that ran is sealed in at most one `policy-turn` record per turn (none when the
+turn decided nothing; lists bounded, counts exact; mode relaxations, standing and full-access allows have their own audit events). The
+record is written after the turn, best effort: a refused write does not fail the turn and is not reported. AuditFollow reads
 verified events after a sequence and reports gaps; it has no runtime operation yet (that waits for the next protocol step). The
 `<issuer>/auditor` identity may only inspect, list and verify. A hold now carries its source: an operator hold, or a Nervous or Auditor
 safety hold that only a person at an interactive terminal lifts (`RUN_HOLD_PERSON_REQUIRED`); every resume is a sealed decision.
@@ -102,6 +109,9 @@ restart a service component, alert the Brain, hand to a person); Nervous itself 
 broker runs a proposal only when its rule is marked `live`, the owner holds a standing policy grant (`recovery-action`/`apply`, never
 grantable to an AI) and an executor exists (`src/engine/core/nervous/internal/broker.ts:43`). Every rule in the Core seed is
 `provisional`, so `live` seals proposals and executes nothing until the owner promotes a measured rule by its exact id and version.
+alpha.55 has no rule-promotion command and no card for the `recovery-action/apply` grant, so in alpha.55 live Nervous and automatic
+recovery cannot act, and recovery shadow produces no data while Nervous is shadow (recovery reads only executed stop steps,
+`src/composition/core/runs/internal/recovery.ts:80-81`). The promotion card is planned for alpha.56.
 
 When a fence and stop do run, the slot is released only with termination proof bound to the same worker (the container id stored at
 create and the incarnation seen at the first running observation); without proof the Run gets a Nervous safety hold. Recovery then
@@ -124,8 +134,9 @@ sign-in at their terminal; the person's `~/.claude` is not used, and `--config-d
 `--safe-mode --restricted`, `HOME` set to an emptied run directory and the login directory as `CLAUDE_CONFIG_DIR`, the system prompt in a 0600 file and the message on stdin, never in argv. A preflight without a model call checks
 the binary, its version range, required flags (help-hidden flags proven by a parser refusal in an empty temporary config directory) and
 the login fields. Guards stop the process group when the CLI reports an API key source, a tool, an MCP server, a plugin outside the
-registry allow-list or a model other than the pinned one; every refusal is typed and nothing falls back to an API. Every spawn runs
-inside a bubblewrap realm: system prefixes read-only, the login directory the only writable host directory, an empty network
+registry allow-list or a model other than the pinned one; every refusal is typed and nothing falls back to an API. Every inference and
+preflight spawn runs inside a bubblewrap realm (the person's own sign-in, `deckent models login`, runs outside it at their terminal because
+it needs their browser, and holds the login lock): system prefixes read-only, the login directory the only writable host directory, an empty network
 namespace whose one way out is a relay to the provider's allow-listed gateway, and file-size, descriptor and core-dump limits. Without a
 usable realm the kind is refused with `HEADLESS_ISOLATION_UNAVAILABLE`; there is no unisolated path, so the kind is available to
 customers wherever the realm works. One call is in flight per connection. An AI/MCP actor or a background role (recovery decision,
