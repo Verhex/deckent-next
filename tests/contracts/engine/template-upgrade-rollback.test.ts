@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, RECOVERY_ROLLOUT, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, POLICY_RECOVERY_CHANGE_KIND, RECOVERY_ROLLOUT, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
 import { ApprovalApplication, NERVOUS_EXECUTABLE_ACTIONS, PolicyAdministrationApplication, PolicyTemplateUpgrade, RecoveryPolicyCard, administerOwnPolicyChange, nervousStandingApproval,
   upgradePolicyTemplate } from '#engine/index.js';
 import { createHmacIntegrity, sha256 } from '#platform/index.js';
@@ -223,6 +223,11 @@ it.skipIf(process.platform !== 'linux')('the recovery card raises its v16 cell t
   // Negative first: the same replace declared as a standing change keeps today's bound (POLICY_DELEGATION_EXCEEDS at the gate), nothing written.
   await expect(administerOwnPolicyChange(f, { scopeId: 's', principal: f.principal, change: { schemaVersion: 1, changes: [{ kind: 'grant.replace', grant: { ...ask, effect: 'allow' } }] },
     tag: 'd1-negative', reason: 'standing path', revision: before.revision, kind: 'standing-change' })).rejects.toMatchObject({ code: 'POLICY_DELEGATION_EXCEEDS' });
+  expect(policySchema.parse(await f.source.load()).revision).toBe(before.revision);
+  // Audit cbbe28b5f: a policy-recovery set that pairs the raise with an added require-approval on the same cell is refused at the gate, nothing written.
+  await expect(administerOwnPolicyChange(f, { scopeId: 's', principal: f.principal, change: { schemaVersion: 1, changes: [{ kind: 'grant.replace', grant: { ...ask, effect: 'allow' } },
+    { kind: 'grant.add', grant: { ...ask, id: 'd1-shadow-ask' } }] }, tag: 'd1-pair', reason: 'paired set', revision: before.revision, kind: POLICY_RECOVERY_CHANGE_KIND }))
+    .rejects.toMatchObject({ code: 'POLICY_DELEGATION_EXCEEDS' });
   expect(policySchema.parse(await f.source.load()).revision).toBe(before.revision);
   const rollout = { registry: { revision: 'r', status: 'provisional' as const }, complete: true, rules: [], decisions: { decided: 0, agreements: 0, perMille: null, waiting: 0, met: false } };
   const card = new RecoveryPolicyCard({ policy: f.source, administration: f.administration, approve: f.approve }, { rollout: async () => rollout, executable: NERVOUS_EXECUTABLE_ACTIONS }, async () => true);

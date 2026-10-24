@@ -108,9 +108,10 @@ export function planPolicyChange(policyInput: unknown, bindingsInput: unknown, c
       grants.push(item.grant); touched.push(rule(item.grant)); counts.grantsAdded++;
     } else if (item.kind === 'grant.remove' || item.kind === 'grant.replace') {
       const index = at(grants, item.kind === 'grant.remove' ? item.id : item.grant.id);
-      touched.push(rule(grants[index]!)); counts.grantsRemoved++; removal = true;
+      const old = rule(grants[index]!);
+      touched.push(old); counts.grantsRemoved++; removal = true;
       if (item.kind === 'grant.remove') grants.splice(index, 1);
-      else { touched.push(Object.freeze({ ...rule(item.grant), replaces: rule(grants[index]!) })); grants[index] = item.grant; counts.grantsAdded++; }
+      else { touched.push(Object.freeze({ ...rule(item.grant), replaces: old })); grants[index] = item.grant; counts.grantsAdded++; }
     } else if (item.kind === 'binding.add') {
       if (entries.some(value => value.id === item.binding.id)) invalid();
       entries.push(item.binding); touched.push(...derive(item.binding)); counts.bindingsAdded++;
@@ -195,6 +196,10 @@ export function delegationWithin(input: Policy, actor: { readonly issuer: string
     return policy.grants.find(item => item.id === value.id && item.effect === 'require-approval' && sameMcpCapabilityRule(item, old as PolicyGrant)
       && sameMcpCapabilityRule({ ...item, effect: 'allow' }, value as PolicyGrant));
   };
+  // Defence in depth (audit cbbe28b5f): a raise stands alone — the change set is exactly that one replace (its old and new side), so no other
+  // rule in the same set (an added require-approval on the cell, anything else) can leave the raised allow dormant, whatever the caller sends.
+  const lone = touched.find(value => raised(value) !== undefined);
+  if (lone && !(touched.length === 2 && touched[0] === lone.replaces && touched[1] === lone)) return Object.freeze({ ok: false as const, ruleId: lone.id, reason: 'require-approval' as const });
   for (const value of touched) {
     const raise = raised(value);
     for (const action of cells(value.actions)) for (const id of cells(value.resource.ids)) for (const scope of cells(value.scopes)) {

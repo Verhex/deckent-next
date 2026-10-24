@@ -18,7 +18,11 @@ function fixture(rollout = view(), grants: unknown[] = []) {
   { schemaVersion: 2, revision: 'b', modes: [], bindings: [{ id: 'owner', principals: [{ issuer: human.issuer, subject: human.subject }], roles: ['owner'], scopes: 'all' }] });
   const commands: { input: { changes: { kind: string; grant?: { id: string; resource: unknown; actions: unknown } }[] } }[] = [];
   const card = (interactive = true) => new RecoveryPolicyCard({ policy: { load: async () => policy },
-    administration: { submit: async (command: unknown) => { commands.push(command as never); return { status: 'settled' } as never; } },
+    // The administration's bound as the gate runs it: a refused change is never recorded.
+    administration: { submit: async (command: { input?: unknown }, _credential?: unknown, options?: DelegationOptions) => {
+      const files = authorityDocuments(policy), verdict = delegationWithin(policy, human, planPolicyChange(files.policy, files.bindings, command.input).touched, options);
+      if (!verdict.ok) throw Object.assign(new Error('POLICY_DELEGATION_EXCEEDS'), { code: 'POLICY_DELEGATION_EXCEEDS', detail: `${verdict.ruleId}:${verdict.reason}` });
+      commands.push(command as never); return { status: 'settled' } as never; } },
     approve: async () => { throw Error('unexpected'); } }, { rollout: async () => rollout, executable: NERVOUS_EXECUTABLE_ACTIONS }, async () => interactive);
   const input = (kind: 'action' | 'rule', id: string, action: 'grant' | 'revoke' = 'grant') => ({ schemaVersion: 1 as const, scopeId: 'scope', kind, id, action, expectedRevision: policy.revision });
   return { card, input, commands, get policy() { return policy; }, set policy(value) { policy = value; } };
@@ -31,7 +35,9 @@ it('rows: every stop-list action and the continuation, then each measured rule a
 });
 
 it('negative first: AI, non-interactive, no executor, unmet exits, unknown rows and a stale revision change nothing', async () => {
-  const f = fixture(view({ rule: false, decisions: false }));
+  // Own cells keep the rows off (a row a role already allows is current before these checks).
+  const f = fixture(view({ rule: false, decisions: false }), [cell('c1', 'action', 'stop-orphan'), cell('c2', 'action', 'alert-brain'), cell('c3', 'action', 'continue-new-attempt'),
+    cell('c4', 'rule', 'container-gone@1')]);
   for (const actor of [{ ...human, ...mcpPrincipalRef(human) }, { ...human, assurance: 'token-verified' as const }])
     await expect(f.card().change(f.input('action', 'stop-orphan'), actor)).rejects.toMatchObject({ code: 'AI_AUTHORITY_NON_DELEGABLE' });
   await expect(f.card(false).change(f.input('action', 'stop-orphan'), human)).rejects.toMatchObject({ code: 'APPROVAL_INTERACTIVE_REQUIRED' });
@@ -43,10 +49,14 @@ it('negative first: AI, non-interactive, no executor, unmet exits, unknown rows 
   expect(f.commands).toEqual([]);
 });
 
-// Audit 8328ff4a9: without the person's own exact cell (only a role, an `ids: 'all'` or a shared rule) the card refuses typed and writes nothing.
-it('no own exact cell: a role-only, a broad or a multi-person require-approval cell is refused with RECOVERY_CELL_NOT_OWN, nothing written', async () => {
-  const other = { issuer: 'host', subject: 'someone-else' };
-  for (const grants of [[], [cell('wide', 'action', 'x', { resource: { kind: 'recovery-action', ids: 'all' } })], [cell('shared', 'action', 'fence-attempt', { principals: [me, other] })]]) {
+// Audit 8328ff4a9 + cbbe28b5f: without the person's own exact cell (an `ids: 'all'` or a shared rule), or when such a rule also meets the own cell,
+// the card refuses typed and writes nothing; a row a role already allows is current.
+it('no own exact cell: a broad or a multi-person require-approval cell, alone or beside the own cell, is refused with RECOVERY_CELL_NOT_OWN; a role-allowed row is current', async () => {
+  const other = { issuer: 'host', subject: 'someone-else' }, wide = cell('wide', 'action', 'x', { resource: { kind: 'recovery-action', ids: 'all' } });
+  const allowed = fixture();
+  expect((await allowed.card().change(allowed.input('action', 'fence-attempt'), human)).status).toBe('current');
+  expect(allowed.commands).toEqual([]);
+  for (const grants of [[wide], [cell('shared', 'action', 'fence-attempt', { principals: [me, other] })], [cell('own-stop', 'action', 'fence-attempt'), wide]]) {
     const f = fixture(view(), grants);
     await expect(f.card().change(f.input('action', 'fence-attempt'), human), JSON.stringify(grants)).rejects.toMatchObject({ code: 'RECOVERY_CELL_NOT_OWN' });
     expect(f.commands).toEqual([]);

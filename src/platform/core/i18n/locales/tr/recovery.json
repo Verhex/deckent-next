@@ -48,7 +48,7 @@
   "error.RECOVERY_TARGET_INVALID": "Hiçbir şey değişmedi: bu kurtarma eylemi, kuralı ya da vakası bu kartta burada sunulmuyor. Seçebileceklerinizi görmek için deckent policy recovery ya da deckent recovery review çalıştırın.",
   "error.RECOVERY_ROLLOUT_CRITERIA_UNMET": "Değişmedi: {target}, {scope} kapsamında yalnız ölçülen çıkış ölçütleri ({criteria}) sağlandıktan sonra açılabilir.",
   "recovery.next.RECOVERY_ROLLOUT_CRITERIA_UNMET": "Her sayıyı ve onu neyin ilerlettiğini görmek için deckent recovery --scope {scope} çalıştırın.",
-  "error.RECOVERY_CELL_NOT_OWN": "Değişmedi: {scope} kapsamında {target} burada yalnız tam olarak ona ait ve yalnız sizi adlandıran kendi onay kuralınızla açılabilir; böyle bir kural yok (bunu bir rol, daha geniş ya da paylaşılan bir kural belirliyor). Bu kurulumun politikasını yöneten kişi bunu orada karara bağlar.",
+  "error.RECOVERY_CELL_NOT_OWN": "Değişmedi: {scope} kapsamında {target} burada yalnız tam olarak ona ait ve yalnız sizi adlandıran kendi onay kuralınız onu belirleyen tek kural olduğunda açılabilir; burada bunu bir rol, daha geniş ya da paylaşılan bir kural belirliyor. Bu kurulumun politikasını yöneten kişi bunu orada karara bağlar.",
   "error.RECOVERY_ACTION_NO_EXECUTOR": "Değişmedi: {action} bu sürümde bir etki üretmiyor; bu yüzden onun için kalıcı izin yazılmaz.",
   "error.RECOVERY_VERDICT_CONFLICT": "Değişmedi: {case} vakasına daha önce farklı bir yanıt verdiniz; her vaka için tek yanıt tutulur.",
   "recovery.rollout.summary": "Geçiş: hazır kurallar {met}/{rules} · uyum oranı {agreements}/{decided} · {waiting} vaka seçiminizi bekliyor.",

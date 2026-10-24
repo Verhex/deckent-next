@@ -26,8 +26,8 @@ export type RecoveryPolicyPorts = Readonly<{ rollout: (scopeId: string) => Promi
  * row off is never gated. The broker and the recovery decision read the policy fresh, so a change applies on the next page or decision.
  * alpha.56 D1 (owner 2026-10-24, Jev c1d1afe9): the evaluator decides require-approval before allow, so turning a row on where the person holds
  * the cell at require-approval (template v16) replaces that rule with allow (the I2 raise of a `policy-recovery` change) and turning it off
- * replaces it back. Without such an exact own cell (the person's cell comes from a role, a broader or a shared rule) the card refuses
- * (`RECOVERY_CELL_NOT_OWN`) and writes nothing: it never adds an allow beside another rule (audit 8328ff4a9: a dormant allow would widen on a later revoke).
+ * replaces it back. A row already allowed (a role allow) is current. Without such an exact own cell, or when another require-approval also
+ * meets it (a role, a broader or a shared rule), the card refuses (`RECOVERY_CELL_NOT_OWN`) and writes nothing: it never adds an allow beside another rule (audit 8328ff4a9: a dormant allow would widen on a later revoke).
  * The measured exits are bound to the write's revision: the view they come from is read on `expectedRevision`, the CAS write commits only on it.
  */
 export class RecoveryPolicyCard {
@@ -71,7 +71,8 @@ export class RecoveryPolicyCard {
     const { policy, view } = await this.read({ schemaVersion: 1, scopeId: command.scopeId }, principal), target = view.rows.find(row => row.kind === command.kind && row.id === command.id);
     if (!target) throw ErrorRegistry.createError('RECOVERY_TARGET_INVALID');
     if (view.revision !== command.expectedRevision || target.managed === 'conflict') throw ErrorRegistry.createError('POLICY_DELEGATION_CONFLICT');
-    if (command.action === 'grant' ? target.managed === 'granted' : target.managed === 'none') return Object.freeze({ status: 'current' as const, view });
+    // A row already allowed (e.g. through a role) is on: a grant is current and writes nothing (audit cbbe28b5f).
+    if (command.action === 'grant' ? target.managed === 'granted' || target.effective === 'allowed' : target.managed === 'none') return Object.freeze({ status: 'current' as const, view });
     if (command.action === 'grant' && !target.available) throw ErrorRegistry.createError('RECOVERY_ACTION_NO_EXECUTOR', { params: { action: target.id } });
     if (command.action === 'grant' && target.exits === false) {
       const criteria = command.kind === 'rule' ? RECOVERY_ROLLOUT.detection.id : RECOVERY_ROLLOUT.decision.id;
@@ -83,8 +84,16 @@ export class RecoveryPolicyCard {
       : cells.filter(item => item.effect === 'allow').map(item => item.id === grant.id ? { kind: 'grant.remove' as const, id: item.id }
         : { kind: 'grant.replace' as const, grant: { ...item, effect: 'require-approval' as const } });
     const change = { schemaVersion: 1 as const, changes };
-    await administerOwnPolicyChange(this.deps, { scopeId: command.scopeId, principal, change, revision: command.expectedRevision, kind: POLICY_RECOVERY_CHANGE_KIND,
-      tag: sha256(encodeCommandProjection('recovery-policy-change:1', command)), reason: `${command.action}: ${command.kind} ${command.id}, ${command.scopeId}` });
+    try {
+      await administerOwnPolicyChange(this.deps, { scopeId: command.scopeId, principal, change, revision: command.expectedRevision, kind: POLICY_RECOVERY_CHANGE_KIND,
+        tag: sha256(encodeCommandProjection('recovery-policy-change:1', command)), reason: `${command.action}: ${command.kind} ${command.id}, ${command.scopeId}` });
+    } catch (error) {
+      // The bound kept the raise at require-approval: another require-approval (a role, a broader or a shared rule) also meets the person's own cell.
+      const refusal = error as { code?: unknown; detail?: unknown } | null;
+      if (command.action === 'grant' && refusal?.code === 'POLICY_DELEGATION_EXCEEDS' && String(refusal.detail).endsWith(':require-approval'))
+        throw ErrorRegistry.createError('RECOVERY_CELL_NOT_OWN', { params: { target: target.id, scope: command.scopeId } });
+      throw error;
+    }
     return Object.freeze({ status: 'applied' as const, view: await this.inspect({ schemaVersion: 1, scopeId: command.scopeId }, principal) });
   }
 }

@@ -167,5 +167,9 @@ describe('delegation bound (POLICY-ADMIN P1)', () => {
       expect(run(files([value]), person, raise(value as typeof ra)), JSON.stringify(value)).toMatchObject({ ok: false, reason: 'require-approval' });
     // The own exact cell while a role-derived require-approval also meets it: the replace would leave the cell at require-approval (dormant), refused.
     expect(run(files([ra], [role], [], ops), person, raise(ra))).toMatchObject({ ok: false, reason: 'require-approval' });
+    // Audit cbbe28b5f, defence in depth: a raise stands alone. The same set adding a require-approval on that cell naming the actor (or anything else) is refused.
+    expect(run(f, person, change({ kind: 'grant.replace', grant: { ...ra, effect: 'allow' } }, { kind: 'grant.add', grant: { ...ra, id: 'again' } })))
+      .toMatchObject({ ok: false, ruleId: 'ra', reason: 'require-approval' });
+    expect(run(f, person, change({ kind: 'grant.replace', grant: { ...ra, effect: 'allow' } }, { kind: 'grant.replace', grant: { ...rule, effect: 'allow' } }))).toMatchObject({ ok: false });
   });
 });
