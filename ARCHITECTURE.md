@@ -130,10 +130,12 @@ transaction; domain `workerCustody` (absent = held) moved only by `releaseWorker
   tool fields are requests; unknown fields kept but never run; bypass/full-access never exported). No Agent Builder target
   (closing 2026-11-30).
 
-## Core layers — alpha.55 (default off)
+## Core layers — alpha.55 (switches start off)
 
-Owner 2026-10-23 put seven core layers before the beta; alpha.55 implements them, each behind a protected switch that no AI writes
-and that starts `off`, with a `shadow` mode that seals what it would do and changes nothing. System assignment: the Brain plans tasks
+Owner 2026-10-23 put seven core layers before the beta; alpha.55 implements them. Memory, Nervous, recovery and the agent statistics
+pass each sit behind a protected switch that no AI writes and that starts `off`, with a `shadow` mode that seals what it would do and
+changes nothing; the headless Brain has no preview switch (S3-5 removed it): its connect kind is offered once the bubblewrap realm
+exists and is used only after the person's own login, connect and consent. System assignment: the Brain plans tasks
 and WorkClasses only and the system picks channel, model and effort from the WorkClass candidate list, sealed at admission; tier and
 role come from one versioned model role registry (`model_roles` overlay, `deckent models roles`). Memory: a scoped journal whose
 candidates come from accepted work, are verified only by a person or an independent other-maker evaluator, and reach worker and

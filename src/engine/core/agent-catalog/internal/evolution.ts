@@ -4,7 +4,7 @@ import { sha256 } from '#platform/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
 import { AgentCatalogStoreError, type AgentCatalogAction, type AgentCatalogDependencies, type AgentCatalogStore } from './contract.js';
 import { canSignCatalogActions, signCatalogActions } from './signing.js';
-import { catalogEvolutionActions, catalogSuggestionAuditSubject, catalogSuggestionStateSchema, catalogSuggestionWorkClass, standingBulkCommandSchema, standingChangeCommandSchema,
+import { catalogEvolutionActions, catalogSuggestionAuditSubject, catalogSuggestionProducerKey, catalogSuggestionSignerRevoked, requireCatalogSuggestionDecidable, catalogSuggestionStateSchema, catalogSuggestionWorkClass, standingBulkCommandSchema, standingChangeCommandSchema,
   suggestionDismissCommandSchema, suggestionInspectQuerySchema, suggestionListQuerySchema, revokedPromotionsQuerySchema, type CatalogEvolutionChange, type CatalogSuggestion, type CatalogSuggestionInspection,
   type CatalogSuggestionListing, type CatalogSuggestionState, type CatalogSuggestionView, type StoredCatalogSuggestion } from './suggestions.js';
 
@@ -61,7 +61,7 @@ export class AgentStandingApplication {
       if (record.scopeId !== scopeId || state.suggestionId !== record.suggestionId) throw new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT');
       const p = record.proposed, readable = p.kind !== 'skill-draft' ? [] : this.deps.lessonReadable ? await this.deps.lessonReadable(principal, scopeId, p.lessons) : p.lessons.map(() => false);
       const proposed = p.kind !== 'skill-draft' ? p : { ...p, lessons: p.lessons.filter((_, index) => readable[index] === true), withheld: p.lessons.filter((_, index) => readable[index] !== true).length };
-      const revoked = state.state === 'open' && state.signed !== undefined && (await store.signer(scopeId, state.signed.keyId))?.state !== 'active';
+      const revoked = catalogSuggestionSignerRevoked(state, await catalogSuggestionProducerKey(store, { record, state }));
       out.push({ ...record, proposed, state: revoked ? 'superseded' : state.state === 'open' && now >= record.expiresAtMs ? 'expired' : state.state, stateRevision: state.revision,
         decidedBy: state.state === 'open' ? null : state.by, decision: state.decision, signerRevoked: revoked });
     }
@@ -91,12 +91,10 @@ export class AgentStandingApplication {
   private async decidable(store: AgentCatalogStore, scopeId: string, suggestionId: string, principal: VerifiedPrincipal): Promise<StoredCatalogSuggestion> {
     const found = await store.suggestion(scopeId, suggestionId);
     if (!found) throw new AgentCatalogStoreError('AGENT_CATALOG_NOT_FOUND');
-    const { record, state } = found;
+    const { record } = found;
     if (record.scopeId !== scopeId) throw new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT');
-    if (record.mode !== 'on') throw new AgentCatalogError('CATALOG_SUGGESTION_SHADOW');
-    if (same(record.producer, principal)) throw new AgentCatalogError('AGENT_STANDING_REFUSED');
-    const revoked = state.signed !== undefined && (await store.signer(scopeId, state.signed.keyId))?.state !== 'active';
-    if (state.state !== 'open' || this.deps.now() >= record.expiresAtMs || revoked) throw new AgentCatalogError('CATALOG_SUGGESTION_STALE');
+    if (record.mode === 'on' && same(record.producer, principal)) throw new AgentCatalogError('AGENT_STANDING_REFUSED');
+    requireCatalogSuggestionDecidable(found, this.deps.now(), await catalogSuggestionProducerKey(store, found));
     return found;
   }
   private decided(found: StoredCatalogSuggestion, principal: VerifiedPrincipal, at: number, commandId: string, decision: string, signed?: { keyId: string; signatureDigest: string }): CatalogSuggestionState {

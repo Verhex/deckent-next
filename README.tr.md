@@ -523,7 +523,7 @@ uygulamasının geliştirilmesi de betayla birlikte başlar.
 
 ```mermaid
 flowchart LR
-  N["Şimdi · alpha.55<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>çekirdek katmanlar kodda, varsayılan kapalı"] --> C["Betadan önce · çekirdek katmanlar açılır<br/>imzalı ajanlar ve skill'ler için Deckent Hub<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
+  N["Şimdi · alpha.55<br/>terminal · onaylar · bütçeler · MCP<br/>/do → kodlama işçileri → Git teslimi<br/>çekirdek katmanlar kodda, anahtarları kapalı başlar"] --> C["Betadan önce · çekirdek katmanlar açılır<br/>imzalı ajanlar ve skill'ler için Deckent Hub<br/>hafıza · tekrarlanan işten önerilen ajanlar ve yetenekler<br/>işçi yürütme ve atama · değerlendirme<br/>Brain · otomatik kurtarmalı Nervous · Auditor"]
   C --> B["Beta<br/>npm paketi<br/>katmanlar gerçek kullanım ve testlerle gelişir<br/>paralelde masaüstü uygulaması geliştirmesi"]
   B --> E["Enterprise · ayrı dağıtım<br/>SSO · filo · merkezi policy<br/>ERP bağlayıcıları"]
 ```
