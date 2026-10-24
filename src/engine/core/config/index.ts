@@ -1,4 +1,4 @@
-export { ConfigApplication } from './internal/application.js';
+export { ConfigApplication, assertConfigPersonWitness, configWriteOperation, isProtectedConfigWrite } from './internal/application.js';
 export { ConfigApplicationError } from './internal/contract.js';
 export type { ConfigFieldView, ConfigSnapshot, ConfigLayer, ConfigSource, ConfigWriteInput, ConfigWriteResult, ConfigDocumentPort, ConfigAuthorityPort, ConfigPlan,
   ConfigApprovalPort, ConfigApprovalAdmission, ConfigAuthorization, ConfigChangeOutcome, ConfigChangeSubject, ConfigPermissionDecision, ConfigWritePermission } from './internal/contract.js';

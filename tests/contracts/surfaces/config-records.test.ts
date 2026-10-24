@@ -21,8 +21,10 @@ async function fixture(extra = {}, policy: 'allow' | 'deny' | 'approval' = 'allo
     authorize: async () => { if (decision === 'deny') throw new ConfigApplicationError('POLICY_DENIED'); return 'p1'; }, audit: async event => { audits.push(event); },
     approvals: { evaluate: async () => { if (decision === 'deny') throw new ConfigApplicationError('POLICY_DENIED'); return { decision: decision === 'approval' ? 'require-approval' : 'allow', revision: 'p1', ruleId: 'rule' }; },
       admit: async () => ({ pending: { approvalId: 'approval', revision: 1, expiresAt: Date.now() + 60000, summary: 'Change setting' } }) },
+    // alpha.55.1: the record editors run on a person's terminal (protected roots such as `execution.*` and `layout.*` need its witness).
+    witness: async () => undefined,
   });
-  const context: ConfigCommandContext = { configApplication: () => app, resolveConfigPrincipal: async () => ({ id: 'owner', issuer: 'local-os', subject: '1000', assurance: 'os-user', scopeIds: ['test'] }) as never };
+  const context: ConfigCommandContext = { env: { TERM: 'xterm-256color' }, stdin: { isTTY: true }, stdout: { isTTY: true } as never, configApplication: () => app, resolveConfigPrincipal: async () => ({ id: 'owner', issuer: 'local-os', subject: '1000', assurance: 'os-user', scopeIds: ['test'] }) as never };
   const sources: ConfigChoiceSourcePort = { list: async source => (source === 'scopes' ? ['test'] : source === 'branches' ? ['refs/heads/main', 'refs/heads/dev'] : source === 'paths' ? [root] : []).map(value => ({ id: value, label: value, value })),
     browse: directory => discoverConfigRecordFiles(directory, { maxEntries: 64, timeoutMs: 1000, outputBytes: 4096 }), readDocument: file => readConfigRecordFile(file, 4096) };
   return { root, path, options, context, sources, app, audits, writes, policy: (next: typeof policy) => { decision = next; }, port: configRecordPort(root, context, options, 'en', sources), document: async () => JSON.parse(await readFile(path, 'utf8')) };

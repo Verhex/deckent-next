@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { executionRegistrySchema, evaluatorDefinitionSchema, identitySchema, nativeCliIdSchema, type ExecutionRegistry, type JsonValue, type ExecutionProfileDefinition, type VerifiedPrincipal } from '#domain/index.js';
 import { affectedToolchainProfiles, registryLayerHold } from '#engine/core/toolchain-currency/index.js';
-import type { ConfigSnapshot, ConfigWriteResult, ConfigApplication } from '#engine/core/config/index.js';
+import { assertConfigPersonWitness, type ConfigSnapshot, type ConfigWriteResult, type ConfigApplication } from '#engine/core/config/index.js';
 import { ConfigValidationError, ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
 import defaults from './initial-registry.json' with { type: 'json' };
 const initialRegistryDefaults = z.object({ schemaVersion: z.literal(1), ordering: z.literal('input-order'),
@@ -14,6 +14,9 @@ export interface NativeTemplatePorts {
   template(resources: unknown, invocation: unknown): ExecutionProfileDefinition;
   detect(provider: string, settings: NonNullable<DeckentConfig['execution']>['docker']): Promise<string>;
   beforeWrite?: () => void | Promise<void>;
+  /** alpha.55.1: the person's terminal witness (`ConfigAuthorityPort.witness`): `admission` is a protected root, so an apply asks it right after
+   * input validation, before any snapshot, discovery, principal or write; absent, an apply is refused (fail closed). */
+  witness?: (operation: string) => Promise<void>;
 }
 
 const discoveryModeSchema = z.enum(['disabled', 'repository']);
@@ -74,6 +77,8 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
   const parsed = requestSchema.safeParse(input);
   if (!parsed.success) refuse('CODING_TEMPLATE_INPUT_INVALID');
   const request = parsed.data;
+  // alpha.55.1 (Astra 2752): an apply is the person's act — the witness first, before any read, discovery, principal or write; preview stays open.
+  if (request.apply) await assertConfigPersonWitness('set', 'admission.registry', ports.witness);
   const read = await ports.snapshot().catch((error: unknown) => {
     if (error instanceof ConfigValidationError) {
       if (error.issues.some(issue => ['admission.poolId', 'admission.executionSlots', 'admission.inFlightSlots'].includes(issue.path))) refuse('CODING_TEMPLATE_ADMISSION_REQUIRED');
@@ -151,7 +156,10 @@ function currentRegistry(snapshot: ConfigSnapshot, request: InitialRegistryReque
 export async function initializeNativeRegistry(input: unknown, ports: NativeTemplatePorts) {
   const parsed = initializeSchema.safeParse(input);
   if (!parsed.success) refuse('CODING_TEMPLATE_INPUT_INVALID');
-  const request = parsed.data, read = await ports.snapshot();
+  const request = parsed.data;
+  // alpha.55.1 (Astra 2752): the witness before the snapshot and the discovery probe (a container), so a refused apply starts nothing.
+  if (request.apply) await assertConfigPersonWitness('set', 'admission', ports.witness);
+  const read = await ports.snapshot();
   const current = currentRegistry(read, request, ports.template);
   if (current) return { schemaVersion: 1 as const, ...current, expect: read.digest, status: 'current' as const, write: null };
   const settings = initialSource(read, request);

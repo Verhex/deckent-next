@@ -85,7 +85,11 @@ it.skipIf(process.platform === 'win32')('cleans provider history through real co
   await set('provider_invocation_profiles', { schemaVersion: 1, profiles: [oldProfile] });
   await set('terminal.scopeId', scopeId); await set('terminal.chat', { schemaVersion: 1, reference: oldReference(5), maxCompletionTokens: 8192 });
   // The fixture's 1 MiB native response needs space for its worst-case delivery envelope, as real activation enforces.
-  await set('service.responseMaxBytes', 16_777_216); await set('mcp.responseMaxBytes', 16_777_216);
+  // alpha.55.1: `service.*` is protected — refused through the piped `--json` command, so the person sets it at a terminal (the witness attests).
+  await expect(set('service.responseMaxBytes', 16_777_216)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  await createConfiguredConfigApplication(root, { env }, undefined, { attest: async () => true }).submit('set', { keyPath: 'service.responseMaxBytes', value: 16_777_216,
+    layer: 'project', scopeId, commandId: `set-${++serial}`, principal: await resolveConfiguredConfigPrincipal(root, scopeId, { env }) });
+  await set('mcp.responseMaxBytes', 16_777_216);
   const activated = await Promise.all([1, 2, 3, 4, 5].map(version => activate(oldReference(version))));
   // Seed one no-network fixture claim via the durable adapter after actual policy authorization and real activation.
   const context = await loadConfiguredScopeContext(root, scopeId, options, 'write');

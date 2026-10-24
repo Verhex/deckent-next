@@ -23,7 +23,8 @@ async function harness(preview: boolean | null, auth?: Record<string, unknown>) 
   const f = await runtime({ extraGrants: grants, noServer: true }), configDir = join(f.data, 'claude-login'), bin = join(f.data, 'bin'), logPath = join(configDir, '.claude.json');
   await mkdir(configDir, { mode: 0o700 }); await mkdir(bin);
   const executable = await writeFakeCli(bin, { logPath, ...(auth ? { auth } : {}) }), options = { env: f.env };
-  if (preview !== null) await createConfiguredConfigApplication(f.project, options).submit('set', { keyPath: 'models.headless.preview', value: preview, layer: 'global',
+  // alpha.55.1: the retired key is protected, so the fixture sets it as the person at a terminal (the witness attests).
+  if (preview !== null) await createConfiguredConfigApplication(f.project, options, undefined, { attest: async () => true }).submit('set', { keyPath: 'models.headless.preview', value: preview, layer: 'global',
     commandId: 'preview-on', scopeId: 'scope', principal: await resolveConfiguredConfigPrincipal(f.project, 'scope', options) });
   const connect = (commandId: string, over: Record<string, unknown> = {}) => connectConfiguredModel(f.project, { schemaVersion: 1, commandId, scopeId: 'scope',
     connection: 'claude-cli-subscription', endpoint: null, model: { nativeId }, cli: { executable, configDir }, ...over }, options);

@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type DeckentConfig, type ExitCode, type Locale } from '#platform/index.js';
 import { executionProfileDefinitionSchema, executionRegistrySchema, type ExecutionProfileDefinition } from '#domain/index.js';
-import { affectedToolchainProfiles } from '#engine/index.js';
+import { affectedToolchainProfiles, configWriteOperation } from '#engine/index.js';
 import { commandLocale, readJsonInput } from '#surfaces/core/cli-kit/index.js';
 import { askCliCard, cliMode, cliTableStyle, renderCliTable, type CliCardOption } from '#surfaces/core/cli-human/index.js';
 import type { AdminCommandContext } from './context.js';
@@ -103,6 +103,8 @@ type TemplateResult = Awaited<ReturnType<CodingTemplateHandler>>;
 async function codingTemplateCommand(argv: readonly string[], context: AdminCommandContext) {
   const { values, flags } = readFlags(argv, 2, ['--preview', '--apply', '--json', '--provider', '--kind', '--image', '--discovery', '--lang']);
   if (flags.has('--preview') && flags.has('--apply') || !context.configureCodingTemplate) throw ErrorRegistry.createError('CLI_USAGE');
+  // alpha.55.1: `--apply` writes the protected `admission.registry` — a person's act at a terminal, refused off one before anything is read.
+  if (flags.has('--apply') && cliMode(context, flags.has('--json')).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: configWriteOperation('set', 'admission.registry') } });
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, locale = commandLocale(context, values.get('--lang'));
   const config = await loadConfig(root, { env, heal: false }), pins = affectedToolchainProfiles(config);
   const providers = [...new Set(pins.map(pin => pin.provider))];

@@ -37,6 +37,10 @@ export interface ConfigAuthorityPort {
   /** S4B-7: a check of the effective configuration before and after one change (a protected switch whose measured preconditions must hold);
    * it throws to refuse. Run by preview, before an approval is opened, and again under the layer lock before the write. Absent: no check. */
   readonly precondition?: (input: ConfigWriteInput, before: DeckentConfig, after: DeckentConfig) => Promise<void>;
+  /** alpha.55.1: the person's terminal witness (the composition's, as for every person-only command). `submit` asks it, before anything is read,
+   * planned, approved or written, for a write that changes a protected root (`protectedConfigKey`); it throws `AUTHORITY_WITNESS_REQUIRED` to
+   * refuse. Absent: a protected write through `submit` is refused (fail closed). `operation` names the change, e.g. `config set <key>`. */
+  readonly witness?: (operation: string) => Promise<void>;
 }
 /** The policy decision of one config write (`deny` is thrown, never returned); `ruleId` names the rule that decided. */
 export interface ConfigAuthorization { readonly decision: 'allow' | 'require-approval'; readonly revision: string; readonly ruleId: string | null }

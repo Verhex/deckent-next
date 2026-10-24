@@ -14,6 +14,8 @@ import { main } from '#surfaces/core/cli/index.js';
 import { seedCatalog, SEED_CHANNEL } from '../support/model-catalog.js';
 
 const roots: string[] = [];
+/** alpha.55.1: an apply writes the protected `admission` root, so these cases run as the witnessed person at a terminal. */
+const person = { witness: { attest: async () => true } };
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const imageId = `sha256:${'a'.repeat(64)}`;
 const docker = { executable: 'docker', imageId, memoryBytes: 268435456, cpus: 1, pids: 64,
@@ -53,7 +55,7 @@ async function setup() {
 describe.skipIf(process.platform === 'win32')('coding template configured producer and real CLI surface', () => {
   it('preview/apply preserve exact profile bytes, old rows, CAS backup/audit and an unchanged repeat', async () => {
     const f = await setup(), before = await readFile(f.path, 'utf8'), audits = f.auditCount(), backups = await f.backups();
-    const preview = await configureNativeCodingTemplate(f.root, request, f.options);
+    const preview = await configureNativeCodingTemplate(f.root, request, f.options, person);
     expect(preview.status).toBe('preview'); expect(preview.write).toBeNull();
     expect(await readFile(f.path, 'utf8')).toBe(before); expect(f.auditCount()).toBe(audits); expect(await f.backups()).toEqual(backups);
     nativeCodingTemplateBase(preview.profile);
@@ -61,7 +63,7 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     const invocation = preview.profile.parameters['invocation'] as Record<string, unknown>;
     for (const field of ['model', 'prompt', 'effort']) expect(invocation).not.toHaveProperty(field);
     for (const field of ['argv', 'nativeSubscription', 'executable']) expect(preview.profile.parameters['docker']).not.toHaveProperty(field);
-    const applied = await configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options);
+    const applied = await configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, person);
     const saved = JSON.parse(await readFile(f.path, 'utf8')).admission.registry;
     expect(saved).toEqual(preview.registry); expect(applied.registry).toEqual(preview.registry);
     expect(encodeExecutionProfileDefinition(saved.profiles.at(-1))).toBe(encodeExecutionProfileDefinition(preview.profile));
@@ -70,9 +72,9 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     expect(applied.write?.beforeDigest).toBe(preview.expect); expect(await readFile(applied.write!.backupPath!, 'utf8')).toBe(before);
     expect(f.auditCount()).toBe(audits + 1);
     const after = await readFile(f.path, 'utf8'), savedBackups = await f.backups();
-    expect((await configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options)).status).toBe('unchanged');
+    expect((await configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, person)).status).toBe('unchanged');
     expect(await readFile(f.path, 'utf8')).toBe(after); expect(await f.backups()).toEqual(savedBackups); expect(f.auditCount()).toBe(audits + 1);
-    const shared = await configureNativeCodingTemplate(f.root, { ...request, kind: 'another', apply: true }, f.options);
+    const shared = await configureNativeCodingTemplate(f.root, { ...request, kind: 'another', apply: true }, f.options, person);
     expect(shared.registry.profiles).toHaveLength(2); expect(shared.registry.kinds).toHaveLength(3);
   });
 
@@ -86,50 +88,50 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     [{ ...request, kind: 'prepared' }, 'CODING_TEMPLATE_KIND_CONFLICT'],
   ])('refuses %j without writing', async (input, code) => {
     const f = await setup(), before = await readFile(f.path, 'utf8'), audits = f.auditCount(), backups = await f.backups();
-    await expect(configureNativeCodingTemplate(f.root, { ...input, apply: true }, f.options)).rejects.toMatchObject({ code });
+    await expect(configureNativeCodingTemplate(f.root, { ...input, apply: true }, f.options, person)).rejects.toMatchObject({ code });
     expect(await readFile(f.path, 'utf8')).toBe(before); expect(f.auditCount()).toBe(audits); expect(await f.backups()).toEqual(backups);
   });
 
   it.each(['admission', 'execution'])('explains the missing %s prerequisite without inventing it', async section => {
     const f = await setup(); await f.mutate(config => { delete config[section]; }); const before = await readFile(f.path, 'utf8');
-    await expect(configureNativeCodingTemplate(f.root, request, f.options)).rejects.toMatchObject({ code: section === 'admission' ? 'CODING_TEMPLATE_ADMISSION_REQUIRED' : 'CODING_TEMPLATE_IMAGE_REQUIRED' });
+    await expect(configureNativeCodingTemplate(f.root, request, f.options, person)).rejects.toMatchObject({ code: section === 'admission' ? 'CODING_TEMPLATE_ADMISSION_REQUIRED' : 'CODING_TEMPLATE_IMAGE_REQUIRED' });
     expect(await readFile(f.path, 'utf8')).toBe(before);
   });
 
   it.each(['poolId', 'executionSlots', 'inFlightSlots'])('explains an incomplete admission.%s without healing config', async key => {
     const f = await setup(); await f.mutate(config => { delete config.admission[key]; });
     const before = await readFile(f.path, 'utf8');
-    await expect(configureNativeCodingTemplate(f.root, request, f.options)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_ADMISSION_REQUIRED' });
+    await expect(configureNativeCodingTemplate(f.root, request, f.options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_ADMISSION_REQUIRED' });
     expect(await readFile(f.path, 'utf8')).toBe(before);
   });
 
   it('reports a missing image as a typed prerequisite and leaves invalid config bytes intact', async () => {
     const f = await setup(); await f.mutate(config => { delete config.execution.docker.imageId; });
     const before = await readFile(f.path, 'utf8');
-    await expect(configureNativeCodingTemplate(f.root, request, f.options)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_IMAGE_REQUIRED' });
+    await expect(configureNativeCodingTemplate(f.root, request, f.options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_IMAGE_REQUIRED' });
     expect(await readFile(f.path, 'utf8')).toBe(before);
   });
 
   it('validates an existing registry before proposing any publication', async () => {
     const f = await setup(); await f.mutate(config => { config.admission.registry = { ...registry, kinds: [] }; });
     const before = await readFile(f.path, 'utf8');
-    await expect(configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_REGISTRY_INVALID' });
+    await expect(configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_REGISTRY_INVALID' });
     expect(await readFile(f.path, 'utf8')).toBe(before);
   });
 
   it('refuses ambiguous admitted pins and global registry overlays', async () => {
     const f = await setup(); await f.mutate(config => { const newer = { ...pin, id: 'newer', parameters: structuredClone(pin.parameters) }; (newer.parameters as unknown as { nativeSubscription: { preflight: { cliVersion: string } } }).nativeSubscription.preflight.cliVersion = '2.1.286';
       config.admission.registry.profiles.push(newer); config.admission.registry.kinds.push({ kind: 'newer', profile: { id: 'newer', version: 1 } }); });
-    await expect(configureNativeCodingTemplate(f.root, request, f.options)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED' });
+    await expect(configureNativeCodingTemplate(f.root, request, f.options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_TOOLCHAIN_REQUIRED' });
     await f.mutate(config => { config.admission.registry = registry; });
     await mkdir(join(f.root, 'global'), { recursive: true });
     await writeFile(join(f.root, 'global/config.json'), JSON.stringify({ admission: { registry } }));
-    await expect(configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options)).rejects.toMatchObject({ code: 'TOOLCHAIN_REGISTRY_LAYER_HOLD' });
+    await expect(configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, person)).rejects.toMatchObject({ code: 'TOOLCHAIN_REGISTRY_LAYER_HOLD' });
   });
 
   it('refuses a CAS race and keeps the concurrent edit with no template backup or audit', async () => {
     const f = await setup(), backups = await f.backups(), audits = f.auditCount();
-    await expect(configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, { beforeWrite: () => f.mutate(config => { config.language = 'tr'; }) }))
+    await expect(configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, { ...person, beforeWrite: () => f.mutate(config => { config.language = 'tr'; }) }))
       .rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
     expect(JSON.parse(await readFile(f.path, 'utf8'))).toMatchObject({ language: 'tr', admission: { registry } });
     expect(await f.backups()).toEqual(backups); expect(f.auditCount()).toBe(audits);
@@ -152,13 +154,13 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
       await f.mutate(config => { delete config.execution.docker; });
     }
     const project = source === 'docker' ? await readFile(f.path, 'utf8') : before;
-    await expect(configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, { beforeWrite })).rejects.toMatchObject({ code: source === 'registry' ? 'TOOLCHAIN_REGISTRY_LAYER_HOLD' : 'CONFIG_CONCURRENT_REVISION_HOLD' });
+    await expect(configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, { ...person, beforeWrite })).rejects.toMatchObject({ code: source === 'registry' ? 'TOOLCHAIN_REGISTRY_LAYER_HOLD' : 'CONFIG_CONCURRENT_REVISION_HOLD' });
     expect(await readFile(f.path, 'utf8')).toBe(project); expect(await f.backups()).toEqual(backups); expect(f.auditCount()).toBe(audits);
   });
 
   it('keeps CLI flags strict and does not print existing registry profiles', async () => {
     const f = await setup(); let output = '', error = '';
-    const context = { root: f.root, env: f.options.env, configureCodingTemplate: configureNativeCodingTemplate,
+    const context = { root: f.root, env: f.options.env, configureCodingTemplate: (root: string, input: unknown, options: object) => configureNativeCodingTemplate(root, input, options, person),
       stdout: { write: (chunk: string) => { output += chunk; return true; } }, stderr: { write: (chunk: string) => { error += chunk; return true; } } };
     const base = ['coding', 'template', '--provider', 'claude', '--kind', 'feature'];
     for (const extra of [[], ['--preview', '--apply'], ['--apply', '--apply'], ['--preview', '--model', 'alias'], ['--preview', '--provider', 'claude']]) {
@@ -173,21 +175,26 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
     for (const grant of policy.grants) if (grant.resource.kind === 'config') grant.effect = effect;
     await writeFile(f.policyPath, JSON.stringify(policy));
     const before = await readFile(f.path, 'utf8'), audits = f.auditCount(), backups = await f.backups();
-    await expect(configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options)).rejects.toMatchObject({ code: effect === 'deny' ? 'POLICY_DENIED' : 'POLICY_APPROVAL_UNSUPPORTED' });
+    await expect(configureNativeCodingTemplate(f.root, { ...request, apply: true }, f.options, person)).rejects.toMatchObject({ code: effect === 'deny' ? 'POLICY_DENIED' : 'POLICY_APPROVAL_UNSUPPORTED' });
     expect(await readFile(f.path, 'utf8')).toBe(before); expect(await f.backups()).toEqual(backups); expect(f.auditCount()).toBe(audits);
   });
 
   it('CLI EN/TR preview/apply and a generated workInput kind pass real Run admission', async () => {
     const f = await setup();
     let output = '', error = '';
-    const context = { root: f.root, env: f.options.env, configureCodingTemplate: configureNativeCodingTemplate,
+    const context = { root: f.root, env: f.options.env, configureCodingTemplate: (root: string, input: unknown, options: object) => configureNativeCodingTemplate(root, input, options, person),
       stdout: { write: (chunk: string) => { output += chunk; return true; } }, stderr: { write: (chunk: string) => { error += chunk; return true; } } };
     for (const locale of ['en', 'tr']) {
       output = ''; expect(await main(['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--preview', '--lang', locale], context)).toBe(0);
       expect(output).toContain(locale === 'en' ? 'Coding template preview' : 'Kodlama şablonu önizlemesi');
     }
-    output = ''; expect(await main(['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--apply', '--json'], context), error).toBe(0);
-    expect(JSON.parse(output).status).toBe('applied');
+    // alpha.55.1: `--apply` writes the protected `admission.registry` — refused off a person's terminal (`--json`, a pipe), applied on one.
+    const piped = await readFile(f.path, 'utf8');
+    output = ''; error = ''; expect(await main(['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--apply', '--json'], context)).not.toBe(0);
+    expect(error).toContain('AUTHORITY_WITNESS_REQUIRED'); expect(await readFile(f.path, 'utf8')).toBe(piped);
+    const terminal = { ...context, stdin: { isTTY: true }, stdout: { isTTY: true, columns: 120, write: (chunk: string) => { output += chunk; return true; } } };
+    output = ''; expect(await main(['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--apply'], terminal), error).toBe(0);
+    expect((JSON.parse(await readFile(f.path, 'utf8')) as { admission: { registry: { kinds: { kind: string }[] } } }).admission.registry.kinds.map(entry => entry.kind)).toContain('feature');
     await applyModelCatalog(f.root, { schemaVersion: 1, commandId: 'catalog', scopeId: 's', action: 'register', catalog: await seedCatalog() }, f.options);
     await applyModelCatalog(f.root, { schemaVersion: 1, commandId: 'activate-channel', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: null, expectedRevision: 0 }, f.options);
     await applyModelCatalog(f.root, { schemaVersion: 1, commandId: 'activate-model', scopeId: 's', action: 'activate', channelId: SEED_CHANNEL, modelId: 'claude-sonnet-5-5', expectedRevision: 0 }, f.options);
@@ -203,14 +210,14 @@ describe.skipIf(process.platform === 'win32')('coding template configured produc
 describe.skipIf(process.platform === 'win32')('coding template discovery selection', () => {
   it('keeps the admitted discovery mode by default and takes an explicit --discovery as a new template content id (C1)', async () => {
     const f = await setup();
-    const kept = await configureNativeCodingTemplate(f.root, request, f.options);
+    const kept = await configureNativeCodingTemplate(f.root, request, f.options, person);
     expect(kept.profile.parameters).toMatchObject({ invocation: { discovery: { mode: 'repository' } } });
-    const hidden = await configureNativeCodingTemplate(f.root, { ...request, discovery: 'disabled' }, f.options);
+    const hidden = await configureNativeCodingTemplate(f.root, { ...request, discovery: 'disabled' }, f.options, person);
     expect(hidden.profile.parameters).toMatchObject({ invocation: { discovery: { mode: 'disabled' } } });
     expect(hidden.profile.id).not.toBe(kept.profile.id);
-    await expect(configureNativeCodingTemplate(f.root, { ...request, discovery: 'off' }, f.options)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_INPUT_INVALID' });
+    await expect(configureNativeCodingTemplate(f.root, { ...request, discovery: 'off' }, f.options, person)).rejects.toMatchObject({ code: 'CODING_TEMPLATE_INPUT_INVALID' });
     let output = '', error = '';
-    const context = { root: f.root, env: f.options.env, configureCodingTemplate: configureNativeCodingTemplate,
+    const context = { root: f.root, env: f.options.env, configureCodingTemplate: (root: string, input: unknown, options: object) => configureNativeCodingTemplate(root, input, options, person),
       stdout: { write: (chunk: string) => { output += chunk; return true; } }, stderr: { write: (chunk: string) => { error += chunk; return true; } } };
     for (const [locale, said] of [['en', 'Repository instructions: hidden from the worker'], ['tr', 'Repo talimatları: işçiden gizli']] as const) {
       output = ''; expect(await main(['coding', 'template', '--provider', 'claude', '--kind', 'feature', '--discovery', 'disabled', '--preview', '--lang', locale], context), error).toBe(0);

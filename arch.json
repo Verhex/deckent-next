@@ -1268,6 +1268,7 @@
     },
     "src/surfaces/core/cli-installation": {
       "dependencies": [
+        "src/engine/core/config",
         "src/domain/core/primitives",
         "src/engine/core/installation",
         "src/platform/core/config",
@@ -2786,7 +2787,8 @@
         "src/platform/core/errors",
         "src/composition/core/model-invocation",
         "src/engine/core/model-invocation",
-        "src/composition/core/memory-rollout"
+        "src/composition/core/memory-rollout",
+        "src/engine/core/runtime"
       ],
       "plan": "CONFIG-SURFACE"
     },

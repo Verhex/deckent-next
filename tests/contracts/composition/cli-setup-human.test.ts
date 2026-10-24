@@ -164,7 +164,8 @@ describe.skipIf(process.platform === 'win32')('C-SETUP security review (be23372e
   it('NEGATIVE: a pending write of a redacted key names the command with a placeholder; the value bytes appear nowhere', async () => {
     const f = await project({ terminal: { scopeId: 's' } });
     for (const [key, redacted] of [['terminal.chat.apiKey', true], ['terminal.theme', true], ['service.authToken', false]] as const) {
-      const result = await terminalConfigWrite(f.projectRoot, { action: 'set', keyPath: key, value: secret }, context(f, redacted), { env: f.env }, 'en', 'cli');
+      // alpha.55.1: `service.*` is protected, so the write comes from a person's terminal (the case is the redaction, not the witness).
+      const result = await terminalConfigWrite(f.projectRoot, { action: 'set', keyPath: key, value: secret }, context(f, redacted, { stdin: { isTTY: true }, stdout: { isTTY: true } }), { env: f.env }, 'en', 'cli');
       expect(result.status).toBe('approval-pending'); expect(result.lines.join('\n')).not.toContain(secret); expect(result.lines.join('\n')).toContain('<value>');
     }
     // A value shaped like a credential is hidden even on a key that is not redacted by name.

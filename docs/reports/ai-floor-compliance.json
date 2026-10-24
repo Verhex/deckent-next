@@ -4,7 +4,7 @@
   "sources": {
     "src/domain/core/approval/index.ts": "d9920351b89a86cc6d62984cbeb7bbd8c28fbfd2a31935f08c9aa05db00ebb4b",
     "src/domain/core/approval/internal/contract.ts": "10a07d273d83e76858c4ef935d84f8db0ac52ccd5007ba1254ebf3b77fc023fa",
-    "src/domain/core/policy/index.ts": "86952796bbd6d0972c10f3d023970465fffdce8cd9536bce213eb5d945270857",
+    "src/domain/core/policy/index.ts": "81a6ef1330be5e98971c2766bb618ae3659e7b8d38840f13f507184578579ef0",
     "src/domain/core/policy/internal/administer.ts": "7db3d8c01de5c0f19a5ab27f7ef2d742f57e1d63de151554e62d668b48ea8004",
     "src/domain/core/policy/internal/administration.ts": "c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b",
     "src/domain/core/policy/internal/ai-floor.ts": "16aad4baa858c82583677bef4e230fb61cd5cbb989092b34d39176b1461e3c2e",

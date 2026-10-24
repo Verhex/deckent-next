@@ -5,5 +5,6 @@
   "error.MCP_TRUST_NEEDS_CARD": "The MCP server {name} was trusted where Deckent no longer reads trust (the project's data folder). Approve it once on its card: run `deckent mcp approve {name}` in a terminal without --yes, or use it in the terminal and answer its card. Nothing was changed.",
   "security.mcp.note.project": "project file: only these environment variables are read: {names}; any other reads as its default or empty, and a value carrying a credential refuses the server; secret references are refused",
   "security.mcp.note.moved": "a trust record for this server in the project's data folder is no longer used; decide again on this card",
-  "security.mcp.trustCard.argument": "argument {index}: {value}"
+  "security.mcp.trustCard.argument": "argument {index}: {value}",
+  "security.witness.config": "The setting {key} is protected: only a person at their own interactive terminal may change it. Run the same deckent command (for a setting also the terminal's /config) in your own terminal on this host, with input and output on the same terminal. AI tools, MCP, SDK scripts, CI, piped commands and --json cannot change it. Nothing was changed."
 }
