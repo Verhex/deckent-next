@@ -1,4 +1,5 @@
 import { hostname, platform, arch, userInfo } from 'node:os';
+import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { supervisorProfileSchema, SupervisorError, type SupervisorProfile } from '#engine/index.js';
 import { identitySchema, workerIsolationSchema, type WorkerIsolation } from '#domain/index.js';
@@ -24,12 +25,18 @@ export function captureDockerProfile(options: DockerSupervisorOptions, daemonId:
   const parameters = parametersSchema.parse({ endpoint, options, origin: { ...dockerHostIdentity(), daemonId }, isolation: dockerWorkerIsolation(options) });
   return supervisorProfileSchema.parse({ schemaVersion: 1, adapterId: 'docker', adapterVersion: 3, parameters });
 }
-/** v3 parameters (with isolation) or v2 (recorded before alpha.56, without), of this host; anything else is invalid. */
+/** v3 parameters (with isolation) or v2 (recorded before alpha.56, without), of this host; anything else is invalid. A v3 isolation block must be exactly
+ * the one its own options derive (egress tied to `connection`): a record is a declaration, so one that claims less than its options give is invalid. */
 export function readDockerProfile(input: unknown): z.infer<typeof legacyParametersSchema> & { isolation?: WorkerIsolation } {
   const profile = supervisorProfileSchema.safeParse(input);
   if (!profile.success || profile.data.adapterId !== 'docker' || ![2, 3].includes(profile.data.adapterVersion)) throw new SupervisorError('SUPERVISOR_PROFILE_INVALID');
   const parameters = (profile.data.adapterVersion === 3 ? parametersSchema : legacyParametersSchema).safeParse(profile.data.parameters);
   if (!parameters.success) throw new SupervisorError('SUPERVISOR_PROFILE_INVALID');
+  if (profile.data.adapterVersion === 3) {
+    let derived: WorkerIsolation;
+    try { derived = dockerWorkerIsolation(parameters.data.options); } catch { throw new SupervisorError('SUPERVISOR_PROFILE_INVALID'); }
+    if (!isDeepStrictEqual(derived, (parameters.data as { isolation?: unknown }).isolation)) throw new SupervisorError('SUPERVISOR_PROFILE_INVALID');
+  }
   const current = dockerHostIdentity(); const { origin } = parameters.data;
   if (current.hostname !== origin.hostname || current.platform !== origin.platform || current.architecture !== origin.architecture
     || current.uid !== origin.uid || current.gid !== origin.gid) throw new SupervisorError('SUPERVISOR_PROFILE_ORIGIN_MISMATCH');
