@@ -1,11 +1,9 @@
 import { mcpPrincipalRef } from '#domain/index.js';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
-import { spawn, execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { hostname, tmpdir, userInfo } from 'node:os';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { expect, it } from 'vitest';
 import { DockerSupervisor, identifyDockerRequest, openSqliteAttemptStore, validateDockerSupervisorProfile, type SqliteAttemptStore } from '#adapters/index.js';
@@ -15,10 +13,13 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyPrincipal } from '../support/custody.js';
 import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
+import { childEnv } from '../support/child-env.js';
+import { owned } from '../support/owned.js';
 
-const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE; const exec = promisify(execFile);
+const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
+const inspect = (endpoint: string, handle: string) => owned().exec('/usr/bin/docker', ['--host', endpoint, 'inspect', handle], { env: childEnv(), deadlineMs: 10_000, label: 'docker inspect' });
 it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('keeps a granted pre-start crash unresolved after %s controller restart', async mode => {
-  const root = await mkdtemp(join(tmpdir(), 'deckent-launch-recovery-')); const project = join(root, 'project'); const data = join(root, 'data');
+  const root = await owned().root('deckent-launch-recovery-'); const project = join(root, 'project'); const data = join(root, 'data');
   const configPath = join(project, '.deckent/config.json'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456, pids: 64, cpus: 1,
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
@@ -51,25 +52,22 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('keeps 
     await store.claimDispatch({ ...claim, profile }); const decision = await store.grantLaunch({ claim, principal, now: 1 });
     process.stdout.write(JSON.stringify({ launch: decision.record.launch, terminal: decision.record.terminal }), () => process.exit(23));
   `;
-  const child = spawn(process.execPath, ['--input-type=module', '-e', program, configured.path, JSON.stringify(claim), JSON.stringify(profile), JSON.stringify(custodyPrincipal)],
-    { cwd: process.cwd(), stdio: ['ignore', 'pipe', 'pipe'] });
-  let stdout = ''; let stderr = ''; child.stdout.on('data', chunk => { stdout += String(chunk); }); child.stderr.on('data', chunk => { stderr += String(chunk); });
-  const closed = new Promise<number | null>((resolveExit, reject) => { child.once('error', reject); child.once('close', resolveExit); });
+  // The crashing controller: an owned child (10 s deadline → TEST_CHILD_DEADLINE; teardown reaps its group on any failure).
+  const crashed = owned().run(process.execPath, ['--input-type=module', '-e', program, configured.path, JSON.stringify(claim), JSON.stringify(profile), JSON.stringify(custodyPrincipal)],
+    { cwd: process.cwd(), env: childEnv(), deadlineMs: 10_000, label: 'crashing controller' });
   const transport = mode === 'mcp' ? new StdioClientTransport({ command: process.execPath,
     args: [resolve('dist/composition/core/mcp/internal/entry.js'), '--project', project], env: options.env, stderr: 'pipe' }) : null;
   const client = transport ? new Client({ name: 'launch-recovery-proof', version: '1' }) : null;
-  let store: SqliteAttemptStore | undefined; let timeout: ReturnType<typeof setTimeout> | undefined;
+  if (client && transport) owned().defer('mcp client', async () => { await client.close(); await transport.close(); });
   try {
-    const exitCode = await Promise.race([closed, new Promise<never>((_, reject) => {
-      timeout = setTimeout(() => reject(new Error('CRASH_CONTROLLER_TIMEOUT')), 10_000);
-    })]);
-    if (timeout) clearTimeout(timeout);
+    const { code: exitCode, stdout, stderr } = await crashed;
     expect({ exitCode, stderr }).toEqual({ exitCode: 23, stderr: '' }); expect(JSON.parse(stdout)).toEqual({ launch: 'granted', terminal: null });
-    store = await openSqliteAttemptStore(configured.path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid');
+    const store: SqliteAttemptStore = await openSqliteAttemptStore(configured.path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: Date.now, timeoutMs: 86400000 }, 'forbid');
+    owned().defer('attempt store', () => store.close());
     const before = (await store.readDispatch(request))!; expect(before).toMatchObject({ launch: 'granted', terminal: null, grant: { generation: 1 } });
     const { handle } = identifyDockerRequest(request, supervisorOptions);
     const endpoint = (profile.parameters as { endpoint: string }).endpoint;
-    await expect(exec('/usr/bin/docker', ['--host', endpoint, 'inspect', handle])).rejects.toMatchObject({ stderr: expect.stringMatching(/no such object/i) });
+    await expect(inspect(endpoint, handle)).rejects.toMatchObject({ stderr: expect.stringMatching(/no such object/i) });
     if (client && transport) await client.connect(transport);
     const result = client ? await client.callTool({ name: 'reconcile_attempt', arguments: identity }) : await reconcileAttempt(project, identity, options);
     if (client) expect((result as { isError?: boolean }).isError).not.toBe(true);
@@ -78,10 +76,6 @@ it.skipIf(!imageId || process.platform !== 'linux').each(['sdk', 'mcp'])('keeps 
     expect(reconciliation).toMatchObject({ status: 'unresolved', terminal: null, outputRecorded: false });
     expect(await store.readDispatch(request)).toEqual(before);
     await expect(readFile(join(workspace, 'effect'))).rejects.toMatchObject({ code: 'ENOENT' });
-    await expect(exec('/usr/bin/docker', ['--host', endpoint, 'inspect', handle])).rejects.toMatchObject({ stderr: expect.stringMatching(/no such object/i) });
-  } finally {
-    if (timeout) clearTimeout(timeout);
-    if (child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await closed.catch(() => null); }
-    store?.close(); await client?.close(); await transport?.close(); await stopTestRuntimeService(runtime); clearConfigCache(); await rm(root, { recursive: true, force: true });
-  }
+    await expect(inspect(endpoint, handle)).rejects.toMatchObject({ stderr: expect.stringMatching(/no such object/i) });
+  } finally { await stopTestRuntimeService(runtime); clearConfigCache(); }
 }, 30000);

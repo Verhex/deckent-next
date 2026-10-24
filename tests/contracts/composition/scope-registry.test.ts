@@ -12,7 +12,7 @@ import { openSqliteAttemptStore } from '#adapters/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyProfiles } from '../support/custody.js';
 import { clearConfigCache } from '#platform/index.js';
-import { cliChildEnv } from '../support/child-env.js';
+import { childEnv } from '../support/child-env.js';
 import { startTestRuntimeService, stopTestRuntimeService } from '../support/runtime-service.js';
 
 const exec = promisify(execFile); const roots: string[] = [];
@@ -32,7 +32,7 @@ const spendAll = { id: 'spend-all', effect: 'allow', actions: ['inspect'], scope
 async function fixture(config: Record<string, unknown> = {}, grants: readonly unknown[] = [inspectAll, spendAll], prepare?: (ledger: string) => void, start = true) {
   const project = await mkdtemp(join(tmpdir(), 'deckent-scope-registry-')); roots.push(project);
   const data = join(project, 'data'); await mkdir(join(project, '.deckent'), { mode: 0o700 });
-  const env: NodeJS.ProcessEnv = cliChildEnv({ HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env.DECKENT_HOME;
+  const env: NodeJS.ProcessEnv = childEnv({ HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' });
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, inspection: { maxPageSize: 4, policyMaxBytes: 65536 }, ...config }));
   const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close();
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p', restrictions: [], grants }), { mode: 0o600 });

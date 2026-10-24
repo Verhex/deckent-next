@@ -1,13 +1,13 @@
-import { execFile } from 'node:child_process';
 import { resolve } from 'node:path';
-import { promisify } from 'node:util';
 import { ErrorRegistry, resolveProductLayout } from '#platform/index.js';
 import { runtimeSocketLocation } from '#adapters/index.js';
 import { RUNTIME_SERVICE_SCHEMA_VERSION } from '#engine/index.js';
+import { childEnv } from './child-env.js';
+import { owned } from './owned.js';
 
 // A PTY belongs to the child, not the test runner. Piped input/output variants retain the controlling TTY.
 const DRIVER = String.raw`
-import json, os, pty, select, sys, time
+import json, os, pty, select, signal, sys, time
 argv, mode = json.loads(sys.argv[1]), sys.argv[2]
 answer = sys.argv[4] if len(sys.argv) > 4 else ''
 answered = False
@@ -17,6 +17,12 @@ if pid == 0:
     if mode == 'piped-input': os.dup2(os.open('/dev/null', os.O_RDONLY), 0)
     if mode == 'redirected-output': os.dup2(2, 1); os.dup2(os.open('/dev/null', os.O_WRONLY), 1)
     os.execvp(argv[0], argv)
+# Stopped by the test harness (deadline or teardown): the PTY child leads its own session and group, so it is ended with the driver.
+def stop(*_):
+    try: os.killpg(pid, signal.SIGKILL)
+    except OSError: pass
+    os._exit(143)
+signal.signal(signal.SIGTERM, stop)
 out = b''
 end = time.monotonic() + 25
 while time.monotonic() < end:
@@ -50,8 +56,8 @@ async function driveTerminal(argv: string[], env: NodeJS.ProcessEnv, mode = 'tty
   return JSON.parse(line) as { response: { ok: boolean; result?: unknown; error?: { code: string; params?: Record<string, unknown> } }; events: unknown[]; decisions: unknown[] };
 }
 export async function terminalProgram(argv: string[], env: NodeJS.ProcessEnv, cwd?: string, mode = 'tty', answer = '') {
-  const { stdout } = await promisify(execFile)('python3', ['-c', DRIVER, JSON.stringify(argv), mode, cwd ?? '', answer],
-    { env: { ...process.env, ...env }, timeout: 30_000, maxBuffer: 1_000_000 });
+  const { stdout } = await owned().exec('python3', ['-c', DRIVER, JSON.stringify(argv), mode, cwd ?? '', answer],
+    { env: childEnv(env), deadlineMs: 30_000, outputBytes: 1_000_000, label: `terminal ${mode}` });
   const result = JSON.parse(stdout) as { status: number; output: string };
   return result;
 }

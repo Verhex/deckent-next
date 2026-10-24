@@ -1,8 +1,7 @@
-import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { hostname, tmpdir, userInfo } from 'node:os';
+import type { ChildProcess } from 'node:child_process';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
-import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { createRun, inspectRun, reserveRunTasks } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
@@ -10,20 +9,17 @@ import { FileArtifactStore, identifyDockerRequest } from '#adapters/index.js';
 import { parseRetainedOutputEnvelope } from '#engine/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
+import { childEnv } from '../support/child-env.js';
+import { owned } from '../support/owned.js';
 
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
-const exec = promisify(execFile);
 type Child = ChildProcess & { stdout: NonNullable<ChildProcess['stdout']>; stderr: NonNullable<ChildProcess['stderr']> };
 
-function closed(child: Child): Promise<number | null> {
-  return new Promise((resolveExit, reject) => { child.once('error', reject); child.once('close', resolveExit); });
-}
-async function bounded<T>(promise: Promise<T>, child: Child, label: string, milliseconds = 15_000): Promise<T> {
+/** A readiness wait; the child itself is owned (its deadline and the teardown stop it). */
+async function bounded<T>(promise: Promise<T>, label: string, milliseconds = 15_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([promise, new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error(label)); }, milliseconds);
-    })]);
+    return await Promise.race([promise, new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error(label)), milliseconds); })]);
   } finally { if (timer) clearTimeout(timer); }
 }
 // Before R6 every writer open took the ledger write lock (hosted ubuntu node 26 refused it ATTEMPT_STORE_BUSY on a loaded runner). A
@@ -60,10 +56,10 @@ it.skipIf(!imageId || process.platform !== 'linux')('automatically reconciles an
   await Promise.all([sdk, cli].map(path => access(path).catch(() => {
     throw new Error('BUILD_REQUIRED: run npm run build before this process proof');
   })));
-  const root = await mkdtemp(join(tmpdir(), 'dk-recon-p-'));
+  const root = await owned().root('dk-recon-p-'), env = childEnv({ HOME: join(root, 'h') }), options = { env };
   const project = join(root, 'p'), data = join(root, 'd'), configPath = join(project, '.deckent/config.json');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
-  const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', project, ...args])).stdout.trim();
+  const git = async (...args: string[]) => (await owned().exec('/usr/bin/git', ['-C', project, ...args], { env, deadlineMs: 10_000, label: `git ${args[0]}` })).stdout.trim();
   await git('init'); await git('config', 'user.email', 'test@example.invalid'); await git('config', 'user.name', 'Test');
   await writeFile(join(project, 'input'), 'base\n'); await git('add', 'input'); await git('commit', '-m', 'base');
   const registry = fixtureDockerRegistry(['offline-runtime']);
@@ -81,7 +77,6 @@ it.skipIf(!imageId || process.platform !== 'linux')('automatically reconciles an
     maxConcurrentRequests: 2, maxConcurrentExecutions: 1, headerTimeoutMs: 1000, shutdownGraceMs: 1000 },
   execution: { docker, git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } };
   await writeFile(configPath, JSON.stringify(configuration));
-  const env = { ...process.env, HOME: join(root, 'h') }; const options = { env };
   const opened = await openConfiguredAttemptStore(project, options);
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
   opened.store.close();
@@ -101,9 +96,8 @@ it.skipIf(!imageId || process.platform !== 'linux')('automatically reconciles an
   const identity = (await reserveRunTasks(project, { schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: 'r',
     expectedRevision: 0 }, options)).reservation.identities[0]!;
   const executeProgram = `const [sdk,project,identity]=process.argv.slice(1);const {executeTask}=await import(sdk);await executeTask(project,JSON.parse(identity),{env:{...process.env,HOME:process.env.HOME}});`;
-  const controller = spawn(process.execPath, ['--input-type=module', '-e', executeProgram, sdk, project, JSON.stringify(identity)],
-    { cwd: process.cwd(), env, stdio: ['ignore', 'pipe', 'pipe'] }) as Child;
-  const controllerClosed = closed(controller); let service: Child | undefined; let handle: string | undefined; let endpoint: string | undefined;
+  const { child: controller, exit: controllerExit } = owned().spawn(process.execPath, ['--input-type=module', '-e', executeProgram, sdk, project, JSON.stringify(identity)],
+    { cwd: process.cwd(), env, stdio: 'ignore', deadlineMs: 40_000, label: 'execute controller' });
   try {
     const record = await poll(async () => {
       const store = await openConfiguredAttemptStore(project, options);
@@ -114,20 +108,20 @@ it.skipIf(!imageId || process.platform !== 'linux')('automatically reconciles an
         catch { return undefined; }
       } finally { store.store.close(); }
     }, 'WORKER_READY_TIMEOUT');
-    endpoint = (record.profile.parameters as { endpoint: string }).endpoint;
-    handle = identifyDockerRequest(record.request, { ...docker, workspaceRoot: resolve(data, 'workspaces'),
-      uid: userInfo().uid, gid: userInfo().gid }).handle;
-    controller.kill('SIGKILL'); await bounded(controllerClosed, controller, 'CONTROLLER_CLOSE_TIMEOUT');
-    expect(controller.signalCode).toBe('SIGKILL');
+    const endpoint = (record.profile.parameters as { endpoint: string }).endpoint;
+    const handle = owned().container(identifyDockerRequest(record.request, { ...docker, workspaceRoot: resolve(data, 'workspaces'),
+      uid: userInfo().uid, gid: userInfo().gid }).handle, ['--host', endpoint]);
+    controller.kill('SIGKILL');
+    expect(await controllerExit).toEqual({ code: null, signal: 'SIGKILL' });
     await writeFile(join(record.request.workspace, 'release'), 'exit');
-    await poll(async () => (await exec('/usr/bin/docker', ['--host', endpoint!, 'inspect', '--format', '{{.State.Running}}', handle!]))
-      .stdout.trim() === 'false' ? true : undefined, 'WORKER_EXIT_TIMEOUT');
+    await poll(async () => (await owned().exec('/usr/bin/docker', ['--host', endpoint, 'inspect', '--format', '{{.State.Running}}', handle],
+      { env, deadlineMs: 10_000, label: 'docker inspect' })).stdout.trim() === 'false' ? true : undefined, 'WORKER_EXIT_TIMEOUT');
     const changed = structuredClone(configuration) as Record<string, unknown>; delete changed.execution;
     await writeFile(configPath, JSON.stringify(changed)); clearConfigCache();
 
-    service = spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], { cwd: project, env,
-      stdio: ['ignore', 'pipe', 'pipe'] }) as Child;
-    await bounded(waitForJson(service, value => value.event === 'ready'), service, 'SERVICE_READY_TIMEOUT');
+    const { child, exit: serviceExit } = owned().spawn(process.execPath, [cli, 'runtime', 'serve', '--json'], { cwd: project, env, deadlineMs: 30_000, label: 'runtime serve' });
+    const service = child as Child;
+    await bounded(waitForJson(service, value => value.event === 'ready'), 'SERVICE_READY_TIMEOUT');
     const settled = await poll(async () => {
       const store = await openConfiguredAttemptStore(project, options);
       try {
@@ -144,13 +138,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('automatically reconciles an
     expect(run.run?.tasks[0]?.phase).not.toBe('accepted');
     expect(await readFile(join(record.request.workspace, 'starts'), 'utf8')).toBe('1');
 
-    const serviceClosed = closed(service); service.kill('SIGTERM');
-    expect(await bounded(serviceClosed, service, 'SERVICE_CLOSE_TIMEOUT')).toBe(0);
-  } finally {
-    for (const child of [controller, service]) if (child && child.exitCode === null && child.signalCode === null) {
-      const closing = child === controller ? controllerClosed : closed(child); child.kill('SIGKILL'); await closing.catch(() => null);
-    }
-    if (handle && endpoint) await exec('/usr/bin/docker', ['--host', endpoint, 'rm', '-f', handle]).catch(() => undefined);
-    clearConfigCache(); await rm(root, { recursive: true, force: true });
-  }
+    service.kill('SIGTERM');
+    expect((await bounded(serviceExit, 'SERVICE_CLOSE_TIMEOUT')).code).toBe(0);
+  } finally { clearConfigCache(); }
 }, 45_000);

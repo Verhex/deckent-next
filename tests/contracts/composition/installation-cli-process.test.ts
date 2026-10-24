@@ -1,25 +1,23 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdtemp, mkdir, writeFile, readdir, rm } from 'node:fs/promises';
-import { tmpdir, hostname, userInfo } from 'node:os';
+import { mkdir, writeFile, readdir } from 'node:fs/promises';
+import { hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
-import { describe, afterEach, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { hashInstallationProfilePayload } from '#engine/core/installation/index.js';
 import { installationProfile } from '../support/installation-profile.js';
+import { childEnv } from '../support/child-env.js';
+import { owned } from '../support/owned.js';
 
-const execute = promisify(execFile), cli = resolve('dist/composition/core/cli/internal/entry.js');
-const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+const cli = resolve('dist/composition/core/cli/internal/entry.js');
 async function fixture(shutdown = false) {
-  const root = await mkdtemp(join(tmpdir(), 'deckent-install-cli-')); roots.push(root);
+  const root = await owned().root('deckent-install-cli-');
   const project = join(root, 'project'), path = join(root, 'profile.json'); await mkdir(project);
   const profile = installationProfile({ root: join(root, 'data'), shutdown });
   const principal = { issuer: hostname(), subject: String(userInfo().uid) };
   for (const grant of profile.policy.grants) grant.principals = [principal];
   profile.profile.digest = hashInstallationProfilePayload({ ...profile, profile: { id: profile.profile.id, version: profile.profile.version } });
   await writeFile(path, JSON.stringify(profile), { mode: 0o600 });
-  const env = { ...process.env, HOME: join(root, 'home'), USERPROFILE: join(root, 'home'), DECKENT_HOME: join(root, 'wrong-data-root') };
-  const run = (args: string[]) => execute(process.execPath, [cli, ...args], { cwd: project, env, timeout: 5000, maxBuffer: 1048576 });
+  const env = childEnv({ HOME: join(root, 'home'), USERPROFILE: join(root, 'home'), DECKENT_HOME: join(root, 'wrong-data-root') });
+  const run = (args: string[]) => owned().exec(process.execPath, [cli, ...args], { cwd: project, env, deadlineMs: 5000, outputBytes: 1048576, label: args.slice(0, 2).join(' ') });
   return { root, project, path, profile, run };
 }
 

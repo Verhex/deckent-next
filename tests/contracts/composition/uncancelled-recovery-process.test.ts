@@ -1,29 +1,16 @@
-import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { hostname, tmpdir, userInfo } from 'node:os';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
-import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { createRun, executeTask, inspectRun, reserveRunTasks } from '../../../src/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { clearConfigCache, getConfigFieldDefault } from '#platform/index.js';
 import { identifyDockerRequest, openSqliteInventoryReader } from '#adapters/index.js';
 import { fixtureDockerRegistry } from '../support/execution-registry.js';
+import { childEnv } from '../support/child-env.js';
+import { owned } from '../support/owned.js';
 
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
-const exec = promisify(execFile);
-type Child = ChildProcess & { stdout: NonNullable<ChildProcess['stdout']>; stderr: NonNullable<ChildProcess['stderr']> };
-function closed(child: Child): Promise<number | null> {
-  return new Promise((resolveExit, reject) => { child.once('error', reject); child.once('close', resolveExit); });
-}
-async function bounded<T>(promise: Promise<T>, child: Child, label: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([promise, new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error(label)); }, 15_000);
-    })]);
-  } finally { if (timer) clearTimeout(timer); }
-}
 async function poll<T>(read: () => Promise<T | undefined>, label: string): Promise<T> {
   for (let attempt = 0; attempt < 600; attempt++) {
     const value = await read(); if (value !== undefined) return value;
@@ -35,10 +22,10 @@ async function poll<T>(read: () => Promise<T | undefined>, label: string): Promi
 it.skipIf(!imageId || process.platform !== 'linux')('manually reconciles an uncancelled offline exit in a fresh process without relaunch or output invention', async () => {
   const sdk = resolve('dist/index.js');
   await access(sdk).catch(() => { throw new Error('BUILD_REQUIRED: run npm run build before this process proof'); });
-  const root = await mkdtemp(join(tmpdir(), 'dk-uncancel-'));
+  const root = await owned().root('dk-uncancel-'), env = childEnv({ HOME: join(root, 'h') }), options = { env };
   const project = join(root, 'p'), data = join(root, 'd'), configPath = join(project, '.deckent/config.json');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
-  const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', project, ...args])).stdout.trim();
+  const git = async (...args: string[]) => (await owned().exec('/usr/bin/git', ['-C', project, ...args], { env, deadlineMs: 10_000, label: `git ${args[0]}` })).stdout.trim();
   await git('init'); await git('config', 'user.email', 'test@example.invalid'); await git('config', 'user.name', 'Test');
   await writeFile(join(project, 'input'), 'base\n'); await git('add', 'input'); await git('commit', '-m', 'base');
   const registry = fixtureDockerRegistry(['offline-exit']);
@@ -51,7 +38,6 @@ it.skipIf(!imageId || process.platform !== 'linux')('manually reconciles an unca
     executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry }, execution: { docker,
     git: { gitExecutable: '/usr/bin/git', timeoutMs: 10000, outputBytes: 65536 } } };
   await writeFile(configPath, JSON.stringify(configuration));
-  const env = { ...process.env, HOME: join(root, 'h') }; const options = { env };
   const opened = await openConfiguredAttemptStore(project, options);
   await opened.store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 1, inFlightSlots: 1 } });
   opened.store.close(); const ledgerPath = opened.path;
@@ -70,9 +56,8 @@ it.skipIf(!imageId || process.platform !== 'linux')('manually reconciles an unca
   const identity = (await reserveRunTasks(project, { schemaVersion: 1, commandId: 'reserve', scopeId: 's', runId: 'r',
     expectedRevision: 0 }, options)).reservation.identities[0]!;
   const executeProgram = `const [sdk,project,identity]=process.argv.slice(1);const {executeTask}=await import(sdk);await executeTask(project,JSON.parse(identity),{env:{...process.env,HOME:process.env.HOME}});`;
-  const controller = spawn(process.execPath, ['--input-type=module', '-e', executeProgram, sdk, project, JSON.stringify(identity)],
-    { cwd: process.cwd(), env, stdio: ['ignore', 'pipe', 'pipe'] }) as Child;
-  const controllerClosed = closed(controller); let handle: string | undefined; let endpoint: string | undefined;
+  const { child: controller, exit: controllerExit } = owned().spawn(process.execPath, ['--input-type=module', '-e', executeProgram, sdk, project, JSON.stringify(identity)],
+    { cwd: process.cwd(), env, stdio: 'ignore', deadlineMs: 30_000, label: 'execute controller' });
   try {
     // The controller process is the writer while it runs. Observe through the read-only reader, which never asks for the write lock
     // (before R6 every writer open took it for the migration check and was refused ATTEMPT_STORE_BUSY on a loaded host, hosted node 26,
@@ -86,14 +71,14 @@ it.skipIf(!imageId || process.platform !== 'linux')('manually reconciles an unca
         catch { return undefined; }
       } finally { store.close(); }
     }, 'WORKER_READY_TIMEOUT');
-    endpoint = (record.profile.parameters as { endpoint: string }).endpoint;
-    handle = identifyDockerRequest(record.request, { ...docker, workspaceRoot: resolve(data, 'workspaces'),
-      uid: userInfo().uid, gid: userInfo().gid }).handle;
-    controller.kill('SIGKILL'); await bounded(controllerClosed, controller, 'CONTROLLER_CLOSE_TIMEOUT');
-    expect(controller.signalCode).toBe('SIGKILL');
+    const endpoint = (record.profile.parameters as { endpoint: string }).endpoint;
+    const handle = owned().container(identifyDockerRequest(record.request, { ...docker, workspaceRoot: resolve(data, 'workspaces'),
+      uid: userInfo().uid, gid: userInfo().gid }).handle, ['--host', endpoint]);
+    controller.kill('SIGKILL');
+    expect(await controllerExit).toEqual({ code: null, signal: 'SIGKILL' });
     await writeFile(join(record.request.workspace, 'release'), 'exit');
-    await poll(async () => (await exec('/usr/bin/docker', ['--host', endpoint!, 'inspect', '--format', '{{.State.Running}}', handle!]))
-      .stdout.trim() === 'false' ? true : undefined, 'WORKER_EXIT_TIMEOUT');
+    await poll(async () => (await owned().exec('/usr/bin/docker', ['--host', endpoint, 'inspect', '--format', '{{.State.Running}}', handle],
+      { env, deadlineMs: 10_000, label: 'docker inspect' })).stdout.trim() === 'false' ? true : undefined, 'WORKER_EXIT_TIMEOUT');
     const before = await inspectRun(project, { schemaVersion: 1, scopeId: 's', runId: 'r' }, options);
     expect(before.run?.tasks[0]).toMatchObject({ phase: 'active', unresolvedEffects: false });
     const changed = structuredClone(configuration) as Record<string, unknown>; delete changed.execution;
@@ -103,11 +88,9 @@ it.skipIf(!imageId || process.platform !== 'linux')('manually reconciles an unca
     expect(await readFile(join(record.request.workspace, 'starts'), 'utf8')).toBe('1');
 
     const reconcileProgram = `const [sdk,project,identity]=process.argv.slice(1);const {reconcileAttempt}=await import(sdk);const value=await reconcileAttempt(project,JSON.parse(identity),{env:{...process.env,HOME:process.env.HOME}});process.stdout.write(JSON.stringify(value));`;
-    const recovery = spawn(process.execPath, ['--input-type=module', '-e', reconcileProgram, sdk, project, JSON.stringify(identity)],
-      { cwd: process.cwd(), env, stdio: ['ignore', 'pipe', 'pipe'] }) as Child;
-    let stdout = '', stderr = ''; recovery.stdout.on('data', chunk => { stdout += String(chunk); });
-    recovery.stderr.on('data', chunk => { stderr += String(chunk); });
-    expect(await bounded(closed(recovery), recovery, 'RECONCILE_CLOSE_TIMEOUT')).toBe(0);
+    const { code, stdout, stderr } = await owned().run(process.execPath, ['--input-type=module', '-e', reconcileProgram, sdk, project, JSON.stringify(identity)],
+      { cwd: process.cwd(), env, deadlineMs: 15_000, label: 'reconcile' });
+    expect(code, stderr).toBe(0);
     expect(stderr).toBe('');
     expect(JSON.parse(stdout)).toMatchObject({ reconciliation: { identity, status: 'terminal',
       terminal: { exitCode: 7 }, outputRecorded: false } });
@@ -119,9 +102,5 @@ it.skipIf(!imageId || process.platform !== 'linux')('manually reconciles an unca
       expect(settled).toMatchObject({ launch: 'granted', terminal: { exitCode: 7 } });
       expect(settled?.output).toBeUndefined();
     } finally { proof.store.close(); }
-  } finally {
-    if (controller.exitCode === null && controller.signalCode === null) { controller.kill('SIGKILL'); await controllerClosed.catch(() => null); }
-    if (handle && endpoint) await exec('/usr/bin/docker', ['--host', endpoint, 'rm', '-f', handle]).catch(() => undefined);
-    clearConfigCache(); await rm(root, { recursive: true, force: true });
-  }
+  } finally { clearConfigCache(); }
 }, 40_000);

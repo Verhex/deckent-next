@@ -12,7 +12,7 @@ import {
   inspectProviderSpendAccount, inspectRun, previewConfiguredWorkspacePatch, requestRunCancellation,
 } from '../../../src/index.js';
 import { clearConfigCache } from '#platform/index.js';
-import { cliChildEnv } from '../support/child-env.js';
+import { childEnv } from '../support/child-env.js';
 import { startTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 
 // Astra 2126 R1 (inverted read-pin repro): a read-only query never writes a scope pin; only a write admission pins.
@@ -56,7 +56,7 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 async function fixture() {
   const project = await mkdtemp(join(tmpdir(), 'deckent-scope-reads-')); roots.push(project);
   const data = join(project, 'data'); await mkdir(join(project, '.deckent'), { mode: 0o700 });
-  const env: NodeJS.ProcessEnv = cliChildEnv({ HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env.DECKENT_HOME;
+  const env: NodeJS.ProcessEnv = childEnv({ HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' });
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, company: { id: 'alpha' } }));
   const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close();
   // The service starts before the policy names these scopes, so the first-start registration cannot pin them.

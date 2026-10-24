@@ -12,7 +12,7 @@ const sdk = resolve('dist/index.js');
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { admitRunAttempts } from '../support/admission.js';
-import { cliChildEnv } from '../support/child-env.js';
+import { childEnv } from '../support/child-env.js';
 import { startTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 const roots: string[] = [];
 afterEach(async () => { await stopTestRuntimeServices(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -35,7 +35,7 @@ describe.skipIf(process.platform === 'win32')('compiled Run CLI and SDK', () => 
     const f = await fixture(); const { store } = await openConfiguredAttemptStore(f.project, f.options);
     try { await admitRunAttempts(store, [{ runId: 'r', scopeId: 's', taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 }]); } finally { store.close(); }
     await f.policy(['r', 'missing']);
-    const options = { cwd: f.project, env: cliChildEnv({ ...f.options.env, NO_COLOR: '1' }) };
+    const options = { cwd: f.project, env: childEnv({ ...f.options.env, NO_COLOR: '1' }) };
     const args = ['run', 'inspect', '--scope', 's', '--id', 'r'];
     const cliResult = await exec(process.execPath, [cli, ...args, '--json'], options);
     const sdkResult = await exec(process.execPath, ['--input-type=module', '-e',

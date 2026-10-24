@@ -8,7 +8,7 @@ import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
 import { createEncryptedFileSecretStore, registerProviderConfig } from '#adapters/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { cliChildEnv } from '../support/child-env.js';
+import { childEnv } from '../support/child-env.js';
 import { lastJson, runInTerminal } from '../support/terminal-cli.js';
 import { personEnv } from '../support/person-env.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
@@ -52,7 +52,7 @@ it.skipIf(process.platform !== 'linux').each(['core.secret-store.file@1', 'core.
   const root = await mkdtemp(join(tmpdir(), 'deckent-secret-process-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
   const project = join(root, 'project'), home = join(root, 'home');
   await mkdir(project, { recursive: true }); await mkdir(home, { mode: 0o700 });
-  const env = cliChildEnv({ HOME: home, DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env['DECKENT_HOME']; delete env['DECKENT_GLOBAL_HOME'];
+  const env = childEnv({ HOME: home, DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env['DECKENT_GLOBAL_HOME'];
   await applyPolicyTemplateInstallation(project, 'installation');
   await writeFile(join(project, '.deckent', 'config.json'), JSON.stringify({ terminal: { scopeId: 'installation' },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
