@@ -22,7 +22,7 @@ afterEach(async () => {
   for (const close of closers.splice(0).reverse()) await close(); for (const store of stores.splice(0)) store.close();
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
 });
-const policy = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live');
+const policy = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live', ['task']);
 const recovery = recoveryPrincipal(owner, ['s']);
 const standing = { schemaVersion: 1, revision: 'owner-policy', restrictions: [], grants: [{ id: 'recovery-standing', effect: 'allow', actions: ['apply'], scopes: ['s'],
   principals: [{ issuer: owner.issuer, subject: owner.subject }], resource: { kind: 'recovery-action', ids: ['continue-new-attempt'] } }] };
