@@ -50,12 +50,18 @@ export function validateBuild(root) {
     if (file.startsWith('/') || file.split('/').includes('..') || digest(join(root, file)) !== hash) throw new Error(`Build bytes mismatch: ${file}`);
   }
   // Product source edits after a build are refused, including added or removed files.
+  if (!buildSourceCurrent(root).current) throw new Error('Stale build source');
+  return manifest;
+}
+/** Whether dist/ was built from the current src/ tree (same files, same bytes); test:affected asks it before running built-product tests. */
+export function buildSourceCurrent(root) {
+  if (!existsSync(join(root, 'dist/build-identity.json'))) return { current: false, reason: 'missing (no dist/build-identity.json)' };
   const sourceFiles = filesUnder(root, 'src', true).sort();
   const hash = createHash('sha256');
   for (const file of sourceFiles) { hash.update(relative(join(root, 'src'), join(root, file))); hash.update(readFileSync(join(root, file))); }
   const identity = JSON.parse(readFileSync(join(root, 'dist/build-identity.json'), 'utf8'));
-  if (sourceFiles.length !== identity.sourceFileCount || hash.digest('hex') !== identity.sourceTreeSha256) throw new Error('Stale build source');
-  return manifest;
+  const current = sourceFiles.length === identity.sourceFileCount && hash.digest('hex') === identity.sourceTreeSha256;
+  return { current, reason: current ? 'current' : 'stale (src changed after the build)' };
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = dirname(dirname(fileURLToPath(import.meta.url)));

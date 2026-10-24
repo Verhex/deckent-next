@@ -47,6 +47,7 @@
     "lint": "node scripts/package-metadata.mjs && node scripts/run-parallel.mjs \"npm run typecheck\" \"eslint .\" \"node scripts/lint-arch.mjs\" \"node scripts/lint-core-memory.mjs\" \"node scripts/lint-docs.mjs\"",
     "test": "vitest run",
     "test:e2e": "vitest run tests/e2e",
+    "test:affected": "node scripts/test-affected.mjs",
     "smoke": "node dist/composition/core/cli/internal/entry.js --version",
     "build:dist": "node scripts/build-dist.mjs",
     "pack:dist": "node scripts/build-dist.mjs --pack",

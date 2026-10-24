@@ -111,6 +111,26 @@ Replace the path with the file relevant to your change. Most contract tests use 
 project and global state; they do not require a configured personal installation. Source-mode
 sandbox tests still need the staged bundle; tests that spawn `dist` entries need the build.
 
+## Run the tests your change affects
+
+`npm run test:affected` compares your branch and working tree with its merge base on `main`
+(`-- --since <ref>` picks another base; `--since HEAD` checks only uncommitted edits). It prints each
+changed file with the reason it selects tests, then runs the selection with two workers.
+
+```sh
+npm run test:affected            # select and run
+npm run test:affected -- --list  # print the selection only
+```
+
+A test is selected when its tree-shaken imports, a file path it names (fixtures, assets, snapshots)
+or a rule in [`scripts/test-affected-map.json`](scripts/test-affected-map.json) reaches the changed
+file. A message-catalog text edit selects the tests that name the key or assert its previous text;
+an added or removed key also selects the code that names it.
+Tests that reach a file only by running the built product are counted; `--built` runs them and
+needs a current `npm run build`. Configuration and dependency changes, and files nothing reaches,
+stop with exit code 2 instead of passing: add a map rule, or coordinate a full run (`--widen`).
+An empty selection is never a pass. Hosted CI still runs every test.
+
 | Check | Runtime and environment notes |
 |---|---|
 | One contract test file | Start here. Time and memory depend on the file; report the duration printed by Vitest, rather than assuming a suite-wide estimate. |
