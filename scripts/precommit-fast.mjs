@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Fast pre-commit gate (developer tooling): typecheck + eslint on changed .ts/.mjs + lint-arch + lint-docs, in parallel.
+// Fast pre-commit gate (developer tooling): typecheck + eslint on changed .ts/.mjs + changed-test typecheck + lint-arch + lint-docs, in parallel.
 // Not a substitute for `npm run ci:local`; it never runs tests.
 import { spawnSync } from 'node:child_process';
 
@@ -10,6 +10,8 @@ const changed = [...new Set([...lines(['diff', '--cached', '--name-only', '--dif
 const quote = file => `'${file.replaceAll("'", `'\\''`)}'`;
 const commands = ['npm run --silent typecheck', 'node scripts/lint-arch.mjs', 'node scripts/lint-docs.mjs'];
 if (changed.length) commands.push(`npx --no-install eslint --no-warn-ignored ${changed.map(quote).join(' ')}`);
+const tests = changed.filter(file => file.startsWith('tests/'));
+if (tests.length) commands.push(`node scripts/typecheck-tests.mjs ${tests.map(quote).join(' ')}`);
 const started = Date.now();
 const run = spawnSync(process.execPath, ['scripts/run-parallel.mjs', ...commands], { stdio: 'inherit' });
 process.stdout.write(`\nprecommit:fast ${run.status === 0 ? 'passed' : 'FAILED'} in ${((Date.now() - started) / 1000).toFixed(1)} s (${changed.length} changed file(s) linted)\n`);

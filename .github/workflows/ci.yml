@@ -49,6 +49,10 @@ jobs:
           path: .pack/bwrap/cache
           key: ${{ steps.bwrap_cache.outputs.cache-primary-key }}
       - run: npm run lint:checks
+      - name: Type-check the test files this change touches
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: node scripts/typecheck-tests.mjs --base "$BASE"
       - run: npm run build
       - run: npm run smoke
       - name: Record complete Vitest inventory and Node-specific build

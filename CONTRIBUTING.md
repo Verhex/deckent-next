@@ -176,10 +176,13 @@ resources are released in reverse order after its hooks, reporting every release
 
 For source changes, run typecheck, ESLint on changed source files, the architecture check and
 relevant test files. Replace `src/path/to/changed.ts` below with the actual changed file.
+`typecheck` covers `src/` only; a test file you change must also pass `scripts/typecheck-tests.mjs`
+(the pre-commit check and CI run it on the files a change touches).
 For documentation changes, run the architecture and documentation checks and check relative links.
 
 ```sh
 npm run --silent typecheck
+node scripts/typecheck-tests.mjs tests/path/to/changed.test.ts
 node_modules/.bin/eslint src/path/to/changed.ts
 node scripts/lint-arch.mjs
 node scripts/lint-docs.mjs
