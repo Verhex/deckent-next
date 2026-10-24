@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { chmod, link, mkdir, mkdtemp, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -56,8 +57,15 @@ it.skipIf(process.platform === 'win32')('requires POSIX bootstrap journal — re
   const root = await project(), path = await publish(root);
   await writeFile(path, '{', { mode: 0o600 });
   await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_INVALID' });
+  // The commit invariant is proved on its own: the record carries the checksum its bytes would have, so only `committed` with a blocker
+  // and a pending resource can refuse it (the same hand-built checksum of a valid record matches the product's own hash).
+  const sorted = (value: unknown): unknown => Array.isArray(value) ? value.map(sorted) : value && typeof value === 'object'
+    ? Object.fromEntries(Object.keys(value).sort().map(key => [key, sorted((value as Record<string, unknown>)[key])])) : value;
+  const checksumOf = (value: unknown) => createHash('sha256').update(`deckent.bootstrap-journal.v2\n${JSON.stringify(sorted(value))}`, 'utf8').digest('hex');
+  expect(checksumOf(payload(root))).toBe(hashBootstrapJournal(payload(root)));
   const invalid = { ...payload(root), phase: 'committed' as const };
-  await writeFile(path, JSON.stringify({ ...invalid, checksum: hex('0') }), { mode: 0o600 });
+  expect(() => hashBootstrapJournal(invalid)).toThrow(expect.objectContaining({ code: 'BOOTSTRAP_STATE_INVALID' }));
+  await writeFile(path, JSON.stringify({ ...invalid, checksum: checksumOf(invalid) }), { mode: 0o600 });
   await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_INVALID' });
   await writeFile(path, JSON.stringify({ ...payload(root), checksum: hex('0') }), { mode: 0o600 });
   await expect(observeBootstrapState(root)).rejects.toMatchObject({ code: 'BOOTSTRAP_STATE_INVALID' });

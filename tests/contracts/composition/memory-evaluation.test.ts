@@ -78,8 +78,13 @@ it('V5: the evaluator invokes its model under its own principal only with its gr
     const reader = await openSqliteModelInvocationReader(f.path, { busyTimeoutMs: 1000 });
     try {
       const record = (await reader.loadReceipt!('s', 'e'.repeat(64)))!, held = (await reader.loadInspection('s', record.receipt.claim.invocationId))!;
-      expect(JSON.stringify(record.receipt)).toContain(evaluator.issuer);
-      expect(memoryEvaluationSpendOf({ receipt: record.receipt, spending: held.spending }, 'metered')).toMatchObject({ state: 'settled', currency: 'USD' });
+      // The sealed actor is the evaluator's own principal (structured, not a substring), admitted by its own grant.
+      expect(record.receipt).toMatchObject({ actor: { id: evaluator.id, issuer: evaluator.issuer, subject: evaluator.subject, assurance: evaluator.assurance },
+        authorization: { ruleId: 'evaluator-model' } });
+      // The spend is the spend ledger's own settled amount, exactly (the fixture's measured tariff rounds to one minor unit).
+      const settled = (held.spending as { disposition: { state: string; amountMinorUnits: number } }).disposition;
+      expect(settled).toMatchObject({ state: 'settled-measured-tariff', amountMinorUnits: 1 });
+      expect(memoryEvaluationSpendOf({ receipt: record.receipt, spending: held.spending }, 'metered')).toEqual({ state: 'settled', minorUnits: settled.amountMinorUnits, currency: 'USD' });
       expect(memoryEvaluationSpendOf({ receipt: record.receipt, spending: null }, 'metered')).toEqual({ state: 'unknown' });
     } finally { reader.close(); }
   }

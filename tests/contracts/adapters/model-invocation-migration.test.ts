@@ -167,7 +167,7 @@ function evidence(path: string) {
   finally { db.close(); }
 }
 
-it('migrates v13 activation and execution records to ledger17 without changing their payloads', async () => workspace(async path => {
+it('migrates v13 activation and execution records to the current ledger without changing their payloads', async () => workspace(async path => {
   await seedV13(path); const before = evidence(path);
   const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();
   expect(evidence(path)).toEqual({ ...before, version: CURRENT_LEDGER_VERSION });
@@ -189,7 +189,7 @@ it('forbids old ledgers from read-only access and rolls back a v14 table collisi
   inspect.close();
 }));
 
-it('chains genuine receipt1 v14 through receipt2 into separated receipt3/content records and rolls malformed history back', async () => {
+it('chains genuine receipt1 v14 through receipt2 into separated receipt v4 and content records and rolls malformed history back', async () => {
   await workspace(async path => {
     await seedV14(path);
     const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();
@@ -221,7 +221,7 @@ it('chains genuine receipt1 v14 through receipt2 into separated receipt3/content
 });
 
 
-it('migrates genuine receipt2 v15 responded, rejected, partial, and null-unknown records to receipt3/content ', async () => {
+it('migrates genuine receipt2 v15 responded, rejected, partial, and null-unknown records to receipt v4 with separate content', async () => {
   await workspace(async path => {
     await seedV15(path);
     const store = await openSqliteModelInvocationStore(path, options, 'allow'); store.close();

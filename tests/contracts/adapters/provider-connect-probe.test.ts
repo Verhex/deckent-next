@@ -28,7 +28,7 @@ describe('provider connection check', () => {
     expect(providerEndpoint(`http://${host}:8000/v1`)).toEqual({ ok: true, base: `http://${host}:8000` });
   });
 
-  it('lists the vendor rows, the generic and local rows and ChatGPT login as not available yet, each with its own store name (T4-B, Jev da5312fb)', () => {
+  it('lists the vendor, generic, local and Claude CLI subscription rows as available and ChatGPT login as not available yet, each with its own store name (T4-B, Jev da5312fb)', () => {
     expect(PROVIDER_CONNECT_KINDS.map(kind => [kind.id, kind.available])).toEqual([['anthropic-api', true], ['openai-api', true], ['deepseek-api', true], ['zai-api', true],
       ['zai-cn-api', true], ['openrouter', true], ['openai-compatible', true], ['local-openai', true], ['claude-cli-subscription', true], ['chatgpt-login', false]]);
     const fixed = PROVIDER_CONNECT_KINDS.filter(item => item.available && item.key?.secretName).map(kind => kind.key!.secretName!);
@@ -124,6 +124,11 @@ describe('provider connection check', () => {
     const failing: ProviderProbeFetch = async () => { throw new Error(`connect ECONNREFUSED with ${CANARY}`); };
     const result = await probeProviderConnection({ kind: 'openai-api', endpoint: null, key: CANARY }, { fetch: failing });
     expect(result).toEqual({ outcome: 'unreachable', httpStatus: null, key: 'unverified' }); expect(JSON.stringify(result)).not.toContain(CANARY);
+    // A request that never answers is cut by the probe's own timeout and reported the same way.
+    const stalled: ProviderProbeFetch = async (_url, init) => new Promise<Response>((_resolve, reject) => {
+      init.signal.addEventListener('abort', () => reject(new Error(`timed out with ${CANARY}`)), { once: true }); });
+    const timedOut = await probeProviderConnection({ kind: 'openai-api', endpoint: null, key: CANARY }, { fetch: stalled, timeoutMs: 20 });
+    expect(timedOut).toEqual({ outcome: 'unreachable', httpStatus: null, key: 'unverified' }); expect(JSON.stringify(timedOut)).not.toContain(CANARY);
     const abort = new AbortController(); abort.abort();
     await expect(probeProviderConnection({ kind: 'openai-api', endpoint: null, key: CANARY }, { fetch: failing, signal: abort.signal })).rejects.toThrow();
   });

@@ -27,7 +27,7 @@ function expectProtocolError(call: () => void, code: RuntimeServiceProtocolError
 }
 
 describe('runtime service protocol', () => {
-  it('carries only the separate MCP channel at v27; old lifecycle cannot erase the actor and old mutations are refused', () => {
+  it('carries only the separate MCP channel at the current version (since v27); an older lifecycle cannot erase the actor and old mutations are refused', () => {
     const request = { schemaVersion: 29, requestId: 'r', operation: 'inspectProviderSpendAccount', channel: 'mcp',
       input: { schemaVersion: 1, scopeId: 'scope-1', current: true }, delivery: { maxResultBytes: 4096 } };
     expect(runtimeServiceRequestSchema.parse(request)).toEqual(request);
@@ -46,7 +46,7 @@ describe('runtime service protocol', () => {
     expect(runtimeServiceRequestSchema.safeParse({ ...request, schemaVersion: 28 }).success).toBe(false);
     expect(runtimeServiceRequestSchema.safeParse({ ...request, delivery: undefined }).success).toBe(false);
   });
-  it('accepts exactly the current v14 operation allowlist', () => {
+  it('accepts exactly the current operation allowlist', () => {
     for (const operation of operations) expect(runtimeServiceOperationSchema.parse(operation)).toBe(operation);
     expect(() => runtimeServiceOperationSchema.parse('shutdown')).toThrow();
     expect(classifyRuntimeServiceOperation('invokeModel')).toBe('execution');
@@ -63,7 +63,7 @@ describe('runtime service protocol', () => {
     expect(runtimeServiceOperationSchema.options).toEqual(operations);
   });
 
-  it('carries the v16 scratch operations (SCR-A): bounded delivery, strict input of scope and session, never in v15', () => {
+  it('carries the scratch operations (SCR-A, since v16) at the current version: bounded delivery, strict input of scope and session, never in an older version', () => {
     const query = { schemaVersion: 1, scopeId: 'scope-1', sessionId: 'session-1' };
     for (const operation of ['inspectScratch', 'clearScratch'] as const) {
       const request = { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'request-1', operation, input: query, delivery: { maxResultBytes: 4096 } };
@@ -166,7 +166,7 @@ describe('runtime service protocol', () => {
   });
 
   // CLEANUP-MARK (Astra 2124, protocol v15 addition, no version bump): `tool.finished`'s optional `cleanup`, host shell only.
-  it("admits tool.finished's optional cleanup within v15 without a version bump, and a v14 envelope never carries it", () => {
+  it("admits tool.finished's optional cleanup at the current version (added in v15 without a bump), and an older envelope never carries it", () => {
     const base = { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'request-1', kind: 'event', sequence: 0 } as const;
     for (const cleanup of ['clean', 'group-ended', 'unverified'] as const) {
       const frame = { ...base, events: [{ kind: 'tool.finished', callId: 'c1', name: 'run_shell', status: 'ok', ms: 3, bytes: 10, cleanup }] };
@@ -177,7 +177,7 @@ describe('runtime service protocol', () => {
     expect(runtimeServiceEventFrameSchema.parse(withoutCleanup)).toEqual(withoutCleanup);
     expect(runtimeServiceEventFrameSchema.safeParse({ ...base,
       events: [{ kind: 'tool.finished', callId: 'c1', name: 'run_shell', status: 'ok', ms: 3, bytes: 10, cleanup: 'maybe' }] }).success).toBe(false);
-    // A v14 envelope is rejected outright by the existing version gate, whether or not the event it carries names the new field:
+    // An older envelope is rejected outright by the existing version gate, whether or not the event it carries names the new field:
     // there is no live wire path where an older client ever sees `cleanup`.
     expect(runtimeServiceEventFrameSchema.safeParse({ ...base, schemaVersion: 20,
       events: [{ kind: 'tool.finished', callId: 'c1', name: 'run_shell', status: 'ok', ms: 3, bytes: 10, cleanup: 'unverified' }] }).success).toBe(false);
@@ -376,13 +376,13 @@ describe('runtime protocol v15 composer @file operations', () => {
 });
 
 describe('runtime protocol v16: a chat turn may ask for model thinking off (OPEN-REASONING-FILE)', () => {
-  it("admits chatTurn's optional reasoning 'on' | 'off' only in v16; a v15 envelope carries no chat turn at all", () => {
+  it("admits chatTurn's optional reasoning 'on' | 'off' only at the current version (since v16); an older envelope carries no chat turn at all", () => {
     const turn = { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: 'request-1', operation: 'chatTurn', delivery: { maxResultBytes: 4096 },
       input: { schemaVersion: 1, scopeId: 'scope-1', turnId: 'turn-1', messages: [{ role: 'user', content: 'hi' }] } };
     for (const reasoning of ['on', 'off']) {
       const request = { ...turn, input: { ...turn.input, reasoning } };
       expect(runtimeServiceRequestSchema.parse(request)).toEqual(request);
-      // The window's older version is lifecycle-only: a v15 terminal can neither send nor receive a chat turn.
+      // The window's older version is lifecycle-only: an older terminal can neither send nor receive a chat turn.
       expect(runtimeServiceRequestSchema.safeParse({ ...request, schemaVersion: 20 }).success).toBe(false);
       expect(runtimeServiceLifecycleRequestSchema.safeParse({ ...request, schemaVersion: 20, delivery: undefined }).success).toBe(false);
     }

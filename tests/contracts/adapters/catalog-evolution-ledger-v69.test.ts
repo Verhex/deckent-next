@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -102,6 +102,9 @@ it('records a pass by compare-and-set on the previous position; a concurrent pas
   try { await expect(read.lastPass('scope')).rejects.toMatchObject({ code: 'CATALOG_EVOLUTION_CORRUPT' }); } finally { read.close(); }
 });
 it('a read of an older ledger is refused, never migrated', async () => {
-  const f = await ledger(DOWNGRADE_TO_V67_LEDGER_SQL);
+  const f = await ledger(DOWNGRADE_TO_V67_LEDGER_SQL), before = await readFile(f.path);
   expect(() => openSqliteCatalogEvolutionStore(f.path, options, 'read')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
+  // Never migrated: the ledger bytes are unchanged and the v69 table was not added.
+  expect((await readFile(f.path)).equals(before)).toBe(true);
+  const db = new DatabaseSync(f.path, { readOnly: true }); try { expect(tables(db)).toEqual([]); } finally { db.close(); }
 });

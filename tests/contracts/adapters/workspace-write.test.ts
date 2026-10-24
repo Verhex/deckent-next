@@ -46,7 +46,7 @@ describe.skipIf(process.platform !== 'linux')('workspace write (T-L4 slice 2)', 
     expect(await planWorkspaceEdit(scope, 'edit_file', { path: 'src/bin.dat', old_string: 'x', new_string: 'y' })).toMatchObject({ ok: false, error: 'not-utf8-text' });
   });
 
-  it('writes conditionally and atomically as an effect target, keeping the mode, and reads crash evidence from the file itself', async () => {
+  it('writes conditionally and atomically as an effect target, keeping the mode, and reads crash evidence from its journal, never from the file content', async () => {
     const { root, scope, journal } = await workspace(); roots.push(journal);
     await chmod(join(root, 'src', 'a.ts'), 0o640);
     const target = new WorkspaceFileTarget(scope, journal), key = 'a'.repeat(64);

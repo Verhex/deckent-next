@@ -41,7 +41,10 @@ it('allows only an exact subset of parent-owned scope budgets', async () => {
 it('rejects duplicate scopes and secret references before resolution', async () => {
   expect(() => validateProviderSpendingLayers(undefined, spending(budget(), budget('scope', { budgetId: 'other' })))).toThrow();
   const f = await fixture(); await writeFile(f.projectPath, JSON.stringify({ provider_spending: spending(budget('$DECK:SCOPE')) }));
-  let resolutions = 0;
-  await expect(loadConfig(f.project, { env: f.env, secretResolver: async () => { resolutions++; return 'scope'; } })).rejects.toThrow();
+  let resolutions = 0; const secretResolver = async () => { resolutions++; return 'scope'; };
+  await expect(loadConfig(f.project, { env: f.env, secretResolver })).rejects.toMatchObject({ issues: [{ path: 'provider_spending', reason: 'SECRET_REFERENCE_FORBIDDEN' }] });
+  // The installation layer may hold `$DECK:` elsewhere; this section's own ban refuses it there too (not only the project-layer floor).
+  await writeFile(f.projectPath, '{}'); await writeFile(f.globalPath, JSON.stringify({ provider_spending: spending(budget('$DECK:SCOPE')) })); clearConfigCache();
+  await expect(loadConfig(f.project, { env: f.env, secretResolver })).rejects.toMatchObject({ issues: [{ path: 'provider_spending', reason: 'SECRET_REFERENCE_FORBIDDEN' }] });
   expect(resolutions).toBe(0);
 });

@@ -26,7 +26,7 @@ describe('catalog v3 packaged seeds through ledger and admission', () => {
     expect(raw.recommendedActivations[0].modelIds.sort()).toEqual(['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol'].sort());
     for (const m of raw.providers[0].models) expect(m).toMatchObject({ canonicalModelId: m.nativeId, vendorId: 'openai', contextWindow: 272000, maxOutputTokens: null, minClientVersion: '0.159.2', pricing: { kind: 'subscription' } });
   });
-  it('keeps Claude recommendations passive at register and includes owner retirement', async () => {
+  it('keeps the Claude recommended active set and includes owner retirement', async () => {
     const raw = await seed('claude-cli-subscription'); expect(raw.schemaVersion).toBe(3);
     // HAIKU55-CATALOG (owner 2026-10-08): Claude Haiku 5.5 joins the recommended active set.
     expect(raw.recommendedActivations[0].modelIds.sort()).toEqual(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-5-5'].sort());

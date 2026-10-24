@@ -229,13 +229,15 @@ it('waits a bounded time for capacity instead of refusing at once, and starts th
 });
 
 it('refuses with the typed BUSY and retryAfterMs when the bounded wait elapses, and never runs the operation', async () => {
-  const { timer, lifecycle } = bounded(); let calls = 0;
-  void lifecycle.admit(() => new Promise<void>(() => undefined)); void lifecycle.admit(() => new Promise<void>(() => undefined));
+  const { timer, lifecycle } = bounded(); let calls = 0; const held = deferred<void>();
+  const first = lifecycle.admit(() => held.promise); void lifecycle.admit(() => new Promise<void>(() => undefined));
   const waiting = lifecycle.admitBounded(() => { calls++; });
   await Promise.resolve(); timer.waits[0]!.release();
   await expect(waiting).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_BUSY', retryAfterMs: 40 }); expect(calls).toBe(0);
-  // The expired waiter left the queue: capacity freed later is not consumed by it.
   expect(() => lifecycle.admit(() => undefined)).toThrow('RUNTIME_SERVICE_BUSY');
+  // The expired waiter left the queue: capacity freed later is not consumed by it, and the next request gets the slot.
+  held.resolve(); await first; await new Promise(resolve => setImmediate(resolve)); // the slot is released after the result settles
+  await expect(lifecycle.admit(() => 'next')).resolves.toBe('next'); expect(calls).toBe(0);
 });
 
 it('keeps the wait queue bounded, serves waiters in arrival order and refuses an execution-class overtake', async () => {
@@ -244,6 +246,13 @@ it('keeps the wait queue bounded, serves waiters in arrival order and refuses an
   const a = lifecycle.admitBounded(() => { order.push('a'); }), b = lifecycle.admitBounded(() => { order.push('b'); });
   await expect(lifecycle.admitBounded(() => undefined)).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_BUSY' }); // queue holds at most maxConcurrentRequests
   gates[0]!.resolve(); await a; gates[1]!.resolve(); await b; expect(order).toEqual(['a', 'b']);
+  // Execution class: with the execution slot taken, a later execution request queues behind the earlier one and never starts first.
+  const execution = bounded().lifecycle, slot = deferred<void>(), ran: string[] = [];
+  void execution.admit(() => slot.promise, 'execution');
+  const early = execution.admitBounded(() => { ran.push('early'); }, 'execution'), late = execution.admitBounded(() => { ran.push('late'); }, 'execution');
+  await expect(execution.admitBounded(() => undefined, 'execution')).rejects.toMatchObject({ code: 'RUNTIME_SERVICE_BUSY' });
+  await Promise.resolve(); expect(ran).toEqual([]);
+  slot.resolve(); await early; await late; expect(ran).toEqual(['early', 'late']);
 });
 
 it('without a configured wait admitBounded refuses at once, and a stop rejects the waiters as stopping', async () => {

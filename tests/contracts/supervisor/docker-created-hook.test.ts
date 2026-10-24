@@ -36,7 +36,10 @@ it('reports the created container id after the mount check and before start', as
   const result = await f.supervisor.execute(f.request, undefined, { async created(id) { seen.push({ id, verbs: [...f.verbs] }); } });
   expect(result.result).toEqual({ kind: 'exited', exitCode: 0 });
   expect(seen).toHaveLength(1); expect(seen[0]!.id).toBe(containerId);
-  expect(seen[0]!.verbs).toContain('create'); expect(seen[0]!.verbs).not.toContain('start');
+  // The mount check is the `inspect` of the created container: it ran after `create` and before the hook, and nothing started yet.
+  const verbs = seen[0]!.verbs, created = verbs.indexOf('create');
+  expect(created).toBeGreaterThanOrEqual(0); expect(verbs.slice(created + 1)).toContain('inspect'); expect(verbs).not.toContain('start');
+  expect(f.verbs.indexOf('start')).toBeGreaterThan(verbs.length - 1);
 });
 
 it('starts nothing when the hook refuses (the record could not be made durable)', async () => {

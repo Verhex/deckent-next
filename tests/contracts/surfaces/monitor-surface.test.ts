@@ -516,7 +516,7 @@ describe('untrusted text never reaches the terminal with control sequences (Fabl
 });
 
 describe('terminal /monitor', () => {
-  it('prints the text snapshot as notice lines in the interactive terminal and is listed in the slash palette', async () => {
+  it('shows the text snapshot in its own window in the interactive terminal (never as notice lines) and is listed in the slash palette', async () => {
     expect(WORKLINE_SLASH_COMMANDS.some(command => command.name === 'monitor' && command.descriptionKey === 'terminal.slash.monitor')).toBe(true);
     const asked: string[] = [];
     const view = mountWorkline({ monitor: async (args: string) => { asked.push(args); return surface.renderMonitorText(fullSnapshot, { locale: 'en', width: 100, ascii: false }).split('\n'); } });

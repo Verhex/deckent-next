@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -49,6 +49,7 @@ describe.skipIf(process.platform !== 'linux')('MCP command boundary: managed-fil
     expect(existsSync(w.crashes)).toBe(false);
     // Nothing was repaired silently: the unsafe companion is left as found.
     expect(readFileSync(`${w.ledger}-wal`, 'utf8')).toBe('');
+    expect(statSync(`${w.ledger}-wal`).mode & 0o777).toBe(0o644);
   });
 
   it('an unexpected (non-product) failure still reaches the crash boundary: only product refusals are mapped', async () => {

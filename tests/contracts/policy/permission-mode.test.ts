@@ -20,6 +20,9 @@ const editGrants = (tool: Effect, op: Effect, eligible: { tool?: boolean; op?: b
 const decide = (policy: unknown, cell: AgentToolCallCell, tool = 'edit_file', operation: string | null = cell === 'read' ? null
   : cell.startsWith('shell') ? 'host.shell.run' : 'workspace.file.write') =>
   decideAgentToolCall(policy, { principal, scopeId: 'scope', tool: { name: tool }, operation: operation ? { id: operation } : null, cell });
+/** Positive control: with FULL_AUTO_SET a stored full-auto is in force (it lowers the narrow mutating shell cell, which only full-auto does). */
+const fullAutoLowersNarrowShell = () => decide(policyOf([rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true),
+  rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_AUTO_SET], [person('full-auto')]), 'shell-narrow-mutating', 'run_shell');
 
 describe('permission-mode policy data (T-L4 slice 4a)', () => {
   it('accepts modeEligible only on a v2 require-approval rule (grant or role permission)', () => {
@@ -92,20 +95,22 @@ describe('the one permission decision of an agent tool call (T-L4 slice 4a)', ()
   });
 
   it('never lowers deny, the floor, low, destructive, always-ask, other modify, a read tool or a read-only command (M1, M2, M5)', () => {
+    // Every policy carries the company full-auto grant, so the full-auto rows run in full-auto (without it the stored mode degrades to standart).
+    expect(fullAutoLowersNarrowShell()).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto' } });
     const eligible = (cell: AgentToolCallCell) => cell === 'read' ? [rule('read', 'agent-tool', ['edit_file'], 'require-approval', true)]
       : cell.startsWith('shell') ? [rule('shell-tool', 'agent-tool', ['edit_file'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'require-approval', true)]
         : editGrants('require-approval', 'require-approval', { tool: true, op: true });
     for (const cell of ['read', 'edit-floor', 'shell-read-none', 'shell-read-low', 'shell-destructive', 'shell-always-ask', 'shell-other-modify'] as const) {
       for (const mode of ['ask', 'auto-edit', 'full-auto']) {
-        expect({ cell, mode, ...decide(policyOf(eligible(cell), [person(mode)]), cell) }).toMatchObject({ cell, mode, decision: 'require-approval', relaxation: null });
+        expect({ cell, mode, ...decide(policyOf([...eligible(cell), FULL_AUTO_SET], [person(mode)]), cell) }).toMatchObject({ cell, mode, decision: 'require-approval', relaxation: null });
       }
     }
     for (const mode of ['ask', 'auto-edit', 'full-auto']) {
-      expect(decide(policyOf(editGrants('deny', 'require-approval', { op: true }), [person(mode)]), 'edit')).toMatchObject({ decision: 'deny', relaxation: null });
-      expect(decide(policyOf(editGrants('require-approval', 'deny', { tool: true }), [person(mode)]), 'edit')).toMatchObject({ decision: 'deny', relaxation: null });
+      expect(decide(policyOf([...editGrants('deny', 'require-approval', { op: true }), FULL_AUTO_SET], [person(mode)]), 'edit')).toMatchObject({ decision: 'deny', relaxation: null });
+      expect(decide(policyOf([...editGrants('require-approval', 'deny', { tool: true }), FULL_AUTO_SET], [person(mode)]), 'edit')).toMatchObject({ decision: 'deny', relaxation: null });
       // Allow everywhere: the floor raise still asks, and no eligible rule produced it, so no mode lowers it.
-      expect(decide(policyOf(editGrants('allow', 'allow'), [person(mode)]), 'edit-floor')).toMatchObject({ decision: 'require-approval', relaxation: null });
-      expect(decide(policyOf([rule('shell-tool', 'agent-tool', ['edit_file'], 'allow'), rule('shell-run', 'operation', ['host.shell.run'], 'allow')], [person(mode)]),
+      expect(decide(policyOf([...editGrants('allow', 'allow'), FULL_AUTO_SET], [person(mode)]), 'edit-floor')).toMatchObject({ decision: 'require-approval', relaxation: null });
+      expect(decide(policyOf([rule('shell-tool', 'agent-tool', ['edit_file'], 'allow'), rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_AUTO_SET], [person(mode)]),
         'shell-narrow-mutating')).toMatchObject({ decision: 'require-approval', relaxation: null });
     }
   });
@@ -118,16 +123,18 @@ describe('the one permission decision of an agent tool call (T-L4 slice 4a)', ()
   });
 
   it('never lowers an operation the company did not mark, nor through a second allow or a second unmarked rule (M6, M7)', () => {
-    const erp = [rule('edit-tool', 'agent-tool', ['edit_file'], 'require-approval', true), rule('erp', 'operation', ['erp.invoice.post'], 'require-approval')];
+    // The company full-auto grant is present throughout, so each full-auto entry below is in force (not degraded to standart).
+    expect(fullAutoLowersNarrowShell()).toMatchObject({ decision: 'allow', relaxation: { mode: 'full-auto' } });
+    const erp = [rule('edit-tool', 'agent-tool', ['edit_file'], 'require-approval', true), rule('erp', 'operation', ['erp.invoice.post'], 'require-approval'), FULL_AUTO_SET];
     expect(decide(policyOf(erp, [person('full-auto')]), 'edit', 'edit_file', 'erp.invoice.post')).toMatchObject({ decision: 'require-approval', relaxation: null });
-    expect(decide(policyOf([...editGrants('require-approval', 'allow'), rule('edit-allow', 'agent-tool', ['edit_file'], 'allow')], [person('full-auto')]), 'edit'))
+    expect(decide(policyOf([...editGrants('require-approval', 'allow'), rule('edit-allow', 'agent-tool', ['edit_file'], 'allow'), FULL_AUTO_SET], [person('full-auto')]), 'edit'))
       .toMatchObject({ decision: 'require-approval', relaxation: null });
-    expect(decide(policyOf([...editGrants('require-approval', 'allow', { tool: true }), rule('unmarked', 'agent-tool', ['edit_file'], 'require-approval')],
+    expect(decide(policyOf([...editGrants('require-approval', 'allow', { tool: true }), rule('unmarked', 'agent-tool', ['edit_file'], 'require-approval'), FULL_AUTO_SET],
       [person('full-auto')]), 'edit')).toMatchObject({ decision: 'require-approval', relaxation: null });
     // Another person's mode never applies (their full-auto does not lower my narrow shell); an unknown operation is no grant (deny), not a lowering.
-    expect(decide(policyOf([rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')],
+    expect(decide(policyOf([rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow'), FULL_AUTO_SET],
       [person('full-auto', ['scope'], 'theirs', { issuer: 'host', subject: '1001' })]), 'shell-narrow-mutating', 'run_shell')).toMatchObject({ decision: 'require-approval', relaxation: null });
-    expect(decide(policyOf([rule('edit-tool', 'agent-tool', ['edit_file'], 'require-approval', true)], [person('full-auto')]), 'edit')).toMatchObject({ decision: 'deny' });
+    expect(decide(policyOf([rule('edit-tool', 'agent-tool', ['edit_file'], 'require-approval', true), FULL_AUTO_SET], [person('full-auto')]), 'edit')).toMatchObject({ decision: 'deny' });
   });
 
   it('lowers a role-derived eligible rule of the person (Enterprise layering path), and names the derived rule', () => {

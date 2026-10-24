@@ -31,8 +31,10 @@ it('role additions plus selected binding removal preserve valid intermediate sna
   expect(resolvePolicyBindings({ ...plan.policy, revision: 'next' }, { ...plan.bindings, revision: 'next' })).toBeDefined();
 });
 it('refuses duplicate roles, unbound references, oversized changes and mixed grant revocation with a new role', () => {
-  for (const changes of [[addRole, addRole], [addBinding, addRole], Array.from({ length: 33 }, () => addRole),
-    [addRole, { kind: 'grant.remove', id: 'owned-read' }]]) {
+  // The size bound uses distinct roles, so only the change count can refuse it: 32 distinct additions plan, 33 do not.
+  const distinct = (count: number) => Array.from({ length: count }, (_, index) => ({ kind: 'role.add', role: { ...role, id: `reader-${index}` } }));
+  expect(planPolicyChange(policy, bindings, change(distinct(32))).policy?.roles).toHaveLength(32);
+  for (const changes of [[addRole, addRole], [addBinding, addRole], distinct(33), [addRole, { kind: 'grant.remove', id: 'owned-read' }]]) {
     expect(() => planPolicyChange(policy, bindings, change(changes))).toThrowError(expect.objectContaining({ code: 'POLICY_CHANGE_INVALID' }));
   }
 });

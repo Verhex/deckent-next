@@ -83,7 +83,7 @@ describe('S8-1a: definition opens the standing rows and bounds the prompt', () =
 });
 
 describe('S8-1b: system agent selection, prompt parts and the frozen seal', () => {
-  it('N25: a scope with no agent selects nothing and the frozen task is byte-identical to a Run without agents', async () => {
+  it('N25: a scope with no agent selects nothing and the frozen task carries no agent seal and no persona or skill parts', async () => {
     const f = await fixture();
     expect((await f.select()).size).toBe(0);
     const execution = await f.admit();
@@ -126,7 +126,7 @@ describe('S8-1b: system agent selection, prompt parts and the frozen seal', () =
     expect((await f.select()).size).toBe(0);
     expect((await f.select('other')).size).toBe(0);
   });
-  it('N14: a new agent revision is a new key — the old revision\'s standing is not read; the new one starts candidate', async () => {
+  it('N14: a new agent revision is a new key — the old revision\'s standing is not read; a shared WorkClass inherits active, a newly bound one starts candidate', async () => {
     const f = await fixture(), first = await f.agent('auditor');
     writeStanding(f.path, integrity, moved((await f.standings('auditor'))[0]!, 'active'));
     await f.app.defineAgent({ schemaVersion: 1, scopeId: 's', commandId: 'a-auditor-2', agentId: 'auditor', expectedRevision: 1, content: { ...first.content, workClasses: ['feature', 'docs'] } });

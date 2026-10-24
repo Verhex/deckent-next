@@ -42,6 +42,10 @@ it('rejects unbounded, unknown and secret-derived work limits', async () => {
   }
   const f = await fixture(); let resolutions = 0;
   await writeFile(f.projectPath, JSON.stringify({ provider_spend_audit: { ...limits, timeoutMs: '$DECK:AUDIT_LIMIT' } }));
-  await expect(loadConfig(f.project, { env: f.env, secretResolver: async () => { resolutions++; return '1000'; } })).rejects.toThrow();
+  const secretResolver = async () => { resolutions++; return '1000'; };
+  await expect(loadConfig(f.project, { env: f.env, secretResolver })).rejects.toMatchObject({ issues: [{ path: 'provider_spend_audit', reason: 'SECRET_REFERENCE_FORBIDDEN' }] });
+  // The installation layer may hold `$DECK:` elsewhere; this section's own ban refuses it there too (not only the project-layer floor).
+  await writeFile(f.projectPath, '{}'); await writeFile(f.globalPath, JSON.stringify({ provider_spend_audit: { ...limits, timeoutMs: '$DECK:AUDIT_LIMIT' } })); clearConfigCache();
+  await expect(loadConfig(f.project, { env: f.env, secretResolver })).rejects.toMatchObject({ issues: [{ path: 'provider_spend_audit', reason: 'SECRET_REFERENCE_FORBIDDEN' }] });
   expect(resolutions).toBe(0);
 });
