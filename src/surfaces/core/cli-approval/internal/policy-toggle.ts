@@ -38,7 +38,7 @@ export function mcpTable(view: McpCapabilityView, locale: Locale, style: ReturnT
     view.groups.map(state => [state.group.id, words.label(state.group.labelKey, state.group.id), state.managed === 'conflict' ? t('cli.policy.conflict', {}, locale) : onOff(state.effective, locale)]), style);
 }
 
-async function toggleScope(context: ApprovalCommandContext, locale: Locale, explicit: string | undefined, command: string, ask: Ask): Promise<ScopeResolution | null> {
+export async function toggleScope(context: ApprovalCommandContext, locale: Locale, explicit: string | undefined, command: string, ask: Ask): Promise<ScopeResolution | null> {
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
   const configured = ((await loadConfig(root, options)).terminal as { scopeId?: unknown } | undefined)?.scopeId;
   // A policy change is a change: a person picks the scope (the configured one preselected), it is never a silent default.

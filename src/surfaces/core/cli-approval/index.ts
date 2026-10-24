@@ -7,3 +7,4 @@ export { cardIo, sinksOf } from './internal/io.js';
 export { assertInputFields, inputSchemaText, type InputSchema } from './internal/input-check.js';
 // `policy scopes` is dispatched by the CLI router once the catalog registers it (delta/C-APPROVE-catalog.md).
 export { policyScopesCommand, vocabularyText } from './internal/policy-summary.js';
+export { policyRecoveryCommand, recoveryCommand, recoveryRolloutText, type RecoveryHandlers } from './internal/recovery.js';

@@ -575,7 +575,7 @@
         "src/adapters/core/sqlite-model-invocation",
         "src/adapters/core/recovery-case-store",
         "src/composition/core/terminal-chat"
-      ],
+      , "src/composition/core/approvals", "src/domain/core/recovery"],
       "plan": "EXECUTION"
     },
     "src/composition/core/runtime": {
@@ -1263,7 +1263,7 @@
         "src/platform/core/output",
         "src/engine/core/recovery",
         "src/surfaces/core/recovery-text"
-      ],
+      , "src/domain/core/recovery"],
       "plan": "SURFACES"
     },
     "src/surfaces/core/cli-installation": {
@@ -2659,7 +2659,7 @@
         "src/engine/core/workspace-patch",
         "src/domain/core/principal",
         "src/engine/core/recovery"
-      ],
+      , "src/engine/core/audit", "src/engine/core/nervous", "src/adapters/core/audit-store", "src/adapters/core/local-keyring", "src/adapters/core/recovery-case-store", "src/domain/core/recovery"],
       "plan": "MONITOR"
     },
     "src/composition/core/monitor": {
@@ -3379,7 +3379,7 @@
         "src/engine/core/config",
         "src/domain/core/approval",
         "src/domain/core/policy"
-      ],
+      , "src/domain/core/recovery", "src/engine/core/recovery"],
       "plan": "SURFACES"
     },
     "src/surfaces/core/cli-admin": {

@@ -10,6 +10,7 @@ import { FileArtifactStore } from '#adapters/core/file-artifacts/index.js';
 import { FilePolicySource } from '#adapters/core/file-policy/index.js';
 import { readWorkerEventTail, readWorkerSidecars } from '#adapters/core/worker-observation/index.js';
 import { emptyWorkerContent, readMonitorWorkerContent } from './worker-content.js';
+import { monitorRecoveryRollout } from './recovery.js';
 import { indexMonitorLedger, scanMonitorLedger, type MonitorAttemptFiles } from './reader.js';
 import { authorizeMonitorDelivery } from './receipt-observation.js';
 import limits from './display-limits.json' with { type: 'json' };
@@ -144,7 +145,8 @@ async function installMap(config: ResolvedConfig, env: Environment, ledger: Moni
     grant = isAiPrincipal(self) ? 'unknown' : recoveryGrantState(document, { ...self, scopeIds: [...scopeIds] }, scopeIds, Date.now());
   } catch (error) { diagnostics.push('map-policy-unavailable:' + code(error)); }
   const recovery = recoveryModeState({ nervous: config.runRuntime.nervous.mode, recovery: config.runRuntime.recovery.mode }, grant);
-  return Object.freeze({ models: ledger?.models ?? [], memory: { available: false }, recovery,
+  const rollout = recovery.recovery === 'off' ? null : await monitorRecoveryRollout(config, scopeIds).catch(error => { diagnostics.push('map-recovery-unavailable:' + code(error)); return null; });
+  return Object.freeze({ models: ledger?.models ?? [], memory: { available: false }, recovery, ...(rollout ? { recoveryRollout: rollout } : {}),
     config: Object.freeze([{ layer: 'default' as const, path: null, sections: keys(createDefaultConfig()) },
       { layer: 'global' as const, path: globalPath, sections: keys(global) },
       { layer: 'project' as const, path: projectPath, sections: project.kind === 'ready' ? keys(project.value) : [] },

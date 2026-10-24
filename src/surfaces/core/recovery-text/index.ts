@@ -1,1 +1,1 @@
-export { holdNoteText, recoveryStateLines, runHoldNextText, runHoldReasonText } from './internal/text.js';
+export { holdNoteText, recoveryRolloutSummary, recoveryStateLines, runHoldNextText, runHoldReasonText } from './internal/text.js';

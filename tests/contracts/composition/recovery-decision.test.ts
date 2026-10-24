@@ -11,7 +11,7 @@ import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { applyModelCatalog } from '../../../src/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { admitRunAttempts } from '../support/admission.js';
-import { custodyProfiles } from '../support/custody.js';
+import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
 import { LEDGER_OPTIONS, LOST_TIMING, loseAttempt, sealDetection } from '../support/lost-task.js';
 
 // S6R-5 through the real composition (config, policy file, ledger, S2 role registry, catalog, model invocation and spend ledger, audit chain): the
@@ -25,7 +25,7 @@ const roles = { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'fixt
   models: [{ channelId: CHANNEL, modelId, version: 1, tier: 'frontier', roles: ['brain', 'recovery-decision'] }], exceptions: [] }] };
 type Choice = Record<string, unknown>;
 
-async function setup(input: { mode: 'shadow' | 'live'; invokeGrant?: boolean; choice?: Choice; roles?: unknown; frozen?: 'shadow' | 'live' }) {
+async function setup(input: { mode: 'shadow' | 'live'; invokeGrant?: boolean; choice?: Choice; roles?: unknown; frozen?: 'shadow' | 'live'; wouldStop?: boolean }) {
   const f = await brainProviderFixture({ response: '', modelRoles: input.roles ?? roles, maxOutputTokens: 1024 }); fixtures.push(f);
   const local = readLocalOsIdentity(), person = { issuer: local.issuer, subject: local.subject }, recoveryRef = { issuer: `${person.issuer}/recovery`, subject: person.subject };
   const config = JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8')) as Record<string, unknown>;
@@ -45,9 +45,10 @@ async function setup(input: { mode: 'shadow' | 'live'; invokeGrant?: boolean; ch
   const { layout } = await openConfiguredAttemptStore(f.project, f.options).then(opened => { opened.store.close(); return opened; });
   const identity: AttemptIdentity = { scopeId: 's', runId: 'lost-run', taskId: 'task', attemptId: 'attempt-1', layoutRevision: layout.revision, generation: 1 };
   await admitRunAttempts(store, [identity], { recovery: freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), input.frozen ?? input.mode, ['task']) });
-  await loseAttempt(store, f.data, identity);
+  if (input.wouldStop) { const claim = { request: { protocolVersion: 1 as const, identity, workspace: f.data, argv: ['fixture'] }, owner: 'owner-attempt-1' };
+    await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim); } else await loseAttempt(store, f.data, identity);
   const integrity = await openLocalIntegrityAuthority(layout, (await loadConfig(f.project, f.options)).approvals.keyFile, true);
-  const caseId = await sealDetection(f.path, identity, 'launcher-dead-orphan', integrity);
+  const caseId = await sealDetection(f.path, identity, 'launcher-dead-orphan', integrity, input.wouldStop ? 'shadow-only' : 'execute');
   f.setOutput(body => { const messages = (JSON.parse(body) as { messages: { content: string }[] }).messages, user = JSON.parse(messages.at(-1)!.content) as { caseId: string; evidenceDigest: string };
     return JSON.stringify({ schemaVersion: 1, caseId: user.caseId, evidenceDigest: user.evidenceDigest, action: 'continue-new-attempt', causeClass: 'infra-transient',
       rationale: 'The launcher died; nothing is open.', nextAttemptNote: 'previous-attempt-launcher-died', ...input.choice }); });
@@ -102,4 +103,12 @@ it('shadow: the model is asked once on the real case, the decision sealed, and t
   expect(h.rows('SELECT invocation_id FROM model_invocation_spend_reservations')).toEqual([{ invocation_id: h.sealed()[0].subject.model.invocationId }]);
   expect(await prepareConfiguredRecovery(h.f.project, h.f.options, 'shadow')!.run('s')).toEqual([{ kind: 'shadow', action: 'continue-new-attempt', code: null, replay: true }]);
   expect(h.f.posts).toBe(1);
+});
+
+it('alpha.56 G1: a shadow-only stop detection (Nervous in shadow stopped nothing) reaches the decision as would-stop input; nothing changes', async () => {
+  const h = await setup({ mode: 'live', wouldStop: true }), before = await h.store.loadRun('s', 'lost-run');
+  expect(await prepareConfiguredRecovery(h.f.project, h.f.options, 'live')!.run('s')).toEqual([{ kind: 'shadow', action: 'continue-new-attempt', code: null, replay: false }]);
+  expect(h.f.posts).toBe(1);
+  expect(h.sealed().map(event => [event.subject.mode, event.subject.basis, event.subject.terminationReceiptId])).toEqual([['shadow', 'would-stop', null]]);
+  expect(await h.store.loadRun('s', 'lost-run')).toEqual(before); expect(h.rows('SELECT count(*) AS n FROM recovery_cases')).toEqual([{ n: 0 }]);
 });

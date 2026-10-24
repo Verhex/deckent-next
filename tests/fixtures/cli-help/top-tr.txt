@@ -70,9 +70,12 @@ Onaylar:
   approval    Onay isteklerini incele ve karara bağla (eylemsiz: list)
       list | inspect | decide | renew
       [--scope <id>] [--input <dosya|->]
+  recovery    Kaybolan işçi kurtarma: geçiş ilerlemesi ve kör incelemeniz
+      review
+      [--scope <id>] [--json]
   policy      Politikayı ve kalıcı izinleri incele (eylemsiz: status)
       vocabulary | status | delegations | delegate | undelegate | grants |
-      revoke | upgrade | mcp list|grant|revoke | scopes
+      revoke | upgrade | recovery | mcp list|grant|revoke | scopes
       [--scope <id>]
 
 Kurulum/Bakım:

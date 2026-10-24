@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RECOVERY_ACTIONS, counterSchema, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, recoveryActionSchema, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
+import { RECOVERY_ACTIONS, RECOVERY_ROLLOUT, counterSchema, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, recoveryActionSchema, type AuditEvent, type VerifiedPrincipal } from '#domain/index.js';
 import type { NervousProposal } from './detect.js';
 
 /**
@@ -28,6 +28,17 @@ export function nervousStandingApproval(document: unknown, principal: VerifiedPr
       assurance: principal.assurance }, approvedAtMs: nowMs, scopeIds: [proposal.scopeId], actions: [proposal.action] });
     return record.success ? record.data : null;
   } catch { return null; }
+}
+/**
+ * alpha.56 G2 (owner Q-A1/Q-A4): whether a person promoted exactly `ruleId@version` in `scopeId` — `promote` on `nervous-rule/<ruleId>@<version>`
+ * for the installation's own principal, read fresh per page from the loaded policy; only the rollout's measured rules. Any doubt is no promotion.
+ */
+export function nervousRulePromoted(document: unknown, principal: VerifiedPrincipal, scopeId: string, ruleId: string, version: number): boolean {
+  const { kind, actions: [promote] } = policyResources.nervousRule;
+  try {
+    return !isAiPrincipal(principal) && RECOVERY_ROLLOUT.rules.includes(ruleId)
+      && evaluatePolicy(document, { principal, scopeId, action: promote, resource: { kind, id: `${ruleId}@${version}` } }).decision === 'allow';
+  } catch { return false; }
 }
 /** Which target each executable action needs: the stop chain one Attempt, a hold one Run (an Attempt's or a task's); a scope case has neither. */
 const TARGETS: Readonly<Partial<Record<NervousProposal['action'], readonly NervousProposal['target']['kind'][]>>> = Object.freeze({

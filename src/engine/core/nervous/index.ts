@@ -4,7 +4,7 @@ export { NERVOUS_RULES_SEED, NervousError, loadNervousRules, promoteNervousRule 
 export type { NervousRule, NervousRules } from './internal/rules.js';
 export { nervousAttemptSignalSchema, nervousProposalSchema, nervousCaseId } from './internal/detect.js';
 export type { NervousAttemptSignal, NervousEvidence, NervousFeedKind, NervousProposal, NervousTarget } from './internal/detect.js';
-export { nervousDisposition, nervousStandingApproval, nervousStandingApprovalSchema } from './internal/broker.js';
+export { nervousDisposition, nervousRulePromoted, nervousStandingApproval, nervousStandingApprovalSchema } from './internal/broker.js';
 export { NERVOUS_EXECUTABLE_ACTIONS, nervousExecutors, nervousHoldCommand } from './internal/executors.js';
 export type { NervousRecoveryPorts, NervousRecoveryResult, NervousRetained } from './internal/executors.js';
 export type { NervousDisposition, NervousExecutors, NervousStandingApproval } from './internal/broker.js';

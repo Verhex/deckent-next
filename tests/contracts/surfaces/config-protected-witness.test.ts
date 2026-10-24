@@ -126,3 +126,21 @@ describe('engine: the human write path (submit) asks the terminal witness for a 
     expect((await refused.app.submit('set', { ...write, keyPath: 'max_workers', value: 2, commandId: 'c4' })).status).toBe('applied'); expect(refused.asked).toEqual(['config unset memoryAutomation.extraction.mode', 'config set runRuntime']);
   });
 });
+
+describe('alpha.56 recovery cards: the blind review and a recovery policy change are a person\'s at a terminal', () => {
+  it('review refuses the AI marker, CI, a pipe, TERM=dumb and --json before anything is read; policy recovery off a terminal only reads', async () => {
+    const { recoveryCommand, policyRecoveryCommand } = await import('#surfaces/core/cli-approval/index.js');
+    const calls: string[] = [], output: string[] = [];
+    const recovery = { inspectRollout: vi.fn(), changePolicy: vi.fn(async () => { calls.push('change'); return null as never; }),
+      reviewPending: vi.fn(async () => { calls.push('pending'); return []; }), reviewAnswer: vi.fn(async () => { calls.push('answer'); return null as never; }),
+      inspectPolicy: vi.fn(async () => { calls.push('inspect'); return { schemaVersion: 1, scopeId: 's', revision: 'r', rows: [], rollout: {} } as never; }) };
+    const ctx = (env: NodeJS.ProcessEnv, stdin: { isTTY: boolean }) => ({ root: '/tmp/recovery-witness', env: { ...env, HOME: '/tmp/recovery-witness-home' }, stdin, recovery,
+      stdout: { isTTY: stdin.isTTY, write: (text: string) => { output.push(text); } } }) as never;
+    for (const [env, stdin, extra] of [[{ ...person.env, CLAUDECODE: '1' }, TTY, []], [{ ...person.env, CI: 'true' }, TTY, []], [person.env, PIPE, []], [{ TERM: 'dumb' }, TTY, []],
+      [person.env, TTY, ['--json']]] as const)
+      expect(await refusal(recoveryCommand(['recovery', 'review', '--scope', 's', ...extra], ctx(env, stdin)))).toMatchObject({ code: 'APPROVAL_INTERACTIVE_REQUIRED' });
+    expect(calls).toEqual([]);
+    await policyRecoveryCommand(['policy', 'recovery', '--scope', 's'], ctx(person.env, PIPE));
+    expect(calls).toEqual(['inspect']); // a pipe reads the card; it never changes a row
+  });
+});

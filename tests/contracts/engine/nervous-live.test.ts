@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { RECOVERY_ACTIONS, type AttemptIdentity, type AuditEvent, type DispatchLossDecision } from '#domain/index.js';
-import { AuditApplication, NERVOUS_RULES_SEED, NervousApplication, nervousExecutors, nervousStandingApproval, type NervousAttemptSignal, type NervousRecoveryPorts } from '#engine/index.js';
+import { AuditApplication, NERVOUS_RULES_SEED, NervousApplication, nervousExecutors, nervousRulePromoted, nervousStandingApproval, type NervousAttemptSignal, type NervousRecoveryPorts } from '#engine/index.js';
 import { createHmacIntegrity } from '#platform/index.js';
 import { openSqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
@@ -192,4 +192,14 @@ it('alpha.56 G2: a person\'s promotion of the exact rule id and version makes th
   const stale = { ...other.context, promoted: (ruleId: string, version: number) => ruleId === 'launcher-dead-orphan' && version === 2 };
   expect(await other.app.observeAttempts('s', [signal()], stale)).toEqual([expect.objectContaining({ disposition: 'proposal-only', executed: false })]);
   expect(other.rows()[0]).toMatchObject({ rule: { status: 'provisional' } }); expect(other.calls).toEqual([]);
+});
+
+it('alpha.56 G2: a promotion is the owner\'s policy grant on nervous-rule/<id>@<version>; another version, an unmeasured rule or an AI principal is none', () => {
+  const promote = (ids: readonly string[]) => ({ schemaVersion: 1, revision: 'owner-policy', restrictions: [], grants: [
+    { id: 'promotion', effect: 'allow', actions: ['promote'], scopes: ['s'], principals: [{ issuer: 'host', subject: '1000' }], resource: { kind: 'nervous-rule', ids } }] });
+  expect(nervousRulePromoted(promote(['container-gone@1']), owner, 's', 'container-gone', 1)).toBe(true);
+  expect(nervousRulePromoted(promote(['container-gone@1']), owner, 's', 'container-gone', 2)).toBe(false);
+  expect(nervousRulePromoted(promote(['crash-loop@1']), owner, 's', 'crash-loop', 1)).toBe(false); // not measured in this release (owner Q-A4)
+  expect(nervousRulePromoted(promote(['container-gone@1']), { ...owner, issuer: 'host/mcp', assurance: 'workload-verified' as never }, 's', 'container-gone', 1)).toBe(false);
+  expect(nervousRulePromoted({ schemaVersion: 7 }, owner, 's', 'container-gone', 1)).toBe(false);
 });

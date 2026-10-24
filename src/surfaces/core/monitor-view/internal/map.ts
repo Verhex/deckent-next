@@ -1,7 +1,7 @@
 import { t, type Locale } from '#platform/index.js';
 import type { MonitorInstall, MonitorMap } from '#engine/index.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
-import { recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
+import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
 import { span, type MonitorBlock, type MonitorColumn, type MonitorRole, type MonitorRow, type MonitorSpan } from './layout.js';
 
 /** The text markers of one view: ✓ ready, ○ off/unused, ! needs attention, → next action (ASCII `+ o ! ->`). */
@@ -99,6 +99,7 @@ export function mapBlocks(installs: readonly MonitorInstall[], locale: Locale, m
       line(map.memory.available ? `${marks.ok} ${t('monitor.map.memory', {}, locale)}` : `${marks.off} ${t('monitor.map.memoryNone', {}, locale)}`, map.memory.available ? 'sectionHeader' : 'muted'),
       // S6R-6: lost-worker recovery — both protected modes, the owner's standing grant, and what that means (live without the grant: a person decides).
       ...(map.recovery ? recoveryLines(map.recovery, locale, marks).map(([text, role]) => line(text, role)) : []),
+      ...(map.recoveryRollout ? [line(`  ${recoveryRolloutSummary(map.recoveryRollout, locale)}`, 'muted')] : []),
     ];
   });
 }

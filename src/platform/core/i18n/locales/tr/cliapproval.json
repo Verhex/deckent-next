@@ -159,5 +159,21 @@
   "cli.policy.toggle.actor": "AI aktörü {actor} · scope {scope} · kaynak {resource}",
   "cli.policy.toggle.becomesOn": "Değişiklik: {what}: kapalı → açık",
   "cli.policy.toggle.becomesOff": "Değişiklik: {what}: açık → kapalı",
-  "cli.approval.unreadable": "{count} kayıt bu sürümle okunamadı; deckent approval list --json gösterir"
+  "cli.approval.unreadable": "{count} kayıt bu sürümle okunamadı; deckent approval list --json gösterir",
+  "cli.policy.recovery.action.fence-attempt": "Kaybolan işçinin geç yazmalarını engelle ve yerini boşalt",
+  "cli.policy.recovery.action.hold-run": "İşi bir kişi için beklet",
+  "cli.policy.recovery.action.stop-orphan": "Sahipsiz kalan işçiyi durdur ve yerini boşalt",
+  "cli.policy.recovery.action.restart-component": "Bir bileşeni yeniden başlat",
+  "cli.policy.recovery.action.alert-brain": "Brain'e uyarı ver",
+  "cli.policy.recovery.action.hand-to-human": "İşi bir kişiye devret",
+  "cli.policy.recovery.action.continue-new-attempt": "Kaybolan işçinin görevini yeni denemeyle sürdür (yalnız düşük riskli iş sınıfları)",
+  "cli.policy.recovery.rule": "{rule} kuralını canlıya al",
+  "cli.policy.recovery.unavailable": "bu sürümde etkisi yok",
+  "cli.policy.recovery.column.state": "Durum",
+  "cli.policy.recovery.column.exits": "Çıkış ölçütleri",
+  "cli.policy.recovery.pick": "{scope} kapsamında kaybolan işçi kurtarma: değiştirmek için bir satır seçin",
+  "cli.policy.recovery.scope": "Kapsam: {scope}",
+  "cli.policy.recovery.exitsUnmet": "Ölçülen çıkış ölçütleri sağlanmadı; değişiklik reddedilecek.",
+  "cli.policy.recovery.applied": "Değiştirildi.",
+  "cli.policy.recovery.current": "Zaten böyle; hiçbir şey değişmedi."
 }

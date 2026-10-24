@@ -63,3 +63,8 @@ export function recoveryStateLines(state: RecoveryModeState, locale: Locale): re
   return [t('recovery.state.line', { nervous: modeWord(state.nervous, locale), recovery: modeWord(state.recovery, locale), grant: grantWord(state.grant, locale) }, locale),
     effectText(state.continuation, locale)];
 }
+/** alpha.56 G4: the rollout counts in one line (doctor, monitor): measured rules ready, blind-reviewed agreement and decisions waiting for a person. */
+export function recoveryRolloutSummary(counts: Readonly<{ rulesMet: number; rules: number; decided: number; agreements: number; waiting: number; complete: boolean }>, locale: Locale): string {
+  return t('recovery.rollout.summary', { met: counts.rulesMet, rules: counts.rules, agreements: counts.agreements, decided: counts.decided, waiting: counts.waiting }, locale)
+    + (counts.complete ? '' : ` ${t('recovery.rollout.incomplete', {}, locale)}`);
+}

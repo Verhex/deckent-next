@@ -6,6 +6,7 @@ import { policyMcpCommand } from './policy-mcp.js';
 import { policyDelegationsCommand } from './policy-delegations.js';
 import { policyStatusCommand } from './policy-summary.js';
 import { policyGrantsAll } from './policy-grants-all.js';
+import { policyRecoveryCommand } from './recovery.js';
 
 /** A persisted standing approval as the CLI shows it (the engine's view; the surface owns no rule of its own). */
 export interface StandingGrantRow { readonly id: string; readonly key: string; readonly tool: string; readonly kind: 'command' | 'directory' | 'unknown'; readonly text: string }
@@ -28,6 +29,7 @@ export async function policyGrantsCommand(argv: readonly string[], context: Appr
   if (argv[1] === 'status') return policyStatusCommand(argv, context);
   if (argv[1] === 'mcp') return policyMcpCommand(argv, context);
   if (argv[1] === 'upgrade') return policyUpgradeCommand(argv, context);
+  if (argv[1] === 'recovery') return policyRecoveryCommand(argv, context);
   const action = argv[1]; let json = false, mine = false, all = false, yes = false, scope: string | undefined, language: string | undefined, id: string | undefined, after: string | undefined;
   if (action !== 'grants' && action !== 'revoke') throw ErrorRegistry.createError('CLI_USAGE');
   for (let i = 2; i < argv.length; i++) {

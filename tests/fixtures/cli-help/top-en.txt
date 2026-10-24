@@ -70,9 +70,12 @@ Approvals:
   approval    Inspect and decide approval requests (without an action: list)
       list | inspect | decide | renew
       [--scope <id>] [--input <file|->]
+  recovery    Lost-worker recovery: rollout progress and your blind review
+      review
+      [--scope <id>] [--json]
   policy      Inspect policy and standing grants (without an action: status)
       vocabulary | status | delegations | delegate | undelegate | grants |
-      revoke | upgrade | mcp list|grant|revoke | scopes
+      revoke | upgrade | recovery | mcp list|grant|revoke | scopes
       [--scope <id>]
 
 Setup / Maintenance:
