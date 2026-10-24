@@ -1,27 +1,24 @@
-import { execFileSync, spawn } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, lstat } from 'node:fs/promises';
+import { mkdir, readFile, lstat } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as wait } from 'node:timers/promises';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { personEnv } from '../contracts/support/person-env.js';
+import { owned } from '../contracts/support/owned.js';
 import { CURRENT_LEDGER_VERSION } from '#adapters/index.js';
 import { runInTerminal } from '../contracts/support/terminal-cli.js';
 
 const binary = fileURLToPath(new URL('../../dist/composition/core/cli/internal/entry.js', import.meta.url));
-const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 describe.skipIf(process.platform !== 'linux')('README first session, actual binary, no Docker or provider call', () => {
   it.each(['short', 'long'] as const)('initializes and serves a fresh %s path; a terminal-prompt secret names the selected scope, a piped one is refused before it is read (C-ADMIN)', async kind => {
-    const root = await mkdtemp('/tmp/dk-first-'); roots.push(root);
+    const root = await owned().root('dk-first-', '/tmp');
     const project = join(root, kind === 'long' ? 'a project with spaces '.repeat(9) : 'project');
     const home = join(root, 'home'), global = join(root, 'global');
     await mkdir(project); await mkdir(home, { mode: 0o700 }); await mkdir(global, { mode: 0o700 });
     const env = { PATH: process.env['PATH'], HOME: home, DECKENT_GLOBAL_HOME: global, NO_COLOR: '1', DECKENT_LANGUAGE: 'en', DOCKER_HOST: 'unix:///nonexistent/docker.sock' };
-    const run = async (args: string[]) => ({ stdout: execFileSync(process.execPath, [binary, ...args],
-      { cwd: project, env, timeout: 20_000, maxBuffer: 1024 * 1024, encoding: 'utf8' }), stderr: '' });
+    const run = (args: string[]) => owned().exec(process.execPath, [binary, ...args], { cwd: project, env, deadlineMs: 20_000, outputBytes: 1024 * 1024, label: args[0] });
     const version = await run(['--version']); expect(version.stdout + version.stderr, JSON.stringify({ binary, node: process.execPath, version })).toContain('deckent v');
     await run(['init', 'policy', '--scope', 'my-project', '--preview']);
     await expect(lstat(join(project, '.deckent'))).rejects.toMatchObject({ code: 'ENOENT' });
@@ -35,9 +32,8 @@ describe.skipIf(process.platform !== 'linux')('README first session, actual bina
     await run(['init', 'policy', '--scope', 'my-project', '--apply']);
     expect(await readFile(join(project, '.deckent/config.json'), 'utf8')).toBe(applied);
     let log = '';
-    const service = spawn(process.execPath, [binary, 'runtime', 'serve'], { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
-    service.stdout.on('data', chunk => { log += String(chunk); }); service.stderr.on('data', chunk => { log += String(chunk); });
-    const exited = new Promise<void>((resolve, reject) => { service.once('exit', () => resolve()); service.once('error', reject); });
+    const { child: service, exit: exited } = owned().spawn(process.execPath, [binary, 'runtime', 'serve'], { cwd: project, env, deadlineMs: 55_000, label: 'runtime serve' });
+    service.stdout!.on('data', chunk => { log += String(chunk); }); service.stderr!.on('data', chunk => { log += String(chunk); });
     try {
       let health: { status: string; startability: { status: string; endpoint: string; checks: unknown[] }; serviceConfig: string } | undefined;
       for (let retry = 0; retry < 100; retry++) {
@@ -48,16 +44,16 @@ describe.skipIf(process.platform !== 'linux')('README first session, actual bina
       }
       // Nothing is recorded on a fresh install, so audit integrity is not verified yet: shown as unknown/no-checkpoint-yet, never healthy.
       expect(health, log).toMatchObject({ status: 'degraded', auditIntegrity: { status: 'unknown', reason: 'no-checkpoint-yet' }, startability: { status: 'ready', checks: [] }, serviceConfig: 'current' });
-      const endpoint = health!.startability.endpoint; roots.push(dirname(endpoint));
+      const endpoint = health!.startability.endpoint; owned().removeAfter(dirname(endpoint));
       expect(Buffer.byteLength(endpoint)).toBeLessThan(108); expect(endpoint).not.toContain(project);
       expect((await lstat(dirname(endpoint))).mode & 0o777).toBe(0o700);
       expect((await lstat(endpoint)).mode & 0o777).toBe(0o600);
       // SEC-1 × C-ADMIN: a piped key is refused by the CLI before it is read (the service witness stays the backstop); the README's hidden prompt
       // on a real PTY stores it.
-      const piped = spawn(process.execPath, [binary, 'secret', 'set', 'INSTALL_FLOW_PIPED', '--scope', 'my-project'], { cwd: project, env, stdio: ['pipe', 'pipe', 'pipe'] });
-      let pipedLog = ''; piped.stdout.on('data', chunk => { pipedLog += String(chunk); }); piped.stderr.on('data', chunk => { pipedLog += String(chunk); });
-      const refused = new Promise<number | null>(resolve => piped.once('exit', resolve)); piped.stdin.end('offline-fixture-key\n');
-      expect(await refused, pipedLog).not.toBe(0); expect(pipedLog).toContain('SECRET_SET_TERMINAL_REQUIRED'); expect(pipedLog).not.toContain('offline-fixture-key');
+      const piped = await owned().run(process.execPath, [binary, 'secret', 'set', 'INSTALL_FLOW_PIPED', '--scope', 'my-project'],
+        { cwd: project, env, input: 'offline-fixture-key\n', deadlineMs: 20_000, label: 'piped secret set' });
+      const pipedLog = piped.stdout + piped.stderr;
+      expect(piped.code, pipedLog).not.toBe(0); expect(pipedLog).toContain('SECRET_SET_TERMINAL_REQUIRED'); expect(pipedLog).not.toContain('offline-fixture-key');
       const set = await runInTerminal([process.execPath, binary, 'secret', 'set', 'INSTALL_FLOW_TEST', '--main', '--scope', 'my-project'], project, personEnv(env), [{ when: 'INSTALL_FLOW_TEST: ', send: 'offline-fixture-key\r' }]);
       expect(set.code, set.output).toBe(0); expect(set.output).not.toContain('offline-fixture-key');
       const listed = await run(['secret', 'list']); expect(listed.stdout + listed.stderr).toContain('INSTALL_FLOW_TEST');

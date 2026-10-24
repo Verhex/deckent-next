@@ -1,12 +1,12 @@
-import { spawn } from 'node:child_process';
-import { access, copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
-import { hostname, tmpdir, userInfo } from 'node:os';
+import { access, copyFile, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { clearConfigCache, productResourcePath } from '#platform/index.js';
 import { composeCore } from '#composition/core/root/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
-import { cliChildEnv } from '../support/child-env.js';
+import { childEnv } from '../support/child-env.js';
+import { owned } from '../support/owned.js';
 
 // ENTERPRISE-EXT-1 acceptance (owner K7 = A): tests/fixtures/overlay-package is a non-Core package that imports only `deckent/extensions`
 // (lint-arch G-j). Installed next to the built Core, its own executable registers an effect target and runs `deckent operation execute`
@@ -14,21 +14,16 @@ import { cliChildEnv } from '../support/child-env.js';
 const dist = resolve('dist'), fixture = resolve('tests/fixtures/overlay-package'), coreCli = join(dist, 'composition/core/cli/internal/entry.js');
 // The package.json line the lead adds (docs-delta); until then the installed copy's manifest carries it so the bare specifier resolves.
 const EXTENSIONS_EXPORT = { types: './dist/extensions.d.ts', import: './dist/extensions.js' };
-const cleanup: (() => Promise<void>)[] = [];
-afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); clearConfigCache(); });
+afterEach(() => { clearConfigCache(); });
 
+/** One CLI process, owned and bounded (a hang is a typed TEST_CHILD_DEADLINE failure; teardown reaps the group). */
 function run(entry: string, args: readonly string[], cwd: string, env: NodeJS.ProcessEnv) {
-  return new Promise<{ code: number | null; stdout: string; stderr: string }>((done, reject) => {
-    const child = spawn(process.execPath, [entry, ...args], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '', stderr = '';
-    child.stdout.on('data', chunk => { stdout += String(chunk); }); child.stderr.on('data', chunk => { stderr += String(chunk); });
-    child.once('error', reject); child.once('close', code => done({ code, stdout, stderr }));
-  });
+  return owned().run(process.execPath, [entry, ...args], { cwd, env, deadlineMs: 20_000, label: `${entry.endsWith('bin.mjs') ? 'overlay' : 'core'} ${args[0]}` });
 }
 
 it.skipIf(process.platform !== 'linux')('[requires Linux live OS session and a build] an installed overlay package registers a target through deckent/extensions only and runs it with `deckent operation`', async () => {
   await access(join(dist, 'extensions.js')).catch(() => { throw new Error('BUILD_REQUIRED'); });
-  const root = await mkdtemp(join(tmpdir(), 'deckent-overlay-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const root = await owned().root('deckent-overlay-');
   // Install: node_modules/deckent is the built Core (dist linked; Node resolves the real path, so Core's own `#` imports stay Core's).
   const installed = join(root, 'node_modules/deckent'), overlay = join(root, 'overlay');
   await mkdir(installed, { recursive: true }); await mkdir(overlay);
@@ -40,7 +35,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session and a b
 
   const project = join(root, 'project'), ledgerDir = join(root, 'erp');
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 }); await mkdir(ledgerDir);
-  const env = cliChildEnv({ HOME: join(root, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env['DECKENT_HOME']; delete env['DECKENT_GLOBAL_HOME'];
+  const env = childEnv({ HOME: join(root, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env['DECKENT_GLOBAL_HOME'];
   const configPath = join(project, '.deckent/config.json'), layout = { root: join(root, 'data') };
   await writeFile(configPath, JSON.stringify({ layout }));
   composeCore();

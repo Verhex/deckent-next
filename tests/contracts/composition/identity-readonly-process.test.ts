@@ -1,15 +1,13 @@
-import { spawn, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, open, readFile, readdir, lstat, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, open, readFile, readdir, lstat, writeFile } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
+import { owned } from '../support/owned.js';
 
-const roots: string[] = [], cli = resolve('dist/composition/core/cli/internal/entry.js'), mcp = resolve('dist/composition/core/mcp/internal/entry.js');
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+const cli = resolve('dist/composition/core/cli/internal/entry.js'), mcp = resolve('dist/composition/core/mcp/internal/entry.js');
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'deckent-identity-process-')); roots.push(root);
+  const root = await owned().root('deckent-identity-process-');
   const project = join(root, 'project'), home = join(root, 'home'); await mkdir(project); await mkdir(home);
   const env = { HOME: home, USERPROFILE: home, DECKENT_GLOBAL_HOME: join(home, 'global'), PATH: process.env.PATH ?? '' };
   // Actual CLI redirection: capture files are outside the observed project/HOME, no child pipe is required.
@@ -18,12 +16,8 @@ async function fixture() {
     await writeFile(stdin, input);
     const handles = await Promise.all([open(stdin, 'r'), open(output, 'w'), open(error, 'w')]);
     try {
-      const child = spawn(process.execPath, [entry, ...args], { cwd: project, env, stdio: handles.map(handle => handle.fd) });
-      const code = await new Promise<number | null>((accept, reject) => {
-        const timer = setTimeout(() => { child.kill(); reject(new Error('IDENTITY_PROCESS_TIMEOUT')); }, 10_000);
-        child.once('error', failure => { clearTimeout(timer); reject(failure); });
-        child.once('close', status => { clearTimeout(timer); accept(status); });
-      });
+      const { code } = await owned().spawn(process.execPath, [entry, ...args], { cwd: project, env, stdio: handles.map(handle => handle.fd),
+        deadlineMs: 10_000, label: `identity ${args.slice(0, 2).join(' ')}` }).exit;
       return { code, stdout: await readFile(output, 'utf8'), stderr: await readFile(error, 'utf8') };
     } finally { await Promise.all(handles.map(handle => handle.close())); }
   }
@@ -80,7 +74,7 @@ it('compiled MCP startup and read tool over POSIX stdio leave identity and proje
   // macOS (PLATFORM-TEMIZLIK, hosted run 38804553793): the server never saw the FIFO's EOF (MCP_LIVE_HANDLES: only PipeWrap, stdinEnded
   // false); that is the kqueue FIFO transport, not a handle the server keeps. There the same proof runs over an ordinary pipe.
   const useFifo = process.platform === 'linux';
-  if (useFifo) execFileSync('/usr/bin/mkfifo', [fifo], { stdio: 'ignore' });
+  if (useFifo) await owned().exec('/usr/bin/mkfifo', [fifo], { env: { PATH: '/usr/bin:/bin' }, deadlineMs: 5_000 });
   // O_RDWR on a FIFO is not defined by POSIX. Separate ends keep the EOF contract explicit.
   const [input, writer] = useFifo ? await Promise.all([open(fifo, 'r'), open(fifo, 'w')]) : [null, null];
   const outputPath = join(f.root, 'mcp-output');
@@ -89,16 +83,13 @@ it('compiled MCP startup and read tool over POSIX stdio leave identity and proje
   // assertion shows. The timer is unref'd: it never keeps the process alive, so a prompt exit (as on Linux) is unchanged.
   const handles = `setTimeout(() => process.stderr.write('MCP_LIVE_HANDLES ' + JSON.stringify({ resources: process.getActiveResourcesInfo(),
     stdinEnded: process.stdin.readableEnded, stdinDestroyed: process.stdin.destroyed }) + '\\n'), 8500).unref();`;
-  const child = spawn(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(handles)}`, mcp, '--project', f.project], { cwd: f.project,
+  // An owned child: its 10 s deadline stops it (a typed failure, not a hang) and teardown reaps it on any failure.
+  const { child, exit: closed } = owned().spawn(process.execPath, ['--import', `data:text/javascript,${encodeURIComponent(handles)}`, mcp, '--project', f.project], { cwd: f.project,
     env: { HOME: f.home, USERPROFILE: f.home, DECKENT_GLOBAL_HOME: join(f.home, 'global'), PATH: process.env.PATH ?? '' },
-    stdio: [input ? input.fd : 'pipe', output.fd, errors.fd] });
+    stdio: [input ? input.fd : 'pipe', output.fd, errors.fd], deadlineMs: 10_000, label: 'mcp stdio' });
   const send = (line: string) => writer ? writer.write(line).then(() => undefined) : new Promise<void>((done, fail) => child.stdin!.write(line, error => error ? fail(error) : done()));
   const endInput = () => writer ? writer.close() : new Promise<void>(done => child.stdin!.end(done));
-  const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((accept, reject) => {
-    child.once('close', (code, signal) => accept({ code, signal })); child.once('error', reject);
-  });
   await input?.close();
-  const timer = setTimeout(() => child.kill(), 10_000);
   const readResponse = async (id: number) => {
     const deadline = Date.now() + 8000;
     while (Date.now() < deadline) {
@@ -121,7 +112,6 @@ it('compiled MCP startup and read tool over POSIX stdio leave identity and proje
     await endInput(); expect(await closed, await readFile(join(f.root, 'mcp-errors'), 'utf8')).toEqual({ code: 0, signal: null });
     expect(await snapshot(f.project, f.home)).toEqual(before);
   } finally {
-    clearTimeout(timer); child.kill(); await closed;
     await Promise.all([writer, input, output, errors].map(handle => handle?.close()));
   }
 }, 15_000);

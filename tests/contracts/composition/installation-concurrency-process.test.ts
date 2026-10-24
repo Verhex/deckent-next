@@ -1,17 +1,15 @@
-import { spawn } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { hostname, tmpdir, userInfo } from 'node:os';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { hashInstallationProfilePayload } from '#engine/index.js';
 import { inspectInstallation } from '../../../src/index.js';
 import { installationProfile } from '../support/installation-profile.js';
+import { owned, OwnedResourceError } from '../support/owned.js';
 
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
 const imageId = process.env.DECKENT_TEST_DOCKER_IMAGE;
-const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 function rehash<T extends ReturnType<typeof installationProfile>>(profile: T): T {
   profile.profile.digest = hashInstallationProfilePayload({ ...profile, profile: { id: profile.profile.id, version: profile.profile.version } });
@@ -20,19 +18,16 @@ function rehash<T extends ReturnType<typeof installationProfile>>(profile: T): T
 function diagnostic(results: readonly ApplyResult[]) {
   return JSON.stringify(results.map(result => ({ code: result.code, timedOut: result.timedOut, stdout: result.stdout, stderr: result.stderr })));
 }
-function apply(project: string, profile: string, proposal: string, env: NodeJS.ProcessEnv): Promise<ApplyResult> {
-  const child = spawn(process.execPath, [cli, 'init', 'apply', '--profile', profile, '--docker-executable', '/usr/bin/docker',
-    '--proposal', proposal, '--accept-custom', '--json'], { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'] });
-  return new Promise((resolveResult, reject) => {
-    let stdout = '', stderr = '', timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-    }, 40_000);
-    child.stdout.on('data', chunk => { stdout += String(chunk); }); child.stderr.on('data', chunk => { stderr += String(chunk); });
-    child.once('error', error => { clearTimeout(timer); reject(error); });
-    child.once('close', code => { clearTimeout(timer); resolveResult({ code, stdout, stderr, timedOut }); });
-  });
+/** One installer process (an owned child: its 40 s watchdog stops the whole process group, and teardown reaps it on any failure). */
+async function apply(project: string, profile: string, proposal: string, env: NodeJS.ProcessEnv): Promise<ApplyResult> {
+  try {
+    const { code, stdout, stderr } = await owned().run(process.execPath, [cli, 'init', 'apply', '--profile', profile, '--docker-executable', '/usr/bin/docker',
+      '--proposal', proposal, '--accept-custom', '--json'], { cwd: project, env, deadlineMs: 40_000, label: 'init apply' });
+    return { code, stdout, stderr, timedOut: false };
+  } catch (error) {
+    if (!(error instanceof OwnedResourceError) || error.code !== 'TEST_CHILD_DEADLINE') throw error;
+    return { code: null, stdout: String(error.detail['stdout'] ?? ''), stderr: String(error.detail['stderr'] ?? ''), timedOut: true };
+  }
 }
 interface ApplyResult { readonly code: number | null; readonly stdout: string; readonly stderr: string; readonly timedOut: boolean }
 function parsed(result: ApplyResult): { status: 'installed' | 'replayed'; transactionId: string } | null {
@@ -43,7 +38,7 @@ function parsed(result: ApplyResult): { status: 'installed' | 'replayed'; transa
 function hasCode(result: ApplyResult, expression: RegExp) { return expression.test(`${result.stdout}\n${result.stderr}`); }
 async function fixture() {
   if (!imageId) throw new Error('DECKENT_TEST_DOCKER_IMAGE is required for installer concurrency proof');
-  const root = await mkdtemp(join(tmpdir(), 'deckent-install-concurrency-')); roots.push(root); await chmod(root, 0o700);
+  const root = await owned().root('deckent-install-concurrency-'); await chmod(root, 0o700);
   const project = join(root, 'project'), data = join(root, 'data'); await mkdir(project, { mode: 0o700 });
   const profile = installationProfile({ root: data, images: [imageId] });
   const principal = { issuer: hostname(), subject: String(userInfo().uid) };
