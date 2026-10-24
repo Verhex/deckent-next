@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Affected-test selection for a local change (developer tooling, test revision stage A, 2026-10-24). Hosted CI still runs everything.
-// Usage: node scripts/test-affected.mjs [--since <ref>] [--list] [--built] [--widen]
+// Usage: node scripts/test-affected.mjs [--since <ref>] [--list] [--no-built] [--widen]
 // Changed inputs (merge-base with main..working tree, plus untracked) → the Vitest files whose dependencies contain them, plus the
 // extra npm scripts the map names. Dependencies come from a tree-shaken esbuild bundle of every test (Vitest's own `related` graph
 // is file-level: through the package barrels it selected 1146 of 1252 files for one domain file), literal file paths in that code
@@ -68,8 +68,8 @@ function literalReferences(root, file, text, inventory, mirror) {
 /**
  * Maps every repository input to the test files that depend on it (`index`): the test's tree-shaken static imports, literal file
  * paths in that code, and the same for every module those literals name (spawned fixtures). A test that runs the built product
- * (`dist/`, mirrored to `src/`) depends on that entry's whole closure; those dependents are kept apart (`builtIndex`), since nearly
- * every source file is in the CLI entry's closure.
+ * (`dist/`, mirrored to `src/`) depends on that entry's whole closure; those dependents are kept apart (`builtIndex`): they need a
+ * current build, and nearly every source file is in the CLI entry's closure.
  */
 export async function dependencyIndex(root, tests, inventory, mirror, packages) {
   const alias = new RegExp(`^#(${packages.join('|')})/`, 'u');
@@ -166,10 +166,10 @@ export function catalogMentions(before, after, markers, files, textOf) {
 
 /**
  * Pure selection: each changed input selects its dependents and what its map rules add, or is reported as widening. Tests that reach
- * an input only through the built product are counted, and selected only with `built`.
+ * an input only through the built product are selected too, unless `built` is false (--no-built): then they are counted as skipped.
  */
-export function selectTests(changed, { index, builtIndex = new Map() }, map, tests, built = false, narrow = new Map()) {
-  const selected = new Set(), runs = new Set(), lines = [], widen = [];
+export function selectTests(changed, { index, builtIndex = new Map() }, map, tests, built = true, narrow = new Map()) {
+  const selected = new Set(), runs = new Set(), lines = [], widen = [], skipped = new Set();
   for (const input of changed) {
     const rules = map.rules.filter(rule => rule.inputs.some(glob => matchesGlob(input, glob)));
     const reason = rules.map(rule => rule.reason).join('; ');
@@ -186,14 +186,26 @@ export function selectTests(changed, { index, builtIndex = new Map() }, map, tes
     }
     const extra = rules.flatMap(rule => rule.run ?? []);
     for (const test of [...direct, ...(built ? viaBuild : [])]) selected.add(test);
+    if (!built) for (const test of viaBuild) skipped.add(test);
     for (const name of extra) runs.add(name);
     const count = direct.size + (built ? viaBuild.size : 0);
-    const deferred = viaBuild.size && !built ? `; ${viaBuild.size} more reach it only through the built product (--built runs them, hosted CI always does)` : '';
-    if (count || extra.length) lines.push(`${input} → ${count} test file(s)${extra.length ? ` + ${extra.join(', ')}` : ''}${deferred}${reason ? ` (${reason})` : ''}`);
+    const via = !viaBuild.size ? '' : built ? `; ${viaBuild.size} of them only through the built product` : `; ${viaBuild.size} more only through the built product, skipped by --no-built`;
+    if (count || extra.length || viaBuild.size) lines.push(`${input} → ${count} test file(s)${extra.length ? ` + ${extra.join(', ')}` : ''}${via}${reason ? ` (${reason})` : ''}`);
     else if (rules.some(rule => rule.none)) lines.push(`${input} → no test: ${reason}`);
-    else { widen.push(input); lines.push(`${input} → WIDEN: no test imports or names it${viaBuild.size ? ' except through the built product (--built)' : ''} and no map rule covers it`); }
+    else { widen.push(input); lines.push(`${input} → WIDEN: no test imports or names it and no map rule covers it`); }
   }
-  return { selected: [...selected].sort(), runs: [...runs], lines, widen };
+  return { selected: [...selected].sort(), runs: [...runs], lines, widen, skipped };
+}
+
+/** Selected tests that run the built product need a current build: run them, refuse a stale build (exit 2), or drop them with --no-built. */
+export function builtGate(files, builtTests, noBuilt, buildState) {
+  const built = files.filter(file => builtTests.has(file));
+  if (noBuilt) return { files: files.filter(file => !builtTests.has(file)), skipped: built };
+  const build = built.length ? buildState() : null;
+  if (build && !build.current) {
+    return { exit: 2, message: `${built.length} selected file(s) run the built dist (e.g. ${built[0]}) but the build is ${build.reason}: build first (npm run build, never while a suite runs) or pass --no-built` };
+  }
+  return { files, skipped: [] };
 }
 
 function git(root, ...args) {
@@ -204,11 +216,12 @@ function git(root, ...args) {
 
 async function main(argv) {
   const root = fileURLToPath(new URL('..', import.meta.url));
-  const options = { since: null, list: false, widen: false, built: false };
+  const options = { since: null, list: false, widen: false, noBuilt: false };
   for (let i = 0; i < argv.length; i++) {
-    if (['--list', '--widen', '--built'].includes(argv[i])) options[argv[i].slice(2)] = true;
+    if (['--list', '--widen'].includes(argv[i])) options[argv[i].slice(2)] = true;
+    else if (argv[i] === '--no-built') options.noBuilt = true;
     else if (argv[i] === '--since' && argv[i + 1]) options.since = argv[++i];
-    else throw new Error(`TEST_AFFECTED_USAGE: unknown argument ${argv[i]} (use --since <ref>, --list, --built, --widen)`);
+    else throw new Error(`TEST_AFFECTED_USAGE: unknown argument ${argv[i]} (use --since <ref>, --list, --no-built, --widen)`);
   }
   const started = Date.now();
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
@@ -229,23 +242,21 @@ async function main(argv) {
     const files = [...graph.index.keys()].filter(file => /^(src|tests)\//u.test(file) && !rule.inputs.some(glob => matchesGlob(file, glob)));
     narrow.set(input, catalogMentions(before.status === 0 ? json(before.stdout) : {}, existsSync(join(root, input)) ? json(textOf(input)) : {}, rule.keys, files, textOf));
   }
-  const { selected, runs, lines, widen } = selectTests(changed, graph, map, tests, options.built, narrow);
+  const { selected, runs, lines, widen, skipped } = selectTests(changed, graph, map, tests, !options.noBuilt, narrow);
   process.stdout.write(`test:affected: ${changed.length} changed input(s) since ${base.slice(0, 12)} (${options.since ?? 'main'}); graph ${((Date.now() - started) / 1000).toFixed(1)} s\n`);
   for (const line of lines) process.stdout.write(`  ${line}\n`);
   if (widen.length && !options.widen) {
     process.stdout.write(`test:affected: WIDENED to all ${tests.length} test files by ${widen.length} input(s) above; not run. Add a map rule, or rerun with --widen (full suite: coordinate with maintainers).\n`);
     return 2;
   }
-  const files = widen.length ? tests : selected;
-  if (!files.length && !runs.length) { process.stdout.write('test:affected: EMPTY selection: nothing proves this change; an empty run is never a pass.\n'); return 2; }
-  process.stdout.write(`test:affected: ${files.length} of ${tests.length} test file(s)${runs.length ? ` + ${runs.join(', ')}` : ''}\n`);
+  const gate = builtGate(widen.length ? tests : selected, graph.builtTests, options.noBuilt, () => buildSourceCurrent(root));
+  if (gate.exit && !options.list) { process.stdout.write(`test:affected: ${gate.message}.\n`); return gate.exit; }
+  const files = gate.files ?? (widen.length ? tests : selected);
+  const dropped = new Set([...skipped, ...(gate.skipped ?? [])]).size;
+  const note = options.noBuilt ? `; --no-built skipped ${dropped} built-product test file(s) (hosted CI runs them)` : '';
+  if (!files.length && !runs.length) { process.stdout.write(`test:affected: EMPTY selection${note}: nothing proves this change; an empty run is never a pass.\n`); return 2; }
+  process.stdout.write(`test:affected: ${files.length} of ${tests.length} test file(s)${runs.length ? ` + ${runs.join(', ')}` : ''}${note}\n`);
   if (options.list) { for (const file of files) process.stdout.write(`${file}\n`); return 0; }
-  const built = files.filter(file => graph.builtTests.has(file));
-  const build = built.length && buildSourceCurrent(root);
-  if (build && !build.current) {
-    process.stdout.write(`test:affected: ${built.length} selected file(s) run the built dist (e.g. ${built[0]}) but the build is ${build.reason}; run npm run build first (never while a suite runs).\n`);
-    return 2;
-  }
   const env = { ...process.env, VITEST_MAX_FORKS: process.env.VITEST_MAX_FORKS ?? '2' };
   let exit = 0;
   if (files.length) {
@@ -256,7 +267,7 @@ async function main(argv) {
     const status = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', name], { cwd: root, stdio: 'inherit', env, shell: process.platform === 'win32' }).status ?? 1;
     exit ||= status;
   }
-  process.stdout.write(`test:affected: ${exit === 0 ? 'passed' : 'FAILED'} in ${((Date.now() - started) / 1000).toFixed(1)} s\n`);
+  process.stdout.write(`test:affected: ${exit === 0 ? 'passed' : 'FAILED'} in ${((Date.now() - started) / 1000).toFixed(1)} s${note}\n`);
   return exit;
 }
 

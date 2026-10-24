@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 // @ts-expect-error Executable JS tooling has no declaration file.
-import { catalogMentions, dependencyIndex, loadMap, selectTests } from '../../../scripts/test-affected.mjs';
+import { builtGate, catalogMentions, dependencyIndex, loadMap, selectTests } from '../../../scripts/test-affected.mjs';
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -15,7 +15,7 @@ const tree = (files: Record<string, string>) => {
 };
 type Graph = { index: Map<string, string[]>; builtIndex: Map<string, string[]>; builtTests: Set<string> };
 
-it('selects through barrels, literal fixture paths and the built product only where the test reaches; unmapped widens, empty stays empty', async () => {
+it('selects through barrels, literal fixture paths and the built product only where the test reaches; stale build, unmapped and empty never pass', async () => {
   const { root, inventory } = tree({
     'src/domain/index.ts': "export * from './a.js';\nexport * from './b.js';\n",
     'src/domain/a.ts': "export const a = () => 'a';\n",
@@ -35,12 +35,15 @@ it('selects through barrels, literal fixture paths and the built product only wh
 
   const map = loadMap({ version: 1, mirror: {}, rules: [{ inputs: ['vitest.config.ts'], widen: true, reason: 'config' },
     { inputs: ['**/*.md'], none: true, reason: 'docs' }] }, {});
-  const pick = (changed: string[], built = false) => selectTests(changed, graph, map, tests, built);
-  expect(pick(['src/domain/a.ts', 'tests/fixtures/in.json']).selected).toEqual(['tests/x.test.ts']);
-  // Reached only through the built product: counted next to a direct selection, and never an empty pass on its own.
-  expect(pick(['src/domain/a.ts']).lines[0]).toContain('1 test file(s); 1 more reach it only through the built product');
-  expect(pick(['src/domain/b.ts'])).toMatchObject({ selected: [], widen: ['src/domain/b.ts'] });
-  expect(pick(['src/domain/b.ts'], true)).toMatchObject({ selected: ['tests/y.test.ts'], widen: [] });
+  const pick = (changed: string[], built = true) => selectTests(changed, graph, map, tests, built);
+  expect(pick(['src/domain/a.ts', 'tests/fixtures/in.json']).selected).toEqual(['tests/x.test.ts', 'tests/y.test.ts']);
+  // Reached through the built product: selected by default; --no-built skips and counts them, never an unexplained empty pass.
+  expect(pick(['src/domain/b.ts'])).toMatchObject({ selected: ['tests/y.test.ts'], widen: [] });
+  expect(pick(['src/domain/b.ts'], false)).toMatchObject({ selected: [], widen: [], skipped: new Set(['tests/y.test.ts']) });
+  const stale = builtGate(['tests/x.test.ts', 'tests/y.test.ts'], graph.builtTests, false, () => ({ current: false, reason: 'stale' }));
+  expect(stale).toMatchObject({ exit: 2 });
+  expect(stale.message).toContain('build first (npm run build, never while a suite runs) or pass --no-built');
+  expect(builtGate(['tests/x.test.ts', 'tests/y.test.ts'], graph.builtTests, true, () => ({ current: false }))).toEqual({ files: ['tests/x.test.ts'], skipped: ['tests/y.test.ts'] });
   expect(pick(['README.md']).selected).toEqual([]); // declared test-free: the command reports an empty selection, never a pass
   expect(pick(['notes.txt', 'vitest.config.ts']).widen).toEqual(['notes.txt', 'vitest.config.ts']);
   expect(() => loadMap({ version: 1, mirror: {}, rules: [{ inputs: ['x'], reason: 'no effect' }] }, {})).toThrow('TEST_AFFECTED_MAP_INVALID');

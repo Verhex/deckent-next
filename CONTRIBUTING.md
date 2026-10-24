@@ -126,8 +126,9 @@ A test is selected when its tree-shaken imports, a file path it names (fixtures,
 or a rule in [`scripts/test-affected-map.json`](scripts/test-affected-map.json) reaches the changed
 file. A message-catalog text edit selects the tests that name the key or assert its previous text;
 an added or removed key also selects the code that names it.
-Tests that reach a file only by running the built product are counted; `--built` runs them and
-needs a current `npm run build`. Configuration and dependency changes, and files nothing reaches,
+Tests that run the built product (`dist/`) are selected too and need a current `npm run build`;
+with a stale build the command stops with exit code 2. `--no-built` skips them explicitly and the
+summary prints how many it skipped. Configuration and dependency changes, and files nothing reaches,
 stop with exit code 2 instead of passing: add a map rule, or coordinate a full run (`--widen`).
 An empty selection is never a pass. Hosted CI still runs every test.
 
