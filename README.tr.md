@@ -375,6 +375,9 @@ deckent report --scope my-project --run <id>   # bir Run'ın maliyet ve kabul ka
 deckent audit verify                      # denetim geçmişini doğrula
 deckent backup create                     # doğrulanabilir bir kurtarma seti yaz
 deckent policy grants --mine              # kalıcı "her zaman" izinleriniz
+deckent memory                            # kapsamın hafıza günlüğü: olgular ve dersler
+deckent agents                            # kapsamın ajanları ve skill'leri
+deckent models roles show                 # hangi model hangi rolde
 ```
 
 ### Bir yapay zekâ istemcisini MCP ile bağlayın
@@ -428,7 +431,7 @@ flowchart LR
 | **Standart** | Okumalar, sıradan dosya düzenlemeleri | Kabuk komutları, korunan yollar, MCP çağrıları |
 | **Dikkatli** | Okumalar | Her düzenleme de |
 | **Tam otomatik** | Düzenlemeler, sandbox içinde kalan kabuk komutları, MCP çağrıları | Host kabuğu, yıkıcı komutlar (`rm -r`, …), korunan yollar |
-| **Tam erişim** | Policy'nin sabit zeminin üstünde izin verdiği her şey; her çağrı denetime yazılır | Sabit zemin ve policy'nin hâlâ istediği onaylar; kurulum sahibinin izni gerekir (tek kişilik kurulumda bu sizsiniz) ve bu oturum boyunca geçerlidir |
+| **Tam erişim** | Policy'nin sabit zeminin üstünde izin verdiği her şey; her çağrı denetime yazılır | Sabit zemin ve policy'nin hâlâ istediği onaylar; kurulum sahibinin izni gerekir (tek kişilik kurulumda bu sizsiniz); bu oturum için açılır ya da `/mode start full-access` ile başlangıç kipiniz olarak saklanır |
 
 Tam otomatik ve tam erişimi kurulum sahibi kendi terminalinde
 `deckent init policy --scope <id> --modes full-auto,full-access --preview`, ardından `--apply` ile açar; yapay zekâ
@@ -485,11 +488,17 @@ anlatır.
   kalıcı izinler ve doğrulayabileceğiniz bir denetim izi.
 - **İşletin**: salt okunur görünüm için `deckent monitor`, sağlık için `deckent doctor`, ayarlar için `deckent config`;
   isterseniz zamanlanmış, doğrulanabilir kurtarma setleri için `deckent backup create|verify|restore`.
-- **Siz açana kadar kapalı çekirdek katmanlar**: sistem her iş türü için işçi modelini görebildiğiniz bir listeden seçer;
-  hafıza kabul edilen işten dolar ve onu siz ya da bağımsız bir değerlendirici doğrular; kaybolan işçiler tespit edilir ve
-  belirli sınırlar içinde yeni bir denemede sürdürülebilir; Brain bir korumalı alan içinde kendi Claude aboneliğinizle
-  planlayabilir; ajanlar ve skill'ler sürümlüdür ve onlara yapılan her AI değişikliği imzalıdır. Her katman kapalı başlar ve
-  yalnız ne yapacağını kaydeden bir gölge kipi vardır ([bilinen sınırlar](docs/known-limits.tr.md#çekirdek-katmanlar)).
+- **Kodda olan, henüz gerçek kullanımda kanıtlanmamış çekirdek katmanlar**: sistem her iş türü için işçi modelini
+  görebildiğiniz bir listeden seçer; hafıza kabul edilen işten dolar ve onu siz ya da bağımsız bir değerlendirici doğrular;
+  kaybolan işçiler tespit edilir ve öneri olarak kaydedilir; Brain bir korumalı alan içinde, sizin kendi girişiniz ve
+  onayınızdan sonra kendi Claude aboneliğinizle planlayabilir; ajanlar ve skill'ler sürümlüdür ve onlara yapılan her AI
+  değişikliği imzalıdır. Her anahtar (hafıza, kaybolan işçi tespiti, kurtarma, ajan istatistiği) kapalı başlar ve hiçbir
+  şeyi uygulamayan bir gölge kipi vardır; gölgedeki hafıza doğrulama ve kurtarma yine de modelini çağırır, yani veri o
+  sağlayıcıya gider ve çağrı harcanır. Otomatik kurtarma henüz devreye giremez: bu sürümde hiçbir tespit kuralı harekete
+  geçecek şekilde yükseltilemez. Yeni haklar kurulum sahibinin policy yükseltmesiyle gelir: ilk kurulum şablonundan gelen
+  policy için `deckent policy upgrade --template current`, elle yazılmış policy için
+  `deckent init policy --scope <id> --upgrade --person <issuer>/<subject>`
+  ([bilinen sınırlar](docs/known-limits.tr.md#çekirdek-katmanlar)).
 
 ### Henüz olmayanlar
 

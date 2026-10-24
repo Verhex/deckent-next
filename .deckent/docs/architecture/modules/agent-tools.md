@@ -41,8 +41,9 @@ still-pending tool-call approval is closed as expired in bounded pages (task app
 a missing integrity key is reported, never created); the host reports `tool-call-approvals-expired`. An allow is followed by a fresh policy
 evaluation (a deny since the request wins). Outcomes are typed call results: `ok` after the run, `denied` (owner or policy),
 `approval-expired`, `cancelled`, or `approval-required` when no approval could be obtained; nothing but an explicit, re-authorized
-allow runs the call. The terminal shows the request on the existing decision card (summary, preview up to 24 lines, expiry; a single
-`y` allows, every other key denies) and closes it when the approval settles elsewhere; a late answer to one decision closes only its
+allow runs the call. The terminal shows the request on the existing decision card (summary, preview up to 24 lines, expiry; the answers are a list —
+Yes once, for the session or always where offered, and No — chosen with ↑↓/j/k/1–9 and Enter or the option's letter; the highlight
+starts on No and Esc denies) and closes it when the approval settles elsewhere; a late answer to one decision closes only its
 own card, never a newer call's (Astra 2092 R1). v14 also carries `tool.output` for slice 3.
 **Agent file edits as C11 effects (T-L4 slice 2).** `edit_file` (exact `old_string` → `new_string`, unique unless `replace_all`; no
 `$` pattern interpretation) and `write_file` (whole content) are declared beside the read tools (tool class `edit`). Policy is
@@ -140,7 +141,7 @@ access (the sandbox realms below narrow this). Open:
 the command runs in its own process group so it can be killed, which also means a service crash leaves a running command orphaned
 (the turn is closed as interrupted at the next start, but nothing signals the group; legacy had the same property; Node has no
 parent-death signal) — candidate: record the group id in the effect journal and signal it at start.
-**Independent integration review (Astra re=2125, 2026-09-27; `5a25b10`, not yet main):** the 2119 unbounded post-exit pipe wait and 2124 missing cleanup notice are fixed in the reviewed integration. Timeout/abort release retained pipes and a separate drain grace bounds completion; `cleanup:unverified` reaches the model result and owner output stream. Process-group signaling still cannot prove escaped descendants died. A persistent finished-call cleanup marker remains a protocol/owner decision. This review does not admit a sandbox or live activation. The follow-up review of `1e896fb` (2127, integration only) closes H34 read-side pinning and A04 registry mutability. The follow-up `b596eee` review (2130) closes both C12 violations: protocol subject visibility now participates in SQL page selection before LIMIT/capacity, and fresh unconsumed approval admission is rechecked after observation before the first claim. Already-consumed intent recovery remains separate. I40-c in that candidate uses trusted producer/consumer time and a monotonic TTL; the decider subtracts usability, never adds lifetime, with a 5 s conservative allowance. A decider already 5 s ahead may reject about 10 s early relative to the producer, and small TTLs can be wholly unusable; a single expiry authority remains a separate owner option. These are reviewed integration properties, not claims that current main or the live service has been updated (PLAN). Open limit (Astra 2145): the ledger upgrade, interrupted-turn close, orphaned tool-call approval expiry and preview sweep still rely on
+**Independent integration review (Astra re=2125, 2026-09-27; `5a25b10`, not yet main at the time; since landed, history in COMPLETED-PLAN):** the 2119 unbounded post-exit pipe wait and 2124 missing cleanup notice are fixed in the reviewed integration. Timeout/abort release retained pipes and a separate drain grace bounds completion; `cleanup:unverified` reaches the model result and owner output stream. Process-group signaling still cannot prove escaped descendants died. A persistent finished-call cleanup marker remains a protocol/owner decision. This review does not admit a sandbox or live activation. The follow-up review of `1e896fb` (2127, integration only) closes H34 read-side pinning and A04 registry mutability. The follow-up `b596eee` review (2130) closes both C12 violations: protocol subject visibility now participates in SQL page selection before LIMIT/capacity, and fresh unconsumed approval admission is rechecked after observation before the first claim. Already-consumed intent recovery remains separate. I40-c in that candidate uses trusted producer/consumer time and a monotonic TTL; the decider subtracts usability, never adds lifetime, with a 5 s conservative allowance. A decider already 5 s ahead may reject about 10 s early relative to the producer, and small TTLs can be wholly unusable; a single expiry authority remains a separate owner option. These are reviewed integration properties, not claims that current main or the live service has been updated (PLAN). Open limit (Astra 2145): the ledger upgrade, interrupted-turn close, orphaned tool-call approval expiry and preview sweep still rely on
 endpoint custody alone; a service started on another socket over the same ledger is not excluded from them (ledger-level custody is
 the proposed class fix, owner decision).
 
@@ -174,7 +175,8 @@ as described above; Astra re-review of `7e0e349` (2095) confirmed both original 
 observer-dependent startup recovery defect is corrected in `a4604fc`: recovery runs before optional notification. Astra 2097
 re-review confirms observed/unobserved starts both expire the orphan, and a missing integrity key leaves it pending, reports
 `keyUnavailable` and creates no key (3 fresh real-service tests). This scoped review closes 2092/2096; T-L5 and file-write findings
-remain open, and full verification/deployment acceptance are separate.
+remain open, and full verification/deployment acceptance are separate. (These reviewed corrections have since landed; history in
+COMPLETED-PLAN.)
 Astra 2099 re-review (2026-09-26): retaining read dedupe by provider call ID is insufficient because IDs may repeat across rounds;
 a recent unrelated call can keep a compacted-away read marked visible. Also the pre-round 75% request-byte threshold does not
 ensure the completed answer plus next user input can enter the service transport; a valid configuration reproduces rejection in
@@ -275,7 +277,7 @@ The 2026-09-25 review limits (Astra 2078: no path recheck of walked descriptors,
 corrected in `e12a253` (every walked directory and file is re-verified; globs match by a bounded dynamic program); Astra 2091 found
 no new blocker in them.
 
-**Anthropic Messages provider (ANTHROPIC-PROVIDER G8, seventh batch; ANTHROPIC-PROFILE, eighth batch).** Provider adapters: `openai-chat-http` (v4), `openrouter-chat-http`
+**Anthropic Messages provider (ANTHROPIC-PROVIDER G8, seventh batch; ANTHROPIC-PROFILE, eighth batch).** Provider adapters: `openai-chat-http` (v4 then; now v5 for chat and v6 for Responses), `openrouter-chat-http`
 (v1) and `anthropic-messages-http` (v2, family `anthropic-messages`, API version `2023-06-01`; unit `adapters/core/provider-anthropic-messages`).
 The adapter takes the provider-neutral (OpenAI-shaped) local request and returns an assembled neutral `chat.completion` evidence; consumers
 do not know the family (one exception: the capability check knows both). `provider-http-json` credential kinds are `none | bearer |
@@ -286,11 +288,10 @@ split uses the dearest write rate, visibly recorded. Haiku5.5 total input = inpu
 the upper rates for all dimensions. Quote/prepared-request correlation uses WeakMaps. An interrupted/unknown call with returned usage
 settles from that evidence; absent usage stays held. Overrun keeps held/overrun and freezes. Reservation v3 / ledger49 has a versioned
 service-start backup migration; inspection, CLI and integrity fold the new basis and append-only governed corrections. The checkpoint's
-source test proof is `proof/SPEND-SETTLEMENT-2026-10-08/`; independent review, landing and the first real billed call remain open.
+source test proof is `proof/SPEND-SETTLEMENT-2026-10-08/`; SPEND-SETTLEMENT landed in alpha.16/alpha.17.
 Paid OpenAI-compatible profiles use adapter-owned, dated published rows or an explicit operator-static v2 tariff. Exact typed lookup
 `lookupOpenAiCompatibleTariff(endpoint, modelId)` is exported for T4-B. Remote legacy zero refuses with a typed next action; local legacy
-zero remains supported. DeepSeek peak/off-peak rows reserve peak; missing authoritative tier remains held/reconcilable, never billed as
-peak by assumption. Governed CLI `models reconcile-spending` / `models revise-budget`, runtime SDK `manageProviderSpend` and MCP
+zero remains supported. DeepSeek peak/off-peak rows reserve peak; a row with a tier schedule settles at peak, labelled as an upper bound (owner S4). Governed CLI `models reconcile-spending` / `models revise-budget`, runtime SDK `manageProviderSpend` and MCP
 `manage_provider_spending` share one strict command, account policy and immutable receipt. Policy template v7 adds owner-only account
 rules through the existing upgrade path. Lowering a budget preserves outstanding charges; unfreeze requires an explicit revision.
 Thinking continuity: a process-local bounded cache inside the adapter, bound to the

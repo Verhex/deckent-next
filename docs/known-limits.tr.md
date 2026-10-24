@@ -204,10 +204,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   bir API modelini kendiniz bağlayıp seçin.
 - **Doğrulanmış yayımlanmış fiyatı olmayan uzak model kilitlidir.** Zhipu GLM Çin, fiyatları CNY olduğu için kilitli kalır.
   DeepSeek yayımlanmış tepe fiyattan kesinleşir ve üst sınır olarak etiketlenir. *Yol:* fiyatı olan ya da yerel bir model kullanın.
-- **Başka bir makinedeki model sunucusu henüz bağlanamaz.** Düz `http` yalnız bu makinede (`127.0.0.1` ya da `[::1]`) kabul
-  edilir; uzak bir OpenAI uyumlu sunucu yayımlanmış bir fiyat satırı ister. Bugün bu satırlar yalnız OpenAI, DeepSeek ve Z.ai
-  API'leri için var ve kendi fiyatınızı bildirmenin yolu yok. *Etki:* ağınızdaki bir şirket model sunucusu kullanılamaz.
-  *Yol:* model sunucusunu bu makinede çalıştırın.
+- **Başka bir makinedeki model sunucusu kayıtlı bir fiyat ister.** Düz `http` yalnız bu makinede (`127.0.0.1` ya da `[::1]`)
+  kabul edilir. Uzak bir HTTPS OpenAI uyumlu sunucu, o modeli kapsayan yayımlanmış bir fiyat satırı ya da `connect.tariff`
+  taşıyan kayıtlı bir katalog satırı varsa bağlanır; kullanılabilir koşul yoksa reddedilir (`MODEL_CONNECT_PRICE_REQUIRED` ya da
+  `MODEL_CONNECT_TARIFF_UNVERIFIED`), fiyat asla tahmin edilmez. *Yol:* fiyatıyla bir katalog satırı kaydedin ya da model
+  sunucusunu bu makinede çalıştırın.
 - **Codex işçisinin modeli yalnız istemci beyanıdır, Cursor işçisinin modeli yalnız adla denetlenir.** Model başına kullanımı yalnız
   Claude Code bildirir (`verified`). Codex çözdüğü modeli konteyner içindeki kendi oturum günlüğüne yazar; Deckent ilk turun modelini o
   günlükten okur (sınırlı, bağlantı izlenmez; konteynerden yalnız model ve Codex sürümü çıkar) ve `client-reported` ("istemci beyanı")
@@ -238,7 +239,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   sınırınızı göremez. *Yol:* ilk ücretli çağrıdan önce ikisine de kendiniz bakın.
 - **alpha.48'den önceki MCP güveni bir kez yeniden sorulur.** Proje ve yerel MCP sunucularının güveni proje klasöründen
   Deckent genel köküne taşındı; bir depo artık güveni kendisiyle getiremez. alpha.48'den önce güvenilen bir sunucu kartını
-  bekler (`mcp list` nedeni `trust-moved`); `deckent mcp approve <ad> --yes` onu `MCP_TRUST_NEEDS_CARD` ile reddeder. Veri
+  bekler (`mcp list` nedeni `trust-moved`); `deckent mcp approve <ad>` terminalde kartı gösterir (`--yes` atlatmaz), terminal
+  dışında `MCP_APPROVAL_NEEDS_TERMINAL` ile reddedilir. Veri
   klasöründeki eski `integrations/mcp-trust.json` yerinde kalır ve güven olarak hiç okunmaz. *Yol:* terminalde ilk kullanımda
   kartı yanıtlayın ya da bir terminalde `deckent mcp approve <ad>` çalıştırın; sonra isterseniz eski dosyayı silin.
 - **Proje MCP dosyası yalnız birkaç ortam değişkeni okur.** Proje `.deckent/mcp.json` içindeki `${VAR}` yalnız `HOME`, `USER`,
@@ -293,9 +295,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   amaçlı kontroller iddia olarak kalır ve kabulü engellemez. *Geçici çözüm:* tamamlanması kanıtlanması gereken işlerde Claude ya da
   Codex işçilerini tercih edin.
 - **Bir kodlama görevi çıkış koduyla kabul edilir.** Ölçütü daha fazlasını isteyebilir (saklanan fark, geri okuma), ama kodlama
-  görevlerinin kullanabildiği tek değerlendirici `process-exit`'tir ve hiçbir Core iş sınıfı kabul profili bağlamaz; bu yüzden ek kanıt
-  denetlenmez. 1.0.0-alpha.50'den beri değerlendirme satırı bunu söyler ("kabul · çıkış kodu · içerik bağımsız doğrulanmadı"):
-  monitör, `workers`, `/runs`, `run inspect`, `task inspect` ve `report`; "1/1 kabul" gibi sayılar nitelenmez. Gerçek doğrulama
+  görevlerinin kullanabildiği tek değerlendirici `process-exit`'tir; Core iş sınıfları planlayıcının kullandığı bir kabul profili
+  (tamamlama, saklanan çıktı) taşır, ama onu puanlayan bir değerlendirici yoktur; bu yüzden ek kanıt denetlenmez.
+  1.0.0-alpha.50'den beri değerlendirme satırı bunu söyler ("kabul · çıkış kodu · içerik bağımsız doğrulanmadı"): monitör,
+  `workers`, `/runs`, `run inspect`, `task inspect` ve `report`; "1/1 kabul" gibi sayılar nitelenmez. Gerçek doğrulama
   değerlendiricisi olan kabul profili beta işidir.
 - **Deckent yalnız görevin bildirdiği ortam gereksinimlerini denetler** (1.0.0-alpha.50'den beri). Bir görev profili ya da şablonu
   `environment.requirements` bildirebilir; Deckent bunları işçi başlamadan denetler, biri karşılanmazsa Run'ı "ortam hazır değil: <id>"
@@ -330,10 +333,10 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   süre sınırı önce geliyorsa ve sessiz işçilerin daha erken durdurulmasını istiyorsanız bu değeri düşürün ya da profilin süre
   sınırını artırın.
 - **Hedef kuyruğu canlıda kullanılıyor ama beta için henüz kabul edilmedi.** 1.0.0-alpha.43'ten beri canlıda çalışıyor ve gerçek teslimleri sonuçlandırdı. Kayıtlı Git hedefi, özel birleşik aday doğrulaması, ayrı
-  yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Runtime protocol v29 ve ledger v59 yeniden build edilmiş
-  binary ve switch öncesi doğrulanmış ledger yedeği gerektirir. Gerçek terminal/socket/crash ve N1 yük kabulü ayrı kapılardır;
-  ölçülmüş kapasite iddiası yoktur. Konum yalnız yetkili kapsamı sayar; görünüm son bilinen durumdur. Teslim penceresi şu an
-  açıkça yenileme gerektirir.
+  yayın/benimseme parti kartları ve ayrı onaylı geri alma bağlandı. Runtime protocol v29 ve güncel ledger (v70; kuyruk
+  ledger v57–v59 ile geldi) yeniden build edilmiş binary ve switch öncesi doğrulanmış ledger yedeği gerektirir. Gerçek
+  terminal/socket/crash ve N1 yük kabulü ayrı kapılardır; ölçülmüş kapasite iddiası yoktur. Konum yalnız yetkili kapsamı sayar;
+  görünüm son bilinen durumdur. Teslim penceresi şu an açıkça yenileme gerektirir.
 - **Kuyruk doğrulaması kurulu profil ve normal Run yetkisi ister.** Özgün evaluator kriterleri ve güncel benimseme bar'ı
   birlikte aranır. Desteklenmeyen profil/değişmiş evaluator reddedilir; Run-create onayı bileti bekletebilir. Normal onayı
   cevapladıktan sonra aynı enqueue komutunu yineleyin; politika atlanmaz. Belirsiz etki uzlaştırmada kalır; TTL'nin geçmesi
@@ -371,8 +374,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Komut satırındaki `deckent do` siz onaylayınca devam etmez.** Öneriyi planlar ve kaydeder; karardan sonra aynı komutu aynı
   `--command-id` ile yinelersiniz; kimlik basılmaz, bu yüzden `--command-id` ile kendinizinkini verin. Terminalde `/do` kendiliğinden
   devam eder.
-- **Soru soran bir işçiye terminalden cevap verme henüz yapılmadı.** *Yol:* `deckent run resume --scope <id> --id <run>
-  --command-id <id> --expected-revision <n> --task <id> --answer <metin>`.
+- **İşçinin sorusunu yanıtlamak.** `/runs` içinde Run üzerinde `a`'ya basın: Tab ile cevabı yazın, tek `y` gönderir. Komut
+  satırında: `deckent run resume --scope <id> --id <run> --command-id <id> --expected-revision <n> --task <id> --answer <metin>`.
 - **Otonom teslim tasarlandı ama kapalı.** Her teslim ve dala alma, doğrulanmış bir terminalde sizin `y`'nizi ister.
 - **Bekletilen bir Run siz sürdürene kadar havuz slotunu tutar.** Başka bir park nedeninin (ilerleme başarısız, ortam hazır değil,
   kota bitti ve diğerleri) üzerine bekletme konduğunda ilerleme durur ve etkin ya da çözümsüz görev havuz slotunu `deckent run resume`
@@ -507,17 +510,24 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
 - **Her çekirdek katman anahtarı kapalı başlar ve onu yalnız bir kişi açar.** Anahtarlar (`memoryAutomation.extraction|verification|context.mode`,
   `runRuntime.nervous.mode`, `runRuntime.recovery.mode`, `catalogEvolution.mode`) korumalıdır: hiçbir AI ve hiçbir MCP aktörü bunları
   yazamaz. Headless Brain'in anahtarı yoktur (S3-5 ön izleme anahtarını kaldırdı): yalnız kişinin kendi login, connect ve
-  onayından sonra çalışır. `shadow` (gölge) kip ne yapacağını kaydeder ve hiçbir şeyi değiştirmez. Yeni kimlikler tam haklarını yalnız politika şablonu
-  v15'ten alır. *Yol:* şablonu `deckent policy upgrade --template current --scope <id> --preview`, sonra `--apply` ile uygulayın; bir
-  katmanı önce gölgeye alın, örneğin `deckent config set memoryAutomation.extraction.mode '"shadow"' --scope <id>`.
+  onayından sonra çalışır. `shadow` (gölge) kip ne yapacağını kaydeder ve hiçbir şeyi uygulamaz; hafıza doğrulama ve kurtarma gölgesi
+  yine de modelini çağırır (veri o sağlayıcıya gider, çağrı harcanır). Yeni kimlikler tam haklarını yalnız politika şablonu v15'ten
+  alır; yeni kurulum onu doğrudan alır. *Yol:* ilk kurulum şablonuyla kurulmuş bir politika
+  `deckent policy upgrade --template current --scope <id> --preview`, sonra `--apply` ile; elle yazılmış bir politika
+  `deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, sonra `--apply` ile yükseltilir (`--person`
+  olmadan hiçbir şeyi değiştirmez ve kapsamın kişilerini adlandırır). Bir katmanı önce gölgeye alın, örneğin
+  `deckent config set memoryAutomation.extraction.mode '"shadow"' --scope <id>`.
 - **Sayılar ölçüm değil, başlangıç değeridir.** Nervous kuralları, kurtarma sınırları (kaybolan görev başına bir otomatik devam, görev
-  başına üç deneme), hafıza sınırları ve açılış eşikleri ile ajan istatistiği eşikleri N1 ölçene kadar geçici işaretlidir. Bir Nervous
-  kuralı `live` kipte ancak owner onu tam kimliği ve sürümüyle yükselttikten sonra çalışır.
+  başına üç deneme), hafıza sınırları ve açılış eşikleri ile ajan istatistiği eşikleri N1 ölçene kadar geçici işaretlidir. Her Nervous
+  başlangıç kuralı geçicidir ve alpha.55'te bir kuralı yükselten ya da `recovery-action/apply` hakkını veren komut yoktur; `live` hiçbir
+  şey yürütmez ve otomatik kurtarma henüz başlayamaz. Kurtarma yalnız Nervous'un gerçekten yürüttüğü durdurma adımlarını okur; bu
+  yüzden Nervous gölgedeyken kurtarma gölgesi veri üretmez. Yükseltme kartı alpha.56 için planlandı.
 - **Hafıza yalnız bir iş türünden dolar.** Core registry yalnız `small` WorkClass'ının (geçici 90 günlük saklama, kişisel veri yok) hafıza
   adayı üretmesine izin verir; başka türlerin kabul edilen işi, saklama süresi tanımlanana kadar hiçbir şey eklemez.
 - **Otomatik hafıza doğrulaması ikinci bir model üreticisi ister.** Değerlendiricinin modeli, kaynak işi yapan her modelden farklı bir
   üreticiden gelmeli, `memory-evaluator` rolünü taşımalı ve etkin olmalıdır. Yalnız bir üretici bağlıysa hiçbir şey otomatik doğrulanmaz
-  ve kayıtlar aday kalır. Doğrulama açıkken aday metni o ikinci sağlayıcıya gönderilir. Kapsam başına günlük çağrı, harcama ve itiraz
+  ve kayıtlar aday kalır. Doğrulama `shadow` ya da `on` iken aday metni o ikinci sağlayıcıya gönderilir; yalnız `on` doğrular ya da
+  itiraz açar. Kapsam başına günlük çağrı, harcama ve itiraz
   sınırlıdır. *Yol:* kayıtları `deckent memory review` ile kendiniz inceleyip doğrulayın.
 - **Purge her kopyayı silmez.** `deckent memory purge` kaydın metnini, arama satırını ve değerlendirici çağrılarının içeriğini siler ve
   yedek geri yüklendikten sonra yeniden uygulanır (o zamana kadar okumalar `MEMORY_PURGE_REPLAY_HELD` ile bekler). İşçi çıktısını,
@@ -548,8 +558,10 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   yazdığı sürüm için asla; bu yüzden tek AI kimliği olan bir kurulum bu yolu kullanamaz). Öneri kuralları geçicidir ve otomatik daraltma
   yalnız `catalogEvolution.mode` `on` iken ölçümle onaylanmış bir kuralda çalışır, bu yüzden bugün hiçbir şey daraltılmaz. Ajan
   istatistikleri yalnız işçiye ya da değerlendiriciye bağlanabilen başarısızlıkları sayar, nedensellik değil ilişkidir ve CLI işçileri
-  için token içermez (emek = süre, API maliyeti ve kota beklemeleri). *Yol:* `deckent agents suggestions` toplayıcının mühürlediği
-  önerileri listeler; her birine kendi kartında karar verin.
+  için token içermez (emek = süre, API maliyeti ve kota beklemeleri). Üretici anahtarı iptal edilmiş bir öneri
+  `CATALOG_SUGGESTION_STALE` ile reddedilir, iptal kart gösterildikten sonra gelse de; gölge kipte yazılmış bir öneri üzerinde
+  işlem yapılamaz (`CATALOG_SUGGESTION_SHADOW`). *Yol:* `deckent agents suggestions` toplayıcının mühürlediği önerileri listeler;
+  her birine kendi kartında karar verin.
 - **İmza anahtarları host anahtar deposunu ister.** AI ve sistem katalog yazmaları bir kişinin kaydettiği imza anahtarını ister; native
   Windows'ta host anahtar deposu yoktur ve bu yazmalar reddedilir. Bir anahtarı iptal etmek yeni ve bekleyen eylemlerini durdurur, ama
   verdiği terfiler bir kişi geri alana kadar kalır (owner'ın seçimi). Skill'ler yalnız bir kişinin eklediği içe aktarma anahtarıyla içe
@@ -652,7 +664,8 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
   etki başlamadan duranı yeniden sıraya alır (en çok `targetQueue.requeueMax`, varsayılan 2) ve çakışmada bir kez yeniden dener.
   `/do` için henüz seçenek yok; bir AI (MCP) önerici niyet taşıyamaz (MCP `propose_run` bu alanı kabul etmez), AI'ın önerdiği bir plan da sizin onayınızla henüz niyet
   alamaz. Yeniden deneme Run'ının kendi biletleri yeniden sıraya alınmaz. Servis niyetli Run'ları kuyruk kirası başına bir kez okur.
-- **İşçinin kaynak kullanımı yalnız sınırlı yerel izlerle ölçülür.** İşçi başına henüz maliyet ya da kalite raporu yok.
+- **İşçinin kaynak kullanımı yalnız sınırlı yerel izlerle ölçülür.** `run inspect` sınırlı izlerden Run başına bir maliyet raporu,
+  `deckent agents stats` kabul istatistiklerini gösterir; ikisi de ölçülmüş bir kalite puanı değildir.
 - **Defter (ledger), her sürecin paylaştığı tek bir yerel SQLite dosyasıdır.** Yazmalar sırayla yapılır; `storage.sqlite.busyTimeoutMs`
   süresinden (varsayılan 5 saniye) uzun bekleyen bir yazma `ATTEMPT_STORE_BUSY` ile reddedilir ve hiçbir şey yazılmaz. *Geçici çözüm:*
   komutu yeniden çalıştırın; yavaş ya da çok yüklü bir makinede süreyi `.deckent/config.json` içinde artırın. Açılışlar artık yazma kilidini

@@ -58,7 +58,8 @@ erişebildiği tüm dosyaların korunduğu anlamına gelmez.
 
 ## Tam erişim (full access)
 
-Yalnız şirket politikasının izin verdiği, oturumla sınırlı bir izin modudur. Kabuk görünümünü
+Yalnız şirket politikasının izin verdiği bir izin modudur; bir terminal oturumu için açılır ya da kişinin başlangıç
+kipi olarak saklanır (`/mode start full-access`); izin her açılışta ve her çağrıda yeniden denetlenir. Kabuk görünümünü
 ana makine dosyaları, ev dizini, ağ ve Git yazmaları için genişletir; korunan durum maskelenir
 ve etki çağrıları denetim kaydına girer. Açık retler ve değişmez koruma sınırı geçerliliğini
 korur. **Tam otomatik (full auto)** modundan daha geniştir: tam otomatik yalnız yalıtımın
@@ -100,3 +101,22 @@ istemci ve servis için eşleşen build'ler kullanın.
 **Principal**, adına işlem yürütülen doğrulanmış kişi veya süreçtir. **Policy**, bu kimliğin
 bir kapsamdaki kaynak üzerinde eylem yapmasına izin verir, reddeder veya onay gerektirir.
 Kapsam üyeliği tek başına yeterli değildir. Model, persona veya eklenti kendisine yetki veremez.
+
+## Çekirdek katmanlar (core layers)
+
+Deckent'in işi daha az gözetimle yürütmesini sağlayan parçalar; alpha.55'te kod olarak eklendi, henüz kabul edilmiş davranış değildir:
+
+- **Brain:** `/do`'nun arkasındaki planlayıcı. İsteği görevlere böler ve her görevin **WorkClass**'ını (iş türünü) adlandırır;
+  işçi modelini seçmez.
+- **Sistem ataması:** kabulde sistem, WorkClass'ın görünen aday listesinden izin verilen ilk modeli alır ve seçimi kaydeder;
+  modelin seviyesi ve rolleri tek bir sürümlü registry'den gelir (`deckent models roles`).
+- **Hafıza günlüğü:** kabul edilen işten gelen kapsamlı olgular ve dersler (`deckent memory`); herhangi bir iş okumadan önce bir
+  kişi ya da başka bir üreticinin değerlendirici modeli doğrular.
+- **Auditor:** araç kararı veren bir ajan turundaki policy kararlarının en fazla bir mühürlü kaydı; en iyi çaba — boş turda ya da yazma hatasında kayıt olmayabilir.
+- **Nervous:** kaybolan işçilerin tespiti, öneri olarak kaydedilir; **kurtarma**, kaybolan bir görevin belirli sınırlar içinde
+  yeni bir denemede sürüp süremeyeceğine karar verir.
+- **Ajan kataloğu:** sürümlü ajanlar ve skill'ler (`deckent agents`); onlara yapılan her AI ya da sistem değişikliği, bir kişinin
+  kaydettiği bir anahtarla imzalanır.
+
+Hafıza, Nervous, kurtarma ve ajan istatistiğinin her birinin kapalı başlayan korumalı bir anahtarı vardır. `shadow` (gölge) kipleri
+hiçbir şeyi uygulamaz; yine de gölgedeki hafıza doğrulama ve kurtarma modelini çağırır. Bkz. [bilinen sınırlar](known-limits.tr.md#çekirdek-katmanlar).

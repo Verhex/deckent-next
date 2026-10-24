@@ -89,3 +89,9 @@ exist. Recommendations accept only the report's permitted exact Attempts, and tr
 sets stay explicit. No raw sample or comparative evidence is written to acceptance_metrics.
 Author unit/contract evidence, independent review, real binary/platform evidence and owner
 acceptance are distinct. No live/N1 or paid provider pilot is authorized in this author lane.
+
+**Agent statistics (alpha.55 S8).** The agent statistics pass (`src/engine/core/catalog-evolution/internal/application.ts`) reports
+acceptance rates with integer Wilson bounds (`src/domain/core/catalog-evolution/internal/stats.ts`) from sealed metrics v2 rows. An
+acceptance rate is not correctness and an association is not causation: the Wilson bound corrects for small samples only, never for task
+difficulty or model differences, and only failures attributable to the worker or the evaluator count. It is a separate signal from the
+cost and quality reports described above; see [core layers](core-layers.md#agents-standing-statistics-suggestions-and-signer-keys-s7-s8-1as8-5).

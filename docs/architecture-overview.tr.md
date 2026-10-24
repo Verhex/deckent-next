@@ -8,7 +8,7 @@ ile yürütmeyi birleştirir: kişi, model veya araç iş önerir; yetki politik
 Açık Core Apache-2.0 lisanslıdır ve tek başına çalışabilir. Tescilli Enterprise paketleri,
 Core'un herkese açık sözleşmelerini genişletecek biçimde tasarlanır ve ayrı dağıtılır.
 
-Bu rehber, kaynak mimarisini açıklar; en son 2026-10-23 tarihinde kaynakla karşılaştırıldı, paket `1.0.0-alpha.53`.
+Bu rehber, kaynak mimarisini açıklar; en son 2026-10-24 tarihinde kaynakla karşılaştırıldı, paket `1.0.0-alpha.55`.
 Mekanizmaları ve sınırları anlatır; kurulu/canlı kabulü, güvenlik sertifikası veya
 kapasite ölçümü değildir. [ARCHITECTURE.md](../ARCHITECTURE.md)
 ayrıntılı sözleşmeleri, uygulama notlarını ve kabul edilmiş gelecek yönünü içerir;
@@ -164,8 +164,11 @@ build kilitli bubblewrap'ı yerleştirir (build `bubblewrap=present` ya da `bubb
 
 `1.0.0-alpha.55` paketi çekirdek katmanları ekler: işçi modellerinin sistemce atanması ve tek bir model rol registry'si, bağımsız
 doğrulamalı kapsamlı bir hafıza günlüğü, mühürlü Auditor kayıtları, kaybolan işçi kurtarmalı Nervous tespiti, bubblewrap alanında
-headless abonelik Brain'i ve istatistik, öneri ve imza anahtarlarıyla sürümlü ajanlar. Her biri bir kişi açana kadar kapalı başlar ve
-henüz kabul edilmiş davranış değil, koddur; bkz. [çekirdek katmanlar](../.deckent/docs/architecture/modules/core-layers.md).
+headless abonelik Brain'i ve istatistik, öneri ve imza anahtarlarıyla sürümlü ajanlar. Bunlar koddur, henüz kabul edilmiş davranış
+değildir. Her anahtar (hafıza, Nervous, kurtarma, ajan istatistiği) bir kişi açana kadar kapalı başlar; `shadow` (gölge) kipi hiçbir
+şeyi uygulamaz, ama hafıza doğrulama ve kurtarma gölgesi yine de modelini çağırır. Headless Brain'in anahtarı yoktur ve yalnız kişinin
+kendi login, connect ve onayından sonra çalışır. alpha.55'te bir Nervous kuralını yükselten komut yoktur; bu yüzden Nervous hiçbir
+durdurma adımı yürütmez ve otomatik kurtarma henüz başlayamaz; bkz. [çekirdek katmanlar](../.deckent/docs/architecture/modules/core-layers.md).
 
 Çok adımlı iş süreçlerinin Mission düzeyinde koordinasyonu, uzak HTTP API, Desktop, Dashboard,
 Enterprise SSO/toplu kurulum yönetimi ve microVM yalıtımı gelecek işlerdir. Yerel kontroller

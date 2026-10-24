@@ -111,7 +111,8 @@ in it can reach the model provider through the worker's one egress. The terminal
 - **Time is load, not the tree:** a `time` bound (deadline or slot wait) is audited like any incomplete scan and thrown as the transient
   `WORKER_TREE_SCAN_DEFERRED` (turn backoff) up to `maxTimeRefusals` (default 2) per Attempt, counted in a product-directory record
   (`crashes/secret-gate-time/`); the refusal after that, or an unreadable count, is the permanent `WORKER_TREE_SCAN_INCOMPLETE`.
-- **Refusal:** both codes are permanent launch refusals (the Run base is pinned; a fix needs a new Run). The checkout is released; no
+- **Refusal:** `WORKER_TREE_SECRET_REFUSED` and the final `WORKER_TREE_SCAN_INCOMPLETE` are permanent launch refusals (the Run base is
+  pinned; a fix needs a new Run); `WORKER_TREE_SCAN_DEFERRED` is transient. The checkout is released; no
   container, connection or claim exists. The text (EN/TR, shared renderer) names up to 16 `path (rule)` pairs and the omitted count; paths
   pass through the record redactor and never carry a value. The `worker-tree-refused` audit subject keeps up to 50 findings, the full
   count and the exhausted bound. No audit, no closure: an audit failure is thrown (transient) and the next turn scans and records again.
@@ -137,6 +138,10 @@ in it can reach the model provider through the worker's one egress. The terminal
   recorded dispatch. `worker-tree-gate-paths.test.ts` fails on a new launch site or a reordering.
 - **Open limits:** Git history (`.git/objects`, packs) is not scanned: workers keep full history (owner 2026-10-15 declined a depth-1
   clone) and a secret removed from the tip but present in history still reaches the worker's `.git`; the history scan is a later card. Encodings other than UTF-8/UTF-16, values shorter than six
-  characters and credential shapes outside the gated rows (e.g. a PEM block inside source) are not detected; the time bound is checked
+  characters and credential shapes outside the gated rows are not detected; the time bound is checked
   between entries. No Next surface lists Core audit events yet; a later Run view shows the recorded code only.
   Author proof and the base-tree-only clone measurement: external `proof/S6-SIR-KAPISI-2026-10-14/`.
+
+Model egress of the alpha.55 core layers is described in [core layers](core-layers.md): the memory evaluator sends candidate text to its
+configured model (also in shadow) and memory purge deletes the evaluator calls' content; the headless subscription Brain's egress leaves
+only through the realm's gateway to the provider's allow-listed hosts, and the gateway's refusals are recorded as counts and host names.

@@ -39,11 +39,17 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   (`terminal.scopeId`) ve sohbet sınırlarını yazar, iptal ayarlarını ve güncel, boş bir ledger'ı oluşturur. Linux, WSL ve
   macOS'ta yeni kurulum şifreli anahtar deposuyla başlar. Sonraki komutlarda aynı kapsam kimliğini kullanın; mevcut kurulumda
   ayarlarda tanımlı kapsam kimliği geçerlidir.
-- **Eski bir kurulumu yükseltme.** Güncel ilk kurulum policy şablonundan (alpha.48'den beri şablon v13) önce kurulmuş bir
-  kurulum `deckent init policy --scope <id> --upgrade --preview`, ardından önizlemenin bastığı değerle
-  `--apply --expect <değer>` ile yükseltilir. Plan yalnız kural ekler; sizin yazdığınız çakışan kurallar korunur. Değer policy
-  revizyonunu ve runtime servis kimliğini bağlar; arada biri değişirse uygulama reddedilir ve yeni önizleme ister. Uygulama
-  `service.identity` ayarlarsa yeniden başlatmadan önce [Runtime servisi](#runtime-servisi) bölümüne bakın.
+- **Eski bir kurulumu yükseltme.** Yeni kurulum güncel ilk kurulum policy şablonunu (alpha.55'ten beri şablon v15) doğrudan
+  alır. Eski bir kurulum, policy'sinin nasıl yazıldığına göre iki yoldan biriyle yükseltilir:
+  - **İlk kurulum şablonuyla kurulmuşsa:** `deckent policy upgrade --template current --scope <id> --preview`, ardından
+    `--apply`. Bu, sizin adınıza yönetilen policy zinciriyle çalışır (sizin kartınız, denetim, arşiv).
+  - **Elle yazılmışsa:** `deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, ardından
+    önizlemenin bastığı değerle `--apply --expect <değer>`. `--person` olmadan hiçbir şeyi değiştirmez ve kapsamın kişilerini
+    adlandırır. Değer policy revizyonunu ve runtime servis kimliğini bağlar; arada biri değişirse uygulama reddedilir ve yeni
+    önizleme ister. Uygulama `service.identity` ayarlarsa yeniden başlatmadan önce [Runtime servisi](#runtime-servisi)
+    bölümüne bakın.
+
+  İki plan da yalnız kural ekler; sizin yazdığınız çakışan kurallar korunur.
 - `deckent init` rehberli kurulumdur: planı ve eksik kalanı, her adımın tam komutuyla gösterir;
   `deckent init --yes --scope <id>` yeni bir ilk kurulum policy'si kurar, dili ayarlar ve son kontrolü çalıştırır.
 - `deckent init --preview`, Deckent'in kendi terminal ajanının okuduğu proje talimat dosyası `DECKENT.md`'yi ve
@@ -65,10 +71,12 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
 - **Komut satırından:** `deckent models connect --scope <id> --connection <tür> --command-id <id> (--model <id> |
   --reference <ref>)` modeli türün paketli kataloğundan bildirir, kapsamın çağrı profilini anahtar adıyla yazar ve
   etkinleştirir. Türler `anthropic-api`, `openai-api`, `deepseek-api`, `zai-api`, `zai-cn-api`, `openrouter`,
-  `openai-compatible` ve `local-openai`'dır. `--command-id` sizin seçtiğiniz benzersiz bir addır; onu yinelemek asla iki kez
-  bağlamaz. Kişinin terminalinde uzun bayrakları olmadan `models connect`, `models activate|deactivate` ve
-  `models catalog activate|deactivate` kapsamı, sağlayıcıyı ya da kanalı ve tam model kimliğini (takma ad asla) sorar, bağ
-  özetini ve revizyonları kendisi okur ve kartla onaylatır; yapay zekâ araçları için uzun biçimler değişmedi.
+  `openai-compatible` ve `local-openai`'dır; bunlara ek olarak `claude-cli-subscription` (Brain planlaması için kendi Claude
+  girişiniz; yalnız kişi bağlar, bubblewrap alanı ve önce `deckent models login` gerekir, bkz.
+  [Çekirdek katmanlar](#çekirdek-katmanlar-hafıza-ajanlar-model-rolleri-kurtarma)). `--command-id` sizin seçtiğiniz benzersiz bir
+  addır; onu yinelemek asla iki kez bağlamaz. Kişinin terminalinde uzun bayrakları olmadan `models connect`, `models
+  activate|deactivate` ve `models catalog activate|deactivate` kapsamı, sağlayıcıyı ya da kanalı ve tam model kimliğini (takma ad
+  asla) sorar, bağ özetini ve revizyonları kendisi okur ve kartla onaylatır; yapay zekâ araçları için uzun biçimler değişmedi.
 - **Bağlantı türüne göre gizli adlar:** `DECKENT_ANTHROPIC_KEY`, `DECKENT_OPENAI_KEY`, `DECKENT_DEEPSEEK_KEY`,
   `DECKENT_GLM_KEY`, `DECKENT_GLM_CN_KEY` ya da `DECKENT_OPENROUTER_KEY` (`/provider` aynı adla saklar). Yerel sunucu isteğe
   bağlı `DECKENT_LOCAL_ENDPOINT_KEY` adını, OpenAI uyumlu uç nokta ise host'undan türetilen `DECKENT_OAICOMPAT_<HOST>` adını
@@ -77,16 +85,18 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   kullanabileceği: [Gizli depolar ve katı kurulum](#gizli-depolar-ve-katı-kurulum).
 - **Model seçimi:** `/model`, kullanılamayan modeli nedeniyle kilitler (bütçe yok, bağlı değil, anahtar eksik, etkin değil).
   **Yalnız bu oturum** modeli oturuma sabitler; **Bu oturum ve varsayılanım olsun** ayrıca `terminal.defaultModel` (kullanıcı
-  katmanı) yazar. Önce oturum sabitlemesi, sonra varsayılan, sonra projenin adlandırdığı model geçerlidir; pencere kullanılan
-  modeli hangi ayarın seçtiğini söyler.
+  katmanı) yazar. Önce oturum sabitlemesi, sonra projenin adlandırdığı model (projedeki `terminal.chat.reference`), sonra
+  varsayılanınız, sonra kendi `terminal.chat.reference` ayarınız geçerlidir; pencere kullanılan modeli hangi ayarın seçtiğini
+  söyler.
 - **Bütçe penceresi:** 5, 10, 25, 50 ya da 100 USD veya ok tuşlarıyla 1 ile 1000 arasında başka bir tam dolar tutarı, ardından
   bir onay adımı; sonra `/provider`'ın ilk satırı **Bütçeyi değiştir** olur. Yerel loopback modeller ve abonelikli işçiler
   (Claude Code, Cursor) bütçesiz çalışır. Sağlayıcı bildirmediyse `/usage` akıl yürütme token'larını *ölçülmedi* gösterir;
   harcama hesabını (üst sınır, ayrılan, kesinleşen) okumak için orada bir bütçe açın. Paranın nasıl ayrılıp kesinleştiği:
   [Harcamanın kesinleşmesi](#harcamanın-kesinleşmesi).
 - **Bugün abonelikler:** Claude Code işçisi kendi Claude girişinizle çalışır; abonelikli Brain (`/do`'nun arkasındaki
-  planlayıcı) hazırlanıyor ve henüz yok; Claude aboneliğiyle terminal sohbeti şu an desteklenmiyor, sohbet için Anthropic API
-  anahtarı kullanın. ChatGPT ile giriş `/provider`'da henüz kullanılamıyor olarak görünür.
+  planlayıcı) `claude-cli-subscription` ile kullanılabilir (bkz.
+  [Çekirdek katmanlar](#çekirdek-katmanlar-hafıza-ajanlar-model-rolleri-kurtarma)); Claude aboneliğiyle terminal sohbeti hâlâ
+  desteklenmiyor, sohbet için Anthropic API anahtarı kullanın. ChatGPT ile giriş `/provider`'da henüz kullanılamıyor olarak görünür.
 - **Cursor işçileri:** paketli Cursor abonelik kataloğunu `deckent models catalog register --scope <id> --command-id <id>
   --seed cursor-cli-subscription` ile kaydedin, sonra modelleri `models catalog activate` ile açın. Bir Cursor denemesi tur,
   token, süre ve araç çağrılarını bildirir ve rapor JSON'u ile biter; gerçekten kullandığı model oturum başlangıç adından okunur
@@ -129,7 +139,8 @@ bir bölümü vardır; diğer bölümler ona bağlantı verir.
   bir kurulum için [Runtime servisi](#runtime-servisi) bölümüne bakın.
 - **Plan kartı:** `/do` kartının Risk ve Geri alma satırları "araç sınıflandırmadı" ve "araç bildirmedi" der; kart
   `approvals.requestTtlMs` (10 dakika) sonra sona erer. `y` sonrası: `Run <run-id> başlatıldı. /tasks veya /monitor ile izleyin.`
-  "Başlatıldı" Run'ın başladığı demektir; bir görevin sonucu daha sonra, bugün işçinin çıkış koduyla kabul edilir.
+  "Başlatıldı" Run'ın başladığı demektir; görevin sonucu daha sonra kabul edilir: çıkış koduyla ve tanımlıysa işçinin
+  yapılandırılmış raporu ve tipli kabul kontrolleriyle; içerik bağımsız doğrulanmaz.
 - **Teslim ve dala alma satırları:** `/deliver` "/deliver · teslim bekleyen görevler" başlığını taşır; yamayı güncel kaynakla
   karşılaştırır ve `Teslim edildi: commit <commit> → refs/deckent/deliveries/<özet>` ile biter. Dala alma
   `<commit> commit'i bir dala alınsın mı? Bu dalı ilerletir ve ayrı bir y ister.` diye sorar ve
@@ -385,9 +396,9 @@ OpenRouter kredi sınırını Deckent bütçenizden yüksek olmayacak şekilde a
   Ctrl+Yukarı/Ctrl+Aşağı önceki/sonraki mesajınıza atlar (Ctrl+R giriş geçmişi aramasıdır). `terminal.viewportRows`
   (varsayılan 2000) görünümün ne kadar geriye kaydığını sınırlar.
 - **Çıkış ve seçim.** Çıkışta sohbet normal ekrana yazılır, böylece terminalin kaydırma geçmişinde kalır; `/clear` görünümü ve
-  o geçmişi boşaltır. Tam pencere yalnız gösterilirken fare tekerleğini alır (tıklamalar yok sayılır ve hiçbir kartı
-  yanıtlamaz); metni Claude Code'daki gibi terminalin değiştirici tuşuyla seçin — çoğu terminalde Shift, iTerm2'de Option,
-  Terminal.app'te Fn.
+  o geçmişi boşaltır. Tam pencere fareyi yalnız gösterilirken alır: tekerlek kaydırır, sol sürükleme sohbet metnini seçer ve
+  bırakınca kopyalar (OSC 52); tıklama hiçbir kartı yanıtlamaz. Terminalinizin değiştirici tuşu (çoğu terminalde Shift;
+  iTerm2'de Option; Terminal.app'te Fn) yerel seçimi sağlamaya devam eder.
 - **Slash komutu pencereleri ve odak.** Slash komutu pencereleri ve kartlar giriş barının hemen üstünde açılır, ekranın en çok
   yarısını kaplar ve içeride kayar (oklar, PageUp/PageDown ve Home/End; satır aralığı görünür); sohbet alanını daraltır, barı
   oynatmaz. Komutunuzla ya da seçiminizle açılan pencere hemen odağı alır; Escape kapatıp girişe döner. Otomatik /do planlama
@@ -425,8 +436,9 @@ bir y/N kartı açar; yalnız tek yazılmış `y` gönderir (Ctrl/Alt bileşimle
 Enter, Esc ve Ctrl+C Run'ı korur). Bekletme gerekçenizi (Tab) ya da varsayılan bir cümleyi not olarak alır. Denetim, gösterilen
 revizyona karşı CLI'ın kendi `run hold|resume|close` komutudur; policy (bekletme ve kapatma için `run cancel`, sürdürme için
 `run reserve`) ve Run'ın durumu karar verir, ret listenin üstünde tipli neden olarak görünür. Sonuç satırı Run'ın yeni durumunu
-ve komut kimliğini adlandırır. Bekletme yeni rezervasyonları durdurur; zaten çalışan iş sürer. Bir görevin sorusunu yanıtlamak
-ve görevi kabul ya da reddetmek ayrı kararlardır, buradaki tuşlar değildir.
+ve komut kimliğini adlandırır. Bekletme yeni rezervasyonları durdurur; zaten çalışan iş sürer. `a`, soru soran (girdi bekleyen)
+bir görevin cevap kartını açar: Tab ile cevabınızı yazarsınız, yalnız tek başına yazılan `y` gönderir. Görevi kabul ya da
+reddetmek ayrı bir karardır, buradaki bir tuş değildir.
 
 ### Görev ve Run komutları
 
@@ -517,9 +529,13 @@ ve görevi kabul ya da reddetmek ayrı kararlardır, buradaki tuşlar değildir.
 
 ## Çekirdek katmanlar: hafıza, ajanlar, model rolleri, kurtarma
 
-alpha.55 bu komutları ekler. Her çekirdek katman kapalı başlar; anahtarı yalnız bir kişinin yazdığı korumalı yapılandırmadır ve yeni
-kimlikler haklarını politika şablonu v15'ten alır (`deckent policy upgrade --template current --scope <id> --preview`, sonra
-`--apply`). Davranış ve sınırlar: [core layers](modules/core-layers.md).
+alpha.55 bu komutları ekler. Anahtarlı her çekirdek katman (hafıza, Nervous, kurtarma, ajan istatistiği) kapalı başlar; anahtarı
+yalnız bir kişinin yazdığı korumalı yapılandırmadır. Headless Brain, model rolleri ve ajan kataloğu komutlarının anahtarı yoktur.
+`shadow` (gölge) kip hiçbir şeyi uygulamaz, ama hafıza doğrulama ve kurtarma gölgesi yine de modelini çağırır (veri o sağlayıcıya
+gider, çağrı harcanır). Yeni kimlikler haklarını politika şablonu v15'ten alır: ilk kurulum şablonuyla kurulmuş bir policy
+`deckent policy upgrade --template current --scope <id> --preview`, sonra `--apply` ile; elle yazılmış bir policy
+`deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, sonra `--apply` ile yükseltilir (bkz.
+[Başlangıç kurulumu](#başlangıç-kurulumu)). Davranış ve sınırlar: [core layers](modules/core-layers.md).
 
 - **Model rolleri.** `deckent models roles [show]` kapsamın gördüğü her katalog modelini üreticisi, tier'ı, rolleri ve durumuyla
   listeler; satırı olmayan model beklemededir ve hiçbir rol onu kullanamaz. `deckent models roles set --channel <id> --model <tam kimlik>
@@ -539,18 +555,25 @@ kimlikler haklarını politika şablonu v15'ten alır (`deckent policy upgrade -
   `standing reset --work-class <id>` ve `define|define-skill --from-suggestion <id> --id <yeni kimlik>` kendi terminalinizdeki
   kartlardır (taslak kart anında, okuyabildiklerinizden üretilir). MCP `list_agent_suggestions` ve `inspect_agent_suggestion` salt
   okunurdur; imzalı yazma araçları (`define_agent`, `define_skill`, `import_skill`, `change_agent_standing`, `dismiss_agent_suggestion`)
-  yalnız kendi etkin imza anahtarı ve kapsamlı izni olan bir AI kimliği için çalışır.
+  yalnız kendi etkin imza anahtarı ve kapsamlı izni olan bir AI kimliği için çalışır. Kapanmış, süresi dolmuş ya da üretici
+  anahtarı iptal edilmiş bir öneri `CATALOG_SUGGESTION_STALE` ile reddedilir.
 - **İmza anahtarları.** `deckent agents signers` anahtarları listeler; `enrol-signer --principal <issuer:subject> --label <metin>` bir AI
   ya da sistem kimliği için host'ta tutulan bir eylem anahtarı üretir, `add-signer --input <dosya>` dış bir açık anahtarı kaydeder,
   `revoke-signer <anahtar-kimliği>` anahtarın yeni, bekleyen ve yeniden oynatılan eylemlerini hemen durdurur, `repair-signers` bozuk bir
   iptal günlüğünü onarır ve `import-skill --input <dosya>` kapsamın bir içe aktarma anahtarıyla imzalı, sabitlenmiş bir skill'i içe aktarır.
   Hepsi kendi terminalinizdeki kartlardır.
-- **Abonelik Brain'i.** `deckent models connect claude-cli-subscription … [--executable <mutlak yol>] [--config-dir <mutlak dizin>]
-  [--delegate none|ai|system|ai,system]` Brain planlaması için kendi Claude girişinizi (varsayılan `~/.claude`) bağlar; kullanılabilir bir
-  bubblewrap korumalı alanı yoksa reddedilir. `--delegate`, AI ya da MCP üzerinden planlama ve arka plan rolleri (kurtarma kararı,
-  hafıza değerlendirici) için onayınızdır; verilmezse önceki seçiminiz kalır. `deckent doctor` her bağlantı için bir Brain girişi satırı gösterir.
+- **Abonelik Brain'i.** Önce `deckent models login --connection claude-cli-subscription [--sso]` Brain'in kendi girişini açar
+  (Claude CLI'nin kendi girişi, kendi terminalinizde); sonra `deckent models connect --scope <id> --connection claude-cli-subscription
+  --command-id <id> --model <id> [--executable <mutlak yol>] [--config-dir <mutlak dizin>] [--delegate none|ai|system|ai,system]` onu
+  Brain planlaması için bağlar. Giriş Deckent'e aittir (global durum kökünde `headless/logins`, `deckent paths` gösterir); `--config-dir`
+  vermedikçe `~/.claude` kullanılmaz. Kullanılabilir bir bubblewrap korumalı alanı yoksa reddedilir. `--delegate`, AI ya da MCP üzerinden
+  planlama ve arka plan rolleri (kurtarma kararı, hafıza değerlendirici) için onayınızdır; verilmezse önceki seçiminiz kalır.
+  `deckent doctor` her bağlantı için bir Brain girişi satırı gösterir. CLI'nin kendi yenileme kilidi varken ya da başka bir Brain çağrısı
+  girişi tutarken çağrı registry sınırı kadar bekler, sonra `HEADLESS_LOGIN_BUSY` ile reddedilir; çöken bir Claude oturumundan geride
+  kalan kilit, siz kaldırana kadar reddettirir.
 - **Kota sorusu.** Kota beklemesi biten bir işçi Run'ı size sorar: `deckent run resume --quota wait` beklemeyi sürdürür,
   `deckent run resume --quota next-candidate` WorkClass listesindeki sıradaki adayı kullanır; Run'ı kapatmak ayrı bir seçimdir.
+  Beklemeyi sürdürme en çok `runRuntime.quotaRecovery.maxRewaits` (3) kez sunulur, sonra `RUN_QUOTA_WAIT_LIMIT`.
 - **Kurtarma.** `deckent doctor` (`work.recovery` satırı) ve izleyici Nervous ve kurtarma kiplerini ve owner'ın `recovery-action`/`apply`
   `continue-new-attempt` izninin olup olmadığını gösterir (`deckent policy grants`); izin yoksa her kaybolan işçi vakası bir kişiye gider.
   `deckent run inspect` Run'ın dondurduğu kurtarma kipini söyler ve bekletme nedenlerini sözcüklerle gösterir.
@@ -659,7 +682,8 @@ taşır; Dockerfile en yenisi başta bir `# version …` yorum geçmişi tutar, 
 tek bir değişmez imageId'ye bağlanır; etiketi başka bir imajı gösteren sürüm reddedilir. Güncellemek için geçmişe yeni bir
 satır ekleyin, `imageVersion`/`previousVersion` değerlerini artırın, yeniden derleyin ve makbuzun `imageId` değerini yeni bir
 execution profil revizyonunda kullanın. Eski imajları, etiketleri ve arşiv makbuzlarını (`worker-images/archive/`) çalışan
-Run'lar ve geri dönüş için koruyun; ürün yalnız `imageId` ile bağlanır, imaj çekmez, etiketlemez ya da silmez.
+Run'lar ve geri dönüş için koruyun. Yürütme yalnız `imageId` ile bağlanır, imaj çekmez ya da silmez; `deckent init` ve
+`toolchains update` imaj kurulumu (ve `npm run worker:image`) kurduğu imajı etiketler.
 
 ### Native kodlama profilleri
 
