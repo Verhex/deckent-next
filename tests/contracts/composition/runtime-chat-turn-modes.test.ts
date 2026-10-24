@@ -126,7 +126,8 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
     const f = await modeRuntime({ ...HOST, grants: [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')],
       mode: 'full-auto' });
     await writeFile(join(f.project, 'package.json'), '{"scripts":{"preinstall":"echo floor"}}\n');
-    // Astra's case: `mkdir out` makes the copy target a directory, so `cp` would write `out/package.json` (write floor `**/package.json`).
+    // Astra's case (2133; the 2134 R1 repro is this same call): `mkdir out` makes the copy target a directory, so `cp` would write
+    // `out/package.json` (write floor `**/package.json`); `out` is never created below, so that file never exists.
     expect(await f.call('run_shell', { command: 'mkdir out && cp package.json out' })).toMatchObject({ card: true, status: 'denied' });
     // A harmless compound asks too: the narrow set is one simple command (no `&&`, `;`, `||`, pipe).
     expect(await f.call('run_shell', { command: 'mkdir out && cp src/a.ts out/a.ts' })).toMatchObject({ card: true, status: 'denied' });
@@ -140,16 +141,6 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
     expect(f.audit()).toEqual([]);
     expect(f.rows("SELECT state FROM effect_intents WHERE target_kind='host-shell'")).toEqual([]);
   }, 90_000);
-
-  it('Astra 2134 R1 repro: compound narrow commands must not bypass the package manifest write floor', async () => {
-    const f = await modeRuntime({ ...HOST, grants: [rule('shell-tool', 'agent-tool', ['run_shell'], 'require-approval', true), rule('shell-run', 'operation', ['host.shell.run'], 'allow')], mode: 'full-auto' });
-    await writeFile(join(f.project, 'package.json'), '{"scripts":{"preinstall":"echo floor"}}\n');
-    const result = await f.call('run_shell', { command: 'mkdir out && cp package.json out' });
-    const content = await readFile(join(f.project, 'out/package.json'), 'utf8').catch(() => null);
-    expect(result.card).toBe(true);
-    expect(content).toBeNull();
-    expect(f.audit()).toEqual([]);
-  }, 60_000);
 
   it('runs nothing when the audit event cannot be written: the relaxation is not applied (M3)', async () => {
     const f = await modeRuntime({ ...HOST, grants: [...edit('require-approval', 'allow', { tool: true }), ...shell('require-approval', 'allow', { tool: true })], mode: 'full-auto' });

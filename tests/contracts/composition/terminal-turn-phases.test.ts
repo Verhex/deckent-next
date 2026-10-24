@@ -154,16 +154,10 @@ describe('summarizing is derived on the client exactly when the service compacts
 });
 
 // COMPOSITION-BUDGET: the service and the terminal read one admission formula (engine `agentTurnAdmission`), not a mirrored copy.
-// The parity test above cannot see a drift of that one source (both sides move together), so each side is pinned on its own here:
-// changing that safety reserve turns both of these red, which a client-side copy would not.
+// Each side is pinned on its own: the first parity case above is the service side (74 000 of 100 000 prompt tokens are summarized,
+// `calls.summary` 1, only because the whole 128 + 2 048 reserve is kept free), the case below the terminal side. Changing that safety
+// reserve turns both red, which a client-side copy would not.
 describe('one admission formula for the service and the terminal (engine agentTurnAdmission)', () => {
-  it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] service: 74 000 of 100 000 prompt tokens are summarized only because the whole reserve (128 + 2 048) is kept free', async () => {
-    const f = await runtime({ windowTokens: 100_000, count: messages => messages.length > 12 ? 74_000 : 900 });
-    const deltas = await f.turn(talk(8));
-    expect(f.calls.summary).toBe(1);
-    expect(deltas.some(delta => delta.kind === 'compacted')).toBe(true);
-  }, 30_000);
-
   it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] terminal: the admission it derives from the configuration is the same formula, whatever the service does', async () => {
     const f = await runtime({ windowTokens: 100_000, count: () => 900 });
     const admission = await assertTerminalChatReady(f.project, { env: f.env });

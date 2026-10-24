@@ -83,8 +83,8 @@ const PREFIXED = AUTHORITY_ARGV.flatMap(([group, action, rest]) => {
   return [`env script -qc '${inner}' /dev/null`, `env -u HOME FOO=1 script -qc '${inner}' /dev/null`, `nohup script -qc '${inner}' /dev/null`,
     `timeout 30 script -qc '${inner}' /dev/null`, `stdbuf -oL script -qc '${inner}' /dev/null`, `setsid -f script -qc '${inner}' /dev/null`,
     `taskset 0x3 script -qc '${inner}' /dev/null`, `chrt -f 10 script -qc '${inner}' /dev/null`, `ionice -c 3 script -qc '${inner}' /dev/null`,
-    `printf '%s\\n' 'script -qc "${inner}" /dev/null' | command bash`, `printf x | env -u HOME bash`, `printf x | timeout 5 sh -s`, `env deckent ${group} ${action} ${rest}`];
-});
+    `printf '%s\\n' 'script -qc "${inner}" /dev/null' | command bash`, `env deckent ${group} ${action} ${rest}`];
+}).concat(['printf x | env -u HOME bash', 'printf x | timeout 5 sh -s']); // these two name no authority argv: one row each, not one per argv
 describe.skipIf(process.platform !== 'linux')('REVISE 2704 B: transparent prefixes carry argv and stdin to the authority commands', () => {
   it.each(PREFIXED)('%s → edit-authority', async command => {
     expect(classify(command), command).toBe(true);
