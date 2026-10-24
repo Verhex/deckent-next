@@ -13,6 +13,8 @@ export function recordedDockerSupervisor(input: SupervisorProfile): ExecutionSup
     async captureProfile() { return profile; },
     async execute(request, signal) { return (await get()).execute(request, signal); },
     async observeTermination(request, worker) { return (await get()).observeTermination(request, worker); },
+    async observeCreatedAbsence(request, containerId) { return (await get()).observeCreatedAbsence(request, containerId); },
+    async removeCreatedContainer(request, containerId) { return (await get()).removeCreatedContainer(request, containerId); },
     async observe(request) { return (await get()).observe(request); },
     async cancel(request) { return (await get()).cancel(request); },
     async collectOutputFiles(request) { return (await get()).collectOutputFiles(request); },

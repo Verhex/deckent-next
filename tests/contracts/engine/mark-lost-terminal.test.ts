@@ -25,7 +25,7 @@ it.each([false, true])('keeps durable unknown across late terminal and projectio
       target: { kind: 'fixture-record', id: 'record-a' }, idempotencyKey: 'effect-key', input: {}, expectedVersion: 'v1' },
     descriptor: { schemaVersion: 1, operation: { id: 'fixture-operation', version: 1 }, targetKind: 'fixture-record', effectClass: 'write',
       approval: 'policy', precondition: 'record-version', compensation: null, inputMaxBytes: 1000 },
-    actor: { id: 'actor', issuer: 'test', subject: 'actor' }, idempotencyKeyHash: 'a'.repeat(64), inputDigest: 'b'.repeat(64) });
+    actor: { id: 'actor', issuer: 'test', subject: 'actor' }, idempotencyKeyHash: 'a'.repeat(64), inputDigest: 'b'.repeat(64), producer: { kind: 'principal' } });
   const unknownEffect = markEffectUnknown(effect); await store.saveEffect(effect, unknownEffect);
   const current = (await store.load('s', 'attempt'))!;
   const unknown = applyAttemptObservation(current, { protocolVersion: 1, identity, sequence: (current.lastObservation?.sequence ?? 0) + 1,

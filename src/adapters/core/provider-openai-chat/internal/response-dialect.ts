@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import COMPATIBILITY from './request-compatibility.json' with { type: 'json' };
 import { OPENAI_CHAT_DEFAULT_DIALECT, openAiChatFinishReasonSchema, type OpenAiChatDialect, type OpenAiChatHttpDefinition } from './contract.js';
+const DIALECTS: Readonly<Record<string, { responseObject?: 'optional'; finishReasons: NonNullable<OpenAiChatDialect['finishReasons']> }>> = COMPATIBILITY.responseDialects as never;
 /** Existing profiles carry verified provider tariff identity. It supplies response grammar without a profile migration or host-name guess. */
 export function responseDialect(definition: OpenAiChatHttpDefinition): OpenAiChatDialect {
   const dialect = definition.dialect ?? OPENAI_CHAT_DEFAULT_DIALECT, tariff = definition.tariff;
   if (tariff.kind !== 'vendor-published') return dialect;
-  if (tariff.vendor === 'zai') return { ...dialect, responseObject: 'optional', finishReasons: ['sensitive', 'model_context_window_exceeded', 'network_error'] };
-  if (tariff.vendor === 'deepseek') return { ...dialect, finishReasons: ['insufficient_system_resource', 'aborted'] };
-  return dialect;
+  const grammar = Object.hasOwn(DIALECTS, tariff.vendor) ? DIALECTS[tariff.vendor] : undefined;
+  return grammar ? { ...dialect, ...(grammar.responseObject ? { responseObject: grammar.responseObject } : {}), finishReasons: [...grammar.finishReasons] } : dialect;
 }
 /** Published identity also narrows legacy profiles; unsupported choices are never silently changed. */
 export function requestToolChoiceAccepted(definition: OpenAiChatHttpDefinition, choice: 'auto' | 'none' | 'required'): boolean {

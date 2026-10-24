@@ -89,7 +89,7 @@ function wordsFor(snapshot: MonitorSnapshot, locale: Locale, ascii: boolean, ver
     installColumn: (priority: number): readonly MonitorColumn[] => multi ? [{ header: t('monitor.col.install', {}, locale), priority, min: 8, max: 16 }] : [],
     installCell: (install: MonitorInstall): readonly MonitorSpan[] => multi ? [span(install.id, 'muted')] : [],
     stateCell: (run: MonitorRun) => globalRunCell(run, locale),
-    blockerText: (blocker: MonitorBlocker) => ['quota-exhausted', 'quota-reset-unknown', 'quota-retry-limit'].includes(blocker.detail ?? '') && blocker.deadlineMs !== undefined
+    blockerText: (blocker: MonitorBlocker) => blocker.detail === 'quota-ask' ? t('quotaask.monitor', {}, locale) : ['quota-exhausted', 'quota-reset-unknown', 'quota-retry-limit'].includes(blocker.detail ?? '') && blocker.deadlineMs !== undefined
       ? quotaWaitText(blocker.deadlineMs, blocker.detail !== 'quota-reset-unknown', locale, blocker.detail === 'quota-retry-limit', now) : `${blockerLabel(blocker.code, locale)}${blocker.detail ? ` (${blockerDetailText(blocker.detail, locale)})` : ''}`,
     runName: (run: MonitorRun) => `${run.scopeId}/${run.runId}`,
     progress: (run: MonitorRun) => t('monitor.progress', { accepted: run.phaseCounts['accepted'] ?? run.tasks.filter(task => task.phase === 'accepted').length,
@@ -375,6 +375,14 @@ const hiddenPools = (installs: readonly MonitorInstall[], locale: Locale): Monit
   return count ? [{ kind: 'line', line: [span(t('monitor.pool.hidden', { count }, locale), 'muted')] }] : [];
 };
 
+/** f4: Brain planning commands waiting for a subscription quota reset before any Run exists (oldest first); nothing when none wait. */
+function brainWaitBlocks(w: Words, installs: readonly MonitorInstall[]): MonitorBlock[] {
+  const waits = installs.flatMap(install => install.brainWaits ?? []), { locale } = w;
+  return waits.length ? [{ kind: 'line', line: [span('')] }, { kind: 'line', line: [span(t('brainwait.monitor.heading', { count: waits.length }, locale), 'sectionHeader')] },
+    ...waits.map((wait): MonitorBlock => ({ kind: 'line', line: [span(`${w.marks.warn} ${t('brainwait.monitor.line', { scope: wait.scopeId, command: wait.commandId,
+      time: clockText(wait.untilMs), attempt: wait.attempt, maxAttempts: wait.maxAttempts, since: clockText(wait.sinceMs) }, locale)}`, 'warning')] }))] : [];
+}
+
 /** What needs a human first: counts, install problems, approvals, stuck Runs (oldest blocker first), failed Runs, live workers. */
 function summaryBlocks(w: Words, installs: readonly MonitorInstall[], runs: readonly Entry<MonitorRun>[], stuck: readonly Entry<MonitorRun>[],
   approvals: readonly Entry<MonitorApproval>[], workers: readonly Entry<MonitorWorker>[]): MonitorBlock[] {
@@ -397,6 +405,7 @@ function summaryBlocks(w: Words, installs: readonly MonitorInstall[], runs: read
     }),
     ...installs.flatMap(install => w.notes(install).map((entry): MonitorBlock => ({ kind: 'line', line: [span(t('monitor.summary.installNote', { install: install.id,
       note: entry.text }, locale), 'muted')] }))),
+    ...brainWaitBlocks(w, installs),
     blank, heading(t('monitor.summary.yours', { count: approvals.length }, locale)), approvalsBlock(w, approvals, true),
     blank, heading(t('monitor.summary.stuck', { count: stuck.length }, locale)),
     { kind: 'table', empty: runs.some(entry => OPEN.includes(entry.value.state)) ? t('monitor.summary.noStuck', {}, locale) : t('monitor.summary.noOpenRuns', {}, locale),

@@ -24,7 +24,8 @@ const upgradePolicyTemplateInstallation = (...args: Parameters<typeof upgradeIns
 // governed stop. Real composition: the installer journal, the first-session config, the ledger, the runtime socket and the policy file.
 const SCOPE = 'installation', SERVICE = 'installation-runtime', V12 = ['first-run-scope-inspect', 'first-run-service-shutdown'];
 // I-POL (alpha.48): the current template is v13; an older (v11) template also lacks the v13 delta, which the upgrade then adds after the v12 rules.
-const V13: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, OLDER = (id: string) => V12.includes(id) || V13.includes(id);
+/** The v13 delta (I-POL) and the current v14 delta (S4). */
+const V13: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect', 'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory', ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS], OLDER = (id: string) => V12.includes(id) || V13.includes(id);
 /** How long the recovery passes get to show a refusal: both passes run at start and then poll, so their first page arrives well inside this. */
 const RECOVERY_WINDOW_MS = 5_000;
 const roots: string[] = [], services: Awaited<ReturnType<typeof startConfiguredRuntimeService>>[] = [];
@@ -53,7 +54,7 @@ async function installed(edit?: (policy: { revision: string; grants: { id: strin
 describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket and OS-user identity] fresh install: the owner observes and restarts their own installation', () => {
   it('init policy --apply → service start → inventory → no POLICY_DENIED recovery → runtime restart → runtime shutdown', async () => {
     const f = await installed();
-    expect(f.result).toMatchObject({ status: 'installed', template: { version: 13 }, serviceIdentity: { status: 'written', identity: { scopeId: SCOPE, serviceId: SERVICE } } });
+    expect(f.result).toMatchObject({ status: 'installed', template: { version: 15 }, serviceIdentity: { status: 'written', identity: { scopeId: SCOPE, serviceId: SERVICE } } });
     // `config explain service.identity` shows the deterministic, non-secret identity from the project layer.
     expect(await createConfiguredConfigApplication(f.project, { env: f.env }).explain({ keyPath: 'service.identity' }))
       .toMatchObject({ value: { scopeId: SCOPE, serviceId: SERVICE }, source: 'project', apply: 'restart', redacted: false });
@@ -77,7 +78,7 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     // `deckent runtime shutdown`: admitted on the owner's v12 rule; the service ends.
     const stopped = await stopConfiguredRuntimeService(f.project, { env: f.env });
     expect(stopped.result).toMatchObject({ replayed: false, admission: { scopeId: SCOPE, command: { serviceId: SERVICE },
-      authorization: { revision: expect.stringContaining('first-run-template-v13'), ruleId: 'first-run-service-shutdown' }, actor: { principal: { assurance: 'os-user' } } } });
+      authorization: { revision: expect.stringContaining('first-run-template-v15'), ruleId: 'first-run-service-shutdown' }, actor: { principal: { assurance: 'os-user' } } } });
     await services.at(-1)!.done;
     await expect(createConfiguredRuntimeClient(f.project, { env: f.env }).describeService()).rejects.toBeDefined();
   });
@@ -108,7 +109,7 @@ describe.skipIf(process.platform !== 'linux')('[requires Linux local runtime soc
     const preview = await upgradePolicyTemplateInstallation(f.project, SCOPE, false, undefined, { env: f.env });
     expect(preview).toMatchObject({ status: 'preview', basis: 'first-run', exact: true, serviceIdentity: { status: 'kept' } });
     expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual([...V12, ...V13]);
-    expect(await upgradePolicyTemplateInstallation(f.project, SCOPE, true, preview.expect!, { env: f.env })).toMatchObject({ status: 'upgraded', template: { to: 13 } });
+    expect(await upgradePolicyTemplateInstallation(f.project, SCOPE, true, preview.expect!, { env: f.env })).toMatchObject({ status: 'upgraded', template: { to: 15 } });
     await expect(inspectConfiguredInventory(f.project, { schemaVersion: 1, scopeId: SCOPE }, { env: f.env })).resolves.toMatchObject({ page: { entries: [], nextAfter: null } });
     await stopConfiguredRuntimeService(f.project, { env: f.env }); await service.done;
     f.errors.length = 0; f.pages.length = 0; await f.start(); await f.settle();

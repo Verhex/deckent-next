@@ -27,3 +27,22 @@ it('does not read denied worker values, metrics or usage and excludes them from 
   expect(readResources).not.toHaveBeenCalled(); expect(readDispatch).not.toHaveBeenCalled(); expect(readMetrics).not.toHaveBeenCalled(); expect(readEvents).not.toHaveBeenCalled();
   expect(report).toMatchObject({ attempts: [], withheld: 1, summary: { measuredCpuSeconds: null, measuredApiUsdNanos: null, sampledCpuSecondsPerAcceptedTask: null } });
 });
+// ATAMA-0 read path: a v2 metric row supplies the human-decision count and the model evidence label; v1 or absent rows stay unknown.
+function pinnedRun(): RunSnapshot {
+  const copy = JSON.parse(JSON.stringify(run()));
+  copy.execution.tasks[0].profile.parameters = { fixture: true, nativeSubscription: { provider: 'claude', model: { channelId: 'claude', modelId: 'claude-opus-5-5', auxiliaryModelIds: [] } } };
+  return copy;
+}
+const metric = (decision: 'system' | 'human', verdict: string) => ({ schemaVersion: 2 as const, identity: { scopeId: 's', runId: 'r', taskId: 't', attemptId: 'a' },
+  workClass: null, policyRevision: null, profileVersion: null, skillSetDigest: null, model: { channelId: 'claude', modelId: 'claude-opus-5-5' }, durationMs: null, cost: null,
+  attemptSequence: 1, evidenceReferences: [], effort: null, outcome: { kind: 'task' as const, status: 'accepted' as const, decision },
+  actualModel: { reported: 'claude-opus-5-5', verdict, evidence: 'sealed' as const, capability: 'session-events' as const }, evidenceKinds: [], acceptanceScore: null });
+it.each([['system', 'verified', 0, 'verified'], ['human', 'verified', 1, 'verified'], ['system', 'substituted', 0, 'unknown'], ['system', 'start-name-matched', 0, 'requested']] as const)(
+  'a v2 %s row with a %s model verdict counts %i human decisions and labels the model %s', (decision, verdict, human, evidence) => {
+    const row = projectAttemptWorkCost(pinnedRun(), identity, resources, null, metric(decision, verdict), undefined, null);
+    expect(row.axes.humanInterventions).toBe(human); expect(row.model).toEqual({ channelId: 'claude', modelId: 'claude-opus-5-5', evidence });
+  });
+it('a pinned Attempt without a v2 row keeps the requested label and an unknown human count', () => {
+  const row = projectAttemptWorkCost(pinnedRun(), identity, resources, null, undefined, undefined, null);
+  expect(row.axes.humanInterventions).toBeNull(); expect(row.model?.evidence).toBe('requested');
+});

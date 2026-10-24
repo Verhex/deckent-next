@@ -1,7 +1,7 @@
 import { clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, CONFIG_CHANGE_DISPLAY_MAX, encodeCommandProjection, identitySchema, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
-import { digestText, serializeJsonDocument, sha256 } from '#platform/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, CONFIG_CHANGE_DISPLAY_MAX, encodeCommandProjection, identitySchema, isAiPrincipal, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
+import { digestText, serializeJsonDocument, sha256, ErrorRegistry } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigApprovalPort, type ConfigAuthorityPort, type ConfigChangeOutcome, type ConfigChangeSubject, type ConfigDocumentPort,
   type ConfigSnapshot, type ConfigWriteInput, type ConfigWritePermission } from './contract.js';
 import { allConfigKeys, atConfigPath, configDisplayText, configFieldView, configPath, definitionFor } from './registry.js';
@@ -32,7 +32,7 @@ export class ConfigApplication {
     const snapshot = await this.documents.snapshot(input.layer ?? 'project');
     if (input.expect !== undefined && input.expect !== snapshot.digest) throw new ConfigApplicationError('CONFIG_CONCURRENT_REVISION_HOLD');
     const document = planConfigChange(snapshot.document, input.keyPath, input.value, action === 'unset');
-    validateConfigLayers(snapshot, document);
+    await this.check(input, snapshot, document);
     return { digest: snapshot.digest, before: configDisplayText(snapshot, input.keyPath, atConfigPath(snapshot.document, configPath(input.keyPath)), Number.MAX_SAFE_INTEGER),
       after: configDisplayText(snapshot, input.keyPath, atConfigPath(document, configPath(input.keyPath)), Number.MAX_SAFE_INTEGER) };
   }
@@ -77,7 +77,7 @@ export class ConfigApplication {
     if ((await approvals.evaluate(input)).decision === 'allow') return { status: 'applied', result: await this.write(input, unset, approvals, null), approvalId: null };
     const preview = await this.documents.snapshot(input.layer ?? 'project');
     if (input.expect !== undefined && input.expect !== preview.digest) throw new ConfigApplicationError('CONFIG_APPROVAL_STALE');
-    validateConfigLayers(preview, planConfigChange(preview.document, input.keyPath, input.value, unset));
+    await this.check(input, preview, planConfigChange(preview.document, input.keyPath, input.value, unset));
     // Re-evaluated on the previewed state: the rule that asks is the one the card names.
     const authorization = await approvals.evaluate(input);
     if (authorization.decision === 'allow') return { status: 'applied', result: await this.write(input, unset, approvals, null), approvalId: null };
@@ -85,6 +85,11 @@ export class ConfigApplication {
     const admission = await approvals.admit(input, subject, authorization);
     if ('pending' in admission) return { status: 'approval-pending', commandId: input.commandId, expect: preview.digest, keyPath: input.keyPath, layer: preview.layer, approval: admission.pending };
     return { status: 'applied', result: await this.write(input, unset, approvals, subject), approvalId: admission.approved.approvalId };
+  }
+  /** Layer validation, the person-only subscription profiles and the precondition port, in that order, over one planned document. */
+  private async check(input: ConfigWriteInput, snapshot: ConfigSnapshot, document: Record<string, unknown>) {
+    const checked = validateConfigLayers(snapshot, document); assertSubscriptionProfilesByPerson(input, snapshot.document, document);
+    await this.authority.precondition?.(input, snapshot.effective, checked.config);
   }
   private admitInput(input: ConfigWriteInput) {
     clientCommandIdSchema.parse(input.commandId); identitySchema.parse(input.scopeId); verifiedPrincipalSchema.parse(input.principal);
@@ -108,7 +113,7 @@ export class ConfigApplication {
     return this.documents.publish(input, async snapshot => {
       if (approved && snapshot.digest !== approved.expectDigest) throw new ConfigApplicationError('CONFIG_APPROVAL_STALE');
       if (input.expect !== undefined && input.expect !== snapshot.digest) throw new ConfigApplicationError('CONFIG_CONCURRENT_REVISION_HOLD');
-      const document = planConfigChange(snapshot.document, input.keyPath, input.value, unset); validateConfigLayers(snapshot, document);
+      const document = planConfigChange(snapshot.document, input.keyPath, input.value, unset); await this.check(input, snapshot, document);
       let revision: string, approvalId: string | null = null;
       if (!approvals) revision = await this.authority.authorize(input);
       else {
@@ -129,6 +134,15 @@ export class ConfigApplication {
       await this.authority.audit(event); return { document, event };
     });
   }
+}
+/**
+ * Owner Q-H3 / SIWC3: a subscription invocation profile (the person's own login, its uid floor and its delegated-use consent) is created, changed or
+ * removed only by a person; an AI or MCP actor's write that would touch one is refused on every surface (`config set`, MCP `connect_model`).
+ */
+function assertSubscriptionProfilesByPerson(input: ConfigWriteInput, before: unknown, after: unknown) {
+  const held = (document: unknown) => JSON.stringify(((document as { provider_invocation_profiles?: { profiles?: unknown } } | null)?.provider_invocation_profiles?.profiles as unknown[] | undefined ?? [])
+    .filter(profile => (profile as { billingAxis?: unknown } | null)?.billingAxis === 'subscription'));
+  if (isAiPrincipal(input.principal) && held(before) !== held(after)) throw ErrorRegistry.createError('HEADLESS_PERSON_REQUIRED');
 }
 /** The approval subject of one previewed change: display copies are redacted and bounded; the exact value is bound by its digest only. */
 function configChangeSubject(snapshot: ConfigSnapshot, input: ConfigWriteInput, unset: boolean, ruleId: string): ConfigChangeSubject {

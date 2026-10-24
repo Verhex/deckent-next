@@ -30,7 +30,11 @@
     "scratch": "state/scratch",
     "instructionTrust": "state/instruction-trust",
     "treeScanCache": "state/tree-scan-cache",
-    "autonomyShadow": "state/autonomy-shadow"
+    "autonomyShadow": "state/autonomy-shadow",
+    "memoryPurges": "state/memory-purges",
+    "signers": "signers",
+    "brainWaits": "state/brain-waits",
+    "headlessLogins": "headless/logins"
   },
   "bootstrapResource": "config",
   "fixedResources": ["config", "installationJournal", "projectIdentity"],

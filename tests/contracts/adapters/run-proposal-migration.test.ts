@@ -10,7 +10,7 @@ it('v52 refuses proposal reads and current writers; the explicit v53 transaction
     expect(() => requireLedgerVersion(db, RUN_PROPOSAL_LEDGER_VERSION)).toThrow('ATTEMPT_STORE_VERSION');
     expect(() => migrateLedger(db, 'forbid')).toThrow('ATTEMPT_STORE_VERSION');
     db.exec('BEGIN IMMEDIATE'); migrateLedger(db, 'allow'); db.exec('COMMIT');
-    expect(CURRENT_LEDGER_VERSION).toBe(59); expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(59);
+    expect(CURRENT_LEDGER_VERSION).toBe(70); expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(70);
     expect(db.prepare('SELECT policy FROM execution_pools').get()!.policy).toBe(bytes);
     for (const table of ['run_proposals', 'run_proposal_receipts']) expect(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()!.n).toBe(0);
   } finally { db.close(); }

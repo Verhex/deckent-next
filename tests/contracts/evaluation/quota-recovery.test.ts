@@ -78,13 +78,15 @@ it.skipIf(process.platform === 'win32').each(['claude-rate-limit', 'codex-text',
   const f = await fixture(source); const run = (await f.store.loadRun('s', 'r'))!;
   const command = { schemaVersion: 1, identity: f.identity, commandId: 'evaluate-quota', expectedRevision: run.revision };
   const first = await f.app.execute(command);
-  expect(first.snapshot.state).toMatchObject({ kind: 'parked', reason: 'quota-exhausted', since: 1000, deadline: 6000 });
+  // S9: an unknown reset waits at most the configured bound (maxWaitMs 10000 here), not the 24 h parking timeout.
+  expect(first.snapshot.state).toMatchObject({ kind: 'parked', reason: 'quota-exhausted', since: 1000, deadline: source === 'claude-rate-limit' ? 6000 : 11000 });
   expect(first.snapshot.progress[0]!.phase).toBe('pending'); expect(f.evaluator.evaluate).not.toHaveBeenCalled();
   const attempt = (await f.store.load('s', f.identity.attemptId))!;
   expect(attempt.lastObservation?.result).toMatchObject({ kind: 'quota-exhausted', quota: { source }, evidenceDigest: expect.stringMatching(/^[a-f0-9]{64}$/) });
   expect(await f.app.execute(command)).toEqual(first); expect((await f.store.loadRun('s', 'r'))!.revision).toBe(first.snapshot.revision);
   await expect(f.app.execute({ ...command, identity: { ...f.identity, generation: 2 } })).rejects.toThrow('RUN_COMMAND_CONFLICT');
-  const db = new DatabaseSync(f.path, { readOnly: true }); expect(db.prepare('SELECT count(*) n FROM acceptance_metrics').get()?.n).toBe(0); db.close();
+  // ATAMA-0: a park is its own quota-park metric row (no Task outcome); the immutable replay writes no second row.
+  const db = new DatabaseSync(f.path, { readOnly: true }); expect(db.prepare('SELECT outcome_kind FROM acceptance_metrics').all()).toEqual([{ outcome_kind: 'quota-park' }]); db.close();
 });
 it.skipIf(process.platform === 'win32')('resets once, retains the old quota Attempt across restart and reserves the same frozen profile with the next generation', async () => {
   const f = await fixture(); const parked = await f.evaluate();
@@ -99,12 +101,13 @@ it.skipIf(process.platform === 'win32')('resets once, retains the old quota Atte
   expect((await reopened.loadRun('s', 'r'))!.bindings).toHaveLength(1);
   await f.finish(fresh.identities[0]!, 12000); await f.evaluate(fresh.identities[0]!); f.setNow(12000);
   await f.lifecycle.advance({ schemaVersion: 1, scopeId: 's', runId: 'r' });
-  expect((await f.store.loadRun('s', 'r'))!.state).toMatchObject({ kind: 'terminal', reason: 'park-timeout' });
+  expect((await f.store.loadRun('s', 'r'))!.state).toMatchObject({ kind: 'parked', reason: 'quota-ask' });
 });
 it.skipIf(process.platform === 'win32').each([null, 999])('does not treat unknown or stale reset %s as permission to retry', async resetsAtMs => {
   const f = await fixture('claude-rate-limit', { resetsAtMs }); await f.evaluate(); f.setNow(6000);
-  await f.lifecycle.advance({ schemaVersion: 1, scopeId: 's', runId: 'r' });
-  const run = (await f.store.loadRun('s', 'r'))!; expect(run.state).toMatchObject({ kind: 'terminal', reason: 'park-timeout' }); expect(run.previousBindings).toBeUndefined();
+  expect(await f.lifecycle.advance({ schemaVersion: 1, scopeId: 's', runId: 'r' })).toBeNull(); // still inside the configured bound
+  f.setNow(11000); await f.lifecycle.advance({ schemaVersion: 1, scopeId: 's', runId: 'r' });
+  const run = (await f.store.loadRun('s', 'r'))!; expect(run.state).toMatchObject({ kind: 'parked', reason: 'quota-ask' }); expect(run.progress[0]!.phase).toBe('pending'); expect(run.previousBindings).toBeUndefined();
 });
 it.skipIf(process.platform === 'win32')('holds other Runs and reserved Attempts on the same channel; unrelated channels and existing custody continue', async () => {
   const f = await fixture(); await f.create('reserved'); const reserved = await f.reserveRun('reserved');
@@ -146,11 +149,11 @@ it.skipIf(process.platform === 'win32').each([{ interrupted: true }, { partial: 
 it.skipIf(process.platform === 'win32')('uses verified bootstrap exit fallback without a seal, zero retry config and scope-safe monitor wait projection', async () => {
   const f = await fixture('exit-text', { noSeal: true, maxResumes: 0 }); const parked = (await f.evaluate()).snapshot;
   expect(parked.quotaWaits?.[0]).toMatchObject({ maxResumes: 0, quota: { resetsAtMs: null, source: 'exit-text' } });
-  expect(runSnapshotSchema.parse(parked)).toEqual(parked); expect(projectRunView(parked).quotaWaits).toEqual([{ taskId: 't', since: 1000, deadline: 6000, resetsAtMs: null, retryLimitReached: true }]);
+  expect(runSnapshotSchema.parse(parked)).toEqual(parked); expect(projectRunView(parked).quotaWaits).toEqual([{ taskId: 't', since: 1000, deadline: 11000, resetsAtMs: null, retryLimitReached: true }]);
   expect(JSON.stringify(projectRunView(parked))).not.toContain(parked.quotaWaits![0]!.evidenceDigest);
   expect(JSON.stringify(projectRunView(parked).quotaWaits)).not.toContain(pin.channelId);
   const monitor = projectMonitorRun({ run: { snapshot: parked, poolId: 'p', admitted: true, createdAtMs: 0, attempts: [] }, approvals: [], pool: null, workers: new Map(), observedAt: 1000 });
-  expect(monitor.blocker).toMatchObject({ detail: 'quota-retry-limit', deadlineMs: 6000 });
+  expect(monitor.blocker).toMatchObject({ detail: 'quota-retry-limit', deadlineMs: 11000 });
   expect(quotaWaitText(6000, false, 'tr')).toContain('bilinmiyor'); expect(quotaWaitText(6000, true, 'en')).toContain('resumes at');
   expect(quotaWaitText(6000, true, 'tr', true)).toContain('sınırına');
 });
@@ -268,13 +271,15 @@ it.skipIf(process.platform === 'win32').each(['codex-text', 'exit-text', 'unknow
     variant === 'unknown' ? { resetsAtMs: null } : variant === 'bounded' ? { resetsAtMs: 50000, maxWaitMs: 10000 } : {});
   const parked = (await f.evaluate()).snapshot;
   await f.create('waiting'); expect((await f.reserveRun('waiting')).identities).toHaveLength(1);
-  expect(parked.state).toMatchObject({ kind: 'parked', deadline: 6000 });
+  // S9: a reset beyond the bound asks the person at once; every other weak signal waits the bound and then asks. None cancels.
+  expect(parked.state).toMatchObject(variant === 'bounded' ? { kind: 'parked', reason: 'quota-ask' } : { kind: 'parked', reason: 'quota-exhausted', deadline: 11000 });
   if (variant === 'bounded') {
     expect(parked.quotaWaits?.[0]).toMatchObject({ resetBoundExceeded: true, quota: { resetsAtMs: 50000 } });
     expect((await f.store.load('s', f.identity.attemptId))!.lastObservation?.result).toMatchObject({ resetBoundExceeded: true });
   }
-  f.setNow(6000); await f.lifecycle.advance({ schemaVersion: 1, scopeId: 's', runId: 'r' });
-  expect((await f.store.loadRun('s', 'r'))!.state).toMatchObject({ kind: 'terminal', reason: 'park-timeout' });
+  f.setNow(11000); await f.lifecycle.advance({ schemaVersion: 1, scopeId: 's', runId: 'r' });
+  const after = (await f.store.loadRun('s', 'r'))!;
+  expect(after.state).toMatchObject({ kind: 'parked', reason: 'quota-ask' }); expect(after.progress[0]!.phase).toBe('pending');
 });
 it.skipIf(process.platform === 'win32')('owner release re-enables own and other reservations, retains reset evidence, seals audit and cannot replay over a later hold', async () => {
   const f = await fixture(); const before = (await f.evaluate()).snapshot; await f.create('waiting');

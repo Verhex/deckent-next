@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
-import { ErrorRegistry, emit, loadConfig, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationPurgeCommand, parseModelInvocationQuery, type ModelInvocationCancellationCommand, type ModelInvocationCancellationReceipt, type ModelInvocationControlRecord, type ModelInvocationCommand,
+import { ErrorRegistry, emit, loadConfig, t, terminalSafeText, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { readHeadlessEgress, parseModelInvocationCancellationCommand, parseModelInvocationCommand, parseModelInvocationPurgeCommand, parseModelInvocationQuery, type ModelInvocationCancellationCommand, type ModelInvocationCancellationReceipt, type ModelInvocationControlRecord, type ModelInvocationCommand,
   type ModelInvocationPlanUsage, type ModelInvocationPurgeCommand, type ModelInvocationPurgeReceipt, type ModelInvocationQuery, type ModelInvocationReceipt } from '#domain/index.js';
 import type { ModelInvocationCancellationResult, ModelInvocationPurgeResult, ModelInvocationResult, ModelInvocationInspection, ProviderSpendReservation } from '#engine/index.js';
 import type { ModelCommandContext } from './context.js';
@@ -70,6 +70,13 @@ function renderSpending(spending: ProviderSpendReservation | null, locale: Local
   }
   return t('models.invocation.spendingSettledLocal', { ...parameters, amount: spending.disposition.amountMinorUnits }, locale);
 }
+/** f5: a subscription CLI call's isolated network (from its stored content, so only with includeResponseContent and before a purge): counts and host names. */
+function renderEgress(item: ModelInvocationInspection, locale: Locale): string[] {
+  const adapterId = (item.invocation?.profile as { adapter?: { id?: unknown } } | undefined)?.adapter?.id;
+  const egress = typeof adapterId === 'string' ? readHeadlessEgress(adapterId, item.responseContent) : null;
+  return egress ? [t('models.invocation.headlessEgress', { connected: egress.connected, refused: egress.refused, other: egress.other,
+    hosts: Object.keys(egress.hosts).map(host => terminalSafeText(host)).join(', ') || '-' }, locale)] : [];
+}
 function render(receipt: ModelInvocationReceipt | null, locale: Locale, replayed?: boolean, purge?: ModelInvocationPurgeReceipt | null,
   control?: ModelInvocationControlRecord | null, spending?: ProviderSpendReservation | null, historyIntegrity?: 'not-recorded', planUsage?: ModelInvocationPlanUsage | null): string {
   if (!receipt) return [t('models.invocation.absent', {}, locale),
@@ -108,7 +115,8 @@ export async function modelInvocationCommand(argv: readonly string[], context: M
     if (!context.inspectModelInvocation) throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE');
     let query; try { query = parseModelInvocationQuery(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
     const result = await context.inspectModelInvocation(root, query, options);
-    emit(result, { ...sinks, json: args.json, render: item => render(item.invocation, locale, undefined, item.purge, item.control, item.spending, item.historyIntegrity, item.planUsage) });
+    emit(result, { ...sinks, json: args.json, render: item => [render(item.invocation, locale, undefined, item.purge, item.control, item.spending, item.historyIntegrity, item.planUsage),
+      ...renderEgress(item, locale)].join('\n') });
   } else if (args.action === 'purge-content') {
     if (!context.purgeModelInvocationContent) throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE');
     let command; try { command = parseModelInvocationPurgeCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }

@@ -132,7 +132,8 @@ describe.skipIf(process.platform !== 'linux')('AI delegation in /policy', () => 
     const title = locale === 'tr' ? 'Yapay zekâya devir' : 'AI delegation', keys = locale === 'tr' ? 'y: onayla' : 'y: confirm', grantAction = locale === 'tr' ? 'Bu adımı devret' : 'Delegate this step';
     const steps = [
       ['READY', [...'/policy', ENTER], 'start'], ['> scope', [ENTER], '+scopes'],
-      [w.groups, [...Array.from({ length: 8 }, () => DOWN), ENTER], '+groups'],
+      // Ten capability groups (S4 added `memory`, S7 `agents`) sit above the AI delegation entry.
+      [w.groups, [...Array.from({ length: 10 }, () => DOWN), ENTER], '+groups'],
       [title, [ENTER], '+delegation list'], [grantAction, [ENTER], '+grant action'],
       [keys, [ENTER], '+default cancel'], [title, [ENTER], '+cancelled list'],
       [grantAction, [ENTER], '+grant again'], [keys, ['y'], '+grant card'],

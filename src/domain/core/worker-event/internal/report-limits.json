@@ -20,6 +20,10 @@
     "sharedNotes": 50,
     "sharedNoteChars": 1000,
     "runSharedNotes": 500,
+    "lessons": 3,
+    "lessonTitleChars": 200,
+    "lessonBodyChars": 1000,
+    "lessonFieldChars": 500,
     "deliveredInputBytes": 1048576,
     "promptBytes": 8192
   }

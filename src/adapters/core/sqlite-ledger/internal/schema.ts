@@ -1,28 +1,6 @@
-import { migrateAuditCheckpoints } from './migration-v56.js';
-import { migrateQuotaWaits } from './migration-v54.js';
-import { migrateRunCreateApprovals } from './migration-v52.js';
-import { migrateMeasuredTariffSpend } from './migration-v49.js';
 import type { DatabaseSync } from 'node:sqlite';
+import { migrateAdoptionVerification, migrateAuditCheckpoints, migrateAuditEvents, migrateDecisionPort, migrateEffectProducerIndex, migrateExecutionPoolHolds, migrateImmediateEligibility, migrateMeasuredTariffSpend, migrateModelAllocationCheckpoints, migrateModelCatalog, migrateModelInvocationContents, migrateModelInvocationControl, migrateModelInvocationEvidence, migrateModelInvocationPurge, migratePoolCapacity, migrateProviderReportedSpend, migrateProviderSpend, migrateQuotaWaits, migrateRunCreateApprovals, migrateRunParking, migrateScopeRegistry, requireLedgerV5Custody, requireLedgerV6ProfileCompatibility, requireLedgerV8ExecutionRegistry } from '#adapters/core/sqlite-ledger-migrations/index.js';
 import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
-import { requireLedgerV5Custody } from './migration-v5.js';
-import { requireLedgerV6ProfileCompatibility } from './migration-v6.js';
-import { requireLedgerV8ExecutionRegistry } from './migration-v8.js';
-import { migrateImmediateEligibility } from './migration-v12.js';
-import { migrateModelInvocationEvidence } from './migration-v15.js';
-import { migrateModelInvocationContents } from './migration-v16.js';
-import { migrateModelInvocationPurge } from './migration-v17.js';
-import { migrateModelInvocationControl } from './migration-v18.js';
-import { migrateModelAllocationCheckpoints } from './migration-v19.js';
-import { migrateProviderSpend } from './migration-v20.js';
-import { migrateProviderReportedSpend } from './migration-v21.js';
-import { migrateScopeRegistry } from './migration-v39.js';
-import { migrateAuditEvents } from './migration-v41.js';
-import { migrateAdoptionVerification } from './migration-v42.js';
-import { migrateModelCatalog } from './migration-v43.js';
-import { migratePoolCapacity } from './migration-v47.js';
-import { migrateExecutionPoolHolds } from './migration-v44.js';
-import { migrateRunParking } from './migration-v45.js';
-import { migrateDecisionPort } from './migration-v46.js';
 import { getConfigFieldDefault } from '#platform/index.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
 export const DISPATCH_LEDGER_VERSION = 8;
@@ -37,13 +15,52 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 59;
+export const CURRENT_LEDGER_VERSION = 70;
+// S8-3/S8-4 catalog suggestions (lane v70 after s82's v69; the lead renumbers at landing): sealed suggestion rows whose state moves once from `open`
+// (one revision, CAS) with append-only state history, and the aggregator's rebuildable per-key window cache. Additive; older code ignores the tables.
+// Downgrade = restore the pre-switch backup (an older build refuses v70).
+export const CATALOG_SUGGESTION_LEDGER_VERSION = 70;
+// S8-5 signer keys (lane v68 after s81's v67; lead renumbers): one row per (scope, key) that moves only active → revoked (revision 1 → 2), append-only
+// revisions and command receipts. Additive; no earlier row is read or rewritten. Downgrade = restore the pre-switch backup.
+export const SIGNER_KEY_LEDGER_VERSION = 68;
+// S8-1a agent standing (lane v67 after s6r4's v66; lead renumbers): current standing per (agent revision, WorkClass), forward-only and undeletable, append-only
+// history and S8-4 command receipts. Additive; pre-v67 agents have no standing row (not selectable until revised). Downgrade = restore the pre-switch backup.
+export const AGENT_STANDING_LEDGER_VERSION = 67;
+// S8-2 aggregator pass position (lane v69 after s85's v68 signer keys; the lead renumbers at landing): one
+// rebuildable pass record per scope whose position only moves forward and is never deleted. Additive; older code ignores the table.
+export const CATALOG_EVOLUTION_LEDGER_VERSION = 69;
+// S6R-4 recovery cases (lane v66 after s4b1's v65; the lead renumbers at landing): one additive table, a case per lost Attempt and Nervous rule
+// (open → gated → decided → applied | escalated), moved only forward by one revision under compare-and-swap; a closed case is final and no row is
+// deleted. No earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v66).
+export const RECOVERY_CASES_LEDGER_VERSION = 66;
+// S4B-1 memory automation (lane v65 after s7's v64; the lead renumbers at landing): the one memory migration for S4B-1..S4B-7 — support rows,
+// extraction receipts + cursor, evaluation records, contests, purge records (all sealed; append-only except the cursor and a contest's single
+// resolution) and the revision trigger that allows only the tombstone rewrite of the same (scope, entry, revision): a sealed record whose
+// `$.value.content.purged` is true, over a row that is not yet a tombstone. No earlier row is read or rewritten. Downgrade = restore the pre-switch
+// backup (an older build refuses v65).
+export const MEMORY_AUTOMATION_LEDGER_VERSION = 65;
+// S7 agent/skill catalog (lane v64 after s6r1's v63; the lead renumbers at landing): additive tables only, append-only revisions and receipts; an existing
+// table is refused, never adopted; no earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v64).
+export const AGENT_CATALOG_LEDGER_VERSION = 64;
+// S6R-1 effect producer (v63 after s1's v62): every new effect intent records its producer (Attempt | principal) in the record; the step adds
+// only the producer-Attempt index (migration-v63.ts). Older intents stay as written. Downgrade = restore the pre-switch backup.
+export const EFFECT_PRODUCER_LEDGER_VERSION = 63;
+// ATAMA-1 system assignment (lane v62; the lead renumbers at landing): Run graphs may hold work input v2 (no model), Run execution snapshots a
+// sealed `assignment` per task, and metric rows its summary. Additive: every v61 record parses unchanged, nothing is read or rewritten; the
+// version step alone keeps an older build (which refuses a newer ledger) from reading the new records. Downgrade = restore the pre-switch backup.
+export const WORKER_ASSIGNMENT_LEDGER_VERSION = 62;
+// S4 memory journal v1 (v61 after S0's v60 on a55/integrate): additive tables (current entry, append-only revisions and receipts, FTS5 index
+// keyed by the entry's explicit `id`, which VACUUM never renumbers). No earlier row is read or rewritten. Downgrade = restore the pre-switch backup (an older build refuses v61).
+export const MEMORY_JOURNAL_LEDGER_VERSION = 61;
 // PRE-7 ORTAM-HAZIR: environment park + `not-run` acceptance vocabularies (Run park reason and its requirement as failure code, a
 // `launch-refused` previous binding, the launch refusal's `requirement` and `probe`, a binding's probe custody `probes`, report evidence `not-run`,
 // task reason `acceptance-check-not-run`).
 // Additive: every v58 record already parses under the widened contracts, so no row is read or rewritten; the version step alone keeps an
 // older build (which refuses a newer ledger) from reading the new vocabulary. Downgrade = restore the pre-switch backup.
 export const ENVIRONMENT_READINESS_LEDGER_VERSION = 59;
+// ATAMA-0 metrics v2: the producer key gains the outcome kind (one producer may record a human decision and a Run observation) and
+// `superseded_by` makes one current row per (Task, Attempt, outcome kind) a storage invariant. v1 rows are kept byte for byte and in order.
+export const METRICS_V2_LEDGER_VERSION = 60;
 // BENIMSEME-DEPO-KIMLIGI: adoptions numbered per (repository, target); pre-v58 rows stamped 'pre-v58'; settled 2 = released as not applied.
 export const ADOPTION_REPOSITORY_LEDGER_VERSION = 58;
 export const MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION = 55;
@@ -68,7 +85,107 @@ export const DECISION_PORT_LEDGER_VERSION = 46;
 export const INTEGRATION_LEDGER_VERSION = 30;
 // Sealed worker event logs (table since v35); read-only readers require it before reading a log.
 export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
+const append = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;`).join('');
+const memoryAppend = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;`).join('');
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  [CATALOG_SUGGESTION_LEDGER_VERSION]: `CREATE TABLE catalog_suggestions(scope_id TEXT NOT NULL,suggestion_id TEXT NOT NULL,kind TEXT NOT NULL,key_digest TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN('open','decided','dismissed','superseded')),state_revision INTEGER NOT NULL CHECK(state_revision>0),seq INTEGER NOT NULL,record TEXT NOT NULL,
+    state_record TEXT NOT NULL,PRIMARY KEY(scope_id,suggestion_id)); CREATE INDEX catalog_suggestions_key ON catalog_suggestions(scope_id,key_digest,state);
+    CREATE INDEX catalog_suggestions_open ON catalog_suggestions(scope_id,state,seq);
+    CREATE TRIGGER catalog_suggestions_state_once BEFORE UPDATE ON catalog_suggestions WHEN NEW.scope_id IS NOT OLD.scope_id OR NEW.suggestion_id IS NOT OLD.suggestion_id
+      OR NEW.kind IS NOT OLD.kind OR NEW.key_digest IS NOT OLD.key_digest OR NEW.seq IS NOT OLD.seq OR NEW.record IS NOT OLD.record OR OLD.state IS NOT 'open' OR NEW.state IS 'open'
+      OR NEW.state_revision IS NOT OLD.state_revision+1 BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;
+    CREATE TABLE catalog_suggestion_states(scope_id TEXT NOT NULL,suggestion_id TEXT NOT NULL,revision INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,suggestion_id,revision));
+    CREATE TABLE catalog_evolution_windows(scope_id TEXT NOT NULL,key_digest TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,key_digest));
+    CREATE TRIGGER catalog_evolution_windows_no_delete BEFORE DELETE ON catalog_evolution_windows BEGIN SELECT RAISE(ABORT,'CATALOG_EVOLUTION_POSITION_CONFLICT'); END;
+    ${append('catalog_suggestions', 'DELETE')}${append('catalog_suggestion_states', 'UPDATE', 'DELETE')} PRAGMA user_version=70;`,
+  [CATALOG_EVOLUTION_LEDGER_VERSION]: `CREATE TABLE catalog_evolution_positions(scope_id TEXT PRIMARY KEY NOT NULL,position INTEGER NOT NULL CHECK(position>0),record TEXT NOT NULL);
+    CREATE TRIGGER catalog_evolution_positions_forward BEFORE UPDATE ON catalog_evolution_positions WHEN NEW.scope_id IS NOT OLD.scope_id OR NEW.position<=OLD.position
+      BEGIN SELECT RAISE(ABORT,'CATALOG_EVOLUTION_POSITION_CONFLICT'); END;
+    CREATE TRIGGER catalog_evolution_positions_no_delete BEFORE DELETE ON catalog_evolution_positions BEGIN SELECT RAISE(ABORT,'CATALOG_EVOLUTION_POSITION_CONFLICT'); END;
+    PRAGMA user_version=69;`,
+  [SIGNER_KEY_LEDGER_VERSION]: `CREATE TABLE skill_signer_keys(scope_id TEXT NOT NULL,key_id TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN('active','revoked')),
+    revision INTEGER NOT NULL CHECK(revision IN(1,2)),seq INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,key_id));
+    CREATE TRIGGER skill_signer_keys_revoke_only BEFORE UPDATE ON skill_signer_keys WHEN NEW.scope_id IS NOT OLD.scope_id OR NEW.key_id IS NOT OLD.key_id OR OLD.state IS NOT 'active'
+      OR NEW.state IS NOT 'revoked' OR NEW.revision IS NOT 2 BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;
+    CREATE TABLE skill_signer_key_revisions(scope_id TEXT NOT NULL,key_id TEXT NOT NULL,revision INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,key_id,revision));
+    CREATE TABLE skill_signer_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id));
+    ${append('skill_signer_keys', 'DELETE')}${append('skill_signer_key_revisions', 'UPDATE', 'DELETE')}${append('skill_signer_receipts', 'UPDATE', 'DELETE')} PRAGMA user_version=68;`,
+  [AGENT_STANDING_LEDGER_VERSION]: `CREATE TABLE agent_standings(scope_id TEXT NOT NULL,agent_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),work_class TEXT NOT NULL,
+    standing TEXT NOT NULL CHECK(standing IN('candidate','active','redesign-required','retired')),standing_revision INTEGER NOT NULL CHECK(standing_revision>0),record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,agent_id,revision,work_class)); CREATE INDEX agent_standings_class ON agent_standings(scope_id,work_class,standing,agent_id);
+    CREATE TRIGGER agent_standings_forward_only BEFORE UPDATE ON agent_standings WHEN NEW.scope_id IS NOT OLD.scope_id OR NEW.agent_id IS NOT OLD.agent_id OR NEW.revision IS NOT OLD.revision
+      OR NEW.work_class IS NOT OLD.work_class OR NEW.standing_revision IS NOT OLD.standing_revision+1 BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;
+    CREATE TABLE agent_standing_revisions(scope_id TEXT NOT NULL,agent_id TEXT NOT NULL,revision INTEGER NOT NULL,work_class TEXT NOT NULL,standing_revision INTEGER NOT NULL,record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,agent_id,revision,work_class,standing_revision)); CREATE TABLE agent_standing_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id));
+    ${append('agent_standings', 'DELETE')}${append('agent_standing_revisions', 'UPDATE', 'DELETE')}${append('agent_standing_receipts', 'UPDATE', 'DELETE')} PRAGMA user_version=67;`,
+  [RECOVERY_CASES_LEDGER_VERSION]: `CREATE TABLE recovery_cases(scope_id TEXT NOT NULL,case_id TEXT NOT NULL,run_id TEXT NOT NULL,task_id TEXT NOT NULL,attempt_id TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN('open','gated','decided','applied','escalated')),revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,case_id));
+    CREATE INDEX recovery_cases_task ON recovery_cases(scope_id,run_id,task_id,state);
+    CREATE TRIGGER recovery_cases_no_delete BEFORE DELETE ON recovery_cases BEGIN SELECT RAISE(ABORT,'RECOVERY_CASE_APPEND_ONLY'); END;
+    CREATE TRIGGER recovery_cases_forward_only BEFORE UPDATE ON recovery_cases WHEN NEW.scope_id IS NOT OLD.scope_id OR NEW.case_id IS NOT OLD.case_id
+      OR NEW.run_id IS NOT OLD.run_id OR NEW.task_id IS NOT OLD.task_id OR NEW.attempt_id IS NOT OLD.attempt_id OR NEW.revision IS NOT OLD.revision+1
+      OR OLD.state IN('applied','escalated') BEGIN SELECT RAISE(ABORT,'RECOVERY_CASE_APPEND_ONLY'); END;
+    PRAGMA user_version=66;`,
+  [MEMORY_AUTOMATION_LEDGER_VERSION]: `CREATE TABLE memory_entry_support(scope_id TEXT NOT NULL,entry_id TEXT NOT NULL,support_id TEXT NOT NULL,seq INTEGER NOT NULL,record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,support_id),FOREIGN KEY(scope_id,entry_id) REFERENCES memory_entries(scope_id,entry_id));
+    CREATE INDEX memory_entry_support_entry ON memory_entry_support(scope_id,entry_id,seq);
+    CREATE TABLE memory_extraction_receipts(scope_id TEXT NOT NULL,run_id TEXT NOT NULL,task_id TEXT NOT NULL,attempt_id TEXT NOT NULL,at_ms INTEGER NOT NULL,
+    proposed INTEGER NOT NULL CHECK(proposed>=0),record TEXT NOT NULL,PRIMARY KEY(scope_id,run_id,task_id,attempt_id));
+    CREATE INDEX memory_extraction_receipts_window ON memory_extraction_receipts(scope_id,at_ms);
+    CREATE TABLE memory_extraction_cursors(scope_id TEXT PRIMARY KEY NOT NULL,record TEXT NOT NULL);
+    CREATE TABLE memory_evaluations(scope_id TEXT NOT NULL,record_id TEXT NOT NULL,entry_id TEXT NOT NULL,seq INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,record_id));
+    CREATE INDEX memory_evaluations_entry ON memory_evaluations(scope_id,entry_id,seq);
+    CREATE TABLE memory_contests(scope_id TEXT NOT NULL,contest_id TEXT NOT NULL,entry_id TEXT NOT NULL,opened_at_ms INTEGER NOT NULL,record TEXT NOT NULL,resolution TEXT,
+    PRIMARY KEY(scope_id,contest_id));
+    CREATE INDEX memory_contests_open ON memory_contests(scope_id,entry_id) WHERE resolution IS NULL;
+    CREATE INDEX memory_contests_window ON memory_contests(scope_id,opened_at_ms);
+    CREATE TRIGGER memory_contests_resolve_once BEFORE UPDATE ON memory_contests WHEN OLD.resolution IS NOT NULL OR NEW.resolution IS NULL OR NEW.record IS NOT OLD.record
+      OR NEW.scope_id IS NOT OLD.scope_id OR NEW.contest_id IS NOT OLD.contest_id OR NEW.entry_id IS NOT OLD.entry_id OR NEW.opened_at_ms IS NOT OLD.opened_at_ms
+      BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    CREATE TABLE memory_purges(scope_id TEXT NOT NULL,purge_id TEXT NOT NULL,entry_id TEXT NOT NULL,content_digest TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,purge_id));
+    CREATE INDEX memory_purges_digest ON memory_purges(scope_id,content_digest);
+    ${memoryAppend('memory_entry_support', 'UPDATE', 'DELETE')}${memoryAppend('memory_extraction_receipts', 'UPDATE', 'DELETE')}${memoryAppend('memory_evaluations', 'UPDATE', 'DELETE')}
+    ${memoryAppend('memory_purges', 'UPDATE', 'DELETE')}${memoryAppend('memory_contests', 'DELETE')}${memoryAppend('memory_extraction_cursors', 'DELETE')}
+    DROP TRIGGER memory_entry_revisions_no_update;
+    CREATE TRIGGER memory_entry_revisions_tombstone_only BEFORE UPDATE ON memory_entry_revisions WHEN NOT (NEW.scope_id=OLD.scope_id AND NEW.entry_id=OLD.entry_id
+      AND NEW.revision=OLD.revision AND json_valid(NEW.record) AND json_valid(OLD.record) AND json_extract(NEW.record,'$.value.content.purged') IS 1
+      AND json_extract(OLD.record,'$.value.content.purged') IS NOT 1) BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    PRAGMA user_version=65;`,
+  [AGENT_CATALOG_LEDGER_VERSION]: `CREATE TABLE agent_definitions(scope_id TEXT NOT NULL,agent_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),parent_id TEXT,seq INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,agent_id));
+    CREATE TABLE agent_definition_revisions(scope_id TEXT NOT NULL,agent_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,agent_id,revision));
+    CREATE TABLE skill_definitions(scope_id TEXT NOT NULL,skill_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),seq INTEGER NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,skill_id));
+    CREATE TABLE skill_definition_revisions(scope_id TEXT NOT NULL,skill_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),content_digest TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,skill_id,revision));
+    CREATE TABLE agent_catalog_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN('agent','skill')),item_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id));
+    CREATE INDEX agent_definitions_recent ON agent_definitions(scope_id,seq DESC); CREATE INDEX skill_definitions_recent ON skill_definitions(scope_id,seq DESC);
+    ${append('agent_definitions', 'DELETE')}${append('skill_definitions', 'DELETE')}${append('agent_definition_revisions', 'UPDATE', 'DELETE')}
+    ${append('skill_definition_revisions', 'UPDATE', 'DELETE')}${append('agent_catalog_receipts', 'UPDATE', 'DELETE')} PRAGMA user_version=64;`,
+  [WORKER_ASSIGNMENT_LEDGER_VERSION]: 'PRAGMA user_version=62;',
+  [MEMORY_JOURNAL_LEDGER_VERSION]: `CREATE TABLE memory_entries(id INTEGER PRIMARY KEY,scope_id TEXT NOT NULL,entry_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),
+    state TEXT NOT NULL CHECK(state IN('candidate','verified','retired')),seq INTEGER NOT NULL,record TEXT NOT NULL,UNIQUE(scope_id,entry_id));
+    CREATE INDEX memory_entries_recent ON memory_entries(scope_id,seq DESC);
+    CREATE TRIGGER memory_entries_no_delete BEFORE DELETE ON memory_entries BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    CREATE TABLE memory_entry_revisions(scope_id TEXT NOT NULL,entry_id TEXT NOT NULL,revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,entry_id,revision),FOREIGN KEY(scope_id,entry_id) REFERENCES memory_entries(scope_id,entry_id));
+    CREATE TRIGGER memory_entry_revisions_no_update BEFORE UPDATE ON memory_entry_revisions BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    CREATE TRIGGER memory_entry_revisions_no_delete BEFORE DELETE ON memory_entry_revisions BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    CREATE TABLE memory_command_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,entry_id TEXT NOT NULL,revision INTEGER NOT NULL,record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,command_id));
+    CREATE TRIGGER memory_command_receipts_no_update BEFORE UPDATE ON memory_command_receipts BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    CREATE TRIGGER memory_command_receipts_no_delete BEFORE DELETE ON memory_command_receipts BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;
+    CREATE VIRTUAL TABLE memory_search USING fts5(text,tokenize='unicode61 remove_diacritics 2');
+    PRAGMA user_version=61;`,
+  // Table rebuild (primary key change); rowids are kept so "latest" stays the producer order. Downgrade = restore the pre-switch backup.
+  60: `CREATE TABLE acceptance_metrics_v60(scope_id TEXT NOT NULL,producer_command_id TEXT NOT NULL,run_id TEXT NOT NULL,task_id TEXT NOT NULL,
+    attempt_id TEXT NOT NULL,outcome_kind TEXT NOT NULL,record TEXT NOT NULL,superseded_by TEXT,PRIMARY KEY(scope_id,producer_command_id,outcome_kind));
+    INSERT INTO acceptance_metrics_v60(rowid,scope_id,producer_command_id,run_id,task_id,attempt_id,outcome_kind,record)
+      SELECT rowid,scope_id,producer_command_id,run_id,task_id,attempt_id,outcome_kind,record FROM acceptance_metrics ORDER BY rowid;
+    UPDATE acceptance_metrics_v60 AS m SET superseded_by=(SELECT n.producer_command_id FROM acceptance_metrics_v60 n WHERE n.scope_id=m.scope_id AND n.run_id=m.run_id
+      AND n.task_id=m.task_id AND n.attempt_id=m.attempt_id AND n.outcome_kind=m.outcome_kind AND n.rowid>m.rowid ORDER BY n.rowid LIMIT 1);
+    DROP TABLE acceptance_metrics; ALTER TABLE acceptance_metrics_v60 RENAME TO acceptance_metrics;
+    CREATE INDEX acceptance_metrics_attempt ON acceptance_metrics(scope_id,run_id,task_id,attempt_id,outcome_kind);
+    CREATE UNIQUE INDEX acceptance_metrics_current ON acceptance_metrics(scope_id,run_id,task_id,attempt_id,outcome_kind) WHERE superseded_by IS NULL;
+    PRAGMA user_version=60;`,
   59: 'PRAGMA user_version=59;',
   // Table rebuild (UNIQUE and CHECK change): every row is kept byte for byte with repository 'pre-v58'. Downgrade = restore the pre-switch backup.
   58: `CREATE TABLE workspace_adoptions_v58(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,repository TEXT NOT NULL,target_ref TEXT NOT NULL,
@@ -270,7 +387,8 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     [AUDIT_EVENT_LEDGER_VERSION]: () => migrateAuditEvents(db), [ADOPTION_VERIFICATION_LEDGER_VERSION]: () => migrateAdoptionVerification(db),
     [MODEL_CATALOG_LEDGER_VERSION]: () => migrateModelCatalog(db), [POOL_HOLD_LEDGER_VERSION]: () => migrateExecutionPoolHolds(db),
     [RUN_PARKING_LEDGER_VERSION]: () => migrateRunParking(db), [DECISION_PORT_LEDGER_VERSION]: () => migrateDecisionPort(db),
-    [POOL_CAPACITY_LEDGER_VERSION]: () => migratePoolCapacity(db), 49: () => migrateMeasuredTariffSpend(db) };
+    [POOL_CAPACITY_LEDGER_VERSION]: () => migratePoolCapacity(db), 49: () => migrateMeasuredTariffSpend(db),
+    [EFFECT_PRODUCER_LEDGER_VERSION]: () => migrateEffectProducerIndex(db) };
   for (let next = version + 1; next <= CURRENT_LEDGER_VERSION; next++) {
     if (next === 52) { migrateRunCreateApprovals(db); continue; }
     // Code-owned steps: each runs, then the version is recorded, in this one transaction.
@@ -280,7 +398,8 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     if (next === 54) { migrateQuotaWaits(db); continue; }
     const sql = migrations[next];
     if (!sql) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
-    if (next === RUN_PROPOSAL_LEDGER_VERSION) {
+    if (next === RUN_PROPOSAL_LEDGER_VERSION || next === MEMORY_AUTOMATION_LEDGER_VERSION || next === RECOVERY_CASES_LEDGER_VERSION || next === AGENT_STANDING_LEDGER_VERSION || next === SIGNER_KEY_LEDGER_VERSION || next === CATALOG_EVOLUTION_LEDGER_VERSION
+      || next === CATALOG_SUGGESTION_LEDGER_VERSION) {
       // A previous version cannot contain proposal objects. Refuse a contradictory
       // schema; never silently adopt an existing table or bypass append-only triggers.
       try { db.exec(sql); } catch { throw new AttemptStoreError('ATTEMPT_STORE_VERSION'); }

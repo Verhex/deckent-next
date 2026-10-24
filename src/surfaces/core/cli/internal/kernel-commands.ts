@@ -3,6 +3,8 @@ import type { InstallationCommandContext } from '#surfaces/core/cli-installation
 import type { TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
 import type { ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 import type { DecisionCommandContext } from '#surfaces/core/cli-decision/index.js';
+import type { MemoryCommandContext } from '#surfaces/core/cli-memory/index.js';
+import type { AgentsCommandContext } from '#surfaces/core/cli-agents/index.js';
 import type { RunCommandContext } from '#surfaces/core/cli-run/index.js';
 import type { TaskCommandContext, TaskIntegrationCheckHandler, TaskIntegrationPrepareHandler, TaskPatchHandler } from '#surfaces/core/cli-task/index.js';
 import type { ApprovalCommandContext } from '#surfaces/core/cli-approval/index.js';
@@ -20,7 +22,7 @@ export type { InferenceMetricsReading } from '#surfaces/core/cli-models/index.js
 /** Every host operation a CLI command may use; each command unit's narrower context is part of it. */
 export type { RunLifecycleHandler } from '#surfaces/core/cli-terminal/index.js';
 /** The terminal's slice (TERMINAL-LAUNCH) carries the monitor and config command contexts. */
-export interface CommandContext extends InstallationCommandContext, IdentityCommandContext, ModelCommandContext, DecisionCommandContext, TerminalLaunchContext,
+export interface CommandContext extends InstallationCommandContext, IdentityCommandContext, ModelCommandContext, DecisionCommandContext, MemoryCommandContext, AgentsCommandContext, TerminalLaunchContext,
   RunCommandContext, TaskCommandContext, ApprovalCommandContext, AdminCommandContext, KernelCommandContext {
   runMcpCommand?: McpCommandHandler;
   initialize?: () => void;

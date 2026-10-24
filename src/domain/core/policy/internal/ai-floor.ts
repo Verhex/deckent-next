@@ -1,4 +1,21 @@
-import { isAiPrincipal } from '#domain/core/principal/index.js';
+import { isAiPrincipal, isAuditorPrincipal, isCatalogAggregatorPrincipal, isMemoryDistillerPrincipal, isMemoryEvaluatorPrincipal, isNervousPrincipal, isRecoveryPrincipal } from '#domain/core/principal/index.js';
+/** S5 (AUDITOR-MODEL Q4): the only actions the auditor principal may ever be granted. A security invariant, never policy data. */
+export const AUDITOR_READ_ACTIONS = Object.freeze(['inspect', 'list', 'verify'] as const);
+/** S6 Nervous (K-B): the only actions the Nervous principal may ever be granted; it writes no state (the broker applies proposals). */
+export const NERVOUS_READ_ACTIONS = Object.freeze(['inspect', 'list'] as const);
+/** S4B-1 (owner S-M1/S-M2, S4B-DESIGN §5 A3, approved verbatim): the memory distiller's exact (resource kind, action) allow-list D1–D4. Every other
+ * pair is refused whatever a policy grants; inside the list a grant still decides each call. */
+export const MEMORY_DISTILLER_ALLOWED_PAIRS = Object.freeze([['memory', 'inspect'], ['memory', 'propose'], ['attempt', 'read-output'], ['run', 'inspect']] as const);
+/** S4B-3 (owner S-M3 2026-10-23, S4B-DESIGN §5 A5, approved verbatim): the memory evaluator's exact allow-list V1–V5 — read memory, verify a
+ * candidate, open a contest, read Runs, invoke its model. No propose, retire, purge or raw worker output (`attempt/read-output`). */
+export const MEMORY_EVALUATOR_ALLOWED_PAIRS = Object.freeze([['memory', 'inspect'], ['memory', 'verify'], ['memory', 'contest'], ['run', 'inspect'], ['model-invocation', 'invoke']] as const);
+/** S6R-4 (S6R-DESIGN §9, lead on s6r3 Q4): the recovery principal's exact allow-list — reconcile an Attempt, read a Run. It continues a lost task only
+ * through its own application under the owner's standing grant (`recovery-action`, a person's), never through a policy grant of its own. S6R-5: it
+ * invokes its `recovery-decision` role model (`model-invocation`/invoke; the role registry restricts which rows). */
+export const RECOVERY_ALLOWED_PAIRS = Object.freeze([['attempt', 'reconcile'], ['run', 'inspect'], ['model-invocation', 'invoke']] as const);
+/** S8-3 (S8-DESIGN §9): the catalog aggregator's exact allow-list — read the catalog, Runs and memory refs, suggest, narrow (each write signed by its own key). */
+export const CATALOG_AGGREGATOR_ALLOWED_PAIRS = Object.freeze([['agent-catalog', 'inspect'], ['agent-catalog', 'suggest'], ['agent-catalog', 'narrow'], ['run', 'inspect'], ['memory', 'inspect']] as const);
+const pairIn = (pairs: readonly (readonly [string, string])[], kind: string, action: string) => pairs.some(([allowedKind, allowed]) => allowedKind === kind && allowed === action);
 /**
  * Approval cards whose decision widens authority: identity profile distribution, MCP capability grants and the first-run template
  * upgrade/rollback (each also needs `policy.administer`, floored below; deciding the card is a second, independent route).
@@ -10,19 +27,43 @@ const AUTHORITY_APPROVAL_IDS = Object.freeze(['identity-profile', 'policy-mcp-ca
  * standing grants), authority/authenticator/assurance records, permission modes incl. full access, backup restore, every secret action,
  * authority approval cards, audit baselines and security configuration (incl. `execution.secretGate` exclusions). Owner 2026-10-19 (I-POL v13):
  * host changes outside the sandbox — installing an execution environment (Docker group membership is root-equivalent) and repairing the
- * installation itself — are never an AI's, whatever a policy grants; the person runs them at a terminal.
+ * installation itself — are never an AI's, whatever a policy grants; the person runs them at a terminal. S4: memory verify/retire likewise (S4B-1:
+ * purge and contest too; the memory distiller is held to its exact allow-list; S4B-3: the evaluator to its own, and only it may verify/contest).
  */
 export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assurance?: string }, resource: { readonly kind: string; readonly id: string }, action: string): boolean {
   if (!isAiPrincipal(actor)) return false;
+  // The auditor reads and writes nothing else: every other action (any resource, any extension's future action) is refused whatever is granted.
+  if (isAuditorPrincipal(actor) && !(AUDITOR_READ_ACTIONS as readonly string[]).includes(action)) return true;
+  if (isNervousPrincipal(actor) && !(NERVOUS_READ_ACTIONS as readonly string[]).includes(action)) return true;
+  if (isMemoryDistillerPrincipal(actor) && !pairIn(MEMORY_DISTILLER_ALLOWED_PAIRS, resource.kind, action)) return true;
+  if (isMemoryEvaluatorPrincipal(actor) && !pairIn(MEMORY_EVALUATOR_ALLOWED_PAIRS, resource.kind, action)) return true;
+  if (isRecoveryPrincipal(actor) && !pairIn(RECOVERY_ALLOWED_PAIRS, resource.kind, action)) return true;
+  if (isCatalogAggregatorPrincipal(actor) && !pairIn(CATALOG_AGGREGATOR_ALLOWED_PAIRS, resource.kind, action)) return true;
+  // S8-3: only the aggregator suggests and narrows; every other AI catalog write needs its own active key's signature (verified at commit) and a grant.
+  if (resource.kind === 'agent-catalog' && ['suggest', 'narrow'].includes(action) && !isCatalogAggregatorPrincipal(actor)) return true;
   if (resource.kind === 'operation' && resource.id === 'policy.administer' && ['execute', 'compensate'].includes(action)) return true;
   if (['authority-document', 'authenticator', 'approval-assurance'].includes(resource.kind) && !['inspect', 'list'].includes(action)) return true;
   if (resource.kind === 'backup' && action === 'restore') return true;
   if (resource.kind === 'execution-environment' && action === 'install' || resource.kind === 'installation' && action === 'repair') return true;
   if (resource.kind === 'permission-mode' && action === 'set') return true;
+  // S4 (law-audit fold 6, lead 2026-10-23): verified memory needs a human or an independent evaluation record, never the AI itself; retiring is the
+  // same knowledge change. S4B-1 (A11): purging content is a person's act. S4B-3 (A5 amendment, verbatim): `memory`/`verify` stays refused for every
+  // AI principal except the memory evaluator principal (the domain accepts it only with an independent-evaluation record it produced, on a model
+  // independent of the source worker model re-derived from the sealed Run); `contest` likewise only for it; retire and purge for every AI.
+  // Proposing a candidate and every read stay policy decisions.
+  if (resource.kind === 'memory' && ['verify', 'retire', 'purge', 'contest'].includes(action) && !(isMemoryEvaluatorPrincipal(actor) && ['verify', 'contest'].includes(action))) return true;
+  // S9 (owner L-A): the answer to an expired subscription-quota wait (keep waiting, next candidate) is a person's.
+  if (resource.kind === 'run-quota') return true;
   if (resource.kind === 'secret') return true;
+  // S6R-3: a standing approval of a Nervous stop action is the owner's; no AI holds it (Nervous itself proposes, the broker applies).
+  if (resource.kind === 'recovery-action') return true;
+  // S8-5 (S8-DESIGN §9, N22): signer rows are a person's — enrol, add, revoke and log repair are refused for every AI principal.
+  if (resource.kind === 'skill-signer' && action !== 'inspect') return true;
   if (resource.kind === 'approval' && action === 'decide' && AUTHORITY_APPROVAL_IDS.includes(resource.id)) return true;
   if (resource.kind === 'audit' && !['inspect', 'verify'].includes(action)) return true;
   if (resource.kind === 'agent-tool-call' && ['edit-authority', 'edit-floor'].includes(resource.id)) return true;
+  // S5b (Auditor owner decision 6): a safety hold (Nervous pause, Auditor park; any source but the public `operator` control) is a person's to lift.
+  if (resource.kind === 'run-hold' && action === 'resume' && resource.id !== 'operator') return true;
   if (resource.kind === 'config' && action === 'write') return protectedConfigKey(resource.id.slice(resource.id.indexOf(':') + 1));
   return false;
 }
@@ -34,6 +75,15 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
  */
 const PROTECTED_CONFIG_PATHS = Object.freeze(['policy', 'approvals', 'identity', 'security', 'storage', 'service', 'paths', 'shell', 'network', 'layout', 'execution',
   'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit',
+  // S4B-1 A10 (lead 2026-10-23, a tightening): the memory automation switches and registry overlay (`memoryAutomation`), and the reserved `memory` root.
+  'memory', 'memoryAutomation',
+  // S6R-5 (lead on s6r4 Q1): the recovery mode, which lets the recovery decision continue a lost task. S6R-6: the Nervous mode, which lets the
+  // broker fence, stop and release a worker (protected the same way: no AI switches either on or off).
+  'runRuntime.recovery', 'runRuntime.nervous',
+  // S3-3 (design §10, MINOR 4): the owner-only switch that makes the subscription Brain connect kind available on this installation.
+  'models.headless',
+  // S8-2 (S8-DESIGN §9): the catalog aggregator switch and the `catalog-evolution` registry overlay (thresholds, calibration) — no AI changes either.
+  'catalogEvolution',
   'terminal.shell.realm', 'terminal.shell.environment', 'terminal.fetch.egress', 'terminal.fetch.allowedHosts']);
 export function protectedConfigKey(keyPath: string): boolean {
   const key = keyPath.replace(/\[[^\]]*\]/gu, '.0').replace(/\.+$/u, '');

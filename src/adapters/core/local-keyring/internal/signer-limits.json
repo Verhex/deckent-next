@@ -1,0 +1,6 @@
+{
+  "revocationLogFile": "revocations.log",
+  "revocationLogMaxBytes": 1048576,
+  "revocationLogMaxEntries": 4096,
+  "lockTimeoutMs": 5000
+}

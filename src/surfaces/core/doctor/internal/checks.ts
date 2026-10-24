@@ -4,6 +4,8 @@ import { renderAuditReason, renderAuditStatus } from './audit.js';
 import { shortImageId } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
 import { firstJobCommand, firstJobSteps, firstJobTitle } from './first-job.js';
+import type { RecoveryModeState } from '#engine/index.js';
+import { recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
 
 /** The four groups of the owner-accepted doctor view (CLI review 2026-10-19 §doctor): Kurulum / Güvenlik / Çalışma / Araçlar. */
 export type DoctorGroup = 'setup' | 'security' | 'work' | 'tools';
@@ -23,6 +25,15 @@ export interface DoctorCheckFacts {
   readonly backupPassphraseStored: boolean | null;
   /** Active models whose catalog lifecycle is past `active` (registry `retirementStates`); null when the catalog could not be read. */
   readonly retiringModels: readonly Readonly<{ modelId: string; channelId: string; state: string; date: string | null }>[] | null;
+  /** M2: catalog models no tier/role row names (every role refuses them until a person assigns one); null or absent when not read. */
+  readonly pendingRoleModels?: readonly Readonly<{ modelId: string; channelId: string }>[] | null;
+  /** S3-3: each subscription Brain connection of the scope (from its profile and last preflight record; no spawn): login kind, plan, directory,
+   * channel state and consent; `state: unknown` when no check ran yet. Absent or null when not read. */
+  readonly headlessLogins?: readonly Readonly<{ state: 'open' | 'closed' | 'unknown'; authMethod: string | null; subscriptionType: string | null; configDir: string;
+    /** s3c: the Brain's own login dir (true), another one sealed before (false: the doctor suggests the move), or not read. */
+    owned?: boolean; consent: readonly string[]; isolation?: Readonly<{ launcher: string; version: string }> | 'unavailable' | null;
+    /** f5: the realm gateway's cumulative refusals (host names most refused first, `other` without a valid name); null: none recorded. */
+    egress?: Readonly<{ refused: number; hosts: readonly string[]; other: number }> | null }>[] | null;
   /** `missing`: the admission names a pool whose ledger row does not exist yet (`deckent init pool` provisions it). */
   readonly poolStatus: 'ready' | 'drift' | 'unavailable' | 'unconfigured' | 'missing';
   /** I-S7: whether an execution section (worker image) and an admission registry are configured; absent → the pool status alone decides. */
@@ -34,6 +45,8 @@ export interface DoctorCheckFacts {
   readonly workerImage?: 'present' | 'missing' | 'unknown' | null;
   /** PRE-34: the execution environment as `deckent init` decides it (same detection and setup decision; read-only); null when it could not be asked. */
   readonly executionEnvironment?: ExecutionEnvironmentDoctorView | null;
+  /** S6R-6: lost-worker recovery modes and the owner's standing continuation grant in this scope; null or absent when not read. */
+  readonly recoveryMode?: RecoveryModeState | null;
   /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
   readonly secretUse?: readonly DoctorSecretUse[] | null;
 }
@@ -141,6 +154,36 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   else if (!f.retiringModels.length) rows.push(row('work', 'work.models', 'ok', t('doctor.check.models.ok', {}, l)));
   else for (const model of f.retiringModels) rows.push(row('work', 'work.models', 'warning', t('doctor.check.models.retiring', { model: model.modelId, channel: model.channelId, state: model.state === 'retired' ? t('doctor.check.models.state.retired', {}, l) : t('doctor.check.models.state.deprecated', {}, l), date: model.date ?? '-' }, l),
     scoped('deckent models list', f)));
+  // M2: a new catalog model fails closed until a person gives it a tier and roles; shown up to the registry bound, then counted.
+  const pending = f.pendingRoleModels ?? [], shown = pending.slice(0, registry.pendingRoleRowsShown);
+  for (const model of shown) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.pending', { model: terminalSafeText(model.modelId), channel: terminalSafeText(model.channelId) }, l),
+    scoped(`deckent models roles set --channel ${model.channelId} --model ${model.modelId} --tier <tier> --roles <roles>`, f)));
+  if (pending.length > shown.length) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.more', { count: pending.length - shown.length }, l), scoped('deckent models roles', f)));
+  // S3-3 doctor line "Brain girişi: hesap türü, dizin": which login the subscription Brain uses and whether its channel is open.
+  for (const login of f.headlessLogins ?? []) {
+    const dir = terminalSafeText(login.configDir), consent = login.consent.length ? login.consent.join(', ') : t('doctor.headless.none', {}, l);
+    // S3-5: the realm the last passing check ran in, or that the realm itself closed the channel.
+    const isolated = !login.isolation ? '' : login.isolation === 'unavailable' ? t('doctor.headless.isolationUnavailable', {}, l)
+      : t('doctor.headless.isolated', { version: terminalSafeText(login.isolation.version), launcher: terminalSafeText(login.isolation.launcher) }, l);
+    // f5: what the isolated CLI tried to reach outside the provider allowlist (counts and host names only).
+    const shownHosts = login.egress?.hosts.slice(0, registry.headlessRefusedHostsShown).map(host => terminalSafeText(host)) ?? [];
+    const refused = !login.egress ? '' : t('doctor.headless.egressRefused', { count: login.egress.refused, hosts: shownHosts.length ? shownHosts.join(', ') : '-',
+      more: login.egress.hosts.length > shownHosts.length ? t('doctor.headless.egressMore', { count: login.egress.hosts.length - shownHosts.length }, l) : '' }, l);
+    // s3c (owner 2026-10-24): which dir it is; a connection sealed to another one keeps working, and the next step is the move (sign-in, then reconnect).
+    const own = login.owned === true ? t('doctor.headless.owned', {}, l) : login.owned === false ? t('doctor.headless.notOwned', {}, l) : '';
+    const next = login.owned === false ? 'deckent models login --connection claude-cli-subscription' : login.state === 'open' ? undefined : scoped('deckent models connect --connection claude-cli-subscription', f);
+    rows.push(login.state === 'unknown' ? row('work', 'work.brainLogin', 'untested', t('doctor.headless.loginUnknown', { dir }, l) + own, login.owned === false ? next : undefined)
+      : row('work', 'work.brainLogin', login.state === 'open' ? 'ok' : 'warning', t('doctor.headless.login', { method: terminalSafeText(login.authMethod ?? '-'),
+        plan: login.subscriptionType ? ` (${terminalSafeText(login.subscriptionType)})` : '', dir, state: login.state === 'open' ? t('doctor.headless.open', {}, l) : t('doctor.headless.closed', {}, l), consent }, l) + own + isolated + refused,
+      next));
+  }
+  // S6R-6: lost-worker recovery — the protected modes and the owner's standing grant; live without the grant sends every case to a person.
+  const recovery = f.recoveryMode;
+  if (recovery) {
+    const text = recoveryStateLines(recovery, l).join(' ');
+    rows.push(recovery.recovery !== 'live' || recovery.continuation === 'automatic' ? row('work', 'work.recovery', 'ok', text)
+      : recovery.continuation === 'unknown' ? row('work', 'work.recovery', 'untested', text) : row('work', 'work.recovery', 'warning', text, scoped('deckent policy grants', f)));
+  }
   return rows;
 }
 

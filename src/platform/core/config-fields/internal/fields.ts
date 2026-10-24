@@ -12,6 +12,8 @@ import { SUPPORTED_LANGUAGES } from '#platform/core/i18n/index.js';
 
 export type { ConfigBinding, ConfigApplyMode, ConfigFieldMetadata } from './field.js';
 const SERVICE_EXECUTION_CAPACITY_DEFAULT = 8;
+/** S4B-1/3/5/7: the modes of every `memoryAutomation` switch, in rollout order (the memory rollout registry names them). */
+export const MEMORY_AUTOMATION_MODES = Object.freeze(['off', 'shadow', 'on'] as const);
 /** Single declaration of mutable config policy. Consumers derive, never duplicate, these values. */
 export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
   schema_version: field('config.field.schema_version', { state: 'bound', consumers: ['src/platform/core/config'] }, 'live', z.literal(CONFIG_SCHEMA_VERSION).default(CONFIG_SCHEMA_VERSION)),
@@ -101,10 +103,31 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     maxAttempts: z.number().int().positive().safe().default(3), retryDelayMs: z.number().int().positive().safe().default(1000),
     claimTtlMs: z.number().int().positive().safe().default(30000),
   }).strict().nullable().default(null), [], LAYOUT_CONTRACT_SINCE),
+  /** S4B-1 (owner S-M1/S-M11/S-M14; A10: the whole subtree is protected, no AI writes it): `extraction.mode` off (customer default) | shadow
+   * (receipts only, no candidate) | on (inert candidates); `overlay` narrows the Core `memory-automation` registry, checked by the memory domain at
+   * use (a widening overlay is MEMORY_AUTOMATION_INVALID). S4B-3 (owner S-M3/S-M14): `verification.mode` off (customer default) | shadow (sealed
+   * evaluation records, nothing verified) | on (an independent pass verifies). S4B-5 (owner S-M6/S-M8/S-M9): `context.mode` off (customer default:
+   * no memory read at Run admission) | shadow (the worker part is computed and sealed, never sent) | on (verified entries reach the worker prompt). */
+  memoryAutomation: field('memory.config.section', { state: 'bound', consumers: ['src/composition/core/memory'] }, 'live', z.object({
+    extraction: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off') }).strict().default({}),
+    verification: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off') }).strict().default({}),
+    context: z.object({ mode: z.enum(MEMORY_AUTOMATION_MODES).default('off') }).strict().default({}), overlay: z.record(z.string(), z.unknown()).optional() }).strict().default({})),
+  /** S8-2 (S8-DESIGN §4, §9; protected: no AI writes it): the catalog aggregator pass `mode` off (customer default: no pass runs) | shadow | on
+   * (S8-2 writes only the pass record in both; suggestions, cards and narrowing arrive in S8-3/S8-4); `overlay` replaces registry rule rows or
+   * lowers bounds of the Core `catalog-evolution` registry, checked by the domain at use (an invalid overlay is CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE). */
+  catalogEvolution: field('agentstats.config.section', { state: 'bound', consumers: ['src/composition/core/agent-catalog'] }, 'restart', z.object({
+    mode: z.enum(['off', 'shadow', 'on']).default('off'), overlay: z.record(z.string(), z.unknown()).optional() }).strict().default({})),
   runRuntime: field('config.field.runRuntime', { state: 'bound', consumers: ['src/composition/core/run-progression'] }, 'restart', z.object({
     parking: RUN_PARKING_SETTINGS.default({ schemaVersion: 1 }),
     quotaRecovery: QUOTA_RECOVERY_SETTINGS.default({ schemaVersion: 1 }),
     stallRecovery: STALL_RECOVERY_SETTINGS.default({ schemaVersion: 1 }),
+    /** S6R-2/3 Nervous (owner 2026-10-23 Q-R2: shadow first, customer default off): `shadow` seals proposals and executes nothing; `live` executes a
+     * measured (`live`) rule's stop step only under the owner's standing policy grant (`recovery-action`); anything else stays a sealed proposal. */
+    nervous: z.object({ mode: z.enum(['off', 'shadow', 'live']).default('off') }).strict().default({}),
+    /** S6R-5 (owner Q-R2, lead on s6r4 Q1; protected: no AI writes it): `off` (customer default) freezes no recovery bounds at admission (never a
+     * continuation); `shadow` freezes them and a decision only seals what it would do; `live` lets the recovery decision continue a lost task under
+     * the owner's standing grant. The stricter of a Run's frozen mode and this one applies. */
+    recovery: z.object({ mode: z.enum(['off', 'shadow', 'live']).default('off') }).strict().default({}),
     maxConcurrentRuns: z.number().int().positive().safe().default(SERVICE_EXECUTION_CAPACITY_DEFAULT),
     maxReservationsPerTurn: z.number().int().positive().safe().default(4),
     pollIntervalMs: z.number().int().positive().max(2147483647).default(1000),

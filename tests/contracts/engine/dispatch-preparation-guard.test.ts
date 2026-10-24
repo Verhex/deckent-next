@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { attemptIdentitySchema, auditEventSchema, type AttemptIdentity, type AuditEvent, type RunSnapshot } from '#domain/index.js';
-import { DispatchPreparationGuard, dispatchPreparationRecordSchema, type DispatchPreparationContext, type DispatchPreparationPark } from '#engine/index.js';
+import { DispatchPreparationGuard, dispatchPreparationRecordSchema, dispatchLauncherEvidenceSchema, readDispatchLauncherEvidence, type DispatchPreparationContext, type DispatchPreparationPark } from '#engine/index.js';
 import type { JsonRead, JsonRecordFile } from '#platform/index.js';
 
 // Crash-loop breaker decisions without I/O: the record port is in memory, each "process" is its own instance, a crash is a guard that never
@@ -15,12 +15,15 @@ const key = (id: AttemptIdentity) => createHash('sha256').update(JSON.stringify(
 function harness() {
   const files = new Map<string, string>(), events: AuditEvent[] = [], parks: DispatchPreparationPark[] = [], receipts = new Set<string>();
   const ledger = { run: running };
-  const port = (name: string): JsonRecordFile => ({
-    async read(): Promise<JsonRead> { const text = files.get(name); return text === undefined ? { kind: 'absent' } : (() => { try { return { kind: 'ready', value: JSON.parse(text), text, digest: '' }; } catch { return { kind: 'corrupt', text, digest: '' }; } })(); },
-    async write(value) { files.set(name, JSON.stringify(value)); }, async remove() { files.delete(name); } });
+  const launcherFiles = new Map<string, string>(), launcherFaults = { write: null as Error | null };
+  const mapPort = (map: Map<string, string>, name: string, fault?: { write: Error | null }): JsonRecordFile => ({
+    async read(): Promise<JsonRead> { const text = map.get(name); return text === undefined ? { kind: 'absent' } : (() => { try { return { kind: 'ready', value: JSON.parse(text), text, digest: '' }; } catch { return { kind: 'corrupt', text, digest: '' }; } })(); },
+    async write(value) { if (fault?.write) throw fault.write; map.set(name, JSON.stringify(value)); }, async remove() { map.delete(name); } });
+  const port = (name: string): JsonRecordFile => mapPort(files, name);
+  const launchers = (name: string): JsonRecordFile => mapPort(launcherFiles, name, launcherFaults);
   const faults = { park: null as Error | null, audit: null as Error | null };
   const context = (id: AttemptIdentity = identity): DispatchPreparationContext => ({ identity: id, principal: { issuer: 'host', subject: '1000' }, policyRevision: 'p', bound: 2, now: () => 1000,
-    instance: { id: randomUUID(), pid: 1, startedAt: 1 }, record: async event => { if (faults.audit) throw faults.audit; events.push(auditEventSchema.parse(event)); },
+    instance: { id: randomUUID(), pid: 1, startedAt: 1 }, launchers, record: async event => { if (faults.audit) throw faults.audit; events.push(auditEventSchema.parse(event)); },
     parked: async commandId => receipts.has(commandId), loadRun: async () => ledger.run,
     park: async command => {
       if (faults.park) throw faults.park;
@@ -33,7 +36,7 @@ function harness() {
   const crash = async (phase: 'workspace' | 'secret-gate' = 'secret-gate', id: AttemptIdentity = identity) => {
     const guard = new DispatchPreparationGuard(port, context(id)); await guard.begin(ledger.run); await guard.enter(phase);
   };
-  return { files, events, parks, receipts, faults, ledger, port, context, record, ownPark, crash };
+  return { files, launcherFiles, launcherFaults, launchers, events, parks, receipts, faults, ledger, port, context, record, ownPark, crash };
 }
 
 it('counts only another instance\'s unsettled preparation, audits each with its last phase, and parks once at the bound instead of preparing', async () => {
@@ -105,4 +108,42 @@ it('an unreadable record is one abnormal end of unknown phase; settle without a 
   // A dispatch claim already exists: whatever a death after the claim left is cleared, not counted.
   await new DispatchPreparationGuard(h.port, h.context()).settle(true); expect(h.files.size).toBe(0);
   expect(() => new DispatchPreparationGuard(h.port, { ...h.context(), bound: 0 })).toThrow();
+});
+
+// S6R-1 (design §2 F6): the record a launcher left while its worker ran is the only launcher-death evidence after a restart. A claimed settle
+// keeps it (instance, phase, counts) in the launcher-evidence record before it clears the preparation; it never judges liveness (S6R-2 does).
+it('captures the record a dispatching launcher left before a claimed settle clears it, without judging that launcher', async () => {
+  const h = harness();
+  const launcher = h.context(), dying = new DispatchPreparationGuard(h.port, launcher); await dying.begin(running); await dying.enter('dispatch');
+  const left = h.record()!;
+  const restarted = h.context(); await new DispatchPreparationGuard(h.port, restarted).settle(true);
+  expect(h.files.size).toBe(0);
+  const captured = dispatchLauncherEvidenceSchema.parse(JSON.parse(h.launcherFiles.get(key(identity))!));
+  expect(captured).toEqual({ schemaVersion: 1, identity, launcher: { kind: 'record', instance: launcher.instance, phase: 'dispatch', at: left.at, starts: 1, aborts: 0 },
+    capturedBy: restarted.instance, capturedAt: 1000 });
+  expect(await readDispatchLauncherEvidence(h.launchers, identity)).toEqual(captured);
+  expect(await readDispatchLauncherEvidence(h.launchers, { ...identity, attemptId: randomUUID() })).toBeNull();
+});
+
+it('keeps the preparation record when the capture cannot be written, never overwrites a first capture, and writes nothing without a record', async () => {
+  const h = harness();
+  const first = h.context(), dying = new DispatchPreparationGuard(h.port, first); await dying.begin(running); await dying.enter('dispatch');
+  h.launcherFaults.write = new Error('EIO');
+  await expect(new DispatchPreparationGuard(h.port, h.context()).settle(true)).rejects.toThrow('EIO');
+  expect(h.record()).toMatchObject({ phase: 'dispatch', instance: first.instance }); expect(h.launcherFiles.size).toBe(0);
+  h.launcherFaults.write = null;
+  await new DispatchPreparationGuard(h.port, h.context()).settle(true);
+  const captured = h.launcherFiles.get(key(identity));
+  // A later record of the same Attempt (it cannot normally reappear after a claim) is cleared but the first capture stays as written.
+  const again = new DispatchPreparationGuard(h.port, h.context()); await again.begin(running);
+  await new DispatchPreparationGuard(h.port, h.context()).settle(true);
+  expect(h.launcherFiles.get(key(identity))).toBe(captured); expect(h.files.size).toBe(0);
+  const other = { ...identity, attemptId: randomUUID() };
+  await new DispatchPreparationGuard(h.port, h.context(other)).settle(true); expect(h.launcherFiles.has(key(other))).toBe(false);
+});
+
+it('captures an unreadable launcher record as unreadable instead of losing it', async () => {
+  const h = harness(); h.files.set(key(identity), '{"schemaVersion":1');
+  await new DispatchPreparationGuard(h.port, h.context()).settle(true);
+  expect(JSON.parse(h.launcherFiles.get(key(identity))!)).toMatchObject({ launcher: { kind: 'unreadable' } }); expect(h.files.size).toBe(0);
 });

@@ -1,0 +1,12 @@
+{
+  "brainwait.window": "The subscription quota is used up. Brain waits until {time} (the quota reset), then plans once more as a new call: attempt {attempt} of {maxAttempts}. Nothing is sent before then and no Run exists yet.",
+  "brainwait.cancelHint": "Esc / Ctrl+C: stop waiting and cancel planning (no Run is created)",
+  "brainwait.activeWork": "quota wait · plans again at {time}",
+  "brainwait.cli": "Subscription quota used up: waiting until {time}, then planning once more as a new call (attempt {attempt} of {maxAttempts}). Ctrl+C cancels; no Run exists yet.",
+  "brainwait.resumed": "Quota reset reached: planning again (attempt {attempt}).",
+  "brainwait.monitor.heading": "Brain waiting for the subscription quota ({count}) — no Run exists yet",
+  "brainwait.monitor.line": "{scope} · plan {command} · plans again at {time} (attempt {attempt} of {maxAttempts}) · waiting since {since}",
+  "brainwait.monitor.unavailable": "Brain quota waits could not be read{detail}",
+  "brainwait.monitor.hidden": "{count} Brain quota wait(s) in scopes you may not read are not shown",
+  "brainwait.monitor.truncated": "More Brain quota waits are stored than the monitor reads; the oldest are shown"
+}

@@ -9,10 +9,14 @@ export { ModelActivationInspectionApplication } from './internal/inspection.js';
 export type { ModelActivationInspection, ModelActivationReader } from './internal/inspection.js';
 export { ModelCatalogApplication, ModelCatalogInspectionApplication, sameModelCatalogRequest, modelCatalogTargetId } from './internal/catalog.js';
 export type { ModelCatalogAdmission, ModelCatalogResult, ModelCatalogStore, ModelCatalogReader, ModelCatalogAuthorizer, ModelCatalogInspection, ModelCatalogChannelView } from './internal/catalog.js';
-export { admitWorkerModels, inspectAdmissibleWorkerModels, WorkerModelAdmissionError } from './internal/worker-admission.js';
+export { admitWorkerModels, inspectAdmissibleWorkerModels, workerRoleKeys, WorkerModelAdmissionError } from './internal/worker-admission.js';
 export type { WorkerPlanningTemplate } from './internal/worker-admission.js';
 export type { WorkerModelAdmissionCode, WorkerModelAdmissionDetail, WorkerAdmissionWarning, WorkerAdmissionOptions } from './internal/worker-admission.js';
 export { ModelConnectApplication, ModelConnectError, declareConnectedModel } from './internal/connect.js';
-export type { ModelConnectBinding, ModelConnectDefaults, ModelConnectKind, ModelConnectLayer, ModelConnectPorts } from './internal/connect.js';
+export type { ModelConnectBinding, ModelConnectDefaults, ModelConnectKind, ModelConnectLayer, ModelConnectPorts, ConnectedAdapter } from './internal/connect.js';
 export { planProfileCache, type ProfileCacheOffer, type ProfileCachePlan } from './internal/profile-cache.js';
 export { planProfileChanges, type ProfileChange, type ProfileChangePlan } from './internal/profile-changes.js';
+export { decideRoleModelInScope, inspectRoleModelsInScope, composeModelRolePolicy, roleModelInvocationReference, roleModelPorts, type RoleModelActivationPorts, type RoleModelSources } from './internal/model-role.js';
+export { ModelRoleAdmissionApplication, catalogRoleFacts, modelRoleCoverage, planModelRoleAssignment, modelRoleQuerySchema, modelRoleAssignCommandSchema } from './internal/model-role-admission.js';
+export type { ModelRoleAdmissionPorts, ModelRoleAssignCommand, ModelRoleAssignResult, ModelRoleCatalogFacts, ModelRoleEntry, ModelRoleInspection, ModelRoleQuery,
+  ModelRoleRow } from './internal/model-role-admission.js';

@@ -48,6 +48,8 @@
       "key": { "required": false, "secretName": "DECKENT_LOCAL_ENDPOINT_KEY" },
       "connect": { "adapter": "openai-chat-http", "chatPath": "/v1/chat/completions", "seed": null,
         "dialect": { "tokenLimitField": "max_completion_tokens", "streamUsage": "include", "toolChoice": ["auto", "none", "required"] } } },
+    { "id": "claude-cli-subscription", "labelKey": "tui.provider.kind.claudeCliSubscription", "available": true, "endpoint": { "default": null, "editable": false }, "probe": null, "key": null,
+      "connect": { "adapter": "native-cli-headless", "chatPath": null, "seed": "claude-cli-subscription", "protocolFamily": "claude-code-stream-json", "personOnly": true } },
     { "id": "chatgpt-login", "labelKey": "tui.provider.kind.chatgptLogin", "available": false, "endpoint": { "default": null, "editable": false }, "probe": null, "key": null, "connect": null }
   ]
 }

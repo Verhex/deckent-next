@@ -46,7 +46,7 @@
     },
     "cli.help.models": {
       "before": "Usage: deckent models [--json] [--lang en|tr] [--no-color]\nLists configured model declarations. Availability is not observed.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation --input <file|-> [--json]",
-      "after": "Usage: deckent models [--scope <id>] [--declared] [--catalog] [--verbose] [--json] [--lang en|tr]\nTwo lists: declared = what the connected providers declare (the terminal's chat models) · catalog = the models workers may use.\nWithout an action: one table of the catalog models of the scope (configured scope when omitted), grouped by channel: model, channel\n(subscription / API / local), state (active, inactive, retired with its day), effort. A switched-on model retiring within\nmodels.retirementWarningDays (default 15) is warned about. --declared shows the declared list; --verbose adds revisions and catalog facts.\n--json alone prints the declared list (unchanged contract); --catalog --json (or --scope <id> --json) prints the catalog table's data.\n  models activate|deactivate        on a terminal: provider, exact model id, then a scoped card\n  models connect                    on a terminal: connection, exact model id, then a scoped card\n  models catalog activate|deactivate  on a terminal: channel, model, then a scoped card\n  models spending                   the scope's API budget: limit, used, held, left\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending|audit-spending --input <file|-> [--json]\nInvoke, invocation, purge-content, spending --input and audit-spending require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request.\n  models catalog --help"
+      "after": "Usage: deckent models [--scope <id>] [--declared] [--catalog] [--verbose] [--json] [--lang en|tr]\nTwo lists: declared = what the connected providers declare (the terminal's chat models) · catalog = the models workers may use.\nWithout an action: one table of the catalog models of the scope (configured scope when omitted), grouped by channel: model, channel\n(subscription / API / local), state (active, inactive, retired with its day), effort. A switched-on model retiring within\nmodels.retirementWarningDays (default 15) is warned about. --declared shows the declared list; --verbose adds revisions and catalog facts.\n--json alone prints the declared list (unchanged contract); --catalog --json (or --scope <id> --json) prints the catalog table's data.\n  models activate|deactivate        on a terminal: provider, exact model id, then a scoped card\n  models connect                    on a terminal: connection, exact model id, then a scoped card\n  models catalog activate|deactivate  on a terminal: channel, model, then a scoped card\n  models roles [set]                which model serves which role (new model: role pending); set: a card on a terminal\n  models spending                   the scope's API budget: limit, used, held, left\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending|audit-spending --input <file|-> [--json]\nInvoke, invocation, purge-content, spending --input and audit-spending require an explicitly started local `deckent runtime serve`. A runtime-owned invocation continues if the client disconnects; retrying the same command identity returns its receipt and does not resend the native request.\n  models catalog --help"
     },
     "cli.help.modelsInvocation": {
       "before": "deckent models invoke|invocation --input <file|-> [--json] [--lang en|tr]\ninvoke: native command JSON; invocation: persisted receipt query JSON.",
@@ -480,6 +480,26 @@
       "before": "deckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--preview|--apply] [--json] [--lang en|tr]\nPreview or add a validated reusable coding template through governed configuration; existing kind bindings are preserved. On a terminal the missing choices are asked and a preview card is confirmed; elsewhere a missing choice lists the admitted values. Without --image the configured worker image is used; when no admitted CLI runs there, the error names the admitted images.",
       "after": "deckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--discovery disabled|repository] [--preview|--apply] [--json] [--lang en|tr]\nPreview or add a validated reusable coding template through governed configuration; existing kind bindings are preserved. On a terminal the missing choices are asked and a preview card is confirmed; elsewhere a missing choice lists the admitted values. Without --image the configured worker image is used; when no admitted CLI runs there, the error names the admitted images. Without --discovery the template keeps the discovery mode of the admitted profiles it derives from; --discovery disabled hides repository instructions from the worker."
     },
+    "memory.config.section": {
+      "before": "Memory automation (protected; no AI may change it): extraction.mode turns on candidates from accepted work (off, shadow records only, live writes candidates); automation narrows the Core bounds and WorkClass rows.",
+      "after": "Memory automation (protected; no AI may change it): extraction.mode turns on candidates from accepted work (off, shadow records only, live writes candidates); verification.mode turns on the independent evaluator (off, shadow seals its records and verifies nothing, on verifies); context.mode lets verified entries reach worker prompts at Run admission (off, shadow seals what would be sent and sends nothing, on sends); automation narrows the Core bounds and WorkClass rows."
+    },
+    "limits.window_week_fable": {
+      "before": "Week (Fable)",
+      "after": null
+    },
+    "xverify.opt_author_model": {
+      "before": "Model id that authored the claimed work (canonical provider API id, e.g. claude-opus-5) — the verifier must run at an equal or higher capability tier. Omitted: the resolved default is used and recorded as low-confidence.",
+      "after": null
+    },
+    "xverify.opt_verifier_model": {
+      "before": "Explicit verifier model id (canonical provider API id, e.g. gpt-5.6-sol) — bypasses tier-equivalence resolution, never the author tier floor",
+      "after": null
+    },
+    "xverify.remedy.usage_unavailable": {
+      "before": "The Fable-to-Sol call dispatched, but the canonical transport reported no usable usage, so no numbers were fabricated and the package stays OPEN. Confirm the verifier CLI emits its token counters (provider version/flags), then rerun xverify.",
+      "after": null
+    },
     "terminal.slash.runs": {
       "before": "Every run of this scope; h hold, r resume, c close a parked run (each after its own y)",
       "after": "Every run of this scope; h hold, r resume, c close a parked run, a answer a worker's question (each after its own y)"
@@ -490,7 +510,7 @@
     },
     "cli.run.inspect.unresolved": {
       "before": "  Effects unresolved; reconciliation required.",
-      "after": "  Worker outcome not confirmed: Deckent could not confirm whether the worker stopped or what it changed. The task stays held; nothing is retried, released or accepted, and no new attempt starts. While it runs, the runtime service checks the worker again; there is no automatic recovery in this release."
+      "after": "  Worker outcome not confirmed: Deckent could not confirm whether the worker stopped or what it changed. The task stays held; nothing is accepted or released on its word. While it runs, the runtime service checks the worker again."
     },
     "doctor.firstJob.workerImage": {
       "before": "Build a worker image in the Deckent source checkout (needs Docker; it prints the image id)",
@@ -507,6 +527,38 @@
     "error.WORKER_INSTRUCTIONS_CHANGED.place": {
       "before": "The folder or file workers read is not the one the card showed (the work target, its folder, the worker source or the file was replaced). Run the command again to review it. Nothing was changed.",
       "after": "The folder, ref or file workers read is not the one the card showed (the work target, its folder, its base ref, the worker source or the file was replaced). Run the command again to review it. Nothing was changed."
+    },
+    "memory.help.detail": {
+      "before": "deckent memory [--scope <id>] [--state candidate,verified,retired] [--json]\n  Lists the scope's memory entries, most recently changed first (candidate and verified unless --state names others).\ndeckent memory search <words...> [--scope <id>] [--state ...] [--json]\n  Finds entries that contain every word (case and accents ignored).\ndeckent memory inspect <entry-id> [--scope <id>] [--json]\n  Shows one entry with its source, verification and every revision.\ndeckent memory propose --input <file> [--scope <id>]\n  Proposes the fact or lesson in the JSON file as a candidate under your name.\ndeckent memory verify <entry-id> --note <text> [--scope <id>]\n  Verifies a candidate after your own review.\ndeckent memory retire <entry-id> --reason <text> [--superseded-by <entry-id>] [--scope <id>]\n  Retires an entry; it and its revisions stay readable.\nPropose, verify and retire run only on your own terminal, each on one card; AI tools, pipes and --json are refused. An entry becomes verified only through a person's review or an independent evaluation record, never by the AI itself; nothing is ever deleted.",
+      "after": "deckent memory [--scope <id>] [--state candidate,verified,retired] [--json]\n  Lists the scope's memory entries, most recently changed first (candidate and verified unless --state names others).\ndeckent memory search <words...> [--scope <id>] [--state ...] [--json]\n  Finds entries that contain every word (case and accents ignored).\ndeckent memory inspect <entry-id> [--scope <id>] [--json]\n  Shows one entry with its source, verification and every revision.\ndeckent memory propose --input <file> [--scope <id>]\n  Proposes the fact or lesson in the JSON file as a candidate under your name.\ndeckent memory verify <entry-id> --note <text> [--scope <id>]\n  Verifies a candidate after your own review.\ndeckent memory retire <entry-id> --reason <text> [--superseded-by <entry-id>] [--scope <id>]\n  Retires an entry; it and its revisions stay readable.\ndeckent memory retire --source <run>[/<attempt>] --reason <text> [--scope <id>]\n  Retires every entry derived from one Run (or one Attempt of it) on one card.\ndeckent memory review [--note <text>] [--reason <text>] [--scope <id>]\n  Shows open contests, candidates and stale entries one card at a time, with their evidence and every evaluator record; you verify, retire, purge or resolve each.\ndeckent memory purge <entry-id> | --source <run>[/<attempt>] [--scope <id>]\n  Deletes an entry's content in every revision and its evaluator calls' stored prompts and answers; only a keyed digest that blocks proposing it again stays. The card says what it does not delete.\ndeckent memory rollout [--scope <id>] [--json]\n  Shows the rollout phase, every exit criterion of the two live switches with its measured numbers and the exact next step for a person; it enables nothing, and a live switch is written only while its criteria hold.\nPropose, verify, retire, review and purge run only on your own terminal, on cards; AI tools, pipes and --json are refused. An entry becomes verified only through a person's review or an independent evaluation record, never by the AI itself; only a person's purge deletes content."
+    },
+    "agentstats.mode.shadow": {
+      "before": "Aggregation pass: shadow. It records statistics only; no suggestion, card or narrowing.",
+      "after": "Aggregation pass: shadow. It records statistics and sealed suggestions marked shadow; no card and no narrowing."
+    },
+    "agentstats.mode.on": {
+      "before": "Aggregation pass: on. In this release it records statistics only; suggestions and cards come later.",
+      "after": "Aggregation pass: on. It records statistics and sealed suggestions for your cards; it narrows only on rules marked calibrated."
+    },
+    "agentstats.config.section": {
+      "before": "Agent catalog aggregation (protected; no AI may change it): mode turns on the pass that records agent and skill statistics from sealed metrics (off, shadow records only, on records only in this release); overlay replaces registry rule rows or lowers its bounds.",
+      "after": "Agent catalog aggregation (protected; no AI may change it): mode turns on the pass that records agent and skill statistics and sealed suggestions from sealed metrics (off; shadow: suggestions as evidence only, no card or narrowing; on: suggestions for cards, narrowing only on calibrated rules); the pass writes only signed by the aggregator's own key; overlay replaces registry rule rows or lowers its bounds."
+    },
+    "tui.provider.kind.claudeCliSubscription": {
+      "before": "Claude subscription (your own claude CLI, preview)",
+      "after": "Claude subscription (your own claude CLI, isolated)"
+    },
+    "headless.help.connect": {
+      "before": "Subscription Brain (claude-cli-subscription, preview, owner only): no key and no address; the\nconnected CLI uses your own Claude login. [--executable <abs path>] (default: first in PATH)\n[--config-dir <abs dir>] (default: ~/.claude) [--delegate none|ai|system|ai,system] (who besides\nyou may use it; absent keeps your earlier choice). The installation owner first sets\nmodels.headless.preview=true on the user layer.",
+      "after": "Subscription Brain (claude-cli-subscription, owner only): no key and no address; the connected\nCLI uses the Brain's own Claude login and runs isolated (bubblewrap: only its login dir, no other\nfiles, network to the provider only). [--executable <abs path>] (default: first in PATH)\n[--config-dir <abs dir>] (default: the Brain's own login dir, signed in by `deckent models login`;\nanother dir only when you name it) [--delegate none|ai|system|ai,system] (who besides you may use\nit; absent keeps your earlier choice). Without usable bubblewrap it is refused."
+    },
+    "error.HEADLESS_KIND_UNAVAILABLE": {
+      "before": "The subscription Brain is not available on this installation. It is a preview for the owner's own installation until isolation lands: the owner turns it on with the installation setting `models.headless.preview` (user layer). Nothing was changed.",
+      "after": null
+    },
+    "error.HEADLESS_LOGIN_REQUIRED": {
+      "before": "The Claude CLI is not logged in with a Claude subscription (claude.ai). Run `claude auth login` yourself; Deckent never opens or reads the login. Nothing was sent and no other model was chosen.",
+      "after": "The Claude CLI is not signed in with a Claude subscription (claude.ai) in the Brain's login directory. Sign it in with `deckent models login --connection claude-cli-subscription` (the CLI's own sign-in, in your terminal); Deckent never opens or reads the login. Nothing was sent and no other model was chosen."
     }
   },
   "tr": {
@@ -668,7 +720,7 @@
     },
     "cli.help.models": {
       "before": "Kullanım: deckent models [--json] [--lang en|tr] [--no-color]\nYapılandırılmış model beyanlarını listeler. Kullanılabilirlik gözlemlenmez.\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation --input <dosya|-> [--json]",
-      "after": "Kullanım: deckent models [--scope <id>] [--declared] [--catalog] [--verbose] [--json] [--lang en|tr]\nİki liste: beyan = bağlı sağlayıcıların bildirdiği (terminalin sohbet modelleri) · katalog = worker'ların kullanabileceği modeller.\nEylemsiz: scope'un katalog modelleri tek tabloda (verilmezse yapılandırılmış scope), kanala göre gruplu: model, kanal\n(abonelik / API / yerel), durum (etkin, etkin değil, günüyle emekli), effort. models.retirementWarningDays (varsayılan 15)\niçinde emekli olacak açık model için uyarı verilir. --declared beyan listesini, --verbose revizyon ve katalog ayrıntılarını gösterir.\nYalnız --json beyan listesini verir (sözleşme değişmedi); --catalog --json (ya da --scope <id> --json) katalog tablosunun verisini verir.\n  models activate|deactivate        terminalde: sağlayıcı, tam model kimliği, sonra scope'lu kart\n  models connect                    terminalde: bağlantı, tam model kimliği, sonra scope'lu kart\n  models catalog activate|deactivate  terminalde: kanal, model, sonra scope'lu kart\n  models spending                   scope'un API bütçesi: sınır, kullanılan, ayrılan, kalan\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending|audit-spending --input <dosya|-> [--json]\nInvoke, invocation, purge-content, spending --input ve audit-spending açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez.\n  models catalog --help"
+      "after": "Kullanım: deckent models [--scope <id>] [--declared] [--catalog] [--verbose] [--json] [--lang en|tr]\nİki liste: beyan = bağlı sağlayıcıların bildirdiği (terminalin sohbet modelleri) · katalog = worker'ların kullanabileceği modeller.\nEylemsiz: scope'un katalog modelleri tek tabloda (verilmezse yapılandırılmış scope), kanala göre gruplu: model, kanal\n(abonelik / API / yerel), durum (etkin, etkin değil, günüyle emekli), effort. models.retirementWarningDays (varsayılan 15)\niçinde emekli olacak açık model için uyarı verilir. --declared beyan listesini, --verbose revizyon ve katalog ayrıntılarını gösterir.\nYalnız --json beyan listesini verir (sözleşme değişmedi); --catalog --json (ya da --scope <id> --json) katalog tablosunun verisini verir.\n  models activate|deactivate        terminalde: sağlayıcı, tam model kimliği, sonra scope'lu kart\n  models connect                    terminalde: bağlantı, tam model kimliği, sonra scope'lu kart\n  models catalog activate|deactivate  terminalde: kanal, model, sonra scope'lu kart\n  models roles [set]                hangi model hangi rolü üstlenir (yeni model: rol bekliyor); set: terminalde kart\n  models spending                   scope'un API bütçesi: sınır, kullanılan, ayrılan, kalan\n  models binding|activation|activate|deactivate --help\n  models invoke|invocation|purge-content|spending|audit-spending --input <dosya|-> [--json]\nInvoke, invocation, purge-content, spending --input ve audit-spending açıkça başlatılmış yerel `deckent runtime serve` gerektirir. Runtime'ın sahiplendiği çağrı, istemci bağlantısı kesilirse sürer; aynı komut kimliğiyle tekrar, kaydını döndürür ve native isteği yeniden göndermez.\n  models catalog --help"
     },
     "cli.help.modelsInvocation": {
       "before": "deckent models invoke|invocation --input <dosya|-> [--json] [--lang en|tr]\ninvoke: native komut JSON verisi; invocation: kalıcı kayıt sorgusu JSON verisi.",
@@ -1118,6 +1170,26 @@
       "before": "deckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--preview|--apply] [--json] [--lang en|tr]\nDoğrulanmış yeniden kullanılabilir kodlama şablonunu önizler veya yönetilen config üzerinden ekler; mevcut görev türü bağlarını korur. Terminalde eksik seçimler sorulur ve önizleme kartı onaylanır; başka yerde eksik seçim kabul edilmiş değerleri listeler. --image verilmezse yapılandırılmış worker imajı kullanılır; orada kabul edilmiş CLI yoksa hata kabul edilmiş imajları söyler.",
       "after": "deckent coding template [--provider <id>] [--kind <kind>] [--image <sha256>] [--discovery disabled|repository] [--preview|--apply] [--json] [--lang en|tr]\nDoğrulanmış yeniden kullanılabilir kodlama şablonunu önizler veya yönetilen config üzerinden ekler; mevcut görev türü bağlarını korur. Terminalde eksik seçimler sorulur ve önizleme kartı onaylanır; başka yerde eksik seçim kabul edilmiş değerleri listeler. --image verilmezse yapılandırılmış worker imajı kullanılır; orada kabul edilmiş CLI yoksa hata kabul edilmiş imajları söyler. --discovery verilmezse şablon, türetildiği kabul edilmiş profillerin discovery modunu korur; --discovery disabled repo talimatlarını işçiden gizler."
     },
+    "memory.config.section": {
+      "before": "Hafıza otomasyonu (korumalı; hiçbir AI değiştiremez): extraction.mode kabul edilen işten aday kaydı açar (off kapalı, shadow yalnız kayıt tutar, live aday yazar); automation Core sınırlarını ve iş türü satırlarını yalnız daraltır.",
+      "after": "Hafıza otomasyonu (korumalı; hiçbir AI değiştiremez): extraction.mode kabul edilen işten aday kaydı açar (off kapalı, shadow yalnız kayıt tutar, live aday yazar); verification.mode bağımsız değerlendiriciyi açar (off kapalı, shadow kaydını mühürler ve hiçbir şeyi doğrulamaz, on doğrular); context.mode doğrulanmış kayıtları Run kabulünde işçi istemine taşır (off kapalı, shadow gönderileceği mühürler ve hiçbir şey göndermez, on gönderir); automation Core sınırlarını ve iş türü satırlarını yalnız daraltır."
+    },
+    "limits.window_week_fable": {
+      "before": "Hafta (Fable)",
+      "after": null
+    },
+    "xverify.opt_author_model": {
+      "before": "İddia edilen işi üreten model kimliği (kanonik sağlayıcı API id, örn. claude-opus-5) — hakem eşit veya daha yüksek yetenek tier’ında çalışmak zorundadır. Verilmezse: çözümlenen varsayılan kullanılır ve düşük-güven olarak kaydedilir.",
+      "after": null
+    },
+    "xverify.opt_verifier_model": {
+      "before": "Açık hakem model kimliği (kanonik sağlayıcı API id, örn. gpt-5.6-sol) — tier-eşdeğerlik çözümlemesini atlar, yazar tier tabanını asla atlamaz",
+      "after": null
+    },
+    "xverify.remedy.usage_unavailable": {
+      "before": "Fable-Sol çağrısı yapıldı, ancak canonical transport kullanılabilir usage raporlamadı; hiçbir sayı uydurulmadı ve paket OPEN kalıyor. Hakem CLI'ının token sayaçlarını yaydığını doğrulayın (sağlayıcı sürümü/bayrakları), sonra xverify'ı yeniden çalıştırın.",
+      "after": null
+    },
     "terminal.slash.runs": {
       "before": "Bu kapsamın tüm işleri; h beklet, r sürdür, c bekleyen işi kapat (her biri kendi y'siyle)",
       "after": "Bu kapsamın tüm işleri; h beklet, r sürdür, c bekleyen işi kapat, a işçinin sorusunu cevapla (her biri kendi y'siyle)"
@@ -1172,7 +1244,7 @@
     },
     "cli.run.inspect.unresolved": {
       "before": "  Etkiler çözümlenmemiş; uzlaştırma gerekli.",
-      "after": "  Worker sonucu doğrulanmadı: Deckent worker'ın durup durmadığını ya da neyi değiştirdiğini doğrulayamadı. Görev bekletiliyor; hiçbir şey yeniden denenmez, serbest bırakılmaz ya da kabul edilmez ve yeni deneme başlamaz. Çalışırken runtime servisi worker'ı yeniden kontrol eder; bu sürümde otomatik kurtarma yok."
+      "after": "  Worker sonucu doğrulanmadı: Deckent worker'ın durup durmadığını ya da neyi değiştirdiğini doğrulayamadı. Görev bekletiliyor; onun sözüyle hiçbir şey kabul edilmez ya da serbest bırakılmaz. Çalışırken runtime servisi worker'ı yeniden kontrol eder."
     },
     "doctor.firstJob.workerImage": {
       "before": "Deckent kaynak kodunda bir worker imajı oluşturun (Docker gerekir; imaj kimliğini yazar)",
@@ -1180,7 +1252,7 @@
     },
     "doctor.firstJob.execution": {
       "before": "İşin nerede çalışacağını söyleyin: o imaj kimliği ile docker ve git yolları (command -v docker, command -v git)",
-      "after": "Worker imajını derleyin ya da benimseyin ve çalıştırma ayarlarını yazın (deckent init önce kartta sorar)"
+      "after": "Worker imajını derleyin ya da hazır imajı kullanın ve çalıştırma ayarlarını yazın (deckent init önce kartta sorar)"
     },
     "cli.coding.instructions.help": {
       "before": "deckent coding instructions [status] [--json] [--lang en|tr]\nÇalışma hedefinin worker talimat dosyasını gösterir (execution.workerInstructions; çalışma hedefi tanımlı değilse proje kökü): yol, boyut, SHA-256 ve worker'ların dosyayı şu an alıp almadığı.\ndeckent coding instructions trust|revoke [--target <id>] --scope <id> [--lang en|tr]\nDosyanın yalnızca şu anki içeriğine o klasör için güvenir (ya da güveni geri alır). Kendi terminalinizdeki kart yolu, boyutu, SHA-256 değerini ve ilk satırları gösterir; yapay zekâ araçları, MCP, boru (pipe) ve --json reddedilir. Karar execution.workerInstructions için config yazma iznine göre verilir ve denetim kaydına yazılır. Değişen dosya yeniden güvenilmez olur.",
@@ -1189,6 +1261,98 @@
     "error.WORKER_INSTRUCTIONS_CHANGED.place": {
       "before": "Worker'ların okuduğu klasör ya da dosya kartta gösterilen değil (çalışma hedefi, klasörü, worker kaynağı ya da dosya değiştirildi). İncelemek için komutu yeniden çalıştırın. Hiçbir şey değiştirilmedi.",
       "after": "Worker'ların okuduğu klasör, ref ya da dosya kartta gösterilen değil (çalışma hedefi, klasörü, temel ref'i, worker kaynağı ya da dosya değiştirildi). İncelemek için komutu yeniden çalıştırın. Hiçbir şey değiştirilmedi."
+    },
+    "memory.help.detail": {
+      "before": "deckent memory [--scope <id>] [--state candidate,verified,retired] [--json]\n  Kapsamın hafıza kayıtlarını en son değişen önce listeler (--state başka durum söylemezse aday ve doğrulanmış).\ndeckent memory search <kelimeler...> [--scope <id>] [--state ...] [--json]\n  Bütün kelimeleri içeren kayıtları bulur (büyük/küçük harf ve aksan yok sayılır).\ndeckent memory inspect <kayıt-id> [--scope <id>] [--json]\n  Bir kaydı kaynağı, doğrulaması ve bütün sürümleriyle gösterir.\ndeckent memory propose --input <dosya> [--scope <id>]\n  JSON dosyasındaki bilgiyi ya da dersi senin adınla aday olarak önerir.\ndeckent memory verify <kayıt-id> --note <metin> [--scope <id>]\n  Kendi incelemenden sonra bir adayı doğrular.\ndeckent memory retire <kayıt-id> --reason <metin> [--superseded-by <kayıt-id>] [--scope <id>]\n  Bir kaydı emekliye ayırır; kayıt ve sürümleri okunabilir kalır.\nÖnerme, doğrulama ve emekliye ayırma yalnız kendi terminalinde, her biri tek kartla çalışır; AI araçları, borular ve --json reddedilir. Bir kayıt yalnız bir kişinin incelemesiyle ya da bağımsız bir değerlendirme kaydıyla doğrulanır, AI kendisi asla doğrulamaz; hiçbir şey silinmez.",
+      "after": "deckent memory [--scope <id>] [--state candidate,verified,retired] [--json]\n  Kapsamın hafıza kayıtlarını en son değişen önce listeler (--state başka durum söylemezse aday ve doğrulanmış).\ndeckent memory search <kelimeler...> [--scope <id>] [--state ...] [--json]\n  Bütün kelimeleri içeren kayıtları bulur (büyük/küçük harf ve aksan yok sayılır).\ndeckent memory inspect <kayıt-id> [--scope <id>] [--json]\n  Bir kaydı kaynağı, doğrulaması ve bütün sürümleriyle gösterir.\ndeckent memory propose --input <dosya> [--scope <id>]\n  JSON dosyasındaki bilgiyi ya da dersi senin adınla aday olarak önerir.\ndeckent memory verify <kayıt-id> --note <metin> [--scope <id>]\n  Kendi incelemenden sonra bir adayı doğrular.\ndeckent memory retire <kayıt-id> --reason <metin> [--superseded-by <kayıt-id>] [--scope <id>]\n  Bir kaydı emekliye ayırır; kayıt ve sürümleri okunabilir kalır.\ndeckent memory retire --source <run>[/<attempt>] --reason <metin> [--scope <id>]\n  Bir Run'dan (ya da onun bir denemesinden) gelen tüm kayıtları tek kartla emekliye ayırır.\ndeckent memory review [--note <metin>] [--reason <metin>] [--scope <id>]\n  Açık itirazları, adayları ve bayat kayıtları kanıtları ve tüm değerlendirici kayıtlarıyla tek tek kartla gösterir; her birini doğrular, emekliye ayırır, siler ya da karara bağlarsınız.\ndeckent memory purge <kayıt-id> | --source <run>[/<attempt>] [--scope <id>]\n  Bir kaydın tüm sürümlerdeki içeriğini ve değerlendirici çağrılarının saklanan istem ve cevaplarını siler; yalnız yeniden önerilmesini engelleyen anahtarlı özet kalır. Kart neyi silmediğini söyler.\ndeckent memory rollout [--scope <id>] [--json]\n  Geçiş aşamasını, iki canlı anahtarın her çıkış ölçütünü ölçülen sayılarıyla ve bir kişi için sıradaki tam adımı gösterir; hiçbir şeyi açmaz, canlı anahtar yalnız ölçütleri sağlandığı sürece yazılır.\nÖnerme, doğrulama, emekliye ayırma, inceleme ve silme yalnız kendi terminalinde, kartlarla çalışır; AI araçları, borular ve --json reddedilir. Bir kayıt yalnız bir kişinin incelemesiyle ya da bağımsız bir değerlendirme kaydıyla doğrulanır, AI kendisi asla doğrulamaz; içeriği yalnız bir kişinin silme kartı siler."
+    },
+    "terminal.slash.deliver": {
+      "before": "Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim et; seçilen doğrulama işiyle dala al",
+      "after": "Teslim bekleyen görevleri kendi penceresinde kontrol edip y ile teslim et; seçilen doğrulama işiyle dalı ilerlet"
+    },
+    "terminal.delivery.adoptionLater": {
+      "before": "Teslimden sonra dala alma ayrı bir seçimdir: {targets}",
+      "after": "Teslimden sonra dalı ilerletme ayrı bir seçimdir: {targets}"
+    },
+    "terminal.delivery.adoptPrompt": {
+      "before": "{commit} commit'i bir dala alınsın mı? Bu dalı ilerletir ve ayrı bir y ister.",
+      "after": "{commit} commit'i için bir dal ilerletilsin mi? Bu, dalı commit'e taşır ve ayrı bir y ister."
+    },
+    "terminal.delivery.adoptHints": {
+      "before": "y seçili dala al (yapılandırılmış doğrulama sonra seçilir) · ↑↓ dal · n/Esc dala almadan bitir",
+      "after": "y seçili dalı ilerlet (yapılandırılmış doğrulama sonra seçilir) · ↑↓ dal · n/Esc dalı ilerletmeden bitir"
+    },
+    "terminal.delivery.adopting": {
+      "before": "Dala alınıyor…",
+      "after": "Dal ilerletiliyor…"
+    },
+    "terminal.delivery.adopted": {
+      "before": "Dala alındı: {target} {from} → {to} · {verification} · dala alma komutu {command}",
+      "after": "Dal ilerletildi: {target} {from} → {to} · {verification} · dalı ilerletme komutu {command}"
+    },
+    "terminal.delivery.verifyWithout": {
+      "before": "{mark} Doğrulamasız dala al (bu kurulum izin veriyor; doğrulanmadı olarak kaydedilir)",
+      "after": "{mark} Doğrulamasız dalı ilerlet (bu kurulum izin veriyor; doğrulanmadı olarak kaydedilir)"
+    },
+    "terminal.delivery.verifyCheck": {
+      "before": "Dala alma, seçilen işin tam olarak bu teslim commit'ini güncel profil ve kurulumun ölçütleriyle doğruladığını denetler; değilse reddedilir ve dal taşınmaz.",
+      "after": "Dalı ilerletme, seçilen işin tam olarak bu teslim commit'ini güncel profil ve kurulumun ölçütleriyle doğruladığını denetler; değilse reddedilir ve dal taşınmaz."
+    },
+    "terminal.delivery.verifyHints": {
+      "before": "↑↓ seç · y seçimle dala al · r yeniden oku · n/Esc geri",
+      "after": "↑↓ seç · y seçimle dalı ilerlet · r yeniden oku · n/Esc geri"
+    },
+    "terminal.delivery.summaryAdopted": {
+      "before": "{target} dalına alındı: {from} → {to} ({verification}). Dala alma komutu {command} (deckent task integration-rollback --adoption-command-id), teslim komutu {delivery}.",
+      "after": "{target} dalı ilerletildi: {from} → {to} ({verification}). Dalı ilerletme komutu {command} (deckent task integration-rollback --adoption-command-id), teslim komutu {delivery}."
+    },
+    "terminal.delivery.summaryAdoptFailed": {
+      "before": "Dala alma yapılmadı; teslim {ref} referansında kalıyor — {reason}",
+      "after": "Dal ilerletilmedi; teslim {ref} referansında kalıyor — {reason}"
+    },
+    "terminal.delivery.summaryNotAdopted": {
+      "before": "Dala alınmadı; teslim {ref} referansında kalıyor.",
+      "after": "Dal ilerletilmedi; teslim {ref} referansında kalıyor."
+    },
+    "terminal.delivery.next.ADOPTION_TARGET_DENIED": {
+      "before": "Sonraki adım: teslim kendi referansında kalır. Burada dala almak için dalı execution.adoption.targets'a ekle (/config).",
+      "after": "Sonraki adım: teslim kendi referansında kalır. Burada dalı ilerletmek için dalı execution.adoption.targets'a ekle (/config)."
+    },
+    "terminal.delivery.next.ADOPTION_NOT_VERIFIED": {
+      "before": "Sonraki adım: teslim kendi referansında kalır, dal taşınmadı. Bu kurulum dalı yalnız teslim commit'inin kabul edilmiş bir doğrulama işi ile taşır: bu pencerede seçin (dalda y) ya da komut satırından dala alın: `deckent task integration-adopt --scope {scope} --run {run} --task {task} --attempt {attempt} --generation {generation} --layout-revision {layout} --command-id <new-id> --delivery-command-id {delivery} --target {target} --verification-run <run>`",
+      "after": "Sonraki adım: teslim kendi referansında kalır, dal taşınmadı. Bu kurulum dalı yalnız teslim commit'inin kabul edilmiş bir doğrulama işi ile taşır: bu pencerede seçin (dalda y) ya da komut satırından dalı ilerletin: `deckent task integration-adopt --scope {scope} --run {run} --task {task} --attempt {attempt} --generation {generation} --layout-revision {layout} --command-id <new-id> --delivery-command-id {delivery} --target {target} --verification-run <run>`"
+    },
+    "setup.execution.workerNone": {
+      "before": "Henüz worker imajı yok: Run'lar ve /do bir imaj ister. Terminalde deckent init imajı bir karttan sonra derler ya da --image-id ile verdiğiniz imajı benimser.",
+      "after": "Henüz worker imajı yok: Run'lar ve /do bir imaj ister. Terminalde deckent init imajı bir karttan sonra derler ya da --image-id ile verdiğiniz imajı kullanır."
+    },
+    "agentstats.mode.shadow": {
+      "before": "Toplama geçişi: gölge. Yalnız istatistik kaydeder; öneri, kart ya da daraltma yok.",
+      "after": "Toplama geçişi: gölge. İstatistik ve gölge işaretli mühürlü öneriler kaydeder; kart ve daraltma yok."
+    },
+    "agentstats.mode.on": {
+      "before": "Toplama geçişi: açık. Bu sürümde yalnız istatistik kaydeder; öneri ve kartlar sonra gelir.",
+      "after": "Toplama geçişi: açık. İstatistik ve kartlarınız için mühürlü öneriler kaydeder; yalnız ölçümle onaylanmış (calibrated) kurallarda daraltır."
+    },
+    "agentstats.config.section": {
+      "before": "Ajan kataloğu toplaması (korumalı; hiçbir AI değiştiremez): mode mühürlü metriklerden ajan ve skill istatistiği kaydeden geçişi açar (off kapalı, shadow yalnız kayıt, on bu sürümde yalnız kayıt); overlay registry kural satırlarını değiştirir ya da sınırlarını yalnız düşürür.",
+      "after": "Ajan kataloğu toplaması (korumalı; hiçbir AI değiştiremez): mode mühürlü metriklerden ajan ve skill istatistiği ile mühürlü öneri kaydeden geçişi açar (off kapalı; shadow öneriler yalnız kanıt, kart ve daraltma yok; on öneriler kart için, daraltma yalnız ölçümle onaylanmış kurallarda); geçiş yalnız toplayıcının kendi anahtarıyla imzalayarak yazar; overlay registry kural satırlarını değiştirir ya da sınırlarını yalnız düşürür."
+    },
+    "tui.provider.kind.claudeCliSubscription": {
+      "before": "Claude aboneliği (kendi claude CLI'niz, önizleme)",
+      "after": "Claude aboneliği (kendi claude CLI'ınız, yalıtılmış)"
+    },
+    "headless.help.connect": {
+      "before": "Abonelik Brain'i (claude-cli-subscription, önizleme, yalnız sahip): anahtar ve adres yok;\nbağlanan CLI kendi Claude girişinizi kullanır. [--executable <mutlak yol>] (varsayılan: PATH'te ilk)\n[--config-dir <mutlak dizin>] (varsayılan: ~/.claude) [--delegate none|ai|system|ai,system] (sizin\ndışınızda kimin kullanabileceği; verilmezse önceki seçiminiz kalır). Kurulum sahibi önce kullanıcı\nkatmanında models.headless.preview=true ayarlar.",
+      "after": "Abonelik Brain'i (claude-cli-subscription, yalnız sahip): anahtar ve adres yok; bağlanan CLI\nBrain'in kendi Claude girişini kullanır ve yalıtılmış çalışır (bubblewrap: yalnız giriş dizini, başka\ndosya yok, ağ yalnız sağlayıcıya). [--executable <mutlak yol>] (varsayılan: PATH'te ilk)\n[--config-dir <mutlak dizin>] (varsayılan: Brain'in kendi giriş dizini, `deckent models login` ile\ngiriş yapılır; başka dizin yalnız siz verirseniz) [--delegate none|ai|system|ai,system] (sizin\ndışınızda kimin kullanabileceği; verilmezse önceki seçiminiz kalır). Kullanılabilir bubblewrap yoksa reddedilir."
+    },
+    "error.HEADLESS_KIND_UNAVAILABLE": {
+      "before": "Abonelik Brain'i bu kurulumda kullanılamıyor. Yalıtım inene kadar yalnız sahibin kendi kurulumu için önizlemedir: sahip onu kullanıcı katmanındaki `models.headless.preview` kurulum ayarıyla açar. Hiçbir şey değiştirilmedi.",
+      "after": null
+    },
+    "error.HEADLESS_LOGIN_REQUIRED": {
+      "before": "Claude CLI bir Claude aboneliğiyle (claude.ai) girişli değil. `claude auth login` komutunu kendiniz çalıştırın; Deckent girişi hiçbir zaman açmaz ve okumaz. Hiçbir şey gönderilmedi, başka bir model seçilmedi.",
+      "after": "Claude CLI, Brain'in giriş dizininde bir Claude aboneliğiyle (claude.ai) girişli değil. `deckent models login --connection claude-cli-subscription` ile giriş yapın (CLI'nin kendi girişi, sizin terminalinizde); Deckent girişi hiçbir zaman açmaz ve okumaz. Hiçbir şey gönderilmedi, başka bir model seçilmedi."
     }
   }
 }

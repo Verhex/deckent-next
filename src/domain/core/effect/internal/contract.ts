@@ -1,6 +1,7 @@
 import { clientCommandIdSchema } from '#domain/core/primitives/index.js';
 import { z } from 'zod';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
+import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 /** Effect class of a catalog operation. `read` never changes the target; `write` is a conditional, compensable-or-not change;
@@ -22,6 +23,10 @@ export const operationDescriptorSchema = z.object({
    * runtime service behind MCP `execute_operation`, agent tools) refuses it before any policy, ledger or target access
    * (`OPERATION_SURFACE_RESTRICTED`); only the authority producer runs it. Versioned code class, not a grant; absent = generic. */
   surface: z.literal('authority').optional(),
+  /** S6R (owner 2026-10-23): `task` declares that a repeat of this operation for the same task and target is deduplicated by the target
+   * (the key never derives from the Attempt), so a settled effect of a lost Attempt need not block a new one. Absent or `command` = not
+   * declared (a settled intent then hands the task to a human). No default, like `admitWithinMs`. */
+  idempotencyScope: z.enum(['task', 'command']).optional(),
 }).strict().superRefine((value, context) => {
   if (value.effectClass === 'irreversible' && value.approval !== 'required') context.addIssue({ code: 'custom', message: 'EFFECT_IRREVERSIBLE_REQUIRES_APPROVAL' });
   if (value.effectClass === 'irreversible' && value.compensation) context.addIssue({ code: 'custom', message: 'EFFECT_IRREVERSIBLE_NOT_COMPENSABLE' });
@@ -43,6 +48,15 @@ export const effectCommandSchema = z.object({
 }).strict().readonly();
 export type EffectCommand = z.infer<typeof effectCommandSchema>;
 const actorSchema = z.object({ id: identitySchema, issuer: identitySchema, subject: identitySchema }).strict().readonly();
+/** S6R-1: which execution produced an intent — the Attempt that ran it, or `principal`: the actor's own direct command (CLI, SDK, runtime peer,
+ * chat turn) with no Attempt. Set by the trusted composition that builds the effect application, never by the wire. */
+export const effectProducerSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('attempt'), identity: attemptIdentitySchema }).strict(),
+  z.object({ kind: z.literal('principal') }).strict(),
+]).readonly();
+export type EffectProducer = z.infer<typeof effectProducerSchema>;
+/** The producer of every direct command (no Attempt): CLI/SDK/runtime-peer operations, chat-turn tools, policy and instruction writers. */
+export const PRINCIPAL_EFFECT_PRODUCER: EffectProducer = Object.freeze({ kind: 'principal' as const });
 /** claimed: intent recorded, effect may be pending; settled: target evidence of the effect; unknown: outcome cannot be
  * established from the target (never retried blindly); refused: the target refused before any effect (terminal, no effect). */
 export const effectStateSchema = z.enum(['claimed', 'settled', 'unknown', 'refused']);
@@ -60,6 +74,9 @@ export const effectIntentSchema = z.object({
   /** The operation approval this intent consumed (C12 G2): the claim is the single use of that approval; every later gate pass of this
    * command verifies the referenced record instead of the admission window. Absent when policy allowed the command outright. */
   approval: z.object({ approvalId: identitySchema, actionDigest: digest }).strict().readonly().optional(),
+  /** Mandatory for every intent claimed from S6R-1 on (the store refuses a new intent without it); absent only on older intents, which
+   * recovery treats by the fail-closed window rule, never as a match. */
+  producer: effectProducerSchema.optional(),
 }).strict().readonly();
 export type EffectIntent = z.infer<typeof effectIntentSchema>;
 export type EffectIntentApproval = NonNullable<EffectIntent['approval']>;

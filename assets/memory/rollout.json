@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "revision": "memory-rollout-core-1",
+  "status": "provisional",
+  "scan": { "evaluations": 1000, "contextEvents": 1000, "candidates": 200 },
+  "phases": [
+    { "phase": 0, "section": "extraction", "set": "on", "reached": ["on"], "criteria": [] },
+    { "phase": 1, "section": "verification", "set": "shadow", "reached": ["shadow", "on"], "criteria": [] },
+    { "phase": 2, "section": "context", "set": "shadow", "reached": ["shadow", "on"], "criteria": [] },
+    { "phase": 3, "section": "context", "set": "on", "reached": ["on"],
+      "criteria": ["context-admissions", "context-overflow", "context-integrity", "candidate-secrets", "purge-replay"] },
+    { "phase": 4, "section": "verification", "set": "on", "reached": ["on"],
+      "criteria": ["evaluator-agreement", "evaluator-false-pass", "injection-corpus", "evaluator-independence", "contest-rate", "candidate-secrets", "purge-replay"] }
+  ],
+  "criteria": [
+    { "id": "evaluator-agreement", "metric": "agreement", "minSample": 20, "minPerMille": 900 },
+    { "id": "evaluator-false-pass", "metric": "decided-since-false-pass", "minSample": 30 },
+    { "id": "injection-corpus", "metric": "corpus", "maxCount": 0 },
+    { "id": "evaluator-independence", "metric": "independence-violations", "maxCount": 0 },
+    { "id": "contest-rate", "metric": "contest-rate", "minSample": 20, "maxPerMille": 100 },
+    { "id": "context-admissions", "metric": "context-shadow-runs", "minSample": 20 },
+    { "id": "context-overflow", "metric": "context-overflow", "maxCount": 0 },
+    { "id": "context-integrity", "metric": "context-integrity-violations", "maxCount": 0 },
+    { "id": "candidate-secrets", "metric": "candidate-secret-findings", "maxCount": 0 },
+    { "id": "purge-replay", "metric": "purge-replay-pending", "maxCount": 0 }
+  ]
+}

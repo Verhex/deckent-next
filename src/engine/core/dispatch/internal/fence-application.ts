@@ -16,6 +16,8 @@ const commandSchema = z.object({ schemaVersion: z.literal(1), identity: attemptI
 export interface LostDispatchObserver {
   observe(record: DispatchRecord): ReturnType<ExecutionSupervisor['observe']>;
   termination?(record: DispatchRecord): Promise<import('#engine/core/supervisor/index.js').SupervisorTermination | null>;
+  /** S6R-3: proven absence of the created container id when no incarnation was retained (`null`: still there). */
+  createdAbsence?(record: DispatchRecord): Promise<Readonly<{ kind: 'created-container-absent'; containerId: string }> | null>;
 }
 type Recorder = (store: AuditStore) => { record(event: unknown): AuditRecord };
 /** Internal reconciliation entry; no manual release command, heartbeat inference or automatic retry. */
@@ -68,7 +70,7 @@ export class LostDispatchApplication {
       if (payload?.operation !== 'release-worker-custody' || payload.owner !== record.owner || !attemptIdentitySchema.safeParse(payload.identity).success || !sameAttemptIdentity(payload.identity, identity)) throw new DispatchError('DISPATCH_FENCE_CONFLICT');
       proof = payload.proof;
     } else {
-      const observed = record.worker ? await this.observer.termination?.(record) : null;
+      const observed = record.worker ? await this.observer.termination?.(record) : record.containerId ? await this.observer.createdAbsence?.(record) : null;
       if (!observed) return Object.freeze({ ...fenced, decision: { kind: 'hold-manual' as const, reason: 'termination-required' as const } });
       proof = { ...observed, identity, owner: record.owner, receiptId: commandId };
     }
@@ -80,7 +82,7 @@ export class LostDispatchApplication {
     const fence = { identity, owner: dispatch.owner, receiptId: fenced.receipt.commandId };
     if (dispatch.owner !== record.owner) throw new DispatchError('DISPATCH_FENCE_CONFLICT');
     if (!prior) releaseWorkerCustody(current, current.revision, { identity, owner: dispatch.owner, launch: dispatch.launch,
-      lost: true, worker: dispatch.worker ?? null }, fence, proof);
+      lost: true, worker: dispatch.worker ?? null, containerId: dispatch.containerId ?? null }, fence, proof);
     const write = { identity, owner: dispatch.owner, expectedRunRevision: current.revision, actor: principal, proof, now: this.now() };
     const encoded = JSON.stringify({ operation: 'release-worker-custody', identity, owner: record.owner, actor: principal, proof });
     const receipt = await this.store.releaseLostDispatch(write, (store, snapshot) => this.recorder(store).record({

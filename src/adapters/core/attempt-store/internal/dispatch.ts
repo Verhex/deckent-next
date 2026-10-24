@@ -59,52 +59,45 @@ export class SqliteDispatchJournal {
       return record;
     });
   }
-  async retainDispatchWorker(claim: DispatchClaim, worker: NonNullable<DispatchRecord['worker']>) {
+  private write(record: DispatchRecord) {
+    this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?').run(JSON.stringify(record), record.request.identity.scopeId, record.request.identity.attemptId);
+    return record;
+  }
+  /** Launch evidence of a granted, unfenced dispatch, each written once: the container id when `create` returned (S6R-1, before `start`), then
+   * the incarnation, which must be that container (older records have no id to compare). The same value replays; another one conflicts. */
+  private retainLaunch(claim: DispatchClaim, evidence: Readonly<{ containerId: string } | { worker: NonNullable<DispatchRecord['worker']> }>) {
     return this.transaction(() => {
       const existing = this.read(claim.request);
       if (!existing || existing.owner !== claim.owner || existing.launch !== 'granted') throw new DispatchError('DISPATCH_CONFLICT');
       if (readDispatchFence(this.db, existing)) throw new DispatchError('DISPATCH_FENCED');
-      if (existing.worker && JSON.stringify(existing.worker) !== JSON.stringify(worker)) throw new DispatchError('DISPATCH_CONFLICT');
-      const record = dispatchRecordSchema.parse({ ...existing, worker });
-      this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?').run(JSON.stringify(record), claim.request.identity.scopeId, claim.request.identity.attemptId);
-      return record;
+      const merged = { ...existing, ...evidence }, same = (key: 'containerId' | 'worker') => JSON.stringify(existing[key]) === JSON.stringify(merged[key]);
+      if ((existing.containerId !== undefined && !same('containerId')) || (existing.worker && !same('worker'))) throw new DispatchError('DISPATCH_CONFLICT');
+      const parsed = dispatchRecordSchema.safeParse(merged);
+      if (!parsed.success) throw new DispatchError('DISPATCH_CONFLICT');
+      return same('containerId') && same('worker') ? existing : this.write(parsed.data);
     });
   }
-  async retainDispatchOutput(input: DispatchClaim, value: ArtifactReceipt) {
+  async retainDispatchContainer(claim: DispatchClaim, containerId: string) { return this.retainLaunch(claim, { containerId }); }
+  async retainDispatchWorker(claim: DispatchClaim, worker: NonNullable<DispatchRecord['worker']>) { return this.retainLaunch(claim, { worker }); }
+  /** Output (any time) and patch (after the terminal) receipts, each retained once for the dispatch's scope; a different receipt conflicts. */
+  private retainArtifact(input: DispatchClaim, value: ArtifactReceipt, kind: 'output' | 'patch') {
     const claim = dispatchClaimSchema.parse(input); const receipt = artifactReceiptSchema.parse(value);
     if (receipt.scopeId !== claim.request.identity.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
     return this.transaction(() => {
       const existing = this.read(claim.request);
       if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
-      this.assertNotFenced(existing, 'output');
-      if (existing.output) {
-        if (existing.output.digest !== receipt.digest || existing.output.byteLength !== receipt.byteLength || existing.output.scopeId !== receipt.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
+      this.assertNotFenced(existing, kind);
+      if (kind === 'patch' && !existing.terminal) throw new DispatchError('DISPATCH_CONFLICT');
+      const kept = existing[kind];
+      if (kept) {
+        if (kept.digest !== receipt.digest || kept.byteLength !== receipt.byteLength || kept.scopeId !== receipt.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
         return existing;
       }
-      const record = dispatchRecordSchema.parse({ ...existing, output: receipt });
-      this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?')
-        .run(JSON.stringify(record), claim.request.identity.scopeId, claim.request.identity.attemptId);
-      return record;
+      return this.write(dispatchRecordSchema.parse({ ...existing, [kind]: receipt }));
     });
   }
-  async retainDispatchPatch(input: DispatchClaim, value: ArtifactReceipt) {
-    const claim = dispatchClaimSchema.parse(input); const receipt = artifactReceiptSchema.parse(value);
-    if (receipt.scopeId !== claim.request.identity.scopeId) throw new DispatchError('DISPATCH_CONFLICT');
-    return this.transaction(() => {
-      const existing = this.read(claim.request);
-      if (!existing || existing.owner !== claim.owner) throw new DispatchError('DISPATCH_CONFLICT');
-      this.assertNotFenced(existing, 'patch');
-      if (!existing.terminal) throw new DispatchError('DISPATCH_CONFLICT');
-      if (existing.patch) {
-        if (JSON.stringify(existing.patch) !== JSON.stringify(receipt)) throw new DispatchError('DISPATCH_CONFLICT');
-        return existing;
-      }
-      const record = dispatchRecordSchema.parse({ ...existing, patch: receipt });
-      this.db.prepare('UPDATE dispatches SET record=? WHERE scope_id=? AND attempt_id=?')
-        .run(JSON.stringify(record), claim.request.identity.scopeId, claim.request.identity.attemptId);
-      return record;
-    });
-  }
+  async retainDispatchOutput(input: DispatchClaim, value: ArtifactReceipt) { return this.retainArtifact(input, value, 'output'); }
+  async retainDispatchPatch(input: DispatchClaim, value: ArtifactReceipt) { return this.retainArtifact(input, value, 'patch'); }
   async readDispatch(request: DispatchClaim['request']) {
     const parsed = sandboxRequestSchema.parse(request);
     try { return this.read(parsed); } catch (error) { throw sqliteFailure(error); }

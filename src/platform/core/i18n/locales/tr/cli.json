@@ -490,5 +490,6 @@
   "error.CLI_ID_TOO_SHORT": "'{prefix}' çok kısa: kimliğin en az {min} karakterini ya da tamamını yazın.",
   "cli.human.scope.pickBodyRead": "Okunacak scope'u seçin. Hiçbir şey değişmez.",
   "error.CLI_ARGUMENT_MISSING": "Eksik komut: {command}.\n{usage}",
-  "error.CLI_INSTALLATION_MISSING": "Bu klasörde Deckent kurulumu yok. Kurmak için `deckent init` çalıştırın."
+  "error.CLI_INSTALLATION_MISSING": "Bu klasörde Deckent kurulumu yok. Kurmak için `deckent init` çalıştırın.",
+  "mcp.tool.inspectModelRoles": "Bir kapsamın gördüğü haliyle hangi tam katalog modelinin hangi rolü (Brain, çalışan, kurtarma kararı, hafıza değerlendirici) üstlenebileceğini listeleyin: üretici, fiyat kanıtı, kademe, roller ve rolü hâlâ bekleyen modeller. Yalnız okuma; rol vermek bir kişinin terminal kartıdır."
 }

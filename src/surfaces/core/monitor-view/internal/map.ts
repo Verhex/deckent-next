@@ -1,6 +1,7 @@
 import { t, type Locale } from '#platform/index.js';
 import type { MonitorInstall, MonitorMap } from '#engine/index.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
+import { recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
 import { span, type MonitorBlock, type MonitorColumn, type MonitorRole, type MonitorRow, type MonitorSpan } from './layout.js';
 
 /** The text markers of one view: ✓ ready, ○ off/unused, ! needs attention, → next action (ASCII `+ o ! ->`). */
@@ -20,6 +21,11 @@ const col = (header: string, priority: number, min: number, max: number, cut?: '
 /** A plain map row: its detail repeats the cells whole, so Enter on a cut cell still shows the full text. */
 const row = (key: string, cells: readonly MonitorSpan[]): MonitorRow => ({ key, cells, detail: () => cells.map(cell => [span(cell.text, cell.role)]) });
 
+function recoveryLines(state: NonNullable<MonitorMap['recovery']>, locale: Locale, marks: MonitorMarkers): readonly (readonly [string, MonitorRole])[] {
+  const [head, effect] = recoveryStateLines(state, locale), attention = state.recovery === 'live' && state.continuation !== 'automatic';
+  return [[`${state.recovery === 'off' ? marks.off : attention ? marks.warn : marks.ok} ${head}`, state.recovery === 'off' ? 'muted' : 'sectionHeader'],
+    [`  ${effect}`, attention ? 'warning' : 'muted']];
+}
 /**
  * Harita (MONITOR v1.1, tables since PB-MON-UX): "what feeds what" per observed install — config layers and the sections each sets, task
  * kind → profile → runner (unused old profile versions collapsed into a count), models with what to do next, permissions in four groups
@@ -91,6 +97,8 @@ export function mapBlocks(installs: readonly MonitorInstall[], locale: Locale, m
       ...(policy ? [permissions] : []),
       ...(policy?.permissionModes.length ? [line(`  ${t('monitor.map.modes', { modes: policy.permissionModes.map(entry => `${entry.principal}: ${entry.mode}`).join(', ') }, locale)}`)] : []),
       line(map.memory.available ? `${marks.ok} ${t('monitor.map.memory', {}, locale)}` : `${marks.off} ${t('monitor.map.memoryNone', {}, locale)}`, map.memory.available ? 'sectionHeader' : 'muted'),
+      // S6R-6: lost-worker recovery — both protected modes, the owner's standing grant, and what that means (live without the grant: a person decides).
+      ...(map.recovery ? recoveryLines(map.recovery, locale, marks).map(([text, role]) => line(text, role)) : []),
     ];
   });
 }

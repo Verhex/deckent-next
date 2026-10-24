@@ -26,7 +26,19 @@ export function brainProposalLines(result: RunProposalResult, locale: Locale): r
     ...(record.reason && record.reason !== 'RUN_APPROVAL_REQUIRED' ? [ErrorRegistry.createError(record.reason, { locale, ...(result.reasonParams ? { params: result.reasonParams } : {}) }).message] : []),
     ...(record.approval ? [t('brain.waiting', { id: record.approval.approvalId, expires: new Date(record.approval.expiresAt).toISOString() }, locale), t('brain.revise', {}, locale)] : []),
     ...(proposal.source.kind === 'model' ? [t('brain.contribution', { model: proposal.source.receipt.reference.modelId, invocation: proposal.source.receipt.invocationId, template: proposal.source.contribution?.template.version ?? '-' }, locale)] : []),
+    ...planningMemoryLines(result, locale),
   ];
+}
+/** S4B-6: what project memory the planning call used (counts only, never which entries); nothing when memory is off or on a replay. */
+export function planningMemoryLines(result: RunProposalResult, locale: Locale): readonly string[] {
+  const memory = result.planningMemory;
+  if (!memory) return [];
+  if (memory.reason) return [{ policy: t('brain.memory.withheld.policy', {}, locale), contests: t('brain.memory.withheld.contests', {}, locale),
+    template: t('brain.memory.withheld.template', {}, locale) }[memory.reason]];
+  const selected = memory.mode === 'on' ? t('brain.memory.sent', { count: memory.selected }, locale) : t('brain.memory.shadow', { count: memory.selected }, locale);
+  return [...(memory.selected ? [selected] : []),
+    ...(memory.omitted ? [t('brain.memory.omitted', { count: memory.omitted }, locale)] : []),
+    ...(memory.withheld ? [t('brain.memory.withheld.sources', { count: memory.withheld }, locale)] : [])];
 }
 
 /** Shared optional Brain-call observation for every proposal summary; worker spend stays separate. */

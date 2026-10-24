@@ -28,7 +28,7 @@ package); the planned name is the scoped `@verhex/deckent` (proposed name; not f
 -->
 
 > [!NOTE]
-> This README describes **pre-release `1.0.0-alpha.54`**, the latest released version; [CHANGELOG.md](CHANGELOG.md)
+> This README describes **pre-release `1.0.0-alpha.55`**, the latest released version; [CHANGELOG.md](CHANGELOG.md)
 > lists every release, newest first. Deckent is not on npm yet: install it from source as shown in
 > [Get started](#get-started). An npm package is planned for the beta, probably as `@verhex/deckent` (the name is
 > not final yet).
@@ -489,6 +489,11 @@ OpenRouter settings.
   list and revoke, and an audit trail you can verify.
 - **Operate**: `deckent monitor` for a read-only view, `deckent doctor` for health, `deckent config` for settings, and
   `deckent backup create|verify|restore` for verifiable recovery sets on a schedule if you choose.
+- **Core layers, off until you turn them on**: the system picks the worker model for each kind of work from a list you
+  can see; memory fills from accepted work and is verified by you or an independent evaluator; lost workers are detected and
+  can be continued in a new attempt within set limits; the Brain can plan with your own Claude subscription inside a
+  sandbox; agents and skills are versioned and every AI change to them is signed. Each layer starts off and has a shadow
+  mode that only records what it would do ([known limits](docs/known-limits.md#core-layers)).
 
 ### Not yet
 
@@ -501,9 +506,9 @@ OpenRouter settings.
   delivery, adoption and rollback waits for your `y`.
 - **Coding tasks are accepted on the worker's exit code.** The content is not verified independently yet, and the
   window says so.
-- **Subscriptions are partial.** A Claude Code worker runs with your own Claude login; chatting in the terminal with a
-  Claude subscription, a subscription-backed Brain (the planner behind `/do`, see [Roadmap](#roadmap)) and Sign in with
-  ChatGPT are not available yet.
+- **Subscriptions are partial.** A Claude Code worker runs with your own Claude login, and the Brain (the planner behind
+  `/do`) can use your Claude subscription where Deckent's bubblewrap sandbox works (Linux and WSL). Chatting in the terminal
+  with a Claude subscription and Sign in with ChatGPT are not available yet (see [Roadmap](#roadmap)).
 - **Platforms.** Native Windows is not supported. On macOS the local runtime service does not run yet (its socket is
   Linux-only), so chat, jobs and backup cannot be used there. Delivery, adoption, rollback and key grants need a terminal
   witness that exists only on Linux (WSL included) and are refused on other systems. arm64 is not shipped. A Docker
@@ -516,12 +521,14 @@ OpenRouter settings.
 
 ## Roadmap
 
-Dates are not promised; the order is. The core layers that let Deckent run work on its own come first. The beta then
-hardens them through real use, and Desktop app development starts alongside it.
+Dates are not promised; the order is. The core layers that let Deckent run work on its own come first: alpha.55 brings
+them as code, each off until a person turns it on, and they are switched on and proven in real use before the beta.
+The next release adds the Deckent Hub for signed agents and skills. The beta then hardens the layers through real use, and Desktop
+app development starts alongside it.
 
 ```mermaid
 flowchart LR
-  N["Now · alpha.54<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>backup and audit"] --> C["Before the beta · core layers<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
+  N["Now · alpha.55<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>core layers in code, their switches start off"] --> C["Before the beta · core layers switched on<br/>Deckent Hub for signed agents and skills<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
   C --> B["Beta<br/>npm package<br/>layers improved through real use and tests<br/>Desktop app development in parallel"]
   B --> E["Enterprise · separate distribution<br/>SSO · fleet · central policy<br/>ERP connectors"]
 ```

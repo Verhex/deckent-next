@@ -23,7 +23,46 @@ export const PREVIOUS_LEDGER_VERSION = 50;
  * repositories' rows of one target at the same sequence, makes it fail, as it must; restoring the pre-switch backup is the real path. */
 /** v59 → v58 (PRE-7): v59 widened only record vocabularies (environment park, `not-run` acceptance), so the version alone goes back —
  * exact for a ledger that holds none of them; restoring the pre-switch backup is the real path. */
-export const DOWNGRADE_TO_V58_LEDGER_SQL = 'PRAGMA user_version=58;';
+/** v66 → v65 (S6R-4 recovery cases): the additive table (with its index and triggers) is dropped; exact for a ledger without recovery cases;
+ * restoring the pre-switch backup is the real path. */
+/** v67 → v66 (S8-1a agent standing): the additive tables (with index and triggers) are dropped; exact for a ledger without standing rows;
+ * restoring the pre-switch backup is the real path. */
+/** v68 → v67 (S8-5 signer keys): the additive tables (with their triggers) are dropped; exact for a ledger without signer rows; restoring the
+ * pre-switch backup is the real path. */
+/** v69 → v68 (S8-2 aggregator pass position): the additive table (with its triggers) is dropped; exact (it is rebuildable state). */
+/** v70 → v69 (S8-3 catalog suggestions): the additive tables (with their indexes and triggers) are dropped; exact for a ledger without suggestions (the
+ * windows are rebuildable state); restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V69_LEDGER_SQL = 'DROP TABLE IF EXISTS catalog_evolution_windows; DROP TABLE IF EXISTS catalog_suggestion_states; DROP TABLE IF EXISTS catalog_suggestions; PRAGMA user_version=69;';
+export const DOWNGRADE_TO_V68_LEDGER_SQL = DOWNGRADE_TO_V69_LEDGER_SQL + ' DROP TABLE catalog_evolution_positions; PRAGMA user_version=68;';
+export const DOWNGRADE_TO_V67_LEDGER_SQL = DOWNGRADE_TO_V68_LEDGER_SQL + ' DROP TABLE skill_signer_receipts; DROP TABLE skill_signer_key_revisions; DROP TABLE skill_signer_keys; PRAGMA user_version=67;';
+export const DOWNGRADE_TO_V66_LEDGER_SQL = DOWNGRADE_TO_V67_LEDGER_SQL + ' DROP TABLE agent_standing_receipts; DROP TABLE agent_standing_revisions; DROP TABLE agent_standings; PRAGMA user_version=66;';
+export const DOWNGRADE_TO_V65_LEDGER_SQL = DOWNGRADE_TO_V66_LEDGER_SQL + ' DROP TABLE recovery_cases; PRAGMA user_version=65;';
+/** v65 → v64 (S4B-1 memory automation): the additive tables (with their indexes and triggers) are dropped and the v61 no-update trigger on revisions
+ * is restored; exact for a ledger without automation rows or tombstones; restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V64_LEDGER_SQL = DOWNGRADE_TO_V65_LEDGER_SQL + ' DROP TABLE memory_purges; DROP TABLE memory_contests; DROP TABLE memory_evaluations; DROP TABLE memory_extraction_cursors; '
+  + 'DROP TABLE memory_extraction_receipts; DROP TABLE memory_entry_support; DROP TRIGGER memory_entry_revisions_tombstone_only; '
+  + "CREATE TRIGGER memory_entry_revisions_no_update BEFORE UPDATE ON memory_entry_revisions BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END; PRAGMA user_version=64;";
+/** v64 → v63 (S7 agent/skill catalog): the additive catalog tables (and with them their indexes and triggers) are dropped; exact for a ledger
+ * without catalog rows; restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V63_LEDGER_SQL = DOWNGRADE_TO_V64_LEDGER_SQL + ' DROP TABLE agent_catalog_receipts; DROP TABLE skill_definition_revisions; DROP TABLE skill_definitions; '
+  + 'DROP TABLE agent_definition_revisions; DROP TABLE agent_definitions; PRAGMA user_version=63;';
+/** v63 → v62 (S6R-1 effect producer): the producer-Attempt index is dropped; intents keep their recorded producer (an older build refuses the
+ * new records), so this is exact for a ledger without producer-bearing intents; restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V62_LEDGER_SQL = DOWNGRADE_TO_V63_LEDGER_SQL + ' DROP INDEX effect_intents_producer_attempt; PRAGMA user_version=62;';
+/** v62 → v61 (ATAMA-1): v62 widened only record contracts (work input v2, sealed assignment), so the version alone goes back — exact for a
+ * ledger that holds none of them; restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V61_LEDGER_SQL = DOWNGRADE_TO_V62_LEDGER_SQL + ' PRAGMA user_version=61;';
+/** v61 → v60 (S4 memory journal): the additive memory tables are dropped; restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V60_LEDGER_SQL = DOWNGRADE_TO_V61_LEDGER_SQL + ' DROP TABLE memory_search; DROP TABLE memory_command_receipts; DROP TABLE memory_entry_revisions; DROP TABLE memory_entries; PRAGMA user_version=60;';
+/** v60 → v59 (ATAMA-0): the metrics table back to the producer-only key without `superseded_by`; rowids kept. Two outcome kinds of one producer
+ * make it fail, as they must; restoring the pre-switch backup is the real path. */
+export const DOWNGRADE_TO_V59_LEDGER_SQL = `${DOWNGRADE_TO_V60_LEDGER_SQL} CREATE TABLE acceptance_metrics_v59(scope_id TEXT NOT NULL, producer_command_id TEXT NOT NULL, run_id TEXT NOT NULL,
+    task_id TEXT NOT NULL, attempt_id TEXT NOT NULL, outcome_kind TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(scope_id,producer_command_id));
+  INSERT INTO acceptance_metrics_v59(rowid,scope_id,producer_command_id,run_id,task_id,attempt_id,outcome_kind,record)
+    SELECT rowid,scope_id,producer_command_id,run_id,task_id,attempt_id,outcome_kind,record FROM acceptance_metrics ORDER BY rowid;
+  DROP TABLE acceptance_metrics; ALTER TABLE acceptance_metrics_v59 RENAME TO acceptance_metrics;
+  CREATE INDEX acceptance_metrics_attempt ON acceptance_metrics(scope_id,run_id,task_id,attempt_id,outcome_kind); PRAGMA user_version=59;`;
+export const DOWNGRADE_TO_V58_LEDGER_SQL = `${DOWNGRADE_TO_V59_LEDGER_SQL} PRAGMA user_version=58;`;
 export const DOWNGRADE_TO_V57_LEDGER_SQL = `${DOWNGRADE_TO_V58_LEDGER_SQL} CREATE TABLE workspace_adoptions_v57(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,target_ref TEXT NOT NULL,
     sequence INTEGER NOT NULL CHECK(sequence>0),kind TEXT NOT NULL CHECK(kind IN('adopt','rollback')),intent TEXT NOT NULL,
     settled INTEGER NOT NULL CHECK(settled IN(0,1)),PRIMARY KEY(scope_id,command_id),UNIQUE(target_ref,sequence));

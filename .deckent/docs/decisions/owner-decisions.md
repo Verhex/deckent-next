@@ -751,3 +751,119 @@ Owner: "Beta öncesi yeni yüzeyler izinli çünkü işlerimizi tamamladık ve 5
 - **Kanun denetimi (HOLD, düzeltildi):** İz 2 owner cevabından önce açılmadı. S6 Nervous yalnız deterministik eşik ve kurallarla çalışır, kendisi yeni Attempt açmaz (kaybolan işçi kurtarması Q3 ile ayrı tasarlanır), üç sürekli eylem dışını reddeder ve sürekli onay kaydının sahibi owner'dır. Hafızada "doğrulanmış" durumu ve S8 terfisi insan ya da bağımsız değerlendirme kaydı ister; terfiler geri alma ve kapsam sınırı taşır (müşteriler arası sızıntı yok). Defter ve protokol numaraları iniş sırasında verilir. S3 headless Brain H1 (tekrar 0, araç yok), H6 ön uçuş ve H2'yi (müşteride API anahtarı varsayılan) korur.
 
 Plan: [PLAN Şimdi ve alpha.54/55 programı](../../../PLAN.md).
+<a id="s6r-kayip-calisan-2026-10-23"></a>
+
+## Owner kararları — 2026-10-23: kaybolan çalışanın otomatik kurtarılması (S6R), K-B + A5 güncellemesi, KARAR 12 kapanışı
+
+Kaynak: ana oturum (lead 4d4830b2) PROGRAM Q3 yanıtı ("Otomatik kurtarma … ilgili çalışan front model görüp aksiyonu almalı manuel süreçleri azaltıp otomasyon kontrol güvenlik hız prensipleriyle ilerlemeliyiz"); tasarım dış `proof/ORCHESTRATION-2026-10-23/S6R-DESIGN.md` (rev 2, kanun denetimi yeniden denetimde PASS); owner yanıtları 2026-10-23 (AskUserQuestion, hepsi önerilen): Q-R1 + Q-R5 yetkiler tasarlandığı gibi (sahipsiz konteyner durdurma dahil sabit deterministik adımlar; model yalnız yeni Attempt ile insana devir arasında seçer; bu durum için "yeni Attempt asla otomatik değil" istisnası), Q-R2 önce gölge sonra yalnız düşük riskli WorkClass'lar (sayısal çıkış ölçütleri, müşteri varsayılanı kapalı), Q-R3 kayıp görev başına en fazla 1 otomatik devam, görev başına toplam 3 deneme (registry), Q-R4 başlatıcı ölü + konteyner çalışıyor = kayıp. Bu bölüm 2026-10-11 K-B ve 2026-10-14 A5 satırlarını yalnız bu durum için günceller; eski satırlar yerinde kalır. Uygulama dilimleri S6R-1…S6R-6 (alpha.55'ten itibaren); ilk çit kodu S6R-3'tedir.
+
+- **K-B + A5 güncellemesi (owner 2026-10-23, Q3):** Nervous sürekli ihlal gözcüsüdür; deterministik kurallarla algılar, durum yazmaz,
+  yalnız durdurma önerir; öneriyi kalıcı onayla aracı (broker) mevcut uygulamalardan yürütür. Kalıcı durdurma listesi: Attempt'i çitleme/Run'ı
+  bekletme, sahipsiz konteyneri iptal, servis bileşenini yeniden başlatma, Brain'e uyarı, insana devir. Nervous model çağırmaz.
+  Sonlanma kanıtıyla slot bırakma ve belirsiz etkinin uzlaştırılması sabit sıralı deterministik adımdır. Kaybolan çalışanın görevi için
+  yeni Attempt yalnız şu durumda açılır: sorumlu frontier-tier model mühürlü kanıtı okuyup tipli seçim yapar, slot kanıtla bırakılmış ve
+  tüm etkiler uzlaşmıştır, görev başına sınır ve değişmiş-kanıt şartı sağlanmıştır. Belirsiz etki varken model çağrılmaz, insana devredilir.
+  Dış sistemde tamamlanmış (settled) iş, ancak işlemi katalogda görev-kapsamlı idempotency bildiriyorsa yeni Attempt'e engel olmaz ve
+  yeni Attempt'e yalnız bilgi olarak verilir; bildirmiyorsa insana gider. Görev başına toplam Attempt tavanı (takılma + kayıp + ileride
+  RETRY) registry'dedir, başlangıç değeri 3.
+  R3 takılma yeniden denemesi (D4a/D5a) aynen kalır; kalite başarısızlığı RETRY tasarımına aittir.
+- **KARAR 12 kapanışı:** slot bırakma = dispatch çiti + aynı çalışan kimliğine bağlı sonlanma kanıtı (sistem, K-B kalıcı onay); kanıtsızda
+  `hold-manual` ve insana devir. İlk çit artık Nervous kuralıyla yazılır (MARK-LOST-ATOMIC); elle `mark-lost` komutu yoktur.
+
+Bu kararla güncellenen doküman satırlarının eski metni (birebir korunur; yeni metin ARCHITECTURE ve PLAN'dadır):
+
+```text
+(`DISPATCH_FENCED`/`DISPATCH_CORRUPT`); operation-evidence evaluator (settled no earlier than the launch grant, Run principal chain, same Run only, `OPERATION_EVIDENCE_OTHER_RUN`); without trusted effect-to-Attempt provenance or an exact settlement digest already accepted by a Task of this Run, a pre-grant settlement remains `unknown` with `OPERATION_EVIDENCE_EARLIER`, including the wall-skew window. Evaluation returns a complete Run view and requires Run `inspect` before mutation or replay; denial writes no evaluation. Evaluation reply and Run inspection share result briefs and delivery outlook under per-Attempt `read-output` authority; a denied Attempt has no `resultBrief` or delivery observation (replay pins the receipt snapshot). Delivery receipts retain producer Attempt identity and are filtered by that producer's read-output authority before aggregation; unattributed receipts are withheld, and output-derived Run outlook is withheld without every bound producer's authority. Internal lost-dispatch recovery revalidates binding, fence and termination against the current Run snapshot and releases custody with its revision CAS; absent Run/Attempt rows refuse with `DISPATCH_NOT_ADMITTED`. No initial production fence trigger is added.
+  retained container incarnation plus exit/absence proof, else `hold-manual`), but no production path writes the first fence yet (automatic mark-lost is MARK-LOST-ATOMIC / KARAR 12, owner-deferred). A late exit keeps a durable unknown Attempt observation (`settle.ts`); the lock is Attempt-level, not effect-level (C11).
+- **Dalga 2 takipleri:** patch-prepare reddi tipli makbuz, `LayoutError` insan metni, MARK-LOST-ATOMIC (KARAR 12).
+```
+
+<a id="s4b-hafiza-dolsun-2026-10-23"></a>
+
+## Owner kararları — 2026-10-23: hafıza kendiliğinden dolsun ve kullanılsın (S4B), K-D güncellemesi
+
+Kaynak: ana oturum (lead 4d4830b2) owner uyarısı "hız ve evrim için hafıza şart" (elle adım azalsın); tasarım dış `proof/ORCHESTRATION-2026-10-23/S4B-DESIGN.md` (rev 4; kanun denetimi rev 4 PASS, 4 MINOR S4B-0/S4B-1'e katlandı); owner yanıtları 2026-10-23 (AskUserQuestion, madde madde, hepsi önerilen). Bu bölüm 2026-10-11 K-D satırını (yukarıda "K-D Hafıza başlangıcı") günceller; eski satır yerinde kalır. Uygulama dilimleri S4B-1…S4B-7 (alpha.55'ten itibaren).
+
+Madde madde owner yanıtları (hepsi "evet"):
+- Yazma: S-M1 aday yazma (damıtıcı kimliği yalnız hafızayı okur, aday yazar, Run kaydını okur; adaylar işçiye ve Brain'e gitmez; N1'de hemen, müşteride kapalı), S-M2 kabul edilmiş işlerin mühürlü ham çıktısını (işçi raporu dahil) kendi kapsamında okuma, S-M11 aday yalnız saklama süresi tanımlı ve "kişisel veri yok" işaretli iş türlerinden, S-M14 aşamalı geçiş (aday canlı → gölge doğrulama → gölge okuma → insan doğruladıkları canlı → otomatik doğrulananlar canlı; eşikler uyum ≥0,90 en az 20 kararda, en az 30 kararda sıfır yanlış geçiş, zehirleme setinde sıfır geçiş).
+- Doğrulama: S-M3 bağımsız değerlendirici (izinleri yalnız hafızayı okuma, adayı doğrulama, çelişkide itiraz açma, Run kaydını okuma, değerlendirme modelini çağırma; aday yazamaz, emekliye ayıramaz, silemez, işçi ham çıktısını okuyamaz), S-M4 değerlendiricinin modeli her zaman işi yapan işçinin modelinden farklı üreticiden (katalogdaki üretici alanı; bilinmiyorsa doğrulama yok), S-M5 değerlendirici harcaması kapsam başına günlük çağrı ve harcama tavanıyla, abonelik kanalı önce, S-M10 itiraz (çelişen kayıt bağlamdan geçici çekilir, günlük sınırlı, kararı insan verir).
+- Okuma: S-M6 işçiye, S-M7 Brain'e (aynı kurallarla), S-M8 okuma hatası işi bekletir, S-M9 otomatik doğrulananlar yalnız düşük riskli iş türlerinde, insanın doğruladıkları her işte.
+- Silme: S-M12 purge kartı (dürüst kapsam metniyle), S-M13 saklama süresi dolunca kayıt bağlamdan çıkar ve silme kartına düşer.
+- Lead kararı (soru değil, sıkılaştırma): hafıza açma/kapama ayarlarını ve `memory.automation` listesini hiçbir AI değiştiremez (A10).
+
+- **K-D güncellemesi (owner 2026-10-23, hafıza dolsun ve kullanılsın):** Kabul edilen işin mühürlü kanıtından hafıza damıtıcısı kimliği aday kayıt
+  yazar; yalnız saklama süresi tanımlı ve kişisel veri içermeyen iş türlerinden; adaylar işçiye ve Brain'e gitmez. Doğrulama insan incelemesi ya da
+  bağımsız değerlendirme kaydıyla olur: değerlendirici ayrı kimliktir, işi yapan işçinin (mühürlü Run kaydından yeniden çıkarılan) model
+  üreticisinden (katalogdaki üretici alanı; bilinmiyorsa doğrulama yok) farklı üreticinin modeliyle çalışır; doğrulama açıksa aday metni bu ikinci
+  sağlayıcıya gönderilir; tek üretici bağlıysa değerlendirici çalışmaz ve kayıt aday kalır; kaydın içerik özetini mühürler; kaydı yazan AI kendi kaydını asla doğrulamaz. Yeni kimliklerin izinleri
+  tasarım §5'teki tam listedir; AI taban kuralı yalnız değerlendirici ve bu dayanak için gevşer; emekliye ayırma ve içerik silme (purge) insanındır.
+  Doğrulanmış kayıtlar yalnız Run'ın kapsamında, aynı iş türü ailesi ve hedefte, kabul eden kişinin kaynak işi okuyabildiği durumda, Run kabulünde
+  dondurularak, veri olarak, boyut sınırıyla ve mühürlü özetle işçiye (sonra Brain'e) verilir; okuma hatası bekletir. Otomatik doğrulananlar yalnız
+  düşük riskli iş türlerinde kullanılır. Çelişki ve bayatlık kaydı otomatik olarak bağlamdan çeker, kararı insan verir. Açma/kapama kapsam başına
+  korumalı ayardadır (AI değiştiremez). Kayıt listeleme, arama ve inceleme de (CLI ve MCP) kaynak işi okuyamayan kişiye kaydı göstermez, yalnız
+  gizlenen sayısını söyler. Purge hafıza kaydının içeriğini ve değerlendirici kayıtlarını siler, yedek geri yüklenince yeniden uygulanır; işçi çıktısı, Run'a dondurulmuş bağlam kopyası, mevcut yedekler ve
+  ikinci sağlayıcıdaki kopya silinmez. Bu paketin hafıza göçünden sonra (lane numarası v65; kesin numara landing'de verilir) içerikten türeyen her özet anahtarlıdır;
+  göçten önce mühürlenmiş denetim olayları, komut makbuzları ve istem parçasının düz özeti düz kalır. Legacy tek seferlik içe aktarma kararı aynen kalır.
+- **Model bağımsızlığı (owner kuralı 2026-10-23, lead iletimi):** değerlendirici modeli kodda adla seçilmez; uygunluk yalnız model rol/tier registry'sindeki
+  `memory-evaluator` rolü ve katalogdaki üretici alanından (`vendorId`) gelir. Yeni bir model yalnız veri güncellemesiyle (registry + katalog) uygun olur.
+  Owner'a gösterilen maliyet ya da uygunluk metni sabit fiyat yazmaz; güncel registry ve katalogdan hesaplanır. Uygun ve etkin bir farklı-üretici
+  satırı yoksa değerlendirici çalışmaz ve kayıtlar aday kalır.
+
+<a id="cekirdek-katmanlar-2026-10-23"></a>
+
+## Owner kararları — 2026-10-23: headless abonelik Brain'i (S3), ajan evrimi ve imza anahtarları (S8), Deckent Hub = alpha.56, MVP yok, paket tavanları, model bağımsızlığı
+
+Kaynak: ana oturum (lead 4d4830b2) AskUserQuestion turları, 2026-10-23; tasarımlar dış `proof/ORCHESTRATION-2026-10-23/S3-DESIGN.md` (rev 2, kanun denetimi PASS), `S8-DESIGN.md` (rev 5.1) ve `S8-HUB-DESIGN.md` (rev 3.1; ikisinin son kanun denetimi PASS); ölçüm dış `proof/HEADLESS-0-2026-10-23/RESULT.md`. Bu bölüm yalnız owner'ın seçimlerini ve lead'in açıkça benimsediği önerileri tutar; bir kabul ya da beta kararı değildir. Uygulama alpha.55'tedir (CHANGELOG alpha.55 satırı, [çekirdek katmanlar modülü](../architecture/modules/core-layers.md)).
+
+<a id="headless-brain-2026-10-23"></a>
+
+### Headless abonelik Brain'i (S3): Q-H1…Q-H5 ve HEADLESS-0
+
+Brain planlamayı kişinin kendi Claude aboneliğiyle, resmî ve değiştirilmemiş `claude -p` üzerinden yapabilsin diye owner beş soruyu cevapladı. Cevaplar:
+
+- **Q-H1 giriş dizini:** standart `~/.claude` (Max). Bilinen risk: Brain'in giriş yenilemesi ve kota, owner'ın kendi oturumlarıyla ortaktır.
+- **Q-H2 ilk ölçüm:** HEADLESS-0'ı lead owner'ın makinesinde, owner'ın girişiyle, araçsız ve repo dışında koştu.
+- **Q-H3 arka plan ve AI kullanımı:** evet. Arka plan rolleri (kurtarma kararı, hafıza değerlendirici) ve AI/MCP üzerinden gelen planlama (`plan_run`) aboneliği yalnız bağlantıda bir kez verilen, geri alınabilir açık onayla kullanır; onayı yalnız kişi yazar. Kişi kendi `/do`'sunu her zaman kullanır.
+- **Q-H4 kota dolunca:** bekleme penceresi kısaysa Brain görünür ve iptal edilebilir biçimde bekler; değilse sıfırlanma saatiyle tipli ret ve kart gelir. Dürüst sınır: Deckent kredi satın almaz ve `credits_required`'da durur; hesapta ek kullanım açıksa CLI onu çekebilir ve Deckent bunu göremez.
+- **Q-H5 CLI güncellenince:** soru sorulmadı, lead önerileni benimsedi: model çağırmayan ön kontrol kendiliğinden yeniden koşar; yeni sürüm katalogdaki `minCliVersion` aralığındaysa ve ön kontrol geçerse kanal açık kalır, değilse kanal kapanır ve owner'a söylenir.
+- **HEADLESS-0 sonucu (dört deneme, hepsi başarılı, hepsinde `apiKeySource none`, araç ve MCP yok, tur başına 1,7–3,6 s):** `--safe-mode` tek başına kişinin kendi eklentilerini yüklediği için `--restricted` zorunludur; dar HOME (`HOME=<çalışma dizini>` ve `CLAUDE_CONFIG_DIR=<giriş dizini>`) girişi koruduğu için gerçek HOME istisnası (Q-H6) sorulmadı; `--restricted` altında da görünen yerleşik eklenti adları kodda değil registry verisinde bir izin listesidir.
+- **HEADLESS-S3 kuralı (owner 2026-10-23):** abonelik Brain'i resmî, değiştirilmemiş `claude -p` ile, kişinin kendi işletim sistemi kullanıcısının süreçlerinde ve kendi girişiyle çalışır; Deckent kimlik dosyasını açmaz, okumaz, kopyalamaz; ortamdaki hiçbir anahtar sürece ulaşmaz. Çağrı araçsız, MCP'siz, tek tur ve tekrarsızdır; sürüm, bayrak ve giriş türü ön kontrolü ya da çalışma bekçileri tutmazsa kanal tipli retle kapanır, API'ye sessiz geçiş yoktur. Giriş dizini Q-H1, AI/MCP ve sistem rolleri Q-H3, kota Q-H4, sürüm değişimi Q-H5'e göredir; HOME dardır. Müşteride varsayılan API anahtarlı Brain'dir; abonelik seçeneği yalnız bubblewrap + ağ geçidi yalıtımının (S3-5) çalıştığı kurulumda açılır, yalıtımsız yol yoktur.
+
+<a id="ajan-evrimi-2026-10-23"></a>
+
+### Ajan seçimi, durum, istatistik ve imza anahtarları (S8): birinci ve ikinci tur
+
+Owner çekirdek vizyonda (Paperclip benzeri, yaratılabilen ajanlar ve org ağacı) ajanların sonuçlarıyla iyileşmesini istedi. Birinci tur (14:29Z) ve ikinci tur (15:09Z) cevapları:
+
+- **Önerildiği gibi kabul:** Q-S1 ajanı sistem seçer (Brain ya da model seçmez); Q-S2 terfi kart kuralıyla olur; Q-S3 terfili ajan düşük riskli işte kartsız, aday ajan her zaman Run kartıyla; Q-S5 ölçümle onaylanmış (calibrated) kuralda otomatik daraltma; Q-S7 taslak kart anında üretilir; Q-S8 eşikler önce N1'de ölçülür; Q-S11 sıra gölge → kartlar → daraltma, müşteride varsayılan kapalı.
+- **Q-S6 alternatifi:** ajanın yeni sürümü önceki sürümün terfisini devralır ("terfi önceki sürümden taşındı"); yalnız aynı iş türünde, kendi sonuçlarıyla yeniden denetlenir; AI'ın yazdığı sürüm kendi terfi iznini ve imzasını ister.
+- **Q-S4, Q-S9, Q-S10 yerine owner'ın kuralı:** "AI ve sistem yetkilere sahip olsun, imzalayarak yapsın." Her AI ve sistem kimliği kendi imza anahtarını alır; imza satırlarını yalnız kişi ekler ve iptal eder; etkin anahtar ve politika izniyle AI/sistem tanım yapabilir, terfi ettirip geri alabilir; her eylem imzalanır, yazma anında doğrulanır ve mühürlenir; iptal bekleyen imzalı eylemleri hemen durdurur; imzasız AI eylemi yoktur; anahtar argv, env, log ya da modele ulaşmaz. İmza anahtarları alpha.55'te (S8-5).
+- **Q-S12 alternatifi (ikinci tur):** izinli ve imzalı başka bir AI, AI'ın yazdığı bir sürümü terfi ettirebilir ya da geri getirebilir. Öz-onay yasağı korunur: hiçbir AI kendi sürümünü ya da kendi önerisini terfi ettirmez. Tek AI kimliği olan kurulumda bu alternatif fiilen kapalıdır; ikinci, ayrı anahtarlı ve izinli bir AI kimliği gerekir.
+- **Q-S13 alternatifi (ikinci tur):** imza anahtarı iptal edilince mevcut terfiler ve kayıtlar kalır; yalnız o anahtarla yeni, bekleyen ya da yeniden oynatılan eylemler durur; inceleme "imzalayan iptal edildi" der; HMAC zincirli `revocations.log` kalır. Owner'ın kabul ettiği sınır: iptal edilen (ele geçirilmiş olabilecek) anahtarın verdiği terfiler, bir kişi geri alana kadar ajanı düşük riskli işte kartsız seçilebilir tutar; iptal kartı bu terfileri tek adımlık geri alma ile listeler.
+- **Güncellenen kural metni (ORG/A4/A5 ve AJAN-ORG):** sistem her görev için işin türüne bağlı ajanı deterministik seçer; ajanı, sürümünü ve skill seti özetini Run kabulünde mühürler; model seçimi WorkClass listesinde kalır. Mühürlü metriklerden ajan, skill ve iş türü başına sonuçlar Wilson aralığıyla toplanır; yalnız işçiye ya da değerlendiriciye bağlanabilen başarısızlıklar sayılır ve her sonuç "ilişki, nedensellik değil" olarak gösterilir. Tier boş kalır (A4); kapsamlar arası öğrenme yoktur.
+
+<a id="deckent-hub-2026-10-23"></a>
+
+### Deckent Hub: ikinci tur cevapları ve alpha.56
+
+- **Merkezî Deckent Hub (owner):** Verhex'in işlettiği, ClawHub benzeri bir hub: kişi ve kurum yayıncı profilleri, profillerden hızlı kurulum, gelen skill'leri Verhex moderasyon ekibi inceler; hub'ın imzalı moderasyon onayı kurulum güveni için yeterlidir (H-Q1'in yerini alır), kurulum daha fazlasını sabitleyebilir; her kurulum ayrıca hub olabilir.
+- **Cevaplar:** H-Q2 alternatifi (aynı yayıncı anahtarıyla gelen güncelleme terfiyi taşır; AI yayıncı anahtarları yine `candidate` başlar); H-Q4 evet (her kurulum hub olabilir, varsayılan kapalı, dışa açık dinlemede TLS); H-Q5 alternatifi (iptal listesi bayatlarsa kurulu öğeler de seçimden çekilir, taze doğrulanmış liste geri getirir); H-Q6 evet (skill'ler MCP Skills eklentisiyle); H-Q11 evet (hub yönetimi ve moderasyon rolleri yalnız kişinin); H-Q12 alternatifi (aynalar kapalı); H-Q13 evet (ilk hub komutunda bağlanma kartı, o zamana kadar ağ trafiği yok); H-Q14 kök anahtar beş kişiden üçünün imzasıyla, ilk moderasyon ekibi en az üç kişi (ikisi kıdemli).
+- **Lead'in önerildiği gibi tuttukları (owner açıkça cevaplamadı):** H-Q3 (yayın dışarı veri çıkışıdır, hedef ve içerik özeti görünür, sır bulunursa reddedilir), H-Q8 (hub'a kullanım ya da başarı verisi gitmez), H-Q9 (AI inceleyici imzası yalnız güvenilen AI anahtarından sayılır, insan incelemesinin yerine geçmez), H-Q10 (hafıza derslerinden türeyen içeriği yalnız kişi, tam metni görerek yayınlar).
+- **Açık:** H-Q7 alan adı ve H-Q14'teki isimler ile hukuki iletişim adresi owner'ın 2026-10-26 (Pazartesi) kararıdır; o güne kadar registry'de yer tutucu durur.
+- **Zamanlama:** owner önce "Hub tasarımı şimdi, kod betadan sonra" dedi; aynı gün MVP kuralıyla (aşağıda) Hub'ı mevcut programa aldı; 20:12Z'de Hub'ın ayrı sürüm **alpha.56** olmasını kabul etti. alpha.55 Hub kodu içermez; S8-HUB tasarımı alpha.56'nın girdisidir. Owner 2026-10-24'te kapsamlı denemesini yapar; alpha.56 planı ondan sonra gözden geçirilir.
+
+<a id="mvp-yok-2026-10-23"></a>
+
+### MVP yok
+
+Owner: "MVP tasarlamıyoruz, sistem mimarisi ve ürün tasarlıyoruz." Kural (her şerit için bağlayıcı): karar verilmiş iş eksiksiz kurulur (gerçek bağlantı, tüm durumlar, testler, EN/TR metinler, belge bilgisi) ve evrimleşecek biçimde tasarlanır (sürümlü sözleşmeler, registry'ler). Karar verilmiş bir parça lead'e söylenmeden "sonraya" bırakılmaz.
+
+### Paket satır tavanları (alpha.55)
+
+Çekirdek katmanlar paket satır bütçelerini aştığı için owner 2026-10-23'te tavanları adım adım yükseltti: adapters 30600 ve composition 8200 (`392bbedcf`, alpha.54'te de `d72f2ba8c`), composition 9000 (08:28Z, `0a9c4b4b8`), adapters 32000 (alpha.54 main birleşmesi, `1764a2538`), adapters 33500 (20:28Z, `54f7f21d6`) ve composition 9800 (20:39Z, `67170359b`). Tavanlar `arch.json`'dadır ve alpha.54 ile alpha.55 main'de buluşunca yeniden ölçülür.
+
+<a id="model-bagimsizligi-2026-10-23"></a>
+
+### Model bağımsızlığı (genel kural)
+
+Owner: "model bağımsız … tüm işlerimiz bu şekilde." Her mekanizma parametriktir: yeni bir model yalnız veri güncellemesiyle (katalog satırı ve model rol/tier satırı) çalışır; mantıkta model kimliği ya da model ailesi adı yazılmaz. Model rol/tier registry'si (`model_roles`) tier ve rolün tek sahibidir; tier ve rol katalog satırına yazılmaz. Kesin model kimlikleri kabulde sabitlenir ve mühürlenir. Yukarıdaki değerlendirici kuralı bu genel kuralın bir uygulamasıdır. alpha.55'te: kaynak koddaki string'lerde model ailesi adı denetimi (G5), API kanallarının fiyat ve rota bilgisinin katalog verisinden gelmesi (M4), yeni bir model için tier ve rol kartı (M2) ve WorkClass aday listelerinde rol seçicileri (M3).

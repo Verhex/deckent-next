@@ -4,7 +4,7 @@ export type { TaskDependency, TaskDefinition, TaskEligibility, TaskGraph, TaskPr
 export { validateTaskGraph } from './internal/graph.js';
 export { measureTaskGraph, summarizeTaskGraph, taskGraphShapeSchema, taskGraphSummarySchema } from './internal/shape.js';
 export type { TaskGraphShape, TaskGraphSummary } from './internal/shape.js';
-export { WORK_INPUT_SCHEMA_VERSION, WORK_INPUT_TEXT_MAX_BYTES, workInputSchema } from './internal/work-input.js';
+export { WORK_INPUT_SCHEMA_VERSION, WORK_INPUT_ASSIGNED_SCHEMA_VERSION, WORK_INPUT_TEXT_MAX_BYTES, workInputSchema } from './internal/work-input.js';
 export type { WorkInput } from './internal/work-input.js';
 export { inspectTaskReadiness } from './internal/readiness.js';
 export { conflictKeys, resourcePathsIntersect, resourceKeysIntersect, withConflictEdges, hasConflictEdges, excludeConflicting } from './internal/conflict.js';

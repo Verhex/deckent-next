@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { workerEffortSchema, workerModelPinEvidenceShape, catalogPinModelEvidence, type ModelCatalogModelRecord } from '#domain/index.js';
+import { workerEffortSchema, workerModelPinEvidenceShape, catalogPinModelEvidence, eligibleRoleModels, roleModelKey, type ModelCatalogModelRecord, type ModelRolePolicy } from '#domain/index.js';
 import { compareToolchainVersions, extractToolchainVersion } from '#engine/core/toolchain-currency/index.js';
 import type { ModelCatalogReader } from './catalog.js';
 
@@ -12,10 +12,13 @@ import type { ModelCatalogReader } from './catalog.js';
  */
 export type WorkerModelAdmissionCode = 'WORKER_MODEL_UNPINNED' | 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_CHANNEL_NOT_ACTIVE'
   | 'WORKER_CHANNEL_MISMATCH' | 'WORKER_MODEL_UNKNOWN' | 'WORKER_MODEL_RETIRED' | 'WORKER_MODEL_NOT_CURRENT' | 'WORKER_MODEL_NOT_ACTIVE'
-  | 'WORKER_MODEL_CLI_TOO_OLD' | 'WORKER_MODEL_BINDING_MISMATCH' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_CLASS_NOT_REGISTERED';
+  | 'WORKER_MODEL_CLI_TOO_OLD' | 'WORKER_MODEL_BINDING_MISMATCH' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_CLASS_NOT_REGISTERED'
+  | 'WORKER_ASSIGNMENT_NO_CANDIDATES' | 'WORKER_ASSIGNMENT_NONE' | 'WORKER_ASSIGNMENT_EXPANSION_LIMIT';
 export interface WorkerModelAdmissionDetail {
   readonly taskId: string; readonly channelId: string | null; readonly modelId: string | null;
   readonly exactModelId?: string; readonly minCliVersion?: string; readonly cliVersion?: string | null;
+  /** ATAMA-1 refusals: the WorkClass whose candidate list was read and each skipped candidate with its typed reason (bounded by the list). */
+  readonly workClass?: string; readonly skipped?: string; readonly skippedMore?: number;
 }
 /** Admission that passes with a visible caveat (WORKER-AUTO-REFRESH, owner K2): the pinned worker CLI is older than the model's minimum while
  * a worker image refresh is in flight, so the Run is admitted on the newest image it can use today. Never raised when no refresh runs. */
@@ -26,7 +29,13 @@ export interface WorkerImageRefreshingWarning {
 export interface WorkerInstructionsWithheldWarning {
   readonly code: 'WORKER_INSTRUCTIONS_WITHHELD'; readonly source: string; readonly reason: 'absent' | 'untrusted' | 'unsafe' | 'unreadable'; readonly digest: string | null;
 }
-export type WorkerAdmissionWarning = WorkerImageRefreshingWarning | WorkerInstructionsWithheldWarning;
+/** S4B-5 (§7.3): memory left out of one task's worker prompt, the Run admitted without it. `policy`: the admitting principal may not inspect the
+ * scope's memory; `sources`: `count` eligible entries come from work it may not read (a count only); `budget`: the prompt had no room for the part;
+ * `contests`: more contests are open than one bounded read shows. */
+export interface MemoryContextWithheldWarning {
+  readonly code: 'MEMORY_CONTEXT_WITHHELD'; readonly taskId: string | null; readonly reason: 'policy' | 'sources' | 'budget' | 'contests'; readonly count: number;
+}
+export type WorkerAdmissionWarning = WorkerImageRefreshingWarning | WorkerInstructionsWithheldWarning | MemoryContextWithheldWarning;
 export type WorkerAdmissionOptions = Readonly<{ imageRefreshInProgress?: boolean }>;
 export class WorkerModelAdmissionError extends Error {
   constructor(readonly code: WorkerModelAdmissionCode, readonly detail: WorkerModelAdmissionDetail) { super(code); this.name = 'WorkerModelAdmissionError'; }
@@ -65,18 +74,27 @@ async function checkModel(reader: ModelCatalogReader, scopeId: string, taskId: s
   return entry;
 }
 /** K3 work input as recorded in the Run graph: the requested pin and optional effort of a task compiled from a template. */
-export type WorkerTaskRequest = Readonly<{ id: string; workInput?: Readonly<{ model: Readonly<{ channelId: string; modelId: string; auxiliaryModelIds: readonly string[] }>; effort?: string | undefined }> | undefined }>;
+export type WorkerTaskRequest = Readonly<{ id: string; workInput?: Readonly<{ model?: Readonly<{ channelId: string; modelId: string; auxiliaryModelIds: readonly string[] }> | undefined; effort?: string | undefined }> | undefined }>;
 
+/** The (channel, model) keys that hold the worker `role` (the WorkClass worker role id, registry data) in a scope today (tier/role registry; a dated exception counts only while its measured row is active).
+ * The one gate for system assignment and for the Brain's worker-model list, so the two cannot disagree. */
+export async function workerRoleKeys(roles: ModelRolePolicy, role: string, scopeId: string, reader: ModelCatalogReader, nowMs: number): Promise<ReadonlySet<string>> {
+  const measured = new Set<string>();
+  for (const row of roles.models) if (row.measured !== undefined && row.roles.includes(role) && (await reader.activation(scopeId, row.channelId, row.modelId))?.state === 'active') measured.add(roleModelKey(row));
+  return new Set(eligibleRoleModels(roles, role, { today: today(nowMs), active: measured }).map(roleModelKey));
+}
 export interface WorkerPlanningTemplate { readonly profile: { id: string; version: number }; readonly provider: string; readonly cliVersion: string }
-/** Read-only planner choices share the admission check, including scope activation, lifecycle, alias and CLI floor. */
+/** Read-only planner choices share the admission check, including scope activation, lifecycle, alias and CLI floor, and the assignment's
+ * `worker` role gate (`roles` is required: a model without the role is skipped, fail closed). */
 export async function inspectAdmissibleWorkerModels(templates: readonly WorkerPlanningTemplate[], scopeId: string, reader: ModelCatalogReader,
-  nowMs: number, options: WorkerAdmissionOptions = {}) {
-  const choices = [];
+  nowMs: number, options: WorkerAdmissionOptions & Readonly<{ roles: ModelRolePolicy; workerRole: string }>) {
+  const choices = [], workers = await workerRoleKeys(options.roles, options.workerRole, scopeId, reader, nowMs);
   const channels = await reader.channels();
   for (const template of templates) {
     for (const channel of channels.filter(row => row.channel.kind === 'native-cli' && row.channel.cli === template.provider)) {
       const admitted: Readonly<{ record: ModelCatalogModelRecord; warnings: readonly WorkerAdmissionWarning[] }>[] = [];
       for (const row of await reader.models(channel.channelId)) {
+        if (!workers.has(roleModelKey({ channelId: channel.channelId, modelId: row.modelId }))) continue;
         const warnings: WorkerAdmissionWarning[] = [];
         try {
           const record = await checkModel(reader, scopeId, template.profile.id, template.provider, template.cliVersion,
@@ -111,7 +129,8 @@ export async function admitWorkerModels(tasksInput: readonly unknown[], scopeId:
     }
     const { provider, preflight, model, reasoningEffort, effortMode } = subscription.data; const request = requested.get(task.taskId);
     const detail = Object.freeze({ taskId: task.taskId, channelId: model.channelId, modelId: model.modelId });
-    if (request && JSON.stringify([request.model.channelId, request.model.modelId, request.model.auxiliaryModelIds])
+    // A work input without a model (v2) was assigned by the system; the frozen assignment seal is checked against the pin by the Run's integrity check.
+    if (request?.model && JSON.stringify([request.model.channelId, request.model.modelId, request.model.auxiliaryModelIds])
       !== JSON.stringify([model.channelId, model.modelId, model.auxiliaryModelIds])) throw new WorkerModelAdmissionError('WORKER_MODEL_BINDING_MISMATCH', detail);
     for (const modelId of [model.modelId, ...model.auxiliaryModelIds]) {
       const entry = await checkModel(reader, scopeId, task.taskId, provider, preflight?.cliVersion ?? null, model.channelId, modelId, nowMs, options.imageRefreshInProgress ? warnings : undefined);

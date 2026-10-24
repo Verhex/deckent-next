@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { AttemptIdentity } from '#domain/index.js';
-import { workerReportLimits } from '#domain/index.js';
+import { RECOVERY_DECISION_SEED, loadRecoveryDecisionRegistry, recoveryNoteText, workerReportLimits, type RunSnapshot } from '#domain/index.js';
 import { HandoffError } from '#engine/core/handoff-observation/index.js';
 import type { TaskHandoffEvidenceStore } from './handoff.js';
 import type { ArtifactStore } from '#capabilities/index.js';
@@ -45,7 +45,7 @@ export async function prepareTaskStart(identity: AttemptIdentity, store: StartSt
   const answer = run?.progress.find(task => task.taskId === identity.taskId)?.inputAnswer;
   if (answer && (identity.generation !== answer.source.generation + 1 || identity.attemptId === answer.source.attemptId)) throw new HandoffError('HANDOFF_INVALID');
   const continuation = answer ? JSON.stringify({ kind: 'human-input-answer', ...answer }) : '';
-  const prompt = [handoff.prompt, continuation].filter(Boolean).join('\n');
+  const prompt = [handoff.prompt, continuation, recoveryContinuation(run, identity)].filter(Boolean).join('\n');
   if (Buffer.byteLength(prompt) > workerReportLimits.promptBytes) throw new HandoffError('HANDOFF_LIMIT_EXCEEDED');
   if (answer) {
     const bytes = new TextEncoder().encode(continuation);
@@ -57,4 +57,16 @@ export async function prepareTaskStart(identity: AttemptIdentity, store: StartSt
   }
   return { declarations, inputs, handoffInputs, patches, events: handoff.events,
     ...(prompt ? { dependencyContext: { text: prompt, sha256: createHash('sha256').update(prompt).digest('hex') } } : {}) };
+}
+/**
+ * S6R-5 (S6R-DESIGN §6, §7 step 4b): what the Attempt that continues a lost one learns of it, as one labelled data line — the decision's registry note
+ * (its code and worker-facing registry text; never model text) and the settled task-idempotent work the gate saw (never re-executed; a repeat dedups
+ * at the target through the task-scoped key). Only for the generation right after the lost binding; it grants nothing.
+ */
+function recoveryContinuation(run: RunSnapshot | null, identity: AttemptIdentity): string {
+  const lost = [...run?.previousBindings ?? []].reverse().find(row => row.identity.taskId === identity.taskId && row.observedKind === 'lost');
+  const context = lost?.recoveryContext;
+  if (!context || lost.identity.generation + 1 !== identity.generation) return '';
+  const note = context.note === null ? null : { code: context.note, text: recoveryNoteText(loadRecoveryDecisionRegistry(RECOVERY_DECISION_SEED), context.note) };
+  return JSON.stringify({ kind: 'recovery-continuation', note, settledWork: context.facts });
 }

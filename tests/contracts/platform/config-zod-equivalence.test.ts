@@ -48,7 +48,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
   it('registered sections: which default from {} and which stay absent is fixed', () => {
     const outcome = Object.fromEntries([...configSections()].map(([name, { schema }]) => [name, schema.safeParse({}).success]));
     expect(outcome).toEqual({ provider_catalog: false, provider_invocation_profiles: false, provider_spending: false, provider_spend_audit: false,
-      inference_serving: false, terminal: true, operations: true, secrets: false, decision: false, identity: false, brain_planner: true });
+      inference_serving: false, terminal: true, operations: true, secrets: false, decision: false, identity: false, brain_planner: true, model_roles: false });
     const defaults = createDefaultConfig();
     expect(defaults['terminal']).toEqual({ persistHistory: true, responseStyle: 'standard', maxTrackedRuns: 128, autostartService: true, serviceStartTimeoutMs: 20_000, theme: 'auto', banner: 'full', clearOnStart: true,
       layout: 'fullscreen', notify: 'bell', viewportRows: 2000,
@@ -56,7 +56,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(defaults['operations']).toEqual({ catalog: [], targets: [] });
     // SECRET-K1: `secrets` stays absent from the defaults, so a healed or default-filled project file never carries a backend selection.
     // AOF-DECISION-PORT: no universal decision threshold is synthesized; a missing `decision` section means unavailable.
-    for (const name of ['provider_catalog', 'provider_invocation_profiles', 'provider_spending', 'provider_spend_audit', 'inference_serving', 'secrets', 'decision']) {
+    for (const name of ['provider_catalog', 'provider_invocation_profiles', 'provider_spending', 'provider_spend_audit', 'inference_serving', 'secrets', 'decision', 'model_roles']) {
       expect(Object.hasOwn(defaults, name), name).toBe(false);
     }
   });
@@ -77,7 +77,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
     expect(d.mcp).toEqual({ inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConcurrentCalls: 8, maxServers: 20 });
     expect(d.service).toEqual({ identity: null, inputMaxBytes: 1_048_576, responseMaxBytes: 1_048_576, maxConnections: 32, maxConcurrentRequests: 16,
       maxConcurrentExecutions: 8, headerTimeoutMs: 10_000, responseTimeoutMs: 10_000, acceptRetryDelayMs: 25, acceptRetryLimit: 3, shutdownGraceMs: 30_000, admissionWaitMs: 250, busyRetryLimit: 2, idleShutdown: { afterMs: 900_000 } });
-    expect(d.runRuntime).toEqual({ quotaRecovery: { schemaVersion: 1, maxResumes: 1, maxWaitMs: 604800000 }, stallRecovery: { schemaVersion: 1, warnAfterMs: 180000, stopAfterMs: 3600000, maxRetries: 1, backoffMs: 30000 }, parking: { schemaVersion: 1, timeoutMs: 86400000 }, maxConcurrentRuns: 8, maxReservationsPerTurn: 4, pollIntervalMs: 1000, failureBackoffMs: 5000, maxConsecutiveFailures: 3, maxPreparationAborts: 2, pageSize: 64 });
+    expect(d.runRuntime).toEqual({ quotaRecovery: { schemaVersion: 1, maxResumes: 1, maxWaitMs: 18000000, maxRewaits: 3 }, stallRecovery: { schemaVersion: 1, warnAfterMs: 180000, stopAfterMs: 3600000, maxRetries: 1, backoffMs: 30000 }, parking: { schemaVersion: 1, timeoutMs: 86400000 }, maxConcurrentRuns: 8, maxReservationsPerTurn: 4, pollIntervalMs: 1000, failureBackoffMs: 5000, maxConsecutiveFailures: 3, maxPreparationAborts: 2, pageSize: 64, nervous: { mode: 'off' }, recovery: { mode: 'off' } });
     expect(d.inspection).toEqual({ maxPageSize: 64, policyMaxBytes: 1_048_576,
       workers: { heartbeatMs: 2000, staleMs: 10_000, maxFileBytes: 65_536, maxEntries: 4096, sources: [] } });
     expect(d.toolchains).toEqual({ currency: { mode: 'report', registryEndpoint: 'https://registry.npmjs.org', timeoutMs: 5000, responseMaxBytes: 65_536 },

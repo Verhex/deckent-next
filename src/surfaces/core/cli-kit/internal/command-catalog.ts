@@ -131,6 +131,43 @@ export const CLI_CATALOG = [
     action('outcome', 'work', 'cli.help.action.outcome', 'cli.help.decide', { requires: INPUT }),
     action('inspect', 'work', 'cli.help.action.decide.inspect', 'cli.help.decide', { requires: INPUT }),
   ] },
+  // S4 memory journal v1: reads (list by default, search, inspect) and a person's terminal-card writes (propose, verify, retire; S4B-4 review, purge).
+  { name: 'memory', group: 'observe', summary: 'memory.help.summary', detail: 'memory.help.detail', args: '[--scope <id>] [--state <name>] [--json]', bare: 'handler', children: [
+    action('search', 'observe', 'memory.help.action.search', 'memory.help.detail', { requires: ['<text>'] }),
+    action('inspect', 'observe', 'memory.help.action.inspect', 'memory.help.detail', { requires: ['<id>'] }),
+    action('propose', 'observe', 'memory.help.action.propose', 'memory.help.detail', { requires: ['--input <file>'] }),
+    action('verify', 'observe', 'memory.help.action.verify', 'memory.help.detail', { requires: ['<id>', '--note <text>'] }),
+    action('retire', 'observe', 'memory.help.action.retire', 'memory.help.detail', { requires: ['<id> | --source <run>[/<attempt>]', '--reason <text>'] }),
+    // S4B-4: the person's review card (candidates, contests, stale entries) and the purge card.
+    action('review', 'observe', 'memory.help.action.review', 'memory.help.detail'),
+    action('purge', 'observe', 'memory.help.action.purge', 'memory.help.detail', { requires: ['<id> | --source <run>[/<attempt>]'] }),
+    // S4B-7: the read-only rollout status (phase, exit criteria with numbers, the next person action).
+    action('rollout', 'observe', 'memory.help.action.rollout', 'memory.help.detail'),
+  ] },
+  // S7 agent/skill catalog core: reads (agents by default, inspect, skills, skill) and a person's terminal-card writes (define, define-skill).
+  { name: 'agents', group: 'observe', summary: 'agents.help.summary', detail: 'agents.help.detail', args: '[--scope <id>] [--json]', bare: 'handler', children: [
+    action('inspect', 'observe', 'agents.help.action.inspect', 'agents.help.detail', { requires: ['<id>'] }),
+    action('skills', 'observe', 'agents.help.action.skills', 'agents.help.detail'),
+    action('skill', 'observe', 'agents.help.action.skill', 'agents.help.detail', { requires: ['<id>'] }),
+    action('define', 'observe', 'agents.help.action.define', 'agents.help.detail', { requires: ['--input <file>'] }),
+    action('define-skill', 'observe', 'agents.help.action.define-skill', 'agents.help.detail', { requires: ['--input <file>'] }),
+    action('signers', 'observe', 'agentsign.help.action.signers', 'agentsign.help.detail'),
+    action('enrol-signer', 'observe', 'agentsign.help.action.enrol-signer', 'agentsign.help.detail', { requires: ['--principal <issuer:subject>', '--label <text>'] }),
+    action('add-signer', 'observe', 'agentsign.help.action.add-signer', 'agentsign.help.detail', { requires: ['--input <file>'] }),
+    action('revoke-signer', 'observe', 'agentsign.help.action.revoke-signer', 'agentsign.help.detail', { requires: ['<id>'] }),
+    action('repair-signers', 'observe', 'agentsign.help.action.repair-signers', 'agentsign.help.detail'),
+    action('import-skill', 'observe', 'agentsign.help.action.import-skill', 'agentsign.help.detail', { requires: ['--input <file>'] }),
+    // S8-2 statistics read; S8-3/S8-4 suggestions (read) and the person's standing, dismiss and reset cards.
+    action('stats', 'observe', 'agentstats.help.action.stats', 'agentstats.help'),
+    action('suggestions', 'observe', 'agentsevo.help.action.suggestions', 'agentsevo.help'),
+    action('promote', 'observe', 'agentsevo.help.action.promote', 'agentsevo.help', { requires: ['<id>', '--work-class <id>'] }),
+    action('demote', 'observe', 'agentsevo.help.action.demote', 'agentsevo.help', { requires: ['<id>', '--work-class <id>'] }),
+    action('restore', 'observe', 'agentsevo.help.action.restore', 'agentsevo.help', { requires: ['<id>', '--work-class <id>'] }),
+    action('retire', 'observe', 'agentsevo.help.action.retire', 'agentsevo.help', { requires: ['<id>', '--work-class <id>'] }),
+    action('dismiss', 'observe', 'agentsevo.help.action.dismiss', 'agentsevo.help', { requires: ['<id>'] }),
+    // `reset` is the action's fixed word (usage and summary name it), not an argument placeholder: `requires` lists only the flag.
+    action('standing', 'observe', 'agentsevo.help.action.standing', 'agentsevo.help', { requires: ['--work-class <id>'] }),
+  ] },
   { name: 'models', group: 'models', summary: 'cli.help.summary.models', detail: 'cli.help.models', args: '[--scope <id>] [--declared] [--catalog] [--verbose]', bare: 'handler', children: [
     action('binding', 'models', 'cli.help.action.binding', 'cli.help.modelsBinding', { requires: MODEL }),
     action('activation', 'models', 'cli.help.action.activation', 'cli.help.modelsActivation', { requires: MODEL }),
@@ -146,11 +183,17 @@ export const CLI_CATALOG = [
     action('revise-budget', 'models', 'cli.help.action.revise-budget', 'cli.help.modelsBudget', { requires: ['--input <file|-> | --usd <amount>'] }),
     action('audit-spending', 'models', 'cli.help.action.audit-spending', 'cli.help.modelsAuditSpending', { requires: ['--input <file|->'] }),
     action('connect', 'models', 'cli.help.action.models.connect', 'cli.help.modelsConnect', { requires: ['--connection <id>', '--command-id <id>', '--model <id> | --reference <ref>'] }),
+    action('login', 'models', 'headless.help.action.login', 'headless.help.login', { requires: ['--connection <id>'] }),
     { name: 'catalog', group: 'models', summary: 'cli.help.action.catalog', detail: 'cli.help.modelsCatalog', children: [
       action('list', 'models', 'cli.help.action.models.catalog.list', 'cli.help.modelsCatalog'),
       action('register', 'models', 'cli.help.action.register', 'cli.help.modelsCatalog', { requires: ['--command-id <id>', '--seed <name> | --file <path>'] }),
       action('activate', 'models', 'cli.help.action.models.catalog.activate', 'cli.help.modelsCatalog', { requires: CATALOG_CHANGE, picks: true }),
       action('deactivate', 'models', 'cli.help.action.models.catalog.deactivate', 'cli.help.modelsCatalog', { requires: CATALOG_CHANGE, picks: true }),
+    ] },
+    // M2 typed role admission: which exact catalog model serves which role; `set` is a person's card (never AI, pipe or --json).
+    { name: 'roles', group: 'models', summary: 'cli.help.action.models.roles', detail: 'climodels.roles.help', children: [
+      action('show', 'models', 'cli.help.action.models.roles.show', 'climodels.roles.help'),
+      action('set', 'models', 'cli.help.action.models.roles.set', 'climodels.roles.help', { requires: ['--channel <id>', '--model <id>', '--tier <tier>', '--roles <roles> | --no-roles'] }),
     ] },
   ] },
   { name: 'approval', group: 'approvals', summary: 'cli.help.summary.approval', detail: 'cli.approval.help', args: '[--scope <id>] [--input <file|->]', bare: { read: 'list' }, children: [

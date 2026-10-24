@@ -2,7 +2,8 @@ import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { acceptanceEvidenceText } from '#surfaces/core/cli-human/index.js';
 import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
 import type { RunView } from '#engine/index.js';
-import { briefQualifiesAcceptance, notAcceptedLabel, notAcceptedNextStep, quotaWaitText, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
+import { briefQualifiesAcceptance, notAcceptedLabel, notAcceptedNextStep, quotaWaitText, quotaAskLines, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
+import { runHoldNextText, runHoldReasonText } from '#surfaces/core/recovery-text/index.js';
 import { runTitle, shownId } from './run-human.js';
 import type { RunCommandContext } from './context.js';
 import REGISTRY from './run.json' with { type: 'json' };
@@ -40,6 +41,9 @@ function exclusionLines(exclusions: Exclusions, locale: Locale, verbose: boolean
     : t('cli.run.inspect.exclusions', { count: exclusions.count }, locale)];
 }
 
+/** f3: what happens to a lost worker's task follows the recovery mode the Run froze at admission (absent: none frozen, recovery off). */
+const unresolvedRecoveryText = (mode: RunView['recoveryMode'], locale: Locale) => mode === 'live' ? t('recovery.unresolved.live', {}, locale)
+  : mode === 'shadow' ? t('recovery.unresolved.shadow', {}, locale) : t('recovery.unresolved.off', {}, locale);
 function taskLines(run: RunView, task: TaskView, models: InspectData['models'], locale: Locale, verbose: boolean): string[] {
   const brief = renderBriefLines(task.taskBrief, task.resultBrief, locale);
   // With a result, the brief's last line is its delivery line: it closes the task block (request → result → acceptance evidence → delivery).
@@ -59,7 +63,7 @@ function taskLines(run: RunView, task: TaskView, models: InspectData['models'], 
       ? t('cli.run.inspect.workspaceStartedFromPatch', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale)
       : t('cli.run.inspect.handoffReceived', { source: receipt.source.taskId, attempt: receipt.source.attemptId, digest: receipt.digest }, locale))),
     ...(task.configExclusions ? exclusionLines(task.configExclusions, locale, verbose) : []),
-    ...(task.unresolvedEffects ? [t('cli.run.inspect.unresolved', {}, locale)] : []),
+    ...(task.unresolvedEffects ? [t('cli.run.inspect.unresolved', {}, locale), unresolvedRecoveryText(run.recoveryMode, locale)] : []),
     ...(verbose && task.acceptance ? [renderAcceptanceLine(task.acceptance, locale)] : []),
     ...(verbose ? [t('cli.run.inspect.profile', { profile: task.profile.id, version: task.profile.version, criteria: task.acceptanceCriteria.join(', ') }, locale)] : []),
   ];
@@ -73,6 +77,10 @@ function taskLines(run: RunView, task: TaskView, models: InspectData['models'], 
  */
 /** PRE7FU (c): every cancelled task of this Run stopped before launch (no worker was started: never dispatched, no quota-exhausted attempt behind
  * it) and nothing is in flight or unresolved; otherwise worker termination stays "not confirmed". From the recorded view only. */
+function holdLines(run: RunView, locale: Locale): string[] {
+  const reason = runHoldReasonText(run.state, locale), next = runHoldNextText(run.state, locale);
+  return reason ? [t('cli.run.lifecycle.note', { note: reason }, locale), ...(next ? [`  ${next}`] : [])] : [];
+}
 function cancelledBeforeLaunch(run: RunView): boolean {
   const waiting = new Set((run.quotaWaits ?? []).map(wait => wait.taskId));
   return run.tasks.some(task => task.phase === 'cancelled') && run.tasks.every(task => !task.unresolvedEffects && !['active', 'evaluating', 'reconciling'].includes(task.phase)
@@ -90,7 +98,8 @@ export function renderRunInspect(data: InspectData, locale: Locale, verbose: boo
     ...(run.channelWaits ?? []).map(wait => `${wait.taskId}: ${quotaWaitText(wait.deadline, wait.resetsAtMs !== null, locale)}`),
     ...(run.state.kind === 'terminal' ? [t('cli.run.lifecycle.outcome', { outcome: run.state.outcome }, locale)] : []),
     ...(run.state.kind === 'parked' && run.state.reason === 'quota-exhausted' ? [quotaWaitText(run.state.deadline, (run.quotaWaits ?? []).every(wait => wait.resetsAtMs !== null), locale, (run.quotaWaits ?? []).some(wait => wait.retryLimitReached))] : []),
-    ...(run.state.kind === 'parked' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
+    ...(run.state.kind === 'parked' && run.state.reason === 'quota-ask' ? quotaAskLines((run.quotaWaits ?? []).map(wait => wait.resetsAtMs), locale) : []),
+    ...(run.state.kind === 'parked' && run.state.reason !== 'quota-ask' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
     // PRE-7: an environment park names the unmet requirement as an installation defect and its next step (fix, then resume: the preflight runs again).
     ...(run.state.kind === 'parked' && run.state.failureCode ? [run.state.reason === 'environment-not-ready' ? t('cli.run.lifecycle.environmentNotReady', { requirement: run.state.failureCode, run: runShown }, locale)
       : t('cli.run.lifecycle.failure', { code: run.state.failureCode }, locale)] : []),
@@ -98,7 +107,8 @@ export function renderRunInspect(data: InspectData, locale: Locale, verbose: boo
     ...(run.state.kind === 'parked' && run.state.failureCode === 'DISPATCH_PREPARATION_ABORTED' ? [t('error.DISPATCH_PREPARATION_ABORTED.summary', {}, locale)] : []),
     // E1: a timed-out environment check holds the Run (no answer, not an installation defect); its next step is an explicit re-run.
     ...(run.state.kind === 'parked' && run.state.failureCode === 'EXECUTION_ENVIRONMENT_TIMED_OUT' ? [t('cli.run.lifecycle.environmentTimedOut', { run: runShown }, locale)] : []),
-    ...(run.state.kind === 'parked' && run.state.note ? [t('cli.run.lifecycle.note', { note: run.state.note }, locale)] : []),
+    // S6R-6: the hold (own park or overlay) in words — a system note is its catalog text with the case reference and next step, never the raw code.
+    ...holdLines(run, locale),
     ...(run.pool ? [...run.pool.drift.map(drift => poolDriftLine(drift, locale)), ...run.pool.waiting.map(wait => poolWaitLine(wait.taskId, wait.reason, locale))] : []),
     !run.cancellationRequested ? t('cli.run.inspect.cancelAbsent', {}, locale) : cancelledBeforeLaunch(run) ? t('cli.run.inspect.cancelNoWorker', {}, locale) : t('cli.run.inspect.cancelRequested', {}, locale),
     ...(run.graphSummary ? renderGraphSummaryLines(run.graphSummary, locale).map(line => `  ${line}`) : []),

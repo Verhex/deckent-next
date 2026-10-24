@@ -1,4 +1,4 @@
-import { auditEventSchema, AuditError, type AuditCounter, type AuditEvent, type AuditRecord } from '#domain/index.js';
+import { auditEventSchema, AuditError, isAuditorPrincipal, isNervousPrincipal, isRecoveryPrincipal, type AuditCounter, type AuditEvent, type AuditRecord } from '#domain/index.js';
 import type { IntegrityAuthority } from '#platform/index.js';
 import { sealAuditRecord, verifyAuditRecord } from './integrity.js';
 import type { AuditStore } from './store.js';
@@ -18,7 +18,13 @@ export class AuditApplication {
   }
   record(input: unknown): AuditRecord {
     const parsed = auditEventSchema.safeParse(input);
-    if (!parsed.success) throw new AuditError('AUDIT_INVALID');
+    // S5: the read-only auditor writes no audit event (its own finding stream is a later, separate slice); an event naming it is refused.
+    // S6R-2: a `recovery-detection` comes only from Nervous, and Nervous records nothing else (it writes no state).
+    if (!parsed.success || isAuditorPrincipal(parsed.data.principal)
+      || isNervousPrincipal(parsed.data.principal) !== (parsed.data.subject.kind === 'recovery-detection')
+      // S6R-4: a lost task's continuation comes only from the recovery principal; S6R-5: so does its decision seal. It records nothing else.
+      || isRecoveryPrincipal(parsed.data.principal) !== (parsed.data.subject.kind === 'recovery-decision'
+        || parsed.data.subject.kind === 'run-lifecycle' && parsed.data.subject.action === 'continue-lost-task')) throw new AuditError('AUDIT_INVALID');
     const event: AuditEvent = parsed.data;
     return this.guard(() => verifyAuditRecord(this.store.append(event, sequence => sealAuditRecord(event, sequence, this.integrity)), this.integrity));
   }
@@ -49,6 +55,17 @@ export class AuditApplication {
     return Object.freeze(page.map(row => {
       const record = verifyAuditRecord(row, this.integrity);
       if (record.event.scopeId !== scopeId || record.event.subject.kind !== kind || record.sequence <= last) throw new AuditError('AUDIT_INTEGRITY');
+      last = record.sequence; return record;
+    }));
+  }
+  /** S6R-6: verified records of one subject kind sealed at or after `sinceAtMs`, newest first, at most `limit` (the recovery breaker's window). */
+  listRecentKind(scopeId: string, kind: AuditEvent['subject']['kind'], sinceAtMs: number, limit: number): readonly AuditRecord[] {
+    if (!this.store.recentOfKind || !Number.isSafeInteger(sinceAtMs) || sinceAtMs < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > MAX_PAGE) throw new AuditError('AUDIT_INVALID');
+    const page = this.guard(() => this.store.recentOfKind!(scopeId, kind, sinceAtMs, limit));
+    let last = Number.MAX_SAFE_INTEGER;
+    return Object.freeze(page.map(row => {
+      const record = verifyAuditRecord(row, this.integrity);
+      if (record.event.scopeId !== scopeId || record.event.subject.kind !== kind || record.event.atMs < sinceAtMs || record.sequence >= last) throw new AuditError('AUDIT_INTEGRITY');
       last = record.sequence; return record;
     }));
   }

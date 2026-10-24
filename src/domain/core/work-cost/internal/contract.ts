@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/core/attempt/index.js';
 import { identitySchema } from '#domain/core/primitives/index.js';
-import { acceptanceViewSchema, deckentMetricsSchema } from '#domain/core/run/index.js';
+import { acceptanceViewSchema, measuredCostSchema } from '#domain/core/run/index.js';
 import { costRecommendationSchema } from './recommendation.js';
 const value = z.number().nonnegative().finite().nullable();
 export const workCostSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
@@ -9,7 +9,7 @@ export const workCostSchema = z.object({ schemaVersion: z.literal(1), identity: 
   model: z.object({ channelId: identitySchema, modelId: z.string().min(1), evidence: z.enum(['requested', 'verified', 'unknown']) }).strict().readonly().nullable(),
   effort: z.string().nullable(), acceptance: acceptanceViewSchema,
   axes: z.object({ cpuSeconds: value, sampledPeakBytes: value, kernelPeakBytes: value, wallMs: value,
-    apiMoney: deckentMetricsSchema.unwrap().innerType().shape.cost,
+    apiMoney: measuredCostSchema.nullable(),
     subscription: z.object({ calls: z.number().int().nonnegative().safe().nullable(), durationMs: value, limit: z.null() }).strict().readonly().nullable(),
     localModel: z.object({ calls: z.number().int().nonnegative().safe().nullable(), durationMs: value }).strict().readonly().nullable(),
     humanInterventions: z.number().int().nonnegative().safe().nullable(),

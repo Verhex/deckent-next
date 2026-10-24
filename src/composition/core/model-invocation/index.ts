@@ -1,4 +1,4 @@
-export { invokeConfiguredModel, previewConfiguredModel, invokePeerConfiguredModel, measurePeerConfiguredModel, measureConfiguredModel } from './internal/invoke.js';
+export { invokeConfiguredModel, invokeConfiguredModelAs, previewConfiguredModel, invokePeerConfiguredModel, measurePeerConfiguredModel, measureConfiguredModel } from './internal/invoke.js';
 export { inspectConfiguredModelInvocation, inspectConfiguredModelInvocationCommand, inspectPeerConfiguredModelInvocation } from './internal/inspect.js';
 export { purgePeerConfiguredModelInvocationContent } from './internal/purge.js';
 export { cancelPeerConfiguredModelInvocation } from './internal/cancel.js';
@@ -8,3 +8,4 @@ export { recoverConfiguredModelCancellations, releaseSettledModelSlots } from '.
 export { assessConfiguredModelInvocationDelivery, configuredModelInvocationDeliverySurfaces } from './internal/delivery-audit.js';
 export type { ModelInvocationDeliveryFinding, ModelInvocationDeliverySurface } from './internal/delivery-audit.js';
 export { inspectConfiguredInvocableModels } from './internal/invocable-now.js';
+export { createCatalogTariffLookup } from './internal/catalog-tariff.js';

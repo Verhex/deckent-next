@@ -1,0 +1,12 @@
+{
+  "brainwait.window": "Abonelik kotası doldu. Brain {time} saatine (kota sıfırlanması) kadar bekliyor, sonra yeni bir çağrıyla bir kez daha planlıyor: deneme {attempt}/{maxAttempts}. O zamana kadar hiçbir şey gönderilmez ve henüz Run yok.",
+  "brainwait.cancelHint": "Esc / Ctrl+C: beklemeyi durdur ve planlamayı iptal et (Run oluşturulmaz)",
+  "brainwait.activeWork": "kota beklemesi · {time} saatinde yeniden planlar",
+  "brainwait.cli": "Abonelik kotası doldu: {time} saatine kadar bekleniyor, sonra yeni bir çağrıyla bir kez daha planlanacak (deneme {attempt}/{maxAttempts}). Ctrl+C iptal eder; henüz Run yok.",
+  "brainwait.resumed": "Kota sıfırlandı: yeniden planlanıyor (deneme {attempt}).",
+  "brainwait.monitor.heading": "Abonelik kotasını bekleyen Brain ({count}) — henüz Run yok",
+  "brainwait.monitor.line": "{scope} · plan {command} · {time} saatinde yeniden planlar (deneme {attempt}/{maxAttempts}) · {since} saatinden beri bekliyor",
+  "brainwait.monitor.unavailable": "Brain kota beklemeleri okunamadı{detail}",
+  "brainwait.monitor.hidden": "Okuyamadığınız scope'lardaki {count} Brain kota beklemesi gösterilmiyor",
+  "brainwait.monitor.truncated": "Monitörün okuduğundan fazla Brain kota beklemesi kayıtlı; en eskileri gösteriliyor"
+}

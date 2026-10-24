@@ -1,0 +1,8 @@
+{
+  "candidatePolicies": 256,
+  "candidatesPerPolicy": 16,
+  "selectorMakers": 16,
+  "selectorChannels": 16,
+  "expandedCandidatesPerPolicy": 64,
+  "refusalSkippedShown": 5
+}

@@ -4,6 +4,9 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource } from '#adapters/index.js';
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
+/** The v13 delta (I-POL): with v14 current, an exact older template lacks it as well as the current delta. */
+const V13_DELTA: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect',
+  'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all'];
 import { decideAgentToolCall } from '#engine/index.js';
 import { main } from '#surfaces/index.js';
 import { applyPolicyTemplateInstallation, upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
@@ -23,6 +26,7 @@ afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, {
 const PERSON = { issuer: 'DESKTOP-7NLBLGA', subject: '1000' };
 const SCOPE = 'live';
 const MCP_PERSON = { issuer: `${PERSON.issuer}/mcp`, subject: PERSON.subject };
+const DISTILLER = { issuer: `${PERSON.issuer}/memory-distiller`, subject: PERSON.subject };
 const grant = (id: string, kind: string, actions: string[], ids: string[] | 'all', extra: Record<string, unknown> = {}) =>
   ({ id, actions, scopes: [SCOPE], principals: [PERSON], resource: { kind, ids }, effect: 'allow', ...extra });
 /** The live installation's 20 hand-built grants (2026-10-08 shape; model hashes shortened): the person is on every one. */
@@ -123,6 +127,11 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
       grant('first-run-monitor-scope-diagnostics', 'monitor', ['inspect-scope-diagnostics'], 'all', { scopes: 'all' }),
       grant('first-run-standing-grants-all', 'policy', ['inspect-standing-grants'], 'all'),
       { id: 'first-run-mcp-observe-pool', effect: 'allow', actions: ['inspect'], scopes: [SCOPE], principals: [MCP_PERSON], resource: { kind: 'pool', ids: 'all' } },
+      // v14 (S4): memory journal reads for the named person and the MCP actor.
+      grant('first-run-memory-inspect', 'memory', ['inspect'], 'all'),
+      { id: 'first-run-mcp-observe-memory', effect: 'allow', actions: ['inspect'], scopes: [SCOPE], principals: [MCP_PERSON], resource: { kind: 'memory', ids: 'all' } },
+      // v15 (S4B-1 + S7): the batch reaches POLICY_CHANGE_MAX (32) here; the person's memory propose and the distiller's first two rules come first.
+      grant('first-run-memory-propose', 'memory', ['propose'], 'all'), ...([['first-run-memory-distiller', 'memory', ['inspect', 'propose']], ['first-run-memory-distiller-runs', 'run', ['inspect']]] as const).map(([id, kind, actions]) => ({ ...grant(id, kind, [...actions], 'all'), principals: [DISTILLER] })),
     ]);
     expect(await f.bytes()).toBe(before);
     expect(await f.archive()).toEqual([]);
@@ -139,14 +148,17 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(entries).toHaveLength(1);
     const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
       before: { policy: unknown }; after: { policy: unknown } };
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v13-/) });
+    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v15-/) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
-
+    // The same upgrade run again adds the remaining v15 rules (each run add-only and idempotent); a third run is current.
+    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded', rules: [{ id: 'first-run-memory-distiller-output' }, { id: 'first-run-agent-catalog' }, { id: 'first-run-mcp-observe-agent-catalog' }, { id: 'first-run-memory-review' }, { id: 'first-run-memory-evaluator' }, { id: 'first-run-memory-evaluator-runs' }, { id: 'first-run-memory-evaluator-model' }, { id: 'first-run-memory-purge' }, { id: 'first-run-recovery-model' }, { id: 'first-run-skill-signers' }, { id: 'first-run-agent-catalog-import' },
+      // S8-3: the catalog aggregator's exact list.
+      { id: 'first-run-catalog-aggregator' }, { id: 'first-run-catalog-aggregator-runs' }, { id: 'first-run-catalog-aggregator-memory' }] });
     const upgraded = await f.bytes();
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'current', basis: 'named-person', rules: [] });
     expect(await f.bytes()).toBe(upgraded);
-    expect(await f.archive()).toHaveLength(1);
+    expect(await f.archive()).toHaveLength(2);
     // After: the mcp-server resource allows; the call itself still asks on its card (the `mcp-call` hard-floor cell raises an allow).
     expect(await f.mcp()).toEqual({ server: 'allow', call: 'require-approval' });
     // v9: the MCP actor observes, but a mutation the person holds (live-invoke, owner-model-catalog) is refused without a grant naming `<issuer>/mcp`.
@@ -157,8 +169,8 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
 
   it('upgrades the hand-built live-read-tools v9 shape to v11 and enables the /do policy chain only for its owner', async () => {
     const f = await installation();
-    // Retain the older add-only upgrades in a hand-built policy; no first-run-read-tools anchor is invented.
-    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
+    // Retain the older add-only upgrades in a hand-built policy; no first-run-read-tools anchor is invented. Since v15 the plan takes two runs (POLICY_CHANGE_MAX).
+    for (let run = 0; run < 2; run++) expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
     const current = JSON.parse(await f.bytes()) as { grants: { id: string }[] };
     const v9 = { ...current, revision: 'hand-built-v9', grants: current.grants.filter(rule => !['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown'].includes(rule.id)) };
     await writeFile(f.policyPath, JSON.stringify(v9), { mode: 0o600 });
@@ -173,7 +185,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const argv = ['init', 'policy', '--scope', SCOPE, '--upgrade', '--person', `${PERSON.issuer}/${PERSON.subject}`, '--json'];
     expect(await main([...argv, '--preview'], context)).toBe(0); expect(errors).toEqual([]);
     const preview = JSON.parse(output.join('')) as { revision: string; expect: string; rules: { id: string }[] };
-    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 13 } });
+    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 15 } });
     expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-service-shutdown']);
     expect(await f.bytes()).toBe(before);
     output.length = 0;
@@ -231,7 +243,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const owner = v5.grants[0]!.principals[0]!;
     const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(rule => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
       'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown'].includes(rule.id)
-      && !rule.id.startsWith('first-run-mcp-observe-') && !(FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as readonly string[]).includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
+      && !rule.id.startsWith('first-run-mcp-observe-') && ![...V13_DELTA, 'first-run-memory-inspect', 'first-run-mcp-observe-memory', ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
       ids: (rule.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : rule) };
     await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });
     const v4Bytes = await readFile(policyPath, 'utf8');
@@ -256,6 +268,8 @@ describe.skipIf(process.platform !== 'linux')('POLICY-V12 option A (owner 2026-1
     const V12 = ['first-run-scope-inspect', 'first-run-service-shutdown'];
     // The live shape without its own scope/service rules, upgraded to the v11 level under the previous release (the v12 rules removed again).
     const f = await installation(handBuilt(HAND_BUILT.filter(rule => !['live-scope', 'live-service-shutdown'].includes(rule.id))));
+    // Since v15 the full add-only plan takes two runs (POLICY_CHANGE_MAX).
+    expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
     const upgraded = JSON.parse(await f.bytes()) as { revision: string; grants: { id: string }[] };
     await writeFile(f.policyPath, JSON.stringify({ ...upgraded, revision: 'a-live-v11', grants: upgraded.grants.filter(rule => !V12.includes(rule.id)) }), { mode: 0o600 });
@@ -294,6 +308,7 @@ describe.skipIf(process.platform !== 'linux')('POLICY-V12 option A (owner 2026-1
     const config = JSON.parse(await readFile(join(live.root, '.deckent', 'config.json'), 'utf8')) as Record<string, unknown>;
     await writeFile(join(live.root, '.deckent', 'config.json'), JSON.stringify({ ...config, service: { identity: { scopeId: SCOPE, serviceId: 'local' } } }), { mode: 0o600 }); clearConfigCache();
     expect(await live.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' });
+    expect(await live.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded' }); // the rest of the v15 batch (POLICY_CHANGE_MAX)
     const liveBytes = await live.bytes();
     expect((JSON.parse(liveBytes) as { grants: { id: string }[] }).grants.filter(rule => V12.includes(rule.id))).toEqual([]);
     expect(await live.upgrade(true, { person: PERSON })).toMatchObject({ status: 'current', serviceIdentity: { status: 'kept', identity: { scopeId: SCOPE, serviceId: 'local' } } });

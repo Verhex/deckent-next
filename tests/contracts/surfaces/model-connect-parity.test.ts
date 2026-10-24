@@ -33,6 +33,22 @@ describe('models.connect surface parity', () => {
       connectModel: async () => result })).rejects.toMatchObject({ code: 'CLI_USAGE' });
   });
 
+  it('S3-3: the CLI kind takes the executable, the login dir and the consent choice into the same command; the result names the login and the consent', async () => {
+    const seen: unknown[] = [], out: string[] = [], cli = { ...result, connection: 'claude-cli-subscription', credentialRef: null, keyStored: null, cli: { configDir: '/home/p/.claude', delegate: ['ai'] } };
+    const run = (extra: string[]) => modelsCommand(['models', 'connect', '--scope', 'scope', '--connection', 'claude-cli-subscription', '--model', 'vendor-model', '--command-id', 'c-9', ...extra],
+      { root: '/project', env: {}, stdout: { write: (text: string) => { out.push(text); return true; } } as never, connectModel: async (_root, input) => { seen.push(input); return cli; } });
+    await run(['--executable', '/opt/cli', '--config-dir', '/home/p/.claude', '--delegate', 'ai', '--lang', 'en']);
+    await run(['--delegate', 'none', '--json']);
+    await run([]);
+    const base = { schemaVersion: 1, commandId: 'c-9', scopeId: 'scope', connection: 'claude-cli-subscription', endpoint: null, model: { nativeId: 'vendor-model' } };
+    expect(seen).toEqual([{ ...base, cli: { executable: '/opt/cli', configDir: '/home/p/.claude' }, delegate: ['ai'] }, { ...base, delegate: [] }, base]);
+    expect(out[0]).toContain('Claude login used: /home/p/.claude'); expect(out[0]).toContain('Besides you, these may use this login after your consent: ai.');
+    for (const bad of [['--delegate', 'everyone'], ['--executable', 'relative/cli']]) await expect(run(bad)).rejects.toMatchObject({ code: expect.stringMatching(/^(CLI_USAGE|MODEL_CONNECT_INVALID)$/u) });
+    const help: string[] = [];
+    await modelsCommand(['models', 'connect', '--help', '--lang', 'tr'], { root: '/p', env: {}, stdout: { write: (text: string) => { help.push(text); return true; } } as never, connectModel: async () => cli });
+    expect(help.join('')).toContain('--delegate none|ai|system|ai,system');
+  });
+
   it('MCP connect_model takes the same command schema and returns the same result', async () => {
     const seen: unknown[] = [];
     const server = createMcpServer({ connectModel: async (input: ModelConnectCommand) => { seen.push(input); return result; } } as McpApplications,

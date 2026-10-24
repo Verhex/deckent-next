@@ -490,5 +490,6 @@
   "error.CLI_ID_TOO_SHORT": "'{prefix}' is too short: type at least {min} characters of the identifier, or all of it.",
   "cli.human.scope.pickBodyRead": "Choose the scope to read. Nothing is changed.",
   "error.CLI_ARGUMENT_MISSING": "Incomplete command: {command}.\n{usage}",
-  "error.CLI_INSTALLATION_MISSING": "No Deckent installation in this folder. Run `deckent init` to set it up."
+  "error.CLI_INSTALLATION_MISSING": "No Deckent installation in this folder. Run `deckent init` to set it up.",
+  "mcp.tool.inspectModelRoles": "List which exact catalog model may serve which role (Brain, worker, recovery decision, memory evaluator) as one scope sees it: maker, price evidence, tier, roles, and models whose role is still pending. Read only; assigning a role is a person's terminal card."
 }

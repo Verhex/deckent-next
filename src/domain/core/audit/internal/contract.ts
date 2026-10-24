@@ -1,16 +1,45 @@
 import { z } from 'zod';
 import { authorityDecisionSubjectSchema } from './authority-decision.js';
 import { identitySchema, counterSchema } from '#domain/core/primitives/index.js';
-const digest = z.string().regex(/^[a-f0-9]{64}$/);
+import limits from './limits.json' with { type: 'json' };
+/** S4B-3 memory evaluation record modes (the memory domain owns their meaning). */
+const MEMORY_EVALUATION_RECORD_MODES = Object.freeze(['shadow', 'live'] as const);
+/** S4B-5: the context modes that read and seal (`off` reads nothing, so it is never recorded). */
+const MEMORY_CONTEXT_RECORD_MODES = Object.freeze(['shadow', 'on'] as const);
+/** S6R-5: the recovery decision modes that seal (the recovery domain's frozen Run modes; `off` decides nothing, so it is never recorded). */
+const RECOVERY_DECISION_RECORD_MODES = Object.freeze(['shadow', 'live'] as const);
+const digest = z.string().regex(/^[a-f0-9]{64}$/), signedRef = z.object({ keyId: digest, signatureDigest: digest }).strict().optional();
 /** The MCP registry scopes (the adapter's own list; the audit contract stays dependency-free). */
 const MCP_REGISTRY_SCOPES = ['managed', 'local', 'project', 'user'] as const;
+/** S5b: the safety hold sources (Nervous pause, Auditor park) a Run hold and its audit name; the Run contract reuses this one list. */
+export const runSafetyHoldSourceSchema = z.enum(['nervous', 'auditor']);
+/**
+ * S6 Nervous K-B standing list (owner 2026-10-11 K-B, updated 2026-10-23 anchor s6r-kayip-calisan-2026-10-23): the only actions a Nervous proposal
+ * may name. Versioned code, never registry data; none opens an Attempt, resumes a Run or releases a slot (release is a broker gate step).
+ */
+export const RECOVERY_ACTIONS = Object.freeze(['fence-attempt', 'hold-run', 'stop-orphan', 'restart-component', 'alert-brain', 'hand-to-human'] as const);
+export const recoveryActionSchema = z.enum(RECOVERY_ACTIONS);
+/** A Nervous rule's measurement state: `provisional` thresholds are unmeasured (shadow only); only a `live` rule may execute (S6R-3). */
+export const NERVOUS_RULE_STATUSES = Object.freeze(['provisional', 'live'] as const);
+/** S6R-2: what Nervous saw of a worker (`control-failed`: the daemon did not answer) and of its launcher (`dead`: another instance whose process is gone). */
+export const NERVOUS_ACTIVITY_STATES = Object.freeze(['missing', 'created', 'running', 'paused', 'exited', 'unknown', 'control-failed'] as const);
+export const NERVOUS_LAUNCHER_BASES = Object.freeze(['same-process', 'alive', 'dead', 'none', 'unreadable'] as const);
 /** Versioned audit event contract (general Core audit port, first slice — owner 2026-09-27 q4/q5). */
 export const AUDIT_EVENT_SCHEMA_VERSION = 1;
 export const AUDIT_SHELL_HEAD_MAX_CHARS = 200;
 /** FA-TRACKED-WARN: the most workspace-relative paths one `tracked-files-changed` list names (its count is always the full number). */
 export const AUDIT_TRACKED_PATHS_MAX = 50;
 /** Crash-loop breaker: the phases of one dispatch preparation, in order (before workspace acquisition → secret gate → handoff → supervisor/claim). */
+/** S5 D1 (owner Q5 2026-10-17): the most refused / silently allowed calls one `policy-turn` record names (each count is always the full number). */
+export const AUDIT_POLICY_TURN_LIMITS = Object.freeze({ refusedMax: limits.policyTurnRefusedMax, allowedMax: limits.policyTurnAllowedMax });
+/** S4B-5: the most memory entries one `memory-context` event names (the memory registry's `context.maxEntries` stays at or below it). */
+export const AUDIT_MEMORY_CONTEXT_ENTRIES_MAX = limits.memoryContextEntriesMax;
 export const DISPATCH_PREPARATION_PHASES = Object.freeze(['prepare', 'workspace', 'secret-gate', 'handoff', 'dispatch'] as const);
+/** S6R-2: the typed signal summary a `recovery-detection` seals (counts and states only, never a log line, path or worker output). */
+export const recoveryEvidenceSchema = z.object({ activity: z.enum(NERVOUS_ACTIVITY_STATES).nullable(), launcher: z.enum(NERVOUS_LAUNCHER_BASES).nullable(),
+  launcherPhase: z.enum(DISPATCH_PREPARATION_PHASES).nullable(), absentObservations: counterSchema, absentForMs: counterSchema.nullable(),
+  unavailableForMs: counterSchema.nullable(), containerRecorded: z.boolean().nullable(), workerRecorded: z.boolean().nullable(),
+  source: z.object({ kind: z.enum(['dispatch-preparation-aborted', 'policy-turn']), eventId: identitySchema, sequence: counterSchema.positive() }).strict().nullable() }).strict();
 /** Who the decision was made for: exact issuer and subject; a persona is never part of the record. */
 export const auditPrincipalSchema = z.object({ issuer: identitySchema, subject: identitySchema }).strict().readonly();
 /**
@@ -35,6 +64,11 @@ const permissionMode = z.enum(['ask', 'auto-edit', 'full-auto', 'standart', 'ful
 /** An agent tool call's position in its turn (the same identity every call event carries). */
 const callRef = z.object({ turnId: identitySchema, round: counterSchema.positive(), index: counterSchema, callId: identitySchema }).strict();
 const toolRef = z.object({ name: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/), version: counterSchema.positive() }).strict();
+/** The agent tool call cells (engine policy catalog; the audit contract keeps its own copy to stay dependency-free). */
+const agentToolCell = z.enum(['read', 'edit', 'edit-floor', 'edit-self-source', 'edit-authority', 'shell-read-none', 'shell-read-low', 'shell-narrow-mutating',
+  'shell-destructive', 'shell-always-ask', 'shell-other-modify', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor']);
+/** One call position without its turn (the `policy-turn` record names the turn once). */
+const turnCallRef = z.object({ round: counterSchema.positive(), index: counterSchema, callId: identitySchema }).strict();
 /**
  * A silent decision produced by the terminal permission mode (slice 4): the mode relaxed a cell the company policy marked
  * mode-eligible, turning `require-approval` into `allow` for exactly this tool call. Other subject kinds join this union as
@@ -52,13 +86,69 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    * 2026-10-07): the config-change approval this write consumed — present only then, so every other config write keeps its earlier shape. */
   z.object({ kind: z.literal('config-change'), action: z.enum(['set', 'unset']), layer: z.enum(['project', 'global']),
     keyPath: identitySchema, commandId: identitySchema, beforeDigest: digest.nullable(), afterDigest: digest, approvalId: identitySchema.optional() }).strict(),
-  z.object({ kind: z.literal('run-lifecycle'), action: z.enum(['close', 'resume', 'hold', 'answer', 'accept', 'reject', 'park-progression', 'release-worker-custody']),
+  // S6R-4: `continue-lost-task` — the recovery principal returned a lost Attempt's task to pending under the owner's standing grant (`decisionRuleId`).
+  z.object({ kind: z.literal('run-lifecycle'), action: z.enum(['close', 'resume', 'hold', 'answer', 'accept', 'reject', 'park-progression', 'release-worker-custody', 'continue-lost-task', 'quota-answer']),
     inputDigest: digest.optional(), deciderClass: z.enum(['human-tty', 'ai-policy', 'system']).optional(),
     decisionRuleId: identitySchema.optional(), approvalId: identitySchema.optional(),
+    // S5b: present only for a safety hold and its resume, so every operator event keeps its earlier shape.
+    holdSource: runSafetyHoldSourceSchema.optional(),
     runId: identitySchema, commandId: identitySchema, taskId: identitySchema.nullable(), revision: counterSchema,
     evidence: z.literal('model-unverified').nullable() }).strict(),
   z.object({kind:z.literal('decision-port'),action:z.enum(['ask','record','outcome']),phase:z.enum(['admitted','observed']),
     decisionId:identitySchema,caseDigest:digest,adviceDigest:digest.nullable(),selectedOption:identitySchema.nullable()}).strict(),
+  /**
+   * S5 D1 (AUDITOR-MODEL, owner Q5 2026-10-17; changes q5 in this scope): one sealed record per agent turn of every policy decision on its tool
+   * calls that is not already its own event. `refused`: each deny and require-approval — at the policy question before planning (`policy`,
+   * no cell yet), on the planned cell (`cell`) or again at the effect (`effect`). `allowed`: each call that ran on a plain allow (no mode,
+   * standing approval or full access, which keep their own events). Tool identity, position, cell and argument digest only — never arguments,
+   * paths or output. Each list keeps its full count and at most its `AUDIT_POLICY_TURN_LIMITS` entries; `ceiling` marks refusals past the bound.
+   */
+  z.object({ kind: z.literal('policy-turn'), turnId: identitySchema, ceiling: z.boolean(),
+    refused: z.object({ count: counterSchema, calls: z.array(z.object({ tool: toolRef, call: turnCallRef, cell: agentToolCell.nullable(), decision: z.enum(['deny', 'require-approval']),
+      stage: z.enum(['policy', 'cell', 'effect']), argsDigest: digest, revision: identitySchema }).strict()).max(AUDIT_POLICY_TURN_LIMITS.refusedMax) }).strict(),
+    allowed: z.object({ count: counterSchema, calls: z.array(z.object({ tool: toolRef, call: turnCallRef, cell: agentToolCell, argsDigest: digest,
+      revision: identitySchema }).strict()).max(AUDIT_POLICY_TURN_LIMITS.allowedMax) }).strict() }).strict(),
+  /** S4 memory journal v1: one transition of one entry (content and notes are never recorded, only their digest and the verification basis). */
+  z.object({ kind: z.literal('memory-journal'), action: z.union([z.literal('propose'), z.literal('verify'), z.literal('retire')]), entryId: identitySchema, commandId: identitySchema,
+    revision: counterSchema.positive(), state: z.enum(['candidate', 'verified', 'retired']), contentDigest: digest,
+    basis: z.enum(['human-review', 'independent-evaluation']).nullable() }).strict(),
+  /** S4B-3 (§9): one sealed evaluation record (shadow or live) and one contest it opened; digests and ids only, never candidate text. */
+  z.object({ kind: z.literal('memory-evaluation'), recordId: identitySchema, entryId: identitySchema, revision: counterSchema.positive(), mode: z.enum(MEMORY_EVALUATION_RECORD_MODES),
+    verdict: z.enum(['pass', 'fail', 'unknown']), recordDigest: digest, subjectDigest: digest }).strict(),
+  z.object({ kind: z.literal('memory-contest'), contestId: identitySchema, entryId: identitySchema, candidateEntryId: identitySchema, recordId: identitySchema }).strict(),
+  /** S4B-4 (§6.6, §9): one purge of one entry (keyed content digest only; `replay`: re-applied from the purge journal after a restore) and one
+   * person's resolution of a contest. Ids and digests only, never content. */
+  z.object({ kind: z.literal('memory-purge'), purgeId: identitySchema, entryId: identitySchema, contentDigest: digest, revisions: counterSchema,
+    invocations: counterSchema, replay: z.boolean() }).strict(),
+  z.object({ kind: z.literal('memory-contest-resolution'), contestId: identitySchema, entryId: identitySchema, decision: z.enum(['retire-contested', 'retire-candidate', 'dismiss']),
+    retiredEntryId: identitySchema.nullable() }).strict(),
+  /** S4B-5 (§7.1, §9): the memory part frozen into one task's worker prompt at Run admission (`shadow`: computed and sealed, never sent;
+   * `delivered` false also when the prompt budget had no room). Keyed digests and ids only, never entry text; `withheld` counts entries the
+   * admitting principal may not read. */
+  z.object({ kind: z.literal('memory-context'), runId: identitySchema, taskId: identitySchema, mode: z.enum(MEMORY_CONTEXT_RECORD_MODES), delivered: z.boolean(),
+    entries: z.array(z.object({ entryId: identitySchema, revision: counterSchema.positive(), contentDigest: digest, basis: z.enum(['human-review', 'independent-evaluation']) }).strict())
+      .min(1).max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), partDigest: digest, withheld: counterSchema, /** S4B-7: whether the part fit the prompt (sealed in both modes). */ fit: z.boolean().optional() }).strict(),
+  /** S4B-6 (§7.2, §9): the memory block of one Brain planning request, sealed before the first prompt leaves the machine (`shadow`: computed,
+   * never sent). `runId` is the Brain's Run id, `contextDigest` the planning context digest the stored proposal's contribution carries: the event
+   * of a plan that was then refused stays (the effect may have happened) and is recognised by a digest no stored proposal names. Keyed digests
+   * and ids only, never entry text; `omitted` counts entries the bounds left out, `withheld` those from work the person may not read. */
+  z.object({ kind: z.literal('brain-memory-context'), runId: identitySchema, commandId: identitySchema, mode: z.enum(MEMORY_CONTEXT_RECORD_MODES), delivered: z.boolean(),
+    entries: z.array(z.object({ entryId: identitySchema, revision: counterSchema.positive(), contentDigest: digest, basis: z.enum(['human-review', 'independent-evaluation']) }).strict())
+      .min(1).max(AUDIT_MEMORY_CONTEXT_ENTRIES_MAX), memoryDigest: digest, contextDigest: digest, omitted: counterSchema, withheld: counterSchema }).strict(),
+  /** S7 agent/skill catalog: one definition or import of one row (persona and skill text are never recorded, only their digests). */
+  z.object({ kind: z.literal('agent-catalog'), item: z.enum(['agent', 'skill']), action: z.enum(['define', 'import']), id: identitySchema, commandId: identitySchema,
+    revision: counterSchema.positive(), contentDigest: digest, skillSetDigest: digest.nullable(),
+    /** S8-5: an AI/system write — the action key and the digest of the signature verified in the commit transaction. */
+    signed: signedRef }).strict(),
+  /** S8-3/S8-4: one standing change of one agent revision for one WorkClass (a person's card, a signed AI command, the aggregator's rule narrowing). */
+  z.object({ kind: z.literal('agent-standing'), action: z.enum(['promote', 'demote', 'restore', 'retire', 'narrow']), agentId: identitySchema, revision: counterSchema.positive(),
+    workClass: identitySchema, from: identitySchema, to: identitySchema, standingRevision: counterSchema.positive(), suggestionId: digest.nullable(), commandId: identitySchema, signed: signedRef }).strict(),
+  /** S8-3: one catalog suggestion written or moved: refs, digests and counts only, never persona, skill, lesson or draft text (N28). */
+  z.object({ kind: z.literal('catalog-suggestion'), action: z.enum(['suggest', 'supersede', 'decide', 'dismiss']), suggestionId: digest, suggestionKind: identitySchema, keyDigest: digest,
+    inputDigest: digest, ruleId: identitySchema, ruleVersion: counterSchema.positive(), state: z.enum(['open', 'decided', 'dismissed', 'superseded']), signed: signedRef }).strict(),
+  /** S8-5: a person's signer-key change (or the startup re-revocation from the append-only log); public facts only, never key material. */
+  z.object({ kind: z.literal('skill-signer'), action: z.enum(['enrol', 'add', 'revoke']), keyId: digest, purpose: z.enum(['action', 'import', 'publish', 'hub']),
+    custody: z.enum(['host', 'external']), commandId: identitySchema, revision: counterSchema.positive(), basis: z.enum(['person-card', 'revocation-log']) }).strict(),
   /** `person` null (MODES-3): the default `standart`, which no bindings entry names. */
   z.object({ kind: z.literal('permission-mode'), mode: z.enum(['auto-edit', 'full-auto', 'standart']), cell: z.enum(['edit-non-floor', 'shell-modify', 'mcp-call']),
     tool: toolRef, call: callRef, grants: z.object({ company: identitySchema, person: identitySchema.nullable() }).strict(),
@@ -229,6 +319,34 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    * ends since the last settle or resume; at `bound` the Run is parked (`progression-failed`, DISPATCH_PREPARATION_ABORTED) instead of dispatched. */
   z.object({ kind: z.literal('dispatch-preparation-aborted'), runId: identitySchema, taskId: identitySchema, attemptId: identitySchema,
     phase: z.enum(DISPATCH_PREPARATION_PHASES).nullable(), aborts: counterSchema.positive(), bound: counterSchema.positive() }).strict(),
+  /**
+   * S6R-2 (owner 2026-10-23, anchor s6r-kayip-calisan-2026-10-23): one Nervous proposal, sealed before any effect and once per case (`caseId`:
+   * the Attempt or scope case and the rule; the event id is derived from it). `disposition` is what the broker made of it: `shadow-only` (recorded
+   * only), `proposal-only` (live, but no owner standing approval, an unmeasured rule or no executor) or `execute`. `target` names the Attempt
+   * (generation null when the signal does not carry it) or null for a scope case; `evidence` is the typed signal summary, `evidenceDigest` its
+   * canonical digest. Written only by the Nervous principal.
+   */
+  z.object({ kind: z.literal('recovery-detection'), caseId: digest, rule: z.object({ id: identitySchema, version: counterSchema.positive(),
+    status: z.enum(NERVOUS_RULE_STATUSES) }).strict(), registryRevision: identitySchema, action: recoveryActionSchema,
+    disposition: z.enum(['shadow-only', 'proposal-only', 'execute']),
+    target: z.object({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, generation: counterSchema.positive().nullable() }).strict().nullable(),
+    evidence: recoveryEvidenceSchema, evidenceDigest: digest, standingRef: identitySchema.optional() }).strict(),
+  /**
+   * S6R-5 (S6R-DESIGN §6, §9; owner Q-R1/Q-R2): one recovery decision, sealed by the recovery principal before its apply (live) or as the only record
+   * (shadow: nothing else happens). `model` is the one call's channel, exact model, template and input/output digests (null: the gate, a bound, the
+   * owner's grant, the role registry, the consent rule or the breaker decided without a model). `code` is the escalation code (null for a
+   * continuation); `failure` the typed reason a call or its answer failed; `note` the registry note code passed on. Codes only, never model text.
+   */
+  z.object({ kind: z.literal('recovery-decision'), caseId: digest, mode: z.enum(RECOVERY_DECISION_RECORD_MODES), evidenceDigest: digest,
+    target: z.object({ runId: identitySchema, taskId: identitySchema, attemptId: identitySchema, generation: counterSchema.positive() }).strict(),
+    gate: z.object({ result: z.enum(['clear', 'reconciled', 'open']), settled: z.enum(['none', 'task-idempotent', 'not-declared', 'over-bound']), intents: counterSchema }).strict(),
+    terminationReceiptId: identitySchema,
+    model: z.object({ channelId: identitySchema, modelId: identitySchema, template: z.object({ id: identitySchema, version: counterSchema.positive() }).strict(),
+      registryRevision: identitySchema, inputDigest: digest, outputDigest: digest.nullable(), invocationId: identitySchema.nullable() }).strict().nullable(),
+    action: z.enum(['continue-new-attempt', 'escalate-human']), causeClass: z.enum(['infra-transient', 'infra-persistent', 'task-induced', 'unknown']).nullable(),
+    note: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(), code: identitySchema.nullable(), failure: identitySchema.nullable(), standingRef: identitySchema.nullable(),
+    /** S6R-6: `shadow` — this live decision adopts the sealed shadow decision of the same evidence (its model block is that call's; no second call). */
+    basis: z.literal('shadow').optional() }).strict(),
 ]);
 /** Installer authority is OS file ownership, not a policy.administer approval. Existing governed events retain their strict shape. */
 export const auditSubjectSchema = z.union([governedAuditSubjectSchema,

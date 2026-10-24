@@ -232,7 +232,7 @@
   "setup.execution.workerUnknown": "Docker, ayarlı worker imajı {image} burada mı zamanında söylemedi; deckent init'i yeniden çalıştırın.",
   "setup.execution.workerGitMissing": "PATH'te Git bulunamadı (ya da Docker'a ulaşılamıyor): çalıştırma ayarları ikisini de ister. Bunu düzeltin, sonra deckent init'i yeniden çalıştırın.",
   "setup.execution.workerReceipt": "Worker imajı {version} ({image}) hazır: çalıştırma ayarlarını şimdi yazın (burada bulunan Docker ve Git yolları ile bu imaj).",
-  "setup.execution.workerNone": "Henüz worker imajı yok: Run'lar ve /do bir imaj ister. Terminalde deckent init imajı bir karttan sonra derler ya da --image-id ile verdiğiniz imajı benimser.",
+  "setup.execution.workerNone": "Henüz worker imajı yok: Run'lar ve /do bir imaj ister. Terminalde deckent init imajı bir karttan sonra derler ya da --image-id ile verdiğiniz imajı kullanır.",
   "setup.execution.workerBuildChosen": "Worker imajını derle: bir şey başlamadan önce kart neyin çalışacağını gösterir.",
   "setup.execution.workerAdopt": "Var olan {image} imajını worker imajı olarak kullan: denetim çalışmadan önce kart onu gösterir.",
   "setup.execution.workerDeclined": "İsteğiniz üzerine atlandı: worker imajı yok, bu yüzden henüz Run ya da /do yok.",

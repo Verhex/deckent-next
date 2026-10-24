@@ -30,7 +30,8 @@ it.each(['pass', 'unknown'] as const)('the card metrics key collides with a vali
   const metric = (status: 'accepted' | 'awaiting-decision', digest: string) => deriveDeckentMetrics({
     identity: { scopeId: identity.scopeId, runId: identity.runId, taskId: identity.taskId, attemptId: identity.attemptId },
     workClass: null, policyRevision: null, profileVersion: null, skillSetDigest: null, model: null,
-    outcome: { kind: 'task', status }, attemptSequence: 1, evidenceReferences: [{ id: 'output', digest }] });
+    outcome: { kind: 'task', status, decision: 'system' }, attemptSequence: 1, effort: null, actualModel: null, evidenceKinds: [], acceptanceScore: null,
+    evidenceReferences: [{ id: 'output', digest }] });
   const firstRow = metric('awaiting-decision', firstDigest), nextRow = metric(verdict === 'pass' ? 'accepted' : 'awaiting-decision', nextDigest);
   expect(JSON.stringify(nextRow)).not.toBe(JSON.stringify(firstRow));
   const db = new DatabaseSync(':memory:');

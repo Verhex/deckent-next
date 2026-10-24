@@ -33,8 +33,16 @@ import setupen from '../locales/en/setup.json' with { type: 'json' };
 import securityen from '../locales/en/security.json' with { type: 'json' };
 import terminalen from '../locales/en/terminal.json' with { type: 'json' };
 import deliveryen from '../locales/en/delivery.json' with { type: 'json' };
+import memoryen from '../locales/en/memory.json' with { type: 'json' };
+import memoryautomationen from '../locales/en/memory-automation.json' with { type: 'json' };
+import memoryreviewen from '../locales/en/memory-review.json' with { type: 'json' };
+import memoryrollouten from '../locales/en/memory-rollout.json' with { type: 'json' };
+import agentsen from '../locales/en/agents.json' with { type: 'json' };
+import assignmenten from '../locales/en/assignment.json' with { type: 'json' };
 import termrunen from '../locales/en/termrun.json' with { type: 'json' };
 import termansweren from '../locales/en/termanswer.json' with { type: 'json' };
+import quotaasken from '../locales/en/quotaask.json' with { type: 'json' };
+import headlessen from '../locales/en/headless.json' with { type: 'json' };
 import helptr from '../locales/tr/help.json' with { type: 'json' };
 import cliruntr from '../locales/tr/clirun.json' with { type: 'json' };
 import clitasktr from '../locales/tr/clitask.json' with { type: 'json' };
@@ -48,18 +56,36 @@ import setuptr from '../locales/tr/setup.json' with { type: 'json' };
 import securitytr from '../locales/tr/security.json' with { type: 'json' };
 import terminaltr from '../locales/tr/terminal.json' with { type: 'json' };
 import deliverytr from '../locales/tr/delivery.json' with { type: 'json' };
+import memorytr from '../locales/tr/memory.json' with { type: 'json' };
+import memoryautomationtr from '../locales/tr/memory-automation.json' with { type: 'json' };
+import memoryreviewtr from '../locales/tr/memory-review.json' with { type: 'json' };
+import memoryrollouttr from '../locales/tr/memory-rollout.json' with { type: 'json' };
+import agentstr from '../locales/tr/agents.json' with { type: 'json' };
+import agentsignen from '../locales/en/agentsign.json' with { type: 'json' };
+import agentsigntr from '../locales/tr/agentsign.json' with { type: 'json' };
+import assignmenttr from '../locales/tr/assignment.json' with { type: 'json' };
 import termruntr from '../locales/tr/termrun.json' with { type: 'json' };
 import tuicopyen from '../locales/en/tuicopy.json' with { type: 'json' };
 import tuinotifyen from '../locales/en/tuinotify.json' with { type: 'json' };
 import tuiqueueen from '../locales/en/tuiqueue.json' with { type: 'json' };
+import recoveryen from '../locales/en/recovery.json' with { type: 'json' };
 import tuieditoren from '../locales/en/tuieditor.json' with { type: 'json' };
 import tuisessionen from '../locales/en/tuisession.json' with { type: 'json' };
 import tuicopytr from '../locales/tr/tuicopy.json' with { type: 'json' };
 import tuinotifytr from '../locales/tr/tuinotify.json' with { type: 'json' };
 import tuiqueuetr from '../locales/tr/tuiqueue.json' with { type: 'json' };
+import recoverytr from '../locales/tr/recovery.json' with { type: 'json' };
+import brainwaiten from '../locales/en/brainwait.json' with { type: 'json' };
+import brainwaittr from '../locales/tr/brainwait.json' with { type: 'json' };
 import tuieditortr from '../locales/tr/tuieditor.json' with { type: 'json' };
 import tuisessiontr from '../locales/tr/tuisession.json' with { type: 'json' };
 import termanswertr from '../locales/tr/termanswer.json' with { type: 'json' };
+import quotaasktr from '../locales/tr/quotaask.json' with { type: 'json' };
+import headlesstr from '../locales/tr/headless.json' with { type: 'json' };
+import agentstatsen from '../locales/en/agentstats.json' with { type: 'json' };
+import agentstatstr from '../locales/tr/agentstats.json' with { type: 'json' };
+import agentsevoen from '../locales/en/agentsevo.json' with { type: 'json' };
+import agentsevotr from '../locales/tr/agentsevo.json' with { type: 'json' };
 
 export const families = [
   { en: configen, tr: configtr },
@@ -87,12 +113,25 @@ export const families = [
   { en: terminalen, tr: terminaltr },
   { en: termrunen, tr: termruntr },
   { en: termansweren, tr: termanswertr },
+  { en: quotaasken, tr: quotaasktr },
+  { en: headlessen, tr: headlesstr },
+  { en: agentstatsen, tr: agentstatstr },
+  { en: agentsevoen, tr: agentsevotr },
   { en: deliveryen, tr: deliverytr },
+  { en: memoryen, tr: memorytr },
+  { en: memoryautomationen, tr: memoryautomationtr },
+  { en: memoryreviewen, tr: memoryreviewtr },
+  { en: memoryrollouten, tr: memoryrollouttr },
+  { en: assignmenten, tr: assignmenttr },
+  { en: agentsen, tr: agentstr },
+  { en: agentsignen, tr: agentsigntr },
   { en: tuicopyen, tr: tuicopytr },
   { en: tuinotifyen, tr: tuinotifytr },
   { en: tuiqueueen, tr: tuiqueuetr },
   { en: tuieditoren, tr: tuieditortr },
   { en: tuisessionen, tr: tuisessiontr },
+  { en: recoveryen, tr: recoverytr },
+  { en: brainwaiten, tr: brainwaittr },
 ] as const;
 
 // Derived from `families` (distributive over the tuple), not from the JSON imports: the emitted declaration then names no JSON module, which a

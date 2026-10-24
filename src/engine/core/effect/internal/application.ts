@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { effectCommandSchema, effectIntentSchema, encodeCommandProjection, EffectError, settleEffect, markEffectUnknown, refuseEffect, assertCompensation,
+import { effectCommandSchema, effectIntentSchema, effectProducerSchema, encodeCommandProjection, EffectError, settleEffect, markEffectUnknown, refuseEffect, assertCompensation,
   evaluatePolicy, policyResources, type EffectCommand, type EffectIntentApproval, type EffectRecord, type EffectTargetRef, type OperationDescriptor, type OperationRef,
-  type VerifiedPrincipal } from '#domain/index.js';
+  type EffectProducer, type VerifiedPrincipal } from '#domain/index.js';
 import type { TrustedClock } from '#platform/index.js';
 import { authenticateSession, assertSessionActive, type SessionVerifier, type SessionAuthority } from '#engine/core/authentication/index.js';
 import { PolicyAuthorizationError, type PolicySource } from '#engine/core/policy/index.js';
@@ -83,6 +83,13 @@ const digest = (value: string) => createHash('sha256').update(value).digest('hex
 export const effectInputDigest = (input: unknown) => digest(encodeCommandProjection('effect-input', input ?? null));
 export const effectWireKey = (command: EffectCommand) => digest(['effect-key:1', command.scopeId, command.target.kind, command.target.id,
   `${command.operation.id}@${command.operation.version}`, command.idempotencyKey].join('\0'));
+/**
+ * S6R-4 (lead note on the S6R design re-audit): the one derivation of a task-scoped idempotency key — from the task, the operation and the target
+ * only, never the Attempt — for an operation whose catalog entry declares `idempotencyScope: 'task'`. A new Attempt of a continued task produces the
+ * same key, so its repeat of settled work maps to the one existing intent (the ledger refuses a second record; the target dedups by the wire key).
+ */
+export const taskScopedIdempotencyKey = (taskId: string, operation: OperationRef, target: EffectTargetRef) =>
+  digest(['effect-task-key:1', taskId, target.kind, target.id, `${operation.id}@${operation.version}`].join('\0'));
 const binding = (descriptor: OperationDescriptor, target: EffectTarget) =>
   digest(`effect-binding:1\0${encodeCommandProjection('effect-descriptor', descriptor)}\0${target.identity()}`);
 /** Unwinds `run` at the gate with the pending outcome (an outcome, never surfaced as an error). */
@@ -92,11 +99,16 @@ class PendingSignal { constructor(readonly outcome: EffectApprovalPending) {} }
  * write, idempotency, re-authorization and live session right before the effect, evidence-based settlement, typed unknown without blind
  * retry, and compensation as a new operation. Nothing here is specific to Git or to one ERP. */
 export class EffectApplication {
+  private readonly producer: EffectProducer;
   constructor(private readonly catalog: OperationCatalog, private readonly targets: EffectTargets, private readonly store: EffectStore,
     private readonly approvals: EffectApprovalGate, private readonly sessions: SessionVerifier & SessionAuthority,
     private readonly authorization: OperationPolicyAuthorization, private readonly clock: TrustedClock,
-    /** The producer's surface class (POLICY-ADMIN I5-i). Absent: a generic producer, which refuses `surface: 'authority'` operations. */
-    private readonly options: { readonly surface?: 'authority' } = {}) {}
+    /** `surface`: the producer's surface class (POLICY-ADMIN I5-i); absent = a generic producer, which refuses `surface: 'authority'`
+     * operations. `producer` (S6R-1, mandatory): the Attempt this composition executes for, or `principal` for a direct command; trusted
+     * composition input, never read from the command. */
+    private readonly options: { readonly surface?: 'authority'; readonly producer: EffectProducer }) {
+    this.producer = effectProducerSchema.parse(options.producer);
+  }
 
   /** Runs to settlement or throws; a pending approval is `EFFECT_APPROVAL_REQUIRED` here (callers that handle pending use `submit`). */
   async execute(input: unknown, credential?: unknown): Promise<EffectResult> { return this.settledOnly(await this.submit('execute', input, credential)); }
@@ -133,7 +145,9 @@ export class EffectApplication {
     const policy = () => this.authorization.authorize(action, command.scopeId, command.operation, verified.principal);
     const decision = await policy();
     const previous = await this.store.loadEffect(command.scopeId, command.commandId);
-    if (previous && (JSON.stringify(previous.intent.command) !== JSON.stringify(command) || JSON.stringify(previous.intent.actor) !== JSON.stringify(verified.session.principalRef))) {
+    // A recorded intent resumes only under the producer that claimed it (an older intent without one stays resumable by its actor).
+    if (previous && (JSON.stringify(previous.intent.command) !== JSON.stringify(command) || JSON.stringify(previous.intent.actor) !== JSON.stringify(verified.session.principalRef)
+      || (previous.intent.producer && JSON.stringify(previous.intent.producer) !== JSON.stringify(this.producer)))) {
       throw new EffectError('EFFECT_CONFLICT');
     }
     // A new command fixes its canonical input before any approval is asked: the subject and the intent bind the same digest, and an input
@@ -173,7 +187,7 @@ export class EffectApplication {
     const approval = await gate(await policy(), null);
     const intent = effectIntentSchema.parse({ schemaVersion: 1, command, descriptor, actor: verified.session.principalRef,
       idempotencyKeyHash: digest(`${command.scopeId}\0${command.idempotencyKey}`), inputDigest, wireKey: effectWireKey(command), targetBinding: current,
-      ...(approval ? { approval } : {}) });
+      ...(approval ? { approval } : {}), producer: this.producer });
     return this.apply(await this.store.claimEffect(intent), target, settle);
   }
 

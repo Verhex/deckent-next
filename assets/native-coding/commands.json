@@ -179,6 +179,176 @@
             "--effort"
           ]
         }
+      },
+      "headless": {
+        "schemaVersion": 1,
+        "revision": "headless-2026-10-23",
+        "source": "HEADLESS-0 measurement 2026-10-23 (CLI 2.1.309): --restricted keeps the login and drops user plugins; HOME=<run dir> + CLAUDE_CONFIG_DIR keeps the login",
+        "args": [
+          "--print",
+          "--output-format",
+          "stream-json",
+          "--verbose",
+          "--safe-mode",
+          "--restricted",
+          "--tools",
+          "",
+          "--strict-mcp-config",
+          "--disallowedTools",
+          "mcp__*",
+          "--disable-slash-commands",
+          "--no-session-persistence",
+          "--permission-mode",
+          "dontAsk",
+          "--permission-prompts",
+          "none"
+        ],
+        "maxTurns": 1,
+        "connect": { "configDirSource": "owner 2026-10-24 (Jev 1d5e4879 deckent_owned_dir 0.92; replaces Q-H1 ~/.claude): without --config-dir the Brain uses its own login dir <Deckent state root>/<layout headlessLogins>/<this CLI id> (0700, never backed up, never read by Deckent), signed in by `deckent models login`; a connection sealed to another dir keeps working until reconnect", "pathSearchDirectories": 64, "pathSearchTimeoutMs": 5000, "maxInFlight": 1, "maxInFlightSource": "S3-DESIGN §7 seed 1 (provisional): one run dir per connection; send empties it, so calls on one connection never overlap" },
+        "login": { "args": ["auth", "login", "--claudeai"], "ssoFlag": "--sso", "timeoutMs": 540000,
+          "env": { "inherit": ["HOME", "PATH", "TERM", "COLORTERM", "LANG", "LC_ALL", "DISPLAY", "WAYLAND_DISPLAY", "BROWSER", "XDG_RUNTIME_DIR", "WSL_DISTRO_NAME", "WSL_INTEROP"],
+            "fixed": { "DISABLE_AUTOUPDATER": "1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1" } },
+          "source": "s3c lane 2026-10-24 from CLI 2.1.309 `auth login --help` (empty config dir, no login run): --claudeai = Claude subscription (the default, named so a Console login is never chosen), --sso forces the SSO flow. The CLI's own sign-in runs in the person's terminal with inherited stdio, outside the realm (its browser OAuth needs the person's browser and the sign-in hosts, which the realm's API-only gateway does not reach); Deckent captures none of its bytes. Inherited names: the browser opener and terminal of the person (unmeasured against a real sign-in until the lead's run); every deny name stays out. timeoutMs stays below refreshLock.staleMs: the login holds the login dir's lock." },
+        "systemPromptFlag": "--system-prompt-file",
+        "systemPromptFile": "system.txt",
+        "forbiddenFlags": [
+          "--fallback-model",
+          "--bare",
+          "--dangerously-skip-permissions",
+          "--allow-dangerously-skip-permissions",
+          "--mcp-config",
+          "--settings",
+          "--setting-sources",
+          "--add-dir",
+          "--plugin-dir",
+          "--continue",
+          "--resume",
+          "--session-id",
+          "--system-prompt",
+          "--append-system-prompt",
+          "--json-schema",
+          "--include-partial-messages",
+          "--agents",
+          "--max-budget-usd"
+        ],
+        "preflight": {
+          "versionArgs": [
+            "--version"
+          ],
+          "versionPattern": "^(\\d+\\.\\d+\\.\\d+)",
+          "helpArgs": [
+            "--help"
+          ],
+          "hiddenFlags": [
+            { "flag": "--max-turns", "probe": "max-turns-capability" },
+            { "flag": "--system-prompt-file", "probe": { "args": ["--print", "--system-prompt-file"], "refusal": ["option '--system-prompt-file", "argument missing"] } }
+          ],
+          "hiddenFlagsSource": "lead real-CLI preflight 2026-10-23 (CLI 2.1.309): --help lists neither --max-turns nor --system-prompt-file (only the prose '--system-prompt[-file]'); HEADLESS-0 used both. Hidden flags are proven by the parser's refusal of a bad value, spawned with an empty temporary config dir (never the person's login).",
+          "authStatusArgs": [
+            "auth",
+            "status",
+            "--json"
+          ]
+        },
+        "auth": {
+          "authMethods": [
+            "claude.ai"
+          ],
+          "apiProviders": [
+            "firstParty"
+          ],
+          "configDirectoryMatch": true
+        },
+        "env": {
+          "fixed": {
+            "PATH": "/usr/bin:/bin",
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "CLAUDE_CODE_MAX_RETRIES": "0",
+            "DISABLE_AUTOUPDATER": "1",
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+            "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+            "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+            "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS": "1000"
+          },
+          "runDir": [
+            "HOME",
+            "TMPDIR"
+          ],
+          "configDir": "CLAUDE_CONFIG_DIR",
+          "deny": [
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_AUTH_TOKEN",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "ANTHROPIC_PROFILE",
+            "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_FOUNDRY_API_KEY",
+            "AWS_BEARER_TOKEN_BEDROCK",
+            "CLAUDE_CODE_USE_BEDROCK",
+            "CLAUDE_CODE_USE_VERTEX",
+            "CLAUDE_CODE_USE_FOUNDRY",
+            "CLAUDE_CODE_RETRY_WATCHDOG"
+          ]
+        },
+        "guards": {
+          "apiKeySources": [
+            "none"
+          ],
+          "permissionMode": "dontAsk",
+          "plugins": [
+            {
+              "name": "cc-plugin-agents-md",
+              "path": "builtin"
+            },
+            {
+              "name": "cc-plugin-plugin-authoring",
+              "path": "builtin"
+            }
+          ],
+          "lengthStopReasons": [
+            "max_tokens"
+          ],
+          "loginErrors": [
+            "authentication_failed",
+            "account_on_hold",
+            "oauth_org_not_allowed"
+          ],
+          "creditsErrors": [
+            "credits_required"
+          ],
+          "loginStatuses": [
+            401,
+            403
+          ],
+          "quotaStatuses": [
+            429
+          ]
+        },
+        "limits": {
+          "stdinMaxBytes": 10485760,
+          "maxLineBytes": 1048576,
+          "stderrMaxBytes": 65536,
+          "preflightTimeoutMs": 15000,
+          "preflightOutputBytes": 262144,
+          "killGraceMs": 3000,
+          "responseFramingBytes": 65536
+        },
+        "isolation": {
+          "source": "bubblewrap 0.13.0 bwrap.xml (the bundled locked build's own manual source, read 2026-10-23): --unshare-all, --unshare-user, --disable-userns (requires --unshare-user), --die-with-parent, --proc, --dev, --size + --tmpfs, --perms, --ro-bind, --ro-bind-try, --bind, --chdir. No --share-net: the network namespace stays empty and only the gateway socket leads out. No --new-session: the runner's detached spawn already starts a session without a controlling terminal, and the process group must reach the CLI so SIGINT ends the turn first. S3-5 lane.",
+          "shell": "/bin/sh",
+          "socketPath": "/run/deckent-egress.sock",
+          "proxy": { "host": "127.0.0.1", "port": 18080, "env": ["HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"], "clear": ["NO_PROXY", "no_proxy"] },
+          "configVisible": [".claude.json", ".claude.json.backup", ".credentials.json", ".oauth_refresh.lock", ".oauth_refresh.lock.owner"],
+          "configVisibleSource": "S3-5 lane 2026-10-23 from CLI 2.1.309 strings (no run): the CLI keeps its state file and login in the config dir, writes them through a sibling temporary file + rename and refreshes the login under a lock beside them. Every other existing entry of the login dir is masked (a directory becomes empty private memory, a file unreadable). Unmeasured against the real CLI until the lead's acceptance run.",
+          "configMaxEntries": 4096,
+          "refreshLock": { "names": [".oauth_refresh.lock", ".oauth_refresh.lock.owner"], "waitMs": 30000, "pollMs": 100, "staleMs": 600000,
+            "source": "f5 lane 2026-10-24: names from configVisible (S3-5, CLI 2.1.309 strings); none exists at rest and none appeared during in-realm --version, --help and auth status (names-only watch of the login dir). The realm binds the login dir itself, so the CLI's lock file is the same inode for the realm and the person's own sessions; whether the CLI's stale-lock check uses a process id is unverified, and the realm's own PID namespace would break such a check both ways. Deckent therefore starts no spawn while a CLI lock name exists, and serializes its own spawns per login dir (staleMs: a holder older than this is stale even if its process id was reused)." },
+          "limits": { "tmpfsBytes": 67108864, "fileSizeBlocks": 131072, "fileSizeBlocksSource": "POSIX ulimit -f counts 512-byte blocks (dash; bash in POSIX mode): 131072 blocks = 64 MiB, the largest file the isolated CLI may write", "openFiles": 1024,
+            "cpuSeconds": 60, "cpuGraceSeconds": 5, "processes": 64, "dataBytes": 2147483648, "sampleMs": 50, "attributionPermille": 900,
+            "exits": { "cpu-time": 201, "processes": 202, "memory": 203 },
+            "boundsSource": "f5 lane 2026-10-24, measured in this realm with the real CLI 2.1.309 (Bun 1.4.4; --help and auth status only, no model call): peak RSS 180 MB, CPU 0.12 s, 8 realm tasks; RLIMIT_NPROC counts the realm's own user namespace on kernel 6.18 (7 runs auth status while the owner has hundreds of processes; 5 aborts), Bun sizes its reservations to RLIMIT_DATA (512 MiB runs --help; 256 MiB aborts); prlimit adds no measurable time (--help 98-104 ms either way). Per process: CPU soft 60 s (SIGXCPU) and hard +5 s (SIGKILL), data 2 GiB; realm: 64 tasks. Turn-time peaks unmeasured until the lead's real call.",
+            "limiter": "/usr/bin/prlimit", "limiterSource": "prlimit(1) util-linux 2.39 --cpu=soft:hard, --nproc, --data (a single value sets soft and hard); setrlimit(2) man-pages 6.7: RLIMIT_CPU SIGXCPU at soft then SIGKILL at hard, RLIMIT_DATA covers brk and mmap since Linux 4.7, RLIMIT_NPROC counts threads (per user namespace since Linux 5.14 ucounts)" }
+        }
       }
     },
     "cursor": {

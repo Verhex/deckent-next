@@ -84,6 +84,7 @@ export class MonitorApplication {
     for (const poolId of index.poolIds) if (await this.ports.observePool(target, poolId, [...admitted]).catch(error => { undecided.add(code(error)); return false; }) === true) visible.add(poolId);
     for (const failure of undecided) scopeNotes.push('pool-decisions-unavailable:' + failure);
     if (refused.length) scopeNotes.unshift(...named ? refused.map(([id, reason]) => `scope-refused:${reason}:${id}`) : [`scopes-denied:${refused.length}`]);
+    const brainWaits = await this.brainWaits(target, index.scopeIds, admitted, scopeNotes);
     try { reading = await this.ports.readLedger(target, Object.freeze({ scopeIds: Object.freeze([...admitted]), poolIds: Object.freeze([...visible]) })); }
     catch (error) { diagnostics.push(...scopeNotes); return unavailable(error); }
     diagnostics.push(...reading.diagnostics, ...scopeNotes);
@@ -149,6 +150,23 @@ export class MonitorApplication {
     return Object.freeze({ id: target.id, path: target.path, status, scopeIds: Object.freeze([...admitted]), service: serviceState, ledgerVersion: reading.ledgerVersion,
       runs: Object.freeze(runs),
       workers: Object.freeze(shown.map(enrich)), map: open ? reading.map ?? null : null, approvals: Object.freeze(approvals), pools: Object.freeze(poolViews),
-      ...(hiddenPools > 0 ? { hiddenPools } : {}), diagnostics: Object.freeze(diagnostics) });
+      ...(hiddenPools > 0 ? { hiddenPools } : {}), ...(brainWaits.length ? { brainWaits } : {}), diagnostics: Object.freeze(diagnostics) });
+  }
+  /**
+   * f4: active Brain quota waits of scopes the viewer may read. A scope the ledger already names uses its admission above; a scope only a wait
+   * names (no Run yet) is asked the same scope decision here, and its workers are not taken. A wait of a scope the viewer may not read is never
+   * shown or named: `info:brain-waits-hidden:<n>` counts them. A failed read is the problem code `brain-waits-unavailable:<CODE>`.
+   */
+  private async brainWaits(target: MonitorTarget, indexed: readonly string[], admitted: Set<string>, notes: string[]) {
+    if (!this.ports.readBrainWaits) return [];
+    let stored;
+    try { stored = await this.ports.readBrainWaits(target); } catch (error) { notes.push('brain-waits-unavailable:' + code(error)); return []; }
+    const allowed = new Set(admitted);
+    for (const scopeId of new Set(stored.records.map(record => record.scopeId))) if (!indexed.includes(scopeId))
+      if (await this.ports.observeScope(target, scopeId).then(scope => scope.access === 'admitted', () => false)) allowed.add(scopeId);
+    const shown = stored.records.filter(record => allowed.has(record.scopeId)), hidden = stored.records.length - shown.length;
+    if (hidden) notes.push('info:brain-waits-hidden:' + hidden);
+    if (stored.truncated) notes.push('info:brain-waits-truncated');
+    return Object.freeze(shown.map(record => Object.freeze({ ...record })));
   }
 }

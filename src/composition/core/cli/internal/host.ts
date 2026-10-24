@@ -9,7 +9,13 @@ import { unifiedDiff, readInstallationProfileFile, isSelfSourceProject, openExte
 import { settledProviderCacheUsage } from '#engine/index.js';
 import { composeCore, loadComposedConfig } from '#composition/core/root/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, configuredConfigChoiceSources } from '#composition/core/config/index.js';
+import { inspectConfiguredMemoryRollout } from '#composition/core/memory-rollout/index.js';
 import { inspectConfiguredWorkerTranscript, inspectConfiguredWorkers } from '#composition/core/worker-observation/index.js';
+import { inspectConfiguredMemory, listConfiguredMemory, searchConfiguredMemory, proposeConfiguredMemory, verifyConfiguredMemory, retireConfiguredMemory, inspectConfiguredMemoryEvaluators,
+  reviewConfiguredMemory, listConfiguredMemorySource, purgeConfiguredMemory, resolveConfiguredMemoryContest, countConfiguredMemoryPurgesPending } from '#composition/core/memory/index.js';
+import { listConfiguredAgents, inspectConfiguredAgent, listConfiguredSkills, inspectConfiguredSkill, defineConfiguredAgent, defineConfiguredSkill, importConfiguredSkill,
+  listConfiguredSigners, enrolConfiguredSigner, addConfiguredSigner, revokeConfiguredSigner, repairConfiguredSigners, inspectConfiguredAgentStats, listConfiguredSuggestions, inspectConfiguredSuggestion,
+  changeConfiguredStanding, dismissConfiguredSuggestion, bulkConfiguredStanding, listConfiguredRevokedPromotions, draftConfiguredSuggestion, defineConfiguredFromSuggestion } from '#composition/core/agent-catalog/index.js';
 import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision, listConfiguredDecisions } from '#composition/core/decision/index.js';
 import { inspectMonitor, inspectSurfaceAccess, inspectSurfaceRunIds, followLedgerSurface } from '#composition/core/monitor/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains, inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
@@ -17,11 +23,12 @@ import { executeConfiguredOperation, compensateConfiguredOperation, inspectConfi
 import { changeConfiguredDecisionDelegation, inspectConfiguredDecisionDelegations, configuredPolicyTemplateUpgrade, inspectConfiguredPolicyAdministration, listConfiguredAllStandingGrants, listConfiguredStandingGrants, revokeConfiguredStandingGrant, listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 import { readConfiguredInferenceMetrics } from '#composition/core/inference-metrics/index.js';
 import { interactiveDeliveryHandlers, describeConfiguredDeliverySummaries, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
-import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
-import { connectConfiguredModel, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
+import { admitConfiguredModelActivation, applyConfiguredModelCatalog, assignConfiguredModelRole, inspectConfiguredModelActivation, inspectConfiguredModelCatalog,
+  inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
+import { connectConfiguredModel, loginConfiguredHeadless, readConfiguredHeadlessLogins, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold,
-  inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust } from '#composition/core/runs/index.js';
+  inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust, inspectConfiguredRecoveryMode } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { openConfigWindow, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
 import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
@@ -50,7 +57,11 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
   const host: Parameters<typeof runCli>[1] & object = { ...base, initialize: composeCore, startRuntimeService: startConfiguredCliRuntimeService,
     verifyAudit: verifyConfiguredAudit, rebaselineAudit: rebaselineConfiguredAudit, executeBackup: executeConfiguredBackup, previewIdentityProfile: previewConfiguredIdentityProfile, listIdentityProfiles,
     listIdentityDistributionChoices: listConfiguredIdentityDistributionChoices, previewIdentityDistribution: previewConfiguredIdentityDistribution, applyIdentityDistribution: applyConfiguredIdentityDistribution,
-    prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision, listDecisions: listConfiguredDecisions,
+    prepareDecision: prepareConfiguredDecision, askDecision: askConfiguredDecision, recordDecision: recordConfiguredDecision, outcomeDecision: outcomeConfiguredDecision, inspectDecision: inspectConfiguredDecision, listDecisions: listConfiguredDecisions, listAgents: listConfiguredAgents, inspectAgent: inspectConfiguredAgent, listSkills: listConfiguredSkills, inspectSkill: inspectConfiguredSkill, defineAgent: defineConfiguredAgent, defineSkill: defineConfiguredSkill, inspectAgentStats: inspectConfiguredAgentStats, importSkill: importConfiguredSkill, listSigners: listConfiguredSigners, enrolSigner: enrolConfiguredSigner, addSigner: addConfiguredSigner, revokeSigner: revokeConfiguredSigner, repairSigners: repairConfiguredSigners, listSuggestions: listConfiguredSuggestions, inspectSuggestion: inspectConfiguredSuggestion, changeStanding: changeConfiguredStanding, dismissSuggestion: dismissConfiguredSuggestion, bulkStanding: bulkConfiguredStanding, listRevokedPromotions: listConfiguredRevokedPromotions, draftSuggestion: draftConfiguredSuggestion, defineFromSuggestion: defineConfiguredFromSuggestion,
+    listMemory: listConfiguredMemory, searchMemory: searchConfiguredMemory, inspectMemory: inspectConfiguredMemory, proposeMemory: proposeConfiguredMemory, verifyMemory: verifyConfiguredMemory, retireMemory: retireConfiguredMemory, inspectMemoryEvaluators: inspectConfiguredMemoryEvaluators,
+    reviewMemory: reviewConfiguredMemory, listMemorySource: listConfiguredMemorySource, purgeMemory: purgeConfiguredMemory, resolveMemoryContest: resolveConfiguredMemoryContest,
+    inspectMemoryRollout: inspectConfiguredMemoryRollout,
+    countMemoryPurgesPending: countConfiguredMemoryPurgesPending,
     ...configuredTargetQueueTerminal(root),
     deliverWorkspaceIntegration: delivery.deliver,
     adoptWorkspaceIntegration: delivery.adopt, rollbackWorkspaceIntegration: delivery.rollback, interactiveDelivery: interactiveDeliveryHandlers, // TESLIM-PENCERESI window answer
@@ -76,7 +87,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     readInferenceMetrics: (projectRoot, input, options) => readConfiguredInferenceMetrics(projectRoot, input, options),
     updateToolchains: (projectRoot, input, options) => updateConfiguredToolchains(projectRoot, input, options),
     runMcpCommand: runConfiguredMcpCommand,
-    inspectSecretStore: inspectConfiguredSecretStore, listSecretNames: listConfiguredSecretNames, inspectRecoveryFiles: inspectConfiguredRecoveryFiles,
+    inspectSecretStore: inspectConfiguredSecretStore, listSecretNames: listConfiguredSecretNames, inspectRecoveryFiles: inspectConfiguredRecoveryFiles, inspectRecoveryMode: inspectConfiguredRecoveryMode,
     inspectInstallationBinding: inspectConfiguredInstallationBinding,
     inspectInstallationStartability, inspectShellRealm: inspectConfiguredShellRealm, // REALM-NOTICE: doctor's selected shell realm and every provider passed over.
     setSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setSecret(input),
@@ -133,6 +144,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     inspectModelInvocation: inspectRuntimeModelInvocation, purgeModelInvocationContent: purgeRuntimeModelInvocationContent,
     cancelModelInvocation: cancelRuntimeModelInvocation, inspectProviderSpendAccount: inspectRuntimeProviderSpendAccount, auditProviderSpendAccount: auditRuntimeProviderSpendAccount, manageProviderSpend: manageRuntimeProviderSpend,
     admitModelActivation: admitConfiguredModelActivation, inspectModelActivation: inspectConfiguredModelActivation, applyModelCatalog: applyConfiguredModelCatalog, inspectModelCatalog: inspectConfiguredModelCatalog,
+    inspectModelRoles: inspectConfiguredModelRoles, readHeadlessLogins: readConfiguredHeadlessLogins, loginHeadless: loginConfiguredHeadless, assignModelRole: (projectRoot, command, options) => assignConfiguredModelRole(projectRoot, command, options), // M2 typed role admission
     /* T4-B models.connect: the secret store is read for names only (the key's presence), the service describe for the restart state. */ planProfileCache: planConfiguredProfileCache, // CACHE-SLICE1: the governed 5-minute cache migration offered in `/model` and `/provider`.
     inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch, inspectInvocableModels: inspectConfiguredInvocableModels,
     planProfileProtocol: planConfiguredProfileProtocol, openProviderWorkspaces: openConfiguredProviderWorkspaces,

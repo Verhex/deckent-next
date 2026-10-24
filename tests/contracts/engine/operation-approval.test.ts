@@ -162,7 +162,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
     saveEffect: async (_previous: EffectRecord, next: EffectRecord) => { saved = next; return next; },
   };
   const app = new EffectApplication({ resolve: async () => descriptor }, { resolve: () => target }, store, f.broker, f.sessions,
-    new OperationPolicyAuthorization({ load: async () => gated }), { sample: () => ({ wallMs: f.time.wallMs, monotonicMs: f.time.wallMs }) });
+    new OperationPolicyAuthorization({ load: async () => gated }), { sample: () => ({ wallMs: f.time.wallMs, monotonicMs: f.time.wallMs }) }, { producer: { kind: 'principal' } });
   try {
     const first = await app.submit('execute', command());
     if (first.status !== 'approval-pending') throw new Error('expected pending');

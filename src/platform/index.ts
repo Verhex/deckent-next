@@ -1,5 +1,5 @@
 export { PACKAGE_NAME, PACKAGE_VERSION } from '#platform/core/common/index.js';
-export { resolveLocale, t, currencyAmountText } from '#platform/core/i18n/index.js';
+export { resolveLocale, t, currencyAmountText, clockText } from '#platform/core/i18n/index.js';
 export type { Locale, MessageKey } from '#platform/core/i18n/index.js';
 export { PRODUCT_LAYOUT_REGISTRY, DECKENT_DIR, CONFIG_FILE, PROJECT_CONFIG_PATH, CONFIG_SCHEMA_VERSION, CONFIG_CONTRACT_SINCE, OUTPUT_MODES } from '#platform/core/common/index.js';
 export type { OutputMode } from '#platform/core/common/index.js';
@@ -28,7 +28,7 @@ export type { GlobalScopePlatform, GlobalScopePaths } from '#platform/core/host/
 export { resolveProductPaths } from '#platform/core/host/index.js';
 export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, describeWorkerRecommendation, type WorkerRecommendation, suggestMaxWorkersFromCapacity, getSystemProfile, assessNodeSupport, nodeEngineFloors, type NodeSupport } from '#platform/core/host/index.js';
 export { detectEnvironment } from '#platform/core/host/index.js';
-export { detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery } from '#platform/core/host/index.js';
+export { detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery, recordedProcessState } from '#platform/core/host/index.js';
 export { readBuildIdentity, type BuildIdentity } from '#platform/core/host/index.js';
 export { validatePath, validateExistingPath, validateTaskId } from '#platform/core/validate/index.js';
 export { isLiteralLoopbackHostname } from '#platform/core/validate/index.js';
@@ -66,7 +66,7 @@ export { emit, createEmitter } from '#platform/core/output/index.js';
 export type { OutputSink, EmitOptions } from '#platform/core/output/index.js';
 export { LOCALES, MESSAGE_KEYS, MESSAGE_REGISTRY, createMessageRegistry } from '#platform/core/i18n/index.js';
 export type { MessageFamily, MessageRegistry } from '#platform/core/i18n/index.js';
-export { CORE_TURN_ASSURANCE_REFERENCE, getConfigFieldDefault, CONFIG_FIELDS } from '#platform/core/config-fields/index.js';
+export { CORE_TURN_ASSURANCE_REFERENCE, getConfigFieldDefault, CONFIG_FIELDS, MEMORY_AUTOMATION_MODES } from '#platform/core/config-fields/index.js';
 export { mergeConfigFields } from '#platform/core/config-fields/index.js';
 export type { ResourceObservationSettings } from '#platform/core/config-fields/index.js';
 export { RESOURCE_OBSERVATION_SETTINGS } from '#platform/core/config-fields/index.js';
@@ -84,6 +84,7 @@ export { SystemTrustedClock, MAX_WALL_SKEW_MS, processWallLagMs } from '#platfor
 export type { TrustedClock, ClockSample } from '#platform/core/clock/index.js';
 export { sha256, constantTimeDigestEqual, createHmacIntegrity } from '#platform/core/integrity/index.js';
 export type { IntegrityAuthority } from '#platform/core/integrity/index.js';
+export { ED25519_PKCS8_BYTES, ED25519_SPKI_BYTES, ed25519KeyId, ed25519Signer, generateEd25519Pair, signatureMessage, verifyEd25519, type Ed25519Signer } from '#platform/core/integrity/index.js';
 export { GLOB_WILDCARD, globLiteralHead, hasGlobWildcard, createGlobMatcher } from '#platform/core/common/index.js';
 export { shortId, mapBounded, HOST_LIMITS_REGISTRY } from '#platform/core/common/index.js';
 

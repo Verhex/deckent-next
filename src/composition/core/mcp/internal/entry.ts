@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
+import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog,
+  inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
 import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
@@ -19,6 +20,9 @@ import { describeConfiguredOperationTools } from '#composition/core/operations/i
 import { releaseConfiguredQuota, applyConfiguredRunLifecycle, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredPoolHold, inspectConfiguredPoolHold } from '#composition/core/runs/index.js';
 import { recordConfiguredMcpIngress } from './ingress.js';
 import { inspectConfiguredDecision } from '#composition/core/decision/index.js';
+import { inspectConfiguredMemory, listConfiguredMemory, searchConfiguredMemory } from '#composition/core/memory/index.js';
+import { listConfiguredAgents, inspectConfiguredAgent, listConfiguredSkills, inspectConfiguredSkill, inspectConfiguredAgentStats, listConfiguredSuggestions, inspectConfiguredSuggestion,
+  signedDefineConfiguredAgent, signedDefineConfiguredSkill, signedImportConfiguredSkill, signedChangeConfiguredStanding, signedDismissConfiguredSuggestion } from '#composition/core/agent-catalog/index.js';
 import { inspectConfiguredPolicyAdministration } from '#composition/core/approvals/index.js';
 import { verifyConfiguredAudit } from '#composition/core/audit/index.js';
 import { inspectMonitor } from '#composition/core/monitor/index.js';
@@ -34,6 +38,13 @@ import { inspectMonitor } from '#composition/core/monitor/index.js';
     recordModelIngress: (notice, input) => recordConfiguredMcpIngress(root, notice, input),
     applyRunControl: command => applyConfiguredRunLifecycle(root, command),
     inspectDecision: query => inspectConfiguredDecision(root, query, { heal: false }),
+    listAgents: query => listConfiguredAgents(root, query, { heal: false }), inspectAgent: query => inspectConfiguredAgent(root, query, { heal: false }),
+    listSkills: query => listConfiguredSkills(root, query, { heal: false }), inspectSkill: query => inspectConfiguredSkill(root, query, { heal: false }), inspectAgentStats: query => inspectConfiguredAgentStats(root, query, { heal: false }),
+    listAgentSuggestions: query => listConfiguredSuggestions(root, query, { heal: false }), inspectAgentSuggestion: query => inspectConfiguredSuggestion(root, query, { heal: false }),
+    signedDefineAgent: command => signedDefineConfiguredAgent(root, command), signedDefineSkill: command => signedDefineConfiguredSkill(root, command),
+    signedImportSkill: command => signedImportConfiguredSkill(root, command), signedChangeStanding: command => signedChangeConfiguredStanding(root, command),
+    signedDismissSuggestion: command => signedDismissConfiguredSuggestion(root, command),
+    listMemory: query => listConfiguredMemory(root, query, { heal: false }), searchMemory: query => searchConfiguredMemory(root, query, { heal: false }), inspectMemory: query => inspectConfiguredMemory(root, query, { heal: false }),
     inspectPolicyAdministration: query => inspectConfiguredPolicyAdministration(root, query, { heal: false }),
     verifyAudit: query => verifyConfiguredAudit(root, query),
     inspectMonitor: query => inspectMonitor(root, {}, query),
@@ -48,7 +59,7 @@ import { inspectMonitor } from '#composition/core/monitor/index.js';
     manageProviderSpend: (command, delivery) => runtime.manageProviderSpend(command, delivery),
     auditProviderSpendAccount: (command, delivery) => runtime.auditProviderSpendAccount(command, delivery),
     inspectModelActivation: query => inspectConfiguredModelActivation(root, query, { heal: false }),
-    admitModelActivation: command => admitConfiguredModelActivation(root, command), inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query, { heal: false }), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),
+    admitModelActivation: command => admitConfiguredModelActivation(root, command), inspectModelCatalog: query => inspectConfiguredModelCatalog(root, query, { heal: false }), inspectModelRoles: query => inspectConfiguredModelRoles(root, query, { heal: false }), applyModelCatalog: command => applyConfiguredModelCatalog(root, command),
     connectModel: command => connectConfiguredModel(root, command, {}, { listSecretNames: listConfiguredSecretNames }),
     applyPoolCapacity: command => applyConfiguredPoolCapacity(root, command), inspectPoolCapacity: query => inspectConfiguredPoolCapacity(root, query, { heal: false }),
     releaseQuota: command => releaseConfiguredQuota(root, command), inspectPoolHold: query => inspectConfiguredPoolHold(root, query, { heal: false }), applyPoolHold: command => applyConfiguredPoolHold(root, command),

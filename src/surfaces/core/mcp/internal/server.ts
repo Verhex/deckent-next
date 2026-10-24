@@ -25,7 +25,13 @@ import { runControlCommandSchema, type RunLifecycleCommand, runCommandSchema, ru
 import type { DeclaredModelsInspection, ModelBindingInspection, ToolchainCurrencyReport } from '#engine/index.js';
 import { quotaReleaseCommandSchema, type QuotaReleaseCommand, type QuotaReleaseReceipt, poolCapacityCommandSchema, type PoolCapacityCommand, type PoolCapacityReceipt, type PoolCapacityView, poolHoldCommandSchema, poolHoldQuerySchema, type PoolHoldCommand, type PoolHoldQuery, type PoolHoldReceipt, type PoolHoldView } from '#engine/index.js';
 import { decisionQuerySchema, type DecisionQuery, type DecisionInspection } from '#engine/index.js';
+import { memoryListQuerySchema, memorySearchQuerySchema, memoryInspectQuerySchema, type MemoryListQuery, type MemoryListing, type MemorySearchQuery, type MemorySearchResult, type MemoryInspectQuery, type MemoryInspection } from '#engine/index.js';
+import { agentListQuerySchema, agentInspectQuerySchema, skillListQuerySchema, skillInspectQuerySchema, type AgentListQuery, type AgentListing, type AgentInspectQuery,
+  type AgentInspection, type SkillListQuery, type SkillListing, type SkillInspectQuery, type SkillInspection, agentStatsQuerySchema, type AgentStatsQuery, type AgentStatsView,
+  suggestionListQuerySchema, suggestionInspectQuerySchema, agentDefineCommandSchema, skillDefineCommandSchema, skillImportCommandSchema, standingChangeCommandSchema, suggestionDismissCommandSchema,
+  type CatalogSuggestionListing, type CatalogSuggestionInspection } from '#engine/index.js';
 import { policyAdministrationQuerySchema, type PolicyAdministrationQuery, type PolicyAdministrationStatus } from '#engine/index.js';
+import { modelRoleQuerySchema, type ModelRoleInspection, type ModelRoleQuery } from '#engine/index.js';
 export interface McpApplications {
   inspectTargetQueue?(query: QueueQuery): Promise<unknown>;
   listTargetQueue?(query: QueueList): Promise<unknown>;
@@ -36,6 +42,19 @@ export interface McpApplications {
   recordModelIngress?(notice: ModelIngressProjection, input: unknown): Promise<void>;
   inspectMonitor?(query: MonitorQuery): Promise<MonitorSnapshot>;
   inspectDecision?(query: DecisionQuery): Promise<DecisionInspection>;
+  /** S4 memory journal v1: read-only; a failed read answers `held`, never an empty memory. */
+  listMemory?(query: MemoryListQuery): Promise<MemoryListing>; searchMemory?(query: MemorySearchQuery): Promise<MemorySearchResult>; inspectMemory?(query: MemoryInspectQuery): Promise<MemoryInspection>;
+  /** S7 agent/skill catalog: read-only; creating, revising and importing stay a person's terminal card. */
+  listAgents?(query: AgentListQuery): Promise<AgentListing>; inspectAgent?(query: AgentInspectQuery): Promise<AgentInspection>;
+  /** S8-2 agent statistics: the same `agent-catalog`/`inspect` read; numbers are associations and acceptance rates (labels on the view). */
+  inspectAgentStats?(query: AgentStatsQuery): Promise<AgentStatsView>;
+  listSkills?(query: SkillListQuery): Promise<SkillListing>; inspectSkill?(query: SkillInspectQuery): Promise<SkillInspection>;
+  /** S8-3/S8-4: the catalog's sealed suggestions (refs, digests, counts; never draft or lesson text; lesson refs only where the MCP actor may read them). */
+  listAgentSuggestions?(query: unknown): Promise<CatalogSuggestionListing>; inspectAgentSuggestion?(query: unknown): Promise<CatalogSuggestionInspection>;
+  /** S8-4 the signed AI command path: define, import, standing and dismiss only with the MCP actor's own active key and a policy grant (a standing action:
+   * a grant naming that WorkClass); verified again at commit. AI grants are empty by default. */
+  signedDefineAgent?(command: unknown): Promise<unknown>; signedDefineSkill?(command: unknown): Promise<unknown>; signedImportSkill?(command: unknown): Promise<unknown>;
+  signedChangeStanding?(command: unknown): Promise<unknown>; signedDismissSuggestion?(command: unknown): Promise<unknown>;
   renewApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   listApprovals?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
   inspectApproval?(input: unknown, delivery?: RuntimeServiceDelivery): Promise<unknown>;
@@ -43,6 +62,8 @@ export interface McpApplications {
   admitModelActivation?(command: ModelActivationCommand): Promise<ModelActivationResult>;
   inspectModelCatalog?(query: ModelCatalogQuery): Promise<ModelCatalogInspection>;
   applyModelCatalog?(command: ModelCatalogCommand): Promise<ModelCatalogResult>;
+  /** M2: which exact catalog model serves which role (pending = no row, every role refuses it). Read-only: assigning stays a person's terminal card. */
+  inspectModelRoles?(query: ModelRoleQuery): Promise<ModelRoleInspection>;
   /** T4-B `models.connect`: the same application as CLI `models connect`, SDK `connectModel` and the terminal (secret names only, never a value). */
   connectModel?(command: ModelConnectCommand): Promise<ModelConnectResult>;
   releaseQuota?(command: QuotaReleaseCommand): Promise<QuotaReleaseReceipt>;
@@ -117,6 +138,32 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (inspectDecision) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_decision',
     description: t('mcp.tool.inspectDecision', {}, locale), schema: decisionQuerySchema,
     invoke: input => inspectDecision.call(applications, decisionQuerySchema.parse(input)) });
+  const { listMemory, searchMemory, inspectMemory } = applications;
+  if (listMemory) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'list_memory', description: t('mcp.tool.listMemory', {}, locale),
+    schema: memoryListQuerySchema, invoke: input => listMemory.call(applications, memoryListQuerySchema.parse(input)) });
+  if (searchMemory) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'search_memory', description: t('mcp.tool.searchMemory', {}, locale),
+    schema: memorySearchQuerySchema, invoke: input => searchMemory.call(applications, memorySearchQuerySchema.parse(input)) });
+  if (inspectMemory) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_memory', description: t('mcp.tool.inspectMemory', {}, locale),
+    schema: memoryInspectQuerySchema, invoke: input => inspectMemory.call(applications, memoryInspectQuerySchema.parse(input)) });
+  for (const [name, description, schema, invoke] of [['list_agents', t('mcp.tool.listAgents', {}, locale), agentListQuerySchema, applications.listAgents],
+    ['inspect_agent', t('mcp.tool.inspectAgent', {}, locale), agentInspectQuerySchema, applications.inspectAgent], ['list_skills', t('mcp.tool.listSkills', {}, locale), skillListQuerySchema, applications.listSkills],
+    ['inspect_skill', t('mcp.tool.inspectSkill', {}, locale), skillInspectQuerySchema, applications.inspectSkill],
+    ['inspect_agent_stats', t('mcp.tool.inspectAgentStats', {}, locale), agentStatsQuerySchema, applications.inspectAgentStats],
+    ['list_agent_suggestions', t('mcp.tool.listAgentSuggestions', {}, locale), suggestionListQuerySchema, applications.listAgentSuggestions],
+    ['inspect_agent_suggestion', t('mcp.tool.inspectAgentSuggestion', {}, locale), suggestionInspectQuerySchema, applications.inspectAgentSuggestion]] as const) {
+    if (invoke) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name, description, schema,
+      invoke: input => (invoke as (query: unknown) => Promise<unknown>).call(applications, schema.parse(input)) });
+  }
+  // S8-4: the signed catalog writes (one typed command each, the same schemas as the person's cards; the signature is made by the host signer for the MCP actor's
+  // own enrolled key, or carried in `signed` from its external key).
+  for (const [name, description, schema, invoke] of [['define_agent', t('mcp.tool.signedDefineAgent', {}, locale), agentDefineCommandSchema, applications.signedDefineAgent],
+    ['define_skill', t('mcp.tool.signedDefineSkill', {}, locale), skillDefineCommandSchema, applications.signedDefineSkill],
+    ['import_skill', t('mcp.tool.signedImportSkill', {}, locale), skillImportCommandSchema, applications.signedImportSkill],
+    ['change_agent_standing', t('mcp.tool.signedChangeStanding', {}, locale), standingChangeCommandSchema, applications.signedChangeStanding],
+    ['dismiss_agent_suggestion', t('mcp.tool.signedDismissSuggestion', {}, locale), suggestionDismissCommandSchema, applications.signedDismissSuggestion]] as const) {
+    if (invoke) definitions.push({ readOnly: false, destructive: false, idempotent: true, openWorld: false, name, description, schema,
+      invoke: input => (invoke as (command: unknown) => Promise<unknown>).call(applications, schema.parse(input)) });
+  }
   if (applications.inspectPolicyAdministration) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_policy_administration',
     description: t('mcp.tool.policyAdministration', {}, locale), schema: policyAdministrationQuerySchema,
     invoke: input => applications.inspectPolicyAdministration!(policyAdministrationQuerySchema.parse(input)) });
@@ -210,6 +257,11 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   if (inspectCatalog) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_model_catalog',
     description: t('mcp.tool.inspectModelCatalog', {}, locale), schema: modelCatalogQuerySchema,
     invoke: input => inspectCatalog.call(applications, modelCatalogQuerySchema.parse(input)) });
+  // M2 parity: the same read view as CLI `models roles` and doctor; there is no MCP write (a tier/role change needs the person's terminal).
+  const inspectRoles = applications.inspectModelRoles;
+  if (inspectRoles) definitions.push({ readOnly: true, destructive: false, idempotent: true, name: 'inspect_model_roles',
+    description: t('mcp.tool.inspectModelRoles', {}, locale), schema: modelRoleQuerySchema,
+    invoke: input => inspectRoles.call(applications, modelRoleQuerySchema.parse(input)) });
   const applyCatalog = applications.applyModelCatalog;
   // Destructive but idempotent: adapters/core/sqlite-model-activation/internal/catalog.ts SqliteModelCatalogStore.apply returns the (scope, commandId) receipt before any row is written again.
   if (applyCatalog) definitions.push({ readOnly: false, destructive: true, idempotent: true, name: 'apply_model_catalog',

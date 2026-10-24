@@ -80,7 +80,8 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
   const openAudit = adapters.openSqliteAuditStore;
   // Faults target the remembered (standing) audit only; ONAY-URETICI D1's producer-inventory audit opened by the decision itself is not the subject here.
   vi.spyOn(adapters, 'openSqliteAuditStore').mockImplementation(async (...args) => {
-    if (!/withAgentAudit/u.test(new Error().stack ?? '')) return openAudit(...args); // only the remembered/used standing audit (agent turn) is faulted
+    // Only the remembered/used standing audit (agent turn) is faulted; the turn's end-of-turn `policy-turn` record (S5 D1) is not the subject here.
+    const stack = new Error().stack ?? ''; if (!/withAgentAudit/u.test(stack) || /PolicyTurnRecord\.flush/u.test(stack)) return openAudit(...args);
     faults.enteredAudit(); await faults.holdAudit; if (faults.failAudit) throw new Error('injected-audit-failure'); return openAudit(...args); });
   // In-process transport routes through the same typed operation handlers, with a real OS peer. No socket or provider is opened.
   vi.spyOn(adapters, 'requestLocalRuntime').mockImplementation(async (_options, input) => {
@@ -89,10 +90,13 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
     if (request.operation === 'decideApproval' && faults.dropDecision) throw new Error('injected-response-loss');
     return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
   });
+  // A turn's service handler finishes after its answer has streamed (it seals the turn's `policy-turn` record, S5 D1): cleanup waits for it.
+  const turns = new Set<Promise<unknown>>();
   vi.spyOn(adapters, 'turnLocalRuntime').mockImplementation(async (_options, input, emit, signal) => {
     const request = runtimeServiceRequestSchema.parse(input); requests.push(request);
+    let settled!: () => void; const handler = new Promise<void>(resolve => { settled = resolve; }); turns.add(handler);
     const result = await runPeerConfiguredChatTurn(project, request.input, peer, { env }, { maxResultBytes: 65536 }, host,
-      { signal: signal ?? controller.signal, drained: async () => undefined, emit: event => { const checked = agentTurnStreamEventSchema.parse(event); events.push(checked); emit([checked]); } });
+      { signal: signal ?? controller.signal, drained: async () => undefined, emit: event => { const checked = agentTurnStreamEventSchema.parse(event); events.push(checked); emit([checked]); } }).finally(settled);
     return { schemaVersion: RUNTIME_SERVICE_SCHEMA_VERSION, requestId: request.requestId, ok: true, result };
   });
   const client = createConfiguredRuntimeClient(project, { env });
@@ -110,7 +114,7 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
       ...(turn?.onTurnBound ? { onTurnBound: turn.onTurnBound } : {}),
       ...(turn?.sessionId ? { sessionId: turn.sessionId } : {}), ...(turn?.fullAccess ? { fullAccess: true as const } : {}) }, { chatTurn: (_root, command, emit, _options, signal) => client.chatTurn(command, emit, signal),
       cancelChatTurn: async () => undefined }) });
-  cleanups.push(async () => { view.instance.unmount(); controller.abort(); await rm(root, { recursive: true, force: true }); });
+  cleanups.push(async () => { view.instance.unmount(); controller.abort(); await Promise.allSettled(turns); await rm(root, { recursive: true, force: true }); });
   const type = async (text: string) => { for (const ch of text) { view.stdin.write(ch); await settle(3); } };
   const rows = (sql: string) => { const db = new DatabaseSync(opened.path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   // SLASH-WINDOWS (SW-2): `/approvals` takes no typed argument in the terminal; clearing the session's answers is the picker's last row,

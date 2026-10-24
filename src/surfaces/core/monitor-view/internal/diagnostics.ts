@@ -58,7 +58,18 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'image-refresh-unreadable': () => t('monitor.diagnostic.imageRefreshUnreadable', { detail }, locale),
     'map-config-global-unavailable': () => t('monitor.diagnostic.mapConfigGlobalUnavailable', {}, locale),
     'map-policy-unavailable': () => t('monitor.diagnostic.mapPolicyUnavailable', { detail }, locale),
+    // M2 (f2): `model-roles-pending:<n>` mirrors the doctor row; a new catalog model refuses every role until a person assigns one.
+    'model-roles-pending': () => t('monitor.diagnostic.modelRolesPending', { count: detail }, locale),
+    // S8-4: the agent catalog lines (summed across the viewer's scopes; each a read-soft read under the viewer's own decision).
+    'catalog-suggestions-open': () => t('agentsevo.monitor.open', { count: detail }, locale),
+    'catalog-signer-revoked': () => t('agentsevo.monitor.signerRevoked', { count: detail }, locale),
+    'catalog-aggregator-unsigned': () => t('agentsevo.monitor.unsigned', {}, locale),
+    'catalog-evolution-registry-unavailable': () => t('agentsevo.monitor.registry', {}, locale),
     'output-denied': () => t('monitor.diagnostic.outputDenied', {}, locale),
+    // f4: the Brain quota wait store (host state): a failed read, waits in scopes the viewer may not read (a count, never a scope), more than the bound.
+    'brain-waits-unavailable': () => t('brainwait.monitor.unavailable', { detail: detail ? ` (${detail})` : '' }, locale),
+    'brain-waits-hidden': () => t('brainwait.monitor.hidden', { count: detail }, locale),
+    'brain-waits-truncated': () => t('brainwait.monitor.truncated', {}, locale),
     'observation-unavailable': () => t('monitor.diagnostic.observationUnavailable', {}, locale),
     // `attempt-files-unavailable:<attempt key>:<CODE>`: the key may itself hold `/`; the code is the last part.
     'attempt-files-unavailable': () => t('monitor.diagnostic.attemptFilesUnavailable', { detail: detail.includes(':') ? detail.slice(0, detail.lastIndexOf(':')) : detail,
@@ -67,6 +78,10 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
   const actions: Readonly<Record<string, () => string>> = {
     'runs-truncated': () => t('monitor.action.runsTruncated', {}, locale),
     'image-refresh-failed': () => t('monitor.action.imageRefreshFailed', {}, locale),
+    'model-roles-pending': () => t('monitor.action.modelRolesPending', {}, locale),
+    'catalog-suggestions-open': () => t('agentsevo.monitor.openAction', {}, locale),
+    'catalog-signer-revoked': () => t('agentsevo.monitor.signerRevokedAction', {}, locale),
+    'catalog-aggregator-unsigned': () => t('agentsevo.monitor.unsignedAction', {}, locale),
   };
   return { code, note, text: Object.hasOwn(words, code) ? words[code]!() : body, ...(Object.hasOwn(actions, code) ? { action: actions[code]!() } : {}) };
 }

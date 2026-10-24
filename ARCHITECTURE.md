@@ -58,10 +58,10 @@ the mandatory legacy seven-level hierarchy nor decides additional Goal/Flow/Oper
 
 ## M5 design — owner 2026-10-11 (accepted target; alpha.29 implements the binding slice)
 
-Source: owner K-A..K-E and K-F S1–S9 answers (2026-10-11), design note v2. Nothing below is implemented except the alpha.29
+Source: owner K-A..K-E and K-F S1–S9 answers (2026-10-11), design note v2. alpha.55 implements the core layers (next section); before it nothing below was implemented except the alpha.29
 binding slice (live 2026-10-11): ledger v51 `acceptance_metrics` keyed `(scope_id, producer_command_id)`, written with the evaluation and its producer receipt in one
 transaction; domain `workerCustody` (absent = held) moved only by `releaseWorkerCustody` on fence plus termination proof; fence with reserved command ids
-(`DISPATCH_FENCED`/`DISPATCH_CORRUPT`); operation-evidence evaluator (settled no earlier than the launch grant, Run principal chain, same Run only, `OPERATION_EVIDENCE_OTHER_RUN`); without trusted effect-to-Attempt provenance or an exact settlement digest already accepted by a Task of this Run, a pre-grant settlement remains `unknown` with `OPERATION_EVIDENCE_EARLIER`, including the wall-skew window. Evaluation returns a complete Run view and requires Run `inspect` before mutation or replay; denial writes no evaluation. Evaluation reply and Run inspection share result briefs and delivery outlook under per-Attempt `read-output` authority; a denied Attempt has no `resultBrief` or delivery observation (replay pins the receipt snapshot). Delivery receipts retain producer Attempt identity and are filtered by that producer's read-output authority before aggregation; unattributed receipts are withheld, and output-derived Run outlook is withheld without every bound producer's authority. Internal lost-dispatch recovery revalidates binding, fence and termination against the current Run snapshot and releases custody with its revision CAS; absent Run/Attempt rows refuse with `DISPATCH_NOT_ADMITTED`. No initial production fence trigger is added.
+(`DISPATCH_FENCED`/`DISPATCH_CORRUPT`); operation-evidence evaluator (settled no earlier than the launch grant, Run principal chain, same Run only, `OPERATION_EVIDENCE_OTHER_RUN`); without trusted effect-to-Attempt provenance or an exact settlement digest already accepted by a Task of this Run, a pre-grant settlement remains `unknown` with `OPERATION_EVIDENCE_EARLIER`, including the wall-skew window. Evaluation returns a complete Run view and requires Run `inspect` before mutation or replay; denial writes no evaluation. Evaluation reply and Run inspection share result briefs and delivery outlook under per-Attempt `read-output` authority; a denied Attempt has no `resultBrief` or delivery observation (replay pins the receipt snapshot). Delivery receipts retain producer Attempt identity and are filtered by that producer's read-output authority before aggregation; unattributed receipts are withheld, and output-derived Run outlook is withheld without every bound producer's authority. Internal lost-dispatch recovery revalidates binding, fence and termination against the current Run snapshot and releases custody with its revision CAS; absent Run/Attempt rows refuse with `DISPATCH_NOT_ADMITTED`. No initial production fence trigger is added yet: owner 2026-10-23 (S6R, KARAR 12 closed) assigns the first fence to a deterministic Nervous rule (slice S6R-3); every new effect intent records a mandatory `producer` (Attempt identity or `principal`, S6R-1; older intents read as absent).
 
 - **Roles are proposals on one ledger, not engines.** The Run ledger is the single source of truth; each transition keeps
   one owner (scheduler, evaluator, approval broker); roles write proposals, never state.
@@ -69,9 +69,9 @@ transaction; domain `workerCustody` (absent = held) moved only by `releaseWorker
     only the system-derived task set). K-A: with the owner's standing admission, low-risk WorkClass proposals pass directly; others ask.
   - Auditor is a deterministic, LLM-free evaluator (`unknown` is never `pass`) plus an advisory independent verifier
     (other provider/model, cannot approve its own work, result is a recorded recommendation).
-  - Nervous is proposals-only (one per situation, never watches its own events). K-B: a broker-effected no-retry standing
-    list: pause a Run, release a dead slot with termination evidence, restart a service component; a new Attempt is never
-    automatic (K4 a).
+  - Nervous is proposals-only (one per situation, never watches its own events). K-B as updated 2026-10-23 (S6R): a broker runs
+    the standing stop list only under the owner's grant (fence the Attempt or hold the Run, stop an orphan container, restart a
+    service component, alert the Brain, hand to a person); a lost worker's new Attempt comes only from the bounded recovery decision.
 - **Memory:** execution state (ledger), curated knowledge (scoped single-writer journal, FTS5 behind a search port) and
   lessons (source → cause → correction → evidence; candidate → verified → active). Scope chain installation > company >
   site/unit > project > session; a read failure holds, never an empty memory. K-D: fresh journal plus a one-time import of
@@ -129,6 +129,25 @@ transaction; domain `workerCustody` (absent = held) moved only by `releaseWorker
   registry adapters; export first, then import, Managed Agents last. Import never grants authority (permission, sandbox and
   tool fields are requests; unknown fields kept but never run; bypass/full-access never exported). No Agent Builder target
   (closing 2026-11-30).
+
+## Core layers — alpha.55 (switches start off)
+
+Owner 2026-10-23 put seven core layers before the beta; alpha.55 implements them. Memory, Nervous, recovery and the agent statistics
+pass each sit behind a protected switch that no AI writes and that starts `off`, with a `shadow` mode that seals what it would do and
+changes nothing; the headless Brain has no preview switch (S3-5 removed it): its connect kind is offered once the bubblewrap realm
+exists and is used only after the person's own login, connect and consent. System assignment: the Brain plans tasks
+and WorkClasses only and the system picks channel, model and effort from the WorkClass candidate list, sealed at admission; tier and
+role come from one versioned model role registry (`model_roles` overlay, `deckent models roles`). Memory: a scoped journal whose
+candidates come from accepted work, are verified only by a person or an independent other-maker evaluator, and reach worker and
+Brain context as sealed data (`memoryAutomation.*`, `deckent memory rollout`). Auditor: one sealed policy-turn record per agent turn
+and a read-only auditor identity; safety holds only a person lifts. Nervous and recovery: deterministic detection, a broker that runs
+measured rules under the owner's grant, and a role-model decision that may continue a lost task in a new Attempt within registry
+bounds (`runRuntime.nervous.mode`, `runRuntime.recovery.mode`). Headless Brain: the person's own `claude -p` subscription in a
+bubblewrap realm with a provider-only gateway and an explicit consent for AI and background use. Agents: versioned agent and skill
+rows, system agent selection by standing, sealed statistics with Wilson bounds, suggestions decided on person cards or signed AI
+commands, and person-enrolled signer keys for AI and system writes. Ledger v59 → v70, runtime protocol v29 unchanged. Detail, switches and bounds:
+[core-layers](.deckent/docs/architecture/modules/core-layers.md); owner record:
+[decisions](.deckent/docs/decisions/owner-decisions.md#cekirdek-katmanlar-2026-10-23).
 
 ## Owner amendment — 2026-09-17 (accepted target, implementation pending)
 
@@ -681,7 +700,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   (`src/domain/core/run/internal/metrics.ts`) is a pure attributed result contract; alpha.29 persists it (v51 above). Rollback to alpha.28 needs the pre-switch ledger backup (typed `ATTEMPT_STORE_VERSION`).
   (3) The pure dispatch-fence decision (`assessLostDispatch` in `src/engine/core/dispatch/internal/loss.ts`, `decideDispatchLoss` in
   `src/domain/core/attempt/internal/dispatch-loss.ts`) is wired in alpha.29 to the atomic writer `fenceLostDispatch` and the fence reader; configured reconcile recovers an existing fence (slot release only with exact
-  retained container incarnation plus exit/absence proof, else `hold-manual`), but no production path writes the first fence yet (automatic mark-lost is MARK-LOST-ATOMIC / KARAR 12, owner-deferred). A late exit keeps a durable unknown Attempt observation (`settle.ts`); the lock is Attempt-level, not effect-level (C11).
+  retained container incarnation plus exit/absence proof, else `hold-manual`), but no production path writes the first fence yet (MARK-LOST-ATOMIC: owner 2026-10-23 closed KARAR 12 and assigned the first fence to a Nervous rule, S6R-3; S6R-1 retains the created container id at `create` and the incarnation at the first `running` observation, owner-decisions "s6r-kayip-calisan-2026-10-23"). A late exit keeps a durable unknown Attempt observation (`settle.ts`); the lock is Attempt-level, not effect-level (C11).
   (4) Test-ERP is a test fixture only (`tests/fixtures/test-erp`): no ERP-specific code exists in Core; it goes through the generic
   http-conditional adapter, the operation catalog and the approval path.
 - **Two lanes.** Lane A (time-boxed dogfood, no new effect types, owner allowed a DOGFOOD trial 2026-09-23) and
@@ -914,6 +933,7 @@ Layers: `platform` (config, errors/i18n, identity, paths), `domain` (pure versio
 | [ci-and-verification](.deckent/docs/architecture/modules/ci-and-verification.md) | CI-FULL, CI-FIX, CI-SPEED (one build/Node, complete shard collection), SOCKET-PUBLICATION, platform verification tooling. |
 | [permission-modes](.deckent/docs/architecture/modules/permission-modes.md) | MODES-3 (standart/full-auto/full-access), decision and audit, write postures, FA-TRACKED-WARN, `/mode`, PRE-9 owner-opened modes, PRE-8 project key vault and grants. |
 | [record-redaction-and-safe-approval](.deckent/docs/architecture/modules/record-redaction-and-safe-approval.md) | Canonical record redactor, terminal S06, SAFE-APPROVAL-A1 custody (former "Current closure"). |
+| [core-layers](.deckent/docs/architecture/modules/core-layers.md) | alpha.55 core layers: system assignment and model roles, memory automation, Auditor and safety holds, Nervous and lost-worker recovery, headless subscription Brain, agent catalog, standing, statistics and suggestions and signer keys; switches, bounds and ledger v60–v70. |
 | [run-planning](.deckent/docs/architecture/modules/run-planning.md) | Brain Run planning behind `/do` / `deckent do`: RunProposal planning call, context projection, planning budget and reasoning, subscription quota recovery (KOTA-D1). |
 | [development-host-and-documents](.deckent/docs/architecture/modules/development-host-and-documents.md) | Development-host only: review roles and channel, host kit and skills, Jev host checks, process board and PLAN/COMPLETED-PLAN roles (no product authority). |
 | [host-qwen-decision-pilot](.deckent/docs/architecture/modules/host-qwen-decision-pilot.md) | Canceled development-host Qwen decision research (owner 2026-10-06; historical record only, outside customer src/native). |

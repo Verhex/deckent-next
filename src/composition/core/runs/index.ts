@@ -10,6 +10,8 @@ export { recoverConfiguredCancellations } from './internal/recover-cancellation.
 export { applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredPoolHold, inspectConfiguredPoolHold } from './internal/pool-hold.js';
 export { recoverConfiguredAttemptOutput } from './internal/recover-output.js';
 export { recoverConfiguredReconciliation } from './internal/recover-reconciliation.js';
+export { prepareConfiguredNervous } from './internal/nervous.js';
+export { inspectConfiguredRecoveryMode, prepareConfiguredRecovery } from './internal/recovery.js';
 export { sweepConfiguredAttemptCustody } from './internal/custody-sweep.js';
 export { applyConfiguredRunLifecycle, advanceConfiguredRunLifecycle, parkConfiguredRunProgression } from './internal/lifecycle.js';
 export { proposeConfiguredRun, inspectConfiguredRunProposal } from './internal/proposals.js';

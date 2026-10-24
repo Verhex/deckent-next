@@ -8,7 +8,8 @@ export { renderResourceDetail } from './internal/resources.js';
 
 export { briefQualifiesAcceptance, renderBriefLines } from './internal/brief.js';
 export { renderGraphSummaryLines } from './internal/graph-summary.js';
-export { quotaWaitText, clockText, processExitText, processLabel, notAcceptedLabel, notAcceptedNextStep } from './internal/labels.js';
+export { quotaWaitText, quotaAskLines, clockText, processExitText, processLabel, notAcceptedLabel, notAcceptedNextStep, blockerDetailText } from './internal/labels.js';
 
 export { renderAcceptanceLine } from './internal/acceptance.js';
 export { renderCostReport, renderCostSummary } from './internal/costs.js';
+export { holdNoteText, recoveryStateLines, runHoldNextText, runHoldReasonText } from '#surfaces/core/recovery-text/index.js';

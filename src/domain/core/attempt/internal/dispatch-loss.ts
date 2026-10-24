@@ -12,6 +12,8 @@ export interface DispatchLossRecord {
   readonly launch: 'pending' | 'granted' | 'prevented-before-launch';
   readonly lost: boolean;
   readonly worker: WorkerIncarnation | null;
+  /** S6R-1: the container id Docker returned at `create` (before start); only the created-container termination variant reads it. */
+  readonly containerId?: string | null | undefined;
 }
 /** A trusted store must supply a committed receipt; this value alone grants no authority.
  * Full Attempt identity (including generation) and owner form the revoked dispatch token. */
@@ -20,12 +22,13 @@ export interface DispatchFence {
   readonly owner: string;
   readonly receiptId: string;
 }
+/** S6R-3 `created-container-absent` (lead on s6r1 Q2): the dispatch retained no incarnation, only its created container id, and the
+ * supervisor proved that exact id absent. It never replaces an incarnation: once a worker was retained only its own proof releases. */
 export type DispatchTerminationProof = Readonly<{
   identity: AttemptIdentity;
   owner: string;
   receiptId: string;
-  worker: WorkerIncarnation;
-} & ({ kind: 'supervisor-exit'; result: ProcessExitCause } | { kind: 'worker-absent' })>;
+} & ({ worker: WorkerIncarnation } & ({ kind: 'supervisor-exit'; result: ProcessExitCause } | { kind: 'worker-absent' }) | { kind: 'created-container-absent'; containerId: string })>;
 export type LostDispatchAction = 'release-slot' | 'finish-dispatch' | 'result' | 'output' | 'patch' | 'effect';
 export type DispatchLossDecision = Readonly<
   { kind: 'release'; fenceReceiptId: string; terminationReceiptId: string } |
@@ -35,6 +38,7 @@ export type DispatchLossDecision = Readonly<
 function matches(record: DispatchLossRecord, evidence: DispatchFence | DispatchTerminationProof): boolean {
   return sameAttemptIdentity(record.identity, evidence.identity) && record.owner === evidence.owner && evidence.receiptId.length > 0;
 }
+const CONTAINER_ID = /^[a-f0-9]{64}$/;
 function sameWorker(expected: WorkerIncarnation | null, observed: WorkerIncarnation): boolean {
   if (!expected || !expected.startedAt || expected.startedAt !== observed.startedAt) return false;
   return expected.kind === 'process' && observed.kind === 'process'
@@ -53,6 +57,8 @@ export function decideDispatchLoss(record: DispatchLossRecord, fence: DispatchFe
   if (!record.lost) return hold('not-lost');
   if (record.launch !== 'granted') return hold('not-granted');
   if (!termination) return hold('termination-required');
+  if (termination.kind === 'created-container-absent') return matches(record, termination) && record.worker === null && CONTAINER_ID.test(termination.containerId)
+    && record.containerId === termination.containerId ? Object.freeze({ kind: 'release', fenceReceiptId: fence.receiptId, terminationReceiptId: termination.receiptId }) : hold('termination-mismatch');
   if (!matches(record, termination) || !sameWorker(record.worker, termination.worker)) return hold('termination-mismatch');
   if (termination.kind !== 'worker-absent' && (termination.kind !== 'supervisor-exit' || !processExitCauseSchema.safeParse(termination.result).success)) return hold('termination-mismatch');
   return Object.freeze({ kind: 'release', fenceReceiptId: fence.receiptId, terminationReceiptId: termination.receiptId });

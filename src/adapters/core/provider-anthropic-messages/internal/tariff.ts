@@ -52,8 +52,9 @@ export function anthropicMaxChargeMinorUnits(tariff: AnthropicPublishedTariff, c
 export type AnthropicPreparedView = Readonly<{ body: string; request: { max_completion_tokens: number; model: string }; scopeId: string;
   definition: unknown; limits: unknown; countedTokens?: number | null }>;
 
-/** Pure, repeatable quote for the exact prepared request: published tariff and the pinned conservative input estimate. */
-export function quoteAnthropicPublishedTariff(input: ModelInvocationSpendingInput, prepared: AnthropicPreparedView): ProviderSpendQuote {
+/** Pure, repeatable quote for the exact prepared request: published tariff and the pinned conservative input estimate. A tariff sealed to a
+ * catalog row (M4) is priced only when the priced native re-read that row and found it equal (`catalogVerified`, security review M4). */
+export function quoteAnthropicPublishedTariff(input: ModelInvocationSpendingInput, prepared: AnthropicPreparedView, catalogVerified = false): ProviderSpendQuote {
   const profile = modelInvocationProfileSchema.parse(input.profile);
   if (profile.adapter.id !== ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID || profile.adapter.version !== ANTHROPIC_MESSAGES_HTTP_ADAPTER_VERSION) throw new OpenAiChatHttpError('OPENAI_CHAT_DEFINITION_INVALID');
   const definition = parseAnthropicMessagesDefinition(profile.adapter.definition), binding = parseModelBindingDefinition(input.definition);
@@ -65,6 +66,7 @@ export function quoteAnthropicPublishedTariff(input: ModelInvocationSpendingInpu
     || !isDeepStrictEqual(input.command.reference, profile.reference) || input.command.expectedBinding.digest !== profile.bindingDigest
     || input.command.scopeId !== profile.scopeId || modelInvocationRequestDigest(input.command) !== input.requestDigest
     || modelInvocationProfileDigest(profile) !== input.profileDigest) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
+  if (definition.tariff.source.catalog && !catalogVerified) throw new ProviderSpendError('PROVIDER_SPEND_TARIFF_UNVERIFIED');
   const tariff = definition.tariff, tariffDigest = providerSpendEvidenceDigest(tariff), cache = definition.cache ?? 'none';
   const bodyBytes = Buffer.byteLength(prepared.body, 'utf8');
   const maxChargeMinorUnits = anthropicMaxChargeMinorUnits(tariff, cache, bodyBytes, request.max_completion_tokens, prepared.countedTokens);

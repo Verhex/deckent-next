@@ -14,6 +14,8 @@ export interface AuditStore {
   page(scopeId: string, afterSequence: number, limit: number): readonly AuditRecord[];
   /** Records of one scope and subject kind with `sequence > afterSequence`, ascending, at most `limit` (optional: a reader that needs one kind). */
   pageOfKind?(scopeId: string, kind: AuditEvent['subject']['kind'], afterSequence: number, limit: number): readonly AuditRecord[];
+  /** S6R-6: records of one scope and subject kind sealed at or after `sinceAtMs`, newest first, at most `limit` (optional: a bounded recent window). */
+  recentOfKind?(scopeId: string, kind: AuditEvent['subject']['kind'], sinceAtMs: number, limit: number): readonly AuditRecord[];
   /** Adds `by` to a summary counter of one scope (created at zero); `atMs` is the caller's trusted clock. */
   increment(scopeId: string, counter: string, by: number, atMs: number): AuditCounter;
   counters(scopeId: string): readonly AuditCounter[];

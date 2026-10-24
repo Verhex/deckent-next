@@ -1,7 +1,8 @@
-import { resetRunQuota } from './quota.js';
+import { resetRunQuota, askRunQuota } from './quota.js';
 import { counterSchema } from '#domain/core/primitives/index.js';
 import { inspectTaskReadiness, blockingDependencyIds, type TaskProgress } from '#domain/core/task-graph/index.js';
-import { checkedRun, runSnapshotSchema, RunError, type RunSnapshot } from './contract.js';
+import { checkedRun, runSnapshotSchema, RunError, type RunHoldSource, type RunSnapshot } from './contract.js';
+import { heldRunState, readRunHold, runHoldOverlay } from './hold.js';
 export type RunLifecycleTiming = Readonly<{ now: number; timeoutMs: number }>;
 export type TaskDecisionReason = 'evaluation-unknown' | 'evaluation-not-ready';
 function deadlineAt(now: number, timeoutMs: number) {
@@ -29,7 +30,7 @@ export function reconcileRunLifecycle(input: unknown, now: number, timeoutMs: nu
   const readiness = inspectTaskReadiness(run.graph, { graphRevision: run.graph.revision, now, progress: tasks });
   let state: RunSnapshot['state'];
   if (tasks.every(task => task.phase === 'accepted')) state = { kind: 'terminal', outcome: 'completed', reason: 'completed' };
-  else if (!run.cancelRequested && run.state.kind === 'parked' && ['operator-hold', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason)) state = run.state;
+  else if (!run.cancelRequested && run.state.kind === 'parked' && ['operator-hold', 'progression-failed', 'quota-exhausted', 'quota-ask', 'environment-not-ready'].includes(run.state.reason)) state = run.state;
   else if (!run.cancelRequested && run.bindings.some(row => row.observedKind === 'quota-exhausted' && tasks.some(task => task.taskId === row.identity.taskId && task.phase === 'pending'))) {
     const waits = (run.quotaWaits ?? []).filter(wait => run.bindings.some(row => row.identity.attemptId === wait.identity.attemptId));
     state = { kind: 'parked', reason: 'quota-exhausted', since: Math.min(...waits.map(wait => wait.since)), deadline: Math.max(...waits.map(wait => wait.deadline)) };
@@ -47,8 +48,7 @@ export function reconcileRunLifecycle(input: unknown, now: number, timeoutMs: nu
     state = run.state.kind === 'parked' ? { ...run.state, reason } : { kind: 'parked', reason, since: now, deadline: deadlineAt(now, timeoutMs) };
   }
   if (run.state.kind === 'parked' && run.state.operatorHold && state.kind !== 'terminal') {
-    state = state.kind === 'parked' ? { ...state, operatorHold: run.state.operatorHold } : { kind: 'parked', reason: 'operator-hold',
-      note: run.state.operatorHold.note, since: run.state.since, deadline: run.state.deadline };
+    state = state.kind === 'parked' ? { ...state, operatorHold: run.state.operatorHold } : heldRunState(readRunHold(run.state)!, run.state.since, run.state.deadline);
   }
   return runSnapshotSchema.parse({ ...run, progress: tasks, state });
 }
@@ -60,6 +60,9 @@ export function advanceRunLifecycle(input: unknown, expectedRevision: number, no
   if (run.state.kind === 'terminal') return run;
   const reset = resetRunQuota(run, now);
   if (reset) return reset;
+  // S9: an expired quota wait asks a person; it never ends the Run. Every other park keeps its own deadline rule.
+  const ask = askRunQuota(run, now);
+  if (ask) return ask;
   const expired = run.progress.some(task => task.decision && task.decision.deadline <= now);
   const progress = run.progress.map(task => {
     if (run.state.kind === 'parked' && ['operator-hold', 'needs-input', 'progression-failed', 'quota-exhausted', 'environment-not-ready'].includes(run.state.reason) && run.state.deadline <= now && task.phase === 'pending' && !task.unresolvedEffects) return { ...task, phase: 'cancelled' as const };
@@ -127,12 +130,15 @@ export function resolveTaskDecision(input: unknown, expectedRevision: number, ta
   return reconcileRunLifecycle({ ...run, revision: run.revision + 1, progress: run.progress.map(value => value === task ? resolved : value) }, now, timeoutMs);
 }
 
-/** Stop new reservations without claiming that existing execution/effects stopped. */
-export function holdRun(input: unknown, expectedRevision: number, note: string, now: number, timeoutMs: number): RunSnapshot {
+/** Stop new reservations without claiming that existing execution/effects stopped. S5b: one hold per Run; only a safety source (Nervous,
+ * Auditor) may replace an operator hold, keeping its timing, so the public control can never replace or downgrade a safety hold. */
+export function holdRun(input: unknown, expectedRevision: number, note: string, now: number, timeoutMs: number, source: RunHoldSource = 'operator'): RunSnapshot {
   const run = checkedRun(input, expectedRevision);
   if (run.cancelRequested || run.state.kind === 'terminal') throw new RunError('RUN_TERMINAL');
-  if (run.state.kind === 'parked' && run.state.reason === 'operator-hold') throw new RunError('RUN_PARKED');
-  const state = run.state.kind === 'parked' ? { ...run.state, operatorHold: { schemaVersion: 1 as const, note } } : { kind: 'parked' as const, reason: 'operator-hold' as const, note, since: now, deadline: deadlineAt(now, timeoutMs) };
+  const prior = readRunHold(run.state), hold = { note, source };
+  if (prior && (prior.source !== 'operator' || source === 'operator')) throw new RunError('RUN_PARKED');
+  const state = run.state.kind !== 'parked' ? heldRunState(hold, now, deadlineAt(now, timeoutMs))
+    : run.state.reason === 'operator-hold' ? heldRunState(hold, run.state.since, run.state.deadline) : { ...run.state, ...runHoldOverlay(hold) };
   return runSnapshotSchema.parse({ ...run, revision: run.revision + 1, state });
 }
 
@@ -145,7 +151,7 @@ export function answerTaskInput(input: unknown, expectedRevision: number, taskId
   if (task.decision.deadline <= now || (run.state.kind === 'parked' && run.state.deadline <= now)) throw new RunError('RUN_DECISION_EXPIRED');
   return reconcileRunLifecycle({ ...run, revision: run.revision + 1,
     state: run.state.kind === 'parked' && run.state.reason === 'operator-hold' ? run.state
-      : run.state.kind === 'parked' && run.state.operatorHold ? { kind: 'parked', reason: 'operator-hold', note: run.state.operatorHold.note, since: run.state.since, deadline: run.state.deadline } : { kind: 'running' },
+      : run.state.kind === 'parked' && run.state.operatorHold ? heldRunState(readRunHold(run.state)!, run.state.since, run.state.deadline) : { kind: 'running' },
     previousBindings: [...run.previousBindings ?? [], binding],
     bindings: run.bindings.filter(value => value !== binding), progress: run.progress.map(value => value === task ? { ...value,
       phase: 'pending', decision: undefined, eligibility: { kind: 'immediate' }, inputAnswer: { schemaVersion: 1, source: binding.identity, question: task.decision!.question!, answer } } : value) }, now, timeoutMs);

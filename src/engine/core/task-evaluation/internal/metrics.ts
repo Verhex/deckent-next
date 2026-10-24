@@ -1,43 +1,102 @@
-import { deriveDeckentMetrics, deriveAcceptanceView, sameAttemptIdentity, runSnapshotSchema, readWorkerModelPin, taskEvaluationSchema, type AttemptIdentity, type TaskEvaluation, type DeckentMetrics, type RunSnapshot } from '#domain/index.js';
+import { deriveDeckentMetrics, deriveAcceptanceView, sameAttemptIdentity, runSnapshotSchema, readWorkerModelPin, taskEvaluationSchema, taskModelConclusion, type AttemptIdentity, type TaskEvaluation,
+  type DeckentMetrics, type DeckentMetricsMeasurements, type CurrentDeckentMetrics, type RunSnapshot, type METRIC_EVIDENCE_KINDS, type FAILURE_CAUSES } from '#domain/index.js';
+import { evaluatorEvidence } from '#capabilities/index.js';
 import { RunStoreError, runLifecycleWriteSchema } from '#engine/core/runs/index.js';
-import { taskEvaluationCommitSchema } from './commit.js';
+import { taskEvaluationCommitSchema, type TaskEvaluationCommit } from './commit.js';
+type MetricEvidenceKind = typeof METRIC_EVIDENCE_KINDS[number];
+type FailureCause = typeof FAILURE_CAUSES[number];
+/** Criterion reasons that say the evidence source itself was not reachable: the work was never judged, so the failure is infrastructure. */
+const UNREACHABLE = new Set(['OPERATION_EVIDENCE_UNAVAILABLE', 'OPERATION_COMPENSATION_UNAVAILABLE']);
+/**
+ * S8-1b `failure-cause` v1 (S8-DESIGN §4 fold B): why a system-decided task failed, from the sealed evaluation and the dispatch record only, in one
+ * fixed precedence: an operator cancel; a stall, no clean exit (no terminal, a signal, an interruption, a non-zero exit) or an unreachable evidence
+ * source → infra; a model substitution or mismatch → model; an invalid handoff → dependency; an installed evaluator's fail → criteria-failed; the
+ * worker's own report (not passed, missing, invalid, oversized) → worker-report-failed, its acceptance checks not run → infra; else unattributed.
+ */
+export function deriveFailureCause(evaluation: TaskEvaluation, dispatch: TaskEvaluationCommit['dispatch']): FailureCause {
+  const end = dispatch.terminal, report = evaluation.report;
+  if (dispatch.cancellation) return 'operator';
+  if (evaluation.stall || !end || end.signal !== undefined || end.interrupted === true || end.exitCode !== 0) return 'infra';
+  if (taskModelConclusion(evaluation.model) === 'fail' || evaluation.model?.verdict === 'client-reported-mismatch') return 'model';
+  if (evaluation.handoff?.status === 'invalid') return 'dependency';
+  const failed = evaluation.criteria.filter(row => row.verdict === 'fail');
+  if (failed.some(row => row.reason !== undefined && UNREACHABLE.has(row.reason))) return 'infra';
+  if (failed.length) return 'criteria-failed';
+  if (report?.acceptanceChecks === 'not-run') return 'infra';
+  if (report && (report.acceptanceChecks === 'not-passed' || ['missing', 'invalid', 'oversized'].includes(report.status))) return 'worker-report-failed';
+  return 'unattributed';
+}
 
-/** Metadata comes from the producer's canonical evaluation and resulting Run, never the metrics table. */
-export function deriveAcceptanceMetric(command: string, input: RunSnapshot): DeckentMetrics | null {
+type Row = Readonly<{ identity: AttemptIdentity; outcome: CurrentDeckentMetrics['outcome']; evaluation?: TaskEvaluation; kinds: readonly MetricEvidenceKind[]; cause?: FailureCause;
+  references: ReadonlyMap<string, string>; measured: DeckentMetricsMeasurements; carried: Pick<CurrentDeckentMetrics, 'actualModel' | 'acceptanceScore'> }>;
+/** Metadata comes from the producer's canonical evaluation or lifecycle command and resulting Run, never the metrics table.
+ * `prior` is the current task row of the decided Attempt (adapter-read, digest-checked): a human decision carries its measurements. */
+export function deriveAcceptanceMetrics(command: string, input: RunSnapshot, prior?: DeckentMetrics | null): readonly CurrentDeckentMetrics[] {
   const run = runSnapshotSchema.parse(input);
   const payload = JSON.parse(command) as Record<string, unknown>;
-  let evaluation: TaskEvaluation | undefined; let identity: AttemptIdentity; let outcome: DeckentMetrics['outcome'];
-  const references = new Map<string, string>();
+  const none = { actualModel: null, acceptanceScore: null };
+  const rows: Row[] = [];
   if (payload['action'] === 'apply-task-evaluation') {
     const value = { ...payload }; delete value['action'];
-    const commit = taskEvaluationCommitSchema.parse(value); evaluation = taskEvaluationSchema.parse(commit.evaluation);
-    // A quota park or an R3 stall retry is not an outcome: the task runs again (an exhausted stall is recorded as failed).
-    if (evaluation.quota || (evaluation.stall && run.progress.find(row => row.taskId === evaluation!.identity.taskId)?.phase === 'pending')) return null;
-    identity = evaluation.identity;
+    const commit = taskEvaluationCommitSchema.parse(value), evaluation = taskEvaluationSchema.parse(commit.evaluation);
+    // An R3 stall retry is not an outcome: the task runs again (an exhausted stall is recorded as failed). A quota park is its own row.
+    if (!evaluation.quota && evaluation.stall && run.progress.find(row => row.taskId === evaluation.identity.taskId)?.phase === 'pending') return [];
+    const references = new Map<string, string>();
     if (commit.dispatch.output) references.set('dispatch-output', commit.dispatch.output.digest);
     if (commit.dispatch.patch) references.set('workspace-patch', commit.dispatch.patch.digest);
     for (const row of evaluation.criteria.flatMap(value => value.evidenceReferences ?? [])) {
       if (references.has(row.id) && references.get(row.id) !== row.digest) throw new RunStoreError('RUN_STORE_CORRUPT');
       references.set(row.id, row.digest);
     }
-    const progress = run.progress.find(row => row.taskId === identity.taskId);
-    if (!progress || !['accepted', 'failed', 'awaiting-decision'].includes(progress.phase)) throw new RunStoreError('RUN_STORE_CORRUPT');
-    outcome = { kind: 'task', status: progress.phase as 'accepted' | 'failed' | 'awaiting-decision' };
-  } else if (payload['operation'] === 'run-lifecycle' && run.state.kind === 'terminal' && run.state.outcome === 'incomplete') {
-    const value = { ...payload }; delete value['operation']; runLifecycleWriteSchema.parse(value);
-    const anchor = [...run.bindings].sort((a, b) => a.identity.taskId < b.identity.taskId ? -1 : a.identity.taskId > b.identity.taskId ? 1 : 0)[0]?.identity;
-    if (!anchor) throw new RunStoreError('RUN_STORE_CORRUPT');
-    identity = anchor; outcome = { kind: 'run', status: 'incomplete' };
-  } else return null;
-  if (identity.scopeId !== run.identity.scopeId || identity.runId !== run.identity.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
-  const reference = run.execution.tasks.find(row => row.taskId === identity.taskId)?.acceptance;
-  const pin = readWorkerModelPin(run.execution.tasks.find(row => row.taskId === identity.taskId)?.profile.parameters)?.pin;
-  return deriveDeckentMetrics({ identity: { scopeId: identity.scopeId, runId: identity.runId, taskId: identity.taskId, attemptId: identity.attemptId },
-    workClass: evaluation?.acceptance?.workClass ?? reference?.workClass ?? null,
-    policyRevision: evaluation?.acceptance?.policyRevision ?? reference?.policyRevision ?? null,
-    profileVersion: evaluation?.acceptance?.profileVersion ?? reference?.profileVersion ?? null,
-    skillSetDigest: null, model: pin ? { channelId: pin.channelId, modelId: pin.modelId } : null, outcome, attemptSequence: identity.generation,
-    evidenceReferences: [...references].map(([id, digest]) => ({ id, digest })) });
+    let outcome: CurrentDeckentMetrics['outcome'];
+    if (evaluation.quota) outcome = { kind: 'quota-park', channelId: evaluation.quota.channelId };
+    else {
+      const progress = run.progress.find(row => row.taskId === evaluation.identity.taskId);
+      if (!progress || !['accepted', 'failed', 'awaiting-decision'].includes(progress.phase)) throw new RunStoreError('RUN_STORE_CORRUPT');
+      outcome = { kind: 'task', status: progress.phase as 'accepted' | 'failed' | 'awaiting-decision', decision: 'system' };
+    }
+    // A quota park ran no evaluator: its row names no verdict evidence.
+    const kinds = evaluation.quota ? [] : evaluation.criteria.map(row => evaluatorEvidence(run.execution.criteria.find(value => value.criterionId === row.criterionId)?.evaluator ?? { id: '' }).kind);
+    const container = commit.dispatch.terminal?.container, model = evaluation.model;
+    rows.push({ identity: evaluation.identity, outcome, evaluation, kinds, references, ...(outcome.kind === 'task' && outcome.status === 'failed' ? { cause: deriveFailureCause(evaluation, commit.dispatch) } : {}),
+      measured: { startedAtMs: container?.startedAt ? Date.parse(container.startedAt) : null, endedAtMs: container?.finishedAt ? Date.parse(container.finishedAt) : null },
+      carried: { acceptanceScore: evaluation.acceptance?.score ?? null, actualModel: model ? { reported: model.init ?? (model.usage?.length === 1 ? model.usage[0]! : null),
+        verdict: model.verdict, evidence: model.evidence, capability: model.evidenceCapability } : null } });
+  } else if (payload['operation'] === 'run-lifecycle') {
+    const value = { ...payload }; delete value['operation']; const write = runLifecycleWriteSchema.parse(value);
+    const binding = run.bindings.find(row => row.identity.taskId === write.taskId), phase = run.progress.find(row => row.taskId === write.taskId)?.phase;
+    // A human decision on an awaiting Task is a task row of its Attempt; a stale prior row of another Attempt carries nothing.
+    // A decision without a bound Attempt has no Attempt row to write; the metric never blocks the human step.
+    if ((write.action === 'accept' || write.action === 'reject') && binding && phase === (write.action === 'accept' ? 'accepted' : 'failed')) {
+      const same = prior && prior.identity.attemptId === binding.identity.attemptId && prior.identity.taskId === binding.identity.taskId ? prior : null;
+      const current = same?.schemaVersion === 2 ? same : null;
+      rows.push({ identity: binding.identity, outcome: { kind: 'task', status: phase, decision: 'human' }, kinds: ['human-decision', ...current?.evidenceKinds ?? []], ...(phase === 'failed' ? { cause: 'human-rejected' as const } : {}),
+        references: new Map((same?.evidenceReferences ?? []).map(row => [row.id, row.digest])), measured: current ? { carriedDurationMs: current.durationMs } : {},
+        carried: current ? { actualModel: current.actualModel, acceptanceScore: current.acceptanceScore } : none });
+    }
+    // The same producer may also end the Run incomplete; that observation keeps its own row.
+    if (run.state.kind === 'terminal' && run.state.outcome === 'incomplete') {
+      const anchor = [...run.bindings].sort((a, b) => a.identity.taskId < b.identity.taskId ? -1 : a.identity.taskId > b.identity.taskId ? 1 : 0)[0]?.identity;
+      if (!anchor) throw new RunStoreError('RUN_STORE_CORRUPT');
+      rows.push({ identity: anchor, outcome: { kind: 'run', status: 'incomplete' }, kinds: [], references: new Map(), measured: {}, carried: none });
+    }
+  }
+  return rows.map(({ identity, outcome, evaluation, kinds, references, measured, carried, cause }) => {
+    if (identity.scopeId !== run.identity.scopeId || identity.runId !== run.identity.runId) throw new RunStoreError('RUN_STORE_CORRUPT');
+    const reference = run.execution.tasks.find(row => row.taskId === identity.taskId)?.acceptance;
+    const frozen = run.execution.tasks.find(row => row.taskId === identity.taskId), pinned = readWorkerModelPin(frozen?.profile.parameters), pin = pinned?.pin;
+    const assigned = frozen?.assignment, agent = frozen?.agent;
+    return deriveDeckentMetrics({ identity: { scopeId: identity.scopeId, runId: identity.runId, taskId: identity.taskId, attemptId: identity.attemptId },
+      workClass: evaluation?.acceptance?.workClass ?? reference?.workClass ?? null,
+      policyRevision: evaluation?.acceptance?.policyRevision ?? reference?.policyRevision ?? null,
+      profileVersion: evaluation?.acceptance?.profileVersion ?? reference?.profileVersion ?? null,
+      // S8-1b: the frozen task's agent and skill set (never the live catalog); a task without an agent says plainly that none was recorded.
+      skillSetDigest: agent?.skillSetDigest ?? null, ...(agent ? { agent: { agentId: agent.agentId, revision: agent.revision } } : {}), ...(cause ? { failureCause: cause } : {}), model: pin ? { channelId: pin.channelId, modelId: pin.modelId } : null, outcome, attemptSequence: identity.generation,
+      effort: pinned?.reasoningEffort ?? null, ...carried, evidenceKinds: kinds,
+      ...(assigned ? { assignment: { candidatePolicy: assigned.candidatePolicy, candidateIndex: assigned.candidateIndex, workClassRevision: assigned.workClassRevision,
+        catalogRevision: assigned.catalogRevision, modelRevision: assigned.modelRevision, activationRevision: assigned.activationRevision, effortSource: assigned.effort.source } } : {}),
+      evidenceReferences: [...references].map(([id, digest]) => ({ id, digest })) }, measured);
+  });
 }
 
 /** Select canonical receipt evaluations at or before the inspected Run revision; never sample a later transition. */

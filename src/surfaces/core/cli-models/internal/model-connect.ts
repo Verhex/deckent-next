@@ -7,7 +7,7 @@ import { modelConnectCommandSchema, type ModelConnectCommand, type ModelConnectR
 import type { ModelCommandContext } from './context.js';
 
 export type ModelConnectHandler = (root: string, command: ModelConnectCommand, options: ConfigLoadOptions) => Promise<ModelConnectResult>;
-const FLAGS = ['--scope', '--connection', '--endpoint', '--model', '--reference', '--command-id', '--lang'] as const;
+const FLAGS = ['--scope', '--connection', '--endpoint', '--model', '--reference', '--command-id', '--lang', '--executable', '--config-dir', '--delegate'] as const;
 /** `provider@version/model@version`: the exact catalog reference the terminal and `models binding` show. */
 const REFERENCE = /^([^@/\s]+)@([1-9]\d*)\/([^@/\s]+)@([1-9]\d*)$/u;
 
@@ -42,6 +42,9 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale): 
     + `${item.reference.modelId}@${item.reference.modelVersion} (${item.code})`).join(', ') }, locale));
   if (result.tariff === 'unmetered') lines.push(t('models.connect.unmetered', {}, locale));
   if (result.service === 'stale') lines.push(t('models.connect.restart', {}, locale));
+  // S3-3: the CLI login it uses and who besides the person may spend it (the consent the person wrote).
+  if (result.cli) lines.push(result.cli.owned ? t('headless.connect.loginOwned', { dir: result.cli.configDir }, locale) : t('headless.connect.login', { dir: result.cli.configDir }, locale), result.cli.delegate.length
+    ? t('headless.connect.delegated', { classes: result.cli.delegate.join(', ') }, locale) : t('headless.connect.personOnly', {}, locale));
   return lines.join('\n');
 }
 
@@ -51,11 +54,14 @@ export async function modelConnectCommand(argv: readonly string[], context: Mode
   if (choosing && modelsInteractive(context)) return connectByChoice(choosing, context);
   const parsed = parse(argv), env = context.env ?? process.env, locale = commandLocale(context, parsed.values.get('--lang'));
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
-  if (parsed.help) { emit(t('cli.help.modelsConnect', {}, locale), sinks); return; }
+  if (parsed.help) { emit(`${t('cli.help.modelsConnect', {}, locale)}\n${t('headless.help.connect', {}, locale)}`, sinks); return; }
   if (!context.connectModel) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const value = (flag: string) => parsed.values.get(flag), exact = value('--reference') ? REFERENCE.exec(value('--reference')!) : null;
   if (value('--reference') && !exact) throw ErrorRegistry.createError('CLI_USAGE');
+  const delegate = value('--delegate'), cli = { ...(value('--executable') ? { executable: value('--executable') } : {}), ...(value('--config-dir') ? { configDir: value('--config-dir') } : {}) };
+  if (delegate !== undefined && !/^(none|ai|system|ai,system|system,ai)$/u.test(delegate)) throw ErrorRegistry.createError('CLI_USAGE');
   const command = modelConnectCommandSchema.safeParse({ schemaVersion: 1, commandId: value('--command-id'), scopeId: value('--scope'), connection: value('--connection'),
+    ...(Object.keys(cli).length ? { cli } : {}), ...(delegate === undefined ? {} : { delegate: delegate === 'none' ? [] : delegate.split(',') }),
     endpoint: value('--endpoint') ?? null, model: exact ? { reference: { providerId: exact[1], providerVersion: Number(exact[2]), modelId: exact[3], modelVersion: Number(exact[4]) } }
       : { nativeId: value('--model') } });
   if (!command.success) throw ErrorRegistry.createError('MODEL_CONNECT_INVALID');

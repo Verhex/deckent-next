@@ -186,6 +186,8 @@
   "doctor.firstJob.next": "{step}: {command}",
   "doctor.check.pool.missing": "The worker pool is configured but not set up yet: Runs cannot start workers",
   "doctor.poolReadiness.status.missing": "configured, not set up yet",
+  "doctor.check.roles.pending": "New model: role pending — {model} ({channel}); no role may use it until a person assigns one",
+  "doctor.check.roles.more": "New model: role pending — {count} more catalog models; see deckent models roles",
   "doctor.check.workerImage.ok": "Worker image {image} is on this Docker",
   "doctor.check.workerImage.missing": "The configured worker image {image} is not on this Docker: Runs cannot start workers",
   "doctor.check.workerImage.unknown": "Whether worker image {image} is on this Docker could not be checked"

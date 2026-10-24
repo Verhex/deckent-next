@@ -5,5 +5,8 @@
   "workerCountCap": 30,
   "observationConcurrency": 8,
   "serviceManagerQueryTimeoutMs": 2000,
-  "serviceManagerQueryOutputBytes": 256
+  "serviceManagerQueryOutputBytes": 256,
+  "procClockTicksPerSecond": 100,
+  "processStartToleranceMs": 2000,
+  "msPerSecond": 1000
 }

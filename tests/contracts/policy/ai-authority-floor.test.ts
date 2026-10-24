@@ -29,6 +29,14 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
   ['audit checkpoint re-baseline', 'audit', 's', 'rebaseline'],
   ['audit checkpoint re-baseline command (its authority cell)', 'approval', 'audit-rebaseline', 'decide'],
   ['secret-gate exclusion globs', 'config', 'project:execution.secretGate.allowPatternPaths', 'write'],
+  // S4 (law-audit fold 6): verified memory is a person's or an independent evaluation's, never the AI's; retiring is the same change.
+  ['memory verify', 'memory', 'scope', 'verify'],
+  ['memory retire', 'memory', 'scope', 'retire'],
+  // S4B-1 (A11): purging memory content is a person's act; a contest stays floored until S4B-3 relaxes it for the evaluator principal alone.
+  ['memory purge', 'memory', 'scope', 'purge'],
+  ['memory contest', 'memory', 'scope', 'contest'],
+  // S6R-3 (lead on s6 Q3): the owner's standing approval of a Nervous stop action is never an AI's.
+  ['Nervous standing approval', 'recovery-action', 'stop-orphan', 'apply'],
   ['secret-gate acknowledged deny paths', 'config', 'global:execution.secretGate.acknowledgedDenyPaths', 'write'],
   ['secret-gate section', 'config', 'project:execution.secretGate', 'write'],
   ['approval assurance producers', 'config', 'project:approvals.assuranceProducers', 'write'],
@@ -48,6 +56,13 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
   ['operation targets', 'config', 'project:operations.targets', 'write'],
   ['audit monitoring', 'config', 'project:audit.checkpointIntervalMs', 'write'],
   ['principal assurance enforcement', 'config', 'project:enforce_principal_assurance', 'write'],
+  // S5b (Auditor owner decision 6): a safety hold is a person's to lift; the public operator hold stays policy-governed (run-decision resume).
+  ['Nervous pause resume', 'run-hold', 'nervous', 'resume'],
+  ['Auditor park resume', 'run-hold', 'auditor', 'resume'],
+  // S8-5 (N22): signer keys are a person's — enrol, add, revoke and repair are refused for every AI principal.
+  ...(['enrol', 'add', 'revoke', 'repair'] as const).map(action => [`signer key ${action}`, 'skill-signer', 's', action] as [string, string, string, string]),
+  // S8-3 (§9): only the catalog aggregator suggests or narrows; every other AI is refused whatever is granted.
+  ...(['suggest', 'narrow'] as const).map(action => [`catalog ${action}`, 'agent-catalog', 's', action] as [string, string, string, string]),
 ];
 const grantAll = (kind: string, principal: VerifiedPrincipal) => ({ id: `all-${kind}`, effect: 'allow' as const, actions: 'all' as const, scopes: 'all' as const,
   principals: [{ issuer: principal.issuer, subject: principal.subject }], resource: { kind, ids: 'all' as const } });

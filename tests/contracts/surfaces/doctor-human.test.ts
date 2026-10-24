@@ -99,6 +99,56 @@ describe('doctor rows (pure)', () => {
       .filter(row => row.state !== 'untested');
     expect(renderDoctorChecks(clean, 'en').split('\n')[0]).toBe('Status: ready · no warnings');
   });
+  it('M2: a catalog model with no tier/role row is a warning "new model: role pending" with its exact set command, bounded by the registry', () => {
+    const pending = Array.from({ length: 7 }, (_, index) => ({ modelId: `model-new-${index}`, channelId: 'anthropic-api' }));
+    const en = doctorChecks(report, facts({ pendingRoleModels: pending }), 'en').filter(row => row.id === 'work.modelRoles');
+    expect(en).toHaveLength(6);
+    expect(en[0]).toMatchObject({ state: 'warning', text: 'New model: role pending — model-new-0 (anthropic-api); no role may use it until a person assigns one',
+      next: 'deckent models roles set --channel anthropic-api --model model-new-0 --tier <tier> --roles <roles> --scope live' });
+    expect(en[5]).toMatchObject({ state: 'warning', text: 'New model: role pending — 2 more catalog models; see deckent models roles', next: 'deckent models roles --scope live' });
+    expect(doctorChecks(report, facts({ pendingRoleModels: pending.slice(0, 1) }), 'tr').find(row => row.id === 'work.modelRoles')?.text).toContain('Yeni model: rol bekliyor');
+    for (const value of [[], null, undefined]) expect(doctorChecks(report, facts({ pendingRoleModels: value }), 'en').some(row => row.id === 'work.modelRoles')).toBe(false);
+  });
+  it('S3-3 "Brain girişi": each subscription login with its kind, plan, directory, channel state and consent; no check yet is "not tested"', () => {
+    const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', consent: ['ai', 'system'] },
+      { state: 'closed' as const, authMethod: null, subscriptionType: null, configDir: '/home/p/.claude-team', consent: [] },
+      { state: 'unknown' as const, authMethod: null, subscriptionType: null, configDir: '/home/p/.other', consent: [] }];
+    const rows = doctorChecks(report, facts({ headlessLogins: logins }), 'tr').filter(row => row.id === 'work.brainLogin');
+    expect(rows.map(row => [row.state, row.text, row.next])).toEqual([
+      ['ok', 'Brain girişi: claude.ai (max), dizin /home/p/.claude, kanal açık, onay ai, system', undefined],
+      ['warning', 'Brain girişi: -, dizin /home/p/.claude-team, kanal kapalı, onay yok (yalnız siz)', 'deckent models connect --connection claude-cli-subscription --scope live'],
+      ['untested', 'Brain girişi: henüz denetlenmedi (dizin /home/p/.other); ilk çağrı ya da yeniden bağlama denetimi koşar', undefined]]);
+    expect(doctorChecks(report, facts({ headlessLogins: logins.slice(0, 1) }), 'en').find(row => row.id === 'work.brainLogin')?.text)
+      .toBe('Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent ai, system');
+    for (const value of [[], null, undefined]) expect(doctorChecks(report, facts({ headlessLogins: value }), 'en').some(row => row.id === 'work.brainLogin')).toBe(false);
+  });
+  it('s3c "Brain girişi" names the Brain\'s own login dir; a connection sealed to another dir keeps working and the next step is the move', () => {
+    const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.deckent/headless/logins/claude', owned: true, consent: [] },
+      { state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', owned: false, consent: [] }];
+    expect(doctorChecks(report, facts({ headlessLogins: logins }), 'en').filter(row => row.id === 'work.brainLogin').map(row => [row.state, row.text, row.next])).toEqual([
+      ['ok', 'Brain login: claude.ai (max), directory /home/p/.deckent/headless/logins/claude, channel open, consent none (you only); the Brain\'s own login directory', undefined],
+      ['ok', 'Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent none (you only); not the Brain\'s own login directory (it keeps working): sign the '
+        + 'Brain\'s own in, then connect again', 'deckent models login --connection claude-cli-subscription']]);
+    expect(doctorChecks(report, facts({ headlessLogins: logins.slice(1) }), 'tr').find(row => row.id === 'work.brainLogin')?.text).toContain("Brain'in kendi giriş dizini değil");
+  });
+  it('S3-5 "Brain girişi" names the isolation realm of the last passing check, or that the realm closed the channel', () => {
+    const logins = [{ state: 'open' as const, authMethod: 'claude.ai', subscriptionType: 'max', configDir: '/home/p/.claude', consent: [], isolation: { launcher: 'bundled', version: '0.13.0' } },
+      { state: 'closed' as const, authMethod: null, subscriptionType: null, configDir: '/home/p/.claude', consent: [], isolation: 'unavailable' as const }];
+    expect(doctorChecks(report, facts({ headlessLogins: logins }), 'en').filter(row => row.id === 'work.brainLogin').map(row => [row.state, row.text])).toEqual([
+      ['ok', 'Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent none (you only); isolated by bubblewrap 0.13.0 (bundled)'],
+      ['warning', 'Brain login: -, directory /home/p/.claude, channel closed, consent none (you only); isolation unavailable (no usable bubblewrap: see the sandbox rows)']]);
+    expect(doctorChecks(report, facts({ headlessLogins: logins.slice(0, 1) }), 'tr').find(row => row.id === 'work.brainLogin')?.text).toContain('bubblewrap 0.13.0 (bundled) ile yalıtılmış');
+  });
+  it('f5 "Brain girişi" names the realm gateway refusals: counts and host names (most refused first, bounded), never a payload', () => {
+    const egress = { refused: 9, hosts: ['h1.example', 'h2.example', 'h3.example', 'h4.example', 'h5.example', 'h6.example', 'h7.example'], other: 1 };
+    const login = { state: 'open' as const, authMethod: 'claude.ai', subscriptionType: null, configDir: '/home/p/.claude', consent: [], isolation: null, egress };
+    expect(doctorChecks(report, facts({ headlessLogins: [login] }), 'en').find(row => row.id === 'work.brainLogin')?.text).toBe('Brain login: claude.ai, directory '
+      + '/home/p/.claude, channel open, consent none (you only); network: 9 connection(s) outside the provider allowlist refused (hosts: h1.example, h2.example, h3.example, '
+      + 'h4.example, h5.example and 2 more)');
+    expect(doctorChecks(report, facts({ headlessLogins: [{ ...login, egress: { refused: 1, hosts: [], other: 1 } }] }), 'tr').find(row => row.id === 'work.brainLogin')?.text)
+      .toContain('; ağ: sağlayıcı izin listesi dışında 1 bağlantı reddedildi (adresler: -)');
+    expect(doctorChecks(report, facts({ headlessLogins: [{ ...login, egress: null }] }), 'en').find(row => row.id === 'work.brainLogin')?.text).not.toContain('network');
+  });
   it('tool rows: stale offers the update fix, not-admitted and offline are "not tested" in words (no raw status code)', () => {
     const toolchains = { mode: 'report', registryEndpoint: 'https://registry.npmjs.org', providers: [
       { provider: 'claude', status: 'stale', admitted: [], latest: { version: '2.9.0' } }, { provider: 'codex', status: 'not-admitted', admitted: [], latest: null },

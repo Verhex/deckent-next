@@ -1,0 +1,15 @@
+{
+  "nameMaxBytes": 200,
+  "personaMaxBytes": 16384,
+  "skillTextMaxBytes": 16384,
+  "skillsPerAgentMax": 16,
+  "workClassesPerAgentMax": 16,
+  "orgTreeDepthMax": 8,
+  "agentsPerScopeMax": 512,
+  "sourceRefMaxBytes": 512,
+  "signatureMaxBytes": 4096,
+  "pageMax": 50,
+  "historyMax": 64,
+  "promptReservedTaskBytes": 12288,
+  "signersPerScopeMax": 64
+}

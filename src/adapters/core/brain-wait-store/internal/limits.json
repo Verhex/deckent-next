@@ -1,0 +1,5 @@
+{
+  "maxEntries": 64,
+  "maxFileBytes": 4096,
+  "staleAfterMs": 60000
+}

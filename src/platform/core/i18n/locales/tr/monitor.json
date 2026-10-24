@@ -260,10 +260,13 @@
   "monitor.config.name.cli": "Komut satırı",
   "monitor.config.name.mcp": "MCP bağlantıları",
   "monitor.config.name.inspection": "İnceleme ve izleme",
+  "monitor.config.name.memoryAutomation": "Bellek otomasyonu",
   "monitor.config.hint": "Tab/←→ sekme · ↑↓ seç · Enter ayrıntı · a tümü/değişenler · / ara · ? yardım · q çık",
   "monitor.config.help": "{index}                Ayarlar: bölümlere göre değişen ayarlar; a tümünü gösterir, / arar, Enter birini açıklar",
   "monitor.legend.next": "yapılacak: üstündeki sorunu çözen komut",
   "monitor.legend.ok": "yolunda: iş kabul edildi ya da kontrol geçti (servis açık, defter okundu, imaj güncel, model çağrılabilir)",
   "monitor.legend.attention": "bakılması gerek: takılı iş, uyarı, eski canlılık sinyali, okuma sorunu, bekletilen havuz ya da eski görüntü",
-  "monitor.legend.installOff": "kapalı ya da ulaşılamıyor: erişilemeyen ya da reddedilen kurulum, durmuş servis, kullanılmayan profil"
+  "monitor.legend.installOff": "kapalı ya da ulaşılamıyor: erişilemeyen ya da reddedilen kurulum, durmuş servis, kullanılmayan profil",
+  "monitor.diagnostic.modelRolesPending": "Yeni model: rol bekliyor ({count}); siz rol verene kadar hiçbir rol onu kullanamaz",
+  "monitor.action.modelRolesPending": "Rol vermek için: deckent models roles"
 }

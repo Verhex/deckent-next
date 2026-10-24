@@ -1,13 +1,13 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { hostname, tmpdir, userInfo } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { inspectMonitor } from '#composition/index.js';
 import { mcpApplications } from '#composition/core/mcp/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { MonitorSourceMemo, type MonitorRecall } from '#engine/index.js';
-import { clearConfigCache, productResourcePath } from '#platform/index.js';
+import { clearConfigCache, productResourcePath, resolveGlobalConfigReadPath } from '#platform/index.js';
 import { fixtureExecution } from '../support/execution-registry.js';
 import { custodyProfiles, dispatchAdmission } from '../support/custody.js';
 
@@ -27,7 +27,8 @@ const graph = { schemaVersion: 2 as const, revision: 1, tasks: [{ id: 't', kind:
   criterionDefinitions: [{ id: 'verified', version: 1, description: 'fixture', evaluator: { id: 'test', version: 1 }, parameters: {} }] };
 const capacity = { executionSlots: 4, inFlightSlots: 4 };
 
-/** Counts the reads the memo had to compute, by kind (`workers`, `ledger`, `pool`, `context`, `approvals`, `models`). */
+/** Counts the reads the memo had to compute, by kind (`workers`, `ledger`, `pool`, `context`, `approvals`, `models`, `catalog` (S8-4 lines), `roles` (f2 pending
+ * roles)). The f4 Brain quota waits stay a live read: a wait ends on the clock, not on a file change. */
 class CountingMemo extends MonitorSourceMemo {
   computed: string[] = [];
   override recall(target: string, generation: string | null): MonitorRecall {
@@ -78,10 +79,13 @@ const runIds = (install: { runs: readonly { runId: string }[] }) => install.runs
 describe('monitor memo (MON-CPU-FIX)', () => {
   it('unchanged sources: the next read recomputes nothing and answers the same Runs, workers and pools', async () => {
     const f = await install(), memo = new CountingMemo(); await settle();
-    const first = await f.inspect(memo);
-    expect(new Set(memo.computed)).toEqual(new Set(['context', 'pool', 'workers', 'models', 'approvals', 'ledger']));
+    const coldStart = performance.now(), first = await f.inspect(memo), coldMs = performance.now() - coldStart, cold = memo.computed.length;
+    expect(new Set(memo.computed)).toEqual(new Set(['context', 'pool', 'workers', 'models', 'approvals', 'ledger', 'catalog', 'roles']));
     memo.computed = [];
-    const second = await f.inspect(memo);
+    const idleStart = performance.now(), second = await f.inspect(memo), idleMs = performance.now() - idleStart;
+    // Measurement (fs1, alpha.55): before the fix every idle read recomputed all 11 reads (the f2 role read's forced config load replaced the
+    // composed config object the generation was keyed on; measured 11 reads, ~102 ms idle vs ~113 ms cold); now none (~34 ms).
+    console.log('monitor-memo-measurement:', JSON.stringify({ cold: { computed: cold, ms: Math.round(coldMs) }, idle: { computed: memo.computed.length, ms: Math.round(idleMs) } }));
     expect(memo.computed).toEqual([]);
     expect(runIds(second)).toEqual(['q1', 'r1']);
     // Equal except the observation clock (`observedAtMs`, `ageMs` are projected against each read's own time).
@@ -129,6 +133,10 @@ describe('monitor memo (MON-CPU-FIX)', () => {
     await f.inspect(memo);
     await writeFile(f.configPath, JSON.stringify({ ...f.config, language: 'tr' }));
     expect(project(await f.inspect(memo))).toContain('language');
+    // The installation layer (where tier/role rows live) is part of the generation too: a settled write recomputes the role read.
+    await settle(); await f.inspect(memo); memo.computed = []; await f.inspect(memo); expect(memo.computed).toEqual([]);
+    const global = await resolveGlobalConfigReadPath(f.options.env); await mkdir(dirname(global), { recursive: true, mode: 0o700 }); await writeFile(global, '{}', { mode: 0o600 });
+    await settle(); memo.computed = []; await f.inspect(memo); expect(memo.computed).toContain('roles');
   });
 
   it('negative: a revoked grant hides the scope on the next read (the policy stamp is part of the generation)', async () => {

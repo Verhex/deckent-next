@@ -25,7 +25,8 @@ async function fixture(standing = true, effect: 'allow' | 'deny' | 'require-appr
   const root = await mkdtemp(join(tmpdir(), 'deckent-proposal-')), path = join(root, 'ledger.db');
   const store = await openSqliteAttemptStore(path, { busyTimeoutMs: 1000, journalMode: 'wal', durability: 'full' }, { now: () => 100, timeoutMs: 1000 });
   await store.createExecutionPool({ schemaVersion: 1, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 } });
-  const state = { now: 100, principal, registry: registry(standing), effect, permissionEffect: 'allow' as 'allow' | 'deny' | 'require-approval', inspect: true, modelSource: false, samples: 0, spending: undefined as { semantics: 'metered' | 'not-metered'; digest: string } | undefined };
+  const state = { now: 100, principal, registry: registry(standing), effect, permissionEffect: 'allow' as 'allow' | 'deny' | 'require-approval', inspect: true, modelSource: false, samples: 0, spending: undefined as { semantics: 'metered' | 'not-metered'; digest: string } | undefined,
+    agents: undefined as Map<string, { agentId: string; revision: number; standing: 'active' | 'candidate' }> | undefined, sealed: new Map<string, object>() };
   const source = { async load() { state.samples++; return { schemaVersion: 1, revision: 'p1', restrictions: [], grants: [
     { id: 'run-create', effect: state.effect, actions: ['create'], scopes: ['s'], principals: 'all', resource: { kind: 'run', ids: 'all' } },
     { id: 'permission', effect: state.permissionEffect, actions: ['execute'], scopes: ['s'], principals: 'all', resource: { kind: 'task', ids: 'all' } },
@@ -44,11 +45,11 @@ async function fixture(standing = true, effect: 'allow' | 'deny' | 'require-appr
   const runs = (port: Pick<SqliteAttemptStore, 'createRun' | 'loadRunReceipt' | 'loadRunWorkspaceCustody'> = store) => new RunAdmissionApplication(port, { verify: async () => state.principal }, f.authority,
     { authorize: async () => {} }, { async resolve(command) { return { now: state.now, layoutRevision: 'layout', execution: (() => { const value = fixtureExecution(command.graph, { workClasses: state.registry });
         return state.spending?.semantics === 'not-metered' ? { ...value, tasks: value.tasks.map(row => ({ ...row, profile: { ...row.profile,
-          parameters: { ...row.profile.parameters, nativeSubscription: { schemaVersion: 2, provider: 'claude' } } } })) } : value; })(),
+          parameters: { ...row.profile.parameters, nativeSubscription: { schemaVersion: 2, provider: 'claude' } } } })) } : { ...value, tasks: value.tasks.map(row => state.sealed.has(row.taskId) ? { ...row, agent: state.sealed.get(row.taskId) } : row) }; })(),
       policy: { schemaVersion: 2, poolId: 'p', capacity: { executionSlots: 2, inFlightSlots: 2 }, ordering: command.graph.tasks.map(t => t.id) } }; } });
   const app = (port: RunProposalStore = proposals, runPort?: Pick<SqliteAttemptStore, 'createRun' | 'loadRunReceipt' | 'loadRunWorkspaceCustody'>) => new RunProposalApplication(port,
     { verify: async () => state.principal }, f.authority, runs(runPort), { registry: state.registry, clock: f.clock,
-      loadBudget: async () => checkpoint, ...(state.spending ? { classifySpending: async () => state.spending! } : {}), verifySource: async value => { if (value.source.kind === 'model' && !state.modelSource) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID'); } });
+      loadBudget: async () => checkpoint, ...(state.spending ? { classifySpending: async () => state.spending! } : {}), ...(state.agents ? { selectAgents: async () => state.agents! } : {}), verifySource: async value => { if (value.source.kind === 'model' && !state.modelSource) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID'); } });
   const inspect = () => new RunProposalInspectionApplication(proposals, { verify: async () => state.principal }, { authorize: async () => { if (!state.inspect) throw ErrorRegistry.createError('POLICY_DENIED'); } }, state.registry);
   const sessions = { verifySession: async () => ({ principal, session: { schemaVersion: 1, sessionId: 'human', authorityRef: 'verified-test-authority', kind: 'os-user', principalRef: proposal.proposer,
     scopeIds: ['s'], authenticatedAt: 0, expiresAt: 10000 } }), isSessionActive: async () => true, revoke: async () => {} };
@@ -422,4 +423,56 @@ it('D2b: a stored binding whose intent differs from the approved proposal is cor
   expect(code({ ...record, binding: { ...record.binding, delivery: { ...record.binding.delivery!, grantedBy: { id: 'other', issuer: 'os', subject: '2' } } } })).toBe('RUN_PROPOSAL_CORRUPT');
   expect(code({ ...record, binding: { ...record.binding, delivery: undefined } })).toBe('RUN_PROPOSAL_CORRUPT');
   expect(code({ ...record, proposal: { ...record.proposal, delivery: undefined } })).toBe('RUN_PROPOSAL_CORRUPT');
+});
+
+// S8-1b (S8-DESIGN §5, AJAN-ORG S6, owner Q-S3): a standing-admission Run may use only a promoted (`active`) agent; a candidate agent makes the
+// Run need its card. The selection runs at proposal time and is re-derived at admission: a standing-admitted Run whose active agent changed in
+// between goes to the card path — never silently to no agent or to another agent.
+const agentSeal = (agentId: string, standing: 'active' | 'candidate', revision = 1) => ({ schemaVersion: 1, agentId, revision, workClass: 'business', personaDigest: 'b'.repeat(64),
+  skillSetDigest: 'c'.repeat(64), skills: [], standing, standingRevision: standing === 'active' ? 2 : 1, selection: { eligible: 1, position: 0, reason: standing === 'active' ? 'active-agent' : 'first-candidate' } });
+it('S8-1b: the standing-admission clause — an active agent keeps standing admission, a candidate agent needs the card (pure validation)', () => {
+  const base = validateRunProposal(proposal, registry(), null, 100, { semantics: 'not-metered', digest: 'd'.repeat(64) });
+  expect(base.standingAdmission).toBe(true); expect(base).not.toHaveProperty('agents');
+  const active = validateRunProposal(proposal, registry(), null, 100, { semantics: 'not-metered', digest: 'd'.repeat(64) }, undefined, new Map([['task', { agentId: 'a', revision: 1, standing: 'active' as const }]]));
+  expect(active).toMatchObject({ standingAdmission: true, agents: [{ taskId: 'task', agentId: 'a', revision: 1, standing: 'active' }] });
+  const candidate = validateRunProposal(proposal, registry(), null, 100, { semantics: 'not-metered', digest: 'd'.repeat(64) }, undefined, new Map([['task', { agentId: 'a', revision: 1, standing: 'candidate' as const }]]));
+  expect(candidate.standingAdmission).toBe(false);
+});
+it('N15/S8-1b: a candidate agent on a standing-admission class makes the Run need its card; no Run before the person decides', async () => {
+  const f = await fixture(true);
+  f.state.agents = new Map([['task', { agentId: 'a', revision: 1, standing: 'candidate' }]]); f.state.sealed.set('task', agentSeal('a', 'candidate'));
+  const first = await f.app().propose(proposal);
+  expect(first.proposal).toMatchObject({ status: 'pending', binding: { admission: { standingAdmission: false, agents: [{ agentId: 'a', standing: 'candidate' }] } } });
+  noRun(f);
+  await f.decide();
+  const accepted = await f.app().propose(proposal);
+  expect(accepted.proposal.status).toBe('accepted');
+  expect((await f.store.loadRun('s', 'r'))!.execution.tasks[0]!.agent).toMatchObject({ agentId: 'a', standing: 'candidate' });
+});
+it('S8-1b: a standing-admitted Run with the same active agent at admission is admitted without a card and seals that agent', async () => {
+  const f = await fixture(true);
+  f.state.agents = new Map([['task', { agentId: 'a', revision: 1, standing: 'active' }]]); f.state.sealed.set('task', agentSeal('a', 'active'));
+  const first = await f.app().propose(proposal);
+  expect(first.proposal.status).toBe('accepted'); expect(f.approvals.list('s', null, 10)).toEqual([]);
+  expect((await f.store.loadRun('s', 'r'))!.execution.tasks[0]!.agent).toMatchObject({ agentId: 'a', standing: 'active' });
+});
+it.each([['demoted to candidate', () => agentSeal('a', 'candidate')], ['replaced by another active agent', () => agentSeal('b', 'active')],
+  ['revised (a new revision)', () => agentSeal('a', 'active', 2)], ['gone (no agent)', () => null]])('N29: a standing-admitted Run whose active agent was %s before admission goes to the card path', async (_name, next) => {
+  const f = await fixture(true);
+  f.state.agents = new Map([['task', { agentId: 'a', revision: 1, standing: 'active' }]]);
+  const seal = next(); if (seal) f.state.sealed.set('task', seal);
+  const first = await f.app().propose(proposal);
+  expect(first.proposal.status).toBe('pending'); noRun(f);
+});
+it('N29: a candidate promoted between proposal and admission proceeds with that agent on the card path (never parked as a stale basis)', async () => {
+  const f = await fixture(true);
+  f.state.agents = new Map([['task', { agentId: 'a', revision: 1, standing: 'candidate' }]]); f.state.sealed.set('task', agentSeal('a', 'active'));
+  const first = await f.app().propose(proposal);
+  expect(first.proposal.status).toBe('pending');
+  // The proposal-time selection may move before the resubmission: the stable basis ignores it (the registry digest still binds the classes).
+  f.state.agents = new Map([['task', { agentId: 'a', revision: 1, standing: 'active' }]]);
+  await f.decide();
+  const accepted = await f.app().propose(proposal);
+  expect(accepted.proposal.status).toBe('accepted');
+  expect((await f.store.loadRun('s', 'r'))!.execution.tasks[0]!.agent).toMatchObject({ agentId: 'a', standing: 'active' });
 });

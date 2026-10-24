@@ -63,6 +63,9 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
     expect(await readFile(join(f.project, 'src/a.ts'), 'utf8')).toBe('export const a = 1;\n');
     expect(f.audit()).toEqual([]);
     expect(f.rows('SELECT * FROM effect_intents')).toEqual([]);
+    // S5 D1: no per-call event, but every turn's refusal is sealed in that turn's one `policy-turn` record (a tool or an operation deny is
+    // answered by the policy question before planning).
+    expect(f.policyTurns().map(turn => turn.refused.calls.map(call => [call['decision'], call['stage']]))).toEqual(MODES.flatMap(() => [[['deny', 'policy']], [['deny', 'policy']]]));
   }, 90_000);
 
   it('asks for a floor path in every mode, with an allow grant and with an eligible require-approval (M1)', async () => {
@@ -86,6 +89,9 @@ describe.skipIf(process.platform !== 'linux')('permission modes through the runt
     expect(await f.call('write_file', { path: 'src/b.ts', content: 'export {};\n' })).toMatchObject({ card: false, status: 'ok' });
     expect(f.audit()).toEqual([]);
     expect(f.counters()).toEqual({ 'agent-tool.silent.shell': 3, 'agent-tool.silent.edit': 1 });
+    // S5 D1 (q5 changed in this scope): each silent allow is also named, by tool and argument digest, in its turn's `policy-turn` record.
+    expect(f.policyTurns().map(turn => [turn.refused.count, turn.allowed.calls.map(call => [(call['tool'] as { name: string }).name, call['cell']])]))
+      .toEqual([[0, [['run_shell', 'shell-read-none']]], [0, [['run_shell', 'shell-read-none']]], [0, [['run_shell', 'shell-read-none']]], [0, [['write_file', 'edit']]]]);
   }, 90_000);
 
   it('asks in full-auto for low, destructive and always-ask commands, and for an eligible read tool (M5)', async () => {

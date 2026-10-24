@@ -162,6 +162,11 @@ build kilitli bubblewrap'ı yerleştirir (build `bubblewrap=present` ya da `bubb
 `BUBBLEWRAP_BUILD_REQUIRED` ile durur, yalnız Linux dışında `bubblewrap=absent (not Linux)` basar.
 [Katkıcı hızlı başlangıcına (EN)](../CONTRIBUTING.md#a-30-minute-quickstart) bakın.
 
+`1.0.0-alpha.55` paketi çekirdek katmanları ekler: işçi modellerinin sistemce atanması ve tek bir model rol registry'si, bağımsız
+doğrulamalı kapsamlı bir hafıza günlüğü, mühürlü Auditor kayıtları, kaybolan işçi kurtarmalı Nervous tespiti, bubblewrap alanında
+headless abonelik Brain'i ve istatistik, öneri ve imza anahtarlarıyla sürümlü ajanlar. Her biri bir kişi açana kadar kapalı başlar ve
+henüz kabul edilmiş davranış değil, koddur; bkz. [çekirdek katmanlar](../.deckent/docs/architecture/modules/core-layers.md).
+
 Çok adımlı iş süreçlerinin Mission düzeyinde koordinasyonu, uzak HTTP API, Desktop, Dashboard,
 Enterprise SSO/toplu kurulum yönetimi ve microVM yalıtımı gelecek işlerdir. Yerel kontroller
 filo ölçeğinde performansı veya denenmemiş platformdaki üretim desteğini kanıtlamaz.

@@ -1,6 +1,6 @@
 import type { QueueSubmitClient, QueueQuery, QueueConsent, TargetBatchExecution } from '#engine/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
-import type { BrainPlanCommand } from '#domain/index.js';
+import type { BrainPlanCommand, BrainPlanObserver } from '#domain/index.js';
 import type { RunProposalResult } from '#engine/index.js';
 import type { McpPanelRun } from './mcp-panel.js';
 import type { TerminalSecretGrantHandlers } from './secret-grant-card.js';
@@ -87,7 +87,7 @@ export type TerminalProfileCachePlan = Readonly<{ models: readonly Readonly<{ re
 export type TerminalProfileProtocolPlan = Readonly<{ models: readonly Readonly<{ reference: ModelReference;
   detail: Readonly<{ modelId: string; from: string; to: string; protocol: string }> }>[];
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[]; shared: readonly ModelReference[] }>;
-export interface TerminalLaunchContext extends MonitorCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
+export interface TerminalLaunchContext extends MonitorCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectModelRoles' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
   | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
   deliveryQueue?: QueueSubmitClient;
   confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution>;
@@ -96,7 +96,8 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   /** OTONOM-TESLIM shadow (lane B1 store): list and inspect only, never a consent card; absent = no shadow column or line. */
   readAutonomyShadow?: AutonomyShadowReader;
 
-  readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal) => Promise<RunProposalResult>;
+  /** `observe` (f3, owner Q-H4): the caller shows planning progress (a quota wait); absent: a quota refusal is the typed refusal at once. */
+  readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal, observe?: BrainPlanObserver) => Promise<RunProposalResult>;
   mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
   delegations?: import('#surfaces/core/work-labels/index.js').DelegationHandlers;
   /** T4 `/provider`: the connect kinds and free check, and the secret store handlers (the key goes only to `setSecret`). */

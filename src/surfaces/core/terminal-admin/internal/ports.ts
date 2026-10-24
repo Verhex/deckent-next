@@ -5,6 +5,7 @@ import type { InfoSurfaceLabels, InfoViewPorts } from '#surfaces/core/terminal-w
 import { doctorLines, doctorView } from './doctor.js';
 import { terminalInfoLabels } from './info-labels.js';
 import { modelLines } from './model.js';
+import { rolesLines } from './roles.js';
 import { scopeLines, scopeView } from './scope.js';
 import { statusLines, statusView } from './status.js';
 import { usageLines, usageView } from './usage.js';
@@ -25,6 +26,8 @@ export interface TerminalAdminInput {
   readonly doctorReport?: (sink: OutputSink) => Promise<void>;
   /** The person's display name for `/scope` (the host user the principal is derived from); absent means the line is left out. */
   readonly principalName?: string | null;
+  /** Terminal width for `/roles` tables. */
+  readonly columns?: number;
 }
 
 /**
@@ -32,13 +35,14 @@ export interface TerminalAdminInput {
  * commands as typed window models (`/status`, `/usage`, `/doctor`, `/scope`) with the catalog words of the information windows.
  */
 export function terminalAdminPorts(input: TerminalAdminInput): Readonly<{ inspect: InspectSlashPorts; info: Readonly<{ ports: InfoViewPorts; labels: InfoSurfaceLabels }> }> {
-  const call = { root: input.root, scopeId: input.scopeId, options: input.options, locale: input.locale, context: input.context };
+  const call = { root: input.root, scopeId: input.scopeId, options: input.options, locale: input.locale, context: input.context, ...(input.columns ? { columns: input.columns } : {}) };
   const identity = { installationId: input.installationId, projectId: input.projectId };
   return { inspect: {
     status: () => statusLines(call, input.status),
     model: args => modelLines(call, args),
     usage: (args, view) => usageLines(call, args, view.usage),
     doctor: () => doctorLines(input.doctor),
+    roles: args => rolesLines(call, args),
     scope: (args, view) => scopeLines(call, identity, args, input.principalName ?? null, view.sessionFullAccess === true),
   }, info: { labels: terminalInfoLabels(input.locale), ports: {
     status: () => statusView(call, input.status, identity),

@@ -1,14 +1,16 @@
 import { resolveLocale, type ConfigLoadOptions } from '#platform/index.js';
 import { attestLocalInteractiveTerminal, localPrincipalPeer, openSqliteApprovalStore, openLocalIntegrityAuthority, openSqliteAttemptStore, openSqliteInventoryReader } from '#adapters/index.js';
-import { RunDecisionApprovalBroker, AuditApplication, DispatchPolicyAuthorization, RunLifecycleApplication, runLifecycleCommandSchema, runProgressionParkCommandSchema, RunPolicyAuthorization, projectRunView, runQuerySchema, type RunQuery } from '#engine/index.js';
+import { RunDecisionApprovalBroker, AuditApplication, DispatchPolicyAuthorization, RunLifecycleApplication, runLifecycleCommandSchema, runProgressionParkCommandSchema, runSafetyHoldOnceSchema, RunPolicyAuthorization, projectRunView, runQuerySchema, type RunQuery } from '#engine/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 export const applyConfiguredRunLifecycle = (root: string, command: unknown, options: ConfigLoadOptions = {}) => applyLifecycle(root, command, options, false);
 export const parkConfiguredRunProgression = (root: string, command: unknown, options: ConfigLoadOptions = {}) => applyLifecycle(root, command, options, 'park');
 export const advanceConfiguredRunLifecycle = (root: string, query: RunQuery, options: ConfigLoadOptions = {}) => applyLifecycle(root, query, options, true);
-async function applyLifecycle(projectRoot: string, input: unknown, options: ConfigLoadOptions, maintain: boolean | 'park') {
+/** S6R-3: the Nervous broker's safety hold (source bound here, never by a caller; not exported to any surface). */
+export const holdConfiguredRunForNervous = (root: string, command: unknown, options: ConfigLoadOptions = {}) => applyLifecycle(root, command, options, 'nervous');
+async function applyLifecycle(projectRoot: string, input: unknown, options: ConfigLoadOptions, maintain: boolean | 'park' | 'nervous') {
   try {
-    const command = maintain === 'park' ? runProgressionParkCommandSchema.parse(input) : maintain ? runQuerySchema.parse(input) : runLifecycleCommandSchema.parse(input);
+    const command = maintain === 'park' ? runProgressionParkCommandSchema.parse(input) : maintain === 'nervous' ? runSafetyHoldOnceSchema.parse(input) : maintain ? runQuerySchema.parse(input) : runLifecycleCommandSchema.parse(input);
     const { config, layout, document, principal, path } = await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write');
     const source = { async load() { return (await loadConfiguredScopeContext(projectRoot, command.scopeId, options, 'write')).document; } }, verifier = { async verify() { return principal; } }, authorization = new RunPolicyAuthorization(source);
     const store = await openSqliteInventoryReader(await path(), { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs }); try {
@@ -26,8 +28,9 @@ async function applyLifecycle(projectRoot: string, input: unknown, options: Conf
           try { return await writer.commitRunLifecycle(write, audit); } finally { writer.close(); }
         } }, verifier, authorization,
         { authorize: (identity, actor) => policy.authorizeIdentity('evaluate', identity, actor) }, audit => new AuditApplication(audit, integrity!),
-        Date.now, config.runRuntime.parking.timeoutMs, document.revision, decisions);
-      const receipt = maintain === 'park' ? await app.parkProgression(command) : maintain ? await app.advance(command) : await app.execute(command);
+        Date.now, config.runRuntime.parking.timeoutMs, document.revision, decisions,
+        { maxWaitMs: config.runRuntime.quotaRecovery.maxWaitMs, maxRewaits: config.runRuntime.quotaRecovery.maxRewaits });
+      const receipt = maintain === 'park' ? await app.parkProgression(command) : maintain === 'nervous' ? await app.holdOnce('nervous', command) : maintain ? await app.advance(command) : await app.execute(command);
       if (!receipt) return null;
       return Object.freeze({ schemaVersion: 1 as const, layout, lifecycle: { schemaVersion: 1 as const, commandId: receipt.commandId, run: projectRunView(receipt.snapshot) } });
       } finally { approvals?.close(); }

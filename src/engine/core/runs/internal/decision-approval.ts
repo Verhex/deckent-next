@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { approvalDecisionClass, approvalRequestSchema, encodeCommandProjection, evaluatePolicy, explicitDecisionGrant, isAiPrincipal,
+import { approvalDecisionClass, approvalRequestSchema, encodeCommandProjection, evaluatePolicy, explicitDecisionGrant, isAiPrincipal, readRunHold,
   ApprovalError, policySchema, type RunSnapshot, type VerifiedPrincipal } from '#domain/index.js';
 import { MAX_WALL_SKEW_MS, sha256, t, type IntegrityAuthority, type Locale } from '#platform/index.js';
 import { RunLifecycleError, type RunDecisionAuthorization, type RunDecisionEvidence, type RunLifecycleCommand, type RunLifecycleWrite } from './lifecycle.js';
@@ -17,8 +17,10 @@ export class RunDecisionApprovalBroker implements RunDecisionAuthorization {
     const policy = policySchema.parse(await this.policy.load());
     const taskStep = 'taskId' in command, kind = taskStep ? 'task-decision' : 'run-decision', id = taskStep ? command.taskId : command.runId;
     const sameReplayActor = replay?.actor.issuer === principal.issuer && replay.actor.subject === principal.subject && replay.actor.id === principal.id;
-    const ordinary = command.action === 'hold' || command.action === 'resume' && (run.state.kind === 'parked' && run.state.reason === 'operator-hold'
-      || sameReplayActor && replay?.action === 'resume' && replay.decision?.step === 'operator-control');
+    // S5b (Auditor owner decision 6): hold is the ordinary control; every resume is a decision. A replay of a resume recorded as an
+    // operator control before this release returns that receipt unchanged (the store writes nothing new for it).
+    const ordinary = command.action === 'hold' || sameReplayActor && replay?.action === 'resume' && replay.decision?.step === 'operator-control';
+    const personOnly = command.action === 'quota-answer' || command.action === 'resume' && (readRunHold(run.state)?.source ?? 'operator') !== 'operator';
     const targetId = taskStep ? run.bindings.find(binding => binding.identity.taskId === command.taskId)?.identity.attemptId
       ?? run.progress.find(task => task.taskId === command.taskId)?.inputAnswer?.source.attemptId : command.runId;
     if (!targetId) throw new ApprovalError('APPROVAL_CONFLICT');
@@ -32,6 +34,8 @@ export class RunDecisionApprovalBroker implements RunDecisionAuthorization {
     // Accept/reject by a script/AI always opens a card, including when that actor has a delegated decision cell.
     if (command.action !== 'accept' && command.action !== 'reject') {
       if (witness) return sameReplayActor && replay?.decision ? replay.decision : evidence('human-tty');
+      // A safety hold (Nervous pause, Auditor park) is lifted only by a witnessed person; no policy cell stands in for them.
+      if (personOnly) throw new RunLifecycleError(command.action === 'quota-answer' ? 'RUN_QUOTA_PERSON_REQUIRED' : 'RUN_HOLD_PERSON_REQUIRED');
       if (ruleId) return sameReplayActor && replay?.decision ? replay.decision : evidence('ai-policy', ruleId);
       throw new RunLifecycleError('TASK_DECISION_HUMAN_REQUIRED');
     }

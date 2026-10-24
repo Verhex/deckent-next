@@ -1,11 +1,16 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { ModelInvocationNativeResponse, ProviderSpendQuote } from '#domain/index.js';
+import { modelInvocationProfileSchema, type CatalogTariffLookup, type ModelInvocationNativeResponse, type ProviderSpendQuote } from '#domain/index.js';
 import { modelInvocationProfileDigest, modelInvocationResponseContentDescriptor, providerSpendQuoteDigest, parseProviderSpendTariffMeasurement,
   measuredTariffExactMinorUnits, ceilProviderSpendExactMinorUnits, type ModelInvocationSpendingInput, type ModelInvocationNativePort } from '#engine/index.js';
 import { createOpenAiChatNativePort, type OpenAiChatNativePortOptions, type PreparedOpenAiChatRequest } from './transport.js';
 import { OpenAiChatHttpError, openAiChatUsageSchema, parseOpenAiChatTextRequest } from './contract.js';
 import { quoteOpenAiChatOperatorTariff, openAiCompatibleTariffRates } from './tariff.js';
-export function createOpenAiChatPricedNative(options: OpenAiChatNativePortOptions = {}) {
+import { catalogTariffMatches, openAiCompatiblePublishedTariffSchema } from './pricing-catalog.js';
+/** `catalogTariff` (security review M4): the spend authority's re-read of a sealed catalog tariff; without it a sealed tariff is never priced. */
+export function createOpenAiChatPricedNative(input: OpenAiChatNativePortOptions & Readonly<{ catalogTariff?: CatalogTariffLookup }> = {}) {
+  // The catalog lookup is the spend authority's own port; the transport (and its HTTP options) never receives it.
+  const { catalogTariff, ...options } = input;
+  const catalogVerified = new WeakSet<object>();
   const responses = new WeakMap<object, string>();
   const partialUsage = new WeakMap<object, { usage: unknown; serviceTier: unknown }>();
   // Filled only by the final-usage callback (Astra 2459/2462 R1): partial settlement never reads an interim count or tier.
@@ -19,9 +24,9 @@ export function createOpenAiChatPricedNative(options: OpenAiChatNativePortOption
       const usage = openAiChatUsageSchema.safeParse(usageInput);
       if (!usage.success) return null;
       const tariff = prepared.definition.tariff;
-      // Owner S4: unknown DeepSeek billing tier uses peak and an explicit upper-bound label.
-      const upperBound = tariff.kind === 'vendor-published' && tariff.version === 1 && tariff.vendor === 'deepseek' && tariff.schedule !== undefined;
-      let rates = openAiCompatibleTariffRates(tariff, prepared.definition.endpoint, prepared.request.model);
+      // Owner S4: a tariff row that carries a billing-tier schedule (unknown tier at settlement) uses peak and an explicit upper-bound label.
+      const upperBound = tariff.kind === 'vendor-published' && tariff.version === 1 && tariff.schedule !== undefined;
+      let rates = openAiCompatibleTariffRates(tariff, prepared.definition.endpoint, prepared.request.model, undefined, 0, catalogVerified.has(token as object));
       const details = usage.data['prompt_tokens_details'] as Record<string, unknown> | undefined;
       if (details !== undefined && (details === null || typeof details !== 'object' || Array.isArray(details))) return null;
       const cached = details?.['cached_tokens'] ?? usage.data['prompt_cache_hit_tokens'] ?? 0;
@@ -60,7 +65,10 @@ export function createOpenAiChatPricedNative(options: OpenAiChatNativePortOption
   const native: ModelInvocationNativePort = {
     ...delegate,
     async prepare(profile, binding, request) {
-      const prepared = await delegate.prepare(profile, binding, request);
+      const prepared = await delegate.prepare(profile, binding, request), tariff = (prepared as PreparedOpenAiChatRequest).definition.tariff;
+      // A sealed catalog tariff is re-read from its registered row before it can be priced (the seal alone is never trusted).
+      if (tariff.kind === 'vendor-published' && tariff.source.catalog && catalogTariff && catalogTariffMatches(tariff,
+        await catalogTariff(tariff.source.catalog, tariff.modelId, modelInvocationProfileSchema.parse(profile).scopeId), openAiCompatiblePublishedTariffSchema)) catalogVerified.add(prepared as object);
       profiles.set(prepared as object, modelInvocationProfileDigest(profile)); return prepared;
     },
     async send(token, signal, onDelta) {
@@ -81,6 +89,6 @@ export function createOpenAiChatPricedNative(options: OpenAiChatNativePortOption
     const prepared = input.prepared as PreparedOpenAiChatRequest;
     if (!prepared || typeof prepared !== 'object' || profiles.get(prepared) !== input.profileDigest
       || !isDeepStrictEqual(prepared.request, parseOpenAiChatTextRequest(input.command.nativeRequest, prepared.definition))) throw new OpenAiChatHttpError('OPENAI_CHAT_REQUEST_INVALID');
-    const quote = quoteOpenAiChatOperatorTariff(input, prepared.body, prepared.reasoningInputTokensUpperBound); quotes.set(prepared, quote); return quote;
+    const quote = quoteOpenAiChatOperatorTariff(input, prepared.body, prepared.reasoningInputTokensUpperBound, catalogVerified.has(prepared)); quotes.set(prepared, quote); return quote;
   } });
 }

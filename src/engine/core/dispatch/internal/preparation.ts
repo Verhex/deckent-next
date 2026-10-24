@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AUDIT_EVENT_SCHEMA_VERSION, DISPATCH_PREPARATION_PHASES, attemptIdentitySchema, counterSchema, identitySchema, sameAttemptIdentity,
   type AttemptIdentity, type AuditEvent, type RunSnapshot } from '#domain/index.js';
 import { ErrorRegistry, type JsonRecordFile } from '#platform/index.js';
+import { DispatchError } from './port.js';
 
 export type DispatchPreparationPhase = (typeof DISPATCH_PREPARATION_PHASES)[number];
 const phaseSchema = z.enum(DISPATCH_PREPARATION_PHASES), instanceSchema = z.object({ id: z.string().uuid(), pid: counterSchema, startedAt: counterSchema }).strict();
@@ -16,6 +17,34 @@ export const dispatchPreparationRecordSchema = z.object({ schemaVersion: z.liter
   park: z.discriminatedUnion('kind', [z.object({ kind: z.literal('own'), commandId: identitySchema, at: counterSchema }).strict(),
     z.object({ kind: z.literal('joined'), revision: counterSchema, at: counterSchema }).strict()]).nullable() }).strict();
 export type DispatchPreparationRecord = z.infer<typeof dispatchPreparationRecordSchema>;
+/** S6R-1 (design §2 F6) v1 launcher evidence: what a claimed settle found before clearing the preparation record — the launcher instance and
+ * phase a process left while its worker ran (`record`), or an unreadable/foreign record (`unreadable`). Written once per Attempt in its own
+ * product-directory record (no ledger); evidence only: it never decides liveness, fencing or release (the S6R-2 detector does). */
+export const dispatchLauncherEvidenceSchema = z.object({ schemaVersion: z.literal(1), identity: attemptIdentitySchema,
+  launcher: z.discriminatedUnion('kind', [z.object({ kind: z.literal('record'), instance: instanceSchema, phase: phaseSchema, at: counterSchema,
+    starts: counterSchema, aborts: counterSchema }).strict(), z.object({ kind: z.literal('unreadable') }).strict()]),
+  capturedBy: instanceSchema, capturedAt: counterSchema }).strict();
+export type DispatchLauncherEvidence = z.infer<typeof dispatchLauncherEvidenceSchema>;
+const recordName = (identity: AttemptIdentity) => createHash('sha256').update(JSON.stringify(attemptIdentitySchema.parse(identity))).digest('hex');
+/** The captured launcher evidence of one Attempt, or null when none was captured. An unparsable or foreign record is refused, never empty. */
+export async function readDispatchLauncherEvidence(records: (name: string) => JsonRecordFile, identity: AttemptIdentity): Promise<DispatchLauncherEvidence | null> {
+  const read = await records(recordName(identity)).read();
+  if (read.kind === 'absent') return null;
+  if (read.kind === 'io') throw read.error;
+  const parsed = read.kind === 'ready' ? dispatchLauncherEvidenceSchema.safeParse(read.value) : null;
+  if (!parsed?.success || !sameAttemptIdentity(parsed.data.identity, identity)) throw new DispatchError('DISPATCH_CORRUPT');
+  return parsed.data;
+}
+/** S6R-2: the preparation record a launcher left for one Attempt (read-only; null when none), or `unreadable` for an unparsable or foreign record. */
+export async function readDispatchPreparationRecord(records: (name: string) => JsonRecordFile, identity: AttemptIdentity): Promise<DispatchPreparationRecord | 'unreadable' | null> {
+  const read = await records(recordName(identity)).read();
+  if (read.kind === 'absent') return null;
+  if (read.kind === 'io') throw read.error;
+  const parsed = read.kind === 'ready' ? dispatchPreparationRecordSchema.safeParse(read.value) : null;
+  return parsed?.success && sameAttemptIdentity(parsed.data.identity, identity) ? parsed.data : 'unreadable';
+}
+/** S6R-3: removes one Attempt's record from a preparation or launcher-evidence directory (absent is done) when its recovery case ends in a release. */
+export async function removeDispatchLaunchRecord(records: (name: string) => JsonRecordFile, identity: AttemptIdentity): Promise<void> { await records(recordName(identity)).remove(); }
 export type DispatchPreparationInstance = z.infer<typeof instanceSchema>;
 /** This process. In the runtime service one start is one instance: a record another instance never settled means that process died in it. */
 export const DISPATCH_PREPARATION_INSTANCE: DispatchPreparationInstance = Object.freeze({ id: randomUUID(), pid: process.pid, startedAt: Date.now() });
@@ -28,6 +57,8 @@ export interface DispatchPreparationContext {
   readonly bound: number;
   readonly now: () => number;
   readonly instance?: DispatchPreparationInstance;
+  /** S6R-1: where a claimed settle keeps the launcher evidence before clearing the preparation record (same naming as the records port). */
+  readonly launchers: (name: string) => JsonRecordFile;
   /** Core audit. No audit, no count: a failure is thrown before the record changes, so the next start counts (and records) again. */
   readonly record: (event: AuditEvent) => Promise<unknown>;
   /** Whether the ledger holds the receipt of this park command (it committed). */
@@ -51,11 +82,12 @@ export interface DispatchPreparationContext {
  */
 export class DispatchPreparationGuard {
   private readonly file: JsonRecordFile;
+  private readonly launcher: JsonRecordFile;
   private readonly instance: DispatchPreparationInstance;
   private current: DispatchPreparationRecord | null = null;
   constructor(records: (name: string) => JsonRecordFile, private readonly context: DispatchPreparationContext) {
     z.number().int().positive().safe().parse(context.bound);
-    this.file = records(createHash('sha256').update(JSON.stringify(attemptIdentitySchema.parse(context.identity))).digest('hex'));
+    this.file = records(recordName(context.identity)); this.launcher = context.launchers(recordName(context.identity));
     this.instance = context.instance ?? DISPATCH_PREPARATION_INSTANCE;
   }
   /** An unreadable or foreign record is never trusted as a clean slate: it counts as one abnormal end of an unknown phase. */
@@ -116,6 +148,18 @@ export class DispatchPreparationGuard {
    * record a process death left after its claim is cleared, never counted. A failed removal is not thrown: it can only over-count later. */
   async settle(claimed = false): Promise<void> {
     if (!this.current && !claimed) return;
+    // S6R-1: a claimed settle of a record this guard did not write keeps it as launcher evidence first; if that write fails nothing is cleared.
+    if (claimed && !this.current) await this.captureLauncher();
     this.current = null; await this.file.remove().catch(() => undefined);
+  }
+  private async captureLauncher(): Promise<void> {
+    const { prior, invalid } = await this.load();
+    if (!prior && !invalid) return;
+    const kept = await this.launcher.read();
+    if (kept.kind === 'io') throw kept.error;
+    if (kept.kind !== 'absent') return; // The first capture stays as written; it is never replaced.
+    const { identity, now } = this.context;
+    await this.launcher.write(dispatchLauncherEvidenceSchema.parse({ schemaVersion: 1, identity, capturedBy: this.instance, capturedAt: now(),
+      launcher: prior ? { kind: 'record', instance: prior.instance, phase: prior.phase, at: prior.at, starts: prior.starts, aborts: prior.aborts } : { kind: 'unreadable' } }));
   }
 }

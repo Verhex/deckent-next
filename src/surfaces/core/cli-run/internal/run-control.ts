@@ -3,6 +3,7 @@ import { ErrorRegistry, t, terminalSafeText, type Locale } from '#platform/index
 import { runLifecycleCommandSchema, runQuerySchema, type RunView } from '#engine/index.js';
 import type { RunCommandContext } from './context.js';
 import { familyScope, pickRun, readScopeRuns, resolveRunId, runStateWord, runTitle, shownId, type RunHumanIo } from './run-human.js';
+import { runHoldReasonText } from '#surfaces/core/recovery-text/index.js';
 import { renderRunCancellation } from './cancellation.js';
 import REGISTRY from './run.json' with { type: 'json' };
 
@@ -36,7 +37,7 @@ function controlCard(action: RunControl, run: RunView, scopeId: string, locale: 
 }
 
 /** What the person typed that the flow keeps: scope, Run (a short id resolves), hold reason, resume answer for one task. */
-export type RunControlInput = Readonly<{ scopeId?: string | undefined; runId?: string | undefined; reason?: string | undefined; taskId?: string | undefined; answer?: string | undefined }>;
+export type RunControlInput = Readonly<{ scopeId?: string | undefined; runId?: string | undefined; reason?: string | undefined; taskId?: string | undefined; answer?: string | undefined; quota?: 'wait' | 'next-candidate' | undefined }>;
 
 /**
  * A Run control for a person on a terminal (CLI review §run, owner 10-08 "değerler yalnız seçimle"): the scope (a change never takes a silent
@@ -52,7 +53,7 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
   let runId = input.runId ? await resolveRunId(context, scopeId, input.runId) : undefined;
   if (!runId) {
     // An answer goes to a Run that waits (the service checks which task asked); every other control to the Runs whose state offers it.
-    const runs = (await readScopeRuns(context, scopeId)).filter(run => input.answer !== undefined ? run.state.kind === 'parked' : runControls(run).includes(action));
+    const runs = (await readScopeRuns(context, scopeId)).filter(run => input.answer !== undefined || input.quota !== undefined ? run.state.kind === 'parked' : runControls(run).includes(action));
     if (!runs.length) { print(t('cli.run.control.none', { scope: scopeId, action }, locale)); return; }
     const picked = await pickRun(io, scopeId, runs, t('cli.run.control.pick', { scope: scopeId, action }, locale));
     if (!picked) { print(t('cli.run.control.nothing', {}, locale)); return; }
@@ -63,7 +64,10 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
   for (let round = 0; ; round++) {
     const run = (await context.inspectRun(io.root, runQuerySchema.parse({ schemaVersion: 1, scopeId, runId }), io.options)).run;
     if (!run) throw ErrorRegistry.createError('RUN_NOT_FOUND', { params: { run: runId } });
-    const extra = [...(action === 'hold' ? [t('cli.run.control.reason', { reason }, locale)] : []),
+    // S6R-6: a held Run's card says why it is held, in words (a system hold's catalog text, never its raw code).
+    const held = action === 'hold' ? null : runHoldReasonText(run.state, locale);
+    const extra = [...(action === 'hold' ? [t('cli.run.control.reason', { reason }, locale)] : []), ...(held ? [t('recovery.hold.cardReason', { reason: held }, locale)] : []),
+      ...(input.quota !== undefined ? [t('quotaask.control.choice', { choice: input.quota === 'wait' ? t('quotaask.choice.wait', {}, locale) : t('quotaask.choice.next-candidate', {}, locale) }, locale)] : []),
       ...(input.answer !== undefined ? [t('cli.run.control.answer', { task: input.taskId ?? '-', answer: input.answer }, locale)] : []), ...(round ? [t('cli.run.control.reread', {}, locale)] : [])];
     const answer = await io.ask(controlCard(action, run, scopeId, locale, extra));
     if (answer !== 'yes') {
@@ -78,7 +82,7 @@ export async function runControlFlow(action: RunControl, context: RunCommandCont
         return;
       }
       const command = runLifecycleCommandSchema.parse({ schemaVersion: 1, commandId, scopeId, runId, expectedRevision: run.revision,
-        ...(action === 'hold' ? { action, holdReason: reason } : input.answer !== undefined ? { action: 'answer', answer: input.answer, taskId: input.taskId } : { action }) });
+        ...(action === 'hold' ? { action, holdReason: reason } : input.quota !== undefined ? { action: 'quota-answer', choice: input.quota } : input.answer !== undefined ? { action: 'answer', answer: input.answer, taskId: input.taskId } : { action }) });
       const after = (await context.applyRunLifecycle!(io.root, command, io.options))?.lifecycle.run;
       const params = { run: shownId(runId), command: commandId, revision: after?.revision ?? '—', state: after ? runStateWord(after, locale) : '—' };
       print(terminalSafeText(action === 'hold' ? t('terminal.runControl.result.hold', params, locale)

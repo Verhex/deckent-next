@@ -1,6 +1,6 @@
 import { renderQueueStatus } from '#surfaces/core/effect-confirmation/index.js';
 import type { RunView } from '#engine/index.js';
-import { renderBriefLines } from '#surfaces/core/monitor/index.js';
+import { renderBriefLines, runHoldReasonText } from '#surfaces/core/monitor/index.js';
 import { shortId, t, type Locale } from '#platform/index.js';
 import { loadRunViewsForWatch, ledgerEntriesForWorkers, fillTemplate, type WorklineLedgerPorts, type WorkLedgerWorkerEntry } from '#surfaces/core/terminal-ledger/index.js';
 import { ArrowPicker, ARROW_PICKER_ROWS } from '#surfaces/core/terminal-picker/index.js';
@@ -39,9 +39,9 @@ export function runTitle(run: RunView, labels: JobWindowLabels): string {
   return task ? task.trim().split(/\r?\n/u)[0]!.replace(/\s+/gu, ' ').trim() : labels.runFallback;
 }
 /** A parked Run's reason in the catalog's words, or null when the Run is not parked or the words are absent. */
-export function parkReasonText(run: RunView, labels: JobWindowLabels): string | null {
-  return run.state?.kind === 'parked' ? labels.parkReasons?.[run.state.reason] ?? null : null;
-}
+export const parkReasonText = (run: RunView, labels: JobWindowLabels): string | null => run.state?.kind === 'parked' ? labels.parkReasons?.[run.state.reason] ?? null : null;
+/** S6R-6: a held Run's hold in words (the shared renderer: a system hold's catalog text and case reference, never its raw code). */
+export const runHoldText = (run: RunView, labels: JobWindowLabels) => runHoldReasonText(run.state, labels.locale);
 export function runStateText(run: RunView, labels: JobWindowLabels): string {
   const value = run.state?.kind === 'terminal' ? run.state.outcome : run.state?.kind ?? 'unknown';
   return labels.runStates[value] ?? labels.unknown;
@@ -74,7 +74,7 @@ export function runDetailLines(run: RunView, work: WorkSurfaceLabels, summaries?
   const section = (title: string): WindowLine => ({ spans: [span(title, { bold: true, role: 'accent' })] });
   const field = (label: string, text: string, muted = false): WindowLine => ({ label: [span(label, { bold: true })], spans: [span(text, muted ? { role: 'muted' } : {})] });
   const taskLabel = (task: RunView['tasks'][number], index: number) => (task.resultBrief ? task.taskBrief?.task : undefined) ?? `${labels.tasks} ${index + 1}`;
-  const parked = run.state?.kind === 'parked' ? run.state : null, reason = parkReasonText(run, labels), note = parked?.operatorHold?.note ?? parked?.note;
+  const parked = run.state?.kind === 'parked' ? run.state : null, reason = parkReasonText(run, labels), note = runHoldText(run, labels); // S6R-6: words, never a raw code
   return [section(labels.state), { spans: [span(`[${runStateText(run, labels)}]`, { role: run.cancellationRequested ? 'warning' : 'accent' }), span(` · ${displayId(run.runId)}`, { role: 'muted' })] },
     ...(parked ? [{ spans: [span(reason ?? parked.reason, { role: 'warning' }), ...(parked.failureCode && labels.parkCode ? [span(` · ${fillTemplate(labels.parkCode, { code: parked.failureCode })}`, { role: 'muted' })] : []),
       ...(note && labels.parkNote ? [span(` · ${fillTemplate(labels.parkNote, { note })}`)] : [])] }] : []),

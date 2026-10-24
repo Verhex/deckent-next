@@ -1,6 +1,6 @@
-import { AuthorityChangeError, DecisionApplicationError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
-import { TargetQueueError, CandidateBindingError, DecisionDelegationError, PolicyChangeError, PolicyLastAdminError, CommandIdError, DecisionError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError } from '#domain/index.js';
-import { ProviderSpendError, ModelInvocationStoreError, type ProviderSpendAccount } from '#engine/index.js';
+import { AuthorityChangeError, AgentCatalogStoreError, DecisionApplicationError, MemoryJournalError, SessionAuthenticationError, WorkerObservationError, WorkspacePatchError, WorkspaceAdoptionError, patchLimitFields } from '#engine/index.js';
+import { TargetQueueError, CandidateBindingError, DecisionDelegationError, PolicyChangeError, PolicyLastAdminError, CommandIdError, DecisionError, MemoryError, AgentCatalogError, ApprovalError, AuditError, EffectError, ModelActivationError, ModelCatalogError, ModelInvocationError, ModelRoleError, CatalogEvolutionError } from '#domain/index.js';
+import { ProviderSpendError, ModelInvocationStoreError, NervousError, type ProviderSpendAccount } from '#engine/index.js';
 import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
 import { ModelActivationStoreError, AgentTurnStoreError, WorkerModelAdmissionError } from '#engine/index.js';
 import { InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError, InstallationIdentityError, ProjectIdentityError } from '#engine/index.js';
@@ -18,8 +18,8 @@ const registeredFailure = (code: string, options?: Parameters<typeof ErrorRegist
   ? ErrorRegistry.createError(code, options) : ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
 /** Preserve stable failures without private details; account totals require a freshly policy-authorized account from the caller. */
 export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAccount): DeckentError {
-  if (error instanceof AuthorityChangeError || error instanceof PolicyChangeError || error instanceof DecisionDelegationError || error instanceof PolicyLastAdminError || error instanceof CommandIdError || error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
-    || error instanceof TargetQueueError || error instanceof CandidateBindingError || error instanceof AuditError || error instanceof WorkerObservationError || error instanceof WorkspaceAdoptionError || error instanceof EffectError) return registeredFailure(error.code);
+  if (error instanceof AuthorityChangeError || error instanceof PolicyChangeError || error instanceof DecisionDelegationError || error instanceof PolicyLastAdminError || error instanceof CommandIdError || error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof MemoryJournalError || error instanceof MemoryError || error instanceof AgentCatalogStoreError || error instanceof AgentCatalogError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
+    || error instanceof TargetQueueError || error instanceof CandidateBindingError || error instanceof AuditError || error instanceof WorkerObservationError || error instanceof WorkspaceAdoptionError || error instanceof EffectError || error instanceof NervousError || error instanceof CatalogEvolutionError) return registeredFailure(error.code);
   if (error instanceof WorkspacePatchError) return registeredFailure(error.code, error.detail ? { params: { ...error.params, detail: error.detail, field: patchLimitFields[error.detail] } } : error.params ? { params: error.params } : {});
   if (error instanceof RunLifecycleError && error.approvalId) return registeredFailure(error.code, { params: { approvalId: error.approvalId } });
   if (error instanceof RunProgressionFailure) return queryFailure(error.cause);
@@ -40,9 +40,10 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
     profile: error.deliveryFinding.profileId, surface: error.deliveryFinding.surface,
     required: error.deliveryFinding.requiredBytes, available: error.deliveryFinding.availableBytes } });
   if (error instanceof ModelInvocationError || error instanceof OpenAiChatHttpError
-    || error instanceof ModelActivationError || error instanceof ModelActivationStoreError || error instanceof ModelCatalogError) return registeredFailure(error.code);
+    || error instanceof ModelActivationError || error instanceof ModelActivationStoreError || error instanceof ModelCatalogError || error instanceof ModelRoleError) return registeredFailure(error.code);
   if (error instanceof WorkerModelAdmissionError) { const d = error.detail; return registeredFailure(error.code, { params: { taskId: d.taskId,
-    channelId: d.channelId ?? '-', modelId: d.modelId ?? '-', minCliVersion: d.minCliVersion ?? '-', cliVersion: d.cliVersion ?? 'unparsed' } }); }
+    channelId: d.channelId ?? '-', modelId: d.modelId ?? '-', minCliVersion: d.minCliVersion ?? '-', cliVersion: d.cliVersion ?? 'unparsed',
+    ...(d.workClass !== undefined ? { workClass: d.workClass, skipped: d.skipped ?? '-', ...(d.skippedMore ? { skippedMore: d.skippedMore } : {}) } : {}) } }); }
   if (error instanceof AgentTurnStoreError) return registeredFailure(error.code);
   // E1: the bounded cause of an unavailable image probe (deadline|exit|signal|parse) travels as a param; Docker's text never does.
   if (error instanceof DockerImageProbeError && error.probeCause) return registeredFailure(error.code, { params: { cause: error.probeCause } });

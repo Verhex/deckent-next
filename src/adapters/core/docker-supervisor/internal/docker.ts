@@ -4,7 +4,7 @@ import { captureDockerProfile, readDockerProfile, dockerEndpointSchema } from '.
 import { createHash } from 'node:crypto';
 import { lstat, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
-import { workerIncarnationSchema, containerEvidenceSchema, SupervisorError, sandboxInterruptCause, type SandboxRequest, type SandboxResult, type ExecutionSupervisor } from '#engine/index.js';
+import { workerIncarnationSchema, containerEvidenceSchema, SupervisorError, sandboxInterruptCause, type SandboxRequest, type SandboxResult, type ExecutionSupervisor, type SupervisorLaunchHooks } from '#engine/index.js';
 import { dockerSupervisorOptionsSchema, type DockerSupervisorOptions } from './options.js';
 import { identifyDockerRequest } from './identity.js';
 import { runNodeDockerCommand, DockerCommandFailure, type DockerCommandRunner } from './command.js';
@@ -138,9 +138,27 @@ export class DockerSupervisor implements ExecutionSupervisor {
     if (!inspection) return { kind: 'worker-absent' as const, worker: expected };
     const observed = this.result(expected.id, inspection);
     if (!observed.worker || observed.worker.id !== expected.id || observed.worker.startedAt !== expected.startedAt) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
-    return observed.result.kind === 'exited' ? { kind: 'supervisor-exit' as const, worker: observed.worker, result: observed.result } : null;
+    // The proof carries the domain exit cause only (S6R-3: the adapter's `kind` field made every Docker exit proof a mismatch).
+    return observed.result.kind === 'exited' ? { kind: 'supervisor-exit' as const, worker: observed.worker, result: { exitCode: observed.result.exitCode } } : null;
   }
-  async execute(input: SandboxRequest, signal?: AbortSignal): Promise<SandboxResult> {
+  /** S6R-3: only Docker's explicit missing-object answer for the created id is absence; the request label still binds an existing container. */
+  async observeCreatedAbsence(input: SandboxRequest, containerId: string) {
+    if (!/^[a-f0-9]{64}$/.test(containerId)) throw new SupervisorError('SUPERVISOR_REQUEST_INVALID');
+    return await this.inspect(containerId, this.identity(input).digest) === null ? Object.freeze({ kind: 'created-container-absent' as const, containerId }) : null;
+  }
+  /** S6R-4 (lead on s6r3 Q3): a launcher that died between `create` and `start` leaves a container no stop can end. Only that exact id, only while
+   * Docker reports it `created` under this request's label, is removed — plain `rm` (Docker refuses a running container), never forced, never by
+   * name — and only a later explicit missing-object answer counts as removed. A started container is never removed here. */
+  async removeCreatedContainer(input: SandboxRequest, containerId: string): Promise<'removed' | 'absent' | 'not-created'> {
+    if (!/^[a-f0-9]{64}$/.test(containerId)) throw new SupervisorError('SUPERVISOR_REQUEST_INVALID');
+    const { digest } = this.identity(input), existing = await this.inspect(containerId, digest);
+    if (!existing) return 'absent';
+    if (existing.State.Status !== 'created' || existing.Id !== containerId) return 'not-created';
+    try { await this.command(['rm', containerId], this.options.controlTimeoutMs); } catch { /* absence decides */ }
+    if (await this.inspect(containerId, digest) !== null) throw new SupervisorError('SUPERVISOR_RELEASE_UNCONFIRMED');
+    return 'removed';
+  }
+  async execute(input: SandboxRequest, signal?: AbortSignal, hooks?: SupervisorLaunchHooks): Promise<SandboxResult> {
     const { request, digest, handle } = this.identity(input);
     if (signal?.aborted) throw new SupervisorError('SUPERVISOR_CANCELLED');
     const root = resolve(this.options.workspaceRoot); const workspace = resolve(request.workspace); const path = relative(root, workspace);
@@ -199,6 +217,11 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const created = await this.inspect(handle, digest);
     if (!created) throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
     assertDockerMountsMatch(created.Mounts, expected);
+    // S6R-1: the immutable id is durable before start, so a launcher that dies during `start --attach` still leaves the container named.
+    if (hooks) {
+      if (!/^[a-f0-9]{64}$/.test(created.Id)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');
+      await hooks.created(created.Id);
+    }
     let stdout: string; let stderr: string; let interrupted = false, cause: SandboxResult['interruptCause'];
     try {
       const output = await this.command(['start', '--attach', handle], o.deadlineMs, signal);

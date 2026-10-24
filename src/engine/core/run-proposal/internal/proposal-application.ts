@@ -1,7 +1,8 @@
-import { encodeCommandProjection, isAiPrincipal, type ModelInvocationBillingAxis, type ProposalPermission, type RunProposal, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
+import { encodeCommandProjection, isAiPrincipal, type ModelInvocationBillingAxis, type ProposalPermission, type RecordedTaskAgent, type RunProposal, type VerifiedPrincipal, type WorkClassRegistry } from '#domain/index.js';
 import { DeckentError, ErrorRegistry, type TrustedClock } from '#platform/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { ProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
+import { WorkerModelAdmissionError } from '#engine/core/model-activation/index.js';
 import { RunAdmissionApplication, RunCreationAuthority, systemOrderedGraph, type BoundRunAdmission, type RunAuthorization, type RunView } from '#engine/core/runs/index.js';
 import { parseRunProposal, runProposalDigest, runProposalQuerySchema, type RunProposalQuery, type RunProposalRecord, type RunProposalStore } from './proposal-contract.js';
 import { stableRunProposalBasis, unrecognisedRunProposalPermissions, validateRunProposal } from './proposal-validation.js';
@@ -11,21 +12,31 @@ export interface RunProposalContext {
   loadBudget(scopeId: string, principal: VerifiedPrincipal): Promise<ProviderSpendCheckpoint | Readonly<{ checkpoint: ProviderSpendCheckpoint | null; source?: 'configured' }> | null>;
   classifySpending?(proposal: RunProposal): Promise<Readonly<{ semantics: 'metered' | 'not-metered'; digest: string }>>;
   verifySource(proposal: RunProposal, principal: VerifiedPrincipal): Promise<void>;
+  /** S8-1b: the system's agent selection per work-input task now (the same selection admission re-derives); absent = no catalog. */
+  selectAgents?(proposal: RunProposal): Promise<ReadonlyMap<string, Omit<RecordedTaskAgent, 'taskId'>>>;
 }
 export interface RunProposalResult { readonly schemaVersion: 1; readonly proposal: RunProposalRecord; readonly run: RunView | null;
   readonly planningSpending?: Readonly<{ billingAxis?: ModelInvocationBillingAxis; class: 'metered' | 'not-metered' | 'unknown'; currency: string | null;
     amountMinorUnits: number | null; evidence: 'measured-tariff' | 'measured-tariff-upper-bound' | 'provider-reported' | 'settled-local' | 'plan-usage' | 'held' | 'unknown' }>;
   readonly budgetSemantics: 'admission-check-only' | 'not-metered'; readonly runtimeTotalSpendEnforced: false;
-  /** A budget refusal's money left (and declared ceiling), on the response that recorded it only: the amount moves with every charge, so it
-   * is never stored and a replay renders the refusal without it. Every other refusal replays byte-identically. */
+  /** A budget refusal's money left (and declared ceiling), or a worker assignment refusal's task, WorkClass and skipped candidates, on the
+   * response that recorded it only: never stored, and a replay renders the refusal without it. Every other refusal replays byte-identically. */
   readonly reasonParams?: Readonly<Record<string, string | number>>;
   /** Advisory entries this installation's vocabulary and registry do not recognise, each once (accept_mark, owner 2026-10-18). Response-only and
    * derived from the current registry: never stored, never evaluated, never a grant; absent when every entry is recognised. */
-  readonly unrecognisedPermissions?: readonly ProposalPermission[] }
+  readonly unrecognisedPermissions?: readonly ProposalPermission[];
+  /** S4B-6: the project memory of the planning call that recorded this proposal (response-only, never stored; a replay carries none). `selected`:
+   * entries sealed for the call (sent with `on`, only sealed with `shadow`); `omitted`: left out by the size limits; `withheld`: from work the
+   * person may not read; `reason`: why no memory was read at all. Absent when memory is off. */
+  readonly planningMemory?: PlanningMemoryNote }
+export type PlanningMemoryNote = Readonly<{ mode: 'shadow' | 'on'; selected: number; omitted: number; withheld: number; reason: 'policy' | 'contests' | 'template' | null }>;
 const result = (registry: WorkClassRegistry | undefined, proposal: RunProposalRecord, run: RunView | null = null, error?: unknown): RunProposalResult => {
   const unrecognised = unrecognisedRunProposalPermissions(proposal.proposal, registry);
   return Object.freeze({ schemaVersion: 1, proposal, run, budgetSemantics: proposal.binding.admission?.budgetSemantics ?? 'admission-check-only', runtimeTotalSpendEnforced: false,
     ...(error instanceof DeckentError && proposal.reason === 'RUN_PROPOSAL_BUDGET_EXCEEDED' && error.code === proposal.reason && error.params ? { reasonParams: error.params } : {}),
+    // ATAMA-1: which task, which WorkClass list and why each listed worker was skipped; response-only, like the budget detail.
+    ...(error instanceof WorkerModelAdmissionError && error.code === proposal.reason && error.detail.workClass !== undefined
+      ? { reasonParams: { taskId: error.detail.taskId, workClass: error.detail.workClass, skipped: error.detail.skipped ?? '-', ...(error.detail.skippedMore ? { skippedMore: error.detail.skippedMore } : {}) } } : {}),
     ...(unrecognised.length ? { unrecognisedPermissions: unrecognised } : {}) });
 };
 /** The graph a proposal's Run is admitted with: the author's graph plus the system order edges (one definition for admission and store). */
@@ -41,7 +52,7 @@ export class RunProposalApplication {
     const spending = await this.context.classifySpending?.(proposal);
     const loaded = spending?.semantics === 'not-metered' ? null : await this.context.loadBudget(proposal.scopeId, principal);
     const snapshot = loaded && 'checkpoint' in loaded ? loaded : { checkpoint: loaded };
-    return validateRunProposal(proposal, this.context.registry, snapshot.checkpoint, now, spending, 'source' in snapshot ? snapshot.source : undefined);
+    return validateRunProposal(proposal, this.context.registry, snapshot.checkpoint, now, spending, 'source' in snapshot ? snapshot.source : undefined, await this.context.selectAgents?.(proposal));
   }
   async propose(input: unknown, credential?: unknown): Promise<RunProposalResult> {
     const proposal = parseRunProposal(input), principal = await authenticate(this.verifier, credential, proposal.scopeId);

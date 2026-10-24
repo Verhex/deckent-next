@@ -6,6 +6,17 @@ export const policyResources = Object.freeze({
   backup: Object.freeze({ kind: 'backup' as const, actions: Object.freeze(['create', 'verify', 'restore'] as const) }),
   config: Object.freeze({ kind: 'config' as const, actions: Object.freeze(['write'] as const) }),
   decision: Object.freeze({kind:'decision' as const, actions:Object.freeze(['prepare','ask','record','outcome','inspect'] as const)}),
+  // S4 memory journal v1: the resource id is the scope. `inspect` reads (list, search, one entry with history); propose/verify/retire are the
+  // application's transitions (no surface writes in v1). Verify additionally needs a human or an independent evaluation record (domain rule).
+  // S4B-1: `contest` (narrowing: an entry withdrawn from model context until a person resolves it; S4B-3) and `purge` (a person's tombstone of the
+  // content; S4B-4, A11). Until their consumers land a grant of either allows nothing; both are on the AI floor.
+  memory: Object.freeze({ kind: 'memory' as const, actions: Object.freeze(['inspect', 'propose', 'verify', 'retire', 'contest', 'purge'] as const) }),
+  // S7 agent/skill catalog core: the resource id is the scope. `inspect` reads agents and skills; `define` creates or revises an agent or a person's
+  // own skill; `import` brings a skill from elsewhere (always also behind the pinned + signed floor, which no grant relaxes). S8-3/S8-4: the standing cards
+  // (promote/demote/restore/retire: resource id `<scopeId>/<workClass>`), `dismiss` of a suggestion; `suggest`/`narrow` are the aggregator's only (AI floor).
+  agentCatalog: Object.freeze({ kind: 'agent-catalog' as const, actions: Object.freeze(['inspect', 'define', 'import', 'promote', 'demote', 'restore', 'retire', 'dismiss', 'suggest', 'narrow'] as const) }),
+  // S8-5 signer keys: the resource id is the scope. `inspect` lists public rows; enrol/add/revoke/repair are a person's terminal cards (AI floor).
+  skillSigner: Object.freeze({ kind: 'skill-signer' as const, actions: Object.freeze(['inspect', 'enrol', 'add', 'revoke', 'repair'] as const) }),
   approval: Object.freeze({ kind: 'approval' as const, actions: Object.freeze(['inspect', 'decide', 'renew'] as const) }),
   task: Object.freeze({ kind: 'task' as const, actions: Object.freeze(['execute'] as const) }),
   attempt: Object.freeze({ kind: 'attempt' as const, actions: Object.freeze(['execute', 'release', 'reconcile', 'recover-output', 'cancel', 'evaluate', 'read-output', 'prepare-integration', 'deliver-integration', 'adopt-integration', 'rollback-integration'] as const) }),
@@ -49,6 +60,9 @@ export const policyResources = Object.freeze({
   monitor: Object.freeze({ kind: 'monitor' as const, actions: Object.freeze(['inspect-scope-diagnostics'] as const) }),
   // v13 (owner 2026-10-19, CA-1): reading every principal's standing approvals (`deckent policy grants --all`); a person's own need no action.
   policy: Object.freeze({ kind: 'policy' as const, actions: Object.freeze(['inspect-standing-grants'] as const) }),
+  // S6R-3 (owner K-B 2026-10-23; lead on s6 Q3): the owner's standing approval of one Nervous stop-list action (the resource id is the action);
+  // the recovery broker applies a sealed proposal only under it. A person's grant only: the AI floor refuses it for every AI principal.
+  recoveryAction: Object.freeze({ kind: 'recovery-action' as const, actions: Object.freeze(['apply'] as const) }),
 });
 export type CorePolicyResource = keyof typeof policyResources;
 export type CorePolicyAction<R extends CorePolicyResource> = typeof policyResources[R]['actions'][number];

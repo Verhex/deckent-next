@@ -26,6 +26,15 @@ Başlarken:
   workers     İşçileri listele veya izle (eylemsiz: list)
       list | watch
       [--scope <id>] [--all | --since <12h>] [--verbose] [--limit <n>]
+  memory      Kapsamın hafıza dergisini oku ve düzenle: bilgiler ve dersler
+      search | inspect | propose | verify | retire | review | purge | rollout
+      [--scope <id>] [--state <ad>] [--json]
+  agents      Kapsamın ajanlarını ve skill'lerini oku ve tanımla
+      inspect | skills | skill | define | define-skill | signers |
+      enrol-signer | add-signer | revoke-signer | repair-signers |
+      import-skill | stats | suggestions | promote | demote | restore | retire |
+      dismiss | standing
+      [--scope <id>] [--json]
 
 İş yürütme:
   do          Brain ve mevcut onay kapılarıyla bir isteği planla
@@ -53,8 +62,8 @@ Modeller:
   models      Modelleri incele ve yönet
       binding | activation | activate | deactivate | invoke | invocation |
       purge-content | cancel | spending | reconcile-spending | create-budget |
-      revise-budget | audit-spending | connect |
-      catalog list|register|activate|deactivate
+      revise-budget | audit-spending | connect | login |
+      catalog list|register|activate|deactivate | roles show|set
       [--scope <id>] [--declared] [--catalog] [--verbose]
 
 Onaylar:

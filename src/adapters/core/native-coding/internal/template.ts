@@ -72,13 +72,17 @@ export const renderWorkScope = (paths: readonly string[]) => paths.join('\n');
  * `context` appends admitted parts (the project's worker instruction snapshot) after the template's own; a composition that fits without
  * them but not with them is the typed overflow refusal, judged by the same composition schema that bounds every prompt. */
 export function compileNativeCodingWorkInput(template: ExecutionProfileDefinition, input: unknown, effort?: WorkerEffort, evidence?: CatalogPinModelEvidence,
-  context: readonly z.infer<typeof promptPartSchema>[] = []): ExecutionProfileDefinition {
+  context: readonly z.infer<typeof promptPartSchema>[] = [], agent?: Readonly<{ persona: z.infer<typeof promptPartSchema>; skills: readonly z.infer<typeof promptPartSchema>[] }>): ExecutionProfileDefinition {
   const workInput = workInputSchema.safeParse(input);
   if (!workInput.success) throw new NativeCodingProfileError('NATIVE_CODING_INVOCATION_INVALID');
   const { docker, invocation: { composition, maxTurns, ...invocation } } = parseTemplate(template);
   const { model, task, scope, acceptance } = workInput.data; const turns = workInput.data.maxTurns ?? maxTurns;
+  // ATAMA-1: a v2 input without a model is compiled only after the system assigned one; reaching here without it is a typed refusal.
+  if (!model) throw new NativeCodingProfileError('WORKER_MODEL_UNASSIGNED');
   if (maxTurns !== undefined && turns !== undefined && turns > maxTurns) throw new NativeCodingProfileError('NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE');
-  const base = { schemaVersion: 1 as const, ...composition, task, scope: renderWorkScope(scope.paths), acceptance };
+  // S8-1b: the system-selected agent's persona and pinned skills replace the template's own; an agent that does not fit is its own typed refusal.
+  const plain = { schemaVersion: 1 as const, ...composition, task, scope: renderWorkScope(scope.paths), acceptance }, base = agent ? { ...plain, persona: agent.persona, skills: [...agent.skills] } : plain;
+  if (agent && nativePromptCompositionSchema.safeParse(plain).success && !nativePromptCompositionSchema.safeParse(base).success) throw new NativeCodingProfileError('NATIVE_CODING_AGENT_OVERFLOW');
   const admitted = context.length ? { ...base, context: [...(composition?.context ?? []), ...context] } : base;
   if (context.length && nativePromptCompositionSchema.safeParse(base).success && !nativePromptCompositionSchema.safeParse(admitted).success) throw new NativeCodingProfileError('NATIVE_CODING_CONTEXT_OVERFLOW');
   return compileNativeCodingDockerProfile(docker, { ...invocation, schemaVersion: 4, ...(turns === undefined ? {} : { maxTurns: turns }),
@@ -87,10 +91,11 @@ export function compileNativeCodingWorkInput(template: ExecutionProfileDefinitio
 }
 
 /** Registry code for a refused compilation: exact-model and turn-limit refusals stay typed; anything else is an invalid profile. */
-export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'WORKER_INSTRUCTIONS_TOO_LARGE' | 'EXECUTION_PROFILE_INVALID' {
+export function nativeCodingRefusalCode(error: unknown): 'WORKER_MODEL_ALIAS_REFUSED' | 'WORKER_EFFORT_UNSUPPORTED' | 'WORKER_MODEL_UNASSIGNED' | 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED' | 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' | 'WORKER_INSTRUCTIONS_TOO_LARGE' | 'AGENT_PROMPT_TOO_LARGE' | 'EXECUTION_PROFILE_INVALID' {
   if (!(error instanceof NativeCodingProfileError)) return 'EXECUTION_PROFILE_INVALID';
   if (error.code === 'NATIVE_CODING_CONTEXT_OVERFLOW') return 'WORKER_INSTRUCTIONS_TOO_LARGE';
-  return (error.code === 'WORKER_MODEL_ALIAS_REFUSED' || error.code === 'WORKER_EFFORT_UNSUPPORTED') ? error.code : error.code === 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' ? 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'
+  if (error.code === 'NATIVE_CODING_AGENT_OVERFLOW') return 'AGENT_PROMPT_TOO_LARGE';
+  return (error.code === 'WORKER_MODEL_ALIAS_REFUSED' || error.code === 'WORKER_EFFORT_UNSUPPORTED' || error.code === 'WORKER_MODEL_UNASSIGNED') ? error.code : error.code === 'NATIVE_CODING_TURN_LIMIT_UNSUPPORTED' ? 'WORK_INPUT_TURN_LIMIT_UNSUPPORTED'
     : error.code === 'NATIVE_CODING_TURN_LIMIT_EXCEEDS_TEMPLATE' ? 'WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE' : 'EXECUTION_PROFILE_INVALID';
 }
 

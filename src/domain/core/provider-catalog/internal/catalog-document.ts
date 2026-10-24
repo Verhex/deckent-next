@@ -62,6 +62,10 @@ export function reportedNameConflict(channel: CatalogChannel, models: readonly C
   }
   return !channelReportedNamesSchema.safeParse([...seen]).success;
 }
+/** M4 connect terms belong to an HTTP API channel's models only (a CLI or local channel never carries an adapter tariff or route). */
+export function connectTermsMisplaced(channel: CatalogChannel, models: readonly CatalogModel[]): boolean {
+  return channel.kind !== 'http-api' && models.some(model => 'connect' in model && model.connect !== undefined);
+}
 /**
  * Catalog-derived model evidence a FROZEN worker pin may carry (owner K1/K2 2026-10-22), stamped at admission from the channel's catalog rows
  * and present only when the catalog records it, so pins without it keep their exact bytes. `reportedNames`: the session-start names of the
@@ -105,6 +109,7 @@ function channelIssues(catalog: ProviderCatalogDocument): ValidationIssue[] {
       if (exact.has(alias) || aliases.has(alias)) issue('providers', p, 'aliases', a); aliases.add(alias);
     });
     if (reportedNameConflict(provider.channel, provider.models)) issue('providers', p, 'reportedNames');
+    if (connectTermsMisplaced(provider.channel, provider.models)) issue('providers', p, 'connect');
   });
   if (catalog.schemaVersion === 3) {
     const seen = new Set<string>();

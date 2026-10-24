@@ -8,10 +8,22 @@ import { openAiChatDialectSchema } from '#adapters/core/provider-openai-chat/ind
  * endpoints are versioned data here, not code (ARCHITECTURE literal rule); a kind with `available: false` is listed with its reason only.
  */
 /** The invocation adapters a connection can be bound to (adapter ids, not vendors): Anthropic Messages and OpenAI chat completions. */
-export const PROVIDER_CONNECT_ADAPTERS = ['anthropic-messages-http', 'openai-chat-http'] as const;
+export const PROVIDER_CONNECT_ADAPTERS = ['anthropic-messages-http', 'openai-chat-http', 'native-cli-headless'] as const;
 const SECRET_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/u;
 const secretNameSchema = z.string().regex(SECRET_NAME);
 const header = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/u);
+/** A route path stays on the connection's origin (security review M4): one leading `/`, non-empty segments of unreserved characters that never
+ * start with `.` — so no `//` authority, scheme, `.`/`..` segment, percent-encoding, backslash, query or fragment can move a keyed request. */
+const routePathSchema = z.string().max(128).regex(/^(?:\/[A-Za-z0-9_-][A-Za-z0-9._-]*)+$/u);
+/** One model's Responses wire route (path under the endpoint, documented dialect, source). The registry's shipped rows and (M4) a registered
+ * catalog row's `connect.route` (the model id then comes from the row) are parsed by this one schema. */
+export const providerProtocolRouteSchema = z.object({ modelId: z.string().min(1), path: routePathSchema,
+  dialect: openAiChatDialectSchema.refine(d => d.protocol === 'responses'),
+  source: z.object({ url: z.string().url().startsWith('https://'), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict() }).strict();
+/** One metadata-priced model's verified first-party endpoint tag and token field (shipped rows and, M4, a catalog row's `connect.route`). */
+export const providerMetadataRouteSchema = z.object({ modelId: z.string().min(1), endpointTag: z.string().min(1),
+  tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), sourceUrl: z.string().url().startsWith('https:'),
+  observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict();
 const kindSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/u),
   /** The catalog key of the kind's name (a surface resolves it in the person's language). */
@@ -30,7 +42,10 @@ const kindSchema = z.object({
     .refine(key => (key.secretName === null) === (key.derive !== undefined)).nullable(),
   /** `models connect`: adapter, chat path and seed (seed null: bounded endpoint model discovery or an already declared exact reference).
    * Connect null: the kind stores a key but cannot bind a model. */
-  connect: z.object({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u),
+  connect: z.object({ adapter: z.enum(PROVIDER_CONNECT_ADAPTERS), chatPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).nullable(),
+    /** S3-3 (CLI kinds only): the CLI's event-stream family and a person-only connection (never an AI/MCP actor). S3-5: no preview switch — the
+     * adapter connects only where its isolation realm is usable, on every installation alike. */
+    protocolFamily: z.string().min(1).max(64).optional(), personOnly: z.boolean().default(false),
     seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
     /** Optional provider counter on the same endpoint origin; only Anthropic exposes this connection path here. */
     tokenCountPath: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u).optional(),
@@ -46,17 +61,14 @@ const kindSchema = z.object({
     workspaceList: z.object({ path: z.string().startsWith('/'), pageSize: positiveLimit(), maxPages: positiveLimit(), maxResponseBytes: positiveLimit(),
       requiredError: z.object({ type: z.string().min(1), messagePrefix: z.string().min(1) }).strict() }).strict().optional(),
     /** Per-model wire selection; endpoints and effort choices are sourced registry data, never model-name branches. */
-    protocolRoutes: z.array(z.object({ modelId: z.string().min(1), path: z.string().regex(/^\/[A-Za-z0-9/._-]{1,127}$/u),
-      dialect: openAiChatDialectSchema.refine(d => d.protocol === 'responses'),
-      source: z.object({ url: z.string().url().startsWith('https://'), observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict() }).strict())
+    protocolRoutes: z.array(providerProtocolRouteSchema)
       .min(1).refine(rows => new Set(rows.map(row => row.modelId)).size === rows.length).readonly().optional(),
     /** Verified first-party endpoint tags and token fields for metadata-priced chat; no provider/model guessing in code. */
     metadataPricing: z.object({ maxAgeMs: positiveLimit(), maxResponseBytes: positiveLimit(), timeoutMs: positiveLimit(),
-      routes: z.array(z.object({ modelId: z.string().min(1), endpointTag: z.string().min(1),
-        tokenLimitField: z.enum(['max_tokens', 'max_completion_tokens']), sourceUrl: z.string().url().startsWith('https:'),
-        observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) }).strict()).min(1)
+      routes: z.array(providerMetadataRouteSchema).min(1)
         .refine(routes => new Set(routes.map(route => route.modelId)).size === routes.length).readonly() }).strict().optional() }).strict()
     .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined))
+    .refine(connect => (connect.adapter === 'native-cli-headless') === (connect.chatPath === null) && (connect.chatPath === null) === (connect.protocolFamily !== undefined))
     .refine(connect => connect.tokenCountPath === undefined || connect.adapter === 'anthropic-messages-http')
     .refine(connect => connect.protocolRoutes === undefined || connect.adapter === 'openai-chat-http')
     .refine(connect => connect.cacheDefault === undefined || connect.adapter === 'anthropic-messages-http').nullable().default(null),

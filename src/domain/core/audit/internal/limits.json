@@ -1,0 +1,6 @@
+{
+  "policyTurnRefusedMax": 64,
+  "policyTurnAllowedMax": 256,
+  "followPageMax": 1000,
+  "memoryContextEntriesMax": 32
+}

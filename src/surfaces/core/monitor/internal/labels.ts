@@ -1,7 +1,8 @@
-import { t, type Locale } from '#platform/index.js';
+import { clockText, t, type Locale } from '#platform/index.js';
 import type { ENVIRONMENT_TIMED_OUT_CODE, WorkerPhase } from '#domain/index.js';
 import type { MONITOR_ENVIRONMENT_DETAIL, WorkerProcessState } from '#engine/index.js';
 import type { MonitorDeliveryState, MonitorDeliveryOutlook, MonitorBlockerCode, MonitorInstallStatus, MonitorRunState, MonitorTask, StopCause } from '#engine/index.js';
+import { holdNoteText } from '#surfaces/core/recovery-text/index.js';
 import { phaseLabel } from './transcript.js';
 
 /** Every monitor word comes from the catalogs; the maps keep each key a literal (lint-arch i18n rule). */
@@ -24,13 +25,8 @@ export const forText = (now: number, since: number | null, locale: Locale) => si
 export const expiryText = (now: number, at: number | null, locale: Locale) => at === null ? t('monitor.time.unknown', {}, locale)
   : at > now ? t('monitor.time.expiresIn', { duration: durationText(at - now, locale) }, locale)
     : t('monitor.time.expired', { duration: durationText(now - at, locale) }, locale);
-/** A moment in the machine's local time zone: `2026-10-08 00:30:00+03` (`Z` at UTC, `+0530` for a half-hour zone), so the person reads their own clock and the offset says which. */
-export function clockText(ms: number): string {
-  const date = new Date(ms), pad = (value: number) => String(value).padStart(2, '0');
-  const east = -date.getTimezoneOffset(), minutes = Math.abs(east) % 60;
-  const zone = east === 0 ? 'Z' : `${east < 0 ? '-' : '+'}${pad(Math.floor(Math.abs(east) / 60))}${minutes ? pad(minutes) : ''}`;
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}${zone}`;
-}
+/** One local-clock format for every surface (platform; the subscription quota refusal names the same time). */
+export { clockText };
 
 export function runStateLabel(state: MonitorRunState, locale: Locale): string {
   const labels: Record<MonitorRunState, string> = { parked: t('monitor.state.parked', {}, locale), incomplete: t('monitor.state.incomplete', {}, locale), progressing: t('monitor.state.progressing', {}, locale), waiting: t('monitor.state.waiting', {}, locale),
@@ -94,6 +90,8 @@ export function notAcceptedLabel(reason: NonNullable<MonitorTask['evaluation']['
 const ENVIRONMENT_DETAIL: typeof MONITOR_ENVIRONMENT_DETAIL = 'environment-not-ready:', ENVIRONMENT_TIMED_OUT: typeof ENVIRONMENT_TIMED_OUT_CODE = 'EXECUTION_ENVIRONMENT_TIMED_OUT';
 /** A blocker's detail in words where one is known (a missing patch; PRE-7: an environment park names its requirement); else the recorded detail. */
 export function blockerDetailText(detail: string, locale: Locale): string {
+  // S6R-6: a system safety hold's note (the engine passes it only for a nervous/auditor hold) in its catalog words, never the raw code.
+  if (/^(recovery|nervous):/u.test(detail)) return holdNoteText(detail, 'nervous', locale);
   if (detail === 'patch-missing') return t('monitor.blocker.patchMissing', {}, locale);
   // E1: a timed-out environment check held the Run (progression park with this code): no answer, re-run it; never an installation problem.
   if (detail === ENVIRONMENT_TIMED_OUT) return t('monitor.blocker.environmentTimedOut', {}, locale);
@@ -155,6 +153,13 @@ export function deliveryOutlookDetail(outlook: MonitorDeliveryOutlook, locale: L
   const labels: Record<MonitorDeliveryOutlook, string> = { none: t('monitor.detail.deliveryOutlook.none', {}, locale),
     'patch-not-prepared': t('monitor.detail.deliveryOutlook.patchNotPrepared', {}, locale), 'awaiting-delivery': t('monitor.detail.deliveryOutlook.awaiting', {}, locale) };
   return labels[outlook];
+}
+
+/** S9 (owner L-A): the card lines of an expired quota wait: what happened, the known reset (if any), the choices. Nothing here cancels. */
+export function quotaAskLines(resetsAtMs: readonly (number | null)[], locale: Locale): readonly string[] {
+  const known = resetsAtMs.length > 0 && resetsAtMs.every((reset): reset is number => reset !== null) ? Math.max(...resetsAtMs as number[]) : null;
+  return [t('quotaask.card.title', {}, locale), known === null ? t('quotaask.card.resetUnknown', {}, locale) : t('quotaask.card.resetKnown', { time: clockText(known) }, locale),
+    t('quotaask.card.options', {}, locale)];
 }
 
 export function quotaWaitText(deadline: number, resetKnown: boolean, locale: Locale, retryLimit = false, now = Date.now()): string {

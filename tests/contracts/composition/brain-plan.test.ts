@@ -54,6 +54,8 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
   });
   it('projects the actual scoped template worker model and billing through SDK without any prepared task prompt', async () => {
     const f = await fixture({ subscription: true, template: true, response: '{}' });
+    // Worker models are offered only by a template that lets the Brain pin one (v2); the default v3 (ATAMA-1) offers none, checked below.
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify({ ...f.config, brain_planner: { selected: { id: 'run-proposal', version: 2 } } })); clearConfigCache();
     await expect(planRun(f.project, command, f.options)).rejects.toMatchObject({ code: 'BRAIN_OUTPUT_INVALID' });
     const context = JSON.parse(f.bodies[0]!).messages[1];
     const projection = JSON.parse(context.content).context.context;
@@ -62,6 +64,10 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     expect(projection.workerModels[0]).toMatchObject({ channelId: 'claude-cli-subscription', modelId: 'claude-sonnet-5-5',
       auxiliaryModelIds: [], availableAuxiliaryModelIds: ['claude-sonnet-5-5'], billing: 'subscription' });
     expect(projection).not.toHaveProperty('registry'); expect(projection.scopePaths.state).toBe('not-inspected');
+    await writeFile(join(f.project, '.deckent/config.json'), JSON.stringify(f.config)); clearConfigCache();
+    await expect(planRun(f.project, { ...command, commandId: 'brain-v3' }, f.options)).rejects.toMatchObject({ code: 'BRAIN_OUTPUT_INVALID' });
+    const v3 = JSON.parse(JSON.parse(f.bodies.at(-1)!).messages[1].content).context.context;
+    expect(v3.kinds).toEqual(projection.kinds); expect(v3.workerModels).toEqual([]);
   });
   it('records a masked contribution and charged invocation; replay reads the same pending proposal without POST or Run', async () => {
     const f = await fixture(), input = { ...command, intent: command.intent + ' api_key=sk-fixture-do-not-send' };
@@ -71,7 +77,7 @@ describe.skipIf(process.platform === 'win32')('Brain through the public SDK and 
     expect(first.proposal.status).toBe('pending'); expect(first.run).toBeNull(); expect(f.posts).toBe(1);
     const source = first.proposal.proposal.source;
     expect(source).toMatchObject({ kind: 'model', receipt: { reference: f.reference }, contribution: { schemaVersion: 2, billingAxis: 'metered', activationRevision: 1,
-      template: { version: 2 }, usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } } });
+      template: { version: 4 }, usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 } } });
     expect(f.bodies[0]).not.toContain('sk-fixture-do-not-send'); expect(JSON.stringify(first)).not.toContain('sk-fixture-do-not-send');
     expect(f.bodies[0]).toContain('[REDACTED]');
     expect(await planRun(f.project, input, f.options)).toEqual(first); expect(f.posts).toBe(1);
