@@ -38,11 +38,17 @@ one section; other sections link to it.
   (`terminal.scopeId`) and chat limits, and initializes cancellation settings and an empty, current ledger. On Linux, WSL and
   macOS a fresh installation starts on the encrypted key store. Reuse the same scope id in later commands; for an existing
   installation use its configured scope id.
-- **Upgrading an older installation.** An installation set up before the current first-run policy template (template v13,
-  since alpha.48) upgrades with `deckent init policy --scope <id> --upgrade --preview`, then `--apply --expect <value>` with the
-  exact value the preview printed. The plan only adds rules; conflicting rules you wrote are kept. The value binds the policy
-  revision and the runtime service identity, so a change of either in between is refused and asks for a new preview. If the
-  apply sets `service.identity`, see [Runtime service](#runtime-service) before restarting.
+- **Upgrading an older installation.** A fresh installation gets the current first-run policy template (template v15, since
+  alpha.55) directly. An older one upgrades in one of two ways, depending on how its policy was written:
+  - **Installed from the first-run template:** `deckent policy upgrade --template current --scope <id> --preview`, then
+    `--apply`. This runs as you through the governed policy chain (your card, audit, archive).
+  - **Written by hand:** `deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, then
+    `--apply --expect <value>` with the exact value the preview printed. Without `--person` it changes nothing and names the
+    people of the scope. The value binds the policy revision and the runtime service identity, so a change of either in
+    between is refused and asks for a new preview. If the apply sets `service.identity`, see
+    [Runtime service](#runtime-service) before restarting.
+
+  Either plan only adds rules; conflicting rules you wrote are kept.
 - `deckent init` is the guided setup: it shows the plan and what is still missing, with the exact command for each step;
   `deckent init --yes --scope <id>` installs a fresh first-run policy, sets the language and runs the final check.
 - `deckent init --preview` previews the project instruction file `DECKENT.md` that Deckent's own terminal agent reads, and which
@@ -64,10 +70,12 @@ one section; other sections link to it.
 - **From the command line:** `deckent models connect --scope <id> --connection <kind> --command-id <id> (--model <id> |
   --reference <ref>)` declares a model from the kind's packaged catalog, writes the scope's invocation profile with the key name
   and activates it. The kinds are `anthropic-api`, `openai-api`, `deepseek-api`, `zai-api`, `zai-cn-api`, `openrouter`,
-  `openai-compatible` and `local-openai`. `--command-id` is any unique name you choose; repeating it never connects twice. On a
-  person's terminal, `models connect`, `models activate|deactivate` and `models catalog activate|deactivate` without their long
-  flags ask for the scope, provider or channel and the exact model id (never an alias), read the binding digest and revisions
-  themselves and confirm on a card; the long flag forms are unchanged for AI tools.
+  `openai-compatible` and `local-openai`, plus `claude-cli-subscription` (your own Claude login for Brain planning; only a person
+  connects it, and it needs the bubblewrap sandbox and `deckent models login` first, see
+  [Core layers](#core-layers-memory-agents-model-roles-recovery)). `--command-id` is any unique name you choose; repeating it
+  never connects twice. On a person's terminal, `models connect`, `models activate|deactivate` and `models catalog
+  activate|deactivate` without their long flags ask for the scope, provider or channel and the exact model id (never an alias),
+  read the binding digest and revisions themselves and confirm on a card; the long flag forms are unchanged for AI tools.
 - **Secret names** per connection kind: `DECKENT_ANTHROPIC_KEY`, `DECKENT_OPENAI_KEY`, `DECKENT_DEEPSEEK_KEY`,
   `DECKENT_GLM_KEY`, `DECKENT_GLM_CN_KEY` or `DECKENT_OPENROUTER_KEY` (`/provider` stores under the same name). A local server
   uses the optional `DECKENT_LOCAL_ENDPOINT_KEY`; an OpenAI-compatible endpoint uses a name derived from its host,
@@ -76,16 +84,17 @@ one section; other sections link to it.
   and who may use them: [Secret stores and strict install](#secret-stores-and-strict-install).
 - **Model choice:** `/model` locks a model with its reason (no budget, not connected, key missing, not activated). **This
   session only** pins it for the session; **This session, and make it my default** also writes `terminal.defaultModel` (user
-  layer). The session pin wins, then the default, then a model the project names; the window says which setting chose the
-  model in use.
+  layer). The session pin wins, then a model the project names (`terminal.chat.reference` in the project), then your default,
+  then your own `terminal.chat.reference`; the window says which setting chose the model in use.
 - **Budget window:** 5, 10, 25, 50 or 100 USD, or another whole-dollar amount from 1 to 1000 with the arrow keys, then a confirm
   step; afterwards the first `/provider` row reads **Change budget**. Local loopback models and subscription workers (Claude
   Code, Cursor) run without a budget. `/usage` shows reasoning tokens as *not measured* when the provider did not report them;
   open a budget there to read its spend account (limit, reserved, settled). How money is reserved and settled:
   [Spend settlement](#spend-settlement).
 - **Subscriptions today:** a Claude Code worker runs with your own Claude login; a subscription-backed Brain (the planner
-  behind `/do`) is being prepared and is not available yet; terminal chat with a Claude subscription is not supported for now,
-  so use an Anthropic API key for chat. Sign in with ChatGPT is listed in `/provider` as not available yet.
+  behind `/do`) is available through `claude-cli-subscription` (see
+  [Core layers](#core-layers-memory-agents-model-roles-recovery)); terminal chat with a Claude subscription is still not
+  supported, so use an Anthropic API key for chat. Sign in with ChatGPT is listed in `/provider` as not available yet.
 - **Cursor workers:** register the packaged Cursor subscription catalog with `deckent models catalog register --scope <id>
   --command-id <id> --seed cursor-cli-subscription`, then switch models on with `models catalog activate`. A Cursor attempt
   reports turns, tokens, duration and tool calls and ends with its report JSON; the model it really used is read from its
@@ -128,7 +137,8 @@ one section; other sections link to it.
   [Runtime service](#runtime-service).
 - **Plan card:** the `/do` card's Risk and Undo lines read "not classified by the tool" and "not declared by the tool"; it expires
   after `approvals.requestTtlMs` (10 minutes). After `y`: `Run <run-id> admitted. Follow /tasks or /monitor.` "Admitted" means
-  the Run started; a task's result is accepted later, today on the worker's exit code.
+  the Run started; a task's result is accepted later: on its exit code plus, where declared, the worker's structured report and
+  typed acceptance checks; the content is not independently verified.
 - **Delivery and adoption lines:** `/deliver` is titled "/deliver · tasks awaiting delivery"; it checks the patch against the
   current source and ends with `Delivered: commit <commit> → refs/deckent/deliveries/<digest>`. Adoption asks
   `Adopt commit <commit> into a branch? This moves the branch and needs its own y.` and ends with
@@ -381,9 +391,9 @@ higher than your Deckent budget; Deckent cannot see either setting.
   text only; Enter/↑ older, ↓ newer, Esc closes; the draft is untouched), and Ctrl+Up/Ctrl+Down jump to your previous/next
   message (Ctrl+R stays input-history search). `terminal.viewportRows` (default 2000) bounds how far the view scrolls back.
 - **Exit and selection.** On exit the conversation is written to the normal screen, so it stays in your terminal's scrollback;
-  `/clear` empties the view and that scrollback. The full window reports the mouse wheel only while it is shown (clicks are
-  ignored and never answer a card); select text with your terminal's modifier as in Claude Code — Shift in most terminals,
-  Option in iTerm2, Fn in Terminal.app.
+  `/clear` empties the view and that scrollback. The full window takes the mouse only while it is shown: the wheel scrolls, a
+  left drag selects conversation text and copies it on release (OSC 52); clicks never answer a card. Your terminal's modifier
+  (Shift in most terminals; Option in iTerm2; Fn in Terminal.app) still gives native selection.
 - **Slash-command windows and focus.** Slash-command windows and cards open right above the input bar, take at most half the
   screen and scroll inside (arrows, PageUp/PageDown and Home/End, with a visible row range); they shrink the conversation area
   and never move the bar. A window opened by your command or selection takes focus immediately; Escape closes it back to input.
@@ -421,7 +431,8 @@ it (Ctrl/Alt chords, pasted or coalesced keys never do; `n`, Enter, Esc and Ctrl
 or a default sentence as its note. The control is the CLI's own `run hold|resume|close` command against the shown revision;
 policy (`run cancel` for hold and close, `run reserve` for resume) and the Run's state decide, and a refusal is shown as the
 typed reason above the list. The result line names the Run's new state and the command id. Hold stops new reservations; work
-already running continues. Answering a task's question and accepting or rejecting a task are separate decisions, not keys here.
+already running continues. `a` opens the answer card of a task that asks a question (needs input): Tab writes your answer and
+only a single typed `y` sends it. Accepting or rejecting a task is a separate decision, not a key here.
 
 ### Task and Run commands
 
@@ -508,9 +519,13 @@ already running continues. Answering a task's question and accepting or rejectin
 
 ## Core layers: memory, agents, model roles, recovery
 
-alpha.55 adds these commands. Every core layer starts off; its switch is protected configuration that only a person writes, and the
-new identities get their rights from policy template v15 (`deckent policy upgrade --template current --scope <id> --preview`, then
-`--apply`). Behaviour and bounds: [core layers](modules/core-layers.md).
+alpha.55 adds these commands. Every switched core layer (memory, Nervous, recovery, agent statistics) starts off; its switch is
+protected configuration that only a person writes. The headless Brain, model roles and the agent catalog commands have no switch. A
+`shadow` mode applies nothing, but memory-verification and recovery shadow still call their model (data goes to that provider and
+the call is spent). The new identities get their rights from policy template v15: a policy installed from the first-run template
+upgrades with `deckent policy upgrade --template current --scope <id> --preview`, then `--apply`; a hand-written policy with
+`deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, then `--apply` (see
+[First-run setup](#first-run-setup)). Behaviour and bounds: [core layers](modules/core-layers.md).
 
 - **Model roles.** `deckent models roles [show]` lists every catalog model the scope sees with its maker, tier, roles and state; a
   model without a row is pending and no role may use it. `deckent models roles set --channel <id> --model <exact id> --tier
@@ -530,17 +545,24 @@ new identities get their rights from policy template v15 (`deckent policy upgrad
   `standing reset --work-class <id>` and `define|define-skill --from-suggestion <id> --id <new id>` are cards on your own terminal (the
   draft is rendered at card time from what you may read). MCP `list_agent_suggestions` and `inspect_agent_suggestion` are read-only;
   the signed write tools (`define_agent`, `define_skill`, `import_skill`, `change_agent_standing`, `dismiss_agent_suggestion`) work only
-  for an AI principal with its own active signer key and a scoped grant.
+  for an AI principal with its own active signer key and a scoped grant. A suggestion that is closed, expired or whose producer key
+  was revoked is refused with `CATALOG_SUGGESTION_STALE`.
 - **Signer keys.** `deckent agents signers` lists keys; `enrol-signer --principal <issuer:subject> --label <text>` creates a host-kept
   action key for one AI or system principal, `add-signer --input <file>` registers an external public key, `revoke-signer <key-id>`
   stops its new, pending and replayed actions at once, `repair-signers` repairs a broken revocation log and `import-skill --input <file>`
   imports a pinned skill signed by an import key of the scope. All are cards on your own terminal.
-- **Subscription Brain.** `deckent models connect claude-cli-subscription … [--executable <abs path>] [--config-dir <abs dir>]
-  [--delegate none|ai|system|ai,system]` connects your own Claude login (default `~/.claude`) for Brain planning; it is refused without a
-  usable bubblewrap sandbox. `--delegate` is your consent for AI or MCP planning and for background roles (recovery decision, memory
-  evaluator); absent keeps your earlier choice. `deckent doctor` shows a Brain login row per connection.
+- **Subscription Brain.** `deckent models login --connection claude-cli-subscription [--sso]` first signs in the Brain's own login
+  (the Claude CLI's own sign-in, at your terminal); then `deckent models connect --scope <id> --connection claude-cli-subscription
+  --command-id <id> --model <id> [--executable <abs path>] [--config-dir <abs dir>] [--delegate none|ai|system|ai,system]` connects
+  it for Brain planning. The login is Deckent's own (`headless/logins` under the global state root, shown by `deckent paths`); your
+  `~/.claude` is not used unless you pass `--config-dir`. It is refused without a usable bubblewrap sandbox. `--delegate` is your
+  consent for AI or MCP planning and for background roles (recovery decision, memory evaluator); absent keeps your earlier choice.
+  `deckent doctor` shows a Brain login row per connection. While the CLI's own refresh lock exists or another Brain call holds the
+  login, a call waits up to the registry bound and is then refused with `HEADLESS_LOGIN_BUSY`; a leftover lock from a crashed Claude
+  session keeps refusing until you remove it.
 - **Quota question.** A worker Run whose quota wait ended asks you: `deckent run resume --quota wait` keeps waiting,
   `deckent run resume --quota next-candidate` uses the next candidate of the WorkClass list; closing the Run stays a separate choice.
+  Keeping the wait is offered at most `runRuntime.quotaRecovery.maxRewaits` (3) times, then `RUN_QUOTA_WAIT_LIMIT`.
 - **Recovery.** `deckent doctor` (row `work.recovery`) and the monitor show the Nervous and recovery modes and whether the owner's grant
   `recovery-action`/`apply` `continue-new-attempt` exists (`deckent policy grants`); without the grant every lost-worker case goes to a
   person. `deckent run inspect` names the Run's frozen recovery mode and shows hold reasons in words.
@@ -650,8 +672,9 @@ keeps a newest-first `# version …` comment history that must match the recipe 
 `/opt/deckent-worker/Dockerfile`. Each version maps to one immutable imageId tagged `deckent/worker:<version>` with OCI labels; a
 version whose tag already names another image is refused. To update: add a new history line, bump
 `imageVersion`/`previousVersion`, rebuild, then reference the receipt's `imageId` in a new execution profile revision. Keep old
-images, tags and archived receipts (`worker-images/archive/`) for active Runs and rollback; the product binds by `imageId` only
-and never pulls, tags or deletes images.
+images, tags and archived receipts (`worker-images/archive/`) for active Runs and rollback. Execution binds by `imageId` only and
+never pulls or deletes images; the image build of `deckent init` and `toolchains update` (and `npm run worker:image`) tags the image
+it builds.
 
 ### Native coding profiles
 

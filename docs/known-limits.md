@@ -207,10 +207,11 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **A remote model without a verified published price is locked.** Zhipu GLM China stays locked because its prices are in
   CNY. DeepSeek settles at the published peak price, labelled an upper bound. *Workaround:* use a priced model or a local
   one.
-- **A model server on another machine cannot be connected yet.** Plain `http` is accepted only on this machine
-  (`127.0.0.1` or `[::1]`), and a remote OpenAI-compatible server needs a published price row; today those exist only for
-  the OpenAI, DeepSeek and Z.ai APIs, and there is no way to declare your own price. *Impact:* a company model server on
-  your network cannot be used. *Workaround:* run the model server on this machine.
+- **A model server on another machine needs a registered price.** Plain `http` is accepted only on this machine
+  (`127.0.0.1` or `[::1]`). A remote HTTPS OpenAI-compatible server connects when a published price row or a registered
+  catalog row with `connect.tariff` covers that model; without usable terms it is refused (`MODEL_CONNECT_PRICE_REQUIRED` or
+  `MODEL_CONNECT_TARIFF_UNVERIFIED`), never priced by guess. *Workaround:* register a catalog row with its price, or run the
+  model server on this machine.
 - **A Codex worker's model is only client-reported, and a Cursor worker's model is checked by name only.** Only Claude Code reports
   per-model usage (`verified`). Codex writes the model it resolved into its own session log inside the container; Deckent reads the
   first turn's model from that log (bounded, no links followed; only the model and the Codex version leave the container) and records
@@ -242,9 +243,10 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   OpenRouter credit limit. *Workaround:* check both yourself before the first paid call.
 - **MCP trust from before alpha.48 is asked again once.** Trust for project and local MCP servers moved out of the project
   folder into the Deckent global root, so a repository can no longer ship it. A server trusted before alpha.48 waits for its
-  card (`mcp list` reason `trust-moved`); `deckent mcp approve <name> --yes` refuses it with `MCP_TRUST_NEEDS_CARD`. The old
-  `integrations/mcp-trust.json` in the data folder is left in place and never read as trust. *Workaround:* answer the card on
-  first use in the terminal, or run `deckent mcp approve <name>` in a terminal; then delete the old file if you like.
+  card (`mcp list` reason `trust-moved`); `deckent mcp approve <name>` on a terminal shows it (`--yes` does not skip it), and
+  off a terminal it is refused with `MCP_APPROVAL_NEEDS_TERMINAL`. The old `integrations/mcp-trust.json` in the data folder is
+  left in place and never read as trust. *Workaround:* answer the card on first use in the terminal, or run `deckent mcp approve
+  <name>` in a terminal; then delete the old file if you like.
 - **A project MCP file reads only a few environment variables.** `${VAR}` in a project `.deckent/mcp.json` reads only `HOME`,
   `USER`, `LOGNAME`, `LANG`, `LC_ALL`, `TZ` and `TMPDIR`; any other name reads as its written default or empty, and a value
   that carries a credential refuses the server. Known installation secrets are not yet compared (credential patterns only).
@@ -297,10 +299,11 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   untyped and exploratory checks remain claims and do not block acceptance. *Workaround:* prefer Claude or Codex workers for tasks
   whose completion must be proven.
 - **A coding task is accepted on its exit code.** Its criterion may ask for more (a retained diff, a readback), but the only evaluator
-  available to coding tasks is `process-exit` and no Core work class binds an acceptance profile, so the extra evidence is not
-  checked. Since 1.0.0-alpha.50 the evaluation line says so ("accepted · exit code · content not independently verified") in the
-  monitor, `workers`, `/runs`, `run inspect`, `task inspect` and `report`; counts such as "1/1 accepted" are not qualified. An
-  acceptance profile with a real verification evaluator is beta work.
+  available to coding tasks is `process-exit`; Core work classes carry an acceptance profile (completion, retained artifact) that
+  the planner uses, but no evaluator scores it, so the extra evidence is not checked. Since 1.0.0-alpha.50 the evaluation line
+  says so ("accepted · exit code · content not independently verified") in the monitor, `workers`, `/runs`, `run inspect`, `task
+  inspect` and `report`; counts such as "1/1 accepted" are not qualified. An acceptance profile with a real verification evaluator
+  is beta work.
 - **Deckent checks only the environment requirements a task declares** (since 1.0.0-alpha.50). A task profile or template may declare
   `environment.requirements`; Deckent checks them before the worker starts and parks the Run as "environment not ready: <id>" when one
   is unmet (no worker, no model call; fix it, then resume, which checks again). An undeclared missing tool is reported as a check that
@@ -333,7 +336,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   tool call; lower it, or raise the profile deadline, when the deadline comes first and you want silent workers stopped earlier.
 - **The target queue is in live use but not yet accepted for the beta.** It has run live since 1.0.0-alpha.43 and settled real deliveries. It connects registered Git targets, private
   combined-candidate verification, separate publish/adopt batch cards and a separately confirmed rollback. Runtime protocol
-  v29 and ledger v59 need a rebuilt binary and verified pre-switch ledger backup. Native terminal/socket/crash and N1 load
+  v29 and the current ledger (v70; the queue arrived with ledger v57–v59) need a rebuilt binary and a verified pre-switch ledger
+  backup. Native terminal/socket/crash and N1 load
   acceptance are still separate gates; there is no measured capacity claim. Queue inspection reports last-known state, and
   position counts this authorized scope only. Explicit refresh is currently needed in the delivery window.
 - **Queue verification needs an installed profile and normal Run authority.** The original evaluator criteria and the current
@@ -373,8 +377,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **`deckent do` on the command line does not continue after you approve.** It plans and records the proposal, then you
   repeat the same command with the same `--command-id` after the decision; the id is not printed, so pass your own with
   `--command-id`. In the terminal `/do` continues by itself.
-- **A worker that asks you a question cannot be answered from the terminal yet.** *Workaround:* `deckent run resume --scope <id>
-  --id <run> --command-id <id> --expected-revision <n> --task <id> --answer <text>`.
+- **Answering a worker's question.** In `/runs` press `a` on the Run: Tab writes the answer and a single `y` sends it. On the
+  command line: `deckent run resume --scope <id> --id <run> --command-id <id> --expected-revision <n> --task <id> --answer <text>`.
 - **Autonomous delivery is designed but off.** Every delivery and adoption needs your `y` in a verified terminal.
 - **A held Run keeps its pool slot until you resume.** When a hold is laid over another park (progression failed, environment not
   ready, quota exhausted and the others), progression stops and the active or unresolved task keeps its pool slot until `deckent run
@@ -507,17 +511,24 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **Every core-layer switch starts off, and only a person turns it on.** The switches (`memoryAutomation.extraction|verification|context.mode`,
   `runRuntime.nervous.mode`, `runRuntime.recovery.mode`, `catalogEvolution.mode`) are protected: no AI and no MCP actor may write them.
   The headless Brain has no switch (S3-5 retired its preview key): it works only after the person's own login, connect and consent.
-  A `shadow` mode records what it would do and changes nothing. The new identities get their exact rights only from policy template
-  v15. *Workaround:* apply it with `deckent policy upgrade --template current --scope <id> --preview`, then `--apply`; turn a layer to
-  shadow first, for example `deckent config set memoryAutomation.extraction.mode '"shadow"' --scope <id>`.
+  A `shadow` mode records what it would do and applies nothing; memory-verification and recovery shadow still call their model (data
+  goes to that provider and the call is spent). The new identities get their exact rights only from policy template v15, which a fresh
+  installation gets directly. *Workaround:* a policy installed from the first-run template upgrades with
+  `deckent policy upgrade --template current --scope <id> --preview`, then `--apply`; a hand-written policy upgrades with
+  `deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, then `--apply` (without `--person` it changes
+  nothing and names the people of the scope). Turn a layer to shadow first, for example
+  `deckent config set memoryAutomation.extraction.mode '"shadow"' --scope <id>`.
 - **The numbers are seed values, not measurements.** Nervous rules, recovery bounds (one automatic continuation per lost task, three
   attempts per task), memory bounds and rollout thresholds and the agent-statistics thresholds are marked provisional until N1 measures
-  them. A Nervous rule runs in `live` only after the owner promotes it by its exact id and version.
+  them. Every Nervous seed rule is provisional, and alpha.55 has no command to promote a rule or to grant `recovery-action/apply`, so
+  `live` runs nothing and automatic recovery cannot start yet. Recovery reads only stop steps Nervous really executed, so recovery
+  shadow produces no data while Nervous is in shadow. The promotion card is planned for alpha.56.
 - **Memory fills from one work kind only.** The Core registry lets only the `small` WorkClass (provisional 90-day retention, no personal
   data) produce memory candidates; accepted work of other kinds adds nothing until its retention is declared.
 - **Automatic memory verification needs a second model maker.** The evaluator's model must come from a different maker than every
   model that did the source work, and must hold the `memory-evaluator` role and be active. With only one maker connected nothing is
-  verified automatically and entries stay candidates. When verification is on, the candidate text is sent to that second provider.
+  verified automatically and entries stay candidates. When verification is `shadow` or `on`, the candidate text is sent to that
+  second provider; only `on` verifies or contests.
   Calls, spend and contests per scope per day are capped. *Workaround:* review and verify entries yourself with `deckent memory review`.
 - **Purge does not delete every copy.** `deckent memory purge` removes the entry's text, its search row and its evaluator calls'
   content, and is applied again after a backup restore (reads wait with `MEMORY_PURGE_REPLAY_HELD` until then). It does not delete
@@ -548,8 +559,10 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   command (never for a revision that AI wrote, so an installation with one AI principal cannot use this path). The suggestion rules are
   provisional and automatic narrowing runs only for a calibrated rule with `catalogEvolution.mode` `on`, so nothing narrows today.
   Agent statistics count only failures attributable to the worker or the evaluator, are an association and not a cause, and do not
-  include tokens for CLI workers (effort is time, API cost and quota parks). *Workaround:* `deckent agents suggestions` lists what the
-  aggregator sealed; decide each on its card.
+  include tokens for CLI workers (effort is time, API cost and quota parks). A suggestion whose producer key was revoked is refused
+  with `CATALOG_SUGGESTION_STALE`, also when the revoke lands after the card was shown; a suggestion written in shadow mode cannot be
+  acted on (`CATALOG_SUGGESTION_SHADOW`). *Workaround:* `deckent agents suggestions` lists what the aggregator sealed; decide each on
+  its card.
 - **Signer keys need the host key store.** AI and system catalog writes need a signer key that a person enrolled; on native Windows
   the host key store is not available and these writes are refused. Revoking a key stops its new and pending actions, but promotions it
   already made stay until a person demotes them (owner's choice). Skills can be imported only with an import key a person added; the
@@ -650,7 +663,8 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   that stopped before any effect (up to `targetQueue.requeueMax`, default 2) and re-attempt once on a conflict. `/do` has no
   option for it yet; an AI (MCP) proposer can never carry one (MCP `propose_run` does not accept the field), and an AI-proposed plan cannot get one through your approval yet.
   A re-attempt Run's own tickets are not re-queued. The service reads the intent Runs once per queue lease.
-- **A worker's resource use is measured in bounded local traces only.** There is no cost or quality report per worker yet.
+- **A worker's resource use is measured in bounded local traces only.** `run inspect` shows a per-Run cost report from bounded traces
+  and `deckent agents stats` shows acceptance statistics; neither is a measured quality score.
 - **The ledger is one local SQLite file shared by every process.** Writes are serialized; a write that waits longer than
   `storage.sqlite.busyTimeoutMs` (default 5 seconds) is refused with `ATTEMPT_STORE_BUSY` and nothing is written. *Workaround:*
   retry the command; on a slow or heavily loaded host raise the timeout in `.deckent/config.json`. Opens no longer wait for the write
