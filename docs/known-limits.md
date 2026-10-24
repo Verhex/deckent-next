@@ -464,11 +464,21 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   every rule in the Core seed is still provisional, and recovery only decides cases whose stop step Nervous really ran.
   `deckent run inspect` names the recovery mode the Run froze and what it means. *Workaround:* watch it with `deckent monitor`; the slot
   is freed only by a typed manual decision or by evidence that the worker ended.
-- **A worker cannot write to your business systems, and recovery relies on that.** Workers run with no network and reach only the
-  model provider's gateway; every change to an outside system (ERP, CRM, an HTTP target) is made by a governed operation of a person
-  or an approved agent, never by a worker directly. From alpha.56 each worker's dispatch record proves this, and automatic recovery
-  continues a lost worker only when it does; a lost worker started before alpha.56 has no such proof and goes to a person
-  (`isolation-unproven`). Letting workers act on outside systems themselves is not offered yet.
+- **A worker has no network route of its own, and recovery relies on that.** Each worker container runs with no network; its one way
+  out is the host gateway, which reaches only the hosts of the worker's model provider. Changes to outside systems (ERP, CRM, an HTTP
+  target) are made by governed operations of a person or an approved agent. From alpha.56 each worker's dispatch record declares this,
+  the worker starts only when Docker reports that network mode, and automatic recovery continues a lost worker only with that record;
+  a lost worker started before alpha.56 has no such record and goes to a person (`isolation-unproven`). This covers the network only:
+  a unix socket inside a read-only folder bound into the worker is not checked. *Workaround:* do not bind folders that hold another
+  service's socket. Letting workers act on outside systems themselves is not offered yet.
+- **Recovery is turned on only through your own recovery rules, with a few edges.** From template v16 (alpha.56) you hold each recovery
+  action and each Nervous rule promotion at require-approval, so recovery stays off until you turn a row on with
+  `deckent policy recovery`; it refuses (`RECOVERY_CELL_NOT_OWN`) when your rule comes from a role or a broader or shared rule. The
+  upgrade to v16 runs through `deckent init policy --upgrade` only: `deckent policy upgrade --template current --apply` is refused for
+  it. `--rollback` keeps a row you turned on and reports it as a conflict (turn it off on the card first). A new Nervous rule or rule
+  version needs a new template version and a policy upgrade (open, under review). The card checks the measured exits against the
+  policy revision only, so a measurement sealed between its read and its write is not seen. Lost workers dispatched before the switch
+  to alpha.56 have no isolation record, so their cases go to a person and the shadow measurement starts over from the switch.
 - **The clean-machine rehearsal stopped at the model step.** A fresh clone on 2026-10-15/16 reached install, `doctor`, policy,
   registry and pool. The model connection, `/do`, a worker image build on an empty Docker daemon and the start-up
   toolchain refresh on a clean daemon were not exercised there. *Workaround:* follow the README first-job path and report what differs.

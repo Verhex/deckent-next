@@ -123,9 +123,10 @@ continuation happens before a Nervous rule is live. Bounds (`src/domain/core/rec
 continuation per lost task, three Attempts per task across stall, loss and retry, four recovery actions per Run. An uncertain effect is
 never sent to a model; it goes to a person. Isolation (alpha.56 D2, owner `invariant_now`): every effect intent is principal-produced
 (S6R-1 producer gap: no surface stamps an Attempt producer), which is honest only because a worker has no route to a customer system.
-The dispatch record proves this per Attempt: the Docker profile v3 records an isolation block (`network: none`, egress `none` or
-`provider-gateway` with the catalog provider), and the supervisor starts a container only after the daemon reports that network mode
-(`SUPERVISOR_ISOLATION_MISMATCH` otherwise). A lost Attempt whose record carries no block (written before alpha.56), an unreadable one
+The dispatch record declares this per Attempt: the Docker profile v3 records an isolation block (`network: none`, egress `none` or
+`provider-gateway` with the catalog provider; it must equal the block its options derive), and the proof is the create-time refusal:
+the supervisor starts a container only after the daemon reports that network mode (`SUPERVISOR_ISOLATION_MISMATCH` otherwise). Network
+scope only: unix sockets inside read-only binds are not checked. A lost Attempt whose record carries no block (written before alpha.56), an unreadable one
 or a wider one is held for a person (`isolation-unproven`), never continued. A worker route to customer systems is new owner-admitted
 scope (a governed worker operation route that stamps the Attempt producer); a non-Docker adapter must record the same block when it lands.
 A circuit breaker counted from sealed decisions survives a restart, and a case already

@@ -462,11 +462,21 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yürütmez: Core tohumundaki her kural hâlâ geçicidir ve kurtarma yalnız Nervous'un durdurma adımını gerçekten çalıştırdığı vakalara karar
   verir. `deckent run inspect` Run'ın dondurduğu kurtarma kipini ve anlamını söyler. *Yol:* `deckent monitor` ile izleyin; slot yalnız
   tipli manuel kararla ya da işçinin bittiğine dair kanıtla bırakılır.
-- **Bir işçi iş sistemlerinize yazamaz ve kurtarma buna dayanır.** İşçiler ağsız çalışır ve yalnız model sağlayıcısının geçidine
-  ulaşır; dış bir sistemdeki (ERP, CRM, bir HTTP hedefi) her değişikliği bir kişinin ya da onaylı bir ajanın yönetilen işlemi yapar,
-  hiçbir zaman doğrudan bir işçi. alpha.56'dan itibaren her işçinin gönderim kaydı bunu kanıtlar ve otomatik kurtarma kaybolan bir işçiyi
-  yalnız bu kanıt varsa sürdürür; alpha.56'dan önce başlamış kaybolan bir işçinin böyle bir kanıtı yoktur ve bir kişiye gider
-  (`isolation-unproven`). İşçilerin dış sistemlerde kendilerinin işlem yapması henüz sunulmuyor.
+- **Bir işçinin kendi ağ yolu yoktur ve kurtarma buna dayanır.** Her işçi konteyneri ağsız çalışır; tek çıkışı yalnız işçinin model
+  sağlayıcısının host'larına ulaşan host geçididir. Dış sistemlerdeki (ERP, CRM, bir HTTP hedefi) değişiklikleri bir kişinin ya da
+  onaylı bir ajanın yönetilen işlemleri yapar. alpha.56'dan itibaren her işçinin gönderim kaydı bunu bildirir, işçi yalnız Docker o ağ
+  kipini bildirdiğinde başlar ve otomatik kurtarma kaybolan bir işçiyi yalnız bu kayıtla sürdürür; alpha.56'dan önce başlamış kaybolan
+  bir işçinin böyle bir kaydı yoktur ve bir kişiye gider (`isolation-unproven`). Bu yalnız ağı kapsar: işçiye salt okunur bağlanan bir
+  klasördeki unix soketi denetlenmez. *Yol:* başka bir servisin soketini tutan klasörleri bağlamayın. İşçilerin dış sistemlerde
+  kendilerinin işlem yapması henüz sunulmuyor.
+- **Kurtarma yalnız kendi kurtarma kurallarınızla açılır, birkaç sınırla.** Şablon v16 (alpha.56) ile her kurtarma eylemini ve her
+  Nervous kuralı yükseltmesini onay gerektiren olarak tutarsınız; bu yüzden kurtarma, `deckent policy recovery` ile bir satırı açana
+  kadar kapalı kalır; kuralınız bir rolden ya da daha geniş veya paylaşılan bir kuraldan geliyorsa kart reddeder
+  (`RECOVERY_CELL_NOT_OWN`). v16'ya yükseltme yalnız `deckent init policy --upgrade` ile yapılır: `deckent policy upgrade --template
+  current --apply` bunun için reddedilir. `--rollback` açtığınız bir satırı korur ve çakışma olarak bildirir (önce kartta kapatın).
+  Yeni bir Nervous kuralı ya da kural sürümü yeni bir şablon sürümü ve politika yükseltmesi ister (açık, inceleniyor). Kart ölçülmüş
+  çıkışları yalnız politika revizyonuna karşı denetler; okuma ile yazma arasında mühürlenen bir ölçüm görülmez. alpha.56'ya geçişten
+  önce gönderilmiş kaybolan işçilerin yalıtım kaydı yoktur; vakaları bir kişiye gider ve gölge ölçümü geçişten itibaren yeniden başlar.
 - **Temiz makine provası model adımında durdu.** 2026-10-15/16'da taze bir klon kurulum, `doctor`, politika, kayıt defteri ve
   havuza ulaştı. Model bağlantısı, `/do`, boş bir Docker daemon'unda işçi imajı derlemesi ve temiz daemon'da başlangıç
   araç zinciri tazelemesi orada denenmedi. *Yol:* README'deki ilk iş yolunu izleyin ve farkı bildirin.
