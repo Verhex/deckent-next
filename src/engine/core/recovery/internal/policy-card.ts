@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RECOVERY_ACTIONS, RECOVERY_ROLLOUT, encodeCommandProjection, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, policySchema, sameMcpCapabilityRule, type PolicyGrant,
+import { POLICY_RECOVERY_CHANGE_KIND, RECOVERY_ACTIONS, RECOVERY_ROLLOUT, encodeCommandProjection, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, policySchema, sameMcpCapabilityRule, type PolicyGrant,
   type Policy, type RecoveryRolloutView, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry, sha256 } from '#platform/index.js';
 import { PolicyAdministrationInspection } from '#engine/core/policy/index.js';
@@ -26,7 +26,8 @@ export type RecoveryPolicyPorts = Readonly<{ rollout: (scopeId: string) => Promi
  * row off is never gated. The broker and the recovery decision read the policy fresh, so a change applies on the next page or decision.
  * alpha.56 D1 (owner 2026-10-24, Jev c1d1afe9): the evaluator decides require-approval before allow, so turning a row on where the person holds
  * the cell at require-approval (template v16) replaces that rule with allow (the I2 raise of a `policy-recovery` change) and turning it off
- * replaces it back; without such a cell the card adds its own allow rule, which the bound admits only where the person already holds allow.
+ * replaces it back. Without such an exact own cell (the person's cell comes from a role, a broader or a shared rule) the card refuses
+ * (`RECOVERY_CELL_NOT_OWN`) and writes nothing: it never adds an allow beside another rule (audit 8328ff4a9: a dormant allow would widen on a later revoke).
  * The measured exits are bound to the write's revision: the view they come from is read on `expectedRevision`, the CAS write commits only on it.
  */
 export class RecoveryPolicyCard {
@@ -77,11 +78,12 @@ export class RecoveryPolicyCard {
       throw ErrorRegistry.createError('RECOVERY_ROLLOUT_CRITERIA_UNMET', { params: { target: target.id, criteria, scope: command.scopeId } });
     }
     const grant = this.grant(command.scopeId, principal, command.kind, command.id), cells = this.cells(policy, grant), ask = cells.find(item => item.effect === 'require-approval');
-    const changes = command.action === 'grant' ? [ask ? { kind: 'grant.replace' as const, grant: { ...ask, effect: 'allow' as const } } : { kind: 'grant.add' as const, grant }]
+    if (command.action === 'grant' && !ask) throw ErrorRegistry.createError('RECOVERY_CELL_NOT_OWN', { params: { target: target.id, scope: command.scopeId } });
+    const changes = command.action === 'grant' ? [{ kind: 'grant.replace' as const, grant: { ...ask!, effect: 'allow' as const } }]
       : cells.filter(item => item.effect === 'allow').map(item => item.id === grant.id ? { kind: 'grant.remove' as const, id: item.id }
         : { kind: 'grant.replace' as const, grant: { ...item, effect: 'require-approval' as const } });
     const change = { schemaVersion: 1 as const, changes };
-    await administerOwnPolicyChange(this.deps, { scopeId: command.scopeId, principal, change, revision: command.expectedRevision, kind: 'policy-recovery',
+    await administerOwnPolicyChange(this.deps, { scopeId: command.scopeId, principal, change, revision: command.expectedRevision, kind: POLICY_RECOVERY_CHANGE_KIND,
       tag: sha256(encodeCommandProjection('recovery-policy-change:1', command)), reason: `${command.action}: ${command.kind} ${command.id}, ${command.scopeId}` });
     return Object.freeze({ status: 'applied' as const, view: await this.inspect({ schemaVersion: 1, scopeId: command.scopeId }, principal) });
   }

@@ -156,9 +156,16 @@ describe('delegation bound (POLICY-ADMIN P1)', () => {
     const own = { ...ra, id: 'mine', effect: 'allow' };
     for (const principals of ['all', [other]]) expect(run(files([{ ...ra, principals }]), person, change({ kind: 'grant.add', grant: own })), JSON.stringify(principals))
       .toMatchObject({ ok: false });
-    // An enterprise assigns the cell through a role bound to exactly this person: it counts (role-derived rules name the bound principal).
+    // Audit 8328ff4a9: only a same-id replace of the actor's own explicit single-cell rule raises. A grant.add beside the actor's own cell, or beside a
+    // cell an enterprise assigns through a role bound to exactly this person, would be a dormant allow (require-approval is decided first): refused.
     const role = { id: 'recovery-operator', permissions: [{ id: 'ra', effect: 'require-approval', actions: ['apply'], resource: { kind: 'recovery-action', ids: ['fence-attempt'] } }] };
-    expect(run(files([], [role], [], [{ id: 'ops', principals: [member], roles: ['recovery-operator'], scopes: ['s1'] }]), person, change({ kind: 'grant.add', grant: own })))
-      .toEqual({ ok: true });
+    const ops = [{ id: 'ops', principals: [member], roles: ['recovery-operator'], scopes: ['s1'] }];
+    expect(run(f, person, change({ kind: 'grant.add', grant: own }))).toMatchObject({ ok: false, reason: 'require-approval' });
+    expect(run(files([], [role], [], ops), person, change({ kind: 'grant.add', grant: own }))).toMatchObject({ ok: false, reason: 'require-approval' });
+    // An explicit cell for `ids: 'all'` or naming the actor and another person is not the actor's own single cell: replacing it never raises.
+    for (const value of [{ ...ra, resource: { kind: 'recovery-action', ids: 'all' } }, { ...ra, principals: [member, other] }])
+      expect(run(files([value]), person, raise(value as typeof ra)), JSON.stringify(value)).toMatchObject({ ok: false, reason: 'require-approval' });
+    // The own exact cell while a role-derived require-approval also meets it: the replace would leave the cell at require-approval (dormant), refused.
+    expect(run(files([ra], [role], [], ops), person, raise(ra))).toMatchObject({ ok: false, reason: 'require-approval' });
   });
 });

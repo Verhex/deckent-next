@@ -48,6 +48,7 @@
   "error.RECOVERY_TARGET_INVALID": "Nothing changed: that recovery action, rule or case is not one this card offers here. Run deckent policy recovery or deckent recovery review to see what you can choose.",
   "error.RECOVERY_ROLLOUT_CRITERIA_UNMET": "Not changed: {target} can be turned on in scope {scope} only after its measured exit criteria ({criteria}) are met.",
   "recovery.next.RECOVERY_ROLLOUT_CRITERIA_UNMET": "Run deckent recovery --scope {scope} to see each number and what moves it.",
+  "error.RECOVERY_CELL_NOT_OWN": "Not changed: {target} in scope {scope} can be turned on here only through your own approval rule for exactly it, and no such rule names only you (a role, a broader or a shared rule decides it). Whoever administers this installation's policy decides it there.",
   "error.RECOVERY_ACTION_NO_EXECUTOR": "Not changed: {action} has no effect in this release, so no standing grant is written for it.",
   "error.RECOVERY_VERDICT_CONFLICT": "Not changed: case {case} already has a different answer from you; one answer per case is kept.",
   "recovery.rollout.summary": "Rollout: rules ready {met}/{rules} · agreement {agreements}/{decided} · {waiting} waiting for your choice.",

@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
 import { bindingsFileSchema, policyBindingSchema, policyFileSchema, policyGrantSchema, policyRoleSchema, policySchema, principalGrants, resolvePolicyBindings, type Policy,
   type PolicyBinding, type PolicyFile, type PolicyGrant } from './schema.js';
+import { sameMcpCapabilityRule } from './mcp-capabilities.js';
+import { policyResources } from './vocabulary.js';
 
 /**
  * Governed policy administration (POLICY-ADMIN P1, lead decision A1 `policy.administer@1`). Pure: a typed, bounded change set over the
@@ -46,6 +48,8 @@ export interface DelegatedRule {
   readonly resource: { readonly kind: string; readonly ids: Selection }; readonly modeEligible?: boolean | undefined;
   /** Who the rule names (a binding's rule: the binding's principals); absent on a probe rule, which never takes the recovery raise. */
   readonly principals?: 'all' | readonly { readonly issuer: string; readonly subject: string }[] | undefined;
+  /** The new side of a same-id `grant.replace` only: the explicit rule it overwrites (the recovery raise reads it). */
+  readonly replaces?: DelegatedRule | undefined;
 }
 type RolePolicyFile = Extract<PolicyFile, { schemaVersion: 2 }>;
 type BindingsFile = z.infer<typeof bindingsFileSchema>;
@@ -106,7 +110,7 @@ export function planPolicyChange(policyInput: unknown, bindingsInput: unknown, c
       const index = at(grants, item.kind === 'grant.remove' ? item.id : item.grant.id);
       touched.push(rule(grants[index]!)); counts.grantsRemoved++; removal = true;
       if (item.kind === 'grant.remove') grants.splice(index, 1);
-      else { grants[index] = item.grant; touched.push(rule(item.grant)); counts.grantsAdded++; }
+      else { touched.push(Object.freeze({ ...rule(item.grant), replaces: rule(grants[index]!) })); grants[index] = item.grant; counts.grantsAdded++; }
     } else if (item.kind === 'binding.add') {
       if (entries.some(value => value.id === item.binding.id)) invalid();
       entries.push(item.binding); touched.push(...derive(item.binding)); counts.bindingsAdded++;
@@ -146,7 +150,7 @@ export const POLICY_RECOVERY_CHANGE_KIND = 'policy-recovery';
  * The resource kinds whose own require-approval cell a person may raise to allow inside a `policy-recovery` change (alpha.56 D1, owner 2026-10-24,
  * Jev c1d1afe9). A versioned security invariant, deliberately NOT derived from the AI floor: `secret` and `run-quota` are person-only too and stay bound.
  */
-export const RECOVERY_RAISE_KINDS: readonly string[] = Object.freeze(['recovery-action', 'nervous-rule']);
+export const RECOVERY_RAISE_KINDS: readonly string[] = Object.freeze([policyResources.recoveryAction.kind, policyResources.nervousRule.kind]);
 export type DelegationOptions = Readonly<{ changeKind?: typeof POLICY_RECOVERY_CHANGE_KIND }>;
 export type DelegationVerdict = { readonly ok: true } | { readonly ok: false; readonly ruleId: string; readonly reason: 'deny' | 'require-approval' | 'no-grant' | 'mode-eligible' };
 const ALL: unique symbol = Symbol('all');
@@ -163,9 +167,11 @@ const meets = (selection: Selection, value: Cell) => selection === 'all' || valu
  * there → `require-approval`; `modeEligible` only where the actor's cell is allow or every meeting require-approval is eligible.
  * Removals pass the same bound (a principal revokes only what it could grant; its own deny can never be lifted this way). The owner
  * root is not special: its role is data and a restriction binds it too. Cost is bounded (`POLICY_CHANGE_TOO_LARGE`).
- * The one raise (alpha.56 D1): inside a `policy-recovery` change a person (never an AI; the actor's assurance must say os-user) may set to allow a
- * cell they hold at require-approval, only for a rule naming exactly themselves, of a `RECOVERY_RAISE_KINDS` kind, not mode-eligible; a deny or
- * restriction meeting the cell still refuses, and a cell they hold neither way stays `no-grant`.
+ * The one raise (alpha.56 D1, audit 8328ff4a9): inside a `policy-recovery` change a person (never an AI; the actor's assurance must say os-user) may
+ * set to allow only the new side of a same-id `grant.replace` whose old side is their own explicit require-approval rule — principals exactly
+ * [actor], one action × id × scope (never `all`), a `RECOVERY_RAISE_KINDS` kind, not mode-eligible — differing from it only in effect, and only
+ * where that rule is the one require-approval meeting the cell (so the result is allow, never a dormant allow). A `grant.add`, a role-derived,
+ * broad or multi-person cell never raises; a deny or restriction meeting the cell still refuses, and a cell held neither way stays `no-grant`.
  */
 export function delegationWithin(input: Policy, actor: { readonly issuer: string; readonly subject: string; readonly assurance?: string }, touched: readonly DelegatedRule[],
   options: DelegationOptions = {}): DelegationVerdict {
@@ -179,9 +185,18 @@ export function delegationWithin(input: Policy, actor: { readonly issuer: string
   const denies = [...grants.filter(value => value.effect === 'deny'), ...policy.restrictions.filter(own)];
   const asks = grants.filter(value => value.effect === 'require-approval'), allows = grants.filter(value => value.effect === 'allow');
   const raising = options.changeKind === POLICY_RECOVERY_CHANGE_KIND && !isAiPrincipal(actor);
-  const raisable = (value: DelegatedRule) => raising && RECOVERY_RAISE_KINDS.includes(value.resource.kind) && value.modeEligible !== true && value.principals !== undefined && value.principals !== 'all'
-    && value.principals.length === 1 && value.principals[0]!.issuer === actor.issuer && value.principals[0]!.subject === actor.subject;
+  const single = (selection: Selection) => selection !== 'all' && selection.length === 1;
+  // The explicit snapshot rule a raise overwrites (identity-equal to its entry in `asks`), or undefined: no raise.
+  const raised = (value: DelegatedRule) => {
+    const old = value.replaces, principals = value.principals;
+    if (!raising || value.effect !== 'allow' || old?.effect !== 'require-approval' || !RECOVERY_RAISE_KINDS.includes(value.resource.kind) || value.modeEligible === true
+      || !single(value.actions) || !single(value.resource.ids) || !single(value.scopes) || principals === undefined || principals === 'all' || principals.length !== 1
+      || principals[0]!.issuer !== actor.issuer || principals[0]!.subject !== actor.subject) return undefined;
+    return policy.grants.find(item => item.id === value.id && item.effect === 'require-approval' && sameMcpCapabilityRule(item, old as PolicyGrant)
+      && sameMcpCapabilityRule({ ...item, effect: 'allow' }, value as PolicyGrant));
+  };
   for (const value of touched) {
+    const raise = raised(value);
     for (const action of cells(value.actions)) for (const id of cells(value.resource.ids)) for (const scope of cells(value.scopes)) {
       const hit = (other: { readonly actions: Selection; readonly scopes: Selection; readonly resource: { readonly kind: string; readonly ids: Selection } },
         test: (selection: Selection, cell: Cell) => boolean) => kindCovers(other.resource.kind, value.resource.kind) && test(other.actions, action)
@@ -191,8 +206,7 @@ export function delegationWithin(input: Policy, actor: { readonly issuer: string
       if (![...asks, ...allows].some(other => hit(other, covers))) return refuse('no-grant');
       const asked = asks.filter(other => hit(other, meets));
       const allowed = asked.length === 0 && allows.some(other => hit(other, covers));
-      // Only a require-approval cell naming the actor counts (explicit, or role-derived through a binding naming them); never `principals: 'all'`.
-      if (value.effect === 'allow' && !allowed && !(raisable(value) && asks.some(other => other.principals !== 'all' && hit(other, covers)))) return refuse('require-approval');
+      if (value.effect === 'allow' && !allowed && !(raise && asked.length === 1 && asked[0] === raise)) return refuse('require-approval');
       if (value.modeEligible === true && !allowed && !asked.every(other => other.modeEligible === true)) return refuse('mode-eligible');
     }
   }
