@@ -2107,9 +2107,10 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 
 - `src/domain/core/approval/index.ts`: `d9920351b89a86cc6d62984cbeb7bbd8c28fbfd2a31935f08c9aa05db00ebb4b`
 - `src/domain/core/approval/internal/contract.ts`: `10a07d273d83e76858c4ef935d84f8db0ac52ccd5007ba1254ebf3b77fc023fa`
-- `src/domain/core/attempt/index.ts`: `5d7a9eb3bcb366348171c1e93d10d188ff7b96e5849395dd42b890fbc71a02eb`
+- `src/domain/core/attempt/index.ts`: `a2234fa31bde2aa77747a7ffe545103827e75935bcf3762be241cdd0928873a9`
 - `src/domain/core/attempt/internal/contract.ts`: `00d46777aaf15f0c8228fbf3e671d475c493ea7e409139bddc20689d07f4009a`
 - `src/domain/core/attempt/internal/dispatch-loss.ts`: `d5bf342eba664f6d2055abaf0c1756366c13d5fc32410f84afacfb233b0ab51f`
+- `src/domain/core/attempt/internal/isolation.ts`: `11812568f0f5844ec4603154426231681437306bdfc53284ab905f4e3618570c`
 - `src/domain/core/attempt/internal/reduce.ts`: `c658466002047df6178eabff46ae069c9dbee9d075a4fa95181ba191a754d98c`
 - `src/domain/core/audit/index.ts`: `b9a555c83888810bac4f2a75c7c06397ee878cc50175645a91656a61a67ef436`
 - `src/domain/core/audit/internal/authority-decision.ts`: `88449bd08c715a38ec119cddc348b2e3d7efd8fc644a29551193488ad8d4cc2b`
@@ -2123,7 +2124,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/effect/internal/contract.ts`: `70ea58374330703e678ace49e21c9ff1a5f7c0b3c5f4e8a4476767a6adc6607e`
 - `src/domain/core/effect/internal/queue.ts`: `5bc5b04b4e6f9964af821800aa70625447499c120b89df8a9f242bbc1dff9f60`
 - `src/domain/core/policy/index.ts`: `e81fc0b92284a587bcfa82b17c8f8f69679b2ebdb1963854867d88c9153175db`
-- `src/domain/core/policy/internal/administer.ts`: `4f5ea583a2008075e4ddd428ea5cbbb30f237432992aa396de02b6b8ef04a3f8`
+- `src/domain/core/policy/internal/administer.ts`: `2c65982c2b71d7ac6aa1b332ec1d5ba71d4892d7cb8ed6cc344983761018c939`
 - `src/domain/core/policy/internal/administration.ts`: `c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b`
 - `src/domain/core/policy/internal/ai-floor.ts`: `3998d5bd342377063d6fc3f1c6f377358e497cdad41e7cc2ad250f03d9c7b289`
 - `src/domain/core/policy/internal/decision-step.ts`: `70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe`
@@ -2161,9 +2162,9 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/provider-catalog/internal/native-cli.ts`: `85aef8c602554c57efba778d73b425c4d551b87258ada1b19e79a45332b5db67`
 - `src/domain/core/provider-catalog/internal/worker-effort.ts`: `4d1c44394c8721605d9c217421b005211f980108b30c4061d008ff376fc40fcc`
 - `src/domain/core/recovery/index.ts`: `8dba4782e7fe0c7cd7ba1b22e3a08a4dfa6ca40391fa419bfeefe9e4db350fa7`
-- `src/domain/core/recovery/internal/case.ts`: `5749304a50bf7a5641cbf5279405d927cff9ea7904c58fbfe5a2d6dd3c7ef06e`
+- `src/domain/core/recovery/internal/case.ts`: `e6e6beef093df32038a3ae76bacbaa8f1c21dfc4b5f623f353344efcde03d220`
 - `src/domain/core/recovery/internal/decision.ts`: `e0d13d08ea12d7014c2c51d9f5c4646decdc68ab33f72434b4e07d0b2c6eb8b8`
-- `src/domain/core/recovery/internal/gate.ts`: `2985af1a8fe42fd3dd8494030a11c16f9772fc5c4d63bf08bad4236a9f875963`
+- `src/domain/core/recovery/internal/gate.ts`: `dcfc252c245f9f65c7767f6eeaba141e450fec659b80ef531e1728ed58e7ef4f`
 - `src/domain/core/recovery/internal/hold-note.ts`: `e6b900015b11ff80ecbfe0ef8afd696fdbbbdf27a902939bc8dc5d79b22e56ce`
 - `src/domain/core/recovery/internal/policy.ts`: `f10fa4120cd637cf7fce8e2c3d54829ea2ab564c52648f4ca2b1fec74c36bbb6`
 - `src/domain/core/recovery/internal/rollout.ts`: `18223f08e4d34c89047076c0021b157e6c22700c54d63ea7e38f345e8b45f80b`
