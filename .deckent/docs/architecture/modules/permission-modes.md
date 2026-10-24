@@ -173,7 +173,8 @@ the project's git-tracked files is shown and audited — never blocked, never a 
   (ctime); a rename reads as a deletion. Submodule entries and files absent before the call are not measured. git is looked up on the
   fixed PATH `/usr/bin:/bin`.
 - **v19.** The typed `tool.finished.trackedChanges` (hook: `agentToolOutcomeSchema`, turn event schema on a v19 envelope, loop,
-  shell outcome, terminal-chat delta, `ToolDelta`, text reading kept as fallback) waits for the v19 bundle (Jev 34a8df5c).
+  shell outcome, terminal-chat delta, `ToolDelta`, text reading kept as fallback) waits for a later protocol step (Jev 34a8df5c; not
+  added through protocol v29, so the text reading remains the path).
 
 **Open view (OPEN-SANDBOX, owner MODES-3 checkpoint 4; live findings 3/4 of session 1d428e9f).** A full-access call in a realm that
 `opens` (bubblewrap) runs with `--unshare-all --share-net`, `--bind / /` then a fresh `/proc` and minimal `/dev` (PID namespace,
@@ -197,7 +198,7 @@ in-project ancestors right after the project bind, before every protective mount
 bypass the write set) or read-only project (EROFS) view pins nothing. An owner-approved call keeps configuration read-only (W3, owner 2026-10-09). Fail closed: an open request without the hard floor, a root that holds the project,
 HOME or `/`, a read-only project. A realm that cannot open (`openShellRealm`) refuses full-access shell calls with `SHELL_SANDBOX_UNAVAILABLE`, under every realm selection, including explicit host mode (W3, owner 2026-10-09). MCP server views are unchanged (`longLivedWritePosture`). Cost (this
 machine, empty project, wall clock with view resolution): open ≈ 55–63 ms, closed ≈ 11–13 ms. Open limits: HOME credential masking is by
-pattern and depth-bounded (deeper or hard-linked aliases outside the masks may remain open; a matched symlink credential carrier refuses the open view); the shared `credential-paths.json` registry now masks gh, Docker, kube, Codex, Git credentials and common cloud CLI directories; arbitrary custom locations, `~/.gnupg` and renamed SSH keys still require separate isolation; other projects' state and a
+pattern and depth-bounded (deeper or hard-linked aliases outside the masks may remain open; a matched symlink credential carrier refuses the open view); the shared `credential-paths.json` registry now masks gh, Docker, kube, Codex, Git credentials, GnuPG and desktop keyrings and common cloud CLI directories; arbitrary custom locations and renamed SSH keys still require separate isolation; other projects' state and a
 missing `~/.deckent` under an override are not sealed; minimal `/dev`; Landlock has no open view; the view seals Deckent's state, not its
 code (the service's node under HOME and a dogfood checkout's `dist/` are writable, so a full-access shell can change what the next restart
 runs); non-product FILES at the `.deckent` root and NEW subdirectories stay read-only (a commit adding one fails to check out there).
@@ -260,7 +261,8 @@ Internal session patterns are distinct from ordinary standing keys, scope/princi
 `standingPattern` refuses the new cell as `cell-not-standing`, and persisted grants never lower it. **Public session answers remain
 unwired:** the stream has no standing offer and terminal decisions return `saved: false, reason: protocol`; the production turn does
 not supply session memory. Adding those fields is outside this lane's pre-approved contracts. This is an implementation limit,
-not S1 closure. Owner D4 (2026-10-03) admits DEV-RELEASE-SOURCE-ORIGIN option D: retain the separate clone, declare the
+not S1 closure. (Since TERMINAL-UX G6: the service turn offers and remembers session answers for `edit-self-source`; the line-mode
+ledger path still answers `saved: false, reason: protocol`.) Owner D4 (2026-10-03) admits DEV-RELEASE-SOURCE-ORIGIN option D: retain the separate clone, declare the
 origin checkout common directory through `DECKENT_BUILD_SOURCE_COMMON_DIR` (absolute existing readable directory, canonicalized),
 and record optional `sourceCommonDirOrigin: declared|derived` in identity v1. Invalid declarations fail the build without fallback.
 Stage checks origin common directory and selected commit in the built and unpacked identity before installing; mismatches,
@@ -285,7 +287,8 @@ for edits too (`askEdits`) or where the mode does not lower. CLI:
 `deckent policy grants --mine` / `deckent policy revoke`. No version changed (policy v2, bindings v1/v2, ledger v42, protocol v16, layout 4);
 the vocabulary gains `agent-tool-call`. Not yet: the card scopes + decision field on protocol v17 (introduced by MODES-3; MCP has no approval decision tool), the
 service wiring from the turn's `requestApproval` to `offer`/`remember`/`persist`, the installation root (P4; a v1 live policy cannot offer
-"always"), `/policy`, listing this session's memory.
+"always"), `/policy`, listing this session's memory. (Since wired: the service turn's session offer and remember, see above;
+`/policy` and the policy administration surface, see [approval and delivery](../approval-and-delivery.md#politika-p0-2026-10-13-landed-in-alpha35).)
 
 **Shift+Tab cycle and in-session full access (TERMINAL-UX T2 T-MODE-CYCLE, owner 2026-10-07, corrected; supersedes "launched only" and the
 surface refusal of `/mode full-access` above; `wave/tui-2`; released with alpha.10, PR #37).** Shift+Tab (Alt+M where the console

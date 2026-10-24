@@ -67,15 +67,16 @@ the CLI, `deckent-mcp`), every family by purpose group with its live actions and
 section; developer families have their own heading and `--help --all` is retired (still tolerated, same
 output, never initializes). Details and registered children are exposed by `deckent <command> --help [--lang en|tr]`.
 Bare behaviour is catalog metadata (`bare`): a reviewed read action runs once its required flags are present
-(`audit`→`verify`, `pool`/`policy`→`status`, `identity`→`profiles`, `mcp`/`secret`→`list`, `runtime`→`describe`,
-`workers --scope <id>`→`list`); `handler` families act on their own; any other family lists its actions and names
+(`audit`→`verify`, `pool`/`policy`→`status`, `mcp`/`secret`→`list`, `runtime`→`describe`,
+`workers --scope <id>`→`list`); `handler` families act on their own (`identity` shows the current selection, people and
+bindings); any other family lists its actions and names
 the missing argument as the typed `CLI_ARGUMENT_MISSING` (exit 2). A default never mutates.
 A scope picker on a terminal in a folder with no installation (no product directory or policy file, detected once by the
 `scopes` choice source) answers the typed `CLI_INSTALLATION_MISSING` (exit 2) naming only `deckent init`; with an installation
 but no scope to pick it stays `TERMINAL_SCOPE_REQUIRED`, and off a terminal `CLI_SCOPE_REQUIRED` is unchanged. Handler action words and catalog
 actions are kept equal by a source test in both directions; the usage echo (`cliUsage`) and the composition signal list
-(`SIGNAL_COMMANDS`) read or are pinned to the same catalog; `planned` entries (`run list`, `policy scopes`) are reserved names,
-neither registered nor shown, until their slice implements them.
+(`SIGNAL_COMMANDS`) read or are pinned to the same catalog. No `planned` name is reserved today (`run list` and `policy scopes`
+are implemented); a later reservation adds `planned: true`, and such a name is neither dispatched nor shown until its slice implements it.
 Canonical help outputs have bilingual goldens and an 80-display-column gate, and every registration's
 group, summary and detail must exist in both locales. New actions register metadata and localized details
 in this catalog (A1/A3 `run close|resume` and `task accept|reject` are registered since batch 27);
@@ -92,32 +93,22 @@ packaged-binary or cross-platform acceptance; the lane excluded build and full v
 ## Coding template authoring
 
 `deckent coding template --provider <id> --kind <kind> [--image <sha256>] [--discovery disabled|repository] --preview|--apply`
-adds a reusable native coding template through the existing project config writer. `--json` returns
-profile, kind, proposed registry revision, preimage digest and (on apply) config write receipt.
-`--lang en|tr` selects human output. Preview writes nothing; apply retains old rows, creates a registry
-revision and backs up the previous config. Repeating the same kind/profile is unchanged. A different
-binding is refused rather than overwritten. No model, task prompt or effort is accepted here.
+adds a reusable native coding template (`native-coding-template@1`) without per-task model, prompt or effort through the existing
+project config writer. `--json` returns profile, kind, proposed registry revision, preimage digest and (on apply) config write receipt.
+`--lang en|tr` selects human output. Preview writes nothing; preview and apply use the same validated profile and add-only registry
+proposal. Apply retains old rows, creates a registry revision and backs up the previous config. Repeating the same kind/profile is
+unchanged; a different profile for an existing kind binding is refused rather than overwritten.
 
 Configure `admission` (registry, poolId, executionSlots, inFlightSlots) through `deckent config set
 admission` or `/config` first. The command does not invent pool capacity or evaluator policy. Configure
-`execution.docker` limits and an immutable image; an optional image must have an admitted provider
-pin. The CLI version and discovery selection come from that pin (an explicit `--discovery` overrides the
-mode as a new template content id); absent or ambiguous pins refuse.
-Apply requires the configured service/terminal scope and local config/write authority. Approval-required
-policy returns POLICY_APPROVAL_UNSUPPORTED via the existing allow-only set contract. A stale project
-digest, global registry contribution or changed effective Docker settings refuses publication.
-This source slice is author-verified separately from packaged CLI, independent review and live worker
-acceptance; evidence is in external RUN-HAZIR-KURULUM-2026-10-13/B-SABLON.
-
-`deckent coding template --provider <id> --kind <kind> [--image <sha256>] --preview|--apply`
-authors a reusable `native-coding-template@1` without per-task model, prompt or effort. It requires an
-existing admission registry/pool/slots and effective `execution.docker` limits. CLI version and discovery
-are copied from one unambiguous admitted provider/image pin; no repository-discovery exception is
-invented. Preview and apply use the same validated profile and add-only registry proposal. Existing
-kind bindings refuse a different profile and return unchanged for the same generated profile. Apply
-uses project ConfigApplication.set: config/write allow-only policy, digest CAS, sealed audit and atomic
-backup/publication. A global registry contribution or changed effective resource source refuses the
-write. This command does not launch, build, grant policy or prove image/worker readiness.
+effective `execution.docker` limits and an immutable image; an optional image must have an admitted provider
+pin. The CLI version and discovery selection are copied from one unambiguous admitted provider/image pin (an explicit
+`--discovery` overrides the mode as a new template content id); absent or ambiguous pins refuse.
+Apply requires the configured service/terminal scope and goes through project `ConfigApplication.set`: config/write allow-only
+policy (approval-required policy returns POLICY_APPROVAL_UNSUPPORTED), digest compare-and-set, sealed audit and atomic
+backup/publication. A stale project digest, a global registry contribution or changed effective Docker settings refuses publication.
+This command does not launch, build, grant policy or prove image/worker readiness. This source slice is author-verified separately
+from packaged CLI, independent review and live worker acceptance; evidence is in external RUN-HAZIR-KURULUM-2026-10-13/B-SABLON.
 
 Checkout shaping (alpha.53 C2): a CLI without a suppression flag (Cursor) realises `disabled` by its worker
 checkout. The native CLI registry's one `instructionSurface` list holds the default hidden paths (`name` at
@@ -148,3 +139,10 @@ terminal picker fills them). A handler's usage refusal of an action called witho
 naming it (exit 2); a present but invalid value stays `CLI_USAGE`. Scope rules (D1/D4, `resolveCommandScope`): a read uses `--scope`, else the configured `terminal.scopeId`, and prints which scope answered; a
 change never takes a silent default. Without a scope a person on a terminal picks from the valid scopes; a pipe, agent or CI gets
 `CLI_SCOPE_REQUIRED` (exit 2) naming them. Queue and task refusals are typed errors, not raw schema output.
+
+## alpha.55 switches
+
+alpha.55 adds protected configuration switches for memory automation, Nervous, recovery and the agent statistics pass; no AI principal
+or MCP actor may write them. The switch table, modes and defaults are in
+[core layers](core-layers.md#one-rule-for-every-switched-layer-off-until-a-person-turns-it-on). The S3-3 key `models.headless.preview`
+is retired: it still parses and is no longer offered.

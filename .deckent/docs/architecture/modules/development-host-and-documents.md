@@ -28,7 +28,9 @@ Jev details live in the skill's `jev-workflow.md`, read before case preparation 
 ROOT-DOCS (DOC-01/DOC-06, owner 2026-10-09): the complete former root contract is retained verbatim for
 `.agents/skills/deckent-next-refactor/internal-contract.md`; owner 2026-10-18: it is short, dated rules point to laws, no read-first gate.
 The internal guide and exact skill patch are staged in external `proof/ROOT-DOCS-2026-10-09/` for lead transfer
-with the public roots. Existing Claude rules and the Cursor always-apply rule select the internal skill;
+with the public roots. (Since transferred: the former root contract is the tracked
+`.agents/skills/deckent-next-refactor/internal-contract.md`; since owner 2026-10-18 it is short and points to the laws, and the
+verbatim original stays in Git history.) Existing Claude rules and the Cursor always-apply rule select the internal skill;
 a full source clone therefore cannot be claimed to load public rules only. Fresh session loading and
 the public export boundary remain to verify. CONTRIBUTING requires responsibility, testing and a brief PR
 disclosure of material AI assistance; prompts/transcripts are not required and the review bar is shared.
@@ -65,6 +67,8 @@ its exact path is admitted by the Markdown gate, excluded from product distribut
 Owner 2026-10-03: it is a pointer only; who holds what and what comes next live on the host process board
 (`.deckent/host/process-board.json`, outside Git/npm, written through `.agents/refactor/board.mjs`), and review
 packages cite the board and PLAN as status source. The board is coordination data: no authority, PASS or liveness.
+Owner 2026-10-10 replaced the pointer-only rule: `current-flow.md` is short-term task memory, and finished items are deleted there
+(`.deckent/docs/core-memory/law_documents_and_memory.md`).
 PLAN.md retains durable roadmap/decisions, remaining work and material open findings; owner 2026-09-24: completed work
 and closed findings move to COMPLETED-PLAN.md (read only when history is needed), so PLAN stays short. Small work/history
 lives in the external refactor proof area (kept until the batch lands and its review closes), not an append-only product plan.
