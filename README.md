@@ -528,7 +528,7 @@ app development starts alongside it.
 
 ```mermaid
 flowchart LR
-  N["Now · alpha.55<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>core layers in code, off by default"] --> C["Before the beta · core layers switched on<br/>Deckent Hub for signed agents and skills<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
+  N["Now · alpha.55<br/>terminal · approvals · budgets · MCP<br/>/do → coding workers → Git delivery<br/>core layers in code, their switches start off"] --> C["Before the beta · core layers switched on<br/>Deckent Hub for signed agents and skills<br/>memory · agents and skills proposed from repeated work<br/>worker execution and assignment · evaluation<br/>Brain · Nervous with automatic recovery · Auditor"]
   C --> B["Beta<br/>npm package<br/>layers improved through real use and tests<br/>Desktop app development in parallel"]
   B --> E["Enterprise · separate distribution<br/>SSO · fleet · central policy<br/>ERP connectors"]
 ```

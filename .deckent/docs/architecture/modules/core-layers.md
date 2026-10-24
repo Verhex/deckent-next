@@ -8,9 +8,11 @@ open. Owner decisions: [core layers](../../decisions/owner-decisions.md#cekirdek
 [S4B memory](../../decisions/owner-decisions.md#s4b-hafiza-dolsun-2026-10-23). Designs and acceptance packs are external
 (`proof/ORCHESTRATION-2026-10-23/`, `proof/ALPHA54-2026-10-23/S6R-ACCEPTANCE.md`, `S4B-ACCEPTANCE.md`).
 
-## One rule for every layer: off until a person turns it on
+## One rule for every switched layer: off until a person turns it on
 
-Every new behaviour ships shadow first and off. A shadow mode computes and seals what it would do and changes nothing. The switches
+Every switched behaviour ships shadow first and off. A shadow mode computes and seals what it would do and changes nothing. The
+headless Brain has no switch: S3-5 retired its preview key, so its connect kind is offered once the realm exists and is used only after
+the person's own login, connect and consent (see Headless subscription Brain). The switches
 are protected configuration: no AI principal and no MCP actor may write them (`PROTECTED_CONFIG_PATHS`,
 `src/domain/core/policy/internal/ai-floor.ts:71`). Bounds and thresholds are versioned registry data marked `provisional` until they
 are measured on N1; no number is a literal in logic.
@@ -115,9 +117,11 @@ decided in shadow is not asked again after the switch to live. Every escalation 
 
 ## Headless subscription Brain and quota (S3-1…S3-5, S9, F3, F4)
 
-The connect kind `claude-cli-subscription` runs the official `claude -p` as the person's own OS user with their own login (default
-`~/.claude`): one turn, no tools, no MCP, `--safe-mode --restricted`, `HOME` set to an emptied run directory and the login directory as
-`CLAUDE_CONFIG_DIR`, the system prompt in a 0600 file and the message on stdin, never in argv. A preflight without a model call checks
+The connect kind `claude-cli-subscription` runs the official `claude -p` as the person's own OS user with the Brain's own Deckent-owned
+login (s3c, owner 2026-10-24: layout resource `headlessLogins`, `headless/logins/claude` under the global state root, 0700, never backed
+up, never read by Deckent; signed in by the person's `deckent models login --connection claude-cli-subscription [--sso]`, the CLI's own
+sign-in at their terminal; the person's `~/.claude` is not used, and `--config-dir` is the person's override): one turn, no tools, no MCP,
+`--safe-mode --restricted`, `HOME` set to an emptied run directory and the login directory as `CLAUDE_CONFIG_DIR`, the system prompt in a 0600 file and the message on stdin, never in argv. A preflight without a model call checks
 the binary, its version range, required flags (help-hidden flags proven by a parser refusal in an empty temporary config directory) and
 the login fields. Guards stop the process group when the CLI reports an API key source, a tool, an MCP server, a plugin outside the
 registry allow-list or a model other than the pinned one; every refusal is typed and nothing falls back to an API. Every spawn runs

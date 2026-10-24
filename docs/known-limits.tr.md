@@ -181,7 +181,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 ## Sağlayıcılar ve abonelikler
 
 - **Claude aboneliği:** Claude Code işçisi kendi Claude girişinizle çalışır. alpha.55'ten beri Brain (`/do`'nun arkasındaki planlayıcı)
-  da yalıtılmış `claude-cli-subscription` bağlantısıyla kendi Claude aboneliğinizle planlayabilir; yalnız Deckent'in bubblewrap
+  da yalıtılmış `claude-cli-subscription` bağlantısıyla kendi Claude aboneliğinizle planlayabilir. Brain kendi, Deckent'e ait giriş
+  dizinine (`headless/logins/claude`, yedeğe girmez) `deckent models login --connection claude-cli-subscription` ile giriş yapar,
+  sizin `~/.claude` dizininiz kullanılmaz; `--config-dir` başka bir dizin seçer. Yalnız Deckent'in bubblewrap
   korumalı alanının çalıştığı yerde (Linux ve WSL) çalışır, bkz. [çekirdek katmanlar](#çekirdek-katmanlar). Claude aboneliğiyle terminal
   sohbeti şu an desteklenmiyor. *Yol:* terminal sohbeti için, korumalı alan yoksa `/do` planlaması için de bir Anthropic API anahtarı kullanın.
 - **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** İlk oturum yalnız abonelikle sohbet edemez; kapsam
@@ -498,13 +500,14 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 ## Çekirdek katmanlar
 
 alpha.55 çekirdek katmanları ekler (hafıza, sistem ataması ve model rolleri, Auditor'ın mühürlü kararları, Nervous ve kurtarma, headless
-abonelik Brain'i, ajanlar). Bunlar koddur, henüz kabul edilmiş davranış değildir: her biri kapalı başlar ve testlerle ve sahte
+abonelik Brain'i, ajanlar). Bunlar koddur, henüz kabul edilmiş davranış değildir: her anahtar kapalı başlar, her katman testlerle ve sahte
 bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış çağrılarıyla), henüz gerçek N1 kullanımında değil. Ayrıntı:
 [çekirdek katmanlar](../.deckent/docs/architecture/modules/core-layers.md).
 
-- **Her çekirdek katman kapalı başlar ve onu yalnız bir kişi açar.** Anahtarlar (`memoryAutomation.extraction|verification|context.mode`,
+- **Her çekirdek katman anahtarı kapalı başlar ve onu yalnız bir kişi açar.** Anahtarlar (`memoryAutomation.extraction|verification|context.mode`,
   `runRuntime.nervous.mode`, `runRuntime.recovery.mode`, `catalogEvolution.mode`) korumalıdır: hiçbir AI ve hiçbir MCP aktörü bunları
-  yazamaz. `shadow` (gölge) kip ne yapacağını kaydeder ve hiçbir şeyi değiştirmez. Yeni kimlikler tam haklarını yalnız politika şablonu
+  yazamaz. Headless Brain'in anahtarı yoktur (S3-5 ön izleme anahtarını kaldırdı): yalnız kişinin kendi login, connect ve
+  onayından sonra çalışır. `shadow` (gölge) kip ne yapacağını kaydeder ve hiçbir şeyi değiştirmez. Yeni kimlikler tam haklarını yalnız politika şablonu
   v15'ten alır. *Yol:* şablonu `deckent policy upgrade --template current --scope <id> --preview`, sonra `--apply` ile uygulayın; bir
   katmanı önce gölgeye alın, örneğin `deckent config set memoryAutomation.extraction.mode '"shadow"' --scope <id>`.
 - **Sayılar ölçüm değil, başlangıç değeridir.** Nervous kuralları, kurtarma sınırları (kaybolan görev başına bir otomatik devam, görev

@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { AGENT_CATALOG_LIMITS, catalogIdSchema, catalogSignatureSchema, clientCommandIdSchema, counterSchema, encodeCommandProjection, identitySchema, type AgentStanding, type AuditEvent,
-  type CatalogAction } from '#domain/index.js';
+import { AGENT_CATALOG_LIMITS, AgentCatalogError, catalogIdSchema, catalogSignatureSchema, clientCommandIdSchema, counterSchema, encodeCommandProjection, identitySchema, type AgentStanding,
+  type AuditEvent, type CatalogAction, type SignerKey } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 
 /**
@@ -40,6 +40,26 @@ export const catalogSuggestionStateSchema = z.object({ schemaVersion: z.literal(
   signed: z.object({ keyId: digest, signatureDigest: digest }).strict().optional() }).strict().readonly();
 export type CatalogSuggestionState = z.infer<typeof catalogSuggestionStateSchema>;
 export type StoredCatalogSuggestion = Readonly<{ record: CatalogSuggestion; state: CatalogSuggestionState }>;
+/** Whether an open suggestion's producer key (the key that signed its open state; none or another row: `null`) is no longer active — it reads `superseded` (§8). */
+export const catalogSuggestionSignerRevoked = (state: CatalogSuggestionState, producerKey: SignerKey | null) =>
+  state.state === 'open' && state.signed !== undefined && (producerKey?.keyId !== state.signed.keyId || producerKey.state !== 'active');
+/**
+ * The one validity check of every path that consumes a suggestion — define from a file or a draft, a standing card, a dismissal (REVISE 2742 R1, owner
+ * Q-S13): live (`on`), still `open`, unexpired at `atMs` and its producer key active. The application checks it, and the store again on the row and key it
+ * reads inside the write transaction, so a revoke between the two refuses too. The aggregator superseding its own older suggestion consumes nothing.
+ */
+export function requireCatalogSuggestionDecidable({ record, state }: StoredCatalogSuggestion, atMs: number, producerKey: SignerKey | null): void {
+  const refused = refusal(record.mode, state.state, atMs >= record.expiresAtMs, catalogSuggestionSignerRevoked(state, producerKey));
+  if (refused) throw new AgentCatalogError(refused);
+}
+/** The same check on a reader's view (its state already reads `superseded` or `expired`), as the refusal code or `null`: a card refuses before it is shown. */
+export const catalogSuggestionViewRefusal = (view: Pick<CatalogSuggestionView, 'mode' | 'state' | 'expiresAtMs' | 'signerRevoked'>, atMs: number) =>
+  refusal(view.mode, view.state, atMs >= view.expiresAtMs, view.signerRevoked);
+const refusal = (mode: CatalogSuggestion['mode'], state: string, expired: boolean, revoked: boolean) =>
+  mode !== 'on' ? 'CATALOG_SUGGESTION_SHADOW' as const : state !== 'open' || expired || revoked ? 'CATALOG_SUGGESTION_STALE' as const : null;
+/** The producer key of an open suggestion as the given store reads it (`null`: unsigned or no such key). */
+export const catalogSuggestionProducerKey = async (store: { signer(scopeId: string, keyId: string): Promise<SignerKey | null> }, { state }: StoredCatalogSuggestion) =>
+  state.signed ? store.signer(state.scopeId, state.signed.keyId) : null;
 /** The id of a suggestion and of its key: canonical projections, so the same inputs always give the same ids. */
 export const catalogSuggestionKeyDigest = (key: CatalogSuggestionKey) => sha256(encodeCommandProjection('catalog-suggestion-key:1', key));
 export const catalogSuggestionIdOf = (content: Omit<CatalogSuggestion, 'suggestionId'>) => sha256(encodeCommandProjection('catalog-suggestion:1', content));

@@ -2,6 +2,7 @@ import { ErrorRegistry, emit, loadConfig, t, type ExitCode } from '#platform/ind
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, resolveCommandScope, safeCell, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { cardIo, sinksOf } from '#surfaces/core/cli-approval/index.js';
+import { catalogSuggestionViewRefusal } from '#engine/index.js';
 import type { AgentsCommandContext } from './context.js';
 import { agentTable, agentView, skillTable, skillView } from './render.js';
 import { agentsWrite } from './write.js';
@@ -70,8 +71,11 @@ export async function agentsCommand(argv: readonly string[], context: AgentsComm
   if ((SIGNER_ACTIONS as readonly string[]).includes(args.action ?? '')) return signersCommand(args.action as SignerAction, { ...args, id: args.words[0] }, context, { ...io, json: args.json });
   if ((EVOLUTION_ACTIONS as readonly string[]).includes(args.action ?? '')) return evolutionCommand(args.action as EvolutionAction, args, context, { ...io, json: args.json });
   if (writing && args.fromSuggestion) return draftDefine(args.action as 'define' | 'define-skill', args, context, { ...io, json: args.json });
-  if (writing) return agentsWrite(args.action as 'define' | 'define-skill', args.input!, context,
-    { ...io, ...(args.suggestion ? { suggestion: (await resolveSuggestion(args.suggestion, context, io)).suggestionId } : {}) });
+  // REVISE 2742 R1: a superseded (revoked producer key), expired, decided or shadow suggestion is refused before the card is shown; the commit checks again.
+  const named = writing && args.suggestion ? await resolveSuggestion(args.suggestion, context, io) : null;
+  const refused = named && catalogSuggestionViewRefusal(named, Date.now());
+  if (refused) throw ErrorRegistry.createError(refused);
+  if (writing) return agentsWrite(args.action as 'define' | 'define-skill', args.input!, context, { ...io, ...(named ? { suggestion: named.suggestionId } : {}) });
   const scopeId = scope.scopeId, id = args.words[0]!, lines = [scopeNotice(scope, locale)];
   const show = (result: unknown, text: () => string) => { if (args.json) emit(result, { ...sinks, json: true }); else emit([...lines, text()].join('\n'), sinks); };
   if (args.action === 'stats') {

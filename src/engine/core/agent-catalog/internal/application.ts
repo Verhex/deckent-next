@@ -5,7 +5,7 @@ import { authenticate } from '#engine/core/authentication/index.js';
 import { agentDefineCommandSchema, agentInspectQuerySchema, agentListQuerySchema, skillDefineCommandSchema, skillImportCommandSchema, skillInspectQuerySchema,
   skillListQuerySchema, AgentCatalogStoreError, type AgentCatalogAction, type AgentCatalogDependencies, type AgentCatalogMutation, type AgentCatalogStore,
   type AgentInspection, type AgentListing, type SignedCatalogAction, type SkillInspection, type SkillListing, type AgentCatalogChange } from './contract.js';
-import { catalogSuggestionAuditSubject, catalogSuggestionStateSchema } from './suggestions.js';
+import { catalogSuggestionAuditSubject, catalogSuggestionProducerKey, catalogSuggestionStateSchema, requireCatalogSuggestionDecidable } from './suggestions.js';
 import { catalogCommandDigest, personaDigest, skillContentDigest, skillSetDigest } from './digests.js';
 import { agentPromptBytes, agentPromptParts } from './selection.js';
 import { signCatalogActions } from './signing.js';
@@ -115,7 +115,7 @@ export class AgentCatalogApplication {
   }
   /**
    * S8-4 define from a suggestion (§6 fold A; a person's card only — the draft is rendered at card time under their read filter and never stored): the
-   * suggestion must be open, live (not shadow), unexpired and of a kind this define decides — a skill from `propose-skill` (origin `lessons-derived`: AI
+   * suggestion must pass the shared validity check (`requireCatalogSuggestionDecidable`: open, live, unexpired, producer key active) and be of a kind this define decides — a skill from `propose-skill` (origin `lessons-derived`: AI
    * output, N36), an agent from `propose-agent` (binding its WorkClass) or the next revision of the agent a `revise-agent` names. Decided in this commit.
    */
   private async decide(store: AgentCatalogStore, command: { scopeId: string; commandId: string; fromSuggestion?: string | undefined }, principal: VerifiedPrincipal,
@@ -126,10 +126,10 @@ export class AgentCatalogApplication {
     if (!found) throw new AgentCatalogStoreError('AGENT_CATALOG_NOT_FOUND');
     const { record, state } = found, key = record.key, p = record.proposed;
     if (record.scopeId !== command.scopeId) throw new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT');
-    if (record.mode !== 'on') throw new AgentCatalogError('CATALOG_SUGGESTION_SHADOW');
+    requireCatalogSuggestionDecidable(found, at, await catalogSuggestionProducerKey(store, found));
     const fits = workClasses === null ? record.kind === 'propose-skill' : record.kind === 'propose-agent' ? key.kind === 'work-class' && workClasses.includes(key.workClass)
       : record.kind === 'revise-agent' && key.kind === 'agent' && previous !== null && key.agentId === previous.agentId && key.revision === previous.revision;
-    if (state.state !== 'open' || at >= record.expiresAtMs || !fits) throw new AgentCatalogError('CATALOG_SUGGESTION_STALE');
+    if (!fits) throw new AgentCatalogError('CATALOG_SUGGESTION_STALE');
     const origin = p.kind === 'skill-draft' ? { kind: 'lessons-derived' as const, suggestionId: record.suggestionId, template: p.template, lessonSetDigest: p.lessonSetDigest }
       : p.kind === 'agent-draft' ? { kind: 'template' as const, suggestionId: record.suggestionId, template: p.template, lessonSetDigest: null } : undefined;
     const next = catalogSuggestionStateSchema.parse({ schemaVersion: 1, scopeId: record.scopeId, suggestionId: record.suggestionId, state: 'decided', revision: state.revision + 1,

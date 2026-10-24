@@ -183,7 +183,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 ## Providers and subscriptions
 
 - **Claude subscription:** a Claude Code worker runs with your own Claude login. Since alpha.55 the Brain (the planner behind `/do`)
-  can also plan with your own Claude subscription through the isolated `claude-cli-subscription` connection; it runs only where
+  can also plan with your own Claude subscription through the isolated `claude-cli-subscription` connection. It signs in to its own
+  Deckent-owned login directory (`headless/logins/claude`, never backed up) with `deckent models login --connection
+  claude-cli-subscription`, not your `~/.claude`; `--config-dir` names another directory. It runs only where
   Deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers). Terminal chat with a Claude subscription is not
   supported for now. *Workaround:* use an Anthropic API key for terminal chat, and for `/do` planning where the sandbox is missing.
 - **Terminal chat needs a model connection and, for a paid API, a budget.** A first session cannot chat with a subscription alone;
@@ -499,11 +501,12 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 ## Core layers
 
 alpha.55 adds the core layers (memory, system assignment and model roles, the Auditor's sealed decisions, Nervous and recovery, the
-headless subscription Brain, agents). They are code, not yet accepted behaviour: each one starts off and has been tried with tests and
+headless subscription Brain, agents). They are code, not yet accepted behaviour: each switch starts off and each layer has been tried with tests and
 fakes (the subscription Brain also with real isolated calls by the lead), not yet in real N1 use. Detail: [core layers](../.deckent/docs/architecture/modules/core-layers.md).
 
-- **Every core layer starts off, and only a person turns it on.** The switches (`memoryAutomation.extraction|verification|context.mode`,
+- **Every core-layer switch starts off, and only a person turns it on.** The switches (`memoryAutomation.extraction|verification|context.mode`,
   `runRuntime.nervous.mode`, `runRuntime.recovery.mode`, `catalogEvolution.mode`) are protected: no AI and no MCP actor may write them.
+  The headless Brain has no switch (S3-5 retired its preview key): it works only after the person's own login, connect and consent.
   A `shadow` mode records what it would do and changes nothing. The new identities get their exact rights only from policy template
   v15. *Workaround:* apply it with `deckent policy upgrade --template current --scope <id> --preview`, then `--apply`; turn a layer to
   shadow first, for example `deckent config set memoryAutomation.extraction.mode '"shadow"' --scope <id>`.

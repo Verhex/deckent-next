@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
 import { agentDefinitionSchema, agentStandingSchema, catalogActionBytes, catalogActionSchema, checkAgentOrgTree, encodeCommandProjection, requireActionSigner, signerKeySchema, AgentCatalogError,
   skillDefinitionSchema, AGENT_CATALOG_LIMITS, SIGNATURE_LABELS, type AgentDefinition, type AgentStanding, type SignerKey, type SkillDefinition } from '#domain/index.js';
-import { AuditApplication, AgentCatalogStoreError, catalogEvolutionActions, catalogSuggestionIdOf, catalogSuggestionSchema, catalogSuggestionStateSchema, skillSignatureMessage, type AgentCatalogChange,
+import { AuditApplication, AgentCatalogStoreError, catalogEvolutionActions, catalogSuggestionIdOf, catalogSuggestionSchema, catalogSuggestionStateSchema, requireCatalogSuggestionDecidable, skillSignatureMessage, type AgentCatalogChange,
   type AgentCatalogReceipt, type AgentCatalogStore, type CatalogEvolutionChange, type CatalogSuggestion, type CatalogSuggestionState, type SignerChange, type StoredCatalogSuggestion } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openSqliteLedger, requireLedgerVersion, CATALOG_SUGGESTION_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
@@ -255,11 +255,13 @@ class SqliteAgentCatalogStore implements AgentCatalogStore {
     return this.read(() => this.db.prepare(`SELECT ${STANDING} FROM agent_standings WHERE scope_id=? AND json_extract(record,'$.value.basis.signed.keyId')=? ORDER BY agent_id,revision,work_class LIMIT ?`)
       .all(scopeId, keyId, limit).map(row => this.standing(row, scopeId)));
   }
-  /** One `open` state moved once (compare-and-set on the stored state), with its kept history row. */
+  /** One `open` state moved once (compare-and-set on the stored state), with its kept history row. A decision or dismissal consumes it: the shared validity
+   * check runs again here on the stored row and its producer key as this transaction reads them (REVISE 2742 R1); the aggregator's supersede does not. */
   private moveSuggestion(scopeId: string, previous: CatalogSuggestionState, nextInput: CatalogSuggestionState) {
     const next = catalogSuggestionStateSchema.parse(nextInput), stored = this.loadSuggestion(scopeId, next.suggestionId);
     if (!stored || next.scopeId !== scopeId || !isDeepStrictEqual(stored.state, previous) || stored.state.state !== 'open' || next.revision !== stored.state.revision + 1 || next.state === 'open')
       throw new AgentCatalogError('CATALOG_SUGGESTION_STALE');
+    if (next.state !== 'superseded') requireCatalogSuggestionDecidable(stored, next.atMs, stored.state.signed ? this.loadSigner(scopeId, stored.state.signed.keyId) : null);
     const record = this.seal(next);
     this.db.prepare('UPDATE catalog_suggestions SET state=?,state_revision=?,state_record=? WHERE scope_id=? AND suggestion_id=?').run(next.state, next.revision, record, scopeId, next.suggestionId);
     this.db.prepare('INSERT INTO catalog_suggestion_states(scope_id,suggestion_id,revision,record) VALUES(?,?,?,?)').run(scopeId, next.suggestionId, next.revision, record);
