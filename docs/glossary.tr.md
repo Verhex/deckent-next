@@ -112,7 +112,7 @@ Deckent'in işi daha az gözetimle yürütmesini sağlayan parçalar; alpha.55't
   modelin seviyesi ve rolleri tek bir sürümlü registry'den gelir (`deckent models roles`).
 - **Hafıza günlüğü:** kabul edilen işten gelen kapsamlı olgular ve dersler (`deckent memory`); herhangi bir iş okumadan önce bir
   kişi ya da başka bir üreticinin değerlendirici modeli doğrular.
-- **Auditor:** her ajan turunun policy kararının mühürlü tek kaydı.
+- **Auditor:** araç kararı veren bir ajan turundaki policy kararlarının en fazla bir mühürlü kaydı; en iyi çaba — boş turda ya da yazma hatasında kayıt olmayabilir.
 - **Nervous:** kaybolan işçilerin tespiti, öneri olarak kaydedilir; **kurtarma**, kaybolan bir görevin belirli sınırlar içinde
   yeni bir denemede sürüp süremeyeceğine karar verir.
 - **Ajan kataloğu:** sürümlü ajanlar ve skill'ler (`deckent agents`); onlara yapılan her AI ya da sistem değişikliği, bir kişinin

@@ -113,7 +113,7 @@ The parts that let Deckent run work with less supervision, added in alpha.55 as 
   and records the choice; a model's tier and roles come from one versioned registry (`deckent models roles`).
 - **Memory journal:** scoped facts and lessons from accepted work (`deckent memory`), verified by a person or by an
   evaluator model from a different maker before any work reads them.
-- **Auditor:** one sealed record of each agent turn's policy decision.
+- **Auditor:** at most one sealed record of the policy decisions in an agent turn that made tool decisions; best effort — an empty turn or a failed write leaves no record.
 - **Nervous:** detection of lost workers, recorded as proposals; **recovery** decides whether a lost task may continue in a
   new attempt within set limits.
 - **Agent catalog:** versioned agents and skills (`deckent agents`); every AI or system change to them is signed with a key a
