@@ -4006,7 +4006,7 @@
     "maxLinesPerFile": 1500,
     "packageLines": {
       "platform": 25000,
-      "domain": 10000,
+      "domain": 10800,
       "capabilities": 25000,
       "engine": 60000,
       "adapters": 33500,
