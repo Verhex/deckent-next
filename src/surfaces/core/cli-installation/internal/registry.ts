@@ -1,5 +1,6 @@
 import { ErrorRegistry, emit, loadConfigLanguage, resolveLocale, t } from '#platform/index.js';
-import type { InitialRegistryRequest } from '#engine/index.js';
+import { configWriteOperation, type InitialRegistryRequest } from '#engine/index.js';
+import { cliMode } from '#surfaces/core/cli-human/index.js';
 import type { InstallationCommandContext } from './context.js';
 
 export async function initRegistryCommand(argv: readonly string[], context: InstallationCommandContext) {
@@ -15,6 +16,8 @@ export async function initRegistryCommand(argv: readonly string[], context: Inst
   }
   // `--discovery` is optional: without it the adapter default (`disabled`) applies; `--lang` is optional as well.
   if (allowed.filter(flag => flag !== '--discovery' && flag !== '--lang').some(flag => !values.has(flag)) || flags.has('--preview') === flags.has('--apply') || !context.initializeNativeCodingRegistry) throw ErrorRegistry.createError('CLI_USAGE');
+  // alpha.55.1: `--apply` writes the protected `admission` root — a person's act at a terminal, refused off one before anything is read.
+  if (flags.has('--apply') && cliMode(context, flags.has('--json')).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: configWriteOperation('set', 'admission') } });
   const root = context.root ?? process.cwd(), env = context.env ?? process.env;
   const locale = resolveLocale(values.get('--lang'), env, await loadConfigLanguage(root, { env })); context.onLocale?.(locale);
   const input = { schemaVersion: 1 as const, scopeId: values.get('--scope')!, provider: values.get('--provider')!, kind: values.get('--kind')!,

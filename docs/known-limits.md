@@ -129,7 +129,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   detected. *Workaround:* keep secrets in a secret store, never in source.
 
 - **Authority changes need a person at a terminal.** Changing the permission mode, setting or deleting a secret, switching
-  the secret store, or (alpha.55.1) changing a protected setting with `deckent config set|unset` or the terminal's `/config` is refused
+  the secret store, or (alpha.55.1) changing a protected setting with `deckent config set|unset`, the terminal's `/config`,
+  `init registry --apply` or `coding template --apply` is refused
   with `AUTHORITY_WITNESS_REQUIRED` unless the requesting process has its input and output on an interactive terminal and carries no
   AI-agent marker; the MCP actor is always refused, and nothing is decided, audited or written. *Impact:*
   `echo KEY | deckent secret set NAME`, `deckent config set <protected key>` from a script, a pipe or with `--json`, the SDK called from a

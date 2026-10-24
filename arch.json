@@ -1268,6 +1268,7 @@
     },
     "src/surfaces/core/cli-installation": {
       "dependencies": [
+        "src/engine/core/config",
         "src/domain/core/primitives",
         "src/engine/core/installation",
         "src/platform/core/config",

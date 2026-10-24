@@ -6,5 +6,5 @@
   "security.mcp.note.project": "proje dosyası: ortamdan yalnız şu değişkenler okunur: {names}; diğerleri varsayılanı ya da boş okunur, kimlik bilgisi taşıyan bir değer sunucuyu reddettirir; sır referansları reddedilir",
   "security.mcp.note.moved": "bu sunucunun projenin veri klasöründeki güven kaydı artık kullanılmıyor; bu kartta yeniden karar verin",
   "security.mcp.trustCard.argument": "argüman {index}: {value}",
-  "security.witness.config": "{key} ayarı korumalıdır: yalnız kendi etkileşimli terminalindeki bir kişi değiştirebilir. Aynı deckent config komutunu (ya da terminaldeki /config penceresini) bu makinede, girişi ve çıkışı aynı terminalde olan kendi terminalinizde çalıştırın. Yapay zekâ araçları, MCP, SDK betikleri, CI, boru hattına bağlı komutlar ve --json bunu değiştiremez. Hiçbir şey değiştirilmedi."
+  "security.witness.config": "{key} ayarı korumalıdır: yalnız kendi etkileşimli terminalindeki bir kişi değiştirebilir. Aynı deckent komutunu (bir ayar için terminaldeki /config penceresini de) bu makinede, girişi ve çıkışı aynı terminalde olan kendi terminalinizde çalıştırın. Yapay zekâ araçları, MCP, SDK betikleri, CI, boru hattına bağlı komutlar ve --json bunu değiştiremez. Hiçbir şey değiştirilmedi."
 }

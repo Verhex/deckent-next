@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { executionRegistrySchema, evaluatorDefinitionSchema, identitySchema, nativeCliIdSchema, type ExecutionRegistry, type JsonValue, type ExecutionProfileDefinition, type VerifiedPrincipal } from '#domain/index.js';
 import { affectedToolchainProfiles, registryLayerHold } from '#engine/core/toolchain-currency/index.js';
-import type { ConfigSnapshot, ConfigWriteResult, ConfigApplication } from '#engine/core/config/index.js';
+import { assertConfigPersonWitness, type ConfigSnapshot, type ConfigWriteResult, type ConfigApplication } from '#engine/core/config/index.js';
 import { ConfigValidationError, ErrorRegistry, sha256, type DeckentConfig } from '#platform/index.js';
 import defaults from './initial-registry.json' with { type: 'json' };
 const initialRegistryDefaults = z.object({ schemaVersion: z.literal(1), ordering: z.literal('input-order'),
@@ -14,6 +14,9 @@ export interface NativeTemplatePorts {
   template(resources: unknown, invocation: unknown): ExecutionProfileDefinition;
   detect(provider: string, settings: NonNullable<DeckentConfig['execution']>['docker']): Promise<string>;
   beforeWrite?: () => void | Promise<void>;
+  /** alpha.55.1: the person's terminal witness (`ConfigAuthorityPort.witness`): `admission` is a protected root, so an apply asks it before the
+   * write (everything before it is what `--preview` reads); absent, an apply is refused (fail closed). */
+  witness?: (operation: string) => Promise<void>;
 }
 
 const discoveryModeSchema = z.enum(['disabled', 'repository']);
@@ -87,6 +90,7 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
   const config = read.effective;
   const scopeId = config.service.identity?.scopeId ?? (config['terminal'] as { scopeId?: string } | undefined)?.scopeId;
   if (!scopeId) refuse('TERMINAL_SCOPE_REQUIRED');
+  await assertConfigPersonWitness('set', 'admission.registry', ports.witness);
   const principal = await ports.principal(scopeId);
   // Refuse a changed global registry or effective resource source under the writer's lock as well as the project CAS.
   const guard = (current: ConfigSnapshot) => {
@@ -161,6 +165,7 @@ export async function initializeNativeRegistry(input: unknown, ports: NativeTemp
     inFlightSlots: request.inFlightSlots, ordering: initialRegistryDefaults.ordering };
   const result = { schemaVersion: 1 as const, profile, kind, registry, expect: read.digest };
   if (!request.apply) return { ...result, status: 'preview' as const, write: null };
+  await assertConfigPersonWitness('set', 'admission', ports.witness);
   const principal = await ports.principal(request.scopeId);
   const guard = (current: ConfigSnapshot) => {
     if (JSON.stringify(initialSource(current, request)) !== JSON.stringify(settings)

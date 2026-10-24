@@ -126,8 +126,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   *Yol:* sırları bir sır deposunda tutun, kaynak kodda değil.
 
 - **Yetki değişikliği terminaldeki bir kişiyi gerektirir.** İzin modunu değiştirmek, bir secret'ı yazmak ya da silmek, secret
-  deposunu değiştirmek veya (alpha.55.1) `deckent config set|unset` ya da terminalin `/config` penceresiyle korumalı bir ayarı
-  değiştirmek, isteği yapan sürecin girişi ve çıkışı etkileşimli bir terminalde değilse ya da süreç bir yapay zekâ ajanı işareti
+  deposunu değiştirmek veya (alpha.55.1) `deckent config set|unset`, terminalin `/config` penceresi, `init registry --apply` ya da
+  `coding template --apply` ile korumalı bir ayarı değiştirmek, isteği yapan sürecin girişi ve çıkışı etkileşimli bir terminalde değilse ya da süreç bir yapay zekâ ajanı işareti
   taşıyorsa `AUTHORITY_WITNESS_REQUIRED` ile reddedilir; MCP aktörü her zaman reddedilir ve hiçbir şey karara bağlanmaz, denetime
   yazılmaz ya da değişmez. *Etki:* `echo ANAHTAR | deckent secret set AD`, bir betikten, boru hattından ya da `--json` ile
   `deckent config set <korumalı anahtar>`, bir betikten çağrılan SDK ve yapay zekâ araçları bu değişiklikleri artık yapamaz; bunlar
