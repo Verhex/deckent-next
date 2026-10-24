@@ -1,6 +1,9 @@
 import { hashInstallationProfilePayload } from '#engine/core/installation/index.js';
 
 const image = (suffix: string) => `sha256:${suffix.repeat(64).slice(0, 64)}`;
+/** A supplied policy grant as the profile document carries it: any selection may be `all`. */
+type FixtureGrant = { id: string; effect: 'allow' | 'deny' | 'require-approval'; actions: string[] | 'all'; scopes: string[] | 'all';
+  principals: { issuer: string; subject: string }[] | 'all'; resource: { kind: string; ids: string[] | 'all' } };
 const docker = (imageId: string) => ({ imageId, memoryBytes: 1024, pids: 16, cpus: 1, logMaxSizeKiB: 16,
   logMaxFiles: 1, tmpBytes: 1024, deadlineMs: 1000, controlTimeoutMs: 1000, outputBytes: 1024, argv: ['echo', 'ok'] });
 
@@ -16,8 +19,8 @@ export function installationProfile(input: { root?: string; shutdown?: boolean; 
   const configuration = { execution: { docker: { executable: 'docker', ...settings }, git: { gitExecutable: 'git', timeoutMs: 1000, outputBytes: 4096 } }, ...(input.root ? { layout: { root: input.root } } : {}), admission: { registry, poolId: 'pool-1',
     executionSlots: 1, inFlightSlots: 1, ordering: 'input-order' as const }, service: { identity: { scopeId: 'scope-1', serviceId: 'service-1' } } };
   const principal = { issuer: 'fixture-issuer', subject: 'fixture-subject' };
-  const grants = [{ id: 'pool', effect: 'allow' as 'allow' | 'deny' | 'require-approval', actions: ['use'], scopes: ['scope-1'], principals: [principal], resource: { kind: 'pool', ids: ['pool-1'] as string[] | 'all' } },
-    ...(input.shutdown ? [{ id: 'shutdown', effect: 'allow' as 'allow' | 'deny' | 'require-approval', actions: ['shutdown'], scopes: ['scope-1'], principals: [principal], resource: { kind: 'service', ids: ['service-1'] } }] : [])];
+  const grants: FixtureGrant[] = [{ id: 'pool', effect: 'allow', actions: ['use'], scopes: ['scope-1'], principals: [principal], resource: { kind: 'pool', ids: ['pool-1'] } },
+    ...(input.shutdown ? [{ id: 'shutdown', effect: 'allow' as const, actions: ['shutdown'], scopes: ['scope-1'], principals: [principal], resource: { kind: 'service', ids: ['service-1'] } }] : [])];
   const payload = { schemaVersion: 1 as const, profile: { id: 'fixture', version: 1 }, scopeId: 'scope-1', configuration,
     policy: { schemaVersion: 1 as const, revision: 'policy-1', grants, restrictions: [] }, pool: { schemaVersion: 1 as const, poolId: 'pool-1', capacity: { executionSlots: 1, inFlightSlots: 1 } }, shutdown: { enabled: !!input.shutdown } };
   return { ...payload, profile: { ...payload.profile, digest: hashInstallationProfilePayload(payload) } };

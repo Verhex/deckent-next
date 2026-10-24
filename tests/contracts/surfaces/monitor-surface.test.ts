@@ -14,7 +14,7 @@ import { cells } from '#surfaces/core/terminal-render/index.js';
 import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, until as untilWorkline, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { BLOCKER_CODES, emptySnapshot, fullSnapshot, longIdSnapshot, OBSERVED_AT } from '../../fixtures/monitor/snapshots.js';
-import { MonitorSourceMemo } from '#engine/index.js';
+import { MonitorSourceMemo, type MonitorSnapshot } from '#engine/index.js';
 
 /** MONITOR-SURFACE: the text snapshot, `--json`, the typed unavailable error and the fullscreen view, all from fixture MonitorSnapshots. */
 const surface = await loadMonitorSurface();
@@ -51,7 +51,8 @@ describe('monitor text snapshot', () => {
       'worker-stale-heartbeat': 'worker silent (stale heartbeat)', 'worker-exited-unevaluated': 'worker exited, not evaluated',
       'evaluation-not-ready': 'evaluation not ready', 'evaluation-unknown': 'evaluation result unknown', 'unresolved-effect': 'effect outcome uncertain',
       'cancellation-pending': 'cancellation pending', 'not-admitted': 'not admitted yet', unknown: 'reason unknown' } as const;
-    for (const code of BLOCKER_CODES) expect(text, code).toContain(labels[code]);
+    expect(Object.keys(labels)).toEqual(BLOCKER_CODES);
+    for (const [code, label] of Object.entries(labels)) expect(text, code).toContain(label);
     const summary = text.slice(text.indexOf('Stuck or waiting'), text.indexOf('Workers running now'));
     // The approval wait (3 h 12 min) is the oldest; the `unknown` blocker has no proven start and goes last; moving Runs are not stuck.
     expect(summary.indexOf('run-blocked-approval')).toBeLessThan(summary.indexOf('run-waiting-pool-slot'));
@@ -78,7 +79,7 @@ describe('monitor text snapshot', () => {
     const run = { ...fullSnapshot.installs[0]!.runs[0]!, runId: 'run-human-wait', createdAtMs: OBSERVED_AT - 3_600_000, state: 'parked' as const,
       blocker: { code: 'parked' as const, taskId: null, sinceMs: OBSERVED_AT - 60_000, detail: 'awaiting-decision', deadlineMs: OBSERVED_AT + 600_000 },
       tasks: [{ ...fullSnapshot.installs[0]!.runs[0]!.tasks[0]!, phase: 'awaiting-decision',
-        decision: { reason: 'evaluation-not-ready', sinceMs: OBSERVED_AT - 60_000, deadlineMs: OBSERVED_AT + 600_000 } }] };
+        decision: { reason: 'evaluation-not-ready' as const, sinceMs: OBSERVED_AT - 60_000, deadlineMs: OBSERVED_AT + 600_000 } }] };
     const snapshot = { ...emptySnapshot, installs: [{ ...emptySnapshot.installs[0]!, runs: [run] }] };
     const view = surface.buildMonitorView(snapshot, locale, true);
     const summary = view.tabs.summary.filter(block => block.kind === 'table').flatMap(block => block.rows);
@@ -626,9 +627,9 @@ for (const locale of ['en', 'tr'] as const) it(`config help derives its number f
 });
 
 /** The same human detail on a finished worker (run-broken/build exited 1): nothing waits for a person, so `--once` keeps it behind --verbose. */
-function finishedHumanSnapshot(snapshot: ReturnType<typeof humanWorkerSnapshot>) {
+function finishedHumanSnapshot(snapshot: MonitorSnapshot) {
   const install = snapshot.installs[0]!, human = install.workers[0]!;
-  return { ...snapshot, installs: [{ ...install, workers: [{ ...fullSnapshot.installs[0]!.workers[2]!, human: human.human, usage: human.usage, usageEvidence: human.usageEvidence }] }] };
+  return { ...snapshot, installs: [{ ...install, workers: [{ ...fullSnapshot.installs[0]!.workers[2]!, human: human.human!, usage: human.usage!, usageEvidence: human.usageEvidence! }] }] };
 }
 function humanWorkerSnapshot() {
   const install = fullSnapshot.installs[0]!, base = install.workers[0]!;

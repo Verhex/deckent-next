@@ -9,6 +9,7 @@ import { createAnthropicMessagesPricedNative, openSqliteModelCatalogReader } fro
 import { createCatalogTariffLookup } from '#composition/core/model-invocation/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
+import { modelInvocationProfileSchema } from '#domain/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
 import { owned } from '../support/owned.js';
 
@@ -75,17 +76,17 @@ describe.skipIf(process.platform !== 'linux')('models.connect from a registered 
     // priced; the same profile with forged, cheaper numbers under the same seal is refused.
     const context = await loadConfiguredScopeContext(f.project, 'scope', f.options, 'read');
     const lookup = createCatalogTariffLookup(async () => openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs }));
-    expect(await lookup({ channelId: 'anthropic-api', modelRevision: 1 }, FABLE)).toEqual(fableTariff);
-    expect(await lookup({ channelId: 'anthropic-api', modelRevision: 2 }, FABLE)).toBeNull();
-    expect(await lookup({ channelId: 'anthropic-api', modelRevision: 1 }, UNPRICED)).toBeNull();
+    expect(await lookup({ channelId: 'anthropic-api', modelRevision: 1 }, FABLE, 'scope')).toEqual(fableTariff);
+    expect(await lookup({ channelId: 'anthropic-api', modelRevision: 2 }, FABLE, 'scope')).toBeNull();
+    expect(await lookup({ channelId: 'anthropic-api', modelRevision: 1 }, UNPRICED, 'scope')).toBeNull();
     const quote = async (value: Record<string, unknown>) => {
-      const binding = { encodingVersion: 1, provider: { id: 'anthropic-api', version: 1 }, model: { id: FABLE, version: 1, nativeId: FABLE,
+      const binding = { encodingVersion: 1 as const, provider: { id: 'anthropic-api', version: 1 }, model: { id: FABLE, version: 1, nativeId: FABLE,
         protocols: [{ family: 'anthropic-messages', version: '2023-06-01', capabilities: [] }] } };
       const request = { model: FABLE, messages: [{ role: 'user' as const, content: 'hello' }], max_completion_tokens: 10 };
       const command = { schemaVersion: 1 as const, commandId: 'call', scopeId: 'scope', reference, catalogRevision: 'catalog',
         expectedBinding: { encodingVersion: 1 as const, algorithm: 'sha256' as const, digest: String(value['bindingDigest']) }, nativeRequest: request };
       const priced = createAnthropicMessagesPricedNative({ resolveCredential: async () => 'sk-ant-test', catalogTariff: lookup });
-      const prepared = await priced.native.prepare(value, binding, request);
+      const prepared = await priced.native.prepare(modelInvocationProfileSchema.parse(value), binding, request);
       return () => priced.quote({ command, requestDigest: modelInvocationRequestDigest(command), profile: value, profileDigest: modelInvocationProfileDigest(value as never),
         definition: binding, prepared } as never);
     };

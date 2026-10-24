@@ -63,7 +63,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('automatically reconciles an
   await git('init'); await git('config', 'user.email', 'test@example.invalid'); await git('config', 'user.name', 'Test');
   await writeFile(join(project, 'input'), 'base\n'); await git('add', 'input'); await git('commit', '-m', 'base');
   const registry = fixtureDockerRegistry(['offline-runtime']);
-  registry.profiles[0]!.parameters = { ...registry.profiles[0]!.parameters, imageId,
+  registry.profiles[0]!.parameters = { ...registry.profiles[0]!.parameters, imageId: imageId!,
     argv: ['node', '-e', "const f=require('node:fs');f.appendFileSync('/workspace/starts','1');f.writeFileSync('/workspace/ready','yes');const t=setInterval(()=>{if(f.existsSync('/workspace/release')){clearInterval(t);process.stdout.write('offline-output');process.stderr.write('offline-error');process.exit(7)}},10)"] };
   const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456, pids: 64, cpus: 1,
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000,

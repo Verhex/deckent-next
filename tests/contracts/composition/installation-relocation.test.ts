@@ -191,7 +191,7 @@ describe('relocation producer to actual CLI surface', () => {
   });
   it('refuses direct service, MCP and peer admissions before ledger/transport startup', async () => {
     const f = await fixture(), before = await readFile(f.path, 'utf8');
-    await expect(startConfiguredRuntimeService(f.project, {}, f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
+    await expect(startConfiguredRuntimeService(f.project, { async onPage() {}, async onError() {} }, f.options)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
     for (const [key, value] of Object.entries(f.options.env)) vi.stubEnv(key, value);
     await expect(mcpMain(f.project)).rejects.toMatchObject({ code: 'INSTALLATION_IDENTITY_RELOCATED' });
     const peer = { pid: process.pid, uid: process.getuid!(), gid: process.getgid!(), assurance: 'linux-so-peercred' as const };

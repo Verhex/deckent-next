@@ -77,7 +77,7 @@ async function seedV14(path: string, corrupt?: 'receipt' | 'allocation') {
       const oldOutcome = current.state === 'responded'
         ? { schemaVersion: 1, state: 'responded', response: (JSON.parse(String(row.content_record)) as { response: unknown }).response, observedAtMs: current.observedAtMs }
         : { schemaVersion: 1, state: 'unknown', reason: 'transport-error', observedAtMs: current.observedAtMs };
-      const old = { ...receipt, schemaVersion: 1, outcome: oldOutcome };
+      const old: Record<string, unknown> = { ...receipt, schemaVersion: 1, outcome: oldOutcome };
       if (corrupt === 'receipt' && row.invocation_id === 'unknown-invocation') old.unexpected = true;
       downgrade.prepare('UPDATE model_invocations SET record=? WHERE invocation_id=?').run(JSON.stringify(old), String(row.invocation_id));
     }
@@ -129,7 +129,8 @@ async function seedV15(path: string, corrupt?: 'state' | 'identity' | 'count') {
   try {
     for (const row of db.prepare(`SELECT i.invocation_id,i.record,c.record AS content_record FROM model_invocations i
       LEFT JOIN model_invocation_contents c ON c.scope_id=i.scope_id AND c.invocation_id=i.invocation_id`).all() as Array<Record<string, unknown>>) {
-      const receipt = JSON.parse(String(row.record)) as Record<string, unknown>, outcome = receipt.outcome as Record<string, unknown>;
+      const receipt = JSON.parse(String(row.record)) as Record<string, unknown>;
+      const outcome = receipt.outcome as { state: string; observedAtMs: unknown; evidence: { body: Record<string, unknown> } | null; content?: unknown };
       const content = row.content_record === null ? null : JSON.parse(String(row.content_record)) as Record<string, unknown>;
       let oldOutcome: unknown;
       if (outcome.state === 'responded') oldOutcome = { schemaVersion: 2, state: 'responded', response: content?.response, observedAtMs: outcome.observedAtMs };

@@ -29,8 +29,8 @@ const claude = (composition?: object) => ({ provider: 'claude', cliVersion: '2.1
 const registry = (composition?: object) => ({ schemaVersion: 1, revision: 'r1', profiles: [{ id: 'claude-t', version: 1, adapter: { id: 'native-coding-template', version: 1 },
   parameters: { schemaVersion: 1, docker, invocation: claude(composition) } }], kinds: [{ kind: 'coding', profile: { id: 'claude-t', version: 1 } }, { kind: 'plain', profile: { id: 'claude-t', version: 1 } }],
   evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] });
-const workInput = (task = 'Append done to note.txt') => ({ schemaVersion: 2, task, scope: { paths: ['note.txt'] }, acceptance: 'note.txt ends with done' });
-const graph = (task?: string) => ({ schemaVersion: 4, revision: 1, tasks: [{ id: 't', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'], workInput: workInput(task) }],
+const workInput = (task = 'Append done to note.txt') => ({ schemaVersion: 2 as const, task, scope: { paths: ['note.txt'] }, acceptance: 'note.txt ends with done' });
+const graph = (task?: string) => ({ schemaVersion: 4 as const, revision: 1, tasks: [{ id: 't', kind: 'coding', dependencies: [], acceptanceCriteria: ['exit'], workInput: workInput(task) }],
   criterionDefinitions: [{ id: 'exit', version: 1, description: 'Zero exit', evaluator: { id: 'process-exit', version: 1 }, parameters: { acceptedExitCodes: [0] } }] });
 const validation = { profile() { return undefined; }, criterion() { return undefined; }, isTemplate: isNativeCodingTemplate };
 const compiler = { capability: nativeWorkerEffortCapability, bind: bindNativeWorkerEffort,

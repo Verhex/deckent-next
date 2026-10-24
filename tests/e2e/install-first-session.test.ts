@@ -18,7 +18,7 @@ describe.skipIf(process.platform !== 'linux')('README first session, actual bina
     const home = join(root, 'home'), global = join(root, 'global');
     await mkdir(project); await mkdir(home, { mode: 0o700 }); await mkdir(global, { mode: 0o700 });
     const env = { PATH: process.env['PATH'], HOME: home, DECKENT_GLOBAL_HOME: global, NO_COLOR: '1', DECKENT_LANGUAGE: 'en', DOCKER_HOST: 'unix:///nonexistent/docker.sock' };
-    const run = (args: string[]) => owned().exec(process.execPath, [binary, ...args], { cwd: project, env, deadlineMs: 20_000, outputBytes: 1024 * 1024, label: args[0] });
+    const run = (args: string[]) => owned().exec(process.execPath, [binary, ...args], { cwd: project, env, deadlineMs: 20_000, outputBytes: 1024 * 1024, label: args[0]! });
     const version = await run(['--version']); expect(version.stdout + version.stderr, JSON.stringify({ binary, node: process.execPath, version })).toContain('deckent v');
     await run(['init', 'policy', '--scope', 'my-project', '--preview']);
     await expect(lstat(join(project, '.deckent'))).rejects.toMatchObject({ code: 'ENOENT' });

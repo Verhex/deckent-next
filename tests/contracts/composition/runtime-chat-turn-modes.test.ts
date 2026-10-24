@@ -7,7 +7,7 @@ import { closeModeRuntimes, me, modeRuntime, rule, type Mode } from '../support/
 // person's mode lives in bindings.json (v2 `modes`). A mode lowers only an eligible require-approval on a relaxable cell, writes one
 // sealed `permission-mode` audit event before the effect, and never touches deny, the write floor, `low`, destructive or always-ask.
 afterEach(closeModeRuntimes);
-const MODES: readonly Mode[] = ['ask', 'auto-edit', 'full-auto'];
+const MODES = ['ask', 'auto-edit', 'full-auto'] as const satisfies readonly Mode[];
 /** The classifier's own matrix runs on the host realm; inside an enforced sandbox full-auto lowers more (runtime-shell-autonomy.test.ts). */
 const HOST = { shell: { schemaVersion: 1, realm: 'host' } };
 type Effect = 'allow' | 'deny' | 'require-approval';

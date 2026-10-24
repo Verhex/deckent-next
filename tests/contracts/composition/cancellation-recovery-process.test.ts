@@ -25,7 +25,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('recovers request-only cance
   await git('init'); await git('config', 'user.email', 'test@example.invalid'); await git('config', 'user.name', 'Test');
   await writeFile(join(project, 'input'), 'base\n'); await git('add', 'input'); await git('commit', '-m', 'base');
   const readyName = `ready-${randomUUID()}`; const registry = fixtureDockerRegistry(['recovery']);
-  registry.profiles[0]!.parameters = { ...registry.profiles[0]!.parameters, imageId,
+  registry.profiles[0]!.parameters = { ...registry.profiles[0]!.parameters, imageId: imageId!,
     argv: ['node', '-e', `require('node:fs').writeFileSync('/workspace/${readyName}','yes');setInterval(()=>{},1000)`] };
   const docker = { executable: '/usr/bin/docker', imageId: imageId!, memoryBytes: 268435456, pids: 64, cpus: 1,
     logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
