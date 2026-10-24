@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { initializeNativeCodingRegistry, configureNativeCodingTemplate } from '#composition/core/native-coding/index.js';
+import { configureNativeTemplate, initializeNativeRegistry, type NativeTemplatePorts } from '#engine/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { withMcpPrincipal } from '#adapters/index.js';
 import { clearConfigCache } from '#platform/index.js';
@@ -36,8 +38,9 @@ describe.skipIf(process.platform === 'win32')('native registry and template writ
     const f = await setup(), before = await readFile(f.path, 'utf8');
     expect(await refusal(initializeNativeCodingRegistry(f.root, { ...registry, apply: true }, f.options, { detect, witness: witness(false) })))
       .toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED', params: { operation: 'config set admission' } });
-    expect(await refusal(withMcpPrincipal(() => initializeNativeCodingRegistry(f.root, { ...registry, apply: true }, f.options, { detect, witness: witness(true) }))))
-      .toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    const probe = vi.fn(detect); // the discovery probe starts a container: a refused MCP apply never reaches it
+    expect(await refusal(withMcpPrincipal(() => initializeNativeCodingRegistry(f.root, { ...registry, apply: true }, f.options, { detect: probe, witness: witness(true) }))))
+      .toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' }); expect(probe).not.toHaveBeenCalled();
     expect(await readFile(f.path, 'utf8')).toBe(before);
     expect((await initializeNativeCodingRegistry(f.root, { ...registry, apply: false }, f.options, { detect, witness: witness(false) })).status).toBe('preview');
     expect((await initializeNativeCodingRegistry(f.root, { ...registry, apply: true }, f.options, { detect, witness: witness(true) })).status).toBe('applied');
@@ -51,6 +54,17 @@ describe.skipIf(process.platform === 'win32')('native registry and template writ
     expect(await readFile(f.path, 'utf8')).toBe(before);
     expect((await configureNativeCodingTemplate(f.root, { ...request, apply: false }, f.options, { witness: witness(false) })).status).toBe('preview');
     expect((await configureNativeCodingTemplate(f.root, request, f.options, { witness: witness(true) })).status).toBe('applied');
+  });
+  it('Astra 2752: a missing or refusing witness stops an apply before any snapshot, discovery, principal, writer or beforeWrite', async () => {
+    for (const refuse of [undefined, async (operation: string) => { throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation } }); }]) {
+      const untouched = () => vi.fn(() => { throw new Error('must not run before the witness'); });
+      const ports = { snapshot: untouched(), principal: untouched(), writer: untouched(), template: untouched(), detect: untouched(), beforeWrite: untouched(),
+        ...(refuse ? { witness: refuse } : {}) };
+      for (const apply of [() => initializeNativeRegistry({ ...registry, apply: true }, ports as unknown as NativeTemplatePorts),
+        () => configureNativeTemplate({ provider: 'claude', kind: 'review', apply: true }, ports as unknown as NativeTemplatePorts)])
+        expect(await refusal(apply())).toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+      for (const port of Object.values(ports)) if (vi.isMockFunction(port)) expect(port).not.toHaveBeenCalled();
+    }
   });
   it('the CLI refuses --apply under the AI marker, through a pipe and with --json before the handler runs; --preview stays open', async () => {
     const handlers = { initializeNativeCodingRegistry: vi.fn(async () => { throw new Error('must not run'); }), configureCodingTemplate: vi.fn(async () => { throw new Error('must not run'); }) };
