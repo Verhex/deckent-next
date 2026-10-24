@@ -125,12 +125,15 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 - **Sır kapısının ayar kuralı yalnız ayar türü dosyalara bakar.** Sıradan kaynak koduna yazılmış bir parola yakalanmaz.
   *Yol:* sırları bir sır deposunda tutun, kaynak kodda değil.
 
-- **Yetki değişikliği terminaldeki bir kişiyi gerektirir.** İzin modunu değiştirmek, bir secret'ı yazmak ya da silmek veya
-  secret deposunu değiştirmek, isteği yapan sürecin girişi ve çıkışı etkileşimli bir terminalde değilse
-  `AUTHORITY_WITNESS_REQUIRED` ile reddedilir; MCP aktörü her zaman reddedilir ve hiçbir şey karara bağlanmaz, denetime
-  yazılmaz ya da değişmez. *Etki:* `echo ANAHTAR | deckent secret set AD`, betikler, bir betikten çağrılan SDK ve yapay zekâ
-  araçları bu değişiklikleri artık yapamaz; bunlar için henüz bir onay isteği yolu yok. *Geçici çözüm:* `deckent secret set AD --main`
-  (ya da `--project`; gizli istem), `deckent secret store` ya da terminalin `/provider` ve mod değiştirmesini etkileşimli bir terminalde kullanın.
+- **Yetki değişikliği terminaldeki bir kişiyi gerektirir.** İzin modunu değiştirmek, bir secret'ı yazmak ya da silmek, secret
+  deposunu değiştirmek veya (alpha.55.1) `deckent config set|unset` ya da terminalin `/config` penceresiyle korumalı bir ayarı
+  değiştirmek, isteği yapan sürecin girişi ve çıkışı etkileşimli bir terminalde değilse ya da süreç bir yapay zekâ ajanı işareti
+  taşıyorsa `AUTHORITY_WITNESS_REQUIRED` ile reddedilir; MCP aktörü her zaman reddedilir ve hiçbir şey karara bağlanmaz, denetime
+  yazılmaz ya da değişmez. *Etki:* `echo ANAHTAR | deckent secret set AD`, bir betikten, boru hattından ya da `--json` ile
+  `deckent config set <korumalı anahtar>`, bir betikten çağrılan SDK ve yapay zekâ araçları bu değişiklikleri artık yapamaz; bunlar
+  için henüz bir onay isteği yolu yok. *Geçici çözüm:* `deckent secret set AD --main` (ya da `--project`; gizli istem),
+  `deckent secret store`, `deckent config set <anahtar> <değer>` ya da terminalin `/provider`, `/config` ve mod değiştirmesini kendi
+  etkileşimli terminalinizde kullanın.
 - **Runtime soketi sandbox'taki süreçleri reddeder, hesabınızın diğer süreçlerini değil.** Runtime servisi kendi PID, mount ve
   user namespace'i dışındaki bir eşi reddeder, tam erişimli bubblewrap görünümü runtime soket dizinlerini gizler ve Landlock
   realm'i hiç unix soketi açamaz. Hesabınızın sandbox dışında çalıştırdığı bir süreç (tam erişimli bir turda onaylanan host
@@ -509,7 +512,8 @@ bileşenlerle denendi (abonelik Brain'i ayrıca lead'in gerçek yalıtılmış �
 
 - **Her çekirdek katman anahtarı kapalı başlar ve onu yalnız bir kişi açar.** Anahtarlar (`memoryAutomation.extraction|verification|context.mode`,
   `runRuntime.nervous.mode`, `runRuntime.recovery.mode`, `catalogEvolution.mode`) korumalıdır: hiçbir AI ve hiçbir MCP aktörü bunları
-  yazamaz. Headless Brain'in anahtarı yoktur (S3-5 ön izleme anahtarını kaldırdı): yalnız kişinin kendi login, connect ve
+  yazamaz; alpha.55.1'den beri bir kişi de bunları yalnız kendi etkileşimli terminalinde yazar (yapay zekâ aracı, betik, boru hattı ya da
+  `--json` reddedilir). Headless Brain'in anahtarı yoktur (S3-5 ön izleme anahtarını kaldırdı): yalnız kişinin kendi login, connect ve
   onayından sonra çalışır. `shadow` (gölge) kip ne yapacağını kaydeder ve hiçbir şeyi uygulamaz; hafıza doğrulama ve kurtarma gölgesi
   yine de modelini çağırır (veri o sağlayıcıya gider, çağrı harcanır). Yeni kimlikler tam haklarını yalnız politika şablonu v15'ten
   alır; yeni kurulum onu doğrudan alır. *Yol:* ilk kurulum şablonuyla kurulmuş bir politika

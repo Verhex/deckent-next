@@ -2786,7 +2786,8 @@
         "src/platform/core/errors",
         "src/composition/core/model-invocation",
         "src/engine/core/model-invocation",
-        "src/composition/core/memory-rollout"
+        "src/composition/core/memory-rollout",
+        "src/engine/core/runtime"
       ],
       "plan": "CONFIG-SURFACE"
     },

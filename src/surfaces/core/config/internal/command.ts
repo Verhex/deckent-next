@@ -4,7 +4,7 @@ import { configDisplayView, getConfigValue, loadConfig, type ConfigLoadOptions }
 import { emit, formatValue } from '#platform/index.js';
 import { isSensitiveConfigKey, MESSAGE_REGISTRY, redactSensitive, resolveLocale, t, type Locale } from '#platform/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
-import { configServiceState, parseConfigInput, type ConfigApplication, type ConfigChangeOutcome, type ConfigFieldView, type DescribeService } from '#engine/index.js';
+import { configServiceState, configWriteOperation, isProtectedConfigWrite, parseConfigInput, type ConfigApplication, type ConfigChangeOutcome, type ConfigFieldView, type DescribeService } from '#engine/index.js';
 import { commandLocale, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import { cliMode, cliTableStyle } from '#surfaces/core/cli-human/index.js';
 import { applyWord, renderConfigExplanation, renderConfigInspection, schemaWord, sourceWord } from './render.js';
@@ -53,6 +53,8 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   if (parsed.help) { emit(t('config.surface.help', {}, locale), { ...sinks, json: false }); return; }
   if (!isWrite && (parsed.expect || parsed.scope || parsed.commandId)) throw ErrorRegistry.createError('CLI_USAGE');
   if (parsed.verbose && action !== 'explain') throw ErrorRegistry.createError('CLI_USAGE');
+  // alpha.55.1: a write of a protected root is refused off a person's terminal before anything is read (`set <key>` alone writes nothing).
+  if (isWrite && keyPath && parsed.args.length === (action === 'set' ? 3 : 2)) assertConfigPerson(context, action as 'set' | 'unset', keyPath, parsed.json);
   if (action === 'get') {
     if (parsed.args.length > 2) throw ErrorRegistry.createError('CLI_USAGE');
     const config = await loadConfig(root, { ...options, heal: true, globalOnly: parsed.global });
@@ -113,6 +115,14 @@ export async function configCommand(argv: readonly string[], context: ConfigComm
   // A restart-apply change is compared with the running service's own fingerprint, so "restart" is a measured state, not a standing hint.
   const service = field.apply === 'restart' ? await configServiceState(root, options, context.describeRuntimeService) : null;
   emit({ ...result, ...(outcome.approvalId ? { approvalId: outcome.approvalId } : {}), ...(service ? { service } : {}) }, { ...sinks, render: () => renderConfigChanged(keyPath, layer, field.apply, result, service, locale).join('\n') });
+}
+/**
+ * alpha.55.1 (functest B P1): a write that changes a protected root (`isProtectedConfigWrite`: the AI floor's security roots and core-layer switches)
+ * is a person's act at a terminal, the same refusal as the other person-only commands (`memory`, `agents`, `models login`): an AI marker, CI,
+ * `TERM=dumb`, a pipe or `--json` is refused with `AUTHORITY_WITNESS_REQUIRED` here; the composed write path then asks the terminal witness.
+ */
+function assertConfigPerson(context: ConfigCommandContext, action: 'set' | 'unset', keyPath: string, json = false) {
+  if (isProtectedConfigWrite(keyPath) && cliMode(context, json).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: configWriteOperation(action, keyPath) } });
 }
 /** The registry declares `keyPath` (its explain resolves) although this installation's configuration leaves the section out. */
 async function declared(context: ConfigCommandContext, root: string, options: ConfigLoadOptions, keyPath: string): Promise<boolean> {
@@ -178,6 +188,7 @@ export interface ConfigWriteRequest {
 }
 export async function configWrite(root: string, request: ConfigWriteRequest, context: ConfigCommandContext, options: ConfigLoadOptions): Promise<ConfigChangeOutcome> {
   if (!context.configApplication || !context.resolveConfigPrincipal) throw ErrorRegistry.createError('CLI_USAGE');
+  assertConfigPerson(context, request.action, request.keyPath);
   const principal = await context.resolveConfigPrincipal(root, request.scopeId, options);
   const input = { keyPath: request.keyPath, layer: request.layer ?? 'project' as const, principal, scopeId: request.scopeId, commandId: request.commandId ?? randomUUID(),
     ...(request.expect === undefined ? {} : { expect: request.expect }) };

@@ -141,8 +141,13 @@ describe.skipIf(process.platform !== 'linux')('I-S7 real binary: the list as dat
     expect(piped.stdout).toContain('Before the first job (/do), still to do, in this order:');
     expect(piped.stdout).toContain('   $ deckent init pool --scope erp-demo --preview');
     expect(steps((await run(['init'], { CLAUDECODE: '1' })).stdout)).toEqual(['execution', 'registry', 'pool']);
-    const set = await run(['config', 'set', 'execution', JSON.stringify({ docker: { executable: join(bin, 'docker'), imageId: `sha256:${'a'.repeat(64)}` }, git: { gitExecutable: '/usr/bin/git' } })]);
-    expect(set.code, set.stderr).toBe(0);
+    const execution = { docker: { executable: join(bin, 'docker'), imageId: `sha256:${'a'.repeat(64)}` }, git: { gitExecutable: '/usr/bin/git' } };
+    // alpha.55.1: `execution` is protected — a piped `config set` is refused and writes nothing; the person sets it at their own terminal
+    // (here: the same value written into the project config, as that write would leave it).
+    const configPath = join(root, '.deckent', 'config.json'), before = await readFile(configPath, 'utf8');
+    const set = await run(['config', 'set', 'execution', JSON.stringify(execution)]);
+    expect(set.code).not.toBe(0); expect(set.stderr).toContain('The setting execution is protected'); expect(await readFile(configPath, 'utf8')).toBe(before);
+    await writeFile(configPath, JSON.stringify({ ...JSON.parse(before) as Record<string, unknown>, execution }, null, 2));
     expect(steps((await run(['init', '--json'])).stdout)).toEqual(['registry', 'pool']);
     const doctor = await run(['doctor']);
     expect(doctor.stdout).toMatch(/warning\s+No worker pool is set up yet: Runs cannot start workers\n\s+next: Declare the first work kind and its worker pool: preview, then the same command with --apply: deckent init registry --scope erp-demo /u);

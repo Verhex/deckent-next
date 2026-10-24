@@ -72,7 +72,12 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
     const ready = (await stages()).find(stage => stage.id === 'core:profile')!;
     expect(ready).toMatchObject({ state: 'ready', autoEligible: false, operation: { id: 'identity-profile.preview', input: { scopeId: 'erp-demo', profile: { id: 'core:solo', version: 1 } } } });
     expect((await f.run(['doctor'])).stdout).toMatch(/warning\s+No identity profile is chosen/u);
-    const result = await configuredSetup({}).applySetupStage(f.root, ready, { env: f.env, scopeId: 'erp-demo' });
+    // alpha.55.1: `identity.profile` is protected — off a person's terminal the stage is refused by name and nothing is written.
+    expect(await configuredSetup({}, { attest: async () => false }).applySetupStage(f.root, ready, { env: f.env, scopeId: 'erp-demo' }))
+      .toEqual({ stage: 'core:profile', operation: 'identity-profile.preview', status: 'refused', code: 'AUTHORITY_WITNESS_REQUIRED' });
+    expect((JSON.parse(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8').catch(() => '{}')) as Record<string, unknown>)['identity']).toBeUndefined();
+    // The person in the window (the terminal witness attests) applies it.
+    const result = await configuredSetup({}, { attest: async () => true }).applySetupStage(f.root, ready, { env: f.env, scopeId: 'erp-demo' });
     expect(result).toEqual({ stage: 'core:profile', operation: 'identity-profile.preview', status: 'applied' });
     expect(JSON.parse(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8'))).toMatchObject({ identity: { profile: { id: 'core:solo', version: 1 } } });
     // Nothing in the folder's own configuration: the selection is the user's, as `config set identity.profile --global`.

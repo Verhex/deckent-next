@@ -43,7 +43,8 @@ async function setup(extra: (principals: unknown) => readonly Grant[] = principa
     await writeFile(policyPath, JSON.stringify(policy), { mode: 0o600 }); clearConfigCache();
   };
   await writePolicy(extra);
-  const app = createConfiguredConfigApplication(root, options), path = join(root, '.deckent/config.json');
+  // alpha.55.1: the owner of these cases is the person at a terminal (the witness attests); the MCP actor is refused by its channel regardless.
+  const app = createConfiguredConfigApplication(root, options, undefined, { attest: async () => true }), path = join(root, '.deckent/config.json');
   const audits = () => { const db = new DatabaseSync(ledger, { readOnly: true }); try { return db.prepare('SELECT record FROM audit_events ORDER BY rowid').all()
     .map(row => JSON.parse(String(row['record'])) as { event: { subject: Record<string, unknown> } }); } finally { db.close(); } };
   const assurance = async (rule: Record<string, unknown> | null) => {
@@ -295,7 +296,9 @@ describe('REVIEW2561 R1: the AI floor over the real terminal boundary keys, on t
       ['terminal.fetch.egress', 'approval'], ['terminal.fetch.allowedHosts', ['evil.example']], ['terminal.shell', { schemaVersion: 1, realm: 'host' }],
       ['terminal.fetch', { schemaVersion: 1, egress: 'allowlist', allowedHosts: ['evil.example'] }], ['terminal', { shell: { schemaVersion: 1, realm: 'host' } }]];
     for (const [keyPath, value] of widening) {
-      await expect(withMcpPrincipal(() => f.app.submit('set', { ...asMcp, commandId: `mcp-${keyPath}`, keyPath, value })), keyPath).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+      // alpha.55.1: on the human write path the MCP actor is refused by the terminal witness before policy is read (the floor still holds on `set`).
+      await expect(withMcpPrincipal(() => f.app.submit('set', { ...asMcp, commandId: `mcp-${keyPath}`, keyPath, value })), keyPath).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+      await expect(withMcpPrincipal(() => f.app.set({ ...asMcp, commandId: `mcp-set-${keyPath}`, keyPath, value })), keyPath).rejects.toMatchObject({ code: 'POLICY_DENIED' });
     }
     expect(await bytesOf(f.path)).toBe(before);
     // Ordinary terminal settings stay governed by policy alone.

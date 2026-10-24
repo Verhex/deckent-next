@@ -5,5 +5,6 @@
   "error.MCP_TRUST_NEEDS_CARD": "MCP sunucusu {name}, Deckent'in artık güven okumadığı bir yerde (projenin veri klasöründe) güvenilir kaydedilmişti. Kartı üzerinden bir kez onaylayın: bir terminalde --yes olmadan `deckent mcp approve {name}` çalıştırın ya da terminalde kullanıp kartını yanıtlayın. Hiçbir şey değiştirilmedi.",
   "security.mcp.note.project": "proje dosyası: ortamdan yalnız şu değişkenler okunur: {names}; diğerleri varsayılanı ya da boş okunur, kimlik bilgisi taşıyan bir değer sunucuyu reddettirir; sır referansları reddedilir",
   "security.mcp.note.moved": "bu sunucunun projenin veri klasöründeki güven kaydı artık kullanılmıyor; bu kartta yeniden karar verin",
-  "security.mcp.trustCard.argument": "argüman {index}: {value}"
+  "security.mcp.trustCard.argument": "argüman {index}: {value}",
+  "security.witness.config": "{key} ayarı korumalıdır: yalnız kendi etkileşimli terminalindeki bir kişi değiştirebilir. Aynı deckent config komutunu (ya da terminaldeki /config penceresini) bu makinede, girişi ve çıkışı aynı terminalde olan kendi terminalinizde çalıştırın. Yapay zekâ araçları, MCP, SDK betikleri, CI, boru hattına bağlı komutlar ve --json bunu değiştiremez. Hiçbir şey değiştirilmedi."
 }

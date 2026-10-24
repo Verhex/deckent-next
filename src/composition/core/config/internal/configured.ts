@@ -1,8 +1,9 @@
 import { composeCore } from '#composition/core/root/index.js';
-import { ConfigApplication, ConfigChangeApprovalBroker, evaluateConfigWrite, type ConfigApprovalPort, type ConfigChangeSubject, type ConfigDocumentPort,
-  type ConfigSnapshot } from '#engine/index.js';
+import { ConfigApplication, ConfigChangeApprovalBroker, assertAuthorityWitness, assertConfigPersonWitness, evaluateConfigWrite, type AuthorityWitness, type ConfigApprovalPort, type ConfigChangeSubject,
+  type ConfigDocumentPort, type ConfigSnapshot } from '#engine/index.js';
 import type { ModelReference, VerifiedPrincipal } from '#domain/index.js';
-import { createConfigFileDocuments, createConfigFileAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, resolveTerminalModel, type TerminalModelChoice } from '#adapters/index.js';
+import { attestLocalInteractiveTerminal, createConfigFileDocuments, createConfigFileAuthority, localPrincipalChannel, localPrincipalPeer, openLocalIntegrityAuthority, openSqliteApprovalStore,
+  resolveTerminalModel, type TerminalModelChoice } from '#adapters/index.js';
 import { resolveLocale, SystemTrustedClock, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { configuredMemoryRolloutPrecondition } from '#composition/core/memory-rollout/index.js';
@@ -15,14 +16,26 @@ export async function resolveConfiguredConfigPrincipal(projectRoot: string, scop
 export function snapshotConfiguredConfig(projectRoot: string, options: ConfigLoadOptions = {}, layer: 'project' | 'global' = 'project') {
   composeCore(); return createConfigFileDocuments(projectRoot, options).snapshot(layer);
 }
-export function createConfiguredConfigApplication(projectRoot: string, options: ConfigLoadOptions = {}, guard?: (snapshot: ConfigSnapshot) => void) {
+/**
+ * alpha.55.1: the person's terminal witness of a protected config write — the same as every person-only command (`memory`, `agents`, `models
+ * roles set`): the MCP actor (or a runtime peer) is refused, any other caller needs `witness` (Core: this process's controlling terminal).
+ */
+export function configPersonWitness(witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }) {
+  return (operation: string) => assertAuthorityWitness(operation, localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined), witness);
+}
+/** A composition writer of a person's choice (`deckent init`'s profile and execution stages): the same rule and witness as `submit`. */
+export function assertConfiguredConfigWitness(action: 'set' | 'unset', keyPath: string, witness?: AuthorityWitness): Promise<void> {
+  return assertConfigPersonWitness(action, keyPath, configPersonWitness(witness));
+}
+export function createConfiguredConfigApplication(projectRoot: string, options: ConfigLoadOptions = {}, guard?: (snapshot: ConfigSnapshot) => void,
+  witness?: AuthorityWitness) {
   composeCore();
   const documents = createConfigFileDocuments(projectRoot, options);
   const guarded: ConfigDocumentPort = guard ? { snapshot: layer => documents.snapshot(layer), publish: (input, planner) => documents.publish(input, async snapshot => { guard(snapshot); return planner(snapshot); }) } : documents;
   const load = (scopeId: string) => loadConfiguredScopeContext(projectRoot, scopeId, { ...options, force: true, heal: false }, 'write');
   // S4B-7: the protected memory live switches are written only when their measured rollout criteria hold (every write path builds this app).
   return new ConfigApplication(guarded, { ...createConfigFileAuthority(load), approvals: configuredConfigApprovals(load, options),
-    precondition: configuredMemoryRolloutPrecondition(projectRoot, options) });
+    precondition: configuredMemoryRolloutPrecondition(projectRoot, options), witness: configPersonWitness(witness) });
 }
 
 /** A card's value: a plain JSON string reads without its quotes ("dark", not "\"dark\""); anything else stays the bounded JSON text. */

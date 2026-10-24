@@ -128,12 +128,14 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 - **The secret gate's config rule covers config-like files only.** A password written into ordinary source code is not
   detected. *Workaround:* keep secrets in a secret store, never in source.
 
-- **Authority changes need a person at a terminal.** Changing the permission mode, setting or deleting a secret, or switching
-  the secret store is refused with `AUTHORITY_WITNESS_REQUIRED` unless the requesting process has its input and output on an
-  interactive terminal; the MCP actor is always refused, and nothing is decided, audited or written. *Impact:*
-  `echo KEY | deckent secret set NAME`, scripts, the SDK called from a script and AI tools can no longer make these changes,
-  and there is no approval-request path for them yet. *Workaround:* run `deckent secret set NAME --main` (or `--project`; hidden prompt),
-  `deckent secret store` or the terminal's `/provider` and mode switch in an interactive terminal.
+- **Authority changes need a person at a terminal.** Changing the permission mode, setting or deleting a secret, switching
+  the secret store, or (alpha.55.1) changing a protected setting with `deckent config set|unset` or the terminal's `/config` is refused
+  with `AUTHORITY_WITNESS_REQUIRED` unless the requesting process has its input and output on an interactive terminal and carries no
+  AI-agent marker; the MCP actor is always refused, and nothing is decided, audited or written. *Impact:*
+  `echo KEY | deckent secret set NAME`, `deckent config set <protected key>` from a script, a pipe or with `--json`, the SDK called from a
+  script and AI tools can no longer make these changes, and there is no approval-request path for them yet. *Workaround:* run
+  `deckent secret set NAME --main` (or `--project`; hidden prompt), `deckent secret store`, `deckent config set <key> <value>` or the
+  terminal's `/provider`, `/config` and mode switch in your own interactive terminal.
 - **The runtime socket refuses sandboxed processes, not other processes of your account.** The runtime service refuses a
   peer outside its own PID, mount and user namespaces, the full-access bubblewrap view hides the runtime socket directories,
   and the Landlock realm cannot open a unix socket at all. A process your account runs outside a sandbox (a host-realm call
@@ -509,7 +511,8 @@ headless subscription Brain, agents). They are code, not yet accepted behaviour:
 fakes (the subscription Brain also with real isolated calls by the lead), not yet in real N1 use. Detail: [core layers](../.deckent/docs/architecture/modules/core-layers.md).
 
 - **Every core-layer switch starts off, and only a person turns it on.** The switches (`memoryAutomation.extraction|verification|context.mode`,
-  `runRuntime.nervous.mode`, `runRuntime.recovery.mode`, `catalogEvolution.mode`) are protected: no AI and no MCP actor may write them.
+  `runRuntime.nervous.mode`, `runRuntime.recovery.mode`, `catalogEvolution.mode`) are protected: no AI and no MCP actor may write them,
+  and since alpha.55.1 a person writes them only at their own interactive terminal (an AI tool, script, pipe or `--json` is refused).
   The headless Brain has no switch (S3-5 retired its preview key): it works only after the person's own login, connect and consent.
   A `shadow` mode records what it would do and applies nothing; memory-verification and recovery shadow still call their model (data
   goes to that provider and the call is spent). The new identities get their exact rights only from policy template v15, which a fresh

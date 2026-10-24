@@ -2,11 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { WORKER_IMAGE_ESTIMATED_GB, attestLocalInteractiveTerminal, codingSetupFamily, detectCodingFacts, detectExecutionFacts, dockerInstallOffer, executionSetupFamily, localPrincipalChannel,
   nativeProviderSpec, observeWorkerImage, workerImagePresence, workerImageSetupPorts, type ExecutionFacts } from '#adapters/index.js';
-import { WorkerImageSetupApplication, assertAuthorityWitness, type SetupStage } from '#engine/index.js';
+import { WorkerImageSetupApplication, assertAuthorityWitness, type AuthorityWitness, type SetupStage } from '#engine/index.js';
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { cliCardGate, doctorVerdict, loadSetupSurface, type CliCardIo, type KernelCommandContext } from '#surfaces/index.js';
 import { applyPolicyTemplateInstallationWithSecretDefault, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
-import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
+import { assertConfiguredConfigWitness, createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { inspectConfiguredShellRealm } from '#composition/core/agent-turn/index.js';
 import { installExecutionEnvironment } from './install.js';
 
@@ -24,7 +24,7 @@ const failure = (error: unknown) => { const code = (error as { code?: unknown } 
  * human doctor) run in the surface after the window closed, so here they are refused (TERMINAL_TTY_REQUIRED) and never half-run; the
  * surface reaches I-D2's foreground install through `installExecutionEnvironment`.
  */
-export function configuredSetup(host: object) {
+export function configuredSetup(host: object, witness: AuthorityWitness = { attest: () => attestLocalInteractiveTerminal() }) {
   // The doctor verdict (its grouped rows, read-only); in an observation a measurement that cannot run is "not run", never a guess.
   const verdict = (env: NodeJS.ProcessEnv, root: string) => doctorVerdict(root, { ...host, env } as KernelCommandContext, { env });
   const observeSetup = async (root: string, options: Options) => {
@@ -42,8 +42,11 @@ export function configuredSetup(host: object) {
   const applySetupStage = async (root: string, stage: SetupStage, options: Options) => {
     const op = stage.operation?.id ?? '-', input = stage.operation?.input ?? {}, scopeId = String(input['scopeId'] ?? options.scopeId ?? '');
     const result = (status: Status, code?: string) => ({ stage: stage.id, operation: op, status, ...(code ? { code } : {}) });
-    const config = async (keyPath: string, value: unknown, layer: 'project' | 'global') => createConfiguredConfigApplication(root, options).set({ keyPath, value, layer,
-      principal: await resolveConfiguredConfigPrincipal(root, scopeId, options), scopeId, commandId: randomUUID() });
+    // alpha.55.1: a person's choice of a protected root (`execution`, `identity.profile`) needs the same terminal witness as `config set`.
+    const config = async (keyPath: string, value: unknown, layer: 'project' | 'global') => {
+      await assertConfiguredConfigWitness('set', keyPath, witness);
+      return createConfiguredConfigApplication(root, options).set({ keyPath, value, layer, principal: await resolveConfiguredConfigPrincipal(root, scopeId, options), scopeId, commandId: randomUUID() });
+    };
     try {
       if (op === 'installation.policy-template') {
         // The owner's own preview first (the same deterministic plan the apply journals), then the journaled first-run install.

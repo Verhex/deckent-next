@@ -1,6 +1,6 @@
 import { clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, CONFIG_CHANGE_DISPLAY_MAX, encodeCommandProjection, identitySchema, isAiPrincipal, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, CONFIG_CHANGE_DISPLAY_MAX, encodeCommandProjection, identitySchema, isAiPrincipal, protectedConfigKey, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
 import { digestText, serializeJsonDocument, sha256, ErrorRegistry } from '#platform/index.js';
 import { ConfigApplicationError, type ConfigApprovalPort, type ConfigAuthorityPort, type ConfigChangeOutcome, type ConfigChangeSubject, type ConfigDocumentPort,
   type ConfigSnapshot, type ConfigWriteInput, type ConfigWritePermission } from './contract.js';
@@ -69,10 +69,14 @@ export class ConfigApplication {
    * previewed layer digest is opened (or found) and reported pending — nothing is written. The same command submitted again after an `allow`
    * applies once, under the layer lock, only if the layer digest is still the previewed one (else `CONFIG_APPROVAL_STALE`: preview again) and
    * the current policy still permits it; the write is audited like every config write. Deny and expiry are the broker's typed refusals.
+   * A protected root first needs the person's terminal witness (`authority.witness`). `set`/`unset` stay the installer's and the toolchain
+   * refresh's derived writes (no person-chosen key or value); a composition writer of a person's choice asks the same witness itself.
    */
   async submit(action: 'set' | 'unset', input: ConfigWriteInput): Promise<ConfigChangeOutcome> {
     const unset = action === 'unset', approvals = this.authority.approvals;
     this.admitInput(input);
+    // alpha.55.1 (functest B P1): a protected root is a person's act at a terminal on every human surface, whatever the policy grants.
+    await assertConfigPersonWitness(action, input.keyPath, this.authority.witness);
     if (!approvals) return { status: 'applied', result: await this.change(input, unset), approvalId: null };
     if ((await approvals.evaluate(input)).decision === 'allow') return { status: 'applied', result: await this.write(input, unset, approvals, null), approvalId: null };
     const preview = await this.documents.snapshot(input.layer ?? 'project');
@@ -134,6 +138,20 @@ export class ConfigApplication {
       await this.authority.audit(event); return { document, event };
     });
   }
+}
+/** alpha.55.1: whether a write of `keyPath` changes a protected root (the AI floor's config roots, ancestors included) — a person's act at a terminal. */
+export const isProtectedConfigWrite = (keyPath: string): boolean => protectedConfigKey(keyPath);
+/** The witness's name for one config write (`config set <key>`), shared by the surfaces' refusal and the engine's. */
+export const configWriteOperation = (action: 'set' | 'unset', keyPath: string): string => `config ${action} ${keyPath}`;
+/**
+ * alpha.55.1: the one rule of every human config write path — a write that changes a protected root needs the person's terminal witness
+ * (the composition's, as for every person-only command); without one it is refused (fail closed). Other keys pass without asking.
+ */
+export async function assertConfigPersonWitness(action: 'set' | 'unset', keyPath: string, witness: ((operation: string) => Promise<void>) | undefined): Promise<void> {
+  if (!protectedConfigKey(keyPath)) return;
+  const operation = configWriteOperation(action, keyPath);
+  if (!witness) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation } });
+  await witness(operation);
 }
 /**
  * Owner Q-H3 / SIWC3: a subscription invocation profile (the person's own login, its uid floor and its delegated-use consent) is created, changed or
