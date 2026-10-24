@@ -18,12 +18,20 @@ const receipts = () => inventory.map((file, i) => ({ schemaVersion: 1, ...identi
     counts: { passed: 2, failed: 0, skipped: 0, pending: 0 } }] }));
 test('duration allocation keeps known and new files exactly once and starts with the longest', () => {
   const files = [...inventory, 'tests/new.test.ts'];
-  const plan = partitionTests(files, { [inventory[0]]: 10000, [inventory[1]]: 2000 }, 3);
+  const plan = partitionTests(files, { [inventory[0]]: 10000, [inventory[1]]: 2000 }, 3, 0);
   assert.deepEqual(plan.flatMap(bin => bin.files).sort(), files.sort());
   assert.equal(new Set(plan.flatMap(bin => bin.files)).size, files.length);
   assert.ok(plan[0].files.includes(inventory[0]));
-  assert.deepEqual(partitionTests([...files].reverse(), { [inventory[0]]: 10000, [inventory[1]]: 2000 }, 3), plan);
+  assert.deepEqual(partitionTests([...files].reverse(), { [inventory[0]]: 10000, [inventory[1]]: 2000 }, 3, 0), plan);
   assert.throws(() => partitionTests([inventory[0], inventory[0]], {}, 3), /duplicate/);
+});
+test('shard 1 starts with its reserved native/host/smoke cost, so Vitest files move to the other shards', () => {
+  const files = Array.from({ length: 6 }, (_, i) => `tests/r-${i}.test.ts`), durations = Object.fromEntries(files.map(f => [f, 1000]));
+  const plain = partitionTests(files, durations, 3, 0), reserved = partitionTests(files, durations, 3, 2500);
+  assert.equal(plain[0].files.length, 2);
+  assert.equal(reserved[0].files.length, 0);
+  assert.equal(reserved[0].durationMs, 2500);
+  assert.deepEqual(reserved.flatMap(bin => bin.files).sort(), [...files].sort());
 });
 test('aggregate accepts exact coverage and preserves actual skip counts', () => {
   const r = receipts(); r[0].files[0].counts.skipped = 1;

@@ -1,4 +1,5 @@
 {
   "shards": 16,
-  "maxForks": 2
+  "maxForks": 2,
+  "shardOneReservedMs": 75000
 }

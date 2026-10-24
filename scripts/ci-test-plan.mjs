@@ -1,14 +1,17 @@
 import { createHash } from 'node:crypto';
 import config from './ci-test-config.json' with { type: 'json' };
 
-if (!Number.isSafeInteger(config.shards) || config.shards < 1 || !Number.isSafeInteger(config.maxForks) || config.maxForks < 1) throw new Error('Invalid CI test configuration');
+if (!Number.isSafeInteger(config.shards) || config.shards < 1 || !Number.isSafeInteger(config.maxForks) || config.maxForks < 1
+  || !Number.isSafeInteger(config.shardOneReservedMs) || config.shardOneReservedMs < 0) throw new Error('Invalid CI test configuration');
 export const SHARDS = config.shards;
 export const MAX_FORKS = config.maxForks;
+// Shard 1 also runs the native, host and smoke suites after Vitest (ci-shard.mjs); its bin starts with that measured cost.
+export const SHARD_ONE_RESERVED_MS = config.shardOneReservedMs;
 export function fileIdentity(path) { return path.replaceAll('\\', '/'); }
 export function inventoryDigest(files) {
   return createHash('sha256').update(JSON.stringify([...files].sort())).digest('hex');
 }
-export function partitionTests(files, durations, count = SHARDS) {
+export function partitionTests(files, durations, count = SHARDS, shardOneReservedMs = SHARD_ONE_RESERVED_MS) {
   if (!Number.isSafeInteger(count) || count < 1) throw new Error('Invalid shard count');
   const normalized = files.map(fileIdentity);
   if (!normalized.length || new Set(normalized).size !== normalized.length) throw new Error('Empty or duplicate test inventory');
@@ -17,7 +20,7 @@ export function partitionTests(files, durations, count = SHARDS) {
   const observed = Object.values(durations).filter(n => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
   const fallback = observed[Math.floor(observed.length / 2)] ?? 1000;
   const weight = file => Number.isFinite(durations[file]) && durations[file] > 0 ? durations[file] : fallback;
-  const bins = Array.from({ length: count }, () => ({ files: [], durationMs: 0 }));
+  const bins = Array.from({ length: count }, (_, i) => ({ files: [], durationMs: i === 0 ? shardOneReservedMs : 0 }));
   for (const file of normalized.sort((a, b) => weight(b) - weight(a) || a.localeCompare(b, 'en'))) {
     const bin = bins.reduce((best, current) => current.durationMs < best.durationMs ? current : best);
     bin.files.push(file); bin.durationMs += weight(file);
