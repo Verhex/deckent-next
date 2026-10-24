@@ -7,10 +7,10 @@ const positive = counterSchema.positive(), criterion = (extra: z.ZodRawShape) =>
  * alpha.56 G4 (owner Q-A2/Q-A4/Q-A5; S6R-DESIGN §11): the recovery rollout registry, versioned Core data (`assets/recovery/rollout.json`,
  * provisional until measured). `rules`: the Nervous rules a person may promote in this release (the lost-worker rules); `detection`: per
  * rule@version, the shadow cases since its last false positive; `decision`: the model-decided cases a person reviewed blind and how many agreed
- * (per mille); `scan`: the newest sealed records read per source (a bound hit leaves every criterion unmet). Meeting them is evidence only.
+ * (per mille); `scan`: the newest sealed records read per source (a bound hit leaves every criterion unmet) and the cases one review page lists. Meeting them is evidence only.
  */
 export const recoveryRolloutRegistrySchema = z.object({ schemaVersion: z.literal(1), revision: identitySchema, status: z.enum(['provisional', 'measured']),
-  rules: z.array(identitySchema).min(1).max(32).readonly(), scan: z.object({ detections: positive, decisions: positive, verdicts: positive }).strict().readonly(),
+  rules: z.array(identitySchema).min(1).max(32).readonly(), scan: z.object({ detections: positive, decisions: positive, verdicts: positive, reviewPage: positive.max(100) }).strict().readonly(),
   detection: criterion({}), decision: criterion({ minPerMille: z.number().int().min(0).max(1000) }) }).strict().readonly();
 export type RecoveryRolloutRegistry = z.infer<typeof recoveryRolloutRegistrySchema>;
 export const RECOVERY_ROLLOUT: RecoveryRolloutRegistry = Object.freeze(recoveryRolloutRegistrySchema.parse(seed));
@@ -22,7 +22,7 @@ export type RecoveryRolloutRecords = Readonly<{
   decisions: readonly Readonly<{ caseId: string; eventId: string; action: 'continue-new-attempt' | 'escalate-human' }>[];
   verdicts: readonly Readonly<{ caseId: string; decisionEventId: string; detection: 'lost' | 'not-lost'; choice: 'continue-new-attempt' | 'escalate-human' | null }>[];
   contradicted: readonly string[]; complete: boolean }>;
-export type RecoveryRolloutRuleView = Readonly<{ ruleId: string; version: number; cases: number; sinceFalsePositive: number; falsePositives: number; met: boolean }>;
+export type RecoveryRolloutRuleView = Readonly<{ id: string; version: number; shadowCases: number; sinceFalsePositive: number; falsePositives: number; met: boolean }>;
 /** Counts only (blind, owner Q-A5): a model's choice of an unreviewed case is never part of the view, so no surface can show it. */
 export type RecoveryRolloutView = Readonly<{ registry: Readonly<{ revision: string; status: 'provisional' | 'measured' }>; complete: boolean;
   rules: readonly RecoveryRolloutRuleView[]; decisions: Readonly<{ decided: number; agreements: number; perMille: number | null; waiting: number; met: boolean }> }>;
@@ -34,7 +34,7 @@ export function recoveryRolloutView(records: RecoveryRolloutRecords, registry: R
   const rules = registry.rules.flatMap(id => records.rules.filter(rule => rule.id === id)).map(rule => {
     const cases = records.detections.filter(row => row.ruleId === rule.id && row.ruleVersion === rule.version), wrong = cases.filter(row => falsePositive(row.caseId));
     const reset = Math.max(0, ...wrong.map(row => row.sequence)), since = cases.filter(row => row.sequence > reset).length;
-    return Object.freeze({ ruleId: rule.id, version: rule.version, cases: cases.length, sinceFalsePositive: since, falsePositives: wrong.length,
+    return Object.freeze({ id: rule.id, version: rule.version, shadowCases: cases.length, sinceFalsePositive: since, falsePositives: wrong.length,
       met: records.complete && rolloutCriterionMet(registry.detection, { count: 0, sample: since, of: null }) });
   });
   const decisions = new Map(records.decisions.map(row => [row.eventId, row] as const));

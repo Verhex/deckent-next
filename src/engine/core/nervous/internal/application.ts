@@ -1,5 +1,5 @@
 import { AUDIT_EVENT_SCHEMA_VERSION, RECOVERY_ACTIONS, auditEventSchema, identitySchema, nervousPrincipalRef, type AuditEvent, type AuditRecord } from '#domain/index.js';
-import { NervousError, loadNervousRules, type NervousRules } from './rules.js';
+import { NervousError, loadNervousRules, promoteNervousRule, type NervousRules } from './rules.js';
 import { advanceNervousAbsence, detectNervousAttempt, detectNervousFeed, detectNervousOutage, nervousAttemptSignalSchema, nervousProposalSchema,
   type NervousAbsence, type NervousAttemptSignal, type NervousFeedKind, type NervousProposal } from './detect.js';
 import { nervousDisposition, nervousStandingApprovalSchema, type NervousDisposition, type NervousExecutors } from './broker.js';
@@ -9,8 +9,10 @@ export interface NervousPorts {
   readonly audit: { record(event: AuditEvent): unknown; load(scopeId: string, eventId: string): AuditRecord | null | Promise<AuditRecord | null> };
   readonly now: () => number;
 }
-/** `approval` (S6R-3): the owner's standing approval for one proposal, read from this scope's loaded policy (absent: the constructor's record). */
-export type NervousContext = Readonly<{ owner: Readonly<{ issuer: string; subject: string }>; policyRevision: string; approval?: (proposal: NervousProposal) => unknown }>;
+/** `approval` (S6R-3): the owner's standing approval for one proposal, read from this scope's loaded policy (absent: the constructor's record).
+ * `promoted` (alpha.56 G2): whether a person promoted exactly this rule id and version in this scope, read fresh per page (absent: none). */
+export type NervousContext = Readonly<{ owner: Readonly<{ issuer: string; subject: string }>; policyRevision: string; approval?: (proposal: NervousProposal) => unknown;
+  promoted?: (ruleId: string, version: number) => boolean }>;
 export type NervousOutcome = Readonly<{ caseId: string; ruleId: string; action: NervousProposal['action']; disposition: NervousDisposition; replay: boolean; executed: boolean }>;
 const PRESENT = new Set(['missing', 'created', 'running', 'paused', 'exited']);
 /** Insertion-ordered bounded memory: the oldest key leaves first. */
@@ -91,7 +93,8 @@ export class NervousApplication {
   async broker(input: unknown, context: NervousContext, replayOnly = false): Promise<NervousOutcome | null> {
     const parsed = nervousProposalSchema.safeParse(input);
     if (!parsed.success || !(RECOVERY_ACTIONS as readonly string[]).includes(parsed.data.action)) throw new NervousError('NERVOUS_ACTION_REFUSED');
-    const proposal = parsed.data, eventId = `recovery-detection:${proposal.caseId}`, key = `${proposal.scopeId}\0${eventId}`;
+    // alpha.56 G2: the effective status is fixed before the seal, so the sealed `rule.status` is the one the broker applied (a seed version bump demotes).
+    const proposal = promoteNervousRule(parsed.data, context.promoted), eventId = `recovery-detection:${proposal.caseId}`, key = `${proposal.scopeId}\0${eventId}`;
     if (this.sealed.has(key)) return null;
     const outcome = (disposition: NervousDisposition, replay: boolean, executed: boolean): NervousOutcome =>
       Object.freeze({ caseId: proposal.caseId, ruleId: proposal.rule.id, action: proposal.action, disposition, replay, executed });

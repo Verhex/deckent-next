@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { RECOVERY_ROLLOUT, recoveryRolloutView, type RecoveryRolloutRecords } from '#domain/index.js';
+import { RECOVERY_ROLLOUT, recoveryRolloutView, type RecoveryRolloutRecords, type RunSnapshot } from '#domain/index.js';
+import { recoveryReportAccepted } from '#engine/index.js';
 
 // alpha.56 G4 (R-DESIGN §2 G4; owner Q-A2/Q-A4/Q-A5): the recovery rollout view over sealed-record fixtures. Expected thresholds are the design's
 // §11 numbers (≥ 20 shadow cases per rule since its last false positive; ≥ 10 blind-reviewed model decisions at ≥ 900‰), never recomputed from the code.
@@ -14,10 +15,10 @@ it('per rule@version: cases since the last false positive (a verdict or an accep
   const orphan = detections('launcher-dead-orphan', 200, 30), dead = detections('launcher-dead-gone', 300, 19);
   const view = recoveryRolloutView({ ...empty, detections: [...gone, ...orphan, ...dead, ...detections('crash-loop', 400, 40)],
     verdicts: [{ caseId: 'launcher-dead-orphan-212', decisionEventId: 'x', detection: 'not-lost', choice: null }], contradicted: ['container-gone-3'] });
-  expect(view.rules.map(row => [row.ruleId, row.cases, row.sinceFalsePositive, row.falsePositives, row.met])).toEqual([
+  expect(view.rules.map(row => [row.id, row.shadowCases, row.sinceFalsePositive, row.falsePositives, row.met])).toEqual([
     ['container-gone', 25, 22, 1, true], ['launcher-dead-orphan', 30, 17, 1, false], ['launcher-dead-gone', 19, 19, 0, false]]);
   // A scan bound hit is unmet, whatever the counts say.
-  expect(recoveryRolloutView({ ...empty, detections: gone, complete: false }).rules[0]).toMatchObject({ cases: 25, met: false });
+  expect(recoveryRolloutView({ ...empty, detections: gone, complete: false }).rules[0]).toMatchObject({ shadowCases: 25, met: false });
 });
 
 it('decision agreement: only lost verdicts on a model decision count, per mille floored; undecided cases are counts only (blind)', () => {
@@ -32,4 +33,13 @@ it('decision agreement: only lost verdicts on a model decision count, per mille 
   expect(recoveryRolloutView({ ...empty, decisions, verdicts: [...ten.slice(0, 8), verdict(8, false), verdict(9, false), ...notLost.slice(10)] }).decisions)
     .toEqual({ decided: 10, agreements: 8, perMille: 800, waiting: 1, met: false });
   expect(JSON.stringify(recoveryRolloutView({ ...empty, decisions }))).not.toMatch(/continue-new-attempt|escalate-human/u);
+});
+
+it('an accepted report of the detected Attempt contradicts the detection; an exit that reached evaluation as report-missing (killed, orphaned) does not', () => {
+  const target = { taskId: 't', attemptId: 'a1' }, binding = (attemptId: string) => ({ identity: { taskId: 't', attemptId } });
+  const run = (phase: string, bindings: unknown[], previous: unknown[] = []) => ({ progress: [{ taskId: 't', phase }], bindings, previousBindings: previous }) as unknown as RunSnapshot;
+  expect(recoveryReportAccepted(run('accepted', [binding('a1')]), target)).toBe(true);
+  expect(recoveryReportAccepted(run('failed', [binding('a1')]), target)).toBe(false); // report-missing / report-invalid: not accepted
+  expect(recoveryReportAccepted(run('accepted', [binding('a2')], [{ ...binding('a1'), observedKind: 'stalled', stallCause: 'report-missing' }]), target)).toBe(false); // a retry delivered
+  expect(recoveryReportAccepted(null, target)).toBe(false);
 });

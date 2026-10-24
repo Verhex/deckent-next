@@ -43,5 +43,10 @@
   "recovery.state.unknown": "Kalıcı onay okunamadı; okunana kadar kaybolan worker vakaları bir kişiye gider.",
   "recovery.unresolved.off": "  Bu Run kabul edildiğinde otomatik kurtarma kapalıydı: hiçbir şey kendiliğinden yeniden denenmez ve yeni deneme başlamaz; bir kişi karar verir.",
   "recovery.unresolved.shadow": "  Bu Run için kurtarma gölge kipinde: bir kurtarma kararı incelemek için kaydedilir ama hiçbir şey kendiliğinden devam etmez; bir kişi karar verir.",
-  "recovery.unresolved.live": "  Bu Run için otomatik kurtarma açık: worker'ın kaybolduğu kanıtlandığında, açık dış iş kalmadığında ve sahibin kalıcı izni buna olanak verdiğinde Deckent bu görevi bu Run için dondurulan sınırlar içinde yeni bir denemeyle sürdürebilir; aksi halde bir kişi karar verir."
+  "recovery.unresolved.live": "  Bu Run için otomatik kurtarma açık: worker'ın kaybolduğu kanıtlandığında, açık dış iş kalmadığında ve sahibin kalıcı izni buna olanak verdiğinde Deckent bu görevi bu Run için dondurulan sınırlar içinde yeni bir denemeyle sürdürebilir; aksi halde bir kişi karar verir.",
+  "error.RECOVERY_TARGET_INVALID": "Hiçbir şey değişmedi: bu kurtarma eylemi, kuralı ya da vakası bu kartta burada sunulmuyor. Seçebileceklerinizi görmek için deckent policy recovery ya da deckent recovery review çalıştırın.",
+  "error.RECOVERY_ROLLOUT_CRITERIA_UNMET": "Değişmedi: {target}, {scope} kapsamında yalnız ölçülen çıkış ölçütleri ({criteria}) sağlandıktan sonra açılabilir.",
+  "recovery.next.RECOVERY_ROLLOUT_CRITERIA_UNMET": "Her sayıyı ve onu neyin ilerlettiğini görmek için deckent recovery --scope {scope} çalıştırın.",
+  "error.RECOVERY_ACTION_NO_EXECUTOR": "Değişmedi: {action} bu sürümde bir etki üretmiyor; bu yüzden onun için kalıcı izin yazılmaz.",
+  "error.RECOVERY_VERDICT_CONFLICT": "Değişmedi: {case} vakasına daha önce farklı bir yanıt verdiniz; her vaka için tek yanıt tutulur."
 }

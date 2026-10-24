@@ -37,3 +37,8 @@ export function loadNervousRules(input: unknown): NervousRules {
   if (rule('daemon-unavailable-escalate').afterMs <= rule('daemon-unavailable').graceMs) throw new NervousError('NERVOUS_RULES_UNREADABLE');
   return Object.freeze({ revision: parsed.data.revision, tracking: Object.freeze({ ...parsed.data.tracking }), rules: Object.freeze([...parsed.data.rules]), rule });
 }
+/** Pure (alpha.56 G2): a proposal of a rule a person promoted at exactly its id and version reads `live`; any other keeps its seeded status. */
+export function promoteNervousRule<P extends Readonly<{ rule: Readonly<{ id: string; version: number; status: (typeof NERVOUS_RULE_STATUSES)[number] }> }>>(proposal: P,
+  promoted: ((ruleId: string, version: number) => boolean) | undefined): P {
+  return proposal.rule.status !== 'live' && promoted?.(proposal.rule.id, proposal.rule.version) === true ? { ...proposal, rule: { ...proposal.rule, status: 'live' } } : proposal;
+}

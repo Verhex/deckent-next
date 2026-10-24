@@ -3892,7 +3892,7 @@
         "src/domain/core/model-invocation",
         "src/engine/core/model-activation",
         "src/domain/core/provider-catalog"
-      ],
+      , "src/platform/core/errors", "src/engine/core/approval", "src/engine/core/policy"],
       "plan": "EXECUTION"
     },
     "src/adapters/core/recovery-case-store": {

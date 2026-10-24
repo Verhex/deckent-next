@@ -96,6 +96,10 @@ it('shadow: the model is asked once on the real case, the decision sealed, and t
   expect(await prepareConfiguredRecovery(h.f.project, h.f.options, 'shadow')!.run('s')).toEqual([{ kind: 'shadow', action: 'continue-new-attempt', code: null, replay: false }]);
   expect(h.f.posts).toBe(1); expect(h.sealed().map(event => event.subject.mode)).toEqual(['shadow']);
   expect(await h.store.loadRun('s', 'lost-run')).toEqual(before); expect(h.rows('SELECT count(*) AS n FROM recovery_cases')).toEqual([{ n: 0 }]);
+  // alpha.56 R2 (R-DESIGN §2 G1, Q-A6): BUD4 — the shadow call is no Run's spend: no Run is bound to it and no Run quota wait opens (the Run is unchanged above).
+  expect(h.rows('SELECT count(*) AS n FROM run_quota_waits')).toEqual([{ n: 0 }]);
+  // S9 — it is the installation's spend on the receipted invocation path: exactly one provider spend reservation, under the sealed call's invocation.
+  expect(h.rows('SELECT invocation_id FROM model_invocation_spend_reservations')).toEqual([{ invocation_id: h.sealed()[0].subject.model.invocationId }]);
   expect(await prepareConfiguredRecovery(h.f.project, h.f.options, 'shadow')!.run('s')).toEqual([{ kind: 'shadow', action: 'continue-new-attempt', code: null, replay: true }]);
   expect(h.f.posts).toBe(1);
 });

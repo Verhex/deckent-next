@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import { rm } from 'node:fs/promises';
-import { RECOVERY_POLICY_SEED, RecoveryError, assessRecoveryEffectGate, auditEventSchema, continueLostTask, freezeRecoveryPolicy, loadRecoveryPolicy, lostContinuationRefusal,
+import { RECOVERY_POLICY_SEED, RecoveryError, assessRecoveryEffectGate, auditEventSchema, continueLostTask, freezeRecoveryPolicy, loadRecoveryPolicy, lostContinuationRefusal, lowRiskTaskIds,
   recoveryCaseSchema, recoveryEffectGatePasses, recoveryEscalationCode, reserveRunTasks, runSnapshotSchema, effectRecordSchema, type AttemptIdentity, type EffectRecord, type RunSnapshot } from '#domain/index.js';
 import { measureTaskOccupancy } from '#engine/index.js';
 import type { SqliteAttemptStore } from '#adapters/index.js';
@@ -137,6 +137,8 @@ it('alpha.56 G1/G6: the would-stop shadow input passes readiness without a relea
     expect(lostContinuationRefusal({ ...unreleased, execution: { ...unreleased.execution, recovery } }, f.identity, input, 'would-stop')).toBe('RECOVERY_RISK_NOT_LOW');
   }
   expect(recoveryEscalationCode(new RecoveryError('RECOVERY_RISK_NOT_LOW'))).toBe('work-class-not-low-risk');
+  // Admission freezes the list from the registry: today only `small` is `proposalAdmission.risk: low`; an unknown class is never low-risk.
+  expect(lowRiskTaskIds([{ id: 'a', kind: 'code', workClass: 'small' }, { id: 'b', kind: 'code', workClass: 'feature' }, { id: 'c', kind: 'code', workClass: 'no-such-class' }])).toEqual(['a']);
 });
 
 it('alpha.56 G1: a receipt-less termination is only a would-stop case or a would-stop shadow seal; a verdict names a choice exactly when the worker was lost', () => {

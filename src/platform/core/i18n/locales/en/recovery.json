@@ -43,5 +43,10 @@
   "recovery.state.unknown": "The standing grant could not be read; lost-worker cases go to a person until it can.",
   "recovery.unresolved.off": "  Automatic recovery was off when this Run was admitted: nothing is retried and no new attempt starts on its own; a person decides.",
   "recovery.unresolved.shadow": "  Recovery runs in shadow mode for this Run: a recovery decision is recorded for review, but nothing continues on its own; a person decides.",
-  "recovery.unresolved.live": "  Automatic recovery is on for this Run: once the worker is proven lost, no outside work is left open and the owner's standing grant allows it, Deckent may continue this task with a new attempt within the limits frozen for this Run; otherwise a person decides."
+  "recovery.unresolved.live": "  Automatic recovery is on for this Run: once the worker is proven lost, no outside work is left open and the owner's standing grant allows it, Deckent may continue this task with a new attempt within the limits frozen for this Run; otherwise a person decides.",
+  "error.RECOVERY_TARGET_INVALID": "Nothing changed: that recovery action, rule or case is not one this card offers here. Run deckent policy recovery or deckent recovery review to see what you can choose.",
+  "error.RECOVERY_ROLLOUT_CRITERIA_UNMET": "Not changed: {target} can be turned on in scope {scope} only after its measured exit criteria ({criteria}) are met.",
+  "recovery.next.RECOVERY_ROLLOUT_CRITERIA_UNMET": "Run deckent recovery --scope {scope} to see each number and what moves it.",
+  "error.RECOVERY_ACTION_NO_EXECUTOR": "Not changed: {action} has no effect in this release, so no standing grant is written for it.",
+  "error.RECOVERY_VERDICT_CONFLICT": "Not changed: case {case} already has a different answer from you; one answer per case is kept."
 }

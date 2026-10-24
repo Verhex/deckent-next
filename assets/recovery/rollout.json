@@ -3,7 +3,7 @@
   "revision": "recovery-rollout-core-1",
   "status": "provisional",
   "rules": ["container-gone", "launcher-dead-orphan", "launcher-dead-gone"],
-  "scan": { "detections": 1000, "decisions": 1000, "verdicts": 1000 },
+  "scan": { "detections": 1000, "decisions": 1000, "verdicts": 1000, "reviewPage": 20 },
   "detection": { "id": "detection-cases", "minSample": 20 },
   "decision": { "id": "decision-agreement", "minSample": 10, "minPerMille": 900 }
 }

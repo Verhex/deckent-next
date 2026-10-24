@@ -24,8 +24,8 @@ export type LostBasis = 'released' | 'would-stop';
 /**
  * Pure: why the lost task of `identity` may not continue now (null: it may), in a fixed order — the Run is closing, it was admitted without frozen
  * recovery bounds (before the switch: never), the case is not ready (`released`: the Attempt is the task's current `unknown` binding, the task
- * `reconciling` with its slot released by a termination proof; `would-stop`: the Attempt is the task's current `started`/`unknown` binding whose
- * slot is not released), the gate (nothing open; settled work only where the catalog declares task-scoped idempotency), then the frozen bounds —
+ * `reconciling` with its slot released by a termination proof; `would-stop`: the Attempt is the task's current binding, not yet observed or observed
+ * `started`/`unknown`, whose slot is not released), the gate (nothing open; settled work only where the catalog declares task-scoped idempotency), then the frozen bounds —
  * continuations per task, the total Attempt ceiling per task across every automatic path (stall, lost; stricter wins), continuations per Run —
  * the task's frozen low-risk WorkClass (G6) and, when a signature is given, the changed-evidence requirement. Both bases share every check after readiness.
  */
@@ -35,7 +35,7 @@ export function lostContinuationRefusal(run: RunSnapshot, identity: AttemptIdent
   if (!policy) return 'RECOVERY_OFF';
   const task = run.progress.find(row => row.taskId === identity.taskId), binding = run.bindings.find(row => sameAttemptIdentity(row.identity, identity));
   if (!task || !binding) return 'RECOVERY_NOT_READY';
-  if (basis === 'would-stop' ? !['started', 'unknown'].includes(binding.observedKind ?? '') || task.workerCustody?.state === 'released'
+  if (basis === 'would-stop' ? !(binding.observedKind === null || ['started', 'unknown'].includes(binding.observedKind)) || task.workerCustody?.state === 'released'
     : binding.observedKind !== 'unknown' || task.phase !== 'reconciling' || !task.unresolvedEffects || task.workerCustody?.state !== 'released'
       || task.workerCustody.basis !== 'termination-proof') return 'RECOVERY_NOT_READY';
   const gate = recoveryEffectGateSchema.safeParse(continuation.gate);

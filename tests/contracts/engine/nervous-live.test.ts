@@ -181,3 +181,15 @@ it('one case\'s failed step never blocks the other cases of the page; the failur
   expect(fake.calls).toEqual([['recover', 'a2', 'fence']]);
   expect(h.rows().map(row => row.target?.attemptId)).toEqual(['a1', 'a2']);
 });
+
+it('alpha.56 G2: a person\'s promotion of the exact rule id and version makes the seeded provisional rule live; another version stays provisional, and the seal says so', async () => {
+  const exact = await harness({ rules: NERVOUS_RULES_SEED });
+  const promoted = { ...exact.context, promoted: (ruleId: string, version: number) => ruleId === 'launcher-dead-orphan' && version === 1 };
+  expect(await exact.app.observeAttempts('s', [signal()], promoted)).toEqual([expect.objectContaining({ disposition: 'execute', executed: true })]);
+  expect(exact.rows()[0]).toMatchObject({ rule: { id: 'launcher-dead-orphan', version: 1, status: 'live' }, disposition: 'execute' });
+  // A seed version bump (or a promotion of another version) demotes: the proposal stays provisional and nothing executes.
+  const other = await harness({ rules: NERVOUS_RULES_SEED });
+  const stale = { ...other.context, promoted: (ruleId: string, version: number) => ruleId === 'launcher-dead-orphan' && version === 2 };
+  expect(await other.app.observeAttempts('s', [signal()], stale)).toEqual([expect.objectContaining({ disposition: 'proposal-only', executed: false })]);
+  expect(other.rows()[0]).toMatchObject({ rule: { status: 'provisional' } }); expect(other.calls).toEqual([]);
+});
