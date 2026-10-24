@@ -1,0 +1,6 @@
+interface:
+  display_name: "Deckent Lean Change"
+  short_description: "Smallest complete code or test change with the fewest proving tests"
+  default_prompt: "Use $deckent-lean-change to write the smallest complete Deckent change for this scope."
+policy:
+  allow_implicit_invocation: true

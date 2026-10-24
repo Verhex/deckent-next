@@ -4,5 +4,5 @@ alwaysApply: true
 ---
 # karpathy-discipline
 
-Read `deckent-next-refactor` first.
+Read `deckent-next-refactor` first; for writing or changing code or tests also load `deckent-lean-change`.
 Inspect before editing. State uncertain assumptions. Make cohesive responsibility changes, avoid speculative abstractions, and verify the relevant observable behavior.
