@@ -29,7 +29,7 @@ async function created(memoryBytes: number, argv: string[] = ['node', 'x']) {
     if (verb === 'inspect') {
       if (state === 'missing') throw { stderr: 'No such object: ' + args[at + 1] };
       return { stdout: JSON.stringify([{ Id: 'c'.repeat(64), Image: imageId, Config: { Labels: { 'deckent.request': label } },
-        Mounts: [{ Type: 'bind', Source: path, Destination: '/workspace', RW: true }], State: { Status: state, ExitCode: 0 } }]), stderr: '' };
+        Mounts: [{ Type: 'bind', Source: path, Destination: '/workspace', RW: true }], HostConfig: { NetworkMode: 'none' }, State: { Status: state, ExitCode: 0 } }]), stderr: '' };
     }
     if (verb === 'create') { create = args.slice(at); label = args[args.indexOf('--label') + 1]!.slice('deckent.request='.length); state = 'created'; return { stdout: 'c'.repeat(64), stderr: '' }; }
     if (verb === 'start') { state = 'exited'; return { stdout: '', stderr: '' }; }

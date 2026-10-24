@@ -19,6 +19,7 @@
   "recovery.hold.recovery.answer-invalid": "Kurtarma karar modelinin yanıtı kullanılamadı; yeniden sorulmaz, bir kişi karar verir.",
   "recovery.hold.recovery.breaker-open": "Kısa sürede çok fazla worker kayboldu, kurtarma kararları duraklatıldı; bir kişi karar verir.",
   "recovery.hold.recovery.work-class-not-low-risk": "Bu görevin iş sınıfı düşük riskli değil; kaybolan işçinin görevi kendiliğinden devam etmez, bir kişi karar verir.",
+  "recovery.hold.recovery.isolation-unproven": "Kaybolan işçinin gönderim kaydı onun bir müşteri sistemine yolu olmadığını kanıtlamıyor; görev kendiliğinden devam etmez, bir kişi karar verir.",
   "recovery.hold.nervous.not-lost": "Güvenlik sistemi bu Run'ı beklemeye aldı: worker'ın kaybolduğu kanıtlanmadı; bir kişi kontrol eder.",
   "recovery.hold.nervous.not-granted": "Güvenlik sistemi bu Run'ı beklemeye aldı: kaybolan worker'a hiç başlama izni verilmemişti; bir kişi kontrol eder.",
   "recovery.hold.nervous.fence-required": "Güvenlik sistemi bu Run'ı beklemeye aldı: kaybolan worker'ın geç yazmaları henüz engellenemedi; bir kişi kontrol eder.",

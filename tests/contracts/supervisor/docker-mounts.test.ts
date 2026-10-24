@@ -20,7 +20,7 @@ async function run(mutate: (mounts: Mount[], workspace: string) => Mount[]) {
     if (verb === 'context') return { stdout: JSON.stringify({ Host: 'unix:///var/run/docker.sock' }), stderr: '' };
     if (verb === 'inspect') {
       if (state === 'missing') throw { stderr: 'No such object: ' + args[at + 1] };
-      return { stdout: JSON.stringify([{ Id: 'c'.repeat(64), Image: imageId, Config: { Labels: { 'deckent.request': label } }, Mounts: mounts,
+      return { stdout: JSON.stringify([{ Id: 'c'.repeat(64), Image: imageId, Config: { Labels: { 'deckent.request': label } }, Mounts: mounts, HostConfig: { NetworkMode: 'none' },
         State: { Status: state, ExitCode: 0 } }]), stderr: '' };
     }
     if (verb === 'create') {

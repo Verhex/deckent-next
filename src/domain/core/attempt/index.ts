@@ -5,3 +5,5 @@ export { processExitCauseShape, processExitCauseSchema, isValidExitCause } from 
 export type { ProcessExitCause } from './internal/contract.js';
 export { decideDispatchLoss } from './internal/dispatch-loss.js';
 export type { WorkerIncarnation, DispatchLossRecord, DispatchFence, DispatchTerminationProof, LostDispatchAction, DispatchLossDecision } from './internal/dispatch-loss.js';
+export { workerIsolationSchema, workerIsolationProven } from './internal/isolation.js';
+export type { WorkerIsolation } from './internal/isolation.js';

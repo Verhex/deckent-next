@@ -16,14 +16,17 @@ export const RECOVERY_CAUSE_CLASSES = Object.freeze(['infra-transient', 'infra-p
 export const RECOVERY_ESCALATION_CODES = Object.freeze(['effects-open', 'settled-not-idempotent', 'settled-over-bound', 'continuation-bound', 'attempt-ceiling', 'run-bound',
   'same-evidence', 'run-closed', 'human-chosen', 'continuation-not-approved', 'no-eligible-model', 'consent-required', 'model-failed', 'answer-invalid', 'breaker-open',
   // alpha.56 G6 (owner Q-R2/Q-A3): the task's WorkClass is not low-risk (registry `proposalAdmission.risk`, frozen at admission).
-  'work-class-not-low-risk'] as const);
+  'work-class-not-low-risk',
+  // alpha.56 D2: the lost Attempt's dispatch record does not prove its worker had no route to a customer system (no block, unreadable or wider).
+  'isolation-unproven'] as const);
 /** A note code: the only thing of a decision that may reach the next Attempt, as its registry text (v1 never forwards free model text). */
 export const recoveryNoteCodeSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u);
 export type RecoveryEscalationCode = typeof RECOVERY_ESCALATION_CODES[number];
 const ESCALATIONS: Readonly<Partial<Record<RecoveryErrorCode, RecoveryEscalationCode>>> = Object.freeze({ RECOVERY_EFFECTS_OPEN: 'effects-open',
   RECOVERY_SETTLED_NOT_IDEMPOTENT: 'settled-not-idempotent', RECOVERY_SETTLED_OVER_BOUND: 'settled-over-bound', RECOVERY_CONTINUATION_BOUND: 'continuation-bound',
   RECOVERY_ATTEMPT_CEILING: 'attempt-ceiling', RECOVERY_RUN_BOUND: 'run-bound', RECOVERY_SAME_EVIDENCE: 'same-evidence', RECOVERY_RUN_CLOSED: 'run-closed',
-  RECOVERY_NOT_APPROVED: 'continuation-not-approved', RECOVERY_RISK_NOT_LOW: 'work-class-not-low-risk' });
+  RECOVERY_NOT_APPROVED: 'continuation-not-approved', RECOVERY_RISK_NOT_LOW: 'work-class-not-low-risk',
+  RECOVERY_ISOLATION_UNPROVEN: 'isolation-unproven' });
 /** The escalation a typed refusal means (null: a caller error, which writes nothing). */
 export function recoveryEscalationCode(error: unknown): RecoveryEscalationCode | null { return error instanceof RecoveryError ? ESCALATIONS[error.code] ?? null : null; }
 

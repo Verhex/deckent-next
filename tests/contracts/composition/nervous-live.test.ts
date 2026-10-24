@@ -204,7 +204,7 @@ it.skipIf(process.platform === 'win32')('S6R-5 (lead on s6r4 Q4): after the lost
   const cases = openSqliteRecoveryStore(f.ledger, options), audit = await openSqliteAuditStore(f.ledger, options);
   try {
     const app = new RecoveryApplication({ store: cases, detections: new AuditApplication(audit, integrity), recorder: target => new AuditApplication(target, integrity),
-      approval: async scopeId => recoveryContinuationApproval(standing, owner, scopeId, 30), hold: async () => { throw new Error('UNEXPECTED_HOLD'); }, policyRevision: 'fixture-policy',
+      approval: async scopeId => recoveryContinuationApproval(standing, owner, scopeId, 30), hold: async () => { throw new Error('UNEXPECTED_HOLD'); }, isolation: async () => ({ schemaVersion: 1, network: 'none', egress: { kind: 'none' } }), policyRevision: 'fixture-policy',
       now: Date.now, timeoutMs: 1000 }, { async verify() { return recoveryPrincipal(owner, ['s']); } });
     const caseId = nervousCaseId('s', 'launcher-dead-orphan', { kind: 'attempt', identity: f.identity });
     const gated = await app.assess({ schemaVersion: 1, scopeId: 's', caseId });

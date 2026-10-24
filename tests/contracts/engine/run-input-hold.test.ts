@@ -224,7 +224,7 @@ function simulatedDocker(workspaceRoot: string, handoffInputs: readonly { target
     if (verb === 'inspect') {
       if (state === 'missing') throw { stderr: 'No such object: ' + command[at + 1] };
       return { stdout: JSON.stringify([{ Id: 'c'.repeat(64), Image: 'sha256:' + 'a'.repeat(64), Config: { Labels: { 'deckent.request': label } },
-        Mounts: mounts, State: { Status: state, ExitCode: 0 } }]), stderr: '' };
+        Mounts: mounts, HostConfig: { NetworkMode: 'none' }, State: { Status: state, ExitCode: 0 } }]), stderr: '' };
     }
     if (verb === 'create') {
       label = command[command.indexOf('--label') + 1]!.slice('deckent.request='.length); state = 'created';

@@ -13,7 +13,7 @@ it.skipIf(!imageId || process.platform !== 'linux')('captures actual Docker orig
     const original = new DockerSupervisor(options); const profile = await original.captureProfile(); const snapshot = structuredClone(options);
     options.memoryBytes *= 2;
     expect(profile.parameters.options).toEqual(snapshot); expect(Object.isFrozen(profile.parameters.options)).toBe(true);
-    expect(profile.adapterVersion).toBe(2);
+    expect(profile.adapterVersion).toBe(3); expect(profile.parameters.isolation).toEqual({ schemaVersion: 1, network: 'none', egress: { kind: 'none' } });
     expect(profile.parameters.endpoint).toMatch(/^unix:\/\/\//);
     const originalHost = process.env.DOCKER_HOST; const originalContext = process.env.DOCKER_CONTEXT;
     let restored: DockerSupervisor;
@@ -39,6 +39,10 @@ it.skipIf(!imageId || process.platform !== 'linux')('captures actual Docker orig
     const invalid = JSON.parse(JSON.stringify(profile)); invalid.parameters.options.secret = 'not-accepted';
     await expect(DockerSupervisor.restoreProfile(invalid)).rejects.toMatchObject({ code: 'SUPERVISOR_PROFILE_INVALID' });
     await expect(DockerSupervisor.restoreProfile({ ...profile, adapterVersion: 1 })).rejects.toMatchObject({ code: 'SUPERVISOR_PROFILE_INVALID' });
+    // alpha.56 D2: a record written before the isolation block (v2) still restores; a v3 record without its block is invalid.
+    const legacy = JSON.parse(JSON.stringify(profile.parameters)) as Record<string, unknown>; delete legacy['isolation'];
+    await expect(DockerSupervisor.restoreProfile({ ...profile, adapterVersion: 2, parameters: legacy })).resolves.toBeInstanceOf(DockerSupervisor);
+    await expect(DockerSupervisor.restoreProfile({ ...profile, parameters: legacy })).rejects.toMatchObject({ code: 'SUPERVISOR_PROFILE_INVALID' });
   } finally { await rm(workspaceRoot, { recursive: true, force: true }); }
 }, 15000);
 

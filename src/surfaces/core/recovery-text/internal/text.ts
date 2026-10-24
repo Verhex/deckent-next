@@ -16,6 +16,7 @@ const recoveryReason = (code: RecoveryEscalationCode, l: Locale): string => ({
   'no-eligible-model': () => t('recovery.hold.recovery.no-eligible-model', {}, l), 'consent-required': () => t('recovery.hold.recovery.consent-required', {}, l),
   'model-failed': () => t('recovery.hold.recovery.model-failed', {}, l), 'answer-invalid': () => t('recovery.hold.recovery.answer-invalid', {}, l),
   'breaker-open': () => t('recovery.hold.recovery.breaker-open', {}, l), 'work-class-not-low-risk': () => t('recovery.hold.recovery.work-class-not-low-risk', {}, l),
+  'isolation-unproven': () => t('recovery.hold.recovery.isolation-unproven', {}, l),
 } satisfies Record<RecoveryEscalationCode, () => string>)[code]();
 const nervousReason = (code: NervousHoldCode, l: Locale): string => ({
   'not-lost': () => t('recovery.hold.nervous.not-lost', {}, l), 'not-granted': () => t('recovery.hold.nervous.not-granted', {}, l),

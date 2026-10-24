@@ -118,7 +118,7 @@ export async function openNativeConnection(input: { binding: NativeSubscription;
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(socketPath, resolve); });
     await chmod(socketPath, 0o600);
     timer = setTimeout(() => { void close().catch(() => undefined); }, input.deadlineMs); timer.unref();
-    return Object.freeze({ descriptor: Object.freeze({ schemaVersion: 1 as const, socketPath, bootstrapPath, bootstrapSha256 }),
+    return Object.freeze({ descriptor: Object.freeze({ schemaVersion: 1 as const, socketPath, bootstrapPath, bootstrapSha256, provider: binding.provider }),
       statistics: () => Object.freeze({ ...statistics, closed }), close,
       /** Host verdict over the accepted worker events against the admitted model (null until the session ended). */
       modelVerification: () => reported.ended ? Object.freeze({ ...verifyWorkerModels({ evidenceCapability: capabilities.modelUsageEvidence, admitted: binding.model ?? null,

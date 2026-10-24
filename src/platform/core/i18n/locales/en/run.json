@@ -358,6 +358,7 @@
   "error.SUPERVISOR_PROFILE_INVALID": "The retained supervisor profile is invalid.",
   "error.SUPERVISOR_PROFILE_ORIGIN_MISMATCH": "The supervisor daemon does not match the retained profile.",
   "error.SUPERVISOR_OPTIONS_INVALID": "Supervisor settings reject the prepared task inputs; inspect the pinned execution profile.",
+  "error.SUPERVISOR_ISOLATION_MISMATCH": "The created worker container's network mode is not the recorded isolation; the worker was not started.",
   "error.SUPERVISOR_CANCELLED": "Supervisor execution was cancelled.",
   "error.SUPERVISOR_CONTROL_FAILED": "Supervisor control is unavailable; inspect the daemon and execution custody.",
   "error.SUPERVISOR_NOT_TERMINAL": "The supervisor has no terminal evidence; execution custody is retained.",
