@@ -376,6 +376,9 @@ deckent report --scope my-project --run <id>   # one Run's cost and acceptance e
 deckent audit verify                      # check the audit history
 deckent backup create                     # write a verifiable recovery set
 deckent policy grants --mine              # your standing "always" grants
+deckent memory                            # the scope's memory journal: facts and lessons
+deckent agents                            # the scope's agents and skills
+deckent models roles show                 # which model serves which role
 ```
 
 ### Connect an AI client over MCP
@@ -429,7 +432,7 @@ flowchart LR
 | **Standard** | Reads, ordinary file edits | Shell commands, protected paths, MCP calls |
 | **Careful** | Reads | Every edit as well |
 | **Full auto** | Edits, shell commands contained in the sandbox, MCP calls | Host shell, destructive commands (`rm -r`, …), protected paths |
-| **Full access** | Everything policy allows above the hard floor; every call is audited | The hard floor and whatever policy still requires; needs a grant from the installation owner (on a solo install, that is you) and lasts for this session |
+| **Full access** | Everything policy allows above the hard floor; every call is audited | The hard floor and whatever policy still requires; needs a grant from the installation owner (on a solo install, that is you); switched on for this session, or saved as your start mode with `/mode start full-access` |
 
 The installation owner opens full auto and full access with
 `deckent init policy --scope <id> --modes full-auto,full-access --preview` and then `--apply` at their own terminal;
@@ -489,11 +492,16 @@ OpenRouter settings.
   list and revoke, and an audit trail you can verify.
 - **Operate**: `deckent monitor` for a read-only view, `deckent doctor` for health, `deckent config` for settings, and
   `deckent backup create|verify|restore` for verifiable recovery sets on a schedule if you choose.
-- **Core layers, off until you turn them on**: the system picks the worker model for each kind of work from a list you
-  can see; memory fills from accepted work and is verified by you or an independent evaluator; lost workers are detected and
-  can be continued in a new attempt within set limits; the Brain can plan with your own Claude subscription inside a
-  sandbox; agents and skills are versioned and every AI change to them is signed. Each layer starts off and has a shadow
-  mode that only records what it would do ([known limits](docs/known-limits.md#core-layers)).
+- **Core layers, in code and not yet proven in real use**: the system picks the worker model for each kind of work from a
+  list you can see; memory fills from accepted work and is verified by you or an independent evaluator; lost workers are
+  detected and recorded as proposals; the Brain can plan with your own Claude subscription inside a sandbox, after your own
+  login and consent; agents and skills are versioned and every AI change to them is signed. Each switch (memory, lost-worker
+  detection, recovery, agent statistics) starts off and has a shadow mode that applies nothing; memory verification and
+  recovery in shadow still call their model, so data goes to that provider and the call is spent. Automatic recovery cannot
+  act yet: no detection rule can be promoted to act in this release. The new rights come from a policy upgrade by the
+  installation owner: `deckent policy upgrade --template current` for a policy from the first-run template, or
+  `deckent init policy --scope <id> --upgrade --person <issuer>/<subject>` for a hand-written one
+  ([known limits](docs/known-limits.md#core-layers)).
 
 ### Not yet
 

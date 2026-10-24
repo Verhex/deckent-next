@@ -59,7 +59,8 @@ all files accessible to other programs running under the same OS account.
 
 ## Full access
 
-A session permission mode available only with a company-policy grant. It broadens the shell
+A permission mode available only with a company-policy grant, switched on for one terminal session or
+saved as the person's start mode (`/mode start full-access`); the grant is re-checked at every launch and call. It broadens the shell
 view to host files, home, network and Git writes, with protected state masked and effect calls
 audited. Explicit policy denies and the hard floor still apply. It is materially broader than
 **full auto**, which automates eligible calls inside the sandbox's closed view.
@@ -101,3 +102,22 @@ A **principal** is the verified person or process on whose behalf an operation r
 decides whether that principal may perform an action on a resource in a scope: allow, deny or
 require approval. Scope membership alone is insufficient. A model, persona or extension cannot
 supply itself with authority.
+
+## Core layers
+
+The parts that let Deckent run work with less supervision, added in alpha.55 as code and not yet accepted behaviour:
+
+- **Brain:** the planner behind `/do`. It splits a request into tasks and names each task's **WorkClass** (the kind of work);
+  it does not choose the worker model.
+- **System assignment:** at admission the system takes the first allowed model from the WorkClass's visible candidate list
+  and records the choice; a model's tier and roles come from one versioned registry (`deckent models roles`).
+- **Memory journal:** scoped facts and lessons from accepted work (`deckent memory`), verified by a person or by an
+  evaluator model from a different maker before any work reads them.
+- **Auditor:** one sealed record of each agent turn's policy decision.
+- **Nervous:** detection of lost workers, recorded as proposals; **recovery** decides whether a lost task may continue in a
+  new attempt within set limits.
+- **Agent catalog:** versioned agents and skills (`deckent agents`); every AI or system change to them is signed with a key a
+  person enrolled.
+
+Memory, Nervous, recovery and agent statistics each have a protected switch that starts off. Their `shadow` mode applies
+nothing, though memory verification and recovery in shadow still call their model. See [known limits](known-limits.md#core-layers).
