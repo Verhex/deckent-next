@@ -1,6 +1,6 @@
 import { collectDockerOutputFiles } from './output-files.js';
 import { sampleDockerResources } from './resources.js';
-import { captureDockerProfile, readDockerProfile, dockerEndpointSchema } from './profile.js';
+import { captureDockerProfile, readDockerProfile, dockerEndpointSchema, DOCKER_WORKER_NETWORK } from './profile.js';
 import { createHash } from 'node:crypto';
 import { lstat, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
@@ -15,7 +15,7 @@ import { dockerNodeHeapEnvironment } from './node-heap.js';
 const DOCKER_RUN_DAEMON_FAILURE = 125;
 /** The only container names a probe removal may touch (probeIdentity's form). */
 const PREFLIGHT_PROBE_NAME = /^deckent-env-[a-f0-9]{64}$/;
-type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; Mounts?: unknown; State: { Status: string; ExitCode: number; StartedAt?: unknown; FinishedAt?: unknown } };
+type Inspection = { Id: string; Image: string; Config: { Labels: Record<string, string> }; Mounts?: unknown; HostConfig?: { NetworkMode?: unknown }; State: { Status: string; ExitCode: number; StartedAt?: unknown; FinishedAt?: unknown } };
 /** Containers remain as reconciliation evidence until the application explicitly releases them.
  * Only an application with durable dispatch ownership may call execute; this adapter does not grant policy.
  */
@@ -204,7 +204,7 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const argv = o.connection ? ['node', '/run/deckent-bootstrap.mjs', ...request.argv] : request.argv;
     try {
       await this.command(['create', '--name', handle, '--label', 'deckent.request=' + digest,
-        '--network', 'none', '--log-driver', 'local', '--log-opt', `max-size=${o.logMaxSizeKiB}k`,
+        '--network', DOCKER_WORKER_NETWORK, '--log-driver', 'local', '--log-opt', `max-size=${o.logMaxSizeKiB}k`,
         '--log-opt', `max-file=${o.logMaxFiles}`, '--log-opt', 'mode=blocking', ...this.floor(),
         '--mount', `type=bind,src=${workspace},dst=/workspace`, '--tmpfs', `/tmp:rw,noexec,nosuid,nodev,size=${o.tmpBytes}`,
         ...inputMounts, ...readOnlyMounts, ...connectionMounts, ...dockerNodeHeapEnvironment(o.memoryBytes), '--workdir', '/workspace', '--entrypoint', argv[0]!, o.imageId, ...argv.slice(1)], o.controlTimeoutMs);
@@ -217,6 +217,8 @@ export class DockerSupervisor implements ExecutionSupervisor {
     const created = await this.inspect(handle, digest);
     if (!created) throw new SupervisorError('SUPERVISOR_CONTROL_FAILED');
     assertDockerMountsMatch(created.Mounts, expected);
+    // alpha.56 D2: the recorded isolation block holds only if the daemon realised it; any other network mode starts nothing (fail closed).
+    if (created.HostConfig?.NetworkMode !== DOCKER_WORKER_NETWORK) throw new SupervisorError('SUPERVISOR_ISOLATION_MISMATCH');
     // S6R-1: the immutable id is durable before start, so a launcher that dies during `start --attach` still leaves the container named.
     if (hooks) {
       if (!/^[a-f0-9]{64}$/.test(created.Id)) throw new SupervisorError('SUPERVISOR_IDENTITY_CONFLICT');

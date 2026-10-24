@@ -582,6 +582,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   SUPERVISOR_PROFILE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_PROFILE_INVALID', p, l) }) },
   SUPERVISOR_PROFILE_ORIGIN_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_PROFILE_ORIGIN_MISMATCH', p, l) }) },
   SUPERVISOR_OPTIONS_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_OPTIONS_INVALID', p, l) }) },
+  SUPERVISOR_ISOLATION_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_ISOLATION_MISMATCH', p, l) }) },
   SUPERVISOR_CANCELLED: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_CANCELLED', p, l) }) },
   SUPERVISOR_CONTROL_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_CONTROL_FAILED', p, l) }) },
   SUPERVISOR_NOT_TERMINAL: { category: 'error', render: (p, l) => ({ message: t('error.SUPERVISOR_NOT_TERMINAL', p, l) }) },

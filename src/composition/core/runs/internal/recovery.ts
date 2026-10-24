@@ -1,9 +1,9 @@
-import type { VerifiedPrincipal } from '#domain/index.js';
+import type { AttemptIdentity, VerifiedPrincipal } from '#domain/index.js';
 import { AuditApplication, RecoveryApplication, RecoveryDecisionApplication, memoryCatalogFacts, memoryCatalogKey, recoveryContinuationApproval, recoveryDecisionPrincipal, recoveryDecisionRegistry,
   recoveryGrantState, recoveryModeState, recoveryModelReference, recoveryModelRows, type MemoryCatalogFact, type RecoveryDecisionOutcome, type RecoveryModeState, type RecoveryModelPorts,
   type RoleModelSources } from '#engine/index.js';
-import { extractOpenAiChatTextFromInvocation, openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteModelActivationReader, openSqliteModelCatalogReader, openSqliteModelInvocationReader,
-  openSqliteRecoveryStore } from '#adapters/index.js';
+import { extractOpenAiChatTextFromInvocation, openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteInventoryReader, openSqliteModelActivationReader, openSqliteModelCatalogReader,
+  openSqliteModelInvocationReader, openSqliteRecoveryStore, recordedWorkerIsolation } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -45,6 +45,11 @@ function recoveryModelPorts(projectRoot: string, options: ConfigLoadOptions, c: 
       }
     } };
 }
+/** alpha.56 D2: the isolation block the lost Attempt's dispatch record carries (null: no record, or none recorded — the engine holds then). */
+async function recordedIsolation(c: Context, path: string, identity: AttemptIdentity) {
+  const reader = await openSqliteInventoryReader(path, { busyTimeoutMs: c.config.storage.sqlite.busyTimeoutMs });
+  try { const record = await reader.loadBoundDispatch(identity); return record ? recordedWorkerIsolation(record.profile) : null; } finally { reader.close(); }
+}
 /** The catalog facts (billing) and the S2 role sources of one read, closed after `work`. */
 async function withRoleSources<T>(c: Context, path: string, work: (facts: ReadonlyMap<string, MemoryCatalogFact>, roles: RoleModelSources) => Promise<T>): Promise<T> {
   const busyTimeoutMs = c.config.storage.sqlite.busyTimeoutMs, catalog = await openSqliteModelCatalogReader(path, { busyTimeoutMs });
@@ -75,7 +80,7 @@ export function prepareConfiguredRecovery(projectRoot: string, options: ConfigLo
     try {
       const ledger = new AuditApplication(audit, integrity), approval = async (id: string) => recoveryContinuationApproval(c.document, c.principal, id, Date.now());
       const recovery = new RecoveryApplication({ store: cases, detections: ledger, recorder: target => new AuditApplication(target, integrity), approval,
-        hold: command => holdConfiguredRunForNervous(projectRoot, command, options), policyRevision: c.document.revision, now: Date.now,
+        hold: command => holdConfiguredRunForNervous(projectRoot, command, options), isolation: identity => recordedIsolation(c, path, identity), policyRevision: c.document.revision, now: Date.now,
         timeoutMs: c.config.runRuntime.parking.timeoutMs }, verifier);
       const page = ledger.listKind(scopeId, 'recovery-detection', cursors.get(scopeId) ?? 0, registry.pass.pageSize);
       const fresh = page.flatMap(record => { const subject = record.event.subject;

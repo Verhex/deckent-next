@@ -3,11 +3,14 @@ import { createHash } from 'node:crypto';
 import { dirname, isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { SupervisorError } from '#engine/index.js';
+import { identitySchema } from '#domain/index.js';
 
 const path = z.string().min(1).refine(value => isAbsolute(value) && !value.includes(String.fromCharCode(0)) && !/[,\r\n]/u.test(value));
 /** Ephemeral capability references only. No credential bytes in custody or task profiles. */
 export const dockerConnectionSchema = z.object({ schemaVersion: z.literal(1), socketPath: path, bootstrapPath: path,
-  bootstrapSha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().readonly();
+  bootstrapSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  /** alpha.56 D2: the catalog provider whose model hosts the gateway allows (absent only in records written before it; a new dispatch needs it). */
+  provider: identitySchema.optional() }).strict().readonly();
 
 export async function dockerConnectionMounts(input: z.infer<typeof dockerConnectionSchema>, uid: number) {
   try {

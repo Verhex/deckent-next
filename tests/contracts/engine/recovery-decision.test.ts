@@ -35,7 +35,7 @@ async function harness(input: { policy?: unknown; rows?: readonly RecoveryModelR
   const ledger = new AuditApplication(audit, lostIntegrity), verifier = { async verify() { return state.principal; } };
   const approval = async (scopeId: string) => recoveryContinuationApproval(state.document, owner, scopeId, 30);
   const app = new RecoveryApplication({ store: cases, detections: ledger, recorder: target => new AuditApplication(target, lostIntegrity), approval,
-    hold: async command => { holds.push(command); return null; }, policyRevision: 'owner-policy', now: () => 30, timeoutMs: 1000 }, verifier);
+    hold: async command => { holds.push(command); return null; }, isolation: async () => ({ schemaVersion: 1, network: 'none', egress: { kind: 'none' } }), policyRevision: 'owner-policy', now: () => 30, timeoutMs: 1000 }, verifier);
   const make = () => new RecoveryDecisionApplication({ recovery: { prepare: (...args) => app.prepare(...args), escalate: (...args) => app.escalate(...args),
     assess: async (...args) => { if (state.crashAssess) { state.crashAssess = false; throw new Error('CRASH_BEFORE_ASSESS'); } return app.assess(...args); },
     continueLostTask: async (...args) => { if (state.crash) { state.crash = false; throw new Error('CRASH_AFTER_SEAL'); } return app.continueLostTask(...args); } },

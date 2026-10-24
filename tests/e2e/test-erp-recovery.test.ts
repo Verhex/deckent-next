@@ -50,7 +50,7 @@ async function harness(descriptor: OperationDescriptor) {
   const holds: unknown[] = [], ledger = new AuditApplication(audit, lostIntegrity), verifier = { async verify() { return recovery; } };
   const approval = async (scopeId: string) => recoveryContinuationApproval(standing, owner, scopeId, 30);
   const app = new RecoveryApplication({ store: cases, detections: ledger, recorder: next => new AuditApplication(next, lostIntegrity), approval,
-    hold: async hold => { holds.push(hold); return null; }, policyRevision: 'owner-policy', now: () => 30, timeoutMs: 1000 }, verifier);
+    hold: async hold => { holds.push(hold); return null; }, isolation: async () => ({ schemaVersion: 1, network: 'none', egress: { kind: 'none' } }), policyRevision: 'owner-policy', now: () => 30, timeoutMs: 1000 }, verifier);
   const rows = (sql: string) => { const db = new DatabaseSync(path, { readOnly: true }); try { return db.prepare(sql).all(); } finally { db.close(); } };
   return { server, root, path, store, worker, command, cases, ledger, holds, app, approval, verifier, rows };
 }

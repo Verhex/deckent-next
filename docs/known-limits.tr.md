@@ -462,6 +462,11 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   yürütmez: Core tohumundaki her kural hâlâ geçicidir ve kurtarma yalnız Nervous'un durdurma adımını gerçekten çalıştırdığı vakalara karar
   verir. `deckent run inspect` Run'ın dondurduğu kurtarma kipini ve anlamını söyler. *Yol:* `deckent monitor` ile izleyin; slot yalnız
   tipli manuel kararla ya da işçinin bittiğine dair kanıtla bırakılır.
+- **Bir işçi iş sistemlerinize yazamaz ve kurtarma buna dayanır.** İşçiler ağsız çalışır ve yalnız model sağlayıcısının geçidine
+  ulaşır; dış bir sistemdeki (ERP, CRM, bir HTTP hedefi) her değişikliği bir kişinin ya da onaylı bir ajanın yönetilen işlemi yapar,
+  hiçbir zaman doğrudan bir işçi. alpha.56'dan itibaren her işçinin gönderim kaydı bunu kanıtlar ve otomatik kurtarma kaybolan bir işçiyi
+  yalnız bu kanıt varsa sürdürür; alpha.56'dan önce başlamış kaybolan bir işçinin böyle bir kanıtı yoktur ve bir kişiye gider
+  (`isolation-unproven`). İşçilerin dış sistemlerde kendilerinin işlem yapması henüz sunulmuyor.
 - **Temiz makine provası model adımında durdu.** 2026-10-15/16'da taze bir klon kurulum, `doctor`, politika, kayıt defteri ve
   havuza ulaştı. Model bağlantısı, `/do`, boş bir Docker daemon'unda işçi imajı derlemesi ve temiz daemon'da başlangıç
   araç zinciri tazelemesi orada denenmedi. *Yol:* README'deki ilk iş yolunu izleyin ve farkı bildirin.

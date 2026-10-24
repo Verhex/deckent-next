@@ -11,7 +11,7 @@ import { openConfiguredAttemptStore } from '#composition/core/storage/index.js';
 import { applyModelCatalog } from '../../../src/index.js';
 import { brainProviderFixture } from '../support/brain-provider.js';
 import { admitRunAttempts } from '../support/admission.js';
-import { custodyProfiles, dispatchAdmission, grantTestLaunch } from '../support/custody.js';
+import { custodyOrDockerProfiles, dispatchAdmission, dockerDispatchProfile, grantTestLaunch } from '../support/custody.js';
 import { LEDGER_OPTIONS, LOST_TIMING, loseAttempt, sealDetection } from '../support/lost-task.js';
 
 // S6R-5 through the real composition (config, policy file, ledger, S2 role registry, catalog, model invocation and spend ledger, audit chain): the
@@ -25,7 +25,7 @@ const roles = { schemaVersion: 1, overlays: [{ schemaVersion: 1, revision: 'fixt
   models: [{ channelId: CHANNEL, modelId, version: 1, tier: 'frontier', roles: ['brain', 'recovery-decision'] }], exceptions: [] }] };
 type Choice = Record<string, unknown>;
 
-async function setup(input: { mode: 'shadow' | 'live'; invokeGrant?: boolean; choice?: Choice; roles?: unknown; frozen?: 'shadow' | 'live'; wouldStop?: boolean }) {
+async function setup(input: { mode: 'shadow' | 'live'; invokeGrant?: boolean; choice?: Choice; roles?: unknown; frozen?: 'shadow' | 'live'; wouldStop?: boolean; dockerVersion?: 2 | 3 }) {
   const f = await brainProviderFixture({ response: '', modelRoles: input.roles ?? roles, maxOutputTokens: 1024 }); fixtures.push(f);
   const local = readLocalOsIdentity(), person = { issuer: local.issuer, subject: local.subject }, recoveryRef = { issuer: `${person.issuer}/recovery`, subject: person.subject };
   const config = JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8')) as Record<string, unknown>;
@@ -41,12 +41,14 @@ async function setup(input: { mode: 'shadow' | 'live'; invokeGrant?: boolean; ch
   await applyModelCatalog(f.project, { schemaVersion: 1, commandId: 'register-recovery', scopeId: 's', action: 'register',
     catalog: { ...seed, revision: 'fixture-recovery-catalog', recommendedActivations: [], providers: [{ ...seed.providers[0]!, id: f.reference.providerId, models: [model] }] } }, f.options);
   // One Run admitted with frozen recovery bounds whose only Attempt was lost and released with an exit proof; the Nervous detection sealed with the installation key.
-  const store = await openSqliteAttemptStore(f.path, LEDGER_OPTIONS, LOST_TIMING, 'forbid', custodyProfiles); stores.push(store);
+  const store = await openSqliteAttemptStore(f.path, LEDGER_OPTIONS, LOST_TIMING, 'forbid', custodyOrDockerProfiles); stores.push(store);
   const { layout } = await openConfiguredAttemptStore(f.project, f.options).then(opened => { opened.store.close(); return opened; });
   const identity: AttemptIdentity = { scopeId: 's', runId: 'lost-run', taskId: 'task', attemptId: 'attempt-1', layoutRevision: layout.revision, generation: 1 };
+  // The dispatch record the real composition port reads: today's Docker profile (v3, isolation block) unless a case asks for a pre-alpha.56 v2 record.
+  const profile = dockerDispatchProfile(input.dockerVersion ?? 3);
   await admitRunAttempts(store, [identity], { recovery: freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), input.frozen ?? input.mode, ['task']) });
   if (input.wouldStop) { const claim = { request: { protocolVersion: 1 as const, identity, workspace: f.data, argv: ['fixture'] }, owner: 'owner-attempt-1' };
-    await store.claimDispatch(dispatchAdmission(claim)); await grantTestLaunch(store, claim); } else await loseAttempt(store, f.data, identity);
+    await store.claimDispatch(dispatchAdmission(claim, profile)); await grantTestLaunch(store, claim); } else await loseAttempt(store, f.data, identity, undefined, undefined, profile);
   const integrity = await openLocalIntegrityAuthority(layout, (await loadConfig(f.project, f.options)).approvals.keyFile, true);
   const caseId = await sealDetection(f.path, identity, 'launcher-dead-orphan', integrity, input.wouldStop ? 'shadow-only' : 'execute');
   f.setOutput(body => { const messages = (JSON.parse(body) as { messages: { content: string }[] }).messages, user = JSON.parse(messages.at(-1)!.content) as { caseId: string; evidenceDigest: string };
@@ -82,6 +84,14 @@ it('without the recovery principal\'s model grant the call is refused before any
     decision: { action: 'escalate-human', code: 'model-failed' } }) })]);
   expect(h.f.posts).toBe(0);
   expect(h.sealed().map(event => [event.subject.code, event.subject.failure])).toEqual([['model-failed', 'POLICY_DENIED']]);
+  expect((await h.store.loadRun('s', 'lost-run'))!.state).toMatchObject({ kind: 'parked', holdSource: 'nervous' });
+});
+
+it('alpha.56 D2: a lost Attempt whose dispatch record predates the isolation block (Docker v2) is held for a person through the real port, no model call', async () => {
+  const h = await setup({ mode: 'live', dockerVersion: 2 });
+  expect(await prepareConfiguredRecovery(h.f.project, h.f.options, 'live')!.run('s')).toEqual([expect.objectContaining({ kind: 'escalated', case: expect.objectContaining({
+    decision: { action: 'escalate-human', code: 'isolation-unproven' } }) })]);
+  expect(h.f.posts).toBe(0); expect(h.sealed().map(event => [event.subject.code, event.subject.model])).toEqual([['isolation-unproven', null]]);
   expect((await h.store.loadRun('s', 'lost-run'))!.state).toMatchObject({ kind: 'parked', holdSource: 'nervous' });
 });
 

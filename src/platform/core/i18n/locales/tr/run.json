@@ -358,6 +358,7 @@
   "error.SUPERVISOR_PROFILE_INVALID": "Tutulan supervisor profili geçersiz.",
   "error.SUPERVISOR_PROFILE_ORIGIN_MISMATCH": "Supervisor daemon kimliği tutulan profille uyuşmuyor.",
   "error.SUPERVISOR_OPTIONS_INVALID": "Supervisor ayarları hazırlanmış görev girdilerini reddetti; sabitlenmiş yürütme profilini inceleyin.",
+  "error.SUPERVISOR_ISOLATION_MISMATCH": "Oluşturulan işçi konteynerinin ağ kipi kayıtlı yalıtımla uyuşmuyor; işçi başlatılmadı.",
   "error.SUPERVISOR_CANCELLED": "Supervisor yürütümü iptal edildi.",
   "error.SUPERVISOR_CONTROL_FAILED": "Supervisor kontrolü kullanılamıyor; daemon ve yürütme sorumluluğu kanıtını inceleyin.",
   "error.SUPERVISOR_NOT_TERMINAL": "Supervisor terminal sonuç kanıtına sahip değil; yürütme sorumluluğu korunuyor.",

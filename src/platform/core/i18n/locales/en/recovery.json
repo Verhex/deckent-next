@@ -19,6 +19,7 @@
   "recovery.hold.recovery.answer-invalid": "The recovery decision model's answer could not be used; it is not asked again and a person decides.",
   "recovery.hold.recovery.breaker-open": "Too many lost workers in a short time, so recovery decisions are paused; a person decides.",
   "recovery.hold.recovery.work-class-not-low-risk": "This task's work class is not low-risk, so a lost worker's task does not continue on its own; a person decides.",
+  "recovery.hold.recovery.isolation-unproven": "This lost worker's dispatch record does not prove it had no route to a customer system, so its task does not continue on its own; a person decides.",
   "recovery.hold.nervous.not-lost": "The safety system held this Run: the worker was not proven lost; a person checks it.",
   "recovery.hold.nervous.not-granted": "The safety system held this Run: the lost worker was never granted its start; a person checks it.",
   "recovery.hold.nervous.fence-required": "The safety system held this Run: the lost worker's late writes could not be blocked yet; a person checks it.",
