@@ -8,8 +8,8 @@ a configured execution environment performs it; durable records describe the out
 The open Core is Apache-2.0 and can operate independently. Proprietary Enterprise packages
 are designed to extend its public contracts and remain separately distributed.
 
-This is a reading guide to the source architecture, last checked against source on 2026-10-23, package
-`1.0.0-alpha.53`. It describes mechanisms and boundaries, not installed/live acceptance, a security certification or
+This is a reading guide to the source architecture, last checked against source on 2026-10-24, package
+`1.0.0-alpha.55`. It describes mechanisms and boundaries, not installed/live acceptance, a security certification or
 capacity benchmark. [ARCHITECTURE.md](../ARCHITECTURE.md) contains the detailed contracts,
 implementation notes and accepted future direction; some of that material is in Turkish.
 
@@ -159,8 +159,11 @@ See the [contributor quickstart](../CONTRIBUTING.md#a-30-minute-quickstart).
 
 Package `1.0.0-alpha.55` adds the core layers: system assignment of worker models and one model role registry, a scoped memory
 journal with independent verification, sealed Auditor records, Nervous detection with lost-worker recovery, the headless subscription
-Brain in a bubblewrap realm, and versioned agents with statistics, suggestions and signer keys. Each starts off until a person turns
-it on and is code, not accepted behaviour yet; see [core layers](../.deckent/docs/architecture/modules/core-layers.md).
+Brain in a bubblewrap realm, and versioned agents with statistics, suggestions and signer keys. They are code, not accepted behaviour yet. Every switch
+(memory, Nervous, recovery, agent statistics) starts off until a person turns it on; its `shadow` mode applies nothing, but
+memory-verification and recovery shadow still call their model. The headless Brain has no switch and works only after the
+person's own login, connect and consent. alpha.55 has no command that promotes a Nervous rule, so Nervous executes no stop step
+and automatic recovery cannot start yet; see [core layers](../.deckent/docs/architecture/modules/core-layers.md).
 
 Mission-level coordination of multi-step business processes, a remote HTTP API,
 Desktop, Dashboard, Enterprise SSO/fleet management and microVM isolation remain future work.
