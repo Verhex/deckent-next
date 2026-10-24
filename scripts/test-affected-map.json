@@ -1,0 +1,119 @@
+{
+  "$comment": "Inputs Vitest imports cannot see (test revision stage A, 2026-10-24). Rules add to the import/literal-path graph; the first widen wins. Rule effects: widen (whole suite), none (declared test-free), tests (test globs), modules (treat the input as a change of these modules), run (npm scripts), keys (flat string catalog: narrow to tests naming a changed key, its previous text, or one of these whole-catalog markers). mirror: built output path prefix -> source prefix.",
+  "version": 1,
+  "mirror": {
+    "dist/": "src/"
+  },
+  "rules": [
+    {
+      "inputs": [
+        "vitest.config.ts",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.json",
+        "arch.json",
+        "tests/fixtures/global-home-teardown.ts",
+        "tests/fixtures/canonical-temp.ts",
+        "scripts/ci-sequencer.mjs",
+        "scripts/verification-reporter.mjs",
+        ".npmrc",
+        ".npmignore",
+        ".gitignore"
+      ],
+      "widen": true,
+      "reason": "Vitest configuration, global setup, sequencer or reporter; dependencies, install, ignore or module-resolution settings: every test file runs through it"
+    },
+    {
+      "inputs": [
+        "src/platform/core/i18n/locales/**/*.json"
+      ],
+      "keys": [
+        "MESSAGE_KEYS",
+        "MESSAGE_REGISTRY",
+        "i18n/locales"
+      ],
+      "reason": "message catalog: a text edit selects the tests and fixtures that name the key or its previous text; an added or removed key also the code that names it; plus the whole-catalog checks (parity, plain Turkish, unused keys)"
+    },
+    {
+      "inputs": [
+        "src/adapters/core/host-shell/native/**"
+      ],
+      "modules": [
+        "src/adapters/core/host-shell/internal/write-set.ts",
+        "src/adapters/core/host-shell/internal/landlock.ts",
+        "src/adapters/core/host-shell/internal/probe.ts"
+      ],
+      "run": [
+        "test:native"
+      ],
+      "reason": "native shell helpers: their own native tests, plus the tests of the TypeScript modules that execute the built helpers"
+    },
+    {
+      "inputs": [
+        "src/adapters/core/local-runtime-socket/native/**"
+      ],
+      "modules": [
+        "src/adapters/core/local-runtime-socket/internal/peer.ts",
+        "src/adapters/core/local-runtime-socket/internal/ledger-lock.ts"
+      ],
+      "run": [
+        "test:native"
+      ],
+      "reason": "native peer-credential addon: its own native tests, plus the tests of the TypeScript modules that load it"
+    },
+    {
+      "inputs": [
+        ".agents/**",
+        ".claude/**",
+        ".codex/**",
+        ".cursor/**"
+      ],
+      "run": [
+        "test:host"
+      ],
+      "reason": "host tooling, skills and agent rules: the host tests (rules parity included)"
+    },
+    {
+      "inputs": [
+        "design/tokens/**"
+      ],
+      "modules": [
+        "src/surfaces/core/terminal-theme/internal/generated/palette.ts"
+      ],
+      "reason": "terminal palette generator input (regenerate with npm run build:terminal-tokens): the palette's tests"
+    },
+    {
+      "inputs": [
+        "**/*.md",
+        ".deckent/**",
+        "LICENSE",
+        "packaging/licenses/**",
+        ".github/assets/**",
+        "docs/reports/**"
+      ],
+      "none": true,
+      "reason": "documentation and maintainer records: node scripts/lint-docs.mjs and node scripts/lint-arch.mjs check them; tests that read a file by path are still selected"
+    },
+    {
+      "inputs": [
+        ".github/**"
+      ],
+      "none": true,
+      "reason": "hosted CI definition: proven by the hosted run on the pushed head"
+    },
+    {
+      "inputs": [
+        "eslint.config.js"
+      ],
+      "none": true,
+      "reason": "lint configuration: run eslint on the changed files"
+    },
+    {
+      "inputs": [
+        "tests/perf/**"
+      ],
+      "none": true,
+      "reason": "separate latency lane, never in the default suite: VITEST_MAX_FORKS=1 npx vitest run --config tests/perf/vitest.config.ts"
+    }
+  ]
+}

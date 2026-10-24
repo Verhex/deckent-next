@@ -25,7 +25,6 @@
     "tests/contracts/adapters/approval-keyring-concurrency.test.ts": 46,
     "tests/contracts/adapters/approval-keyring.test.ts": 165,
     "tests/contracts/adapters/approval-operation-keyed.test.ts": 902,
-    "tests/contracts/adapters/astra-2177-new-floor.test.ts": 11601,
     "tests/contracts/adapters/astra-2180-dynamic-ref.test.ts": 1625,
     "tests/contracts/adapters/audit-checkpoint.test.ts": 1116,
     "tests/contracts/adapters/audit-store.test.ts": 444,
