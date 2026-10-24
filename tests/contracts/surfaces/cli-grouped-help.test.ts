@@ -181,6 +181,7 @@ const HANDLER_SOURCES: Readonly<Record<string, readonly string[]>> = {
   models: ['cli-models/internal/models.ts', 'cli-models/internal/model-catalog.ts', 'cli-models/internal/model-roles.ts'], approval: ['cli-approval/internal/approvals.ts'],
   identity: ['cli-identity/internal/command.ts', 'cli-identity/internal/distribution.ts'],
   policy: ['cli/internal/entry.ts', 'cli-approval/internal/policy-grants.ts', 'cli-approval/internal/policy-delegations.ts', 'cli-approval/internal/policy-mcp.ts', 'cli-observe/internal/policy-vocabulary.ts'],
+  recovery: ['cli-approval/internal/recovery.ts#recoveryCommand'],
   config: ['config/internal/command.ts'], mcp: ['cli/internal/mcp.ts#mcpCommand'], secret: ['cli-admin/internal/secret.ts'], toolchains: ['cli-admin/internal/toolchains.ts'],
   runtime: ['cli-admin/internal/runtime.ts'], coding: ['cli-admin/internal/coding.ts', 'cli-admin/internal/worker-instructions.ts'], inference: ['cli-models/internal/inference.ts'], operation: ['cli-admin/internal/operation.ts'],
 };
@@ -265,7 +266,7 @@ it.each(['en', 'tr'] as const)('names the missing argument for every family with
   // C-RUN: bare `report` and `inventory` are handler-owned reads (default scope; off a terminal without one: CLI_SCOPE_REQUIRED, below).
   // C-DOCTOR: bare `workers` reads the default scope (no `--scope` required by the catalog).
   const runnable = new Set([...Object.keys(READ_DEFAULTS), 'terminal', 'init', 'models', 'identity', 'mcp', 'config', 'monitor', 'doctor', 'paths',
-    'coding', 'inference', 'operation', 'report', 'inventory', 'decide', 'memory', 'agents', 'backup', 'toolchains']);
+    'coding', 'inference', 'operation', 'report', 'inventory', 'decide', 'memory', 'agents', 'backup', 'toolchains', 'recovery']);
   const catalog = MESSAGE_REGISTRY.catalogs[language];
   for (const spec of (CLI_CATALOG as readonly CliCommandSpec[]).filter(item => !runnable.has(item.name))) {
     let errors = '';

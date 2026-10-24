@@ -53,8 +53,9 @@ export class RecoveryApplication {
     // A sealed escalation re-issues its hold (idempotent by its case-derived command id): a crash between the seal and the hold never strands the Run.
     if (existing) { if (existing.decision?.action === 'escalate-human') await this.hold(existing, existing.decision.code); return existing; }
     const { draft, refused, run } = await this.draft(command);
-    // S6R-5: only a Run frozen `live` writes a case; a shadow Run's decision is sealed elsewhere and changes nothing.
-    if (run.execution.recovery?.mode !== 'live') throw new RecoveryError('RECOVERY_OFF');
+    // S6R-5: only a Run frozen `live` writes a case; a shadow Run's decision is sealed elsewhere and changes nothing. alpha.56 G1: a would-stop case
+    // (its stop step never ran) is shadow input only — never stored, held or applied.
+    if (run.execution.recovery?.mode !== 'live' || draft.basis) throw new RecoveryError('RECOVERY_OFF');
     const saved = await this.ports.store.saveCase(null, draft);
     return refused ? this.close(saved, refused) : saved;
   }
@@ -72,17 +73,21 @@ export class RecoveryApplication {
     if (!run || !binding) throw new RecoveryError('RECOVERY_NOT_READY');
     const identity = binding.identity, policy = run.execution.recovery;
     if (!policy) throw new RecoveryError('RECOVERY_OFF');
-    const custody = run.progress.find(row => row.taskId === identity.taskId)?.workerCustody;
-    const termination = custody?.state === 'released' && custody.proofReceiptId ? await this.ports.store.loadTermination(command.scopeId, custody.proofReceiptId) : null;
+    // alpha.56 G1 (Jev JD): the basis follows the sealed detection — an executed stop step released the slot; any other disposition is would-stop,
+    // decided as if the stop had run, with the termination that stop would yield (no receipt).
+    const wouldStop = subject.disposition !== 'execute', custody = run.progress.find(row => row.taskId === identity.taskId)?.workerCustody;
+    const termination = wouldStop ? { receiptId: null, kind: subject.evidence.activity === 'missing' ? 'worker-absent' as const : 'supervisor-exit' as const, exitCode: null }
+      : custody?.state === 'released' && custody.proofReceiptId ? await this.ports.store.loadTermination(command.scopeId, custody.proofReceiptId) : null;
     if (!termination) throw new RecoveryError('RECOVERY_NOT_READY');
     const gate = assessRecoveryEffectGate(identity, await this.ports.store.listGateEffects(identity, policy.maxGateIntents + 1), policy);
-    const refused = lostContinuationRefusal(run, identity, { signature: null, gate, priorSignatures: [] });
+    const refused = lostContinuationRefusal(run, identity, { signature: null, gate, priorSignatures: [] }, wouldStop ? 'would-stop' : 'released');
     if (refused && NOTHING_WRITTEN.has(refused)) throw new RecoveryError(refused);
     const detection = { eventId, ruleId: subject.rule.id, ruleVersion: subject.rule.version, registryRevision: subject.registryRevision, evidenceDigest: subject.evidenceDigest,
       activity: subject.evidence.activity, launcherPhase: subject.evidence.launcherPhase };
     const now = this.ports.now();
-    const draft = recoveryCaseSchema.parse({ schemaVersion: 1, caseId: command.caseId, revision: 1, state: 'gated', identity, detection, termination, gate,
-      evidenceDigest: sha256(encodeCommandProjection('recovery-case-evidence:1', { caseId: command.caseId, identity, detection, termination, gate })), openedAtMs: now, updatedAtMs: now });
+    const basis = wouldStop ? { basis: 'would-stop' as const } : {};
+    const draft = recoveryCaseSchema.parse({ schemaVersion: 1, caseId: command.caseId, revision: 1, state: 'gated', identity, detection, ...basis, termination, gate,
+      evidenceDigest: sha256(encodeCommandProjection('recovery-case-evidence:1', { caseId: command.caseId, identity, detection, termination, gate, ...basis })), openedAtMs: now, updatedAtMs: now });
     return Object.freeze({ draft, refused: refused ? recoveryEscalationCode(new RecoveryError(refused)) : null, run });
   }
   async continueLostTask(input: unknown, credential?: unknown): Promise<RecoveryOutcome> {

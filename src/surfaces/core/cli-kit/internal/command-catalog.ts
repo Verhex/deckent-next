@@ -208,6 +208,10 @@ export const CLI_CATALOG = [
     action('choices', 'setup', 'identity.choicesSummary', 'identity.distributionHelp'),
     action('distribute', 'setup', 'identity.distributeSummary', 'identity.distributionHelp'),
   ] },
+  // alpha.56 G4: the read-only rollout view of lost-worker recovery and the person's blind review card.
+  { name: 'recovery', group: 'approvals', summary: 'cli.help.summary.recovery', detail: 'cli.help.recovery', args: '[--scope <id>] [--json]', bare: 'handler', children: [
+    action('review', 'approvals', 'cli.help.action.recoveryReview', 'cli.help.recovery'),
+  ] },
   { name: 'policy', group: 'approvals', summary: 'cli.help.summary.policy', detail: 'cli.help.policy', args: '[--scope <id>]', bare: { read: 'status' }, children: [
     action('vocabulary', 'approvals', 'cli.help.action.vocabulary', 'cli.help.policy', { installation: 'independent' }),
     action('status', 'observe', 'cli.help.action.policyStatus', 'cli.help.policyStatus'),
@@ -217,6 +221,8 @@ export const CLI_CATALOG = [
     action('grants', 'approvals', 'cli.help.action.grants', 'cli.help.policy'),
     action('revoke', 'approvals', 'cli.help.action.revoke', 'cli.help.policy', { requires: ['<id>'] }),
     action('upgrade', 'approvals', 'cli.help.action.policyUpgrade', 'cli.help.policy', { requires: ['--template current'] }),
+    // alpha.56 G2 + G3: lost-worker recovery grants and rule promotions (a person's card; off a terminal it only reads).
+    action('recovery', 'approvals', 'cli.help.action.policyRecovery', 'cli.help.policy'),
     { name: 'mcp', group: 'approvals', summary: 'cli.help.action.policy.mcp', detail: 'cli.help.policy', children: [
       action('list', 'approvals', 'cli.help.action.policy.mcp.list', 'cli.help.policy'),
       action('grant', 'approvals', 'cli.help.action.policy.mcp.grant', 'cli.help.policy', { requires: ['--group <id>'] }),

@@ -33,6 +33,8 @@ export interface WorkerObservation {
   readonly outputRecorded: boolean; readonly patchRecorded: boolean; readonly files: WorkerSidecars | null;
   /** EXEC-RELEASE: observed after a retained patch: the container and the attempt directory (with its live sidecars) are gone. */
   readonly custody?: 'released';
+  /** alpha.56: the container id the Attempt's own dispatch record names (Docker `create`; null: none recorded) — the ledger's, never a monitor sample. */
+  readonly dispatch?: Readonly<{ containerId: string | null }>;
   readonly diagnostics: readonly string[];
   /** Pinned worker tasks (WORKER-CURRENCY-2): requested → init → usage → verdict; `pending` until the host seals the log. */
   readonly model?: WorkerModelView | null;

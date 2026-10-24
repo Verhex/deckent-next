@@ -60,7 +60,7 @@ export async function inspectConfiguredWorkers(root: string, input: WorkerObserv
             const evidence = await recall(JSON.stringify(['models', entry.identity, files?.usage ?? null]), async () => observeAttemptWorkerModels(await reader(),
               FileArtifactStore.reader(() => inspectProductDirectory(target.layout, 'artifacts'), target.config.artifacts.maxBytes), entry.identity, files?.usage ?? null), value => value.usageEvidence !== 'unavailable'), model = evidence.model;
             return { ...basic, resources, ...(model ? { model } : {}), provider: files?.provider ?? 'unknown', workspace: record.request.workspace, process: activity.state, handle: activity.handle ?? basic.handle,
-              patchRecorded: !!record.patch, files, usageEvidence: evidence.usageEvidence, ...(evidence.usage ? { usage: evidence.usage } : {}), ...(released ? { custody: 'released' as const } : {}), diagnostics: [...(activity.state === 'unknown' ? ['process-unavailable'] : []),
+              patchRecorded: !!record.patch, dispatch: { containerId: record.containerId ?? null }, files, usageEvidence: evidence.usageEvidence, ...(evidence.usage ? { usage: evidence.usage } : {}), ...(released ? { custody: 'released' as const } : {}), diagnostics: [...(activity.state === 'unknown' ? ['process-unavailable'] : []),
                 ...(evidence.usageEvidence === 'unavailable' ? ['model-unavailable'] : []), ...(files ? files.log.diagnostics : [released ? 'custody-released' : 'activity-unavailable'])] };
           } catch { return { ...basic, diagnostics: ['observation-unavailable'] }; }
         }).finally(() => opened?.then(value => value.close(), () => undefined));

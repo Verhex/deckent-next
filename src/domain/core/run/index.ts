@@ -6,7 +6,7 @@ export { readRunHold } from './internal/hold.js';
 export type { RunHold } from './internal/hold.js';
 export { recoverStalledTask } from './internal/stall.js';
 export { continueLostTask, lostContinuationRefusal, taskAttemptCeilingReached } from './internal/lost.js';
-export type { LostContinuation } from './internal/lost.js';
+export type { LostBasis, LostContinuation } from './internal/lost.js';
 export { observeRunAttemptClosure, settleEnvironmentProbe, holdEnvironmentProbes, releaseEnvironmentProbes, environmentRequirementSchema, environmentRequirementsSchema } from './internal/environment.js';
 export type { EnvironmentRequirement } from './internal/environment.js';
 export type { StallCause } from './internal/stall.js';
@@ -23,7 +23,7 @@ export type { RunExecutionSnapshot, TaskStallPolicy } from './internal/registry.
 export { reconcileRunLifecycle, advanceRunLifecycle, expireParkedRun, closeParkedRun, resumeParkedRun, parkTaskAwaitingDecision, resolveTaskDecision } from './internal/lifecycle.js';
 export type { RunLifecycleTiming, TaskDecisionReason } from './internal/lifecycle.js';
 
-export { workClassRegistrySchema, workClassAcceptanceProfileSchema, coreEvidenceTypeSchema, mergeWorkClassRegistries, resolveTaskWorkClass, evidenceExtensionSchema, CORE_WORK_CLASSES, selectWorkerEffort, WorkerEffortError, WorkClassRegistryError,
+export { workClassRegistrySchema, workClassAcceptanceProfileSchema, coreEvidenceTypeSchema, mergeWorkClassRegistries, resolveTaskWorkClass, lowRiskTaskIds, evidenceExtensionSchema, CORE_WORK_CLASSES, selectWorkerEffort, WorkerEffortError, WorkClassRegistryError,
   candidatePolicySchema, candidateSelectorSchema, isCandidateSelector, WORK_CLASS_WORKER_ROLE, WORK_CLASS_LIMITS, resolveWorkClassCandidates, catalogDefaultEffort } from './internal/work-class.js';
 export type { WorkClassRegistry, WorkClassAcceptanceProfile, WorkClassPolicy, CandidatePolicy, CandidateSelector, ExactCandidate } from './internal/work-class.js';
 export { workerAssignmentSchema, workerAssignmentSkipSchema } from './internal/assignment.js';

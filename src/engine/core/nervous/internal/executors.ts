@@ -31,6 +31,8 @@ const pending = (result: NervousRecoveryResult) => result.disposition?.kind === 
  * in that fixed order; a release needs nothing more here (the task stays `reconciling`; continuation is S6R-4/5). No proof and none coming →
  * the Run goes to a person through the Nervous safety hold. Alert-brain and restart-component have no executor (proposal only).
  */
+/** alpha.56 G3: the stop-list actions that have an executor in this release (the person card offers a standing grant only for these). */
+export const NERVOUS_EXECUTABLE_ACTIONS = Object.freeze(['fence-attempt', 'stop-orphan', 'hold-run', 'hand-to-human'] as const);
 export function nervousExecutors(ports: NervousRecoveryPorts): NervousExecutors {
   const hold = async (proposal: NervousProposal, code: NervousHoldCode) => { const command = nervousHoldCommand(proposal, code); if (command) await ports.hold(command); return 'held' as const; };
   // `pending` lets the broker re-apply the case on a later page (the stop is sent again, a late proof releases); its last application holds instead.
@@ -40,6 +42,7 @@ export function nervousExecutors(ports: NervousRecoveryPorts): NervousExecutors 
     if (result.disposition?.kind !== 'hold-manual') return 'done' as const;
     return pending(result) && !options?.last ? 'pending' as const : hold(proposal, result.disposition.reason);
   };
-  return Object.freeze({ 'fence-attempt': lost('fence'), 'stop-orphan': lost('stop'),
-    'hold-run': (proposal: NervousProposal) => hold(proposal, 'hold-run'), 'hand-to-human': (proposal: NervousProposal) => hold(proposal, 'hand-to-human') });
+  const executors = { 'fence-attempt': lost('fence'), 'stop-orphan': lost('stop'),
+    'hold-run': (proposal: NervousProposal) => hold(proposal, 'hold-run'), 'hand-to-human': (proposal: NervousProposal) => hold(proposal, 'hand-to-human') };
+  return Object.freeze(executors satisfies Record<(typeof NERVOUS_EXECUTABLE_ACTIONS)[number], unknown>);
 }

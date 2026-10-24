@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { HOST_LIMITS_REGISTRY, inspectProductDirectory, jsonRecordDirectory, mapBounded, recordedProcessState, type ConfigLoadOptions } from '#platform/index.js';
 import { DockerSupervisor, openLocalIntegrityAuthority, openSqliteAuditStore, openSqliteInventoryReader } from '#adapters/index.js';
-import { AuditApplication, DISPATCH_PREPARATION_INSTANCE, DispatchInventoryPolicyAuthorization, NERVOUS_RULES_SEED, NervousApplication, SupervisorError, nervousExecutors, nervousStandingApproval,
+import { AuditApplication, DISPATCH_PREPARATION_INSTANCE, DispatchInventoryPolicyAuthorization, NERVOUS_RULES_SEED, NervousApplication, SupervisorError, nervousExecutors, nervousRulePromoted, nervousStandingApproval,
   readDispatchLauncherEvidence, readDispatchPreparationRecord, type DispatchPreparationInstance, type NervousAttemptSignal, type NervousProposal, type ReconciliationRecoveryCommand } from '#engine/index.js';
 import { reconcileAttemptFor } from './reconcile.js';
 import { holdConfiguredRunForNervous } from './lifecycle.js';
@@ -51,7 +51,8 @@ export function prepareConfiguredNervous(projectRoot: string, options: ConfigLoa
     try {
       const audit = ledger.current = new AuditApplication(store, await openLocalIntegrityAuthority(c.layout, c.config.approvals.keyFile, true));
       const context = { owner: { issuer: c.principal.issuer, subject: c.principal.subject }, policyRevision: c.document.revision,
-        approval: (proposal: NervousProposal) => nervousStandingApproval(c.document, c.principal, proposal, Date.now()) };
+        approval: (proposal: NervousProposal) => nervousStandingApproval(c.document, c.principal, proposal, Date.now()),
+        promoted: (ruleId: string, version: number) => nervousRulePromoted(c.document, c.principal, command.scopeId, ruleId, version) };
       await app.observeAttempts(command.scopeId, signals, context);
       if (command.after === null) for (const kind of ['dispatch-preparation-aborted', 'policy-turn'] as const) {
         await app.observeFeed(command.scopeId, kind, audit.listKind(command.scopeId, kind, app.feedCursor(command.scopeId, kind), app.rules.tracking.feedPageSize), context);

@@ -188,6 +188,11 @@ export function resolveTaskWorkClass(kind: string, requested?: string, configure
   if (requested !== undefined && !workClass) throw new WorkerEffortError('WORK_CLASS_NOT_REGISTERED');
   return { policy, workClass };
 }
+/** alpha.56 G6 (owner Q-A3): the tasks whose resolved WorkClass the registry marks `proposalAdmission.risk: low`; an unresolvable class is not low-risk. */
+export function lowRiskTaskIds(tasks: readonly Readonly<{ id: string; kind: string; workClass?: string | undefined }>[], configured?: WorkClassRegistry): readonly string[] {
+  return tasks.filter(task => { try { const { workClass } = resolveTaskWorkClass(task.kind, task.workClass, configured);
+    return workClass !== undefined && 'proposalAdmission' in workClass && workClass.proposalAdmission?.risk === 'low'; } catch { return false; } }).map(task => task.id);
+}
 /** ATAMA-1: the class's declared candidate list in the effective policy, or null when the class declares none (no default list exists). */
 export function resolveWorkClassCandidates(policy: WorkClassPolicy, workClass: WorkClassPolicy['classes'][number] | undefined): CandidatePolicy | null {
   const id = workClass && 'candidatePolicyId' in workClass ? workClass.candidatePolicyId : undefined;

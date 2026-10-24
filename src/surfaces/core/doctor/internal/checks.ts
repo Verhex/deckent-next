@@ -5,7 +5,8 @@ import { shortImageId } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
 import { firstJobCommand, firstJobSteps, firstJobTitle } from './first-job.js';
 import type { RecoveryModeState } from '#engine/index.js';
-import { recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
+import type { RecoveryRolloutView } from '#domain/index.js';
+import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
 
 /** The four groups of the owner-accepted doctor view (CLI review 2026-10-19 §doctor): Kurulum / Güvenlik / Çalışma / Araçlar. */
 export type DoctorGroup = 'setup' | 'security' | 'work' | 'tools';
@@ -47,6 +48,8 @@ export interface DoctorCheckFacts {
   readonly executionEnvironment?: ExecutionEnvironmentDoctorView | null;
   /** S6R-6: lost-worker recovery modes and the owner's standing continuation grant in this scope; null or absent when not read. */
   readonly recoveryMode?: RecoveryModeState | null;
+  /** alpha.56 G4: the scope's rollout view when recovery is not off (null: not read). */
+  readonly recoveryRollout?: RecoveryRolloutView | null;
   /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
   readonly secretUse?: readonly DoctorSecretUse[] | null;
 }
@@ -180,9 +183,12 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   // S6R-6: lost-worker recovery — the protected modes and the owner's standing grant; live without the grant sends every case to a person.
   const recovery = f.recoveryMode;
   if (recovery) {
-    const text = recoveryStateLines(recovery, l).join(' ');
-    rows.push(recovery.recovery !== 'live' || recovery.continuation === 'automatic' ? row('work', 'work.recovery', 'ok', text)
-      : recovery.continuation === 'unknown' ? row('work', 'work.recovery', 'untested', text) : row('work', 'work.recovery', 'warning', text, scoped('deckent policy grants', f)));
+    // alpha.56 G4: the exit progress in one line (blind counts) and the next step: the person's review first, else the recovery policy card (F-e).
+    const view = f.recoveryRollout, text = [...recoveryStateLines(recovery, l), ...(view ? [recoveryRolloutSummary({ rulesMet: view.rules.filter(rule => rule.met).length,
+      rules: view.rules.length, decided: view.decisions.decided, agreements: view.decisions.agreements, waiting: view.decisions.waiting, complete: view.complete }, l)] : [])].join(' ');
+    const next = view && view.decisions.waiting > 0 ? scoped('deckent recovery review', f) : scoped('deckent policy recovery', f);
+    rows.push(recovery.recovery !== 'live' || recovery.continuation === 'automatic' ? row('work', 'work.recovery', 'ok', text, view?.decisions.waiting ? next : undefined)
+      : recovery.continuation === 'unknown' ? row('work', 'work.recovery', 'untested', text) : row('work', 'work.recovery', 'warning', text, next));
   }
   return rows;
 }

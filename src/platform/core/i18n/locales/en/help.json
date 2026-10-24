@@ -229,5 +229,9 @@
   "cli.coding.instructions.help": "deckent coding instructions [status] [--json] [--lang en|tr]\nShows the worker instruction file of the work target (execution.workerInstructions; the project root when no work target is configured): path, size, SHA-256 and whether workers get it now.\ndeckent coding instructions trust|revoke [--target <id>] --scope <id> [--lang en|tr]\nTrusts (or takes back) exactly the file's current content for that folder and, with a work target, for its base ref. A card on your own terminal shows the path, size, SHA-256 and first lines; AI tools, MCP, pipes and --json are refused. Decided on the config write permission for execution.workerInstructions and recorded in the audit log. A changed file is untrusted again.",
   "cli.help.action.models.roles": "Which model serves which role (new model: role pending)",
   "cli.help.action.models.roles.show": "List catalog models with maker, tier, roles and state",
-  "cli.help.action.models.roles.set": "Give one model a tier and roles on a card"
+  "cli.help.action.models.roles.set": "Give one model a tier and roles on a card",
+  "cli.help.summary.recovery": "Lost-worker recovery: rollout progress and your blind review",
+  "cli.help.recovery": "Usage: deckent recovery [--scope <id>] [--json]\n  Read-only: per measured lost-worker rule its shadow cases since the last false alarm, and how often the recovery model agreed with your blind choices. A model's choice of a case you have not answered is never shown.\ndeckent recovery review [--scope <id>]\n  On your terminal only: each case the model decided in shadow, without its choice. You say whether the worker really was lost and what you would have done; your answer is recorded, then the model's choice is shown. Answers measure agreement and change no work.\nStanding grants and rule promotions: deckent policy recovery.",
+  "cli.help.action.recoveryReview": "Answer shadow-decided recovery cases blind (your terminal only)",
+  "cli.help.action.policyRecovery": "Lost-worker recovery grants and rule promotions (your card)"
 }

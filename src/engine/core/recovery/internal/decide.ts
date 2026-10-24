@@ -52,9 +52,9 @@ const failureCode = (error: unknown) => { const code = (error as { code?: unknow
 
 /**
  * S6R-5 (S6R-DESIGN §6, §7 step 5–6, §8, §9, §11 phase 1; owner Q-R1/Q-R2/Q-R5, Q-H3): the recovery decision of one sealed lost-worker case. The
- * deterministic gate runs first (`RecoveryApplication.prepare`): a refusal, no owner standing grant for a continuation, no eligible
+ * deterministic gate runs first (`RecoveryApplication.prepare`): a refusal, (live only) no owner standing grant for a continuation, no eligible
  * `recovery-decision` role row, no delegated-use consent for a subscription row, or an open circuit breaker each seal `escalate-human` without a
- * model call. Otherwise the role model reads the sealed evidence projection once (retries 0; its command id is the decision id, so a claimed call
+ * model call (alpha.56: shadow — including every would-stop case — asks the model without the grant, inside the breaker). Otherwise the role model reads the sealed evidence projection once (retries 0; its command id is the decision id, so a claimed call
  * replays and is never sent again) and its answer is read strictly; any failure is a sealed escalation with the typed reason, never a re-ask. The
  * decision is sealed (`recovery-decision`) before its apply; a sealed decision is applied on replay without a second call (N17). `shadow` — the
  * config's or the Run's frozen mode, the stricter wins — seals what would happen and writes nothing else: no case, no hold, no continuation.
@@ -76,7 +76,8 @@ export class RecoveryDecisionApplication {
       if (error instanceof RecoveryError && error.code === 'RECOVERY_NOT_READY') return Object.freeze({ kind: 'skipped' as const, reason: 'not-ready' as const });
       throw error;
     }
-    const mode: Mode = command.mode === 'live' && prepared.run.execution.recovery?.mode === 'live' ? 'live' : 'shadow';
+    // alpha.56 G1: a would-stop case is shadow input whatever the command or the Run says.
+    const mode: Mode = command.mode === 'live' && prepared.run.execution.recovery?.mode === 'live' && !prepared.draft.basis ? 'live' : 'shadow';
     if (mode === 'shadow') {
       const sealed = await this.loadSeal(command.scopeId, command.caseId, 'shadow');
       if (sealed) return Object.freeze({ kind: 'shadow' as const, action: sealed.action, code: sealed.code, replay: true });
@@ -100,10 +101,13 @@ export class RecoveryDecisionApplication {
     if (!subject) {
       // S6R-6: a case already decided by its model in shadow (same evidence) is not asked again after the switch to live: the live seal adopts the
       // shadow decision (`basis: 'shadow'`, its call's model block). A shadow seal without a model (a deterministic escalation) is decided afresh.
+      // alpha.56: a would-stop shadow seal is never adopted (it decided a counterfactual); a shadow seal carries no grant, so an adopted continuation
+      // re-derives it now and without it is sealed `continuation-not-approved` (lead decision, R-DESIGN §9).
       const shadow = await this.loadSeal(ref.scopeId, current.caseId, 'shadow');
-      if (shadow && shadow.model !== null && shadow.evidenceDigest === current.evidenceDigest) {
-        const { model, action, causeClass, note, code, failure, standingRef } = shadow;
-        subject = await this.seal(current, 'live', { model, action, causeClass, note, code, failure, standingRef, basis: 'shadow' });
+      if (shadow && shadow.model !== null && shadow.basis !== 'would-stop' && shadow.evidenceDigest === current.evidenceDigest) {
+        const { model, action, causeClass, note, code, failure } = shadow, standingRef = action === 'continue-new-attempt' ? await this.standingRef(ref.scopeId) : null;
+        subject = await this.seal(current, 'live', action === 'continue-new-attempt' && standingRef === null ? { ...this.escalation('continuation-not-approved'), model, basis: 'shadow' }
+          : { model, action, causeClass, note, code, failure, standingRef, basis: 'shadow' });
       } else {
         const run = await this.ports.store.loadRun(ref.scopeId, current.identity.runId);
         if (!run) throw new RecoveryError('RECOVERY_CORRUPT');
@@ -134,8 +138,10 @@ export class RecoveryDecisionApplication {
   /** The decision for a case whose gate passed: deterministic escalations first, then the one call and its strict answer. */
   private async choose(current: RecoveryCase, run: RunSnapshot, mode: Mode): Promise<Omit<Sealed, 'kind' | 'caseId' | 'mode' | 'evidenceDigest' | 'target' | 'gate' | 'terminationReceiptId'>> {
     const { scopeId } = current.identity, registry = this.registry, now = this.ports.now();
-    const approval = recoveryContinuationApprovalSchema.safeParse(await this.ports.approval(scopeId).catch(() => null));
-    if (!approval.success || !approval.data.scopeIds.includes(scopeId)) return this.escalation('continuation-not-approved');
+    // alpha.56 G1 (owner Q-A6): shadow is the owner's permission to spend inside the breaker — the model is asked without the continuation grant,
+    // and the shadow seal names no grant. Live still needs it.
+    const standingRef = mode === 'live' ? await this.standingRef(scopeId) : null;
+    if (mode === 'live' && standingRef === null) return this.escalation('continuation-not-approved');
     if (await this.breakerOpen(scopeId, now)) return this.escalation('breaker-open');
     const rows = (await this.ports.models.rows(scopeId)).filter(row => row.invocable);
     if (!rows.length) return this.escalation('no-eligible-model');
@@ -155,11 +161,16 @@ export class RecoveryDecisionApplication {
     const answer = readRecoveryDecisionAnswer(result.text, { caseId: current.caseId, evidenceDigest: current.evidenceDigest, offered: OFFERED }, registry);
     if (!answer.ok) return { ...this.escalation('answer-invalid', answer.failure), model };
     if (answer.action === 'escalate-human') return { ...this.escalation('human-chosen'), causeClass: answer.causeClass, model };
-    return { model, action: 'continue-new-attempt', causeClass: answer.causeClass, note: answer.note, code: null, failure: null, standingRef: approval.data.decisionRef };
+    return { model, action: 'continue-new-attempt', causeClass: answer.causeClass, note: answer.note, code: null, failure: null, standingRef };
+  }
+  /** The owner's standing grant of a continuation in `scopeId`, read fresh (null: none, or unreadable). */
+  private async standingRef(scopeId: string): Promise<string | null> {
+    const approval = recoveryContinuationApprovalSchema.safeParse(await this.ports.approval(scopeId).catch(() => null));
+    return approval.success && approval.data.scopeIds.includes(scopeId) ? approval.data.decisionRef : null;
   }
   /**
-   * S6R-6 installation circuit breaker, persistent: the model calls of recovery decisions (shadow and live seals with a model block; a live seal
-   * adopting a shadow decision is the same call) sealed in the registry window across the breaker scopes. Open at the bound, when a window holds
+   * S6R-6 installation circuit breaker, persistent: the model calls of recovery decisions (shadow — would-stop included — and live seals with a
+   * model block; a live seal adopting a shadow decision is the same call) sealed in the registry window across the breaker scopes. Open at the bound, when a window holds
    * `scanLimit` seals without reaching it, or when the ledger cannot be read (fail closed: no call). A crash between the call and its seal is the
    * one call not yet counted; its replay finds the claimed invocation (command id) and never sends it again.
    */
@@ -170,7 +181,7 @@ export class RecoveryDecisionApplication {
       let calls = 0;
       for (const id of new Set(this.ports.breakerScopes?.() ?? [scopeId])) {
         const page = await this.ports.seals.listRecentKind(id, 'recovery-decision', since, limit);
-        calls += page.filter(record => record.event.subject.kind === 'recovery-decision' && record.event.subject.model !== null && record.event.subject.basis === undefined).length;
+        calls += page.filter(record => record.event.subject.kind === 'recovery-decision' && record.event.subject.model !== null && record.event.subject.basis !== 'shadow').length;
         if (calls >= maxCasesPerWindow || page.length >= limit) return true;
       }
       return false;
@@ -199,7 +210,8 @@ export class RecoveryDecisionApplication {
     const { scopeId, runId, taskId, attemptId, generation } = current.identity, held = await this.loadSeal(scopeId, current.caseId, mode);
     if (held) return held;
     const subject: Sealed = { kind: 'recovery-decision', caseId: current.caseId, mode, evidenceDigest: current.evidenceDigest, target: { runId, taskId, attemptId, generation },
-      gate: { result: current.gate.result, settled: current.gate.settled, intents: current.gate.intents.length }, terminationReceiptId: current.termination.receiptId, ...decision };
+      gate: { result: current.gate.result, settled: current.gate.settled, intents: current.gate.intents.length }, terminationReceiptId: current.termination.receiptId, ...decision,
+      ...(current.basis ? { basis: current.basis } : {}) };
     const principal = await authenticate(this.verifier, undefined, scopeId);
     await this.ports.seals.record({ schemaVersion: AUDIT_EVENT_SCHEMA_VERSION, eventId: this.eventId(current.caseId, mode), scopeId,
       principal: { issuer: principal.issuer, subject: principal.subject }, policyRevision: this.ports.policyRevision, atMs: this.ports.now(), subject } satisfies AuditEvent);

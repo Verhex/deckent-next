@@ -21,6 +21,8 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const names = context.listSecretNames ? await context.listSecretNames(root, options).then(view => view.names, () => null) : null;
   const catalog = context.inspectModelCatalog && scopeId ? await context.inspectModelCatalog(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
   const recoveryMode = context.inspectRecoveryMode && scopeId ? await context.inspectRecoveryMode(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
+  const recoveryRollout = context.inspectRecoveryRollout && scopeId && recoveryMode && recoveryMode.recovery !== 'off'
+    ? await context.inspectRecoveryRollout(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
   const roles = context.inspectModelRoles && scopeId ? await context.inspectModelRoles(root, { schemaVersion: 1, scopeId }, options).catch(() => null) : null;
   const executionEnvironment = context.inspectExecutionEnvironment ? await context.inspectExecutionEnvironment(options.env ?? process.env).catch(() => null) : null;
   const docker = config.execution?.docker, workerImage = docker && executionEnvironment?.state === 'done' && context.inspectWorkerImage
@@ -36,7 +38,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     identityProfile: typeof identity?.profile?.id === 'string' ? { state: 'selected', id: identity.profile.id } : { state: 'missing' },
     backupPassphraseStored: names === null ? null : names.includes(DOCTOR_BACKUP_PASSPHRASE_SECRET),
     retiringModels: catalog === null ? null : retiringModels(catalog, config.models.retirementWarningDays), secretUse,
-    recoveryMode,
+    recoveryMode, recoveryRollout,
     pendingRoleModels: roles === null ? null : roles.models.filter(entry => entry.state === 'pending').map(entry => ({ modelId: entry.modelId, channelId: entry.channelId })),
     headlessLogins: context.readHeadlessLogins && scopeId ? await context.readHeadlessLogins((config as Record<string, unknown>)['provider_invocation_profiles'], scopeId, options).catch(() => null) : null,
   };

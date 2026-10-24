@@ -68,7 +68,7 @@ async function fixture(input: { status: 'running' | 'missing' | 'created'; retai
   const supervisor = new DockerSupervisor(docker, runner), profile = await supervisor.captureProfile();
   const restore = DockerSupervisor.restoreProfile.bind(DockerSupervisor);
   vi.spyOn(DockerSupervisor, 'restoreProfile').mockImplementation(profileInput => restore(profileInput, runner));
-  await admitRunAttempts(opened.store, [identity], input.recovery ? { recovery: freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live') } : {});
+  await admitRunAttempts(opened.store, [identity], input.recovery ? { recovery: freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live', ['t']) } : {});
   const claim = { request, owner: 'original-controller' };
   await opened.store.claimDispatch({ ...claim, profile });
   await opened.store.grantLaunch({ claim, principal: custodyPrincipal, now: 1 });

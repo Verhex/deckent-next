@@ -17,6 +17,7 @@ import { assignmentErrors } from './assignment.js';
 import { headlessErrors } from './headless.js';
 import { agentstatsErrors } from './agentstats.js';
 import { agentsevoErrors } from './agentsevo.js';
+import { recoveryErrors } from './recovery.js';
 
 /** Family fragments merged after the core table, in this fixed order (alpha.48 A2); each lane writes only its own fragment file. */
 export const ERROR_DEFINITION_FRAGMENTS: readonly (readonly [string, ErrorDefinitions])[] = Object.freeze([
@@ -38,4 +39,5 @@ export const ERROR_DEFINITION_FRAGMENTS: readonly (readonly [string, ErrorDefini
   ['headless', headlessErrors],
   ['agentstats', agentstatsErrors],
   ['agentsevo', agentsevoErrors],
+  ['recovery', recoveryErrors],
 ]);

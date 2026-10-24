@@ -37,6 +37,7 @@ const WIDENING: readonly (readonly [string, string, string, string])[] = [
   ['memory contest', 'memory', 'scope', 'contest'],
   // S6R-3 (lead on s6 Q3): the owner's standing approval of a Nervous stop action is never an AI's.
   ['Nervous standing approval', 'recovery-action', 'stop-orphan', 'apply'],
+  ['Nervous rule promotion (alpha.56 G2)', 'nervous-rule', 'container-gone@1', 'promote'],
   ['secret-gate acknowledged deny paths', 'config', 'global:execution.secretGate.acknowledgedDenyPaths', 'write'],
   ['secret-gate section', 'config', 'project:execution.secretGate', 'write'],
   ['approval assurance producers', 'config', 'project:approvals.assuranceProducers', 'write'],

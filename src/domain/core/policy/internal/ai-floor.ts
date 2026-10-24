@@ -20,7 +20,7 @@ const pairIn = (pairs: readonly (readonly [string, string])[], kind: string, act
  * Approval cards whose decision widens authority: identity profile distribution, MCP capability grants and the first-run template
  * upgrade/rollback (each also needs `policy.administer`, floored below; deciding the card is a second, independent route).
  */
-const AUTHORITY_APPROVAL_IDS = Object.freeze(['identity-profile', 'policy-mcp-capability', 'policy-template-upgrade', 'audit-rebaseline']);
+const AUTHORITY_APPROVAL_IDS = Object.freeze(['identity-profile', 'policy-mcp-capability', 'policy-template-upgrade', 'audit-rebaseline', 'policy-recovery']);
 /**
  * Y4 v1: security invariants, never policy-grant data. Read-only metadata stays available. Every route that can widen an AI actor's own
  * (or a controlled principal's) authority is here: policy administration (grants, role bindings, delegation cells, restrictions, SoD,
@@ -57,6 +57,8 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   if (resource.kind === 'secret') return true;
   // S6R-3: a standing approval of a Nervous stop action is the owner's; no AI holds it (Nervous itself proposes, the broker applies).
   if (resource.kind === 'recovery-action') return true;
+  // alpha.56 G2: promoting a Nervous rule to live is the owner's measured decision; no AI holds it.
+  if (resource.kind === 'nervous-rule') return true;
   // S8-5 (S8-DESIGN §9, N22): signer rows are a person's — enrol, add, revoke and log repair are refused for every AI principal.
   if (resource.kind === 'skill-signer' && action !== 'inspect') return true;
   if (resource.kind === 'approval' && action === 'decide' && AUTHORITY_APPROVAL_IDS.includes(resource.id)) return true;

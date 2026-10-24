@@ -10,3 +10,5 @@ export { RECOVERY_DECISION_ACTIONS, RECOVERY_DECISION_FAILURES, RECOVERY_DECISIO
 export type { RecoveryDecisionAction, RecoveryDecisionAnswer, RecoveryDecisionFailure, RecoveryDecisionRegistry } from './internal/decision.js';
 export { HOLD_NOTE_CASE_CHARS, NERVOUS_HOLD_CODES, nervousHoldNote, readRunHoldNote, recoveryHoldNote } from './internal/hold-note.js';
 export type { NervousHoldCode, RunHoldNote } from './internal/hold-note.js';
+export { RECOVERY_ROLLOUT, recoveryRolloutRegistrySchema, recoveryRolloutView } from './internal/rollout.js';
+export type { RecoveryRolloutRecords, RecoveryRolloutRegistry, RecoveryRolloutRuleView, RecoveryRolloutView } from './internal/rollout.js';

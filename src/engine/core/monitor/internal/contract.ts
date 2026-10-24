@@ -160,7 +160,11 @@ export interface MonitorMap {
   readonly memory: { readonly available: boolean };
   /** S6R-6 (additive): lost-worker recovery — the protected Nervous and recovery modes and the owner's standing continuation grant. Absent: not read. */
   readonly recovery?: import('#engine/core/recovery/index.js').RecoveryModeState;
+  /** alpha.56 G4 (additive): the rollout counts over the installation's scopes (blind: counts only). Absent: recovery off, or not read. */
+  readonly recoveryRollout?: MonitorRecoveryRollout;
 }
+/** Measured rules ready / measured rules, model decisions a person reviewed and agreed with, decisions waiting for a person; `complete` false at a scan bound. */
+export type MonitorRecoveryRollout = Readonly<{ rulesMet: number; rules: number; decided: number; agreements: number; waiting: number; complete: boolean }>;
 export interface MonitorSnapshot {
   readonly schemaVersion: 1; readonly observedAt: number; readonly installs: readonly MonitorInstall[]; readonly control: 'observe-only';
   /** Collection targets attempted, in order (including denied/unavailable targets); no unlisted source is collected.
