@@ -14,7 +14,7 @@ import { pathToFileURL } from 'node:url';
 export const DEFAULTS = Object.freeze({
   cli: '/home/alperen/deckent-dogfood/bin/cli.sh', n1Root: '/home/alperen/deckent-dogfood', unit: 'deckent-n1.service',
   accept: '/home/alperen/deckent-refactor-work/proof/ALPHA56-2026-10-24/accept', scope: 'live', k: 4,
-  batchDeadlineMs: 10 * 60_000, pollMs: 15_000, windowMaxMs: 4 * 3_600_000, restartGapMs: 5_000,
+  batchDeadlineMs: 10 * 60_000, pollMs: 15_000, daemonPollMs: 1_000, windowMaxMs: 4 * 3_600_000, restartGapMs: 5_000, maxWorkerPages: 64,
 });
 /** Rule ids are the Nervous seed's (assets/nervous/rules.json); `expect` is the per-rule detection delta one batch must produce (null: measured only). */
 export const SCENARIOS = Object.freeze({
@@ -120,21 +120,34 @@ export async function execute(config, ports, scenario) {
   const state = { scenario, stamp, runs: [], identities: [], targets: [], baseline: null, records: [], allowed: new Set() };
   const log = (step, detail = {}) => ports.log({ at: new Date(ports.now()).toISOString(), scenario, step, ...detail });
   const must = (argv, code = 'PACK_CLI_FAILED') => { const r = ports.cli(argv); if (r.code !== 0 || !r.json) throw new PackStop(code, { argv: argv.slice(0, 2), error: r.error }); return r.json; };
-  const deadline = ports.now() + config.batchDeadlineMs;
-  const until = async (what, probe) => {
-    for (;;) { const value = await probe(); if (value) return value; if (ports.now() >= deadline) throw new PackStop('PACK_DEADLINE', { what }); await ports.sleep(config.pollMs); }
+  // Each wait has its own deadline (scenario 2 waits twice for detections of ≥ 3 absences over ≥ 60 s).
+  const until = async (what, probe, pollMs = config.pollMs) => {
+    const deadline = ports.now() + config.batchDeadlineMs;
+    for (;;) { const value = await probe(); if (value) return value; if (ports.now() >= deadline) throw new PackStop('PACK_DEADLINE', { what }); await ports.sleep(pollMs); }
+  };
+  /** Every page of the `current` source: a worker past the first page must still count (foreign check, own Attempts). */
+  const readWorkers = () => {
+    const rows = []; let after = null;
+    for (let page = 0; page < config.maxWorkerPages; page++) {
+      const json = must(['workers', '--scope', config.scope, '--source', 'current', ...(after ? ['--after', after] : [])]);
+      const source = (json.sources ?? []).find(row => row.id === 'current');
+      if (!source || source.status !== 'available') throw new PackStop('PACK_WORKERS_UNAVAILABLE', { status: source?.status ?? null });
+      rows.push(...(source.workers ?? [])); after = source.nextAfter ?? null;
+      if (!after) return { sources: [{ id: 'current', workers: rows }] };
+    }
+    throw new PackStop('PACK_WORKERS_TRUNCATED', { pages: config.maxWorkerPages });
   };
   const own = row => state.runs.includes(row.identity?.runId);
   const steps = {
     async admit() {
       // N1 dogfood is paused for the window: an unsettled worker of any other Run would be hit by a service kill. Refuse rather than touch it.
-      const foreign = workers(must(['workers', '--scope', config.scope])).filter(row => row.terminal == null && !own(row));
+      const foreign = workers(readWorkers()).filter(row => row.terminal == null && !own(row));
       if (foreign.length) throw new PackStop('PACK_FOREIGN_WORKERS', { runs: [...new Set(foreign.map(row => row.identity?.runId))] });
       state.baseline = ruleCounts(must(['recovery', '--scope', config.scope]));
       for (let i = 1; i <= config.k; i++) {
         const id = `rp${scenario}-${stamp}-${i}`, file = join(config.accept, `${id}-graph.json`);
         mkdirSync(config.accept, { recursive: true, mode: 0o700 }); writeFileSync(file, `${JSON.stringify(graph, null, 2)}\n`);
-        must(['run', 'create', '--scope', config.scope, '--id', id, '--command-id', `create-${id}`, '--graph', file]); state.runs.push(id);
+        must(['run', 'create', '--scope', config.scope, '--id', id, '--command-id', `create-${id}`, '--graph', file]); state.runs.push(id); log('admitted', { runId: id });
         // Only a Run admitted after the owner set N1 to shadow freezes a recovery section (R-DESIGN F-f); otherwise the batch measures nothing.
         const mode = must(['run', 'inspect', '--scope', config.scope, '--id', id]).run?.recoveryMode;
         if (mode !== 'shadow') throw new PackStop('PACK_RECOVERY_NOT_SHADOW', { runId: id, recoveryMode: mode ?? null });
@@ -142,12 +155,12 @@ export async function execute(config, ports, scenario) {
     },
     async 'await-containers'() {
       state.identities = await until('containers', () => {
-        const rows = workers(must(['workers', '--scope', config.scope])).filter(row => own(row) && row.terminal == null && row.process === 'running');
+        const rows = workers(readWorkers()).filter(row => own(row) && row.terminal == null && row.process === 'running');
         return new Set(rows.map(row => row.identity.runId)).size === state.runs.length ? rows.map(row => row.identity) : null;
       });
     },
     async 'verify-targets'() {
-      const json = must(['workers', '--scope', config.scope]);
+      const json = readWorkers();
       state.targets = state.identities.map(identity => { const id = dispatchContainerId(json, identity); return { identity, ...checkInspect(ports.inspect(id), id, config.n1Root) }; });
     },
     async 'remove-containers'() {
@@ -165,7 +178,7 @@ export async function execute(config, ports, scenario) {
     async 'await-service'() { await ports.sleep(config.restartGapMs); await until('service', () => ports.cli(['runtime', 'describe']).code === 0); },
     async 'owner-docker-restart'() {
       log('owner-step', { say: 'Owner: run `sudo systemctl restart docker` now (live idle). The pack only observes the outage.' });
-      await until('daemon-down', () => !ports.daemonUp()); await until('daemon-up', () => ports.daemonUp());
+      await until('daemon-down', () => !ports.daemonUp(), config.daemonPollMs); await until('daemon-up', () => ports.daemonUp(), config.daemonPollMs);
     },
     async 'await-records'(expect) {
       const delta = counts => Object.fromEntries(Object.entries(counts).map(([rule, n]) => [rule, n - (state.baseline[rule] ?? 0)]).filter(([, n]) => n !== 0));
@@ -186,7 +199,7 @@ export async function execute(config, ports, scenario) {
   for (const row of p.steps) {
     if (row.destructive) window();
     log('step', { step: row.step });
-    try { await steps[row.step](row.expect); } catch (error) { log('stopped', { step: row.step, code: error.code ?? 'PACK_ERROR', detail: error.detail ?? String(error) }); throw error; }
+    try { await steps[row.step](row.expect); } catch (error) { log('stopped', { step: row.step, code: error.code ?? 'PACK_ERROR', detail: error.detail ?? String(error), runs: state.runs }); throw error; }
   }
   log('done', { runs: state.runs, records: state.records });
   return state;

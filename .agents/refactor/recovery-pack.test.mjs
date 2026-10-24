@@ -16,7 +16,7 @@ function fixture(t, { window = {}, workers: shapeWorker = row => row, mount = id
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const accept = path.join(dir, 'accept'); fs.mkdirSync(accept);
   const config = { k: 2, scope: 'live', n1Root: '/n1', accept, window: path.join(accept, 'WINDOW.json'), task: path.join(accept, 'scenario-task.json'),
-    batchDeadlineMs: 60_000, pollMs: 1_000, windowMaxMs: 4 * 3_600_000, restartGapMs: 0 };
+    batchDeadlineMs: 60_000, pollMs: 1_000, daemonPollMs: 1_000, windowMaxMs: 4 * 3_600_000, restartGapMs: 0, maxWorkerPages: 4 };
   if (window !== null) fs.writeFileSync(config.window, JSON.stringify({ schemaVersion: 1, ownerAnswer: 'R0b Q-A7', startUtc: '2026-10-29T09:30:00Z',
     endUtc: '2026-10-29T11:30:00Z', dockerRestart: 'out', n1DogfoodPaused: true, ...window }));
   fs.writeFileSync(config.task, JSON.stringify({ kind: 'claude-coding', workInput: { schemaVersion: 1, task: 'hold the container' } }));
@@ -28,7 +28,9 @@ function fixture(t, { window = {}, workers: shapeWorker = row => row, mount = id
     cli(argv) {
       calls.push(['cli', ...argv]);
       const [a, b] = argv, id = argv[argv.indexOf('--id') + 1];
-      if (a === 'workers') return { code: 0, json: { sources: [{ id: 'current', workers: [...foreign, ...runs.map((runId, i) => {
+      // Page 1 holds the pack's own Attempts and points to page 2, which holds other Runs' workers (if any).
+      if (a === 'workers' && argv.includes('--after')) return { code: 0, json: { sources: [{ id: 'current', status: 'available', workers: foreign, nextAfter: null }] } };
+      if (a === 'workers') return { code: 0, json: { sources: [{ id: 'current', status: 'available', nextAfter: 'p2', workers: [...runs.map((runId, i) => {
         const identity = { scopeId: 'live', runId, taskId: 'scenario', attemptId: `a-${i}`, layoutRevision: 'l', generation: 1 };
         if (!ids.has(runId)) ids.set(runId, hex(i + 1));
         return shapeWorker({ identity, terminal: null, process: 'running', dispatch: { containerId: ids.get(runId) } });
@@ -74,7 +76,7 @@ test('every G5 stop happens before any docker rm -f', async t => {
     assert.equal(await stop(execute(f.config, f.ports, '1')), code, code);
     assert.deepEqual(f.removed(), [], code);
   }
-  // A worker of another Run still unsettled: N1 dogfood is not paused; nothing is admitted.
+  // A worker of another Run still unsettled (on the second page; the pack reads every page): N1 dogfood is not paused; nothing is admitted.
   const busy = fixture(t);
   busy.foreign.push({ identity: { runId: 'd50-w7' }, terminal: null, process: 'running' });
   assert.equal(await stop(execute(busy.config, busy.ports, '1')), 'PACK_FOREIGN_WORKERS');
