@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID } from '#domain/index.js';
-import { cliChildEnv } from '../support/child-env.js';
+import { childEnv } from '../support/child-env.js';
 import { terminalProgram } from '../support/approval-terminal.js';
 
 // PERSISTENT-APPROVALS G6 on the shipped CLI (built binary, real config, ledger, policy files): `policy grants --mine` shows only the caller's own
@@ -24,7 +24,7 @@ const standing = (id: string, who: { issuer: string; subject: string }, key: str
 async function fixture() {
   const project = await mkdtemp(join(tmpdir(), 'deckent-standing-cli-')); roots.push(project);
   const data = join(project, 'data'); await mkdir(join(project, '.deckent'), { mode: 0o700 });
-  const env: NodeJS.ProcessEnv = cliChildEnv({ HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env.DECKENT_HOME;
+  const env: NodeJS.ProcessEnv = childEnv({ HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' });
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, inspection: { maxPageSize: 4, policyMaxBytes: 65536 } }));
   const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close();
   const db = new DatabaseSync(opened.path);

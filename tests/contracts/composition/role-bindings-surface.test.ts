@@ -11,7 +11,7 @@ import { openConfiguredAttemptStore } from '../../../src/composition/core/storag
 import { openLocalIntegrityAuthority, openSqliteApprovalStore } from '#adapters/index.js';
 import { requestTaskApproval } from '#engine/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
-import { cliChildEnv } from '../support/child-env.js';
+import { childEnv } from '../support/child-env.js';
 import { startTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 
 // H34 S2 on shipped surfaces: a v2 role reached only through the bindings resource authorizes a CLI and an SDK operation, and the
@@ -30,7 +30,7 @@ const bindings = (principals = [actor]) => ({ schemaVersion: 1, revision: 'b1', 
 async function fixture() {
   const project = await mkdtemp(join(tmpdir(), 'deckent-role-bindings-')); roots.push(project);
   const data = join(project, 'data'); await mkdir(join(project, '.deckent'), { mode: 0o700 });
-  const env: NodeJS.ProcessEnv = cliChildEnv({ HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env.DECKENT_HOME;
+  const env: NodeJS.ProcessEnv = childEnv({ HOME: join(project, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' });
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, inspection: { maxPageSize: 4, policyMaxBytes: 65536 } }));
   const opened = await openConfiguredAttemptStore(project, { env }); opened.store.close();
   // `proj` is registered to the default company (as an admin declaration would); bindings never declare scopes.

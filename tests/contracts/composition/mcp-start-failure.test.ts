@@ -1,16 +1,15 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mcpConfigLanguage, mcpHelpRequested, mcpHelpText, mcpStartFailureText, run } from '#composition/core/mcp/index.js';
 import { DeckentError, ErrorRegistry, t } from '#platform/index.js';
+import { owned } from '../support/owned.js';
 
 // g2-mcp-hata (analysis 2026-10-18): a failed deckent-mcp start said only MCP_START_FAILED. The first stderr line stays exactly that (clients
 // and the launch-argument tests key on it); a typed Deckent error adds its localized message and code, any other error adds nothing.
-const roots: string[] = [], home = process.env['HOME'];
-afterEach(async () => { if (home === undefined) delete process.env['HOME']; else process.env['HOME'] = home; await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+const home = process.env['HOME'];
+afterEach(() => { if (home === undefined) delete process.env['HOME']; else process.env['HOME'] = home; });
 
 it('a typed Deckent error is named with its localized message and code, in English and Turkish; stdout stays untouched', () => {
   const error = ErrorRegistry.createError('LOCAL_RUNTIME_UNAVAILABLE');
@@ -27,7 +26,7 @@ it('an untyped failure (launch arguments) stays the bare line', () => {
 });
 
 it('the real start path: a project whose configuration cannot load fails with a typed error that the line names', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'deckent-mcp-start-')); roots.push(root);
+  const root = await owned().root('deckent-mcp-start-');
   process.env['HOME'] = join(root, 'home'); await mkdir(join(root, 'home'), { recursive: true });
   await mkdir(join(root, 'project', '.deckent'), { recursive: true, mode: 0o700 }); await writeFile(join(root, 'project', '.deckent', 'config.json'), '{ not json', { mode: 0o600 });
   const failure = await run(['--project', join(root, 'project')]).then(() => null, (error: unknown) => error);
@@ -49,16 +48,17 @@ it('the help text names the usage and the project option, in English and Turkish
 });
 it.skipIf(process.platform === 'win32')('the real built entry: --help prints help on stdout and exits 0; an unknown option still fails non-zero', async () => {
   const entry = fileURLToPath(new URL('../../../dist/composition/core/mcp/internal/entry.js', import.meta.url));
-  const env = { PATH: process.env['PATH'] ?? '', HOME: tmpdir(), LANG: 'en_US.UTF-8' };
-  const help = spawnSync(process.execPath, [entry, '--help'], { env, encoding: 'utf8', input: '' });
-  expect(help.status).toBe(0); expect(help.stdout).toContain('--project'); expect(help.stderr).toBe('');
-  const bad = spawnSync(process.execPath, [entry, '--bogus'], { env, encoding: 'utf8', input: '' });
-  expect(bad.status).not.toBe(0); expect(bad.stderr.split('\n')[0]).toBe('MCP_START_FAILED'); expect(bad.stdout).toBe('');
+  // A private HOME (not the shared temporary root) and owned, bounded children.
+  const env = { PATH: process.env['PATH'] ?? '', HOME: await owned().root('deckent-mcp-help-'), LANG: 'en_US.UTF-8' };
+  const help = await owned().run(process.execPath, [entry, '--help'], { env, input: '', deadlineMs: 10_000, label: 'mcp --help' });
+  expect(help.code).toBe(0); expect(help.stdout).toContain('--project'); expect(help.stderr).toBe('');
+  const bad = await owned().run(process.execPath, [entry, '--bogus'], { env, input: '', deadlineMs: 10_000, label: 'mcp --bogus' });
+  expect(bad.code).not.toBe(0); expect(bad.stderr.split('\n')[0]).toBe('MCP_START_FAILED'); expect(bad.stdout).toBe('');
 });
 
 // alpha.53 D3: the help and the start-failure line follow the project's configured language, not only LANG/DECKENT_LANG.
 it('config language drives the help text and the failure line when the environment says nothing', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'deckent-mcp-lang-')); roots.push(root);
+  const root = await owned().root('deckent-mcp-lang-');
   await mkdir(join(root, 'home'), { recursive: true }); await mkdir(join(root, 'project', '.deckent'), { recursive: true, mode: 0o700 });
   await writeFile(join(root, 'project', '.deckent', 'config.json'), JSON.stringify({ schema_version: 3, language: 'tr' }), { mode: 0o600 });
   const env = { HOME: join(root, 'home'), LANG: 'C' };

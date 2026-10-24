@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFile, writeFile } from 'node:fs/promises';
-import { execFile } from 'node:child_process';
 import { join, resolve } from 'node:path';
-import { promisify } from 'node:util';
 import { PROVIDER_CONNECT_REGISTRY, parseProviderConnectRegistry, readProviderConnectSeed } from '#adapters/index.js';
 import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
 import { applyConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
@@ -12,6 +10,7 @@ import { createCatalogTariffLookup } from '#composition/core/model-invocation/in
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { modelInvocationProfileDigest, modelInvocationRequestDigest } from '#engine/index.js';
 import { me, runtime } from '../support/chat-turn-harness.js';
+import { owned } from '../support/owned.js';
 
 // M4 (owner 2026-10-23): a model the release does not know connects and answers after ONE data step, a `models catalog register --file`
 // document, with zero src edits. Synthetic test-only ids; no real provider is called (the Anthropic connect writes config and ledger rows only;
@@ -58,8 +57,8 @@ describe.skipIf(process.platform !== 'linux')('models.connect from a registered 
     const f = await harness(true);
     // The person's path, through the built `deckent` binary: `models catalog register --file`, then `models connect --model`.
     await writeFile(join(f.project, 'synthetic.json'), JSON.stringify(await document('anthropic-api', [[FABLE, { tariff: fableTariff }, { inputPerMTok: '12', outputPerMTok: '60', cacheReadPerMTok: '0.3' }], [UNPRICED, undefined]])));
-    const deckent = (...args: string[]) => promisify(execFile)(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), ...args],
-      { cwd: f.project, env: f.options.env as NodeJS.ProcessEnv });
+    const deckent = (...args: string[]) => owned().exec(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), ...args],
+      { cwd: f.project, env: f.options.env as NodeJS.ProcessEnv, deadlineMs: 20_000, label: args.slice(0, 2).join(' ') });
     await deckent('models', 'catalog', 'register', '--scope', 'scope', '--file', 'synthetic.json', '--command-id', 'register-fable', '--json');
     clearConfigCache();
     const out = [(await deckent('models', 'connect', '--scope', 'scope', '--connection', 'anthropic-api', '--model', FABLE, '--command-id', 'connect-fable', '--json')).stdout];

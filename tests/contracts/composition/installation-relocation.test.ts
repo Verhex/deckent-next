@@ -1,6 +1,4 @@
-import { execFile } from 'node:child_process';
-import { cp, mkdtemp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { cp, mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as adapters from '#adapters/index.js';
@@ -15,13 +13,13 @@ import { main as mcpMain } from '#composition/core/mcp/index.js';
 import { applyPolicyTemplateInstallation, applySuppliedInstallation } from '#composition/core/installation/index.js';
 import { main } from '#surfaces/index.js';
 import { installationBindingNotRunReason } from '../support/binding-capability.js';
+import { owned } from '../support/owned.js';
 const bindingNotRun = await installationBindingNotRunReason();
 
-const roots: string[] = [];
-afterEach(async () => { vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); clearConfigCache(); });
 beforeEach(context => { if (process.platform !== 'linux') context.skip('Linux machine binding required; unsupported capability has a separate adapter test'); else if (bindingNotRun) context.skip(bindingNotRun); });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'deckent-relocated-')); roots.push(root);
+  const root = await owned().root('deckent-relocated-');
   const original = join(root, 'original'), project = join(root, 'copy'); await mkdir(original);
   const env = { DECKENT_GLOBAL_HOME: join(root, 'global'), HOME: join(root, 'home') }, options = { env };
   const identity = await new FileInstallationIdentityStore(resolveProductLayout({ projectRoot: original })).loadOrCreate(),
@@ -38,14 +36,17 @@ async function fixture() {
   return { root, original, project, options, identity, projectIdentity, path, output, context };
 }
 
-/** The compiled CLI in `project` with exactly `env` (no inherited HOME or global config). */
-const compiledCli = (project: string, env: Record<string, string>, args: string[]) => new Promise<{ code: number; output: string }>(done => execFile(process.execPath,
-  [resolve('dist/composition/core/cli/internal/entry.js'), ...args], { cwd: project, env: { ...env, PATH: process.env.PATH ?? '/usr/bin:/bin' } },
-  (error, stdout, stderr) => done({ code: typeof error?.code === 'number' ? error.code : 0, output: `${stdout}${stderr}` })));
+/** The compiled CLI in `project` with exactly `env` (no inherited HOME or global config): an owned, bounded child. A signal-ended child is
+ * code -1, never a success. */
+const compiledCli = async (project: string, env: Record<string, string>, args: string[]): Promise<{ code: number; output: string }> => {
+  const { code, stdout, stderr } = await owned().run(process.execPath, [resolve('dist/composition/core/cli/internal/entry.js'), ...args],
+    { cwd: project, env: { ...env, PATH: process.env.PATH ?? '/usr/bin:/bin' }, deadlineMs: 20_000, label: args.slice(0, 2).join(' ') });
+  return { code: code ?? -1, output: `${stdout}${stderr}` };
+};
 /** A custom installation identity resource and a real policy-template transaction that died after its pending journal entry,
  * before any target and before the default identity (Astra 2363: the crash/retry window). */
 async function pendingPolicyFixture() {
-  const root = await mkdtemp(join(tmpdir(), 'deckent-pending-policy-')); roots.push(root);
+  const root = await owned().root('deckent-pending-policy-');
   const project = join(root, 'project'), env = { DECKENT_GLOBAL_HOME: join(root, 'global'), HOME: join(root, 'home') };
   await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { resources: { installationIdentity: 'custom-identity' } } }), { mode: 0o600 });
@@ -142,7 +143,7 @@ describe('relocation producer to actual CLI surface', () => {
     expect(readScopeCompanies(ledger, 1000, ['s']).size).toBe(0);
   });
   it('owned init mutations check the configured (custom resource) installation identity before any effect (Astra 2361 P1)', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'deckent-relocated-custom-')); roots.push(root);
+    const root = await owned().root('deckent-relocated-custom-');
     const original = join(root, 'original'), project = join(root, 'copy'), env = { DECKENT_GLOBAL_HOME: join(root, 'global'), HOME: join(root, 'home') };
     await mkdir(join(original, '.deckent'), { recursive: true, mode: 0o700 });
     await writeFile(join(original, '.deckent/config.json'), JSON.stringify({ layout: { resources: { installationIdentity: 'custom-identity' } } }), { mode: 0o600 });
@@ -153,9 +154,7 @@ describe('relocation producer to actual CLI surface', () => {
       return { entries, bytes: await Promise.all(['config.json', 'custom-identity/identity.json'].map(name => readFile(join(project, '.deckent', name)))) }; };
     const before = await snapshot();
     expect(before.entries).not.toContain('installation-identity'); expect(before.entries).not.toContain('installation');
-    const cli = (args: string[]) => new Promise<{ code: number; output: string }>(done => execFile(process.execPath,
-      [resolve('dist/composition/core/cli/internal/entry.js'), ...args], { cwd: project, env: { ...env, PATH: process.env.PATH ?? '/usr/bin:/bin' } },
-      (error, stdout, stderr) => done({ code: typeof error?.code === 'number' ? error.code : 0, output: `${stdout}${stderr}` })));
+    const cli = (args: string[]) => compiledCli(project, env, args);
     for (const args of [['init', 'policy', '--scope', 's', '--apply', '--json'],
       ['init', 'resume', '--docker-executable', '/usr/bin/docker', '--proposal', 'a'.repeat(64), '--accept-custom', '--json']]) {
       const result = await cli(args);

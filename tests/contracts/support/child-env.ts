@@ -12,10 +12,3 @@ export function childEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   const inherited = Object.entries(process.env).filter(([name]) => INHERITED.test(name));
   return { ...Object.fromEntries(inherited), ...overrides };
 }
-
-/** Parent environment for a CLI child, with FORCE_COLOR removed so NO_COLOR stays silent. Superseded by childEnv; callers move in batches. */
-export function cliChildEnv(overrides: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  delete env.FORCE_COLOR;
-  return { ...env, ...overrides };
-}

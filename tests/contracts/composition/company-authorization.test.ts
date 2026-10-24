@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
-import { tmpdir, hostname, userInfo } from 'node:os';
+import { hostname, userInfo } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
@@ -12,15 +10,15 @@ import { clearConfigCache } from '#platform/index.js';
 import { openSqliteAttemptStore } from '#adapters/index.js';
 import { admitRunAttempts } from '../support/admission.js';
 import { custodyProfiles, dispatchAdmission } from '../support/custody.js';
-import { cliChildEnv } from '../support/child-env.js';
+import { childEnv } from '../support/child-env.js';
+import { owned } from '../support/owned.js';
 import { startTestRuntimeService, stopTestRuntimeService, stopTestRuntimeServices } from '../support/runtime-service.js';
 
 // H34 S3: company-aware authorization at every port. The one company rule (engine scope membership, H34 S1) decides every principal a
 // port sees, for the requesting installation's company; a scope pinned to another company is refused as SCOPE_UNKNOWN on CLI, SDK and
 // the runtime peer path, without naming the other company. The same company is unchanged.
-const exec = promisify(execFile); const roots: string[] = [];
 const binary = resolve('dist/composition/core/cli/internal/entry.js');
-afterEach(async () => { await stopTestRuntimeServices(); clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { await stopTestRuntimeServices(); clearConfigCache(); });
 const actor = { issuer: hostname(), subject: String(userInfo().uid) };
 const kinds = ['scope', 'run', 'approval', 'model-activation', 'operation', 'provider-spend-account', 'attempt'] as const;
 /** Every grant names `s` explicitly (a declared scope): only the company pin decides. */
@@ -29,9 +27,9 @@ const grants = (scope: string) => kinds.map(kind => ({ id: `${kind}-${scope}`, e
 type Fixture = { project: string; data: string; env: NodeJS.ProcessEnv; ledger: string; configPath: string };
 
 async function project(config: Record<string, unknown>, policy: unknown, pins: Record<string, string> = {}): Promise<Fixture> {
-  const root = await mkdtemp(join(tmpdir(), 'deckent-company-authz-')); roots.push(root);
+  const root = await owned().root('deckent-company-authz-');
   const data = join(root, 'data'); await mkdir(join(root, '.deckent'), { mode: 0o700 });
-  const env: NodeJS.ProcessEnv = cliChildEnv({ HOME: join(root, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env.DECKENT_HOME;
+  const env: NodeJS.ProcessEnv = childEnv({ HOME: join(root, 'home'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1' });
   const configPath = join(root, '.deckent/config.json');
   await writeFile(configPath, JSON.stringify({ layout: { root: data }, inspection: { maxPageSize: 4, policyMaxBytes: 65536 }, ...config }));
   const opened = await openConfiguredAttemptStore(root, { env }); opened.store.close();
@@ -50,9 +48,11 @@ const v1 = (scope: string) => ({ schemaVersion: 1, revision: 'p', restrictions: 
 async function setCompany(f: Fixture, id: string) {
   await writeFile(f.configPath, JSON.stringify({ ...JSON.parse(await readFile(f.configPath, 'utf8')), company: { id } })); clearConfigCache();
 }
+/** The compiled CLI as an owned, bounded child (a hang is TEST_CHILD_DEADLINE, not a stuck test). */
 async function cli(f: Fixture, args: readonly string[]) {
-  try { return { exit: 0, stderr: '', value: JSON.parse((await exec(process.execPath, [binary, ...args, '--json'], { cwd: f.project, env: f.env })).stdout) }; }
-  catch (error) { const failure = error as { code: number; stdout: string; stderr: string }; return { exit: failure.code, stderr: failure.stderr, code: JSON.parse(failure.stderr).code }; }
+  const { code, stdout, stderr } = await owned().run(process.execPath, [binary, ...args, '--json'], { cwd: f.project, env: f.env, deadlineMs: 20_000, label: args.slice(0, 2).join(' ') });
+  if (code === 0) return { exit: 0, stderr: '', value: JSON.parse(stdout) };
+  return { exit: code, stderr, code: JSON.parse(stderr).code };
 }
 const codeOf = (work: Promise<unknown>) => work.then(() => 'admitted', (error: { code?: string }) => error.code ?? 'thrown');
 const pinsOf = (ledger: string) => { const db = new DatabaseSync(ledger, { readOnly: true });

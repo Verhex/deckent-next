@@ -147,6 +147,12 @@ Use the existing typed application contract, keep domain logic pure, put externa
 ports and carry identity, scope and policy through operations. Preserve negative tests for denied,
 stale, cancelled or uncertain work when they are relevant to your change.
 
+A test that starts child processes, PTY drivers, containers, servers or temporary directories
+acquires them through `owned()` in [tests/contracts/support/owned.ts](tests/contracts/support/owned.ts):
+every child carries a deadline and an explicit environment (`childEnv` in
+[child-env.ts](tests/contracts/support/child-env.ts) passes only allowlisted variables), and the test's
+resources are released in reverse order after its hooks, reporting every release failure together.
+
 For source changes, run typecheck, ESLint on changed source files, the architecture check and
 relevant test files. Replace `src/path/to/changed.ts` below with the actual changed file.
 For documentation changes, run the architecture and documentation checks and check relative links.

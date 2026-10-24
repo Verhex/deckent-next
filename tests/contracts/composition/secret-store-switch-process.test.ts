@@ -9,7 +9,7 @@ import { createEncryptedFileSecretStore, registerProviderConfig } from '#adapter
 import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { openConfiguredAttemptStore } from '../../../src/composition/core/storage/index.js';
 import { personEnv } from '../support/person-env.js';
-import { cliChildEnv } from '../support/child-env.js';
+import { childEnv } from '../support/child-env.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { lastJson, runInTerminal } from '../support/terminal-cli.js';
 import { createTerminalRuntimeClient } from '../support/terminal-runtime-client.js';
@@ -56,7 +56,7 @@ it.skipIf(process.platform !== 'linux')('compiled CLI + service: file → encryp
   const root = await mkdtemp(join(tmpdir(), 'deckent-store-switch-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
   const project = join(root, 'project'), home = join(root, 'home');
   await mkdir(project, { recursive: true }); await mkdir(home, { mode: 0o700 });
-  const env = cliChildEnv({ HOME: home, DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env['DECKENT_HOME']; delete env['DECKENT_GLOBAL_HOME'];
+  const env = childEnv({ HOME: home, DECKENT_LANGUAGE: 'en', NO_COLOR: '1' }); delete env['DECKENT_GLOBAL_HOME'];
   await applyPolicyTemplateInstallation(project, 'installation');
   await writeFile(join(project, '.deckent', 'config.json'), JSON.stringify({ terminal: { scopeId: 'installation' },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
@@ -123,7 +123,7 @@ it.skipIf(process.platform !== 'linux')('compiled env guard and direct runtime c
   const root = await mkdtemp(join(tmpdir(), 'deckent-env-switch-')); cleanup.push(() => rm(root, { recursive: true, force: true }));
   const project = join(root, 'project'), home = join(root, 'home');
   await mkdir(project, { mode: 0o700 }); await mkdir(home, { mode: 0o700 });
-  const env = cliChildEnv({ HOME: home, DECKENT_GLOBAL_HOME: join(home, 'global'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1', PROVIDER_TOKEN: CANARY });
+  const env = childEnv({ HOME: home, DECKENT_GLOBAL_HOME: join(home, 'global'), DECKENT_LANGUAGE: 'en', NO_COLOR: '1', PROVIDER_TOKEN: CANARY });
   await applyPolicyTemplateInstallation(project, 'installation');
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ terminal: { scopeId: 'installation' },
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },

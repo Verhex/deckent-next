@@ -12,7 +12,7 @@ import { onTestFinished } from 'vitest';
  * resource still present afterwards — is reported in one aggregated error. Every child carries a deadline: past it the process group is
  * stopped (TERM, then KILL) and the wait fails with a typed error instead of hanging.
  */
-export type OwnedErrorCode = 'TEST_CHILD_DEADLINE' | 'TEST_CHILD_OUTPUT_LIMIT' | 'TEST_CHILD_EXIT' | 'TEST_CLOSE_DEADLINE' | 'TEST_RESOURCE_LEAK';
+export type OwnedErrorCode = 'TEST_CHILD_DEADLINE' | 'TEST_CHILD_OUTPUT_LIMIT' | 'TEST_CLOSE_DEADLINE' | 'TEST_RESOURCE_LEAK';
 export class OwnedResourceError extends Error {
   constructor(readonly code: OwnedErrorCode, message: string, readonly detail: Readonly<Record<string, unknown>> = {}) { super(`${code}: ${message}`); }
 }
@@ -177,12 +177,12 @@ export class OwnedResources {
     return { ...status, ...text() };
   }
 
-  /** run(), rejecting a non-zero exit the way execFile does (error.code is the exit code; stdout/stderr attached). */
+  /** run(), rejecting a non-zero exit the way execFile does: error.code is the exit code (null for a signal), stdout/stderr attached. */
   async exec(command: string, args: readonly string[], options: OwnedRunOptions, register = true): Promise<{ stdout: string; stderr: string }> {
     const result = await this.#run(command, args, options, register);
     if (result.code === 0) return { stdout: result.stdout, stderr: result.stderr };
-    throw Object.assign(new OwnedResourceError('TEST_CHILD_EXIT', `${options.label ?? command} exited ${result.code ?? result.signal}\n${tail(result.stderr)}`),
-      { exitCode: result.code, signal: result.signal, stdout: result.stdout, stderr: result.stderr });
+    throw Object.assign(new Error(`${options.label ?? command} exited ${result.code ?? result.signal}\n${tail(result.stderr)}`),
+      { code: result.code, signal: result.signal, stdout: result.stdout, stderr: result.stderr });
   }
 
   /** A container (id or name) removed with `docker rm -f` at teardown; dockerArgs selects the daemon (e.g. ['--host', endpoint]). */

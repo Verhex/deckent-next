@@ -1,15 +1,17 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { chmod, mkdtemp, mkdir, open, readdir, readFile, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, open, readdir, readFile, rm, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { GitWorkspaceBroker } from '#adapters/index.js';
-const exec = promisify(execFile); const roots: string[] = [];
-afterEach(async () => { for (const root of roots.splice(0)) { await exec('/usr/bin/chmod', ['-R', 'u+rwx', root]).catch(() => undefined); await rm(root, { recursive: true, force: true }); } });
+import { childEnv } from '../support/child-env.js';
+import { owned } from '../support/owned.js';
+// Fixture Git is an owned, bounded child without the system or the caller's global configuration; an owned root regains write permission
+// before removal (the tests chmod parts of it read-only).
+const gitEnv = childEnv({ GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' });
+const exec = (file: string, args: readonly string[]) => owned().exec(file, args, { env: gitEnv, deadlineMs: 10_000, label: `git ${args[2] ?? ''}` });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'deckent-attempt-release-')); roots.push(root);
+  const root = await owned().root('deckent-attempt-release-');
   const source = join(root, 'source'); const workspaces = join(root, 'workspaces'); await mkdir(source); await mkdir(workspaces, { mode: 0o700 });
   const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', source, ...args])).stdout.trim();
   await git('init'); await git('config', 'user.email', 'test@example.invalid'); await git('config', 'user.name', 'Test');

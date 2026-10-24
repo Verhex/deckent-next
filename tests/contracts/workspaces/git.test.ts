@@ -1,14 +1,14 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { mkdtemp, mkdir, writeFile, readFile, rm, stat, lstat, chmod } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, rm, stat, lstat, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { childEnv } from '../support/child-env.js';
+import { owned } from '../support/owned.js';
 import { GitIntegrationDelivery, GitWorkspaceBroker } from '#adapters/index.js';
-const exec = promisify(execFile); const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+// Fixture Git is an owned, bounded child without the system or the caller's global configuration (hooks, signing, templates).
+const gitEnv = childEnv({ GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' });
+const exec = (file: string, args: readonly string[]) => owned().exec(file, args, { env: gitEnv, deadlineMs: 10_000, label: `git ${args.find(arg => !arg.startsWith('-') && !arg.startsWith('/')) ?? ''}` });
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'deckent-git-workspace-')); roots.push(root);
+  const root = await owned().root('deckent-git-workspace-');
   const source = join(root, 'source'); const workspaces = join(root, 'workspaces'); await mkdir(source); await mkdir(workspaces);
   const git = async (...args: string[]) => (await exec('/usr/bin/git', ['-C', source, ...args])).stdout.trim();
   await git('init'); await git('config', 'user.email', 'test@example.invalid'); await git('config', 'user.name', 'Test');
