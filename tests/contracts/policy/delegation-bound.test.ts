@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { delegationWithin, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, kindCovers, planPolicyChange, resolvePolicyBindings,
+import { delegationWithin, getPolicyVocabulary, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, kindCovers, planPolicyChange, POLICY_RECOVERY_CHANGE_KIND, resolvePolicyBindings,
   type PolicyChange } from '#domain/index.js';
 
 // POLICY-ADMIN P1: a principal grants, delegates or revokes only what its own effective authority holds (kind, actions, ids, scopes),
@@ -122,5 +122,35 @@ describe('delegation bound (POLICY-ADMIN P1)', () => {
     const ids = Array.from({ length: 70 }, (_, index) => `t${index}`);
     const huge = planPolicyChange(f.policy, f.bindings, change({ kind: 'grant.add', grant: grant('huge', other, { actions: ids, scopes: ids, resource: { kind: 'agent-tool', ids } }) }));
     expect(() => delegationWithin(resolvePolicyBindings(f.policy, f.bindings), owner, huge.touched)).toThrow(expect.objectContaining({ code: 'POLICY_CHANGE_TOO_LARGE' }));
+  });
+
+  it('alpha.56 D1 raise: only inside a policy-recovery change, only a person, only their own require-approval recovery cell; everything else keeps the bound', () => {
+    const person = { ...member, assurance: 'os-user' };
+    const cell = (id: string, kind = 'recovery-action', action = 'apply', ids = ['fence-attempt']) => ({ id, effect: 'require-approval', actions: [action], scopes: ['s1'],
+      principals: [member], resource: { kind, ids } });
+    const ra = cell('ra'), rule = cell('ra-rule', 'nervous-rule', 'promote', ['container-gone@1']), secret = cell('ra-secret', 'secret', 'set', ['token']);
+    const raise = (value: typeof ra, extra: Record<string, unknown> = {}) => change({ kind: 'grant.replace', grant: { ...value, effect: 'allow', ...extra } });
+    const run = (input: ReturnType<typeof files>, actor: { issuer: string; subject: string; assurance?: string }, value: PolicyChange, recovery = true) =>
+      delegationWithin(resolvePolicyBindings(input.policy, input.bindings), actor, planPolicyChange(input.policy, input.bindings, value).touched,
+        recovery ? { changeKind: POLICY_RECOVERY_CHANGE_KIND } : {});
+    const f = files([ra, rule, secret]);
+    expect(run(f, person, raise(ra))).toEqual({ ok: true });
+    expect(run(f, person, raise(rule))).toEqual({ ok: true });
+    // Lowering it back needs no raise (the person then holds allow).
+    const raised = files([{ ...ra, effect: 'allow' }]);
+    expect(run(raised, person, change({ kind: 'grant.replace', grant: ra }), false)).toEqual({ ok: true });
+    // Negatives, one per risk: another policy.administer path (standing, delegation, MCP capability, template upgrade) declares no kind.
+    expect(run(f, person, raise(ra), false)).toMatchObject({ ok: false, reason: 'require-approval' });
+    // An AI or an actor without a person's assurance never raises.
+    for (const actor of [{ ...person, assurance: 'workload-verified' }, member]) expect(run(f, actor, raise(ra))).toMatchObject({ ok: false, reason: 'require-approval' });
+    // Only the two recovery kinds: a person-only `secret` cell is not raisable.
+    expect(run(f, person, raise(secret))).toMatchObject({ ok: false, reason: 'require-approval' });
+    // The raised rule must name exactly the actor (not another person, not the actor plus another one, not `all`).
+    for (const principals of [[other], [member, other], 'all']) expect(run(f, person, raise(ra, { principals })), JSON.stringify(principals)).toMatchObject({ ok: false });
+    // A deny or restriction meeting the cell still refuses.
+    const restricted = files([ra], [], [{ id: 'lock', actions: 'all', scopes: 'all', principals: [member], resource: { kind: 'recovery-action', ids: 'all' } }]);
+    expect(run(restricted, person, raise(ra))).toMatchObject({ ok: false, reason: 'deny' });
+    // A person who does not hold the cell (an organisation narrowed who may turn recovery on) cannot give it to themselves.
+    expect(run(files([]), person, change({ kind: 'grant.add', grant: { ...ra, effect: 'allow' } }))).toMatchObject({ ok: false, reason: 'no-grant' });
   });
 });

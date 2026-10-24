@@ -5,14 +5,15 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, RECOVERY_ROLLOUT, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
 import { ApprovalApplication, PolicyAdministrationApplication, PolicyTemplateUpgrade, upgradePolicyTemplate } from '#engine/index.js';
 import { createHmacIntegrity, sha256 } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
 import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, policyChangeSchema, policyGrantSchema } from '#domain/index.js';
 
-const names = { proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer', executionEnvironmentIds: ['docker'] };
-// S4B-1 + S4B-3 (alpha.55): the rolled-back delta is v15's ten rules (person propose, distiller D1–D4, agent catalog, person review, evaluator V1–V5); it was v14's two memory reads through v14, v13's seven through v13.
+const names = { proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer', executionEnvironmentIds: ['docker'],
+  recoveryRules: RECOVERY_ROLLOUT.rules.map(id => ({ id, version: 1 })) };
+// alpha.56 D1: the rolled-back delta is v16's recovery cells (require-approval); it was v15's (S4B-1 + S4B-3 + S8) through v15, v14's two memory reads through v14.
 const deltaIds: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
 const closers: (() => Promise<void> | void)[] = [];
 afterEach(async () => { for (const close of closers.splice(0).reverse()) await close(); });
@@ -52,13 +53,11 @@ async function fixture(edit: (grants: readonly PolicyGrant[]) => readonly unknow
     rollback: (expect?: string) => upgrade.run({ scopeId: 's', principal, mode: 'rollback', reason: 'v14 rollback', ...(expect ? { expect } : {}) }) };
 }
 
-describe.skipIf(process.platform !== 'linux')('v15 rollback through the real approval and archived authority writer', () => {
-  it('approves the operation card, removes only v15 rules, preserves the only administration grants, and refuses stale replay', async () => {
+describe.skipIf(process.platform !== 'linux')('v16 rollback through the real approval and archived authority writer', () => {
+  it('approves the operation card, removes only v16 rules, preserves the only administration grants, and refuses stale replay', async () => {
     const f = await fixture(), beforeBytes = await f.bytes(), before = JSON.parse(beforeBytes);
-    expect(deltaIds).toEqual(['first-run-memory-propose', 'first-run-memory-distiller', 'first-run-memory-distiller-runs', 'first-run-memory-distiller-output', 'first-run-agent-catalog', 'first-run-mcp-observe-agent-catalog',
-      'first-run-memory-review', 'first-run-memory-evaluator', 'first-run-memory-evaluator-runs', 'first-run-memory-evaluator-model', 'first-run-memory-purge', 'first-run-recovery-model',
-      // S8-5 signer cards and signed import; S8-3 the catalog aggregator's exact list.
-      'first-run-skill-signers', 'first-run-agent-catalog-import', 'first-run-catalog-aggregator', 'first-run-catalog-aggregator-runs', 'first-run-catalog-aggregator-memory']);
+    expect(deltaIds).toEqual(['fence-attempt', 'hold-run', 'stop-orphan', 'restart-component', 'alert-brain', 'hand-to-human', 'continue-new-attempt']
+      .map(id => `first-run-recovery-action-${id}`).concat(RECOVERY_ROLLOUT.rules.map(id => `first-run-recovery-promote-${id}`)));
     expect(await f.rollback('stale')).toMatchObject({ status: 'conflict' });
     expect(f.cards).toBe(0); expect(await f.bytes()).toBe(beforeBytes);
     expect(await f.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(',') });
@@ -80,39 +79,37 @@ describe.skipIf(process.platform !== 'linux')('v15 rollback through the real app
   });
 
   it('preserves a modified current-version rule carrying the only administration authority and reports its conflict', async () => {
-    // The person keeps catalog authority through a hand rule, so removing the MCP catalog read stays inside their own authority (I2).
-    const f = await fixture(grants => [...grants.filter(rule => rule.id !== 'first-run-policy-administer').map(rule => rule.id === 'first-run-agent-catalog'
-      ? { ...rule, actions: ['execute'], resource: { kind: 'operation', ids: ['policy.administer'] } } : rule),
-      { ...grants.find(rule => rule.id === 'first-run-agent-catalog')!, id: 'hand-agent-catalog' }]);
+    const modified = deltaIds[0]!;
+    const f = await fixture(grants => grants.filter(rule => rule.id !== 'first-run-policy-administer').map(rule => rule.id === modified
+      ? { ...rule, effect: 'allow', actions: ['execute'], resource: { kind: 'operation', ids: ['policy.administer'] } } : rule));
     const before = await f.bytes();
-    expect(await f.rollback()).toMatchObject({ status: 'rolled-back', conflicts: ['first-run-agent-catalog'] });
+    expect(await f.rollback()).toMatchObject({ status: 'rolled-back', conflicts: [modified] });
     const after = JSON.parse(await f.bytes());
-    expect(after.grants.find((rule: { id: string }) => rule.id === 'first-run-agent-catalog')).toEqual(JSON.parse(before).grants.find((rule: { id: string }) => rule.id === 'first-run-agent-catalog'));
+    expect(after.grants.find((rule: { id: string }) => rule.id === modified)).toEqual(JSON.parse(before).grants.find((rule: { id: string }) => rule.id === modified));
     expect(f.cards).toBe(1);
   });
 
-  it('refuses rollback through I2 when a narrower memory card restricts current memory authority', async () => {
-    const f = await fixture(grants => [...grants, { ...grants.find(rule => rule.id === 'first-run-memory-inspect')!, id: 'run-card',
-      effect: 'require-approval', actions: ['inspect'], resource: { kind: 'memory', ids: ['one'] } }]);
+  it('refuses rollback through I2 when a deny on one recovery cell binds the person', async () => {
+    const f = await fixture(grants => [...grants, { ...grants.find(rule => rule.id === deltaIds[0])!, id: 'run-card', effect: 'deny' }]);
     const before = await f.bytes();
     expect(await f.rollback()).toMatchObject({ status: 'refused', missing: ['delegation'] });
     expect(await f.bytes()).toBe(before); expect(f.cards).toBe(0); expect(f.events).toEqual([]);
   });
 });
 
-it.skipIf(process.platform !== 'linux')('POLICY-V12 rule, v15 delta: a delta the installer added under template v15 is rollbackable; an older or future key does not count', async () => {
+it.skipIf(process.platform !== 'linux')('POLICY-V12 rule, v16 delta: a delta the installer added under template v16 is rollbackable; an older or future key does not count', async () => {
   const seed = async (version: number) => {
     const f = await fixture(undefined, false), current = JSON.parse(await f.bytes());
     await f.source.updateAuthority(() => ({ write: { policy: { ...current, revision: 'a-older', grants: current.grants.filter((rule: { id: string }) => !deltaIds.includes(rule.id)) },
       bindings: null, order: 'policy-first' }, result: null }), 'fixture-older');
-    // The installer upgrade's own key shape (`policy-template-upgrade-v<version>-<64 hex>`), as a v15 installer writes it.
+    // The installer upgrade's own key shape (`policy-template-upgrade-v<version>-<64 hex>`), as a v16 installer writes it.
     await f.source.updateAuthority(() => ({ write: { policy: { ...current, revision: 'a-upgraded' }, bindings: null, order: 'policy-first' }, result: null }),
       `policy-template-upgrade-v${version}-${'a'.repeat(64)}`);
     return f;
   };
-  const v15 = await seed(15);
-  expect(await v15.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
-  for (const version of [14, 16]) {
+  const v16 = await seed(16);
+  expect(await v16.rollback()).toMatchObject({ status: 'rolled-back', reason: deltaIds.join(','), conflicts: [] });
+  for (const version of [15, 17]) {
     const other = await seed(version), before = await other.bytes();
     expect(await other.rollback()).toMatchObject({ status: 'nothing-to-roll-back', conflicts: deltaIds });
     expect(await other.bytes()).toBe(before); expect(other.cards).toBe(0);
@@ -129,7 +126,7 @@ it.skipIf(process.platform !== 'linux')('POLICY-V12 option A: a governed delta u
   const change = policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map((grant: unknown) => ({ kind: 'grant.add', grant: policyGrantSchema.parse(grant) })) });
   const tag = `template-v5:${deltaIds.join(',')}`;
   // The governed chain binds the resolved (policy + bindings) revision it read.
-  const resolved = 'a-older+first-run-template-v15-bindings';
+  const resolved = 'a-older+first-run-template-v16-bindings';
   const commandId = sha256(`policy-template-upgrade:1\0s\0${f.principal.issuer}\0${f.principal.subject}\0${tag}\0${resolved}`);
   const key = effectWireKey({ schemaVersion: 1, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
     target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: resolved });
@@ -146,7 +143,7 @@ it.skipIf(process.platform !== 'linux')('Astra 2596: a governed upgrade that nam
   const rules = current.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id) || v12.includes(rule.id))
     .map((rule: { id: string; resource: object }) => rule.id === v12[1] ? { ...rule, resource: { kind: 'service', ids: ['local'] } } : rule);
   const change = policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map((grant: unknown) => ({ kind: 'grant.add', grant: policyGrantSchema.parse(grant) })) });
-  const tag = `template-v5:${rules.map((rule: { id: string }) => rule.id).join(',')}`, resolved = 'a-older+first-run-template-v15-bindings';
+  const tag = `template-v5:${rules.map((rule: { id: string }) => rule.id).join(',')}`, resolved = 'a-older+first-run-template-v16-bindings';
   const commandId = sha256(`policy-template-upgrade:1\0s\0${f.principal.issuer}\0${f.principal.subject}\0${tag}\0${resolved}`);
   const key = effectWireKey({ schemaVersion: 1, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
     target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: resolved });
@@ -165,7 +162,7 @@ it.skipIf(process.platform !== 'linux')('Astra 2598: a governed upgrade whose `l
   // Then the configured service was `local`, covered by `own-stop`: the plan was the delta and scope inspection only, no stop rule.
   const rules = current.grants.filter((rule: { id: string }) => deltaIds.includes(rule.id) || rule.id === v12[0]);
   const change = policyChangeSchema.parse({ schemaVersion: 1, changes: rules.map((grant: unknown) => ({ kind: 'grant.add', grant: policyGrantSchema.parse(grant) })) });
-  const tag = `template-v5:${rules.map((rule: { id: string }) => rule.id).join(',')}`, resolved = 'a-older+first-run-template-v15-bindings';
+  const tag = `template-v5:${rules.map((rule: { id: string }) => rule.id).join(',')}`, resolved = 'a-older+first-run-template-v16-bindings';
   const commandId = sha256(`policy-template-upgrade:1\0s\0${f.principal.issuer}\0${f.principal.subject}\0${tag}\0${resolved}`);
   const key = effectWireKey({ schemaVersion: 1, commandId, scopeId: 's', operation: POLICY_ADMINISTER_OPERATION.operation,
     target: { kind: AUTHORITY_DOCUMENT_TARGET_KIND, id: 'installation' }, idempotencyKey: commandId, input: change, expectedVersion: resolved });
@@ -195,10 +192,10 @@ it.skipIf(process.platform !== 'linux')('rollback keeps fresh-install rules, det
   expect(await edited.bytes()).toBe(editedBytes); expect(edited.cards).toBe(0);
   const restored = await fixture(), before = JSON.parse(await restored.bytes());
   await restored.source.updateAuthority(() => ({ write: { policy: { ...before, revision: 'a-edited', grants: before.grants.map((rule: { id: string }) =>
-    rule.id === 'first-run-agent-catalog' ? { ...rule, actions: ['inspect'] } : rule) }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-edited');
+    rule.id === deltaIds[0] ? { ...rule, scopes: ['other'] } : rule) }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-edited');
   await restored.source.updateAuthority(() => ({ write: { policy: { ...before, revision: 'a-restored' }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-restored');
-  expect(await restored.rollback()).toMatchObject({ status: 'rolled-back', conflicts: ['first-run-agent-catalog'] });
-  expect(JSON.parse(await restored.bytes()).grants.some((rule: { id: string }) => rule.id === 'first-run-agent-catalog')).toBe(true);
+  expect(await restored.rollback()).toMatchObject({ status: 'rolled-back', conflicts: [deltaIds[0]] });
+  expect(JSON.parse(await restored.bytes()).grants.some((rule: { id: string }) => rule.id === deltaIds[0])).toBe(true);
   const handBuilt = await fixture(grants => grants.filter(rule => rule.id !== 'first-run-read-tools'));
   expect(await handBuilt.rollback()).toMatchObject({ status: 'rolled-back', conflicts: [] });
   expect(handBuilt.cards).toBe(1);

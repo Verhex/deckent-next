@@ -16,7 +16,7 @@ export type { PermissionModeChange, PermissionModeCommand, PermissionModeQuery, 
 export { policyResources, getPolicyVocabulary } from './internal/vocabulary.js';
 export type { CorePolicyResource, CorePolicyAction } from './internal/vocabulary.js';
 export { authorityDocuments, DELEGATION_CELL_LIMIT, delegationWithin, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, kindCovers, planPolicyChange, POLICY_CHANGE_MAX, PolicyChangeError,
-  policyChangeSchema } from './internal/administer.js';
+  policyChangeSchema, POLICY_RECOVERY_CHANGE_KIND, RECOVERY_RAISE_KINDS, type DelegationOptions } from './internal/administer.js';
 export type { DelegatedRule, DelegationVerdict, PolicyChange, PolicyChangePlan } from './internal/administer.js';
 export { describePolicyChange, POLICY_CHANGE_SUMMARY_MAX } from './internal/describe.js';
 export { policyBindingSchema, policyGrantSchema } from './internal/schema.js';

@@ -2,6 +2,7 @@ import { expect, it } from 'vitest';
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   matchFirstRunPolicyTemplate, mcpPrincipalRef, namedPersonPolicyAdditions, resolvePolicyBindings, upgradeFirstRunPolicy } from '#domain/index.js';
 import { FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
+import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // S4 (lead 2026-10-23): one bump v13 → v14 with two add-only rules — the named person reads the installed scope's memory journal, the MCP actor
 // gets the same read (observation). No memory change for the person or the MCP actor (propose/verify/retire stay ungranted). S4B-1's v15 delta
@@ -13,7 +14,7 @@ const mcp = { ...owner, ...mcpRef, assurance: 'workload-verified' as const };
 const names = { proposeMcpToolName: FIRST_RUN_TOOL_NAMES.proposeMcpToolName, mcpCallOperationId: FIRST_RUN_TOOL_NAMES.mcpCallOperationId,
   policyAdministerOperationId: FIRST_RUN_TOOL_NAMES.policyAdministerOperationId, executionEnvironmentIds: FIRST_RUN_TOOL_NAMES.executionEnvironmentIds };
 const input = { scopeId: 'installation', principal: person, ...FIRST_RUN_TOOL_NAMES };
-const current = firstRunPolicyTemplate(input), v15ids: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+const current = firstRunPolicyTemplate(input), v15ids: readonly string[] = [...FIRST_RUN_V15_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS];
 const built = { ...current, version: 14, policy: { ...current.policy, revision: 'first-run-template-v14', grants: current.policy.grants.filter(rule => !v15ids.includes(rule.id)) },
   bindings: { ...current.bindings as object, revision: 'first-run-template-v14-bindings' } };
 const v14ids: readonly string[] = [FIRST_RUN_UPGRADE_RULE_IDS.memoryInspect, FIRST_RUN_UPGRADE_RULE_IDS.observeMemory];

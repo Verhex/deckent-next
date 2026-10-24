@@ -2,21 +2,25 @@ import { expect, it } from 'vitest';
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, FIRST_RUN_UPGRADE_RULE_IDS, catalogAggregatorPrincipal, catalogAggregatorPrincipalRef, evaluatePolicy, firstRunPolicyTemplate, firstRunTemplateAdditions, firstRunTemplateRollback,
   matchFirstRunPolicyTemplate, mcpPrincipalRef, memoryDistillerPrincipal, memoryDistillerPrincipalRef, memoryEvaluatorPrincipal, memoryEvaluatorPrincipalRef, namedPersonPolicyAdditions, recoveryPrincipalRef, resolvePolicyBindings,
   upgradeFirstRunPolicy } from '#domain/index.js';
-import { FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
+import { FIRST_RUN_RECOVERY_RULES, FIRST_RUN_TOOL_NAMES, MemoryPolicyAuthorization } from '#engine/index.js';
+import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
 
 // S4B-1 + S7 (owner S-M1/S-M2 2026-10-23, S4B-DESIGN §5 A2/A2b; lead: v15 carries s7's agent-catalog grants): one add-only bump v14 → v15. The memory
 // distiller workload gets D1+D2 (memory inspect, propose), D4 (run inspect) and, as its own rule, D3 (attempt read-output); the named person may
 // propose memory (the delegation bound needs it to grant D2) and inspects and defines in the agent/skill catalog, the MCP actor inspects it.
 // S4B-3 (owner S-M3/S-M5, §5 A6/A7): the person may verify and contest (the delegation bound needs both to grant V2/V3); the memory evaluator workload gets V1–V3 (memory inspect, verify, contest), V4 (run inspect) and, as its own
-// rule, V5 (model-invocation invoke). Rollback removes exactly this delta.
+// rule, V5 (model-invocation invoke). Since v16 (alpha.56 D1) v15 is the current template without the v16 delta, and the rollback removes v16's.
 const person = { issuer: 'host', subject: 'owner' };
 const mcpRef = mcpPrincipalRef(person), distillerRef = memoryDistillerPrincipalRef(person), evaluatorRef = memoryEvaluatorPrincipalRef(person), aggregatorRef = catalogAggregatorPrincipalRef(person);
 const owner = { id: 'owner', ...person, assurance: 'os-user' as const, scopeIds: ['installation', 'other'] };
 const distiller = memoryDistillerPrincipal(person, ['installation', 'other']), evaluator = memoryEvaluatorPrincipal(person, ['installation', 'other']);
 const names = { proposeMcpToolName: FIRST_RUN_TOOL_NAMES.proposeMcpToolName, mcpCallOperationId: FIRST_RUN_TOOL_NAMES.mcpCallOperationId,
-  policyAdministerOperationId: FIRST_RUN_TOOL_NAMES.policyAdministerOperationId, executionEnvironmentIds: FIRST_RUN_TOOL_NAMES.executionEnvironmentIds };
+  policyAdministerOperationId: FIRST_RUN_TOOL_NAMES.policyAdministerOperationId, executionEnvironmentIds: FIRST_RUN_TOOL_NAMES.executionEnvironmentIds, recoveryRules: FIRST_RUN_RECOVERY_RULES };
 const input = { scopeId: 'installation', principal: person, ...FIRST_RUN_TOOL_NAMES };
-const built = firstRunPolicyTemplate(input), ids: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+const current = firstRunPolicyTemplate(input), ids: readonly string[] = FIRST_RUN_V15_RULE_IDS, v16ids: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+const v16 = current.policy.grants.filter(rule => v16ids.includes(rule.id));
+const built = { ...current, version: 15, policy: { ...current.policy, revision: 'first-run-template-v15', grants: current.policy.grants.filter(rule => !v16ids.includes(rule.id)) },
+  bindings: { ...current.bindings as object, revision: 'first-run-template-v15-bindings' } };
 const v15 = built.policy.grants.filter(rule => ids.includes(rule.id));
 const v14 = { ...built.policy, revision: 'first-run-template-v14', grants: built.policy.grants.filter(rule => !ids.includes(rule.id)) };
 const scoped = (id: string, principal: object, kind: string, actions: string[]) => ({ id, effect: 'allow', actions, scopes: ['installation'], principals: [principal], resource: { kind, ids: 'all' } });
@@ -78,16 +82,16 @@ it('the grants decide only inside the floor: the distiller proposes and reads, n
   for (const principal of [mcpActor, evaluator]) expect(decide(widened, principal, 'memory', 'purge').decision, principal.issuer).toBe('deny');
 });
 
-it('exact v14 becomes exactly v15; edited and hand-built policies get the delta add-only; a person\'s broader rule never stands in for the distiller\'s; rollback removes exactly v15', () => {
-  expect(upgradeFirstRunPolicy(v14, input)).toEqual({ status: 'upgrade', from: 14, policy: built.policy });
-  expect(upgradeFirstRunPolicy(built.policy, input)).toEqual({ status: 'current' });
+it('exact v14 and v15 become exactly the current template; edited and hand-built policies get the delta add-only; a person\'s broader rule never stands in for the distiller\'s; no v15 rule is a rollback candidate', () => {
+  expect(upgradeFirstRunPolicy(v14, input)).toEqual({ status: 'upgrade', from: 14, policy: current.policy });
+  expect(upgradeFirstRunPolicy(built.policy, input)).toEqual({ status: 'upgrade', from: 15, policy: current.policy });
   const extra = { id: 'extra', effect: 'allow', actions: ['inspect', 'propose'], scopes: ['installation'], principals: [person], resource: { kind: 'memory', ids: 'all' } };
   const edited = { ...v14, revision: 'a-edited', grants: [...v14.grants, extra] };
   const handBuilt = { ...edited, grants: edited.grants.map(rule => rule.id === 'first-run-read-tools' ? { ...rule, id: 'custom-read-tools' } : rule) };
   for (const plan of [firstRunTemplateAdditions(edited, { ...names, person }), namedPersonPolicyAdditions(handBuilt, { ...names, person, scopeId: 'installation' })]) {
     // The person's own `extra` rule covers their propose cell, never the distiller's: only the distiller and catalog rules are added.
-    expect(plan.status === 'plan' ? plan.rules : null).toEqual(v15.filter(rule => rule.id !== FIRST_RUN_UPGRADE_RULE_IDS.memoryPropose));
+    expect(plan.status === 'plan' ? plan.rules : null).toEqual([...v15.filter(rule => rule.id !== FIRST_RUN_UPGRADE_RULE_IDS.memoryPropose), ...v16]);
   }
-  expect(firstRunTemplateRollback(built.policy, person, 'installation').rules.map(rule => rule.id)).toEqual(v15.map(rule => rule.id));
+  expect(firstRunTemplateRollback(current.policy, person, 'installation', FIRST_RUN_RECOVERY_RULES).rules.some(rule => ids.includes(rule.id))).toBe(false);
   expect(matchFirstRunPolicyTemplate('first-run-template-v15')).toEqual({ id: 'first-run-template', version: 15 });
 });

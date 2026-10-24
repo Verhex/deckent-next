@@ -31,11 +31,11 @@ describe.skipIf(process.platform !== 'linux')('init policy --upgrade --apply nee
     const policyPath = join(root, '.deckent/policy.json');
     const current = JSON.parse(await readFile(policyPath, 'utf8')) as { revision: string; grants: { id: string }[] };
     const delta: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
-    await writeFile(policyPath, JSON.stringify({ ...current, revision: 'first-run-template-v14', grants: current.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
+    await writeFile(policyPath, JSON.stringify({ ...current, revision: 'first-run-template-v15', grants: current.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
     // The test process has no controlling terminal: the Core witness says no.
     expect(await attestLocalInteractiveTerminal()).toBe(false);
     const preview = await upgradePolicyTemplateInstallation(root, 'installation', false);
-    expect(preview).toMatchObject({ status: 'preview', template: { to: 15 } });
+    expect(preview).toMatchObject({ status: 'preview', template: { to: 16 } });
     const before = await snapshot(root), mtime = (await stat(policyPath)).mtimeMs;
 
     // Default (Core) witness, no terminal: typed refusal, every file byte-identical.
@@ -51,9 +51,9 @@ describe.skipIf(process.platform !== 'linux')('init policy --upgrade --apply nee
     expect(await snapshot(root)).toEqual(before);
     expect((await stat(policyPath)).mtimeMs).toBe(mtime);
 
-    // Positive control: the same apply with an attesting witness writes exactly the previewed v15 delta.
+    // Positive control: the same apply with an attesting witness writes exactly the previewed v16 delta (an exact v15 becomes the current template).
     expect(await upgradePolicyTemplateInstallation(root, 'installation', true, preview.expect!, {}, process.getuid?.(), undefined, attested))
-      .toMatchObject({ status: 'upgraded', template: { to: 15 } });
+      .toMatchObject({ status: 'upgraded', template: { to: 16 } });
     expect(JSON.parse(await readFile(policyPath, 'utf8'))).toEqual(current);
   });
 });

@@ -1,4 +1,4 @@
-import { isMcpPrincipal } from '#domain/core/principal/index.js';
+import { isAiPrincipal, isMcpPrincipal } from '#domain/core/principal/index.js';
 import { z } from 'zod';
 import { identitySchema } from '#domain/core/primitives/index.js';
 import { bindingsFileSchema, policyBindingSchema, policyFileSchema, policyGrantSchema, policyRoleSchema, policySchema, principalGrants, resolvePolicyBindings, type Policy,
@@ -44,6 +44,8 @@ type Selection = 'all' | readonly string[];
 export interface DelegatedRule {
   readonly id: string; readonly effect: 'allow' | 'deny' | 'require-approval'; readonly actions: Selection; readonly scopes: Selection;
   readonly resource: { readonly kind: string; readonly ids: Selection }; readonly modeEligible?: boolean | undefined;
+  /** Who the rule names (a binding's rule: the binding's principals); absent on a probe rule, which never takes the recovery raise. */
+  readonly principals?: 'all' | readonly { readonly issuer: string; readonly subject: string }[] | undefined;
 }
 type RolePolicyFile = Extract<PolicyFile, { schemaVersion: 2 }>;
 type BindingsFile = z.infer<typeof bindingsFileSchema>;
@@ -65,7 +67,7 @@ const planned = <T extends object>(body: T) => ({ ...body, revision: 'planned' }
 function validSnapshot(policy: unknown, bindings: unknown) {
   try { resolvePolicyBindings(policy, bindings); } catch { invalid(); }
 }
-const rule = (grant: PolicyGrant): DelegatedRule => Object.freeze({ id: grant.id, effect: grant.effect, actions: grant.actions, scopes: grant.scopes, resource: grant.resource,
+const rule = (grant: PolicyGrant): DelegatedRule => Object.freeze({ id: grant.id, effect: grant.effect, actions: grant.actions, scopes: grant.scopes, resource: grant.resource, principals: grant.principals,
   ...(grant.modeEligible === undefined ? {} : { modeEligible: grant.modeEligible }) });
 
 /**
@@ -85,7 +87,7 @@ export function planPolicyChange(policyInput: unknown, bindingsInput: unknown, c
   const bindings = bindingsParsed.data;
   const roles = new Map(policy.roles.map(value => [value.id, value]));
   const derive = (binding: PolicyBinding): DelegatedRule[] => binding.roles.flatMap(roleId => (roles.get(roleId) ?? invalid()).permissions.map(item => Object.freeze({
-    id: `${binding.id}/${roleId}/${item.id}`, effect: item.effect, actions: item.actions, scopes: binding.scopes, resource: item.resource,
+    id: `${binding.id}/${roleId}/${item.id}`, effect: item.effect, actions: item.actions, scopes: binding.scopes, resource: item.resource, principals: binding.principals,
     ...(item.modeEligible === undefined ? {} : { modeEligible: item.modeEligible }) })));
   const grants = [...policy.grants], entries = [...bindings.bindings];
   const touched: DelegatedRule[] = [];
@@ -138,6 +140,14 @@ export function installationOwnerPermissions(kinds: readonly string[]) {
 /** Whether a rule of `ruleKind` reaches resources of `kind`. Today: exact kind (no joker kind exists in policy v2). */
 export function kindCovers(ruleKind: string, kind: string): boolean { return ruleKind === kind; }
 
+/** The change kind the recovery policy card declares (engine input, never part of the `policy.administer@1` wire change). */
+export const POLICY_RECOVERY_CHANGE_KIND = 'policy-recovery';
+/**
+ * The resource kinds whose own require-approval cell a person may raise to allow inside a `policy-recovery` change (alpha.56 D1, owner 2026-10-24,
+ * Jev c1d1afe9). A versioned security invariant, deliberately NOT derived from the AI floor: `secret` and `run-quota` are person-only too and stay bound.
+ */
+export const RECOVERY_RAISE_KINDS: readonly string[] = Object.freeze(['recovery-action', 'nervous-rule']);
+export type DelegationOptions = Readonly<{ changeKind?: typeof POLICY_RECOVERY_CHANGE_KIND }>;
 export type DelegationVerdict = { readonly ok: true } | { readonly ok: false; readonly ruleId: string; readonly reason: 'deny' | 'require-approval' | 'no-grant' | 'mode-eligible' };
 const ALL: unique symbol = Symbol('all');
 type Cell = string | typeof ALL;
@@ -153,8 +163,12 @@ const meets = (selection: Selection, value: Cell) => selection === 'all' || valu
  * there → `require-approval`; `modeEligible` only where the actor's cell is allow or every meeting require-approval is eligible.
  * Removals pass the same bound (a principal revokes only what it could grant; its own deny can never be lifted this way). The owner
  * root is not special: its role is data and a restriction binds it too. Cost is bounded (`POLICY_CHANGE_TOO_LARGE`).
+ * The one raise (alpha.56 D1): inside a `policy-recovery` change a person (never an AI; the actor's assurance must say os-user) may set to allow a
+ * cell they hold at require-approval, only for a rule naming exactly themselves, of a `RECOVERY_RAISE_KINDS` kind, not mode-eligible; a deny or
+ * restriction meeting the cell still refuses, and a cell they hold neither way stays `no-grant`.
  */
-export function delegationWithin(input: Policy, actor: { readonly issuer: string; readonly subject: string }, touched: readonly DelegatedRule[]): DelegationVerdict {
+export function delegationWithin(input: Policy, actor: { readonly issuer: string; readonly subject: string; readonly assurance?: string }, touched: readonly DelegatedRule[],
+  options: DelegationOptions = {}): DelegationVerdict {
   const policy = policySchema.parse(input);
   let total = 0;
   for (const value of touched) total += cells(value.actions).length * cells(value.resource.ids).length * cells(value.scopes).length;
@@ -164,6 +178,9 @@ export function delegationWithin(input: Policy, actor: { readonly issuer: string
   const grants = principalGrants(policy, actor).filter(value => own(value) && !(value.effect === 'allow' && value.principals === 'all' && isMcpPrincipal(actor)));
   const denies = [...grants.filter(value => value.effect === 'deny'), ...policy.restrictions.filter(own)];
   const asks = grants.filter(value => value.effect === 'require-approval'), allows = grants.filter(value => value.effect === 'allow');
+  const raising = options.changeKind === POLICY_RECOVERY_CHANGE_KIND && !isAiPrincipal(actor);
+  const raisable = (value: DelegatedRule) => raising && RECOVERY_RAISE_KINDS.includes(value.resource.kind) && value.modeEligible !== true && value.principals !== undefined && value.principals !== 'all'
+    && value.principals.length === 1 && value.principals[0]!.issuer === actor.issuer && value.principals[0]!.subject === actor.subject;
   for (const value of touched) {
     for (const action of cells(value.actions)) for (const id of cells(value.resource.ids)) for (const scope of cells(value.scopes)) {
       const hit = (other: { readonly actions: Selection; readonly scopes: Selection; readonly resource: { readonly kind: string; readonly ids: Selection } },
@@ -174,7 +191,7 @@ export function delegationWithin(input: Policy, actor: { readonly issuer: string
       if (![...asks, ...allows].some(other => hit(other, covers))) return refuse('no-grant');
       const asked = asks.filter(other => hit(other, meets));
       const allowed = asked.length === 0 && allows.some(other => hit(other, covers));
-      if (value.effect === 'allow' && !allowed) return refuse('require-approval');
+      if (value.effect === 'allow' && !allowed && !(raisable(value) && asks.some(other => hit(other, covers)))) return refuse('require-approval');
       if (value.modeEligible === true && !allowed && !asked.every(other => other.modeEligible === true)) return refuse('mode-eligible');
     }
   }

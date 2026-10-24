@@ -6,7 +6,7 @@ import type { AuthorityRevision, AuthorityHistorySource } from '#engine/core/pol
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from './standing.js';
 
 /** The template version that introduced the add-only delta this upgrade adds and rolls back (`FIRST_RUN_CURRENT_UPGRADE_RULE_IDS`; owner A48-D3, D3c). */
-const FIRST_RUN_DELTA_VERSION = 15;
+const FIRST_RUN_DELTA_VERSION = 16;
 /** What the person lacks for the governed upgrade, in order: the `policy.administer` operation, the right to decide its card, the cells I2 checks. */
 export type TemplateUpgradeMissing = 'policy-administer' | 'approval-decide' | 'delegation' | 'lockout';
 export interface TemplateUpgradeResult {
@@ -36,7 +36,7 @@ export class PolicyTemplateUpgrade {
       /** v12: the installation's configured runtime service id of the scope (Astra 2596: never a guessed default when one is configured). */
       readonly serviceId?: string;
       /** v13: the execution-environment registry ids the template's install rule names (the installer's pinned list). */
-      readonly executionEnvironmentIds: readonly string[] }) {}
+      readonly executionEnvironmentIds: readonly string[]; readonly recoveryRules?: readonly Readonly<{ id: string; version: number }>[] }) {}
   private async snapshot() { return policySchema.parse(await this.deps.policy.load()); }
   private missing(policy: ReturnType<typeof policySchema.parse>, principal: VerifiedPrincipal, scopeId: string, touched: Parameters<typeof delegationWithin>[2]): TemplateUpgradeMissing[] {
     const out: TemplateUpgradeMissing[] = [];
@@ -46,7 +46,7 @@ export class PolicyTemplateUpgrade {
     return out;
   }
   private upgraded(entry: AuthorityRevision, principal: VerifiedPrincipal, scopeId: string): boolean {
-    // The installer's upgrade key names the template version it ran under. The rolled-back delta is v15's, so a v15 delta the installer added under
+    // The installer's upgrade key names the template version it ran under. The rolled-back delta is v16's, so a v16 delta the installer added under
     // v15 or any later version is this upgrade's (POLICY-V12: a later bump must not orphan delta upgrades already on disk).
     const installer = /^policy-template-upgrade-v(\d+)-([a-f0-9]{64})$/.exec(entry.key ?? '');
     if (installer && Number(installer[1]) >= FIRST_RUN_DELTA_VERSION && Number(installer[1]) <= FIRST_RUN_POLICY_TEMPLATE_VERSION) return true;
@@ -80,7 +80,7 @@ export class PolicyTemplateUpgrade {
     if (input.expect !== undefined && input.expect !== policy.revision) return result('conflict', { reason: 'revision-changed' });
     const files = authorityDocuments(policy);
     if (input.mode === 'rollback') {
-      const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId);
+      const delta = firstRunTemplateRollback(files.policy, input.principal, input.scopeId, this.names.recoveryRules);
       const history = await this.deps.policy.authorityHistory?.();
       // J3: a policy at a template's own revision that already carries the delta (v13+; no `a-`/`m-` write since) with no archived upgrade has nothing
       // provable to undo (a fresh install) → `nothing-to-roll-back`
