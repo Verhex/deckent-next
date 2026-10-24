@@ -63,6 +63,9 @@ export const policyResources = Object.freeze({
   // S6R-3 (owner K-B 2026-10-23; lead on s6 Q3): the owner's standing approval of one Nervous stop-list action (the resource id is the action);
   // the recovery broker applies a sealed proposal only under it. A person's grant only: the AI floor refuses it for every AI principal.
   recoveryAction: Object.freeze({ kind: 'recovery-action' as const, actions: Object.freeze(['apply'] as const) }),
+  // alpha.56 G2 (owner Q-A1): a person's promotion of one measured Nervous rule (the resource id is `<ruleId>@<version>`): the broker treats only that
+  // exact rule and version as `live`. A person's grant only: the AI floor refuses it for every AI principal; the shipped seed never changes.
+  nervousRule: Object.freeze({ kind: 'nervous-rule' as const, actions: Object.freeze(['promote'] as const) }),
 });
 export type CorePolicyResource = keyof typeof policyResources;
 export type CorePolicyAction<R extends CorePolicyResource> = typeof policyResources[R]['actions'][number];

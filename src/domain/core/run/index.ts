@@ -6,7 +6,7 @@ export { readRunHold } from './internal/hold.js';
 export type { RunHold } from './internal/hold.js';
 export { recoverStalledTask } from './internal/stall.js';
 export { continueLostTask, lostContinuationRefusal, taskAttemptCeilingReached } from './internal/lost.js';
-export type { LostContinuation } from './internal/lost.js';
+export type { LostBasis, LostContinuation } from './internal/lost.js';
 export { observeRunAttemptClosure, settleEnvironmentProbe, holdEnvironmentProbes, releaseEnvironmentProbes, environmentRequirementSchema, environmentRequirementsSchema } from './internal/environment.js';
 export type { EnvironmentRequirement } from './internal/environment.js';
 export type { StallCause } from './internal/stall.js';

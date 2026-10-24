@@ -18,20 +18,26 @@ export function taskAttemptCeilingReached(run: RunSnapshot, taskId: string): boo
   return policy !== undefined && (run.previousBindings ?? []).filter(row => row.identity.taskId === taskId).length + 2 > policy.maxAttemptsPerTask;
 }
 
+/** alpha.56 G1: what a lost-worker case stands on — `released` (the stop step ran and released the slot with a termination proof) or `would-stop`
+ * (the explicit shadow input: a detection whose stop step did not run, decided as if it had). */
+export type LostBasis = 'released' | 'would-stop';
 /**
  * Pure: why the lost task of `identity` may not continue now (null: it may), in a fixed order — the Run is closing, it was admitted without frozen
- * recovery bounds (before the switch: never), the case is not ready (the Attempt is the task's current `unknown` binding, the task `reconciling`
- * with its slot released by a termination proof), the gate (nothing open; settled work only where the catalog declares task-scoped idempotency),
- * then the frozen bounds — continuations per task, the total Attempt ceiling per task across every automatic path (stall, lost; stricter wins),
- * continuations per Run — and, when a signature is given, the changed-evidence requirement.
+ * recovery bounds (before the switch: never), the case is not ready (`released`: the Attempt is the task's current `unknown` binding, the task
+ * `reconciling` with its slot released by a termination proof; `would-stop`: the Attempt is the task's current `started`/`unknown` binding whose
+ * slot is not released), the gate (nothing open; settled work only where the catalog declares task-scoped idempotency), then the frozen bounds —
+ * continuations per task, the total Attempt ceiling per task across every automatic path (stall, lost; stricter wins), continuations per Run —
+ * the task's frozen low-risk WorkClass (G6) and, when a signature is given, the changed-evidence requirement. Both bases share every check after readiness.
  */
-export function lostContinuationRefusal(run: RunSnapshot, identity: AttemptIdentity, continuation: Omit<LostContinuation, 'decisionId'>): RecoveryErrorCode | null {
+export function lostContinuationRefusal(run: RunSnapshot, identity: AttemptIdentity, continuation: Omit<LostContinuation, 'decisionId'>, basis: LostBasis = 'released'): RecoveryErrorCode | null {
   if (run.cancelRequested || run.state.kind === 'terminal') return 'RECOVERY_RUN_CLOSED';
   const policy = run.execution.recovery;
   if (!policy) return 'RECOVERY_OFF';
   const task = run.progress.find(row => row.taskId === identity.taskId), binding = run.bindings.find(row => sameAttemptIdentity(row.identity, identity));
-  if (!task || !binding || binding.observedKind !== 'unknown' || task.phase !== 'reconciling' || !task.unresolvedEffects || task.workerCustody?.state !== 'released'
-    || task.workerCustody.basis !== 'termination-proof') return 'RECOVERY_NOT_READY';
+  if (!task || !binding) return 'RECOVERY_NOT_READY';
+  if (basis === 'would-stop' ? !['started', 'unknown'].includes(binding.observedKind ?? '') || task.workerCustody?.state === 'released'
+    : binding.observedKind !== 'unknown' || task.phase !== 'reconciling' || !task.unresolvedEffects || task.workerCustody?.state !== 'released'
+      || task.workerCustody.basis !== 'termination-proof') return 'RECOVERY_NOT_READY';
   const gate = recoveryEffectGateSchema.safeParse(continuation.gate);
   if (!gate.success) return 'RECOVERY_INVALID';
   const refused = recoveryGateRefusal(gate.data);
@@ -40,6 +46,7 @@ export function lostContinuationRefusal(run: RunSnapshot, identity: AttemptIdent
   if (previous.filter(row => row.observedKind === 'lost').length >= policy.maxLostContinuationsPerTask) return 'RECOVERY_CONTINUATION_BOUND';
   if (taskAttemptCeilingReached(run, identity.taskId)) return 'RECOVERY_ATTEMPT_CEILING';
   if ((run.previousBindings ?? []).filter(row => row.observedKind === 'lost').length >= policy.maxRecoveryActionsPerRun) return 'RECOVERY_RUN_BOUND';
+  if (!policy.lowRiskTaskIds?.includes(identity.taskId)) return 'RECOVERY_RISK_NOT_LOW';
   if (continuation.signature !== null && continuation.priorSignatures.includes(continuation.signature)) return 'RECOVERY_SAME_EVIDENCE';
   return null;
 }

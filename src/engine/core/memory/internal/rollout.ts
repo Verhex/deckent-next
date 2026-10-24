@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import rolloutSeed from '../../../../../assets/memory/rollout.json' with { type: 'json' };
 import corpusSeed from '../../../../../assets/memory/injection-corpus.json' with { type: 'json' };
-import { assertMemoryEvaluationIndependent, composeMemoryAutomation, identitySchema, isMemoryTombstone, memoryEntryStale, memoryRetentionMs, type AuditEvent, type MemoryAutomation,
+import { assertMemoryEvaluationIndependent, composeMemoryAutomation, identitySchema, rolloutCriterionMet, isMemoryTombstone, memoryEntryStale, memoryRetentionMs, type AuditEvent, type MemoryAutomation,
   type MemoryEntry, type MemoryEvaluationRecord } from '#domain/index.js';
 import { MEMORY_AUTOMATION_MODES } from '#platform/index.js';
 import { MemoryJournalError, type MemoryJournalDependencies, type MemoryJournalStore } from './contract.js';
@@ -48,12 +48,7 @@ export interface MemoryRolloutMeasure { readonly count: number; readonly sample:
 /** null: the source could not be read (the criterion is then unmet — never assumed). */
 export type MemoryRolloutMeasures = Readonly<Partial<Record<MemoryRolloutMetric, MemoryRolloutMeasure | null>>>;
 const measure = (value: number, sample: number, complete: boolean, of: number | null = null): MemoryRolloutMeasure => Object.freeze({ count: value, sample, of, complete });
-export function memoryRolloutCriterionMet(criterion: MemoryRolloutCriterion, value: MemoryRolloutMeasure | null | undefined): boolean {
-  if (!value || value.sample < (criterion.minSample ?? 0) || (value.of !== null && value.sample < value.of)) return false;
-  if (criterion.maxCount !== undefined && value.count > criterion.maxCount) return false;
-  if (criterion.minPerMille !== undefined && value.count * PER_MILLE < criterion.minPerMille * value.sample) return false;
-  return criterion.maxPerMille === undefined || value.count * PER_MILLE <= criterion.maxPerMille * value.sample;
-}
+export const memoryRolloutCriterionMet: (criterion: MemoryRolloutCriterion, value: MemoryRolloutMeasure | null | undefined) => boolean = rolloutCriterionMet;
 export interface MemoryRolloutCriterionView { readonly criterion: MemoryRolloutCriterion; readonly measure: MemoryRolloutMeasure | null; readonly met: boolean }
 export interface MemoryRolloutPhaseView { readonly phase: number; readonly section: MemoryRolloutSection; readonly set: typeof MEMORY_AUTOMATION_MODES[number]; readonly reached: boolean; readonly met: boolean;
   readonly criteria: readonly MemoryRolloutCriterionView[] }

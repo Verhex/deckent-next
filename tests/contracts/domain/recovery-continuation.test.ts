@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest';
 import { rm } from 'node:fs/promises';
-import { RECOVERY_POLICY_SEED, RecoveryError, assessRecoveryEffectGate, continueLostTask, freezeRecoveryPolicy, loadRecoveryPolicy, recoveryEffectGatePasses,
-  reserveRunTasks, runSnapshotSchema, effectRecordSchema, type AttemptIdentity, type EffectRecord, type RunSnapshot } from '#domain/index.js';
+import { RECOVERY_POLICY_SEED, RecoveryError, assessRecoveryEffectGate, auditEventSchema, continueLostTask, freezeRecoveryPolicy, loadRecoveryPolicy, lostContinuationRefusal,
+  recoveryCaseSchema, recoveryEffectGatePasses, recoveryEscalationCode, reserveRunTasks, runSnapshotSchema, effectRecordSchema, type AttemptIdentity, type EffectRecord, type RunSnapshot } from '#domain/index.js';
 import { measureTaskOccupancy } from '#engine/index.js';
 import type { SqliteAttemptStore } from '#adapters/index.js';
 import { effectIntent, releasedLostTask } from '../support/lost-task.js';
@@ -11,7 +11,7 @@ import { effectIntent, releasedLostTask } from '../support/lost-task.js';
 // it requires. Nothing here calls a model; S6R-5 adds the chooser.
 const roots: string[] = [], stores: SqliteAttemptStore[] = [];
 afterEach(async () => { for (const store of stores.splice(0)) store.close(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-const policy = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live');
+const policy = freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), 'live', ['task']);
 const timing = { now: 30, timeoutMs: 1000 };
 const clear = (identity: AttemptIdentity) => assessRecoveryEffectGate(identity, [], policy);
 const continuation = (identity: AttemptIdentity, overrides: Partial<Parameters<typeof continueLostTask>[3]> = {}) =>
@@ -120,4 +120,40 @@ it('the snapshot contract: `lost` lives only on a superseded binding and always 
   expect(runSnapshotSchema.safeParse({ ...snapshot, previousBindings: [{ ...lost, recoveryDecisionId: undefined }] }).success).toBe(false);
   expect(runSnapshotSchema.safeParse({ ...snapshot, previousBindings: [{ ...lost, observedKind: 'exited' }] }).success).toBe(false);
   expect(runSnapshotSchema.safeParse({ ...f.run, bindings: [{ ...f.run.bindings[0], observedKind: 'lost', recoveryDecisionId: 'd'.repeat(64) }] }).success).toBe(false);
+});
+
+it('alpha.56 G1/G6: the would-stop shadow input passes readiness without a release and keeps every later check; only frozen low-risk tasks continue', async () => {
+  const f = await releasedLostTask(roots, stores, policy), input = { signature: null, gate: clear(f.identity), priorSignatures: [] };
+  const unreleased = { ...f.run, bindings: f.run.bindings.map(row => ({ ...row, observedKind: 'started' as const })), progress: f.run.progress.map(task => ({ ...task, workerCustody: undefined })) };
+  expect(lostContinuationRefusal(unreleased, f.identity, input)).toBe('RECOVERY_NOT_READY');
+  expect(lostContinuationRefusal(unreleased, f.identity, input, 'would-stop')).toBeNull();
+  expect(lostContinuationRefusal(f.run, f.identity, input, 'would-stop')).toBe('RECOVERY_NOT_READY'); // released: not a would-stop case
+  const open = assessRecoveryEffectGate(f.identity, [record('c-open', 'claimed', { producer: { kind: 'attempt', identity: f.identity } })], policy);
+  expect(lostContinuationRefusal(unreleased, f.identity, { ...input, gate: open }, 'would-stop')).toBe('RECOVERY_EFFECTS_OPEN');
+  expect(lostContinuationRefusal({ ...unreleased, cancelRequested: true }, f.identity, input, 'would-stop')).toBe('RECOVERY_RUN_CLOSED');
+  const earlier = Object.fromEntries(Object.entries(policy).filter(([key]) => key !== 'lowRiskTaskIds')) as typeof policy; // frozen before the list: none eligible
+  for (const recovery of [{ ...policy, lowRiskTaskIds: ['other'] }, earlier]) {
+    expect(lostContinuationRefusal({ ...f.run, execution: { ...f.run.execution, recovery } }, f.identity, input)).toBe('RECOVERY_RISK_NOT_LOW');
+    expect(lostContinuationRefusal({ ...unreleased, execution: { ...unreleased.execution, recovery } }, f.identity, input, 'would-stop')).toBe('RECOVERY_RISK_NOT_LOW');
+  }
+  expect(recoveryEscalationCode(new RecoveryError('RECOVERY_RISK_NOT_LOW'))).toBe('work-class-not-low-risk');
+});
+
+it('alpha.56 G1: a receipt-less termination is only a would-stop case or a would-stop shadow seal; a verdict names a choice exactly when the worker was lost', () => {
+  const gate = { schemaVersion: 1, result: 'clear', complete: true, settled: 'none', intents: [], facts: [] }, d = 'a'.repeat(64);
+  const kase = { schemaVersion: 1, caseId: d, revision: 1, state: 'gated', identity: { scopeId: 's', runId: 'run', taskId: 'task', attemptId: 'a', layoutRevision: 'l', generation: 1 },
+    detection: { eventId: 'e', ruleId: 'container-gone', ruleVersion: 1, registryRevision: 'r', evidenceDigest: d, activity: 'missing', launcherPhase: null },
+    termination: { receiptId: null, kind: 'worker-absent', exitCode: null }, gate, evidenceDigest: d, openedAtMs: 1, updatedAtMs: 1 };
+  expect(recoveryCaseSchema.safeParse({ ...kase, basis: 'would-stop' }).success).toBe(true);
+  expect(recoveryCaseSchema.safeParse(kase).success).toBe(false);
+  expect(recoveryCaseSchema.safeParse({ ...kase, basis: 'would-stop', termination: { ...kase.termination, receiptId: 'receipt' } }).success).toBe(false);
+  const seal = { kind: 'recovery-decision', caseId: d, mode: 'shadow', evidenceDigest: d, target: { runId: 'run', taskId: 'task', attemptId: 'a', generation: 1 },
+    gate: { result: 'clear', settled: 'none', intents: 0 }, terminationReceiptId: null, model: null, action: 'escalate-human', causeClass: null, note: null, code: 'breaker-open',
+    failure: null, standingRef: null, basis: 'would-stop' };
+  const event = (subject: object) => auditEventSchema.safeParse({ schemaVersion: 1, eventId: 'e', scopeId: 's', principal: { issuer: 'i', subject: 'p' }, policyRevision: 'r', atMs: 1, subject }).success;
+  expect(event(seal)).toBe(true);
+  expect(event({ ...seal, mode: 'live' })).toBe(false);
+  expect(event({ ...seal, basis: undefined })).toBe(false);
+  const verdict = { kind: 'recovery-verdict', caseId: d, decisionEventId: `recovery-decision:shadow:${d}`, evidenceDigest: d, detection: 'lost', choice: 'escalate-human' };
+  expect([event(verdict), event({ ...verdict, choice: null }), event({ ...verdict, detection: 'not-lost', choice: null })]).toEqual([true, false, true]);
 });

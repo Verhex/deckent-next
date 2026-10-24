@@ -44,7 +44,7 @@ async function setup(input: { mode: 'shadow' | 'live'; invokeGrant?: boolean; ch
   const store = await openSqliteAttemptStore(f.path, LEDGER_OPTIONS, LOST_TIMING, 'forbid', custodyProfiles); stores.push(store);
   const { layout } = await openConfiguredAttemptStore(f.project, f.options).then(opened => { opened.store.close(); return opened; });
   const identity: AttemptIdentity = { scopeId: 's', runId: 'lost-run', taskId: 'task', attemptId: 'attempt-1', layoutRevision: layout.revision, generation: 1 };
-  await admitRunAttempts(store, [identity], { recovery: freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), input.frozen ?? input.mode) });
+  await admitRunAttempts(store, [identity], { recovery: freezeRecoveryPolicy(loadRecoveryPolicy(RECOVERY_POLICY_SEED), input.frozen ?? input.mode, ['task']) });
   await loseAttempt(store, f.data, identity);
   const integrity = await openLocalIntegrityAuthority(layout, (await loadConfig(f.project, f.options)).approvals.keyFile, true);
   const caseId = await sealDetection(f.path, identity, 'launcher-dead-orphan', integrity);
