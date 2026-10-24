@@ -104,7 +104,7 @@ export class OwnedResources {
   spawn<C extends ChildProcess = ChildProcess>(command: string, args: readonly string[], options: OwnedSpawnOptions): OwnedChild<C> {
     return this.#spawn<C>(command, args, options, true);
   }
-  #spawn<C extends ChildProcess = ChildProcess>(command: string, args: readonly string[], options: OwnedSpawnOptions, register: boolean): OwnedChild<C> {
+  #spawn<C extends ChildProcess = ChildProcess>(command: string, args: readonly string[], options: OwnedSpawnOptions, register: boolean): OwnedChild<C> & { entry?: Entry } {
     const label = options.label ?? `${command} ${args.slice(0, 3).join(' ')}`.slice(0, 160);
     const child = spawn(command, [...args], { cwd: options.cwd, env: options.env, stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'], detached: GROUPS }) as C;
     const pid = child.pid;
@@ -124,7 +124,7 @@ export class OwnedResources {
     });
     exit.catch(() => undefined);
     const exited = () => child.exitCode !== null || child.signalCode !== null || pid === undefined;
-    if (register) this.#entries.push({ label: `process ${label} (pid ${pid ?? 'none'})`,
+    const entry: Entry = { label: `process ${label} (pid ${pid ?? 'none'})`,
       present: async () => !exited() || (pid !== undefined && groupAlive(pid)),
       release: async () => {
         clearTimeout(deadline);
@@ -136,8 +136,9 @@ export class OwnedResources {
         if (groupAlive(pid)) throw new OwnedResourceError('TEST_RESOURCE_LEAK', `process group ${pid} of ${label} still has members`);
         liveGroups.delete(pid);
         for (const stream of [child.stdin, child.stdout, child.stderr]) stream?.destroy();
-      } });
-    return { child, exit };
+      } };
+    if (register) this.#entries.push(entry);
+    return { child, exit, entry };
   }
 
   /** Runs a child to its exit with bounded output; a non-zero exit is a result, not an error. */
@@ -145,8 +146,8 @@ export class OwnedResources {
     return this.#run(command, args, options, true);
   }
   async #run(command: string, args: readonly string[], options: OwnedRunOptions, register: boolean): Promise<OwnedRun> {
-    const owned = this.#spawn(command, args, { ...options, stdio: [options.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] }, register);
-    const { child } = owned, limit = options.outputBytes ?? 8 * 1024 * 1024, label = options.label ?? command;
+    const started = this.#spawn(command, args, { ...options, stdio: [options.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] }, register);
+    const { child } = started, limit = options.outputBytes ?? 8 * 1024 * 1024, label = options.label ?? command;
     const out: Buffer[] = [], err: Buffer[] = [];
     let bytes = 0, overflow = false;
     const take = (into: Buffer[]) => (chunk: Buffer) => {
@@ -160,7 +161,7 @@ export class OwnedResources {
     if (options.input !== undefined) { child.stdin!.on('error', () => undefined); child.stdin!.end(options.input); }
     const text = () => ({ stdout: Buffer.concat(out).toString('utf8'), stderr: Buffer.concat(err).toString('utf8') });
     let status: OwnedExit;
-    try { status = await owned.exit; }
+    try { status = await started.exit; }
     catch (error) {
       const { stdout, stderr } = text();
       if (error instanceof OwnedResourceError) throw new OwnedResourceError(error.code, `${error.message}\nstdout: ${tail(stdout)}\nstderr: ${tail(stderr)}`, { ...error.detail, stdout, stderr });
@@ -171,6 +172,8 @@ export class OwnedResources {
       child.stdout!.destroy(); child.stderr!.destroy();
     }
     if (overflow) throw new OwnedResourceError('TEST_CHILD_OUTPUT_LIMIT', `${label} wrote more than ${limit} bytes`, { ...text() });
+    // A run that ended with its whole group needs no teardown (a polling loop would otherwise accumulate entries).
+    if (child.pid !== undefined && !groupAlive(child.pid)) { liveGroups.delete(child.pid); const at = this.#entries.indexOf(started.entry!); if (at >= 0) this.#entries.splice(at, 1); }
     return { ...status, ...text() };
   }
 

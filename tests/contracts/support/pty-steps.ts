@@ -1,7 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { childEnv } from './child-env.js';
+import { owned } from './owned.js';
 
-const execute = promisify(execFile);
 /**
  * python3 `pty` driver: each step waits for a text in the output so far, then types its keys 10 ms apart; the view is stopped after the last step
  * (a fifth argument `until-exit` waits for a one-shot program's own exit instead).
@@ -17,6 +16,12 @@ pid, fd = pty.fork()
 if pid == 0:
     if mode == 'piped-input': os.dup2(os.open('/dev/null', os.O_RDONLY), 0)
     os.execvp(argv[0], argv)
+# Stopped by the test harness (deadline or teardown): the PTY child leads its own session and group, so it is ended with the driver.
+def stop(*_):
+    try: os.killpg(pid, signal.SIGKILL)
+    except OSError: pass
+    os._exit(143)
+signal.signal(signal.SIGTERM, stop)
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 50, 160, 0, 0))
 out = b''
 sent_at = 0
@@ -70,10 +75,10 @@ read_for(0.2)
 sys.stdout.write(json.dumps({'status': status, 'output': out.decode('utf8', 'replace')}))
 `;
 export type Step = readonly [wait: string, keys: string] | readonly [wait: string, keys: string, fresh: 'fresh' | 'next'];
-/** Runs `node <program> <mode>` on its own controlling PTY in `project` and types the steps (see DRIVER). */
+/** Runs `node <program> <mode>` on its own controlling PTY in `project` and types the steps (see DRIVER); the driver is an owned child. */
 export async function inPty(program: string, project: string, env: NodeJS.ProcessEnv, mode: string, steps: readonly Step[], stdin = 'tty') {
-  const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, program, mode]), JSON.stringify(steps), stdin],
-    { cwd: project, env: { ...process.env, ...env }, timeout: 180_000, maxBuffer: 32 * 1024 * 1024 });
+  const { stdout } = await owned().exec('python3', ['-c', DRIVER, JSON.stringify([process.execPath, program, mode]), JSON.stringify(steps), stdin],
+    { cwd: project, env: childEnv(env), deadlineMs: 180_000, outputBytes: 32 * 1024 * 1024, label: `pty ${mode}` });
   const result = JSON.parse(stdout) as { status?: number | string; timeout?: string; output: string };
   if (result.timeout) throw new Error(`waited for ${JSON.stringify(result.timeout)}\n${result.output.slice(-6000)}`);
   return result;
