@@ -6,10 +6,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource, LocalOsSessionAuthority, openSqliteApprovalStore, openSqliteAttemptStore } from '#adapters/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
 import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, RECOVERY_ROLLOUT, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, type AuditEvent, type PolicyGrant } from '#domain/index.js';
-import { ApprovalApplication, PolicyAdministrationApplication, PolicyTemplateUpgrade, upgradePolicyTemplate } from '#engine/index.js';
+import { ApprovalApplication, NERVOUS_EXECUTABLE_ACTIONS, PolicyAdministrationApplication, PolicyTemplateUpgrade, RecoveryPolicyCard, administerOwnPolicyChange, nervousStandingApproval,
+  upgradePolicyTemplate } from '#engine/index.js';
 import { createHmacIntegrity, sha256 } from '#platform/index.js';
 import { effectWireKey } from '#engine/core/effect/index.js';
-import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, policyChangeSchema, policyGrantSchema } from '#domain/index.js';
+import { AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, policyChangeSchema, policyGrantSchema, policySchema } from '#domain/index.js';
 
 const names = { proposeMcpToolName: 'propose_mcp_server', mcpCallOperationId: 'mcp.tool.call', policyAdministerOperationId: 'policy.administer', executionEnvironmentIds: ['docker'],
   recoveryRules: RECOVERY_ROLLOUT.rules.map(id => ({ id, version: 1 })) };
@@ -49,7 +50,7 @@ async function fixture(edit: (grants: readonly PolicyGrant[]) => readonly unknow
       .decide({ schemaVersion: 1, scopeId: 's', approvalId: approval.approvalId, commandId, expectedRevision: approval.revision, decision: 'allow', reason });
   };
   const upgrade = new PolicyTemplateUpgrade({ administration, approve, policy: source }, names);
-  return { principal, apply: () => upgrade.run({ scopeId: 's', principal, mode: 'apply', reason: 'v14 upgrade' }), source, events, archive, get cards() { return cards; }, bytes: () => readFile(policyPath, 'utf8'),
+  return { principal, administration, approve, apply: () => upgrade.run({ scopeId: 's', principal, mode: 'apply', reason: 'v14 upgrade' }), source, events, archive, get cards() { return cards; }, bytes: () => readFile(policyPath, 'utf8'),
     rollback: (expect?: string) => upgrade.run({ scopeId: 's', principal, mode: 'rollback', reason: 'v14 rollback', ...(expect ? { expect } : {}) }) };
 }
 
@@ -212,4 +213,22 @@ it.skipIf(process.platform !== 'linux')('rollback keeps fresh-install rules, det
   await rm(damaged.archive, { recursive: true });
   expect(await damaged.rollback()).toMatchObject({ status: 'unavailable', reason: 'history-unavailable' });
   expect(await damaged.bytes()).toBe(bytes); expect(damaged.cards).toBe(0);
+});
+
+// alpha.56 D1: the raise through the real chain (approval card, delegation-bound gate, bound inside the write lock, audit, archive).
+it.skipIf(process.platform !== 'linux')('the recovery card raises its v16 cell through the real policy.administer chain; the same replace on another path is refused', async () => {
+  const f = await fixture(undefined, false), cell = 'first-run-recovery-action-fence-attempt';
+  const before = policySchema.parse(await f.source.load()), ask = before.grants.find(rule => rule.id === cell)!;
+  expect(ask.effect).toBe('require-approval'); expect(nervousStandingApproval(before, f.principal, { scopeId: 's', action: 'fence-attempt' }, 1)).toBeNull();
+  // Negative first: the same replace declared as a standing change keeps today's bound (POLICY_DELEGATION_EXCEEDS at the gate), nothing written.
+  await expect(administerOwnPolicyChange(f, { scopeId: 's', principal: f.principal, change: { schemaVersion: 1, changes: [{ kind: 'grant.replace', grant: { ...ask, effect: 'allow' } }] },
+    tag: 'd1-negative', reason: 'standing path', revision: before.revision, kind: 'standing-change' })).rejects.toMatchObject({ code: 'POLICY_DELEGATION_EXCEEDS' });
+  expect(policySchema.parse(await f.source.load()).revision).toBe(before.revision);
+  const rollout = { registry: { revision: 'r', status: 'provisional' as const }, complete: true, rules: [], decisions: { decided: 0, agreements: 0, perMille: null, waiting: 0, met: false } };
+  const card = new RecoveryPolicyCard({ policy: f.source, administration: f.administration, approve: f.approve }, { rollout: async () => rollout, executable: NERVOUS_EXECUTABLE_ACTIONS }, async () => true);
+  expect(await card.change({ schemaVersion: 1, scopeId: 's', kind: 'action', id: 'fence-attempt', action: 'grant', expectedRevision: before.revision }, f.principal)).toMatchObject({ status: 'applied' });
+  const after = policySchema.parse(await f.source.load());
+  expect(after.grants.find(rule => rule.id === cell)).toEqual({ ...ask, effect: 'allow' });
+  expect(nervousStandingApproval(after, f.principal, { scopeId: 's', action: 'fence-attempt' }, 1)).not.toBeNull();
+  expect(f.events.filter(event => event.subject.kind === 'authority-change')).toHaveLength(1);
 });

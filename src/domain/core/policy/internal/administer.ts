@@ -191,7 +191,8 @@ export function delegationWithin(input: Policy, actor: { readonly issuer: string
       if (![...asks, ...allows].some(other => hit(other, covers))) return refuse('no-grant');
       const asked = asks.filter(other => hit(other, meets));
       const allowed = asked.length === 0 && allows.some(other => hit(other, covers));
-      if (value.effect === 'allow' && !allowed && !(raisable(value) && asks.some(other => hit(other, covers)))) return refuse('require-approval');
+      // Only a require-approval cell naming the actor counts (explicit, or role-derived through a binding naming them); never `principals: 'all'`.
+      if (value.effect === 'allow' && !allowed && !(raisable(value) && asks.some(other => other.principals !== 'all' && hit(other, covers)))) return refuse('require-approval');
       if (value.modeEligible === true && !allowed && !asked.every(other => other.modeEligible === true)) return refuse('mode-eligible');
     }
   }

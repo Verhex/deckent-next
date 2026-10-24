@@ -152,5 +152,13 @@ describe('delegation bound (POLICY-ADMIN P1)', () => {
     expect(run(restricted, person, raise(ra))).toMatchObject({ ok: false, reason: 'deny' });
     // A person who does not hold the cell (an organisation narrowed who may turn recovery on) cannot give it to themselves.
     expect(run(files([]), person, change({ kind: 'grant.add', grant: { ...ra, effect: 'allow' } }))).toMatchObject({ ok: false, reason: 'no-grant' });
+    // Only a cell naming the actor counts: a require-approval rule for `all` principals, or naming another person, never lets anyone raise.
+    const own = { ...ra, id: 'mine', effect: 'allow' };
+    for (const principals of ['all', [other]]) expect(run(files([{ ...ra, principals }]), person, change({ kind: 'grant.add', grant: own })), JSON.stringify(principals))
+      .toMatchObject({ ok: false });
+    // An enterprise assigns the cell through a role bound to exactly this person: it counts (role-derived rules name the bound principal).
+    const role = { id: 'recovery-operator', permissions: [{ id: 'ra', effect: 'require-approval', actions: ['apply'], resource: { kind: 'recovery-action', ids: ['fence-attempt'] } }] };
+    expect(run(files([], [role], [], [{ id: 'ops', principals: [member], roles: ['recovery-operator'], scopes: ['s1'] }]), person, change({ kind: 'grant.add', grant: own })))
+      .toEqual({ ok: true });
   });
 });

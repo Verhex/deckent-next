@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { RECOVERY_ACTIONS, authorityDocuments, delegationWithin, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, mcpPrincipalRef, planPolicyChange, resolvePolicyBindings,
+import { RECOVERY_ACTIONS, authorityDocuments, delegationWithin, evaluatePolicy, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, mcpPrincipalRef, planPolicyChange, resolvePolicyBindings,
   type DelegationOptions, type Policy, type RecoveryRolloutView, type VerifiedPrincipal } from '#domain/index.js';
 import { FIRST_RUN_TOOL_NAMES, NERVOUS_EXECUTABLE_ACTIONS, RecoveryPolicyCard, nervousRulePromoted, nervousStandingApproval, recoveryContinuationApproval } from '#engine/index.js';
 
@@ -93,4 +93,14 @@ it('first-run v16: recovery is off after install; the card turns one row on thro
   const files = authorityDocuments(policy), ask = policy.grants.find(rule => rule.id === 'first-run-recovery-action-fence-attempt')!;
   expect(delegationWithin(policy, human, planPolicyChange(files.policy, files.bindings, { schemaVersion: 1, changes: [{ kind: 'grant.replace', grant: { ...ask, effect: 'allow' } }] }).touched))
     .toMatchObject({ ok: false, reason: 'require-approval' });
+});
+
+it('why the card replaces the cell: an allow added beside the v16 require-approval rule leaves every reader off (require-approval is decided first)', () => {
+  const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: { issuer: human.issuer, subject: human.subject }, ...FIRST_RUN_TOOL_NAMES });
+  const added = { id: 'added-allow', effect: 'allow', actions: ['apply'], scopes: ['scope'], principals: [{ issuer: human.issuer, subject: human.subject }],
+    resource: { kind: 'recovery-action', ids: ['fence-attempt'] } };
+  const both = resolvePolicyBindings({ ...template.policy, grants: [...template.policy.grants, added] }, template.bindings);
+  expect(evaluatePolicy(both, { principal: human, scopeId: 'scope', action: 'apply', resource: { kind: 'recovery-action', id: 'fence-attempt' } }))
+    .toMatchObject({ decision: 'require-approval', ruleId: 'first-run-recovery-action-fence-attempt' });
+  expect(nervousStandingApproval(both, human, { scopeId: 'scope', action: 'fence-attempt' }, 1)).toBeNull();
 });
