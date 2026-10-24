@@ -471,8 +471,8 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   kendilerinin işlem yapması henüz sunulmuyor.
 - **Kurtarma yalnız kendi kurtarma kurallarınızla açılır, birkaç sınırla.** Şablon v16 (alpha.56) ile her kurtarma eylemini ve her
   Nervous kuralı yükseltmesini onay gerektiren olarak tutarsınız; bu yüzden kurtarma, `deckent policy recovery` ile bir satırı açana
-  kadar kapalı kalır; kuralınız bir rolden ya da daha geniş veya paylaşılan bir kuraldan geliyorsa kart reddeder
-  (`RECOVERY_CELL_NOT_OWN`). v16'ya yükseltme yalnız `deckent init policy --upgrade` ile yapılır: `deckent policy upgrade --template
+  kadar kapalı kalır; kuralınız bir rolden ya da daha geniş veya paylaşılan bir kuraldan geliyorsa, ya da böyle bir kural kendi
+  kuralınızın yanında aynı satırı kapsıyorsa kart reddeder (`RECOVERY_CELL_NOT_OWN`): sizinkini açmak satırı açmazdı. v16'ya yükseltme yalnız `deckent init policy --upgrade` ile yapılır: `deckent policy upgrade --template
   current --apply` bunun için reddedilir. `--rollback` açtığınız bir satırı korur ve çakışma olarak bildirir (önce kartta kapatın).
   Yeni bir Nervous kuralı ya da kural sürümü yeni bir şablon sürümü ve politika yükseltmesi ister (açık, inceleniyor). Kart ölçülmüş
   çıkışları yalnız politika revizyonuna karşı denetler; okuma ile yazma arasında mühürlenen bir ölçüm görülmez. alpha.56'ya geçişten

@@ -473,7 +473,8 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   service's socket. Letting workers act on outside systems themselves is not offered yet.
 - **Recovery is turned on only through your own recovery rules, with a few edges.** From template v16 (alpha.56) you hold each recovery
   action and each Nervous rule promotion at require-approval, so recovery stays off until you turn a row on with
-  `deckent policy recovery`; it refuses (`RECOVERY_CELL_NOT_OWN`) when your rule comes from a role or a broader or shared rule. The
+  `deckent policy recovery`; it refuses (`RECOVERY_CELL_NOT_OWN`) when your rule comes from a role or a broader or shared rule, and also
+  when such a rule covers the same row beside your own, because turning yours on would leave the row off. The
   upgrade to v16 runs through `deckent init policy --upgrade` only: `deckent policy upgrade --template current --apply` is refused for
   it. `--rollback` keeps a row you turned on and reports it as a conflict (turn it off on the card first). A new Nervous rule or rule
   version needs a new template version and a policy upgrade (open, under review). The card checks the measured exits against the
