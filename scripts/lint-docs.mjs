@@ -68,15 +68,18 @@ try {
     // The first ref after the date must be a SHA, not a branch followed by a SHA elsewhere in the prose.
     if (!/\*\*\s*—\s*\d{4}-\d{2}-\d{2}\s*·\s*`[0-9a-f]{7,40}`(?:\s|$)/iu.test(release.line)) fail(where, 'landed ref after the date must be a commit SHA, not a branch');
   }
-  const packageAlpha = /^\d+\.\d+\.\d+-alpha\.(\d+)(?:\+.*)?$/u.exec(packageVersion);
+  // An alpha is `alpha.N` or a hotfix `alpha.N.M` (alpha.55.1, 2026-10-24); compared as (N, M) with M = 0 when absent.
+  const alphaOf = (text) => { const match = /-alpha\.(\d+)(?:\.(\d+))?(?:\+.*)?$/u.exec(text); return match ? [BigInt(match[1]), BigInt(match[2] ?? 0)] : null; };
+  const alphaName = ([major, minor]) => minor ? `${major}.${minor}` : `${major}`;
+  const packageAlpha = /^\d+\.\d+\.\d+-alpha\.\d+(?:\.\d+)?(?:\+.*)?$/u.test(packageVersion) ? alphaOf(packageVersion) : null;
   // Public docs describe what is live: the package version once released, or the last released version while the top CHANGELOG line is Unreleased.
   const unreleasedTop = /^\s*-\s+\*\*[^*]+\*\*\s*—\s*Unreleased\b/iu.test(releases[0]?.line ?? '');
-  const lastReleasedAlpha = /-alpha\.(\d+)\b/u.exec((unreleasedTop ? releases[1] : releases[0])?.value ?? '')?.[1];
+  const lastReleasedAlpha = alphaOf((unreleasedTop ? releases[1] : releases[0])?.value ?? '');
   if (packageAlpha) for (const name of ['README.md', 'README.tr.md', 'SECURITY.md']) {
-    const alphas = [...read(name).matchAll(/\balpha\.(\d+)\b/gu)].map(match => BigInt(match[1]));
-    const highest = alphas.reduce((max, value) => value > max ? value : max, -1n);
-    const allowed = new Set([BigInt(packageAlpha[1]), ...(unreleasedTop && lastReleasedAlpha ? [BigInt(lastReleasedAlpha)] : [])]);
-    if (!allowed.has(highest)) fail(name, `highest alpha.${highest} must equal package.json ${packageVersion}${unreleasedTop && lastReleasedAlpha ? ` or the last released alpha.${lastReleasedAlpha}` : ''}`);
+    const alphas = [...read(name).matchAll(/\balpha\.(\d+)(?:\.(\d+))?\b/gu)].map(match => [BigInt(match[1]), BigInt(match[2] ?? 0)]);
+    const highest = alphas.reduce((max, value) => value[0] > max[0] || value[0] === max[0] && value[1] > max[1] ? value : max, [-1n, 0n]);
+    const allowed = new Set([alphaName(packageAlpha), ...(unreleasedTop && lastReleasedAlpha ? [alphaName(lastReleasedAlpha)] : [])]);
+    if (!allowed.has(alphaName(highest))) fail(name, `highest alpha.${alphaName(highest)} must equal package.json ${packageVersion}${unreleasedTop && lastReleasedAlpha ? ` or the last released alpha.${alphaName(lastReleasedAlpha)}` : ''}`);
   }
   for (const name of ['ARCHITECTURE.md', ...architectureFiles('.deckent/docs/architecture')]) {
     read(name).split('\n').forEach((line, index) => {

@@ -89,6 +89,22 @@ describe('documentation release drift gate', () => {
     const landed = lint(await fixture({ 'package.json': '{"version":"1.0.0-alpha.18"}', 'CHANGELOG.md': release(18) + '\n' + release(17) }));
     expect(landed.status).toBe(1); expect(landed.output).toContain('README.md: highest alpha.17 must equal package.json 1.0.0-alpha.18');
   });
+  it('a hotfix pre-release with an extra numeric part (1.0.0-alpha.55.1) keeps the current-version check: docs name alpha.55.1', async () => {
+    const hotfix = '- **1.0.0-alpha.55.1** — 2026-10-24 · `abcdef12` (PR #115) · hotfix', previous = '- **1.0.0-alpha.55** — 2026-10-24 · `abcdef13` (PR #113) · features';
+    const docs = (claim: string) => ({ 'README.md': `Current ${claim}.`, 'README.tr.md': `Güncel ${claim}.`, 'SECURITY.md': `Supports ${claim}.` });
+    const landed = { 'package.json': '{"version":"1.0.0-alpha.55.1"}', 'CHANGELOG.md': hotfix + '\n' + previous };
+    expect(lint(await fixture({ ...landed, ...docs('alpha.55.1'), 'README.md': 'Current alpha.55.1; the core layers came with alpha.55.' }))).toMatchObject({ status: 0 });
+    const stale = lint(await fixture({ ...landed, ...docs('alpha.55.1'), 'SECURITY.md': 'Supports alpha.55.' }));
+    expect(stale.status).toBe(1); expect(stale.output).toContain('SECURITY.md: highest alpha.55 must equal package.json 1.0.0-alpha.55.1');
+    for (const claim of ['alpha.55.2', 'alpha.56']) {
+      const future = lint(await fixture({ ...landed, ...docs('alpha.55.1'), 'README.tr.md': `Güncel ${claim}.` }));
+      expect(future.status).toBe(1); expect(future.output).toContain(`README.tr.md: highest ${claim} must equal package.json 1.0.0-alpha.55.1`);
+    }
+    // While the hotfix line is Unreleased, the live alpha.55 or the hotfix itself may be named; nothing older.
+    const unreleased = { 'package.json': '{"version":"1.0.0-alpha.55.1"}', 'CHANGELOG.md': '- **1.0.0-alpha.55.1** — Unreleased · hotfix\n' + previous };
+    for (const claim of ['alpha.55', 'alpha.55.1']) expect(lint(await fixture({ ...unreleased, ...docs(claim) })).status).toBe(0);
+    expect(lint(await fixture({ ...unreleased, ...docs('alpha.54') })).status).toBe(1);
+  });
   it.each(['unpushed', 'not landed', 'review open', 'PR pending'])('rejects %s in root and recursively nested architecture docs', async phrase => {
     for (const name of ['ARCHITECTURE.md', '.deckent/docs/architecture/nested/contract.md']) {
       const result = lint(await fixture({ [name]: `# Contract\nCandidate ${phrase}` }));
