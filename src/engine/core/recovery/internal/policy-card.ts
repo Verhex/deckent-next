@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { RECOVERY_ACTIONS, RECOVERY_ROLLOUT, encodeCommandProjection, evaluatePolicy, identitySchema, isAiPrincipal, policyResources, policySchema, sameMcpCapabilityRule, type PolicyGrant,
-  type RecoveryRolloutView, type VerifiedPrincipal } from '#domain/index.js';
+  type Policy, type RecoveryRolloutView, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry, sha256 } from '#platform/index.js';
 import { PolicyAdministrationInspection } from '#engine/core/policy/index.js';
 import { administerOwnPolicyChange, type PersistentStandingDependencies } from '#engine/core/approval/index.js';
@@ -24,6 +24,10 @@ export type RecoveryPolicyPorts = Readonly<{ rollout: (scopeId: string) => Promi
  * person at a real terminal; an AI is refused (and the AI floor refuses both resources). A grant whose measured exits do not hold (a rule's
  * detection cases, the decision agreement for a continuation) is refused visibly; an action without an executor is never granted; turning a
  * row off is never gated. The broker and the recovery decision read the policy fresh, so a change applies on the next page or decision.
+ * alpha.56 D1 (owner 2026-10-24, Jev c1d1afe9): the evaluator decides require-approval before allow, so turning a row on where the person holds
+ * the cell at require-approval (template v16) replaces that rule with allow (the I2 raise of a `policy-recovery` change) and turning it off
+ * replaces it back; without such a cell the card adds its own allow rule, which the bound admits only where the person already holds allow.
+ * The measured exits are bound to the write's revision: the view they come from is read on `expectedRevision`, the CAS write commits only on it.
  */
 export class RecoveryPolicyCard {
   constructor(private readonly deps: Pick<PersistentStandingDependencies, 'policy' | 'administration' | 'approve'>, private readonly ports: RecoveryPolicyPorts,
@@ -33,21 +37,28 @@ export class RecoveryPolicyCard {
     const key = sha256(encodeCommandProjection('recovery-policy:1', { scopeId, person, kind, id })).slice(0, 32);
     return { id: `recovery-${kind}-${key}`, effect: 'allow', principals: [person], scopes: [scopeId], actions: [resource.actions[0]], resource: { kind: resource.kind, ids: [id] } };
   }
-  async inspect(input: Readonly<{ schemaVersion: 1; scopeId: string }>, principal: VerifiedPrincipal): Promise<RecoveryPolicyView> {
+  /** The person's own single-cell rules of a row (any id, allow or require-approval): v16's cell, the card's own allow, or a raised cell. */
+  private cells(policy: Policy, rule: PolicyGrant): readonly PolicyGrant[] {
+    return policy.grants.filter(item => (item.effect === 'allow' || item.effect === 'require-approval') && sameMcpCapabilityRule({ ...item, id: rule.id, effect: rule.effect }, rule));
+  }
+  async inspect(input: Readonly<{ schemaVersion: 1; scopeId: string }>, principal: VerifiedPrincipal): Promise<RecoveryPolicyView> { return (await this.read(input, principal)).view; }
+  private async read(input: Readonly<{ schemaVersion: 1; scopeId: string }>, principal: VerifiedPrincipal): Promise<Readonly<{ policy: Policy; view: RecoveryPolicyView }>> {
     const { scopeId } = input;
     if (!principal.scopeIds.includes(scopeId)) throw ErrorRegistry.createError('POLICY_DENIED');
     const policy = policySchema.parse(await this.deps.policy.load());
     await new PolicyAdministrationInspection({ load: async () => policy }).inspect(principal, { schemaVersion: 1, scopeId });
     const rollout = await this.ports.rollout(scopeId);
     const row = (kind: RecoveryPolicyRow['kind'], id: string, available: boolean, exits: boolean | null): RecoveryPolicyRow => {
-      const rule = this.grant(scopeId, principal, kind, id), held = policy.grants.find(item => item.id === rule.id);
+      const rule = this.grant(scopeId, principal, kind, id), held = policy.grants.find(item => item.id === rule.id), cells = this.cells(policy, rule);
+      const asks = cells.filter(item => item.effect === 'require-approval').length;
       const { kind: resource, actions: [action] } = kind === 'action' ? policyResources.recoveryAction : policyResources.nervousRule;
       const allowed = evaluatePolicy(policy, { principal, scopeId, action, resource: { kind: resource, id } }).decision === 'allow';
-      return Object.freeze({ kind, id, managed: held ? sameMcpCapabilityRule(held, rule) ? 'granted' : 'conflict' : 'none', effective: allowed ? 'allowed' : 'denied', available, exits });
+      const managed = held && !sameMcpCapabilityRule(held, rule) || asks > 1 ? 'conflict' : asks === 0 && cells.length > 0 ? 'granted' : 'none';
+      return Object.freeze({ kind, id, managed, effective: allowed ? 'allowed' : 'denied', available, exits });
     };
     const actions = [...RECOVERY_ACTIONS.map(id => row('action', id, this.ports.executable.includes(id), null)), row('action', RECOVERY_CONTINUE_ACTION, true, rollout.decisions.met)];
     const rules = rollout.rules.map(rule => row('rule', `${rule.id}@${rule.version}`, true, rule.met));
-    return Object.freeze({ schemaVersion: 1, scopeId, revision: policy.revision, rows: Object.freeze([...actions, ...rules]), rollout });
+    return { policy, view: Object.freeze({ schemaVersion: 1, scopeId, revision: policy.revision, rows: Object.freeze([...actions, ...rules]), rollout }) };
   }
   async change(input: unknown, principal: VerifiedPrincipal): Promise<Readonly<{ status: 'applied' | 'current'; view: RecoveryPolicyView }>> {
     if (isAiPrincipal(principal)) throw ErrorRegistry.createError('AI_AUTHORITY_NON_DELEGABLE');
@@ -56,7 +67,7 @@ export class RecoveryPolicyCard {
     const command = parsed.data;
     if (!await this.interactive()) throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
     // The measured view is re-read inside the change: a gate is never decided on an older card.
-    const view = await this.inspect({ schemaVersion: 1, scopeId: command.scopeId }, principal), target = view.rows.find(row => row.kind === command.kind && row.id === command.id);
+    const { policy, view } = await this.read({ schemaVersion: 1, scopeId: command.scopeId }, principal), target = view.rows.find(row => row.kind === command.kind && row.id === command.id);
     if (!target) throw ErrorRegistry.createError('RECOVERY_TARGET_INVALID');
     if (view.revision !== command.expectedRevision || target.managed === 'conflict') throw ErrorRegistry.createError('POLICY_DELEGATION_CONFLICT');
     if (command.action === 'grant' ? target.managed === 'granted' : target.managed === 'none') return Object.freeze({ status: 'current' as const, view });
@@ -65,8 +76,11 @@ export class RecoveryPolicyCard {
       const criteria = command.kind === 'rule' ? RECOVERY_ROLLOUT.detection.id : RECOVERY_ROLLOUT.decision.id;
       throw ErrorRegistry.createError('RECOVERY_ROLLOUT_CRITERIA_UNMET', { params: { target: target.id, criteria, scope: command.scopeId } });
     }
-    const grant = this.grant(command.scopeId, principal, command.kind, command.id);
-    const change = { schemaVersion: 1 as const, changes: [command.action === 'grant' ? { kind: 'grant.add' as const, grant } : { kind: 'grant.remove' as const, id: grant.id }] };
+    const grant = this.grant(command.scopeId, principal, command.kind, command.id), cells = this.cells(policy, grant), ask = cells.find(item => item.effect === 'require-approval');
+    const changes = command.action === 'grant' ? [ask ? { kind: 'grant.replace' as const, grant: { ...ask, effect: 'allow' as const } } : { kind: 'grant.add' as const, grant }]
+      : cells.filter(item => item.effect === 'allow').map(item => item.id === grant.id ? { kind: 'grant.remove' as const, id: item.id }
+        : { kind: 'grant.replace' as const, grant: { ...item, effect: 'require-approval' as const } });
+    const change = { schemaVersion: 1 as const, changes };
     await administerOwnPolicyChange(this.deps, { scopeId: command.scopeId, principal, change, revision: command.expectedRevision, kind: 'policy-recovery',
       tag: sha256(encodeCommandProjection('recovery-policy-change:1', command)), reason: `${command.action}: ${command.kind} ${command.id}, ${command.scopeId}` });
     return Object.freeze({ status: 'applied' as const, view: await this.inspect({ schemaVersion: 1, scopeId: command.scopeId }, principal) });

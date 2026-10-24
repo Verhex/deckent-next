@@ -1,5 +1,5 @@
 import { PRINCIPAL_EFFECT_PRODUCER, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMINISTER_OPERATION, ApprovalError, authorityDocuments, delegationWithin, describePolicyChange, planPolicyChange,
-  effectCommandSchema, policyChangeSchema, PolicyChangeError, PolicyLastAdminError, policySchema, resolvePolicyBindings, type ApprovalActor, type DelegatedRule, type EffectCommand, type EffectTargetRef, type OperationDescriptor, type Policy,
+  effectCommandSchema, policyChangeSchema, type DelegationOptions, PolicyChangeError, PolicyLastAdminError, policySchema, resolvePolicyBindings, type ApprovalActor, type DelegatedRule, type EffectCommand, type EffectTargetRef, type OperationDescriptor, type Policy,
   type PolicyChangePlan, type VerifiedPrincipal } from '#domain/index.js';
 import type { IntegrityAuthority, TrustedClock } from '#platform/index.js';
 import { authenticateSession, type SessionAuthority, type SessionVerifier } from '#engine/core/authentication/index.js';
@@ -15,6 +15,9 @@ const AUDITED_REFUSALS: ReadonlySet<string> = new Set(['POLICY_DELEGATION_EXCEED
   'EFFECT_PRECONDITION_CHANGED', 'APPROVAL_DENIED', 'APPROVAL_EXPIRED', 'APPROVAL_STALE']);
 /** What the approval gate learned about this submission, for the target that writes inside the store's lock. */
 interface AuthoritySubmission { requester?: VerifiedPrincipal; decider?: ApprovalActor; approvalId?: string; inputDigest?: string }
+/** The bound's actor: the decider, with the requester's assurance only when the requester is that same person (else none: never a person raise).
+ * `changeKind` (DelegationOptions) is engine input only, never part of the wire change: no raw submission declares `policy-recovery`. */
+const boundActor = (decider: ApprovalActor, requester?: VerifiedPrincipal) => requester?.issuer === decider.issuer && requester.subject === decider.subject ? { ...decider, assurance: requester.assurance } : decider;
 export interface AuthorityTargetHooks {
   /** Throws when the touched rules exceed the bounding principal's authority on exactly this snapshot. */
   bound(snapshot: Policy, touched: readonly DelegatedRule[]): void;
@@ -77,7 +80,7 @@ export class AuthorityDocumentTarget implements EffectTarget {
  */
 export class DelegationBoundGate implements EffectApprovalGate {
   constructor(private readonly inner: EffectApprovalGate, private readonly approvals: ApprovalStore, private readonly integrity: IntegrityAuthority,
-    private readonly policy: PolicySource, private readonly submission: AuthoritySubmission) {}
+    private readonly policy: PolicySource, private readonly submission: AuthoritySubmission, private readonly options: DelegationOptions = {}) {}
   async admit(descriptor: OperationDescriptor, decision: 'allow' | 'require-approval', command: EffectCommand, principal: VerifiedPrincipal,
     context: EffectApprovalContext): Promise<EffectAdmission | void> {
     const admission = await this.inner.admit(descriptor, decision, command, principal, context);
@@ -89,7 +92,7 @@ export class DelegationBoundGate implements EffectApprovalGate {
     if (context.record === null) {
       const current = policySchema.parse(await this.policy.load());
       const files = authorityDocuments(current);
-      const verdict = delegationWithin(current, stored.actor, planPolicyChange(files.policy, files.bindings, command.input).touched);
+      const verdict = delegationWithin(current, boundActor(stored.actor, principal), planPolicyChange(files.policy, files.bindings, command.input).touched, this.options);
       if (!verdict.ok) throw new AuthorityChangeError('POLICY_DELEGATION_EXCEEDS', `${verdict.ruleId}:${verdict.reason}`);
     }
     return admission;
@@ -109,12 +112,12 @@ export interface PolicyAdministrationDependencies {
  */
 export class PolicyAdministrationApplication {
   constructor(private readonly deps: PolicyAdministrationDependencies) {}
-  async submit(input: unknown, credential?: unknown): Promise<EffectOutcome> {
+  async submit(input: unknown, credential?: unknown, options: DelegationOptions = {}): Promise<EffectOutcome> {
     const { deps } = this;
     const command = effectCommandSchema.parse(input);
     const submission: AuthoritySubmission = {};
     const previous = await deps.effects.loadEffect(command.scopeId, command.commandId);
-    try { return await this.run(command, submission, credential); }
+    try { return await this.run(command, submission, credential, options); }
     catch (caught) {
       const cause = caught instanceof Error ? caught.cause : null;
       const root = cause instanceof Error ? cause.cause : null;
@@ -138,7 +141,7 @@ export class PolicyAdministrationApplication {
         stage, code, operation: command.operation, commandId: command.commandId, approvalId: submission.approvalId ?? null, decider: submission.decider ?? null }));
     } catch { /* see above */ }
   }
-  private run(command: EffectCommand, submission: AuthoritySubmission, credential?: unknown): Promise<EffectOutcome> {
+  private run(command: EffectCommand, submission: AuthoritySubmission, credential: unknown, options: DelegationOptions): Promise<EffectOutcome> {
     const { deps } = this;
     // The typed, bounded change set is checked before anything is asked: an invalid input never opens a card. Snapshot-dependent checks
     // (an id that exists, a known role) stay with the plan at the gate and inside the write.
@@ -146,10 +149,10 @@ export class PolicyAdministrationApplication {
     // The card shows what would change (bounded, redacted, human-readable), computed from the current documents and this exact input.
     const describe = async (asked: EffectCommand, budget: number) => describePolicyChange(authorityDocuments(policySchema.parse(await deps.policy.load())), asked.input, budget);
     const broker = new OperationApprovalBroker(deps.approvals, deps.integrity, deps.policy, deps.clock, { requestTtlMs: deps.requestTtlMs, defaultAdmitWithinMs: deps.requestTtlMs, describe });
-    const gate = new DelegationBoundGate(broker, deps.approvals, deps.integrity, deps.policy, submission);
+    const gate = new DelegationBoundGate(broker, deps.approvals, deps.integrity, deps.policy, submission, options);
     const target = new AuthorityDocumentTarget(deps.authority, {
       bound(snapshot, touched) {
-        const verdict = submission.decider ? delegationWithin(snapshot, submission.decider, touched) : null;
+        const verdict = submission.decider ? delegationWithin(snapshot, boundActor(submission.decider, submission.requester), touched, options) : null;
         if (!verdict?.ok) throw new AuthorityChangeError('POLICY_DELEGATION_EXCEEDS', verdict && !verdict.ok ? `${verdict.ruleId}:${verdict.reason}` : null);
       },
       audit(change) {

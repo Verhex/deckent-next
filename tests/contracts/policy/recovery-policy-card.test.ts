@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
-import { RECOVERY_ACTIONS, getPolicyVocabulary, installationOwnerPermissions, mcpPrincipalRef, resolvePolicyBindings, type RecoveryRolloutView, type VerifiedPrincipal } from '#domain/index.js';
-import { NERVOUS_EXECUTABLE_ACTIONS, RecoveryPolicyCard } from '#engine/index.js';
+import { RECOVERY_ACTIONS, authorityDocuments, delegationWithin, evaluatePolicy, firstRunPolicyTemplate, getPolicyVocabulary, installationOwnerPermissions, mcpPrincipalRef, planPolicyChange, resolvePolicyBindings,
+  type DelegationOptions, type Policy, type RecoveryRolloutView, type VerifiedPrincipal } from '#domain/index.js';
+import { FIRST_RUN_TOOL_NAMES, NERVOUS_EXECUTABLE_ACTIONS, RecoveryPolicyCard, nervousRulePromoted, nervousStandingApproval, recoveryContinuationApproval } from '#engine/index.js';
 
 // alpha.56 G2 + G3 (R-DESIGN §2, §5, §6; owner Q-A1/Q-A2/Q-A4): the person card over the owner's own recovery grants and rule promotions.
 const human: VerifiedPrincipal = { id: 'owner', issuer: 'host', subject: 'person', assurance: 'os-user', scopeIds: ['scope'] };
@@ -53,4 +54,53 @@ it('grant and revoke through policy.administer: a stop action needs no exits, a 
   expect(unmet.commands[0]!.input.changes[0]).toEqual({ kind: 'grant.remove', id: grant.id });
   expect((await f.card().change(f.input('action', 'fence-attempt'), human)).status).toBe('applied');
   expect(f.commands[1]!.input.changes[0]).toMatchObject({ grant: { actions: ['apply'], resource: { kind: 'recovery-action', ids: ['fence-attempt'] } } });
+});
+
+// alpha.56 D1 (owner 2026-10-24 v16_require_approval_raise, Jev c1d1afe9): on a real first-run v16 policy the readers are off; the card raises the
+// person's own require-approval cell to allow (the evaluator decides require-approval before allow, so an added allow beside it would stay off).
+it('first-run v16: recovery is off after install; the card turns one row on through the I2 raise and off again; the bound refuses the same raise without the card', async () => {
+  const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: { issuer: human.issuer, subject: human.subject }, ...FIRST_RUN_TOOL_NAMES });
+  let policy: Policy = resolvePolicyBindings(template.policy, template.bindings);
+  const seen: (DelegationOptions | undefined)[] = [];
+  let writes = 0;
+  // The administration's bound as the target runs it (person decider, the requester's assurance), applied to the documents on success.
+  const administration = { submit: async (command: { input?: unknown }, _credential?: unknown, options?: DelegationOptions) => {
+    seen.push(options);
+    const files = authorityDocuments(policy), plan = planPolicyChange(files.policy, files.bindings, command.input);
+    const verdict = delegationWithin(policy, human, plan.touched, options);
+    if (!verdict.ok) throw Object.assign(new Error('POLICY_DELEGATION_EXCEEDS'), { code: 'POLICY_DELEGATION_EXCEEDS', detail: `${verdict.ruleId}:${verdict.reason}` });
+    policy = resolvePolicyBindings({ ...plan.policy, revision: `a-${++writes}` }, files.bindings);
+    return { status: 'settled' } as never;
+  } };
+  const card = new RecoveryPolicyCard({ policy: { load: async () => policy }, administration, approve: async () => { throw Error('unexpected'); } },
+    { rollout: async () => view(), executable: NERVOUS_EXECUTABLE_ACTIONS }, async () => true);
+  const on = () => ({ stop: nervousStandingApproval(policy, human, { scopeId: 'scope', action: 'fence-attempt' }, 1) !== null,
+    next: recoveryContinuationApproval(policy, human, 'scope', 1) !== null, rule: nervousRulePromoted(policy, human, 'scope', 'container-gone', 1) });
+  expect(on()).toEqual({ stop: false, next: false, rule: false });
+  const shown = await card.inspect({ schemaVersion: 1, scopeId: 'scope' }, human);
+  expect(shown.rows.filter(row => row.available).every(row => row.managed === 'none' && row.effective === 'denied')).toBe(true);
+  const change = (kind: 'action' | 'rule', id: string, action: 'grant' | 'revoke' = 'grant') => card.change({ schemaVersion: 1, scopeId: 'scope', kind, id, action, expectedRevision: policy.revision }, human);
+  for (const [kind, id] of [['action', 'fence-attempt'], ['action', 'continue-new-attempt'], ['rule', 'container-gone@1']] as const) expect((await change(kind, id)).status).toBe('applied');
+  expect(on()).toEqual({ stop: true, next: true, rule: true });
+  expect(seen.every(options => options?.changeKind === 'policy-recovery')).toBe(true);
+  expect((await card.inspect({ schemaVersion: 1, scopeId: 'scope' }, human)).rows.find(row => row.id === 'fence-attempt')).toMatchObject({ managed: 'granted', effective: 'allowed' });
+  // Another row stays off: only the raised cell changed.
+  expect(nervousStandingApproval(policy, human, { scopeId: 'scope', action: 'stop-orphan' }, 1)).toBeNull();
+  expect((await change('action', 'fence-attempt', 'revoke')).status).toBe('applied');
+  expect(on()).toMatchObject({ stop: false });
+  expect(policy.grants.find(rule => rule.id === 'first-run-recovery-action-fence-attempt')).toMatchObject({ effect: 'require-approval' });
+  // The same raise outside a policy-recovery change (any other policy.administer path) is refused by the bound.
+  const files = authorityDocuments(policy), ask = policy.grants.find(rule => rule.id === 'first-run-recovery-action-fence-attempt')!;
+  expect(delegationWithin(policy, human, planPolicyChange(files.policy, files.bindings, { schemaVersion: 1, changes: [{ kind: 'grant.replace', grant: { ...ask, effect: 'allow' } }] }).touched))
+    .toMatchObject({ ok: false, reason: 'require-approval' });
+});
+
+it('why the card replaces the cell: an allow added beside the v16 require-approval rule leaves every reader off (require-approval is decided first)', () => {
+  const template = firstRunPolicyTemplate({ scopeId: 'scope', principal: { issuer: human.issuer, subject: human.subject }, ...FIRST_RUN_TOOL_NAMES });
+  const added = { id: 'added-allow', effect: 'allow', actions: ['apply'], scopes: ['scope'], principals: [{ issuer: human.issuer, subject: human.subject }],
+    resource: { kind: 'recovery-action', ids: ['fence-attempt'] } };
+  const both = resolvePolicyBindings({ ...template.policy, grants: [...template.policy.grants, added] }, template.bindings);
+  expect(evaluatePolicy(both, { principal: human, scopeId: 'scope', action: 'apply', resource: { kind: 'recovery-action', id: 'fence-attempt' } }))
+    .toMatchObject({ decision: 'require-approval', ruleId: 'first-run-recovery-action-fence-attempt' });
+  expect(nervousStandingApproval(both, human, { scopeId: 'scope', action: 'fence-attempt' }, 1)).toBeNull();
 });

@@ -692,7 +692,9 @@
       "dependencies": [
         "src/domain/core/primitives",
         "src/domain/core/principal",
-        "src/domain/core/approval"
+        "src/domain/core/approval",
+        "src/domain/core/audit",
+        "src/domain/core/recovery"
       ],
       "plan": "CONTRACT"
     },
@@ -1432,7 +1434,9 @@
         "src/engine/core/runs",
         "src/platform/core/bootstrap-state",
         "src/domain/core/audit",
-        "src/engine/core/audit"
+        "src/engine/core/audit",
+        "src/domain/core/recovery",
+        "src/engine/core/nervous"
       ],
       "plan": "INSTALLATION"
     },
