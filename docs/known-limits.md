@@ -183,7 +183,9 @@ Deckent is a pre-release. Nothing here is a promise of a date.
 ## Providers and subscriptions
 
 - **Claude subscription:** a Claude Code worker runs with your own Claude login. Since alpha.55 the Brain (the planner behind `/do`)
-  can also plan with your own Claude subscription through the isolated `claude-cli-subscription` connection; it runs only where
+  can also plan with your own Claude subscription through the isolated `claude-cli-subscription` connection. It signs in to its own
+  Deckent-owned login directory (`headless/logins/claude`, never backed up) with `deckent models login --connection
+  claude-cli-subscription`, not your `~/.claude`; `--config-dir` names another directory. It runs only where
   Deckent's bubblewrap sandbox works (Linux and WSL), see [core layers](#core-layers). Terminal chat with a Claude subscription is not
   supported for now. *Workaround:* use an Anthropic API key for terminal chat, and for `/do` planning where the sandbox is missing.
 - **Terminal chat needs a model connection and, for a paid API, a budget.** A first session cannot chat with a subscription alone;

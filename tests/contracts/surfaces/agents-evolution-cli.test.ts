@@ -158,3 +158,23 @@ it('the monitor names the catalog lines in the person\'s language', () => {
   expect(describeDiagnostic('catalog-aggregator-unsigned', 'tr').text).toContain('imza anahtarı yok');
   expect(describeDiagnostic('catalog-aggregator-unsigned', 'en').action).toContain('catalog-aggregator');
 });
+
+describe('define from a file naming a suggestion (REVISE 2742 R1)', () => {
+  it('a superseded (revoked producer key), expired, decided or shadow suggestion is refused before the card is shown; an open one reaches the define', async () => {
+    const f = await project(), calls: unknown[] = [], defineAgent = async (_root: string, input: unknown) => { calls.push(['defineAgent', input]); return { schemaVersion: 1, replayed: false, item: { agentId: 'auditor', revision: 2 } }; };
+    const args = ['agents', 'define', '--input', 'agent.json', '--suggestion', 'a'.repeat(12), '--scope', 'scope'];
+    card.interactive = true;
+    for (const [extra, code] of [[{ state: 'superseded', signerRevoked: true }, 'CATALOG_SUGGESTION_STALE'], [{ expiresAtMs: Date.now() - 1 }, 'CATALOG_SUGGESTION_STALE'],
+      [{ state: 'expired' }, 'CATALOG_SUGGESTION_STALE'], [{ state: 'decided' }, 'CATALOG_SUGGESTION_STALE'], [{ mode: 'shadow' }, 'CATALOG_SUGGESTION_SHADOW']] as const) {
+      card.answers = ['apply'];
+      await expect(agentsCommand(args, { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink, stderr: capture().sink, ...handlers(calls, [view({ kind: 'revise-agent', ...extra })]), defineAgent }))
+        .rejects.toMatchObject({ code });
+    }
+    expect(card.asked).toEqual([]);
+    expect(calls).toEqual([]);
+    card.answers = ['apply'];
+    expect(await agentsCommand(args, { root: f.root, env: f.env, stdin: tty(), stdout: capture().sink, stderr: capture().sink, ...handlers(calls, [view({ kind: 'revise-agent' })]), defineAgent })).not.toBe(1);
+    expect(card.asked).toHaveLength(1);
+    expect(calls).toMatchObject([['defineAgent', { agentId: 'auditor', expectedRevision: 1, fromSuggestion: d('a') }]]);
+  });
+});

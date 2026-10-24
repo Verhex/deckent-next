@@ -181,7 +181,9 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
 ## Sağlayıcılar ve abonelikler
 
 - **Claude aboneliği:** Claude Code işçisi kendi Claude girişinizle çalışır. alpha.55'ten beri Brain (`/do`'nun arkasındaki planlayıcı)
-  da yalıtılmış `claude-cli-subscription` bağlantısıyla kendi Claude aboneliğinizle planlayabilir; yalnız Deckent'in bubblewrap
+  da yalıtılmış `claude-cli-subscription` bağlantısıyla kendi Claude aboneliğinizle planlayabilir. Brain kendi, Deckent'e ait giriş
+  dizinine (`headless/logins/claude`, yedeğe girmez) `deckent models login --connection claude-cli-subscription` ile giriş yapar,
+  sizin `~/.claude` dizininiz kullanılmaz; `--config-dir` başka bir dizin seçer. Yalnız Deckent'in bubblewrap
   korumalı alanının çalıştığı yerde (Linux ve WSL) çalışır, bkz. [çekirdek katmanlar](#çekirdek-katmanlar). Claude aboneliğiyle terminal
   sohbeti şu an desteklenmiyor. *Yol:* terminal sohbeti için, korumalı alan yoksa `/do` planlaması için de bir Anthropic API anahtarı kullanın.
 - **Terminal sohbeti bir model bağlantısı ve ücretli API için bütçe ister.** İlk oturum yalnız abonelikle sohbet edemez; kapsam

@@ -49,9 +49,14 @@ export const catalogSuggestionSignerRevoked = (state: CatalogSuggestionState, pr
  * reads inside the write transaction, so a revoke between the two refuses too. The aggregator superseding its own older suggestion consumes nothing.
  */
 export function requireCatalogSuggestionDecidable({ record, state }: StoredCatalogSuggestion, atMs: number, producerKey: SignerKey | null): void {
-  if (record.mode !== 'on') throw new AgentCatalogError('CATALOG_SUGGESTION_SHADOW');
-  if (state.state !== 'open' || atMs >= record.expiresAtMs || catalogSuggestionSignerRevoked(state, producerKey)) throw new AgentCatalogError('CATALOG_SUGGESTION_STALE');
+  const refused = refusal(record.mode, state.state, atMs >= record.expiresAtMs, catalogSuggestionSignerRevoked(state, producerKey));
+  if (refused) throw new AgentCatalogError(refused);
 }
+/** The same check on a reader's view (its state already reads `superseded` or `expired`), as the refusal code or `null`: a card refuses before it is shown. */
+export const catalogSuggestionViewRefusal = (view: Pick<CatalogSuggestionView, 'mode' | 'state' | 'expiresAtMs' | 'signerRevoked'>, atMs: number) =>
+  refusal(view.mode, view.state, atMs >= view.expiresAtMs, view.signerRevoked);
+const refusal = (mode: CatalogSuggestion['mode'], state: string, expired: boolean, revoked: boolean) =>
+  mode !== 'on' ? 'CATALOG_SUGGESTION_SHADOW' as const : state !== 'open' || expired || revoked ? 'CATALOG_SUGGESTION_STALE' as const : null;
 /** The producer key of an open suggestion as the given store reads it (`null`: unsigned or no such key). */
 export const catalogSuggestionProducerKey = async (store: { signer(scopeId: string, keyId: string): Promise<SignerKey | null> }, { state }: StoredCatalogSuggestion) =>
   state.signed ? store.signer(state.scopeId, state.signed.keyId) : null;
