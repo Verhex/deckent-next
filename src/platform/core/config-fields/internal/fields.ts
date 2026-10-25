@@ -167,15 +167,15 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
   resourceObservation: field('config.field.resourceObservation', { state: 'bound', consumers: ['src/composition/core/resource-observation'] }, 'restart', RESOURCE_OBSERVATION_SETTINGS),
   toolchains: field('config.field.toolchains', { state: 'bound', consumers: ['src/composition/core/toolchains'] }, 'restart', z.object({ currency: z.object({
     mode: z.enum(['off', 'report']).default('report'),
-    registryEndpoint: z.string().url().refine(value => { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash; }, 'WORKER_IMAGE_SOURCE_INSECURE').default('https://registry.npmjs.org'),
+    registryEndpoint: z.string().url().refine(value => { if (!URL.canParse(value)) return true; /* .url() already reported it */ const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash; }, 'WORKER_IMAGE_SOURCE_INSECURE').default('https://registry.npmjs.org'),
     timeoutMs: z.number().int().positive().max(2_147_483_647).default(5000),
     responseMaxBytes: z.number().int().positive().safe().default(65536),
   }).strict().default({}), image: z.object({
     providers: z.array(z.string().regex(/^[a-z0-9]{1,32}$/u)).default([]),
     baseRefreshMs: z.number().int().positive().max(2_147_483_647).default(604_800_000),
     sources: z.object({ baseImage: z.string().regex(/^[a-z0-9][\w./:@-]{0,254}$/u).nullable().default(null),
-      proxy: z.string().url().refine(value => { const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash; }, 'WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED').nullable().default(null),
-      installerUrls: z.record(z.string().url().refine(value => { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash; }, 'WORKER_IMAGE_SOURCE_INSECURE')).default({}),
+      proxy: z.string().url().refine(value => { if (!URL.canParse(value)) return true; /* .url() already reported it */ const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash; }, 'WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED').nullable().default(null),
+      installerUrls: z.record(z.string().url().refine(value => { if (!URL.canParse(value)) return true; /* .url() already reported it */ const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash; }, 'WORKER_IMAGE_SOURCE_INSECURE')).default({}),
     }).strict().default({}),
   }).strict().default({}), update: z.object({
     mode: z.enum(['off', 'propose', 'auto']).default('auto'),

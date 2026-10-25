@@ -307,6 +307,15 @@
       "responseMaxBytes": 65536,
       "timeoutMs": 5000
     },
+    "image": {
+      "baseRefreshMs": 604800000,
+      "providers": [],
+      "sources": {
+        "baseImage": null,
+        "installerUrls": {},
+        "proxy": null
+      }
+    },
     "update": {
       "atStartup": true,
       "buildTimeoutMs": 1800000,
