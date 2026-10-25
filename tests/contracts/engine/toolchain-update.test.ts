@@ -18,7 +18,7 @@ it('advances the version counter with the planning day and inserts the newest hi
   // Lineage: after r3-20260922 the next revision is r4 on the planning day, never a second r3.
   expect(nextImageVersion('r3-20260922', '2026-09-30T11:00:00.000Z')).toBe('r4-20260930');
   expect(() => nextImageVersion('v2', '2026-09-23T08:00:00.000Z')).toThrow('TOOLCHAIN_RECIPE_INVALID');
-  const dockerfile = await readFile(new URL('../../../assets/worker-image/Dockerfile', import.meta.url), 'utf8');
+  const dockerfile = await readFile(new URL('../../../assets/worker-image/history.log', import.meta.url), 'utf8');
   const edited = insertHistoryLine(dockerfile, '# version r5-20261003 | 2026-10-03 | base node:24-trixie-slim | supersedes r4-20260930 | test');
   const lines = edited.split('\n').filter(line => /^# version r/.test(line));
   expect(lines[0]).toMatch(/^# version r5-20261003/); expect(lines[1]).toMatch(/^# version r4-20260930/); expect(lines[2]).toMatch(/^# version r3-20260922/);
@@ -61,6 +61,10 @@ it('derives exact profile changes from a build receipt and refuses mismatched or
     profiles: [{ profile: { id: 'codex-a', version: 1 }, provider: 'codex', changes: { cliVersion: { from: 'codex-cli 0.155.1', to: 'codex-cli 0.156.0' }, imageId: { from: 'sha256:' + 'a'.repeat(64), to: 'sha256:' + 'b'.repeat(64) } } }] });
   expect(() => proposeProfileRevisions(plan, { ...receipt, imageVersion: 'r4-20260923' }, '2026-09-23T08:30:00.000Z')).toThrow('TOOLCHAIN_RECEIPT_INVALID');
   expect(() => proposeProfileRevisions(plan, { ...receipt, manifest: { providers: [] } }, '2026-09-23T08:30:00.000Z')).toThrow('TOOLCHAIN_RECEIPT_INVALID');
+  const images = [{ imageId: 'sha256:' + 'c'.repeat(64), manifest: { providers: [{ id: 'codex', version: 'codex-cli 0.156.0' }] } }];
+  const layered = proposeProfileRevisions(plan, { ...receipt, schemaVersion: 3, images }, '2026-09-23T08:30:00.000Z');
+  expect(layered.profiles[0]!.changes.imageId.to).toBe('sha256:' + 'c'.repeat(64));
+  expect(() => proposeProfileRevisions(plan, { ...receipt, schemaVersion: 3, images: [...images, ...images] }, '2026-09-23T08:30:00.000Z')).toThrow('TOOLCHAIN_RECEIPT_INVALID');
   const noChange = planToolchainUpdate({ report: report('0.155.1'), recipe, plannedAt: '2026-09-23T08:00:00.000Z', affectedProfiles: affected });
   expect(() => proposeProfileRevisions(noChange, receipt, '2026-09-23T08:30:00.000Z')).toThrow('TOOLCHAIN_RECEIPT_INVALID');
 });

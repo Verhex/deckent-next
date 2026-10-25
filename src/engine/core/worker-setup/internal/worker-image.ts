@@ -31,8 +31,9 @@ export function planFirstWorkerImage(input: Readonly<{ recipe: unknown; dockerfi
   const recipe = recipeOf(input.recipe), current = recipe.imageVersion;
   if (!input.held || counter(input.held) < counter(current)) return { imageVersion: current, recipe, dockerfile: input.dockerfile };
   const imageVersion = nextImageVersion(current, input.plannedAt, input.held);
-  const line = `# version ${imageVersion} | ${input.plannedAt.slice(0, 10)} | base ${recipe.baseImage} | supersedes ${current} | first image of this installation (deckent init); counter past daemon-held ${input.held}`;
-  return { imageVersion, recipe: { ...recipe, imageVersion, previousVersion: current }, dockerfile: insertHistoryLine(input.dockerfile, line) };
+  const base = recipe.schemaVersion === 3 ? recipe.base.image : recipe.baseImage;
+  const line = `# version ${imageVersion} | ${input.plannedAt.slice(0, 10)} | base ${base} | supersedes ${current} | first image of this installation (deckent init); counter past daemon-held ${input.held}`;
+  return { imageVersion, recipe: recipe.schemaVersion === 3 ? recipe : { ...recipe, imageVersion, previousVersion: current }, dockerfile: insertHistoryLine(input.dockerfile, line) };
 }
 
 /**

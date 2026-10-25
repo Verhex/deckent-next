@@ -4,7 +4,7 @@
     "src/platform/core/common/internal/constants.ts": "68e0b420d5b07cbf302b05b7e9149640e6f4fb1792b98bef9a29717ec2880b45",
     "src/platform/core/config-fields/internal/fields-models.ts": "9d347347153aa5af2a808d8e2dd7d3ff064db34c2911deee6eba63fa58dbf165",
     "src/platform/core/config-fields/internal/fields-setup.ts": "bfb8d883744c1586bcc7e11de80586f3fcf892da42963e3ac292ecb6ea7cd768",
-    "src/platform/core/config-fields/internal/fields.ts": "d4c5d10994533c2af6abbd9477ed1887a130f01b4539bb111911937c6327cca9",
+    "src/platform/core/config-fields/internal/fields.ts": "8bd304a6176d3190177731be6e88b9e911eb385bbf0bd68bb1a9d2c12bdc739e",
     "src/platform/core/i18n/internal/types.ts": "d01f84fb14c660c1af38f89c906b162d85c7f94ef837a25ec5f04daaad0ebbe9"
   },
   "fields": {

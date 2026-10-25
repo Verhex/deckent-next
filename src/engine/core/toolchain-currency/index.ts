@@ -8,3 +8,6 @@ export type { ToolchainCatalog, ToolchainMechanism, AdmittedToolchain, Published
 export { admittedToolchains, affectedToolchainProfiles, type ToolchainAdmissionSource } from './internal/registry.js';
 export { toolchainRefreshStateSchema, refreshTriggerAllowed, refreshInProgress, refreshStatus, reviseRegistryForProposal, toolchainUpdateApplies, refreshIntervalMs, refreshAuditName, unverifiedReason, failedContextsToPrune, selectWorkerLineage, REGISTRY_WRITE_ATTEMPTS, registryLayerHold } from './internal/refresh.js';
 export type { WorkerLineage, ToolchainRefreshState, ToolchainRefreshStatus, ToolchainRefreshTrigger, ToolchainRefreshPolicy, RegistryRevision } from './internal/refresh.js';
+
+export { layeredWorkerRecipeSchema, workerSourceUrl, planWorkerImage } from './internal/image-plan.js';
+export type { LayeredWorkerRecipe, WorkerBuildPlan, WorkerInstallInput, WorkerImageSources } from './internal/image-plan.js';

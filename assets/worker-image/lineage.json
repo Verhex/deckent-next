@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "recipes": [
+    {
+      "sha256": "bb537affb0f515f79503216728490ed6ad459d09cee01dd07a06f3b112ed24a3",
+      "version": "r4-20260930",
+      "providers": [
+        "codex",
+        "claude",
+        "cursor"
+      ]
+    }
+  ]
+}

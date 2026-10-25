@@ -1,5 +1,6 @@
 // deckent build: tsc → copy JSON/text assets into dist → executable bits on bins → native (when present).
 // Single entry point for local and CI builds. No staging/quarantine machinery: dist is disposable.
+import { workerLineage } from './build-worker-lineage.mjs';
 import { execFileSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -10,6 +11,7 @@ import { buildTypeScript } from './build-typescript.mjs';
 import { writeBuildIdentity } from './build-identity.mjs';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
+workerLineage(ROOT);
 const SRC = join(ROOT, 'src');
 const DIST = join(ROOT, 'dist');
 const ASSET_EXTENSIONS = new Set(['.json', '.md', '.template', '.sh']);

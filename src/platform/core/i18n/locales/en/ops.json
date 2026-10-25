@@ -505,5 +505,11 @@
   "doctor.secretStore.globalRootUnsafe": "SECRET_STORE_UNSAFE: installation secret directory {path} has mode {mode}. Make this directory private (chmod 700); Deckent did not change its permissions.",
   "doctor.secretStore.leftoverCode": "Secret-store inspection refused: {backend} ({code}).",
   "tui.provider.result.grantMissing": "Key stored; project access unavailable: {kind}",
-  "tui.provider.action.grant": "Use the stored key in this project"
+  "tui.provider.action.grant": "Use the stored key in this project",
+  "error.WORKER_PLAN_INVALID": "The worker image plan is invalid. Plan the build again.",
+  "error.WORKER_IMAGE_VERSIONS_UNRESOLVABLE": "Worker CLI versions could not be resolved. Configure the image sources or import a verified local image; latest will not be assumed.",
+  "error.WORKER_IMAGE_INSTALLER_CHANGED": "The installer changed after planning. Review a new plan before building.",
+  "error.WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED": "Credentials in image source URLs are refused. Use a BuildKit secret mount for authenticated mirrors.",
+  "error.WORKER_IMAGE_SOURCE_INSECURE": "Worker registry and installer sources require HTTPS. Review the complete source URL.",
+  "error.WORKER_LINEAGE_INVALID": "The packaged worker recipe lineage is invalid. Use a verified Deckent package."
 }

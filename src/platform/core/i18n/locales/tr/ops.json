@@ -505,5 +505,11 @@
   "doctor.secretStore.globalRootUnsafe": "SECRET_STORE_UNSAFE: kurulumun sır dizini {path}, izinleri {mode}. Dizini özel yapın (chmod 700); Deckent izinleri değiştirmedi.",
   "doctor.secretStore.leftoverCode": "Sır deposu denetimi reddedildi: {backend} ({code}).",
   "tui.provider.result.grantMissing": "Anahtar saklandı; proje izni yok: {kind}",
-  "tui.provider.action.grant": "Saklanan anahtarı bu projede kullan"
+  "tui.provider.action.grant": "Saklanan anahtarı bu projede kullan",
+  "error.WORKER_PLAN_INVALID": "İşçi imajı planı geçersiz. Derlemeyi yeniden planlayın.",
+  "error.WORKER_IMAGE_VERSIONS_UNRESOLVABLE": "İşçi CLI sürümleri çözülemedi. İmaj kaynaklarını ayarlayın veya doğrulanmış yerel imajı içeri aktarın; latest varsayılmaz.",
+  "error.WORKER_IMAGE_INSTALLER_CHANGED": "Kurulum betiği planlamadan sonra değişti. Derlemeden önce yeni planı inceleyin.",
+  "error.WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED": "İmaj kaynağı URL’lerindeki kimlik bilgileri reddedildi. Kimlik doğrulamalı aynalar için BuildKit sır bağlaması kullanın.",
+  "error.WORKER_IMAGE_SOURCE_INSECURE": "İşçi registry ve kurulum betiği kaynakları HTTPS gerektirir. Kaynağın tam URL’sini inceleyin.",
+  "error.WORKER_LINEAGE_INVALID": "Paketlenmiş işçi tarifinin soy kaydı geçersiz. Doğrulanmış bir Deckent paketi kullanın."
 }

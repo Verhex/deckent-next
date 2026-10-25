@@ -4,7 +4,25 @@ import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 // @ts-expect-error Build tooling is native JavaScript, not a product TypeScript module.
 import { syncPackageMetadata, metadataPath } from '../../../scripts/package-metadata.mjs';
+// @ts-expect-error Build tooling is native JavaScript, not a product TypeScript module.
+import { workerLineage } from '../../../scripts/build-worker-lineage.mjs';
 const roots: string[] = [];
+it('refuses packaging a changed recipe without an appended lineage entry and a matching lock', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-worker-lineage-')); roots.push(root);
+  const folder = join(root, 'assets/worker-image'); await mkdir(folder, { recursive: true });
+  const recipe = { imageVersion: 'r4-20260930', providers: [{ id: 'fixture' }] };
+  await writeFile(join(folder, 'recipe.json'), JSON.stringify(recipe));
+  workerLineage(root, true);
+  const before = await readFile(join(folder, 'lineage.json'), 'utf8');
+  expect(workerLineage(root).recipes).toHaveLength(1);
+  await writeFile(join(folder, 'recipe.json'), JSON.stringify({ ...recipe, imageVersion: 'r5-20261025' }));
+  expect(() => workerLineage(root)).toThrow('WORKER_LINEAGE_INVALID');
+  workerLineage(root, true);
+  expect(workerLineage(root).recipes).toHaveLength(2);
+  expect((await readFile(join(folder, 'lineage.json'), 'utf8'))).toContain(JSON.parse(before).recipes[0].sha256);
+  await writeFile(join(folder, 'lineage.lock.json'), JSON.stringify({ sha256: '0'.repeat(64) }));
+  expect(() => workerLineage(root)).toThrow('WORKER_LINEAGE_INVALID');
+});
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 describe('package identity build projection', () => {
   async function fixture() {

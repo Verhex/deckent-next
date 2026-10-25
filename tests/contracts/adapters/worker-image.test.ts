@@ -3,12 +3,53 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { readWorkerImageHeldVersion, prepareWorkerImageBuildContext, readWorkerImageSources, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
-import { parseVersionHistory, validateRecipe } from '../../../assets/worker-image/history.mjs';
+import { readWorkerImageHeldVersion, prepareWorkerImageBuildContext, readWorkerImageSources, resolveWorkerBuildPlan, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { layeredWorkerRecipeSchema } from '#engine/index.js';
+import { parseVersionHistory, validateRecipe, assertVersionAdvances, heldVersion, adoptionProvenance } from '../../../assets/worker-image/history.mjs';
+import { baseDockerfile, imageDockerfile } from '../../../assets/worker-image/layers.mjs';
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const packageRoot = process.cwd();
+
+it('v3 resolves at plan time from the install registry, isolates CLI cache inputs, guards lineage and refuses unknown or credentialed sources', async () => {
+  const recipe = layeredWorkerRecipeSchema.parse((await readWorkerImageSources(packageRoot)).recipe);
+  const endpoints: string[] = [];
+  let version = '0.156.0';
+  const input = { selected: ['codex', 'claude'], npmRegistry: 'https://mirror.example.invalid/npm', plannedAt: '2026-10-25T12:00:00.000Z',
+    lookup: async (request: { endpoint: string; package: string }) => { endpoints.push(request.endpoint); return { version: request.package === '@openai/codex' ? version : '2.1.278', source: 'fixture', observedAt: '2026-10-25T12:00:00.000Z' }; } };
+  const first = await resolveWorkerBuildPlan(recipe, 'r32-20261025', 123456, input);
+  const meta = { recipeSha256: 'a'.repeat(64), sourceRevision: 'fixture' };
+  version = '0.157.0';
+  const next = await resolveWorkerBuildPlan(recipe, 'r33-20261025', 123456, { ...input, previousRefreshKey: first.refreshKey });
+  const run = (plan: typeof first, id: string) => imageDockerfile(recipe, plan, [id], meta).split('\n').find((line: string) => line.startsWith('RUN '));
+  expect(run(first, 'claude')).toBe(run(next, 'claude'));
+  expect(run(first, 'codex')).not.toBe(run(next, 'codex'));
+  expect(run(first, 'codex')).toContain('0.156.0');
+  expect(run(first, 'codex')).toContain('https://mirror.example.invalid/npm');
+  expect(endpoints).toEqual(Array(4).fill(input.npmRegistry));
+  expect(baseDockerfile(recipe, first)).toBe(baseDockerfile(recipe, next));
+  expect(first.base.pull).toBe(true); expect(next.base.pull).toBe(false);
+  expect(imageDockerfile(recipe, first, ['codex'], meta)).not.toMatch(/latest|COPY.*history|COPY.*recipe/u);
+  expect(imageDockerfile(recipe, first, ['codex'], { ...meta, secret: true })).toContain('RUN --mount=type=secret,id=worker-npmrc,required=true');
+  expect(heldVersion(['r31-20261024', 'r32-20261025-claude', 'latest'])).toBe('r32-20261025');
+  expect(() => assertVersionAdvances('r32-20261025', ['r32-20261025-claude'])).toThrow('WORKER_VERSION_COUNTER_TAKEN');
+  expect(() => assertVersionAdvances('r33-20261025', ['r32-20261025-claude'])).not.toThrow();
+  const lineage = { recipes: [{ sha256: 'a'.repeat(64), version: 'r32-20261025', providers: ['codex'] }] };
+  const labels = { 'dev.deckent.worker.recipe.sha256': 'a'.repeat(64), 'org.opencontainers.image.version': 'r32-20261025', 'dev.deckent.worker.provider': 'codex' };
+  expect(adoptionProvenance(labels, lineage, ['codex'])).toBe('adopted-label-matched');
+  expect(adoptionProvenance({ ...labels, 'org.opencontainers.image.version': 'r33-20261025' }, lineage, ['codex'])).toBe('adopted-lineage-unknown');
+  expect(adoptionProvenance({ ...labels, 'dev.deckent.worker.recipe.sha256': 'b'.repeat(64) }, lineage, ['codex'])).toBe('adopted-lineage-unknown');
+  expect(adoptionProvenance({ ...labels, 'dev.deckent.worker.provider': 'codex,codex' }, lineage, ['codex'])).toBe('adopted-lineage-unknown');
+  await expect(resolveWorkerBuildPlan(recipe, 'r32-20261025', 123456, { ...input, npmRegistry: 'https://user:fixture@mirror.example.invalid' }))
+    .rejects.toMatchObject({ code: 'WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED' });
+  await expect(resolveWorkerBuildPlan(recipe, 'r32-20261025', 123456, { ...input, npmRegistry: 'http://mirror.example.invalid' }))
+    .rejects.toMatchObject({ code: 'WORKER_IMAGE_SOURCE_INSECURE' });
+  await expect(resolveWorkerBuildPlan(recipe, 'r32-20261025', 123456, { ...input, lookup: async () => { throw new Error('offline'); } }))
+    .rejects.toMatchObject({ code: 'WORKER_IMAGE_VERSIONS_UNRESOLVABLE' });
+  await expect(resolveWorkerBuildPlan(recipe, 'r32-20261025', 123456, { ...input, lookup: async () => ({ version: 'latest', source: 'fixture', observedAt: input.plannedAt }) }))
+    .rejects.toMatchObject({ code: 'WORKER_IMAGE_VERSIONS_UNRESOLVABLE' });
+});
 
 describe.skipIf(process.platform !== 'linux')('worker image build context and bounded build run', () => {
   it('reads the highest revision the daemon holds through the installed builder before any effect, comparing numeric counters and ignoring unrelated tags', async context => {
@@ -20,6 +61,7 @@ describe.skipIf(process.platform !== 'linux')('worker image build context and bo
 printf '%s\\n' "$*" >> ${shellQuote(log)}
 case "$*" in
   'context inspect --format {{json .Endpoints.docker.Host}}') printf '%s\\n' '"unix:///fixture-daemon"' ;;
+  '--host unix:///fixture-daemon image ls deckent/worker-base --format {{.Tag}}') exit 0 ;;
   '--host unix:///fixture-daemon image ls deckent/worker --format {{.Tag}}')
     ${fail ? 'exit 1' : "printf '%s\\n' " + shellQuote(tags)} ;;
   *) exit 99 ;;
@@ -40,7 +82,8 @@ esac
     await expect(readWorkerImageHeldVersion(input)).resolves.toBe('r4-20260930');
     let calls = (await readFile(log, 'utf8')).trim().split('\n');
     expect(calls).toEqual(['context inspect --format {{json .Endpoints.docker.Host}}',
-      '--host unix:///fixture-daemon image ls deckent/worker --format {{.Tag}}']);
+      '--host unix:///fixture-daemon image ls deckent/worker --format {{.Tag}}',
+      '--host unix:///fixture-daemon image ls deckent/worker-base --format {{.Tag}}']);
     await fakeDocker('r9-20260101\nr10-20251231\nr4-20260930');
     await expect(readWorkerImageHeldVersion(input)).resolves.toBe('r10-20251231');
     await fakeDocker('latest');
@@ -48,7 +91,7 @@ esac
     await fakeDocker('', true);
     await expect(readWorkerImageHeldVersion(input)).rejects.toMatchObject({ code: 'WORKER_IMAGE_COMMAND_FAILED' });
     calls = (await readFile(log, 'utf8')).trim().split('\n');
-    expect(calls).toHaveLength(8);
+    expect(calls).toHaveLength(11);
     expect(calls.every(args => args.startsWith('context inspect ') || args.startsWith('--host unix:///fixture-daemon image ls '))).toBe(true);
     expect((await readdir(parent)).sort()).toEqual(['bin', 'docker-calls.jsonl']);
   });
@@ -82,12 +125,14 @@ printf '%s\\n' "$*" >> '${log}'
 case "$*" in
   'context inspect --format {{json .Endpoints.docker.Host}}') printf '%s\\n' '"unix:///fixture-daemon"' ;;
   '--host unix:///fixture-daemon info --format {{.ID}}') printf '%s\\n' 'fixture-daemon-id' ;;
-  '--host unix:///fixture-daemon image inspect deckent/worker:'*' --format {{.Id}}') printf '%s\\n' 'sha256:${'c'.repeat(64)}' ;;
+  '--host unix:///fixture-daemon image inspect deckent/worker-base:'*' --format {{.Id}}') printf '%s\\n' 'sha256:${'c'.repeat(64)}' ;;
   *) exit 99 ;;
 esac
 `, { mode: 0o700 });
     if ((spawnSync(join(bin, 'docker'), ['probe'], { encoding: 'utf8' }).error as NodeJS.ErrnoException | undefined)?.code === 'EACCES') context.skip('TEST_TMPDIR_NOEXEC: the fake docker cannot run here');
-    const builder = (args: string[]) => spawnSync(process.execPath, [join(packageRoot, 'assets/worker-image/build.mjs'), ...args], { encoding: 'utf8', env: { PATH: bin, HOME: parent } });
+    const sources = await readWorkerImageSources(packageRoot);
+    const prepared = await prepareWorkerImageBuildContext({ packageRoot, parent: join(parent, 'builds'), imageVersion: 'r4-20260930', dockerfile: sources.dockerfile, recipe: sources.recipe, plan: { schemaVersion: 1, imageVersion: 'r4-20260930', previousVersion: 'r3-20260922', base: { image: 'node:24-trixie-slim', pull: false }, buildTimeoutMs: 5000, images: [['codex']], providers: { codex: { kind: 'npm', package: '@openai/codex', version: '0.156.0' } }, npmRegistry: 'https://registry.npmjs.org', proxy: null, refreshKey: '1' } });
+    const builder = (args: string[]) => spawnSync(process.execPath, [join(prepared.context, 'build.mjs'), ...args], { encoding: 'utf8', env: { PATH: bin, HOME: parent } });
     for (const [args, code] of [[[join(parent, 'receipt.json')], 'WORKER_VERSION_TAKEN'], [['relative.json'], 'WORKER_RECEIPT_INVALID']] as const) {
       const result = builder([...args]);
       expect(result.status).toBe(1);
@@ -95,20 +140,20 @@ esac
       expect(result.stderr).not.toMatch(/\n\s+at |build\.mjs:\d+/);
     }
     expect((await readFile(log, 'utf8')).split('\n').some(line => / (build|tag|rmi|run) /.test(line))).toBe(false);
-    expect((await readdir(parent)).sort()).toEqual(['bin', 'docker-calls.log']);
+    expect((await readdir(parent)).sort()).toEqual(['bin', 'builds', 'docker-calls.log']);
   });
   it('copies the shipped builder into a private exclusive context with the edited Dockerfile and recipe, leaving package bytes untouched', async () => {
     const sources = await readWorkerImageSources(packageRoot);
-    const before = await readFile(join(packageRoot, 'assets/worker-image/Dockerfile'), 'utf8');
+    const before = await readFile(join(packageRoot, 'assets/worker-image/history.log'), 'utf8');
     const recipe = { ...(sources.recipe as Record<string, unknown>), imageVersion: 'r99-20260923', previousVersion: (sources.recipe as { imageVersion: string }).imageVersion };
     const dockerfile = sources.dockerfile.replace(/^# version r/m, `# version r99-20260923 | 2026-09-23 | base node:24-trixie-slim | supersedes ${(sources.recipe as { imageVersion: string }).imageVersion} | test\n# version r`);
     const parent = await mkdtemp(join(tmpdir(), 'deckent-worker-image-')); roots.push(parent);
     const prepared = await prepareWorkerImageBuildContext({ packageRoot, parent: join(parent, 'builds'), imageVersion: 'r99-20260923', dockerfile, recipe });
-    expect((await readdir(prepared.context)).sort()).toEqual(['Dockerfile', 'build.mjs', 'history.mjs', 'inspect.mjs', 'install.mjs', 'recipe.json']);
+    expect((await readdir(prepared.context)).sort()).toEqual(['build.mjs', 'history.log', 'history.mjs', 'inspect.mjs', 'install.mjs', 'layers.mjs', 'lineage.json', 'lineage.lock.json', 'recipe.json']);
     expect((await stat(prepared.context)).mode & 0o077).toBe(0);
     const copied = validateRecipe(JSON.parse(await readFile(join(prepared.context, 'recipe.json'), 'utf8')));
-    expect(parseVersionHistory(await readFile(join(prepared.context, 'Dockerfile'), 'utf8'), copied)[0]).toMatchObject({ id: 'r99-20260923', supersedes: copied.previousVersion });
-    expect(await readFile(join(packageRoot, 'assets/worker-image/Dockerfile'), 'utf8')).toBe(before);
+    expect(parseVersionHistory(await readFile(join(prepared.context, 'history.log'), 'utf8'), copied)[0]).toMatchObject({ id: 'r99-20260923', supersedes: copied.previousVersion });
+    expect(await readFile(join(packageRoot, 'assets/worker-image/history.log'), 'utf8')).toBe(before);
     await expect(prepareWorkerImageBuildContext({ packageRoot, parent: join(parent, 'builds'), imageVersion: 'r99-20260923', dockerfile, recipe })).rejects.toMatchObject({ code: 'WORKER_IMAGE_CONTEXT_EXISTS' });
     await expect(prepareWorkerImageBuildContext({ packageRoot: join(parent, 'missing'), parent: join(parent, 'builds'), imageVersion: 'r98-20260923', dockerfile, recipe })).rejects.toMatchObject({ code: 'WORKER_IMAGE_SOURCE_INVALID' });
   });

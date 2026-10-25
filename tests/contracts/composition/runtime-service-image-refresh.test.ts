@@ -21,7 +21,7 @@ async function installation(update: Record<string, unknown>, docker = true) {
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 1, claimTtlMs: 10 }, cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 },
     service: { inputMaxBytes: 4096, responseMaxBytes: 4096, maxConnections: 2, maxConcurrentRequests: 2, maxConcurrentExecutions: 1, headerTimeoutMs: 100, shutdownGraceMs: 100 },
     execution: { docker: { executable: 'docker', imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 2147483648, pids: 128, cpus: 2, logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 } },
-    toolchains: { currency: { registryEndpoint: 'http://127.0.0.1:1' }, update },
+    toolchains: { currency: { registryEndpoint: 'https://registry.example.invalid' }, update },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'r', profiles: [profile],
       kinds: [{ kind: 'codex-pinned', profile: { id: 'codex-pinned', version: 1 } }], evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } } }));
   if (!docker) { // the same installation without Docker execution (and so without the Docker-bound registry)
@@ -41,8 +41,9 @@ async function installation(update: Record<string, unknown>, docker = true) {
     // The real runner ends the builder process on the signal; this one takes a while to do so, like a process that exits on SIGTERM.
     if (honorStop) await new Promise<never>((_, reject) => signal?.addEventListener('abort', () => { setTimeout(() => reject(Object.assign(new Error('stopped'), { code: 'PROCESS_ABORTED' })), 300); }, { once: true }));
     await gate;
-    const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { imageVersion: string; repository: string };
-    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + 'b'.repeat(64), imageVersion: recipe.imageVersion, tag: `${recipe.repository}:${recipe.imageVersion}`,
+    const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { repository: string };
+    const plan = JSON.parse(await readFile(join(command.cwd, 'plan.json'), 'utf8')) as { imageVersion: string; previousVersion: string; base: { image: string } };
+    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + 'b'.repeat(64), imageVersion: plan.imageVersion, tag: `${recipe.repository}:${plan.imageVersion}`,
       manifest: { providers: [{ id: 'codex', version: 'codex-cli 0.156.0' }, { id: 'claude', version: '2.1.278 (Claude Code)' }, { id: 'cursor', version: '2026.09.18-9a7762b' }] } }));
     return ok(command.requestId);
   };

@@ -35,7 +35,7 @@ async function fixture(update: Record<string, unknown> = {}) {
   const path = join(root, '.deckent/config.json'); await mkdir(join(root, '.deckent'), { recursive: true });
   const existing = (() => { try { return {}; } catch { return {}; } })();
   await writeFile(path, JSON.stringify({ ...existing, execution: { docker: { executable: 'docker', imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 2147483648, pids: 128, cpus: 2, logMaxSizeKiB: 1024, logMaxFiles: 2, tmpBytes: 1048576, deadlineMs: 60000, controlTimeoutMs: 5000, outputBytes: 65536 }, git: { gitExecutable: 'git', timeoutMs: 5000 } },
-    service: { identity: { scopeId: 'installation', serviceId: 'refresh-service' } }, toolchains: { currency: { registryEndpoint: 'http://127.0.0.1:1' }, update },
+    service: { identity: { scopeId: 'installation', serviceId: 'refresh-service' } }, toolchains: { currency: { registryEndpoint: 'https://registry.example.invalid' }, update },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'r', profiles,
       kinds: profiles.map(profile => ({ kind: profile.id, profile: { id: profile.id, version: profile.version } })), evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } } }));
   const latest: Record<string, string> = { '@openai/codex': '0.156.0', '@anthropic-ai/claude-code': '2.1.278' };
@@ -50,11 +50,12 @@ async function fixture(update: Record<string, unknown> = {}) {
     if (state.gate) await Promise.race([state.gate, new Promise<void>(resolve => signal?.addEventListener('abort', () => resolve(), { once: true }))]);
     if (signal?.aborted) return { ...ok(command.requestId), reason: 'cancelled' as const, exitCode: null, started: true };
     if (state.failFirst > 0) { state.failFirst--; return { ...ok(command.requestId), exitCode: 1, stderrBase64: Buffer.from('Error: WORKER_IMAGE_BUILD_FAILED fixture').toString('base64') }; }
-    const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { imageVersion: string; repository: string };
-    (await historyOwner()).parseVersionHistory(await readFile(join(command.cwd, 'Dockerfile'), 'utf8'), recipe); // the context's own history chain must validate
-    (await historyOwner()).assertVersionAdvances(recipe.imageVersion, state.tags); // the builder's own guard before it tags
-    state.tags.push(recipe.imageVersion);
-    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + (state.fill ?? (state.builds % 2 ? 'b' : 'c')).repeat(64), imageVersion: recipe.imageVersion, tag: `${recipe.repository}:${recipe.imageVersion}`,
+    const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { repository: string };
+    const plan = JSON.parse(await readFile(join(command.cwd, 'plan.json'), 'utf8')) as { imageVersion: string; previousVersion: string; base: { image: string } };
+    (await historyOwner()).parseVersionHistory(await readFile(join(command.cwd, 'history.log'), 'utf8'), plan); // the context's own history chain must validate
+    (await historyOwner()).assertVersionAdvances(plan.imageVersion, state.tags); // the builder's own guard before it tags
+    state.tags.push(plan.imageVersion);
+    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + (state.fill ?? (state.builds % 2 ? 'b' : 'c')).repeat(64), imageVersion: plan.imageVersion, tag: `${recipe.repository}:${plan.imageVersion}`,
       manifest: { providers: [{ id: 'codex', version: `codex-cli ${latest['@openai/codex']}` }, { id: 'claude', version: '2.1.278 (Claude Code)' }, { id: 'cursor', version: '2026.09.18-9a7762b' }] } }));
     return ok(command.requestId);
   };
@@ -231,7 +232,7 @@ describe('version lineage across refreshes (Astra 2371 P1-1)', () => {
     expect(advanced.outcome).toBe('current'); expect(advanced.event!.imageVersion).toBe('r13-20261011');
     expect(f.state.builds).toBe(4);
     const builds = join(productResourcePath((await loadConfig(f.root, f.options)).productLayout, 'workspaces'), 'toolchains/builds');
-    const lineage = JSON.parse(await readFile(join(builds, 'r13-20261011/recipe.json'), 'utf8'));
+    const lineage = JSON.parse(await readFile(join(builds, 'r13-20261011/plan.json'), 'utf8'));
     expect(lineage).toMatchObject({ imageVersion: 'r13-20261011', previousVersion: 'r7-20261009' });
   });
 

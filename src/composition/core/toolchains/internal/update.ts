@@ -3,7 +3,7 @@ import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
-import { selectWorkerLineage, toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
+import { selectWorkerLineage, toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type LayeredWorkerRecipe, type WorkerInstallInput, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
 import { buildWorkerImageInHome, readBuiltWorkerLineage, readWorkerImageHeldVersion, localPrincipalChannel, readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
@@ -50,7 +50,13 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   await dependencies.onBuild?.(plan);
   // A failed build keeps its context as evidence under another name (bounded retention), so the next attempt may reuse the planned version.
   const built = await buildWorkerImageInHome({ packageRoot: root, home, imageVersion: plan.next!.imageVersion, dockerfile: insertHistoryLine(lineage.dockerfile, plan.next!.historyLine),
-    recipe: plan.next!.recipe, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, failedContextsKept: policy.failedContextsKept, env, ...signal }, dependencies.runner);
+    recipe: sources.recipe, resolution: { selected: plan.staleProviders, npmRegistry: config.toolchains.currency.registryEndpoint,
+      sources: config.toolchains.image.sources, refreshMs: config.toolchains.image.baseRefreshMs, plannedAt, previousVersion: plan.next!.previousVersion,
+      resolved: Object.fromEntries(plan.report.providers.flatMap(entry => {
+        const installer = (sources.recipe as LayeredWorkerRecipe).providers.find(provider => provider.id === entry.provider)?.installer;
+        return installer?.kind === 'npm' && entry.latest ? [[entry.provider, { kind: 'npm', package: installer.package, version: entry.latest.version } satisfies WorkerInstallInput]] : [];
+      })), ...(dependencies.fetcher ? { lookup: dependencies.fetcher } : {}),
+      timeoutMs: config.toolchains.currency.timeoutMs, responseMaxBytes: config.toolchains.currency.responseMaxBytes }, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, failedContextsKept: policy.failedContextsKept, env, ...signal }, dependencies.runner);
   const proposal = proposeProfileRevisions(plan, built.receipt, now());
   const proposalPath = await writeArtifact(join(home, 'proposals'), `${plan.next!.imageVersion}.json`, proposal);
   return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'built', plan, planPath,

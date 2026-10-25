@@ -1,4 +1,5 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, globalAgent, type Server } from 'node:https';
+import { createLocalTls } from '../../fixtures/local-tls.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,8 +9,9 @@ import { admittedToolchains } from '#engine/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
 
+const originalCa = globalAgent.options.ca;
 const roots: string[] = []; const servers: Server[] = [];
-afterEach(async () => { clearConfigCache(); await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))));
+afterEach(async () => { globalAgent.options.ca = originalCa; clearConfigCache(); await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))));
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const bounds = { imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };
 function nativeProfile(id: string, provider: 'codex' | 'claude', cliVersion: string) {
@@ -25,10 +27,11 @@ async function fixture(currency: Record<string, unknown>, versions: Record<strin
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'r', profiles,
       kinds: profiles.map(profile => ({ kind: profile.id, profile: { id: profile.id, version: profile.version } })), evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } } }));
   const requests: string[] = [];
-  const server = createServer((request, response) => { requests.push(request.url ?? ''); const name = decodeURIComponent((request.url ?? '').replace(/^\//, '').replace(/\/latest$/, ''));
+  const tls = await createLocalTls(root); globalAgent.options.ca = tls.caPem;
+  const server = createServer({ key: tls.key, cert: tls.caPem }, (request, response) => { requests.push(request.url ?? ''); const name = decodeURIComponent((request.url ?? '').replace(/^\//, '').replace(/\/latest$/, ''));
     const version = versions[name]; if (!version) { response.statusCode = 404; response.end('{}'); return; } response.end(JSON.stringify({ name, version })); });
   servers.push(server); await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  const endpoint = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const endpoint = `https://127.0.0.1:${(server.address() as { port: number }).port}`;
   const options = { env: { HOME: join(root, 'home'), USERPROFILE: join(root, 'home') } };
   return { project, options, endpoint, requests };
 }
@@ -52,7 +55,7 @@ it('stays offline-honest: disabled mode makes no request and an unreachable regi
   expect(disabled).toMatchObject({ mode: 'off', registryEndpoint: null });
   expect(disabled.providers.find(entry => entry.provider === 'codex')).toMatchObject({ status: 'disabled', latest: null });
   expect(off.requests).toEqual([]);
-  const unreachable = await fixture({ registryEndpoint: 'http://127.0.0.1:1', timeoutMs: 500 }, {});
+  const unreachable = await fixture({ registryEndpoint: 'https://127.0.0.1:1', timeoutMs: 500 }, {});
   const report = await inspectToolchainCurrency(unreachable.project, unreachable.options);
   expect(report.providers.find(entry => entry.provider === 'claude')).toMatchObject({ status: 'unknown-offline', reason: 'NPM_REGISTRY_UNAVAILABLE' });
   const injected = await inspectToolchainCurrency(unreachable.project, unreachable.options, async () => { throw new Error('boom'); });

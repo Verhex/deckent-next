@@ -14,6 +14,7 @@
 // own unsplit bundle (code splitting gave every entry a side-effect import of the shared esbuild-runtime chunk) and may import node: builtins only.
 // BWRAP-SELECT: the bundled bubblewrap (owner S4/S5) comes from a build-bwrap output (CI check-mode build) and must be exactly the locked
 // build for the shipped architectures with its notice, licenses and corresponding source; otherwise the package is not publishable.
+import { workerLineage } from './build-worker-lineage.mjs';
 import { execFileSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -117,6 +118,7 @@ export function publishedManifest(source, extraFiles) {
 }
 
 export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timestamp, bwrap = null } = {}) {
+  workerLineage(root);
   const dist = join(root, 'dist'), stage = join(out, 'package');
   if (!existsSync(join(dist, 'build-identity.json'))) throw new Error('dist/build-identity.json missing: run `npm run build` first (or pass --build)');
   const identity = JSON.parse(readFileSync(join(dist, 'build-identity.json'), 'utf8'));

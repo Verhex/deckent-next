@@ -4,7 +4,8 @@ import type { SetupDecision, SetupStageContext } from '#engine/core/setup/index.
 const imageId = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
 /** BR1: the worker image as composition observes it (configuration, this installation's newest receipt, a read-only `image inspect` of the
  * configured image or else the receipt's, the Git path from coding detection). Absent until an installation can be read. */
-export const workerFactsSchema = z.object({ configured: imageId.nullable(), receipt: z.object({ imageId, imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}$/u) }).strict().nullable(),
+export const workerFactsSchema = z.object({ configured: imageId.nullable(), receipt: z.object({ imageId, imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}(?:-[a-z0-9]{1,32})?$/u),
+  images: z.array(z.object({ imageId, providers: z.array(z.string()) }).passthrough()).optional() }).strict().nullable(),
   image: z.enum(['present', 'missing', 'unknown', 'not-run']), git: z.string().min(1).max(4096).nullable() }).strict();
 type WorkerFacts = z.infer<typeof workerFactsSchema>;
 /** The part of the execution family's facts these stages read (the family validates the whole shape with its own schema). */

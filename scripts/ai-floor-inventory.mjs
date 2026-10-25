@@ -54,7 +54,7 @@ export const floorFamilies = [
     routes: ['suggest', 'narrow'].map(action => ['agent-catalog', 'fixture-target', action]) },
 ];
 export const protectedPaths = ['policy', 'approvals', 'identity', 'security', 'storage', 'service', 'paths', 'shell', 'network', 'layout', 'execution',
-  'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit', 'memory', 'memoryAutomation', 'runRuntime.recovery', 'runRuntime.nervous', 'models.headless', 'catalogEvolution',
+  'installation', 'company', 'enforce_principal_assurance', 'secrets', 'admission', 'operations', 'audit', 'memory', 'memoryAutomation', 'runRuntime.recovery', 'runRuntime.nervous', 'models.headless', 'toolchains.image', 'toolchains.currency.registryEndpoint', 'catalogEvolution',
   'terminal.shell.realm', 'terminal.shell.environment', 'terminal.fetch.egress', 'terminal.fetch.allowedHosts'];
 floorFamilies.push({ id: 'configuration', en: 'Protected configuration subtrees, descendants and whole-object ancestors',
   tr: 'Korunan ayar ağaçları, alt yolları ve bütün nesneyi değiştiren üst yolları',

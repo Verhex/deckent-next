@@ -6,7 +6,7 @@ import { planSetup, planFirstWorkerImage, SetupStageRegistry, WORK_SETUP_FAMILY,
 import { MESSAGE_REGISTRY } from '#platform/index.js';
 import { nativeCliIds } from '#domain/index.js';
 import { executionSetupFamily, type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
-import { buildWorkerImageInHome, observeWorkerImage, readNewestWorkerReceipt, readWorkerImageSources, workerImagePresence, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { buildWorkerImageInHome, observeWorkerImage, readNewestWorkerReceipt, readWorkerImageSources, workerImagePresence, workerImageSetupPorts, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { doctorChecks, firstJobCommand, firstJobSteps, type DoctorCheckFacts } from '#surfaces/core/doctor/index.js';
 import { isForegroundStage, parseSetupFlags, runForegroundStage, stageChoices, unattendedAnswers, type SetupCommandContext } from '#surfaces/core/setup/index.js';
 import { configuredSetup } from '#composition/core/setup/index.js';
@@ -118,7 +118,7 @@ describe('BR1 engine owner: the first image version and the card before anything
       const plan = planFirstWorkerImage({ recipe, dockerfile, held, plannedAt: '2026-10-23T05:00:00.000Z' });
       expect(plan.imageVersion).toBe(`r${Math.max(counter, Number(/^r(\d+)-/u.exec(held)![1])) + 1}-20261023`);
       // The installed builder's own history owner accepts the edited lineage (the same check it runs before a build).
-      expect(() => parseVersionHistory(plan.dockerfile, validateRecipe(plan.recipe))).not.toThrow();
+      expect(() => parseVersionHistory(plan.dockerfile, { ...validateRecipe(plan.recipe), imageVersion: plan.imageVersion, previousVersion: packaged })).not.toThrow();
       expect(plan.dockerfile).toContain(`supersedes ${packaged} | first image of this installation (deckent init); counter past daemon-held ${held}`);
     }
     expect(() => planFirstWorkerImage({ recipe: { schemaVersion: 1 }, dockerfile, held: null, plannedAt: '2026-10-23T05:00:00.000Z' })).toThrow(expect.objectContaining({ code: 'WORKER_IMAGE_SOURCE_INVALID' }));
@@ -167,6 +167,10 @@ describe.skipIf(process.platform !== 'linux')('BR1 adapters: receipts, read-only
     const outside = join(home, 'outside.json');
     await writeFile(outside, receipt(IMAGE, 'r7-20261003', '2026-10-24T00:00:00.000Z')); await symlink(outside, join(receipts, 'r7-20261003.json'));
     expect(await readNewestWorkerReceipt(home)).toEqual({ imageId: OTHER, imageVersion: 'r4-20260930' });
+    await writeFile(join(receipts, 'r8-20261024.json'), receipt(IMAGE, 'r8-20261024', '2026-01-01T00:00:00.000Z'));
+    const heldRunner: WorkerImageBuildRunner = async command => ({ schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null,
+      stdoutBase64: Buffer.from('{"heldVersion":"r4-20260930"}\n').toString('base64'), stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 });
+    expect(await workerImageSetupPorts({ home, executable: 'docker', env: {}, timeoutMs: 1000, outputBytes: 4096, failedContextsKept: 3 }, heldRunner).held()).toBe('r8-20261024');
     // No Docker → the image is not checked; a configured image is the one checked when present.
     expect(await observeWorkerImage({ home, docker: null, configured: null, git: '/usr/bin/git' })).toEqual({ configured: null, receipt: { imageId: OTHER, imageVersion: 'r4-20260930' }, image: 'not-run', git: '/usr/bin/git' });
   });
@@ -205,7 +209,7 @@ esac
     const { recipe, dockerfile } = await readWorkerImageSources(process.cwd()), version = (recipe as { imageVersion: string }).imageVersion;
     const seen: string[][] = [];
     const ok: WorkerImageBuildRunner = async command => { seen.push([...command.args]); await writeFile(command.args[1]!, receipt(IMAGE, version, '2026-10-23T05:00:00.000Z')); return evidence(command) as never; };
-    const base = { packageRoot: process.cwd(), home, imageVersion: version, recipe, dockerfile, timeoutMs: 1000, outputBytes: 4096, failedContextsKept: 3, replace: true };
+    const base = { packageRoot: process.cwd(), home, imageVersion: version, recipe, dockerfile, timeoutMs: 1000, outputBytes: 4096, failedContextsKept: 3, replace: true, resolution: { selected: ['codex'], resolved: { codex: { kind: 'npm' as const, package: '@openai/codex', version: '0.156.0' } } } };
     await mkdir(join(home, 'builds', version), { recursive: true, mode: 0o700 }); // a half-done earlier attempt, no receipt
     const built = await buildWorkerImageInHome(base, ok);
     expect(built.receiptPath).toBe(join(home, 'receipts', `${version}.json`));
