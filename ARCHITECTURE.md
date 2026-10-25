@@ -781,7 +781,8 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   windows); all are `Window`s in one stack, which owns focus, and an approval card hides the slot until answered. **Typed arguments (owner I-1):**
   with window words a slash command typed with an argument runs bare in every host and its window says once (`WindowNoteContext`, never on an
   approval card) that the terminal takes no typed argument; the typed text is never shown, queued or kept in the input history
-  (only `/command`, Astra 2456). Information and list windows project every visible word through the known-secret / human-text projection,
+  (only `/command`, Astra 2456). A command no window replaces keeps its argument (registry `typedArgument`: `/do`, `/copy`, `/rename`; TRM-40).
+  Information and list windows project every visible word through the known-secret / human-text projection,
   whole, before layout (Astra 2456 P1-2). Line mode and the CLI keep arguments.
 - **Shell and identity (L6):** the shell scanner reads a redirection operator whole (`2>&1`, `N>&M`, `&>`); stream silencing/merging to
   `/dev/null` or a descriptor keeps a read a read, a file target stays a write; a sandboxed write to a protected path explains itself in the

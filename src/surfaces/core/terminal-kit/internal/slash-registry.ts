@@ -7,6 +7,8 @@ export interface SlashCommand {
   /** Catalog key of the argument hint; set only for commands that take an argument. Enter on such a palette row completes
    * `/name ` and waits for the argument; a command without one runs at once. */
   readonly argumentKey?: string;
+  /** The rich terminal keeps the typed argument because no window takes its place (SLASH-WINDOWS I-1 runs every other command bare). */
+  readonly typedArgument?: true;
 }
 
 /** The groups `/help` lists commands under, in display order; each heading is a catalog text (`labelKey`). */
@@ -17,7 +19,7 @@ export const SLASH_GROUPS = Object.freeze([
 export type SlashGroupId = typeof SLASH_GROUPS[number]['id'];
 
 export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
-  { name: 'do', group: 'work', descriptionKey: 'terminal.slash.do', argumentKey: 'terminal.slash.doArgument' },
+  { name: 'do', group: 'work', descriptionKey: 'terminal.slash.do', argumentKey: 'terminal.slash.doArgument', typedArgument: true },
   { name: 'status', group: 'info', descriptionKey: 'terminal.slash.status' },
   { name: 'workers', group: 'work', descriptionKey: 'terminal.slash.workers' },
   { name: 'watch-workers', group: 'work', descriptionKey: 'terminal.slash.watchWorkers' },
@@ -38,10 +40,10 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'context', group: 'info', descriptionKey: 'terminal.slash.context' },
   { name: 'resume', group: 'session', descriptionKey: 'terminal.slash.resume', argumentKey: 'terminal.slash.resumeArgument' },
   // T5: names the open conversation (`/rename <title>`); the /resume picker shows the title and filters by typed text.
-  { name: 'rename', group: 'session', descriptionKey: 'terminal.slash.rename', argumentKey: 'terminal.slash.renameArgument' },
+  { name: 'rename', group: 'session', descriptionKey: 'terminal.slash.rename', argumentKey: 'terminal.slash.renameArgument', typedArgument: true },
   { name: 'clear', group: 'session', descriptionKey: 'terminal.slash.clear' },
   // T1: sends the latest (or n-th latest) answer to the terminal clipboard; the argument is typed, the palette row completes `/copy ` and waits for it.
-  { name: 'copy', group: 'session', descriptionKey: 'tuicopy.slash.copy', argumentKey: 'tuicopy.slash.copyArgument' },
+  { name: 'copy', group: 'session', descriptionKey: 'tuicopy.slash.copy', argumentKey: 'tuicopy.slash.copyArgument', typedArgument: true },
   { name: 'mode', group: 'settings', descriptionKey: 'terminal.slash.mode', argumentKey: 'terminal.slash.modeArgument' },
   // TL-A D6: shows or hides the reasoning preview (toggle, or `on`/`off`); runs at once from the palette.
   { name: 'reasoning', group: 'settings', descriptionKey: 'terminal.slash.reasoning' },
@@ -72,6 +74,9 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
  * and `/help` never list a command that does nothing; the lane that lands the behaviour moves its name into the registry and out of this list.
  */
 export const RESERVED_SLASH_COMMAND_NAMES: readonly string[] = Object.freeze([]);
+
+/** TRM-40: whether the rich terminal passes this command's typed argument through (`/do <intent>`, `/copy <n>`, `/rename <title>`). */
+export const keepsTypedArgument = (command: string): boolean => WORKLINE_SLASH_COMMANDS.some(entry => entry.name === command && entry.typedArgument === true);
 
 /** Read-only inspect commands (S09). Each is answered by an optional port that re-reads a typed query per call; `status` keeps its static line without one. */
 export const INSPECT_SLASH_COMMANDS = Object.freeze(['status', 'model', 'usage', 'doctor', 'scope', 'roles'] as const);
