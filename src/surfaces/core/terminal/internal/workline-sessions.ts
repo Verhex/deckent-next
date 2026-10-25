@@ -25,6 +25,7 @@ export interface ConversationSessionLabels {
   /** T5 `/rename`: `usage` when no title was typed, `done` after naming, `nothingSaved` when the conversation has no saved snapshot yet. */
   /** T5 picker filter: `prompt` carries `{text}` (the typed filter, may be empty), `none` is shown when no conversation matches. */
   readonly filter?: { readonly prompt: string; readonly none: string };
+  readonly folders?: { readonly all: string; readonly current: string };
   readonly rename?: { readonly usage: string; readonly done: string; readonly nothingSaved: string };
   /** `{approx}{prompt}` of `{window}` tokens (`{percent}%`) · `{count}` messages */
   readonly context: string;
@@ -84,6 +85,7 @@ export function contextInfoModel(input: Readonly<{ measured: ContextMeasure | nu
  */
 export function useConversationSession(port: ConversationSessionPort | undefined, labels: ConversationSessionLabels | undefined, id: () => string, known?: KnownSecretSnapshot) {
   const saveFailed = useRef(false), listed = useRef<readonly ConversationSessionSummary[]>([]), context = useRef<ContextView | null>(null), compaction = useRef<ContextCompaction | null>(null);
+  const allFolders = useRef(false);
   // The same measurement `/context` reads, kept as state too so the information row under the bar follows it (harness gap item 1).
   const [measured, setMeasured] = useState<ContextView | null>(null);
   const remember = useCallback((value: ContextView | null) => { context.current = value; setMeasured(value); }, []);
@@ -127,15 +129,19 @@ export function useConversationSession(port: ConversationSessionPort | undefined
       catch { return done([notice('error', labels.rename.nothingSaved)]); }
     }
     // The store bounds the list (its own `maxSessions`); the picker filters it by typed text.
-    const freshList = async () => (await port.list()).filter(summary => summary.sessionId !== id());
+    const freshList = async () => (await port.list(allFolders.current)).filter(summary => summary.sessionId !== id());
     const refuse = (refusal: SessionRefusal, text: string): SessionCommandResult => ({ refusal, entries: [notice('error', text)] });
-    if (!args) {
+    if (!args || args === '--all-folders' || args === '--this-folder') {
+      if (args) allFolders.current = args === '--all-folders';
       listed.current = (await freshList()).map(summary => ({ ...summary }));
-      if (!listed.current.length) return done([systemSummaryEntry(labels.none)]);
+      if (!listed.current.length && !labels.folders) return done([systemSummaryEntry(labels.none)]);
       // The index stays filled so a later typed `/resume 2` still resolves. The rows are the picker, not ledger lines.
-      return done([], listed.current.map((summary, index) => ({ sessionId: summary.sessionId,
+      const rows: ResumePickerItem[] = listed.current.map((summary, index) => ({ sessionId: summary.sessionId,
         ...projectHumanPickerText(fillTemplate(labels.entry, { index: index + 1, session: summary.sessionId.slice(0, 8), when: when(summary.updatedAtMs),
-          count: summary.messages, preview: summary.title ?? summary.preview }), known, labels.hiddenCount) })));
+          count: summary.messages, preview: summary.title ?? summary.preview }), known, labels.hiddenCount) }));
+      if (labels.folders) rows.push({ sessionId: allFolders.current ? '--this-folder' : '--all-folders',
+        ...projectHumanPickerText(allFolders.current ? labels.folders.current : labels.folders.all, known, labels.hiddenCount) });
+      return done([], rows);
     }
     const reference = resolveSessionReference(args, listed.current, /^\d+$/.test(args) && listed.current.length ? await freshList() : []);
     if ('refusal' in reference) {

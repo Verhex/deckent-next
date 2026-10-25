@@ -423,5 +423,7 @@
   "terminal.info.usage.cacheHitPartial": "{percent}% in measured reports ({measured}/{reports}); full session unknown",
   "terminal.slash.policy": "MCP permissions by selection",
   "terminal.mode.fullAutoRevoked": "Full-auto is no longer granted in this scope, so your stored full-auto choice is not in effect: this session runs as standart and every call is decided as standart. The installation owner can open it again with deckent init policy --scope <scope> --modes full-auto.",
-  "terminal.admin.scope.modeRevoked": "Mode: {mode} (stored full-auto is no longer granted here, so it is not in effect)"
+  "terminal.admin.scope.modeRevoked": "Mode: {mode} (stored full-auto is no longer granted here, so it is not in effect)",
+  "terminal.session.folders.all": "All folders",
+  "terminal.session.folders.current": "This folder"
 }

@@ -19,6 +19,7 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   not available there. The OS-user identity cannot be read and the private ledger files cannot be opened, so backup, the
   monitor, model calls, the Brain and acceptance do not work natively either. Platform tests skip these with an
   `[unsupported on Windows: …]` tag, so a green Windows check does not mean these parts work. *Workaround:* use WSL2.
+- **Conversation origins only filter the resume list.** `/resume` starts with the current OS user and launch folder; “All folders” widens it within the project. Older snapshots appear at the project root to their file owner. These labels grant no permissions.
 - **Native Windows does not open a project from its subfolders.** Elsewhere `deckent` and `deckent-mcp` started in a subfolder
   use the installation above it; native Windows has no owner and mode checks for that walk, so it stops with
   `INSTALLATION_ROOT_WALK_UNSUPPORTED`. *Workaround:* run in the project's own folder or pass `deckent-mcp --project`.

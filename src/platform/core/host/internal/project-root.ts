@@ -56,7 +56,7 @@ export async function resolveProjectRoot(start: string, env: Environment, option
     // A folder that looks installed but has no identity yet is not an installation, and nothing above it is adopted in its place.
     if (candidate || dirname(directory) === directory) break;
   }
-  return { root: start, folder: '', found: false, gitTop };
+  return { root: physical, folder: '', found: false, gitTop };
 }
 
 async function adopt(directory: string, physical: string, data: string, ports: ProjectRootPorts): Promise<ProjectRootResolution | null> {
@@ -67,7 +67,7 @@ async function adopt(directory: string, physical: string, data: string, ports: P
   if (!root || !policy || root.isSymbolicLink() || policy.isSymbolicLink()) throw refuse('INSTALLATION_ROOT_UNSAFE', { path: data, reason: 'symlink' });
   // The managed-file rules the policy reader itself applies: the person's own data folder, writable by nobody else; a private single-link file.
   if (!root.isDirectory() || root.uid !== ports.uid || (root.mode & 0o022) !== 0 || policy.uid !== ports.uid) throw refuse('INSTALLATION_ROOT_FOREIGN', { path: data });
-  if (!policy.isFile() || policy.nlink !== 1 || ![0o400, 0o600].includes(policy.mode & 0o777)) throw refuse('INSTALLATION_ROOT_UNSAFE', { path: policyPath, reason: 'mode' });
+  if ((root.mode & 0o777) !== 0o700 || !policy.isFile() || policy.nlink !== 1 || (policy.mode & 0o777) !== 0o600) throw refuse('INSTALLATION_ROOT_UNSAFE', { path: policyPath, reason: 'mode' });
   const identity = await ports.lstat(join(data, registry.resources.installationIdentity, IDENTITY_RECORD));
   if (!identity?.isFile()) return null;
   if (await insideWorkTree(directory, ports)) {

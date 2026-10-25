@@ -1,4 +1,4 @@
-import { ErrorRegistry, emit, type Locale } from '#platform/index.js';
+import { ErrorRegistry, emit, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { planSetup, SETUP_PLAN_SCHEMA_VERSION, type SetupObservation, type SetupPlan, type SetupStageRegistry } from '#engine/index.js';
 import { cliMode, resolveCommandScope, scopeLister } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
@@ -14,19 +14,20 @@ export function setupFormat(context: SetupCommandContext, json: boolean): SetupF
   return registry.formats[cliMode(context, json).reason] as SetupFormat;
 }
 /** `imageId` (BR1, owner Q2): adopt this existing image as the worker image instead of building one (a person confirms it on a card). */
-export type SetupFlags = Readonly<{ json: boolean; yes: boolean; scope?: string; lang?: string; imageId?: string }>;
+export type SetupFlags = Readonly<{ json: boolean; yes: boolean; here?: boolean; scope?: string; lang?: string; imageId?: string }>;
 export function parseSetupFlags(argv: readonly string[]): SetupFlags {
-  let json = false, yes = false, scope: string | undefined, lang: string | undefined, imageId: string | undefined;
+  let json = false, yes = false, here = false, scope: string | undefined, lang: string | undefined, imageId: string | undefined;
   for (let index = 1; index < argv.length; index++) {
     const flag = argv[index], value = () => { const next = argv[++index]; if (!next || next.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE'); return next; };
     if (flag === '--json' && !json) json = true;
+    else if (flag === '--here' && !here) here = true;
     else if (flag === '--yes' && !yes) yes = true;
     else if (flag === '--scope' && scope === undefined) scope = value();
     else if (flag === '--lang' && lang === undefined) lang = value();
     else if (flag === '--image-id' && imageId === undefined && /^sha256:[a-f0-9]{64}$/u.test(argv[index + 1] ?? '')) imageId = value();
     else if (flag !== '--no-color') throw ErrorRegistry.createError('CLI_USAGE');
   }
-  return { json, yes, ...(scope === undefined ? {} : { scope }), ...(lang === undefined ? {} : { lang }), ...(imageId === undefined ? {} : { imageId }) };
+  return { json, yes, ...(here ? { here } : {}), ...(scope === undefined ? {} : { scope }), ...(lang === undefined ? {} : { lang }), ...(imageId === undefined ? {} : { imageId }) };
 }
 
 /** The answers a call brings without a window: `--scope` answers the folder stage (never derived); without a person the profile is solo
@@ -58,6 +59,9 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
   const flags = parseSetupFlags(argv), locale: Locale = commandLocale(context, flags.lang);
   const root = context.root ?? process.cwd(), env = context.env ?? process.env, format = setupFormat(context, flags.json);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
+  if (!flags.here && context.rootResolution?.found && context.rootResolution.folder) {
+    (context.stderr ?? process.stderr).write(`${t('setup.enclosing', { path: terminalSafeText(root) }, locale)}\n`);
+  }
   // INIT-D5: `--yes` names its scope; it is refused before anything is observed, with the valid scopes listed.
   if (flags.yes) await resolveCommandScope({ command: 'deckent init --yes', locale, explicit: flags.scope, mutating: true, interactive: false,
     listScopes: () => scopeLister(context, root, { env })().catch(() => []) });

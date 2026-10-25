@@ -126,7 +126,7 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   ensureRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
   restartRuntimeService?: (root: string, options: ConfigLoadOptions) => Promise<RuntimeServiceReadinessView>;
   openTerminalHistory?: (root: string, options: ConfigLoadOptions) => Promise<ComposerHistoryPort | null>;
-  openTerminalSessions?: (root: string, options: ConfigLoadOptions) => Promise<TerminalSessionStoreView | null>;
+  openTerminalSessions?: (root: string, options: ConfigLoadOptions, folder?: string) => Promise<TerminalSessionStoreView | null>;
   /** T4 (Ctrl+G): the person's `$VISUAL`/`$EDITOR` behind the composition's adapter (temporary 0600 file, bounded read-back). */
   externalEditor?: WorklineProps['externalEditor'];
   completeTerminalChat?: TerminalChatTurnHandler;

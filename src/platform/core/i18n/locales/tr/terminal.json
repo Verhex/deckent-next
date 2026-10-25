@@ -423,5 +423,7 @@
   "terminal.info.usage.cacheHitPartial": "ölçülen raporlarda %{percent} ({measured}/{reports}); tüm oturum bilinmiyor",
   "terminal.slash.policy": "MCP izinlerini seçimle yönet",
   "terminal.mode.fullAutoRevoked": "Tam otomatik bu kapsamda artık izinli değil, bu yüzden kayıtlı tam otomatik seçiminiz geçerli değil: bu oturum standart çalışır ve her çağrı standart olarak karar alır. Kurulumun sahibi bunu deckent init policy --scope <kapsam> --modes full-auto ile yeniden açabilir.",
-  "terminal.admin.scope.modeRevoked": "Mod: {mode} (kayıtlı tam otomatik burada artık izinli değil, bu yüzden geçerli değil)"
+  "terminal.admin.scope.modeRevoked": "Mod: {mode} (kayıtlı tam otomatik burada artık izinli değil, bu yüzden geçerli değil)",
+  "terminal.session.folders.all": "Tüm klasörler",
+  "terminal.session.folders.current": "Bu klasör"
 }

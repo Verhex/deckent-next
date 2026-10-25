@@ -1,6 +1,9 @@
 import type { Readable } from 'node:stream';
 import type { Locale, OutputSink, ProjectRootResolution } from '#platform/index.js';
 
+/** An existing installation wins; otherwise propose the repository top, or the launch folder outside Git. */
+export const offerTarget = (found: boolean, gitTop: string | null, cwd: string): string => found ? cwd : gitTop ?? cwd;
+
 /** What every CLI command gets from its host: project root, environment, output sinks, stdin, cancellation and the chosen locale. */
 export interface CliBaseContext {
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;

@@ -35,6 +35,8 @@ it('walks up only to a guarded installation, refuses an unsafe one and keeps the
   await expect(resolve(`${p}/a`, tracked, { tracked: async () => null })).rejects.toMatchObject({ code: 'INSTALLATION_ROOT_TRACKED', params: { reason: 'unknown' } });
   expect(await resolve(`${p}/a`, installed(p), { tracked: async () => true })).toMatchObject({ found: true }); // no work tree: Git is not asked
   await expect(resolve(`${p}/a`, installed(p, { mode: 0o644 }))).rejects.toMatchObject({ code: 'INSTALLATION_ROOT_UNSAFE', params: { reason: 'mode' } });
+  await expect(resolve(`${p}/a`, installed(p, { mode: 0o400 }))).rejects.toMatchObject({ code: 'INSTALLATION_ROOT_UNSAFE', params: { reason: 'mode' } });
+  await expect(resolve(`${p}/a`, { ...installed(p), [`${p}/.deckent`]: dir({ mode: 0o755 }) })).rejects.toMatchObject({ code: 'INSTALLATION_ROOT_UNSAFE', params: { reason: 'mode' } });
   await expect(resolve(`${p}/a`, { ...installed(p), [`${p}/.deckent`]: { kind: 'link' } })).rejects.toMatchObject({ code: 'INSTALLATION_ROOT_UNSAFE', params: { reason: 'symlink' } });
   await expect(resolve(`${p}/a`, installed(p, { uid: 0 }))).rejects.toMatchObject({ code: 'INSTALLATION_ROOT_FOREIGN' });
   await expect(resolve(`${p}/a`, { ...installed(p), [`${p}/.deckent`]: dir({ mode: 0o777 }) })).rejects.toMatchObject({ code: 'INSTALLATION_ROOT_FOREIGN' });
@@ -44,4 +46,6 @@ it('walks up only to a guarded installation, refuses an unsafe one and keeps the
   expect(await resolve(`${p}/m/a`, { ...installed(p), [`${p}/m`]: dir({ dev: 2 }), [`${p}/m/a`]: dir({ dev: 2 }) })).toMatchObject({ found: false });
   expect(await resolve(p, installed(p, { mode: 0o644 }))).toEqual({ root: p, folder: '', found: true, gitTop: null });
   expect(await resolve(`${p}/a`, installed(p), {}, { exact: true })).toEqual({ root: `${p}/a`, folder: '', found: false, gitTop: null });
+  expect(await resolve('/alias', { '/physical': dir() }, { realpath: async path => path === '/alias' ? '/physical' : path }))
+    .toEqual({ root: '/physical', folder: '', found: false, gitTop: null });
 });

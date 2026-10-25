@@ -258,6 +258,7 @@
     },
     "src/composition/core/cli": {
       "dependencies": [
+        "src/adapters/core/local-principal",
         "src/adapters/core/agent-workspace-floor",
         "src/adapters/core/setup-detect-coding",
         "src/platform/core/crash-reporting",

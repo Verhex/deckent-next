@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, prepareProductFile, detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ConfigLoadOptions } from '#platform/index.js';
-import { launchDetachedRuntimeService, querySystemdMainPid, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig } from '#adapters/index.js';
+import { launchDetachedRuntimeService, querySystemdMainPid, openTerminalHistoryFile, openTerminalSessionStore, readTerminalConfig, readLocalOsIdentity } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { RUNTIME_SERVICE_AUTOSTART_ENV, awaitRuntimeServiceStart, awaitRuntimeServiceRestart, describeRuntimeServiceWithin, runtimeServiceReadiness as readiness, runtimeMonotonicDeadline as monotonicDeadline, runtimeDeadlineSignal as within,
@@ -81,8 +81,14 @@ export async function openConfiguredTerminalHistory(projectRoot: string, options
   });
 }
 /** Conversation snapshots for `/resume` (T-L5c): the same owner switch as the composer history; null when it is off. */
-export async function openConfiguredTerminalSessions(projectRoot: string, options: ConfigLoadOptions = {}) {
+export async function openConfiguredTerminalSessions(projectRoot: string, options: ConfigLoadOptions = {}, folder = '') {
   const config = await loadComposedConfig(projectRoot, { ...options, heal: false });
   if (!readTerminalConfig(config as Record<string, unknown>).persistHistory) return null;
-  return openTerminalSessionStore(await prepareProductDirectory(config.productLayout, 'terminalSessions'), undefined, getConfigKnownSecrets(config));
+  const store = openTerminalSessionStore(await prepareProductDirectory(config.productLayout, 'terminalSessions'), undefined, getConfigKnownSecrets(config));
+  const { issuer, subject } = readLocalOsIdentity(), origin = { schemaVersion: 1 as const, principal: { issuer, subject }, folder };
+  return Object.freeze({
+    save: (snapshot: Parameters<typeof store.save>[0]) => store.save(snapshot, origin),
+    list: (scopeId: string, filter?: { readonly allFolders?: boolean }) => store.list(scopeId, { principal: origin.principal, folder, allFolders: filter?.allFolders === true }),
+    load: store.load, rename: store.rename,
+  });
 }

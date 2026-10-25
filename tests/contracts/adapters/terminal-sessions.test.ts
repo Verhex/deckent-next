@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -17,6 +17,33 @@ const history = (question: string) => [{ role: 'system' as const, content: 'SYST
   { role: 'assistant' as const, content: 'It exports a.', toolCalls: [] }];
 
 describe.skipIf(process.platform === 'win32')('requires POSIX private session files and no-follow opening', () => {
+it('U7 filters two principals and folders, keeps legacy sessions at their owner/root and prunes origins with titles', async () => {
+  const { directory, sessions } = await store({ maxSessions: 5, maxFileBytes: 1_000_000, previewChars: 20 });
+  const principal = { issuer: 'before-hostname-change', subject: String(process.getuid!()) }, other = { issuer: 'other', subject: String(process.getuid!() + 1) };
+  const ids = [randomUUID(), randomUUID(), randomUUID(), randomUUID()], legacy = randomUUID();
+  for (const [index, id] of ids.entries()) await sessions.save({ schemaVersion: 1, sessionId: id, scopeId: 's', updatedAtMs: index + 1, messages: history('q') },
+    { schemaVersion: 1, principal: index < 2 ? principal : other, folder: index % 2 ? 'a' : '' });
+  await sessions.save({ schemaVersion: 1, sessionId: legacy, scopeId: 's', updatedAtMs: 5, messages: history('legacy') });
+  const list = async (subject: string, folder: string) => (await sessions.list('s', { principal: { issuer: 'new-hostname', subject }, folder, allFolders: folder === 'all' })).map(row => row.sessionId);
+  expect(await list(principal.subject, 'a')).toEqual([ids[1]]);
+  expect(await list(principal.subject, '')).toEqual([legacy, ids[0]]);
+  expect(await list(principal.subject, 'all')).toEqual([legacy, ids[1], ids[0]]);
+  expect(await list(other.subject, 'all')).toEqual([ids[3], ids[2]]);
+  expect(await sessions.list('s', { principal, folder: 'all' })).toEqual([]); // A folder named "all" never widens the list.
+  const origin = join(directory, `${ids[1]}.json.origin`), bytes = await readFile(origin, 'utf8');
+  expect(JSON.parse(bytes)).toEqual({ schemaVersion: 1, principal, folder: 'a' });
+  expect((await stat(origin)).mode & 0o777).toBe(0o600);
+  // A resumed conversation retains its start folder; snapshot v1 remains readable by the previous release.
+  await sessions.save({ schemaVersion: 1, sessionId: ids[1]!, scopeId: 's', updatedAtMs: 6, messages: history('resumed') }, { schemaVersion: 1, principal, folder: '' });
+  expect(await readFile(origin, 'utf8')).toBe(bytes);
+  expect(JSON.parse(await readFile(join(directory, `${ids[1]}.json`), 'utf8'))).not.toHaveProperty('origin');
+  await chmod(origin, 0o644);
+  expect(await list(principal.subject, 'a')).toEqual([]);
+  await chmod(origin, 0o600);
+  await sessions.rename('s', ids[0]!, 'old title');
+  await sessions.save({ schemaVersion: 1, sessionId: randomUUID(), scopeId: 's', updatedAtMs: 7, messages: history('new') }, { schemaVersion: 1, principal, folder: '' });
+  for (const suffix of ['', '.title', '.origin']) expect(await readdir(directory)).not.toContain(`${ids[0]}.json${suffix}`);
+});
 it('saves the whole history as one owner-only snapshot per session and resumes exactly the latest one, never duplicated', async () => {
   const { directory, sessions } = await store(), id = randomUUID();
   await sessions.save({ schemaVersion: 1, sessionId: id, scopeId: 'live', updatedAtMs: 1, messages: history('what does a.ts export?') });

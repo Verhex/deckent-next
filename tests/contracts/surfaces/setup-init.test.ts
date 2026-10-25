@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { SetupStageRegistry, type SetupObservation, type SetupStage } from '#engine/index.js';
 import { MESSAGE_REGISTRY, clearConfigCache } from '#platform/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
-import { createSetupController, setupInitCommand, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
+import { createSetupController, setupInitCommand, parseSetupFlags, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
+import { offerTarget } from '#surfaces/core/cli-kit/index.js';
 
 // I-S4: bare `deckent init` renders the I-S1 plan as JSON, plain lines or the window, and applies only what INIT-D5 allows.
 const base: SetupObservation = { schemaVersion: 1,
@@ -36,6 +37,18 @@ function harness(input: Readonly<{ env?: NodeJS.ProcessEnv; stdout?: { isTTY: bo
 async function failure(work: Promise<unknown>) { try { await work; } catch (error) { return (error as { code?: string }).code; } return 'no-error'; }
 
 describe('I-S4 bare deckent init', () => {
+  it('U7 proposes the repository top only without an installation, accepts --here and reports an enclosing installation outside JSON', async () => {
+    expect(offerTarget(true, '/repo', '/repo/installed')).toBe('/repo/installed');
+    expect(offerTarget(false, '/repo', '/repo/a')).toBe('/repo');
+    expect(offerTarget(false, null, '/scratch')).toBe('/scratch');
+    expect(parseSetupFlags(['init', '--here', '--json'])).toMatchObject({ here: true, json: true });
+    expect(() => parseSetupFlags(['init', '--here', '--here'])).toThrow(expect.objectContaining({ code: 'CLI_USAGE' }));
+    const run = harness();
+    await setupInitCommand(['init', '--json'], { ...run.context, rootResolution: { root: run.context.root!, folder: 'a', found: true, gitTop: null } });
+    expect(JSON.parse(run.out()).schemaVersion).toBe(1);
+    expect(run.err()).toContain('deckent init --here');
+    expect(run.err()).toContain(run.context.root);
+  });
   it('JSON contract: --json prints the versioned, locale-free plan document and applies nothing', async () => {
     const run = harness();
     await setupInitCommand(['init', '--json'], run.context);

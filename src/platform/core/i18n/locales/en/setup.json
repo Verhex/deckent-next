@@ -270,5 +270,8 @@
   "setup.work.card.yes": "Declare",
   "setup.work.poolCard.title": "Set up worker pool {pool}?",
   "setup.work.poolCard.body": "Records pool {pool} with {execution} running and {inFlight} in-flight slots in the ledger; Runs can then start workers.",
-  "setup.work.poolCard.yes": "Set up"
+  "setup.work.poolCard.yes": "Set up",
+  "setup.offer.recommended": "{path} (recommended)",
+  "setup.offer.here": "This folder: {path}",
+  "setup.enclosing": "Using the enclosing installation at {path}. To install separately in this folder, run deckent init --here."
 }
