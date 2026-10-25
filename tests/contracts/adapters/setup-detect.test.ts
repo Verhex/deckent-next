@@ -148,6 +148,12 @@ describe.skipIf(posix)('I-S2 coding/git detection', () => {
     expect(coding({ ...full, hosts: [{ id: 'codex', cli: 'found', login: 'absent' }] }, 1)).toMatchObject({ state: 'skipped', reason: { code: 'setup.coding.hostsInstalled', params: { hosts: 'codex' } } });
   });
 
+  it('first commit: a secret shape past the first 64 KiB of a file is still flagged and left out by default (security review)', async () => {
+    const root = await temp('first-deep'); git(root, 'init', '-q');
+    await writeFile(join(root, 'notes.txt'), `${'x'.repeat(70_000)}\n-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n`);
+    const preview = await previewFirstCommit({ root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' }, message: 'First commit' });
+    expect(preview).toMatchObject({ state: 'offered', selected: 0, rows: [{ path: 'notes.txt', flag: 'secret-content' }] });
+  });
   it('first commit (alpha.56 U4-1c): a failed commit-tree and a ref race leave the repository as it was; a flagged .env is committed only when ticked', async () => {
     const repo = async (identity: boolean) => {
       const root = await temp('first'); git(root, 'init', '-q');

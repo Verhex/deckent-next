@@ -16,6 +16,6 @@
     "stripEnv": ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR", "GIT_NAMESPACE", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT"],
     "env": { "GIT_TERMINAL_PROMPT": "0", "GIT_NO_LAZY_FETCH": "1", "GIT_OPTIONAL_LOCKS": "0", "LC_ALL": "C" },
     "recoveryCommand": "git read-tree HEAD",
-    "limits": { "files": 2000, "bytes": 104857600, "fileBytes": 5242880, "scanBytes": 65536, "pathBytes": 4096, "previewRows": 20, "messageChars": 500, "detailChars": 240, "commitTimeoutMs": 120000 }
+    "limits": { "files": 2000, "bytes": 104857600, "fileBytes": 5242880, "pathBytes": 4096, "previewRows": 20, "messageChars": 500, "detailChars": 240, "commitTimeoutMs": 120000 }
   }
 }

@@ -52,14 +52,19 @@ export async function firstCommitGit(root: string, env: DetectEnvironment, signa
   });
 }
 
-/** Why a candidate is excluded by default: a known credential path, a known secret shape in its first bytes (symlinks are never followed), or its size. */
+/** Why a candidate is excluded by default: a known credential path, a known secret shape anywhere in its content (symlinks are never followed), or
+ * its size. The whole file is scanned (a secret past a prefix must not slip in); the reads are bounded by fileBytes per file and by the
+ * default-selection byte limit across files (the caller refuses past it). */
 async function flagOf(root: string, path: string, bytes: number, file: boolean): Promise<FirstCommitFlag | null> {
   if (workerTreeDenyForms(path).some(form => denied.some(match => match(form)))) return 'secret-name';
   if (bytes > limits.fileBytes) return 'size';
   if (!file) return null;
   const handle = await open(join(root, path), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
-    const buffer = Buffer.alloc(Math.min(bytes, limits.scanBytes)), { bytesRead } = await handle.read(buffer, 0, buffer.length, 0), text = buffer.subarray(0, bytesRead).toString('utf8');
+    const buffer = Buffer.alloc(bytes);
+    let read = 0;
+    for (let part = 1; read < bytes && part > 0;) { part = (await handle.read(buffer, read, bytes - read, read)).bytesRead; read += part; }
+    const text = buffer.subarray(0, read).toString('utf8');
     return shapes.some(shape => shape.test(text)) || isConfigFile(path) && configSecretHit(text) ? 'secret-content' : null;
   } finally { await handle.close(); }
 }
