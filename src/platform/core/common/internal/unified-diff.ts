@@ -9,11 +9,13 @@ const CONTEXT = 3;
 export function unifiedDiff(path: string, before: string | null, after: string | null): string {
   const a = before === null ? [] : before.split('\n'), b = after === null ? [] : after.split('\n');
   const header = [`--- ${before === null ? '/dev/null' : `a/${path}`}`, `+++ ${after === null ? '/dev/null' : `b/${path}`}`];
-  if (a.length * b.length > MAX_DIFF_CELLS) return [...header, `@@ ${a.length} lines -> ${b.length} lines (too large to diff here) @@`].join('\n');
-  // lcs[i][j] = LCS length of a[i..] and b[j..].
-  const lcs: Uint32Array[] = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1));
+  // The bound covers the real table, (a+1)·(b+1) cells in one flat array, so a one-sided shape cannot allocate per-row objects past it.
+  const width = b.length + 1;
+  if ((a.length + 1) * width > MAX_DIFF_CELLS) return [...header, `@@ ${a.length} lines -> ${b.length} lines (too large to diff here) @@`].join('\n');
+  // lcs[i·width + j] = LCS length of a[i..] and b[j..].
+  const lcs = new Uint32Array((a.length + 1) * width), at = (i: number, j: number) => lcs[i * width + j]!;
   for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) {
-    lcs[i]![j] = a[i] === b[j] ? lcs[i + 1]![j + 1]! + 1 : Math.max(lcs[i + 1]![j]!, lcs[i]![j + 1]!);
+    lcs[i * width + j] = a[i] === b[j] ? at(i + 1, j + 1) + 1 : Math.max(at(i + 1, j), at(i, j + 1));
   }
   type Op = { kind: ' ' | '-' | '+'; text: string; ai: number; bi: number };
   const ops: Op[] = [];
@@ -21,7 +23,7 @@ export function unifiedDiff(path: string, before: string | null, after: string |
   while (i < a.length || j < b.length) {
     if (i < a.length && j < b.length && a[i] === b[j]) { ops.push({ kind: ' ', text: a[i]!, ai: i, bi: j }); i++; j++; }
     // Removals before additions at a tie (the usual diff reading order).
-    else if (i < a.length && (j === b.length || lcs[i + 1]![j]! >= lcs[i]![j + 1]!)) { ops.push({ kind: '-', text: a[i]!, ai: i, bi: j }); i++; }
+    else if (i < a.length && (j === b.length || at(i + 1, j) >= at(i, j + 1))) { ops.push({ kind: '-', text: a[i]!, ai: i, bi: j }); i++; }
     else { ops.push({ kind: '+', text: b[j]!, ai: i, bi: j }); j++; }
   }
   // Changed positions grouped into hunks: each change with CONTEXT lines around it, groups closer than 2 × CONTEXT merged.

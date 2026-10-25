@@ -148,6 +148,11 @@ describe('DeliverySummary projector', () => {
     const patch = { changes: [{ path: 'src/large.ts', before: file('old\n'.repeat(2001)), after: file('new\n'.repeat(2001)) }] };
     expect(workspacePatchChangeFacts(patch, classifyPatchScope(patch, ['src/**'], 'warn', INSTRUCTION_SURFACE_PATHS))).toMatchObject({ added: 2001, removed: 2001 });
   });
+  it('ISY-35: a one-sided huge comparison is summarized by its real table size, not diffed row by row', () => {
+    const file = (text: string) => ({ mode: '100644' as const, text, digest: 'd'.repeat(64) });
+    const patch = { changes: [{ path: 'src/huge.ts', before: file('x\n'), after: file('y\n'.repeat(2_500_000)) }] };
+    expect(workspacePatchChangeFacts(patch, classifyPatchScope(patch, ['src/**'], 'warn', INSTRUCTION_SURFACE_PATHS))).toMatchObject({ added: 2_500_000, removed: 1 });
+  });
   it('G1: carries instruction-surface writes from the scope classification into the change facts and flags them on the risk line', () => {
     const file = (text: string) => ({ mode: '100644' as const, text, digest: 'd'.repeat(64) });
     const patch = { changes: [{ path: 'AGENTS.md', before: file('a\n'), after: file('b\n') }, { path: 'src/a.ts', before: null, after: file('x\n') }] };
