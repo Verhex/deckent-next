@@ -358,6 +358,7 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    */
   z.object({ kind: z.literal('recovery-verdict'), caseId: digest, decisionEventId: identitySchema, evidenceDigest: digest, detection: z.enum(['lost', 'not-lost']),
     choice: z.enum(['continue-new-attempt', 'escalate-human']).nullable() }).strict(),
+  z.object({ kind: z.literal('hub-client'), action: identitySchema, hubId: digest, commandId: identitySchema, inputDigest: digest }).strict(),
 ]).superRefine((subject, context) => {
   // A null termination only with a would-stop shadow seal; a would-stop seal is shadow with no termination; a choice exactly when lost.
   if (subject.kind === 'recovery-decision' && (subject.terminationReceiptId === null) !== (subject.basis === 'would-stop')

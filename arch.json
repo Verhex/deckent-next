@@ -579,8 +579,10 @@
         "src/engine/core/recovery",
         "src/adapters/core/sqlite-model-invocation",
         "src/adapters/core/recovery-case-store",
-        "src/composition/core/terminal-chat"
-      , "src/composition/core/approvals", "src/domain/core/recovery"],
+        "src/composition/core/terminal-chat",
+        "src/composition/core/approvals",
+        "src/domain/core/recovery"
+      ],
       "plan": "EXECUTION"
     },
     "src/composition/core/runtime": {
@@ -1273,9 +1275,10 @@
         "src/domain/core/audit",
         "src/platform/core/output",
         "src/engine/core/recovery",
-        "src/surfaces/core/recovery-text"
-      , "src/domain/core/recovery",
-        "src/surfaces/core/monitor-view"],
+        "src/surfaces/core/recovery-text",
+        "src/domain/core/recovery",
+        "src/surfaces/core/monitor-view"
+      ],
       "plan": "SURFACES"
     },
     "src/surfaces/core/cli-installation": {
@@ -2685,8 +2688,14 @@
         "src/platform/core/output",
         "src/engine/core/workspace-patch",
         "src/domain/core/principal",
-        "src/engine/core/recovery"
-      , "src/engine/core/audit", "src/engine/core/nervous", "src/adapters/core/audit-store", "src/adapters/core/local-keyring", "src/adapters/core/recovery-case-store", "src/domain/core/recovery"],
+        "src/engine/core/recovery",
+        "src/engine/core/audit",
+        "src/engine/core/nervous",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/recovery-case-store",
+        "src/domain/core/recovery"
+      ],
       "plan": "MONITOR"
     },
     "src/composition/core/monitor": {
@@ -3412,8 +3421,10 @@
         "src/engine/core/approval",
         "src/engine/core/config",
         "src/domain/core/approval",
-        "src/domain/core/policy"
-      , "src/domain/core/recovery", "src/engine/core/recovery"],
+        "src/domain/core/policy",
+        "src/domain/core/recovery",
+        "src/engine/core/recovery"
+      ],
       "plan": "SURFACES"
     },
     "src/surfaces/core/cli-admin": {
@@ -3820,7 +3831,9 @@
         "src/platform/core/integrity",
         "src/engine/core/authentication",
         "src/domain/core/policy",
-        "src/engine/core/policy"
+        "src/engine/core/policy",
+        "src/domain/core/hub",
+        "src/engine/core/hub"
       ],
       "plan": "LEARNING"
     },
@@ -3832,7 +3845,9 @@
         "src/engine/core/agent-catalog",
         "src/adapters/core/audit-store",
         "src/adapters/core/sqlite-ledger",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/domain/core/hub",
+        "src/engine/core/hub"
       ],
       "plan": "LEARNING"
     },
@@ -3882,7 +3897,8 @@
         "src/surfaces/core/cli-approval",
         "src/surfaces/core/cli-terminal",
         "src/engine/core/catalog-evolution",
-        "src/domain/core/catalog-evolution"
+        "src/domain/core/catalog-evolution",
+        "src/domain/core/hub"
       ],
       "plan": "LEARNING"
     },
@@ -3930,8 +3946,11 @@
         "src/platform/core/integrity",
         "src/domain/core/model-invocation",
         "src/engine/core/model-activation",
-        "src/domain/core/provider-catalog"
-      , "src/platform/core/errors", "src/engine/core/approval", "src/engine/core/policy"],
+        "src/domain/core/provider-catalog",
+        "src/platform/core/errors",
+        "src/engine/core/approval",
+        "src/engine/core/policy"
+      ],
       "plan": "EXECUTION"
     },
     "src/adapters/core/recovery-case-store": {
@@ -4029,6 +4048,53 @@
         "src/domain/core/command",
         "src/domain/core/agent-catalog",
         "src/platform/core/integrity"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/engine/core/hub-client": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/domain/core/primitives",
+        "src/domain/core/agent-catalog",
+        "src/domain/core/audit",
+        "src/domain/core/principal",
+        "src/capabilities/core/artifacts",
+        "src/engine/core/agent-catalog",
+        "src/engine/core/authentication",
+        "src/engine/core/hub",
+        "src/platform/core/integrity"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/hub-client-store": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/engine/core/hub",
+        "src/engine/core/hub-client",
+        "src/engine/core/audit",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/agent-catalog-store",
+        "src/adapters/core/sqlite-ledger",
+        "src/platform/core/integrity",
+        "src/domain/core/audit"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/hub-package-file": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/engine/core/hub-client"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/composition/core/hub": {
+      "dependencies": [
+        "src/engine/core/hub-client",
+        "src/adapters/core/hub-client-store",
+        "src/adapters/core/file-artifacts",
+        "src/adapters/core/local-keyring",
+        "src/platform/core/managed-files",
+        "src/composition/core/agent-catalog"
       ],
       "plan": "LEARNING"
     }

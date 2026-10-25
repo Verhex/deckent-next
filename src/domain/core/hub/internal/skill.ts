@@ -11,3 +11,5 @@ export const hubSkillDefinitionSchema = skillDefinitionSchema.unwrap().innerType
 export const readableSkillDefinitionSchema = z.union([skillDefinitionSchema, hubSkillDefinitionSchema]);
 export type HubSkillContent = z.infer<typeof hubSkillContentSchema>;
 export type HubSkillDefinition = z.infer<typeof hubSkillDefinitionSchema>;
+
+export type ReadableSkillDefinition = z.infer<typeof readableSkillDefinitionSchema>;

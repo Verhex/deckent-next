@@ -35,17 +35,17 @@ const pass = (position: number, previousPosition = 0) => ({ schemaVersion: 1 as 
   registry: { revision: 'seed', digest: 'e'.repeat(64) }, rowsRead: position, truncated: false, keys: [], skippedKeys: 0 });
 
 it('pins the step: v69 is the catalog evolution pass position (v70, the S8-3 suggestions, is the current ledger)', () => {
-  expect(CATALOG_EVOLUTION_LEDGER_VERSION).toBe(69); expect(CURRENT_LEDGER_VERSION).toBe(70);
+  expect(CATALOG_EVOLUTION_LEDGER_VERSION).toBe(69); expect(CURRENT_LEDGER_VERSION).toBe(71);
 });
 it('backs up a v67 ledger and adds only the empty position table; an older build refuses the result', async () => {
   const f = await ledger(DOWNGRADE_TO_V67_LEDGER_SQL);
   expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-23T00:00:00Z'));
-  expect(upgrade).toMatchObject({ from: 67, to: 70 });
+  expect(upgrade).toMatchObject({ from: 67, to: 71 });
   const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true }), db = new DatabaseSync(f.path, { readOnly: true });
   try {
     expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(67); expect(tables(backup)).toEqual([]);
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(70); expect(tables(db)).toEqual(['catalog_evolution_positions']);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(71); expect(tables(db)).toEqual(['catalog_evolution_positions']);
     expect(db.prepare('SELECT count(*) AS n FROM catalog_evolution_positions').get()?.['n']).toBe(0);
   } finally { backup.close(); db.close(); }
 });
@@ -67,7 +67,7 @@ it('the v69 → v67 down steps are exact; negative: an existing position table a
     db.exec('BEGIN IMMEDIATE'); expect(() => migrateLedger(db, 'allow')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' })); db.exec('ROLLBACK');
     expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(68);
     db.exec(DOWNGRADE_TO_V67_LEDGER_SQL); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(67); migrateLedger(db, 'allow');
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(70); expect(tables(db)).toEqual(['catalog_evolution_positions']);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(71); expect(tables(db)).toEqual(['catalog_evolution_positions']);
   } finally { db.close(); }
 });
 it('reads the scope\'s current rows with their digest and the producer\'s sealed time; superseded rows and other scopes never appear', async () => {

@@ -1,12 +1,13 @@
-import { AGENT_CATALOG_LIMITS, executionRegistrySchema, resolveTaskWorkClass, taskAgentSealSchema, WorkerEffortError, type AgentDefinition, type AgentPromptParts, type SkillDefinition,
+import { AGENT_CATALOG_LIMITS, executionRegistrySchema, resolveTaskWorkClass, taskAgentSealSchema, WorkerEffortError, type AgentDefinition, type AgentPromptParts, type ReadableSkillDefinition,
   type TaskAgentSelection, type TaskGraph, type WorkClassRegistry } from '#domain/index.js';
 import { AgentCatalogStoreError, type AgentCatalogStore } from './contract.js';
+import { skillContentV2Digest } from '#engine/core/hub/index.js';
 import { personaDigest, skillContentDigest, skillSetDigest } from './digests.js';
 
 type SelectionStore = Pick<AgentCatalogStore, 'eligibleAgents' | 'loadSkill'>;
 const corrupt = () => new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT');
 
-export const agentPromptParts = (agent: AgentDefinition, skills: readonly SkillDefinition[]): AgentPromptParts => Object.freeze({
+export const agentPromptParts = (agent: AgentDefinition, skills: readonly ReadableSkillDefinition[]): AgentPromptParts => Object.freeze({
   persona: Object.freeze({ id: agent.agentId, version: agent.revision, text: agent.content.persona }),
   skills: Object.freeze(skills.map(row => Object.freeze({ id: row.skillId, version: row.revision, text: row.content.text }))) });
 /** The bytes the parts add to a native prompt composition, whose bound is measured over its JSON (define-time check, S8-DESIGN §5). */
@@ -14,13 +15,13 @@ export const agentPromptBytes = (parts: AgentPromptParts) => Buffer.byteLength(J
 
 /** The exact pinned skill revisions of an agent revision, each re-digested from its stored content, and the persona and skill-set digests
  * recomputed: any mismatch is a corrupt catalog (N17), never a Run with other text than the one pinned. */
-export async function pinnedAgentSkills(store: Pick<AgentCatalogStore, 'loadSkill'>, agent: AgentDefinition): Promise<readonly SkillDefinition[]> {
+export async function pinnedAgentSkills(store: Pick<AgentCatalogStore, 'loadSkill'>, agent: AgentDefinition): Promise<readonly ReadableSkillDefinition[]> {
   if (personaDigest(agent.content.persona) !== agent.personaDigest || skillSetDigest(agent.content.skills) !== agent.skillSetDigest) throw corrupt();
-  const skills: SkillDefinition[] = [];
+  const skills: ReadableSkillDefinition[] = [];
   for (const ref of agent.content.skills) {
     const skill = await store.loadSkill(agent.scopeId, ref.skillId, ref.revision);
     if (!skill || skill.scopeId !== agent.scopeId || skill.skillId !== ref.skillId || skill.revision !== ref.revision || skill.contentDigest !== ref.digest
-      || skillContentDigest(skill.content) !== ref.digest) throw corrupt();
+      || (skill.schemaVersion === 2 ? skillContentV2Digest(skill.content) : skillContentDigest(skill.content)) !== ref.digest) throw corrupt();
     skills.push(skill);
   }
   return skills;

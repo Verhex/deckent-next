@@ -1,5 +1,6 @@
-import { defineAgentRevision, defineSkillRevision, initialAgentStandings, isAiPrincipal, requireActionSigner, requireSkillImportPinnedAndSigned, AgentCatalogError, AGENT_CATALOG_LIMITS,
-  type AgentDefinition, type AgentStanding, type AuditEvent, type CatalogSignature, type SkillDefinition, type VerifiedPrincipal } from '#domain/index.js';
+import { skillContentV2Digest } from '#engine/core/hub/index.js';
+import { hubSkillContentSchema, hubSkillDefinitionSchema, defineAgentRevision, defineSkillRevision, initialAgentStandings, isAiPrincipal, requireActionSigner, requireSkillImportPinnedAndSigned, AgentCatalogError, AGENT_CATALOG_LIMITS,
+  type AgentDefinition, type AgentStanding, type AuditEvent, type CatalogSignature, type ReadableSkillDefinition, type VerifiedPrincipal } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
 import { agentDefineCommandSchema, agentInspectQuerySchema, agentListQuerySchema, skillDefineCommandSchema, skillImportCommandSchema, skillInspectQuerySchema,
@@ -10,7 +11,7 @@ import { catalogCommandDigest, personaDigest, skillContentDigest, skillSetDigest
 import { agentPromptBytes, agentPromptParts } from './selection.js';
 import { signCatalogActions } from './signing.js';
 
-type Item = AgentDefinition | SkillDefinition;
+type Item = AgentDefinition | ReadableSkillDefinition;
 const inScope = <T extends Item>(item: T, scopeId: string): T => { if (item.scopeId !== scopeId) throw new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT'); return item; };
 const idOf = (item: Item) => 'agentId' in item ? item.agentId : item.skillId;
 
@@ -61,12 +62,12 @@ export class AgentCatalogApplication {
   }
   /** Create (expectedRevision null) or revise an agent. Skill refs must be exact pinned revisions of this scope; WorkClass ids must be registered.
    * The org tree is not pre-checked here: the store checks it inside its write transaction, against the rows it holds at commit. */
-  async defineAgent(input: unknown, credential?: unknown): Promise<AgentCatalogMutation<AgentDefinition>> {
-    const command = agentDefineCommandSchema.parse(input), { principal, authorization } = await this.admit('define', command.scopeId, credential);
+  async defineAgent(input: unknown, credential?: unknown, hubUpdate?: { readonly carryStanding: boolean }): Promise<AgentCatalogMutation<AgentDefinition>> {
+    const command = { ...agentDefineCommandSchema.parse(input), ...(hubUpdate ? { hubUpdate } : {}) }, { principal, authorization } = await this.admit('define', command.scopeId, credential);
     return this.mutate('agent', command, command.agentId, principal, authorization.revision, async (store, previous, signed) => {
       const classes = this.deps.workClassIds ? await this.deps.workClassIds(command.scopeId) : null;
       if (classes && command.content.workClasses.some(id => !classes.includes(id))) throw new AgentCatalogError('AGENT_WORK_CLASS_UNKNOWN');
-      const skills: SkillDefinition[] = [];
+      const skills: ReadableSkillDefinition[] = [];
       for (const ref of command.content.skills) {
         const skill = await store.loadSkill(command.scopeId, ref.skillId, ref.revision);
         if (!skill || inScope(skill, command.scopeId).skillId !== ref.skillId || skill.revision !== ref.revision || skill.contentDigest !== ref.digest) throw new AgentCatalogError('AGENT_SKILL_NOT_PINNED');
@@ -81,30 +82,41 @@ export class AgentCatalogApplication {
       const prior = previous as AgentDefinition | null, kept = new Set(prior?.content.skills.map(ref => JSON.stringify(ref)) ?? []);
       // Q-S6: inheritance needs the same skill set or local-only added/changed skills (an imported one always restarts at candidate).
       const importChanged = skills.some(skill => skill.source.kind === 'import' && !kept.has(JSON.stringify({ skillId: skill.skillId, revision: skill.revision, digest: skill.contentDigest })));
-      return { item, standings: initialAgentStandings(item, prior ? { definition: prior, standings: await store.standings(command.scopeId, prior.agentId, prior.revision) } : null, importChanged),
+      return { item, standings: initialAgentStandings(item, prior && (!hubUpdate || hubUpdate.carryStanding) ? { definition: prior, standings: await store.standings(command.scopeId, prior.agentId, prior.revision) } : null, importChanged && !hubUpdate?.carryStanding, hubUpdate?.carryStanding === true),
         suggestion: decided.suggestion };
     }) as Promise<AgentCatalogMutation<AgentDefinition>>;
   }
   /** A person's own skill text (source local, unsigned, pinned by its content digest). Import from elsewhere goes through `importSkill` only. */
-  async defineSkill(input: unknown, credential?: unknown): Promise<AgentCatalogMutation<SkillDefinition>> {
+  async defineSkill(input: unknown, credential?: unknown): Promise<AgentCatalogMutation<ReadableSkillDefinition>> {
     const command = skillDefineCommandSchema.parse(input), { principal, authorization } = await this.admit('define', command.scopeId, credential);
     return this.mutate('skill', command, command.skillId, principal, authorization.revision, async (store, previous, signed) => {
       const decided = await this.decide(store, command, principal, null, null);
-      return { item: defineSkillRevision(previous as SkillDefinition | null, { scopeId: command.scopeId, skillId: command.skillId, commandId: command.commandId, content: command.content,
+      return { item: defineSkillRevision(previous as ReadableSkillDefinition | null, { scopeId: command.scopeId, skillId: command.skillId, commandId: command.commandId, content: command.content,
         contentDigest: skillContentDigest(command.content), source: { kind: 'local' }, signature: { status: 'unsigned' }, author: principal, atMs: this.deps.now(), signed, origin: decided.origin }),
       suggestion: decided.suggestion };
-    }) as Promise<AgentCatalogMutation<SkillDefinition>>;
+    }) as Promise<AgentCatalogMutation<ReadableSkillDefinition>>;
   }
   /** Floor (d) for every principal and whatever policy allows: pinned by the digest of the received bytes and signed over (id, digest) by a key the
    * person registered for `import` — verified by the store inside the write transaction (S8-5), so a key revoked before commit refuses the import. */
-  async importSkill(input: unknown, credential?: unknown): Promise<AgentCatalogMutation<SkillDefinition>> {
+  async importSkill(input: unknown, credential?: unknown): Promise<AgentCatalogMutation<ReadableSkillDefinition>> {
     const command = skillImportCommandSchema.parse(input), { principal, authorization } = await this.admit('import', command.scopeId, credential);
     const contentDigest = skillContentDigest(command.content);
     requireSkillImportPinnedAndSigned({ declaredDigest: command.pin, computedDigest: contentDigest, signature: command.signature });
     const signature = command.signature!;
-    return this.mutate('skill', command, command.skillId, principal, authorization.revision, async (_store, previous, signed) => ({ item: defineSkillRevision(previous as SkillDefinition | null, {
+    return this.mutate('skill', command, command.skillId, principal, authorization.revision, async (_store, previous, signed) => ({ item: defineSkillRevision(previous as ReadableSkillDefinition | null, {
       scopeId: command.scopeId, skillId: command.skillId, commandId: command.commandId, content: command.content, contentDigest, signed,
-      source: { kind: 'import', ref: command.source.ref }, signature: { status: 'verified', ...signature }, author: principal, atMs: this.deps.now() }) }), 'import') as Promise<AgentCatalogMutation<SkillDefinition>>;
+      source: { kind: 'import', ref: command.source.ref }, signature: { status: 'verified', ...signature }, author: principal, atMs: this.deps.now() }) }), 'import') as Promise<AgentCatalogMutation<ReadableSkillDefinition>>;
+  }
+  /** H2: v2 import uses the same floor, authorization, action signing, receipt and catalog commit as v1. */
+  async importHubSkill(input: unknown, credential?: unknown): Promise<AgentCatalogMutation<ReadableSkillDefinition>> {
+    const command = skillImportCommandSchema.extend({ content: hubSkillContentSchema }).parse(input);
+    const { principal, authorization } = await this.admit('import', command.scopeId, credential), contentDigest = skillContentV2Digest(command.content);
+    requireSkillImportPinnedAndSigned({ declaredDigest: command.pin, computedDigest: contentDigest, signature: command.signature });
+    return this.mutate('skill', command, command.skillId, principal, authorization.revision, async (_store, previous, signed) => ({
+      item: hubSkillDefinitionSchema.parse({ schemaVersion: 2, scopeId: command.scopeId, skillId: command.skillId, revision: (previous?.revision ?? 0) + 1,
+        content: command.content, contentDigest, source: { kind: 'import', ref: command.source.ref }, signature: { status: 'verified', ...command.signature! },
+        provenance: { author: { issuer: principal.issuer, subject: principal.subject, ai: isAiPrincipal(principal) }, commandId: command.commandId,
+          definedAtMs: this.deps.now(), ...(signed ? { signed } : {}) } }) }), 'import') as Promise<AgentCatalogMutation<ReadableSkillDefinition>>;
   }
   /** S8-5: an AI/system write is signed over the `catalog-action:1` bytes built here from the typed command (`signCatalogActions`); a person's carries none. */
   private async sign(store: AgentCatalogStore, kind: 'agent' | 'skill', action: 'define' | 'import', command: { scopeId: string; commandId: string; expectedRevision: number | null;
@@ -172,7 +184,7 @@ export class AgentCatalogApplication {
       const decided = suggestion && { ...suggestion, event: { ...event, eventId: this.deps.eventId(), atMs: suggestion.next.atMs, subject: catalogSuggestionAuditSubject(suggestion.record, 'decide', suggestion.next) } };
       const receipt = { scopeId: command.scopeId, commandId: command.commandId, kind, itemId, revision: item.revision, digest }, seal = { ...(signed ? { signed } : {}), ...(decided ? { suggestion: decided } : {}) };
       const saved = await store.commit(kind === 'agent' ? { kind, previous: previous as AgentDefinition | null, next: item as AgentDefinition, receipt, event, standings, ...seal }
-        : { kind, previous: previous as SkillDefinition | null, next: item as SkillDefinition, receipt, event, ...seal });
+        : { kind, previous: previous as ReadableSkillDefinition | null, next: item as ReadableSkillDefinition, receipt, event, ...seal });
       return { schemaVersion: 1, replayed: saved.replayed, item: saved.item };
     } finally { store.close(); }
   }

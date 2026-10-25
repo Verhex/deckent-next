@@ -13,5 +13,16 @@
   "error.HUB_FOREIGN_PACKAGE": "Paket seçilen Hub ile eşleşen bir onay imzası taşımıyor.",
   "error.HUB_FEED_REPLAYED": "Hub iptal listesi eski veya daha önce kabul edilmiş.",
   "error.HUB_FEED_STALE": "İmzalı Hub iptal listesinin süresi dolmuş veya zamanı gelecekte. Devam etmeden önce yenileyin.",
-  "error.HUB_SKILL_INVALID": "Skill içeriği veya paket üst bilgisi geçersiz."
+  "error.HUB_SKILL_INVALID": "Skill içeriği veya paket üst bilgisi geçersiz.",
+  "error.HUB_SOURCE_INVALID": "Hub kaynağı geçersiz veya kaynak sınırına ulaşıldı.",
+  "error.HUB_SOURCE_NOT_FOUND": "Seçilen Hub kaynağı bulunamadı veya kaldırılmış.",
+  "error.HUB_AUTHORITY_REFUSED": "Bu Hub işlemi kişi kartı veya etkin imza anahtarı ve izin gerektirir.",
+  "error.HUB_INSTALL_CONFLICT": "Hub komutu veya katalog revizyonu kayıtlı durumla çelişiyor. Yeniden denemeden önce inceleyin.",
+  "error.HUB_DEPENDENCY_REFUSED": "Tam bağımlılık kümesi veya yerel WorkClass eşlemesi doğrulanamadı.",
+  "error.HUB_DOWNGRADE_REFUSED": "Güncelleme için daha yüksek bir paket sürümü seçilmelidir.",
+  "error.HUB_PACKAGE_REVOKED": "İmzalı Hub akışı bu paketi, yayıncıyı veya imza anahtarını geri çekmiş.",
+  "error.HUB_STORE_CORRUPT": "Hub deposu bütünlük denetiminden geçemedi. Kanıtı koruyup defteri inceleyin.",
+  "error.HUB_STORE_UNAVAILABLE": "Hub deposuna erişilemiyor.",
+  "error.HUB_OUTCOME_UNKNOWN": "Hub kayıt işleminin sonucu bilinmiyor. Aynı komut kimliğiyle uzlaştırın.",
+  "error.HUB_FILE_UNSUPPORTED": "Bu platformda güvenli Hub dosyası içe aktarma kullanılamıyor."
 }

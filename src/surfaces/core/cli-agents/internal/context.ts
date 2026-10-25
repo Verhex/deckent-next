@@ -5,7 +5,7 @@ import type { AgentCatalogMutation, AgentDefineCommand, AgentInspectQuery, Agent
   SignerListing, SignerMutation, SignerRepairCommand, SignerRevokeCommand, SkillDefineCommand, SkillImportCommand, SkillInspectQuery, SkillInspection, SkillListQuery, SkillListing, AgentStatsQuery, AgentStatsView,
   CatalogDraft, CatalogSuggestionInspection, CatalogSuggestionListing, CatalogSuggestionState, CatalogSuggestionView, StandingBulkCommand, StandingChangeCommand, SuggestionDismissCommand, SuggestionInspectQuery,
   SuggestionListQuery } from '#engine/index.js';
-import type { AgentDefinition, AgentStanding, SkillDefinition } from '#domain/index.js';
+import type { AgentDefinition, AgentStanding, ReadableSkillDefinition } from '#domain/index.js';
 
 /** S7 agent/skill catalog: reads use the application's `inspect` authorization; define and define-skill run only from a person's terminal card. */
 export interface AgentsCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'configChoiceSources'> {
@@ -17,9 +17,9 @@ export interface AgentsCommandContext extends CliBaseContext, Pick<TerminalLaunc
   /** S8-2 statistics read (the same `inspect` authorization). */
   inspectAgentStats?: (root: string, input: AgentStatsQuery, options: ConfigLoadOptions) => Promise<AgentStatsView>;
   defineAgent?: (root: string, input: AgentDefineCommand, options: ConfigLoadOptions) => Promise<AgentCatalogMutation<AgentDefinition>>;
-  defineSkill?: (root: string, input: SkillDefineCommand, options: ConfigLoadOptions) => Promise<AgentCatalogMutation<SkillDefinition>>;
+  defineSkill?: (root: string, input: SkillDefineCommand, options: ConfigLoadOptions) => Promise<AgentCatalogMutation<ReadableSkillDefinition>>;
   /** S8-5 signer keys and signed import (each write a person's card). */
-  importSkill?: (root: string, input: SkillImportCommand, options: ConfigLoadOptions) => Promise<AgentCatalogMutation<SkillDefinition>>;
+  importSkill?: (root: string, input: SkillImportCommand, options: ConfigLoadOptions) => Promise<AgentCatalogMutation<ReadableSkillDefinition>>;
   listSigners?: (root: string, input: SignerListQuery, options: ConfigLoadOptions) => Promise<SignerListing>;
   enrolSigner?: (root: string, input: SignerEnrolCommand, options: ConfigLoadOptions) => Promise<SignerMutation>;
   addSigner?: (root: string, input: SignerAddCommand, options: ConfigLoadOptions) => Promise<SignerMutation>;
@@ -36,5 +36,5 @@ export interface AgentsCommandContext extends CliBaseContext, Pick<TerminalLaunc
   draftSuggestion?: (root: string, input: SuggestionInspectQuery, options: ConfigLoadOptions) => Promise<Readonly<{ suggestion: CatalogSuggestionView; draft: CatalogDraft; digest: string;
     readable: number; withheld: number; aiDerived: boolean }>>;
   defineFromSuggestion?: (root: string, input: { readonly schemaVersion: 1; readonly scopeId: string; readonly suggestionId: string; readonly id: string; readonly expectedRevision: number | null;
-    readonly draftDigest: string; readonly commandId: string }, options: ConfigLoadOptions) => Promise<AgentCatalogMutation<AgentDefinition | SkillDefinition>>;
+    readonly draftDigest: string; readonly commandId: string }, options: ConfigLoadOptions) => Promise<AgentCatalogMutation<AgentDefinition | ReadableSkillDefinition>>;
 }

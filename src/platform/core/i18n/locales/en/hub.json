@@ -13,5 +13,16 @@
   "error.HUB_FOREIGN_PACKAGE": "The package has no matching attestation from the selected Hub.",
   "error.HUB_FEED_REPLAYED": "The Hub revocation feed is older or has already been accepted.",
   "error.HUB_FEED_STALE": "The signed Hub revocation feed is expired or has a future timestamp. Refresh it before continuing.",
-  "error.HUB_SKILL_INVALID": "The skill content or its package frontmatter is invalid."
+  "error.HUB_SKILL_INVALID": "The skill content or its package frontmatter is invalid.",
+  "error.HUB_SOURCE_INVALID": "The Hub source is invalid or the source limit was reached.",
+  "error.HUB_SOURCE_NOT_FOUND": "The selected Hub source is absent or removed.",
+  "error.HUB_AUTHORITY_REFUSED": "This Hub operation requires the person card or an active signing key and grant.",
+  "error.HUB_INSTALL_CONFLICT": "The Hub command or catalog revision conflicts with stored state. Inspect it before retrying.",
+  "error.HUB_DEPENDENCY_REFUSED": "The exact dependency closure or local WorkClass mapping could not be verified.",
+  "error.HUB_DOWNGRADE_REFUSED": "An update must select a strictly higher package version.",
+  "error.HUB_PACKAGE_REVOKED": "This package, publisher or signing key was withdrawn by the signed Hub feed.",
+  "error.HUB_STORE_CORRUPT": "Hub storage failed integrity validation. Preserve the evidence and inspect the ledger.",
+  "error.HUB_STORE_UNAVAILABLE": "Hub storage is unavailable.",
+  "error.HUB_OUTCOME_UNKNOWN": "The Hub commit result is unknown. Reconcile using the same command id.",
+  "error.HUB_FILE_UNSUPPORTED": "Secure Hub file import is unavailable on this platform."
 }

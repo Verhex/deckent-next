@@ -32,7 +32,8 @@ export const PREVIOUS_LEDGER_VERSION = 50;
 /** v69 → v68 (S8-2 aggregator pass position): the additive table (with its triggers) is dropped; exact (it is rebuildable state). */
 /** v70 → v69 (S8-3 catalog suggestions): the additive tables (with their indexes and triggers) are dropped; exact for a ledger without suggestions (the
  * windows are rebuildable state); restoring the pre-switch backup is the real path. */
-export const DOWNGRADE_TO_V69_LEDGER_SQL = 'DROP TABLE IF EXISTS catalog_evolution_windows; DROP TABLE IF EXISTS catalog_suggestion_states; DROP TABLE IF EXISTS catalog_suggestions; PRAGMA user_version=69;';
+export const DOWNGRADE_TO_V70_LEDGER_SQL = 'DROP TABLE IF EXISTS hub_revocation_entries; DROP TABLE IF EXISTS hub_client_receipts; DROP TABLE IF EXISTS hub_revocation_snapshots; DROP TABLE IF EXISTS hub_installs; DROP TABLE IF EXISTS hub_sources; PRAGMA user_version=70;';
+export const DOWNGRADE_TO_V69_LEDGER_SQL = DOWNGRADE_TO_V70_LEDGER_SQL + 'DROP TABLE IF EXISTS catalog_evolution_windows; DROP TABLE IF EXISTS catalog_suggestion_states; DROP TABLE IF EXISTS catalog_suggestions; PRAGMA user_version=69;';
 export const DOWNGRADE_TO_V68_LEDGER_SQL = DOWNGRADE_TO_V69_LEDGER_SQL + ' DROP TABLE catalog_evolution_positions; PRAGMA user_version=68;';
 export const DOWNGRADE_TO_V67_LEDGER_SQL = DOWNGRADE_TO_V68_LEDGER_SQL + ' DROP TABLE skill_signer_receipts; DROP TABLE skill_signer_key_revisions; DROP TABLE skill_signer_keys; PRAGMA user_version=67;';
 export const DOWNGRADE_TO_V66_LEDGER_SQL = DOWNGRADE_TO_V67_LEDGER_SQL + ' DROP TABLE agent_standing_receipts; DROP TABLE agent_standing_revisions; DROP TABLE agent_standings; PRAGMA user_version=66;';
