@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { terminalSessionLabels } from '#surfaces/core/terminal-labels/index.js';
 import { bindSessionScope } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, settle, until, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
+import { SLASH_WINDOW_TEST_LABELS } from '../support/slash-window-labels.js';
 
 // T5 (alpha.54): `/rename <title>` names the open conversation through the session port; the `/resume` picker shows the title and narrows by typed text.
 const mounted: Array<{ unmount(): void }> = [];
@@ -16,9 +17,10 @@ const ready = async (view: ReturnType<typeof mountWorkline>) => { mounted.push(v
 const row = (n: number, preview: string, title?: string) => ({ sessionId: `0000000${n}-2222-4333-8444-555555555555`, updatedAtMs: n, messages: 2, preview, ...(title ? { title } : {}) });
 
 describe('/rename', () => {
-  it('names the open conversation through the port and says so', async () => {
+  // TRM-40: the rich terminal (slash windows) runs window commands bare, but no window replaces the title, so it keeps the argument.
+  it.each([['line terminal', labels], ['rich terminal with slash windows', { ...labels, windows: SLASH_WINDOW_TEST_LABELS }]] as const)('names the open conversation through the port and says so (%s)', async (_name, words) => {
     const rename = vi.fn(async () => true);
-    const view = mountWorkline({ labels, sessions: { async save() { /* unused */ }, async list() { return []; }, async load() { return null; }, rename } });
+    const view = mountWorkline({ labels: words, sessions: { async save() { /* unused */ }, async list() { return []; }, async load() { return null; }, rename } });
     await ready(view);
     await send(view, '/rename release notes\r');
     await until(() => frameOf(view).includes('RENAME-DONE'), 'renamed');

@@ -335,3 +335,26 @@ esac
     expect(doctor.stdout).toMatch(new RegExp(`ok\\s+Worker image ${images[0]!.slice(0, 19)} is on this Docker`, 'u'));
   }, 300_000);
 });
+
+describe.skipIf(process.platform !== 'linux')('U8 held terminal between cards on a real PTY (compiled card view)', () => {
+  // Taze init (U8): between two cards of one flow the terminal stays raw and typed keys are discarded: an arrow key never echoes `^[[B` over
+  // the next frame, a card still answers its own keys, and Ctrl+C typed in the gap still interrupts (SIGINT). The real card renderer and hold.
+  it('a held terminal between two cards echoes no key, keeps each card\'s own answer and still takes Ctrl+C', async () => {
+    const human = resolve('dist/surfaces/core/cli-human/index.js');
+    await access(human);
+    const f = await fixture();
+    const script = `const { askCliCard, holdTerminalInput } = await import(${JSON.stringify(human)});
+const io = { locale: 'en', stdin: process.stdin, stdout: process.stdout, env: process.env }, gap = () => new Promise(done => setTimeout(done, 1500));
+const options = [{ id: 'apply', label: 'Apply', key: 'y' }, { id: 'no', label: 'No', key: 'n' }];
+holdTerminalInput(process.stdin);
+process.stdout.write('ANSWER1=' + await askCliCard({ title: 'First card', options }, io) + '\\nGAP-OPEN\\n'); await gap();
+process.stdout.write('ANSWER2=' + await askCliCard({ title: 'Second card', options }, io) + '\\nGAP-AGAIN\\n'); await gap(); await gap();
+process.stdout.write('NOT-INTERRUPTED\\n');`;
+    const run = await f.pty('held-gap', [process.execPath, '--input-type=module', '-e', script],
+      [['First card', '1\r'], ['GAP-OPEN', '\u001b[B\r'], ['Second card', 'n'], ['GAP-AGAIN', '\u001b[B\u0003']]);
+    expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
+    expect(run.output).toContain('ANSWER1=apply'); expect(run.output).toContain('ANSWER2=no');
+    expect(run.output).not.toContain('^[');
+    expect({ status: run.status, interrupted: !run.output.includes('NOT-INTERRUPTED') }).toEqual({ status: -2, interrupted: true });
+  }, 60_000);
+});
