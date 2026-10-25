@@ -259,6 +259,8 @@
     "src/composition/core/cli": {
       "dependencies": [
         "src/adapters/core/agent-workspace-floor",
+        "src/adapters/core/setup-detect-coding",
+        "src/platform/core/crash-reporting",
         "src/adapters/core/contract",
         "src/adapters/core/installation-profile-file",
         "src/adapters/core/local-runtime-socket",
@@ -371,6 +373,7 @@
     },
     "src/composition/core/mcp": {
       "dependencies": [
+        "src/adapters/core/setup-detect-coding",
         "src/composition/core/approvals",
         "src/composition/core/monitor",
         "src/adapters/core/local-principal",

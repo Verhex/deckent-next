@@ -25,7 +25,7 @@ export { isMainModule } from '#platform/core/host/index.js';
 export type { Environment } from '#platform/core/host/index.js';
 export { globalStateRoot, detectWslLinux, isWslHost, type KernelIdentityReader, normalizeGlobalScopePlatform, resolveGlobalScopePaths, resolveGlobalConfigPaths, resolveGlobalConfigReadPath } from '#platform/core/host/index.js';
 export type { GlobalScopePlatform, GlobalScopePaths } from '#platform/core/host/index.js';
-export { resolveProductPaths } from '#platform/core/host/index.js';
+export { resolveProductPaths, resolveProjectRoot, type ProjectRootPorts, type ProjectRootResolution } from '#platform/core/host/index.js';
 export { detectHostMemory, suggestMaxWorkers, calcRecommendedMaxWorkers, describeWorkerRecommendation, type WorkerRecommendation, suggestMaxWorkersFromCapacity, getSystemProfile, assessNodeSupport, nodeEngineFloors, type NodeSupport } from '#platform/core/host/index.js';
 export { detectEnvironment } from '#platform/core/host/index.js';
 export { detectServiceManager, serviceManagerRestartCommand, SERVICE_MANAGER_QUERY_BOUNDS, type ServiceManagerUnit, type ServiceMainPidQuery, recordedProcessState } from '#platform/core/host/index.js';
