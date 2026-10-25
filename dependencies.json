@@ -123,7 +123,8 @@
       "owners": [
         "src/adapters/core/mcp-transport",
         "src/surfaces/core/mcp",
-        "src/composition/core/mcp"
+        "src/composition/core/mcp",
+        "src/surfaces/core/hub-mcp"
       ],
       "purpose": "deckent-mcp server: the protocol surface external agents use to drive Deckent over stdio.",
       "features": [
@@ -299,7 +300,8 @@
         "src/adapters",
         "src/composition",
         "src/surfaces/core/cli-terminal",
-        "src/surfaces/core/mcp"
+        "src/surfaces/core/mcp",
+        "src/surfaces/core/hub-mcp"
       ],
       "purpose": "Contract language: runtime schemas for domain records, config, ledger rows, provider wire shapes and MCP tool input.",
       "features": [

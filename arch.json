@@ -4053,6 +4053,40 @@
         "src/platform/core/integrity"
       ],
       "plan": "LEARNING"
+    },
+    "src/engine/core/hub-server": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/domain/core/primitives",
+        "src/platform/core/integrity",
+        "src/platform/core/redaction",
+        "src/capabilities/core/artifacts",
+        "src/engine/core/hub",
+        "src/platform/core/errors"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/hub-store": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/domain/core/primitives",
+        "src/platform/core/integrity",
+        "src/capabilities/core/artifacts",
+        "src/engine/core/hub",
+        "src/engine/core/hub-server",
+        "src/adapters/core/file-artifacts"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/surfaces/core/hub-mcp": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/platform/core/integrity",
+        "src/platform/core/common",
+        "src/platform/core/validate",
+        "src/engine/core/hub-server"
+      ],
+      "plan": "LEARNING"
     }
   },
   "composition": {
@@ -4087,7 +4121,7 @@
       "domain": 10800,
       "capabilities": 25000,
       "engine": 60000,
-      "adapters": 33500,
+      "adapters": 33700,
       "surfaces": 45000,
       "composition": 9800
     },
@@ -4336,6 +4370,23 @@
       }
     ],
     "invariants": [
+      {
+        "file": "src/surfaces/core/hub-mcp/internal/server.ts",
+        "symbol": "listParams/cursor",
+        "values": [
+          "cursor"
+        ],
+        "reason": "MCP paginated request wire field cursor, stable ext-skills 2026-07-28; unrelated to the Cursor provider."
+      },
+      {
+        "file": "src/engine/core/hub-server/internal/application.ts",
+        "symbol": "HubServerApplication/requirePublication",
+        "values": [
+          60,
+          1000
+        ],
+        "reason": "Exact hour to milliseconds conversion for hub-limits publishesPerHour (60 minutes/hour, 60 seconds/minute, 1000 milliseconds/second); not a mutable rate policy."
+      },
       {
         "file": "src/adapters/core/native-connection/internal/egress.ts",
         "symbol": "tunnelNativeConnect",

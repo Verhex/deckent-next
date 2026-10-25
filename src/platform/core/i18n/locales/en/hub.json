@@ -13,5 +13,15 @@
   "error.HUB_FOREIGN_PACKAGE": "The package has no matching attestation from the selected Hub.",
   "error.HUB_FEED_REPLAYED": "The Hub revocation feed is older or has already been accepted.",
   "error.HUB_FEED_STALE": "The signed Hub revocation feed is expired or has a future timestamp. Refresh it before continuing.",
-  "error.HUB_SKILL_INVALID": "The skill content or its package frontmatter is invalid."
+  "error.HUB_SKILL_INVALID": "The skill content or its package frontmatter is invalid.",
+  "error.HUB_SERVER_DENIED": "The Hub operation is outside this principal or scope authority.",
+  "error.HUB_VERSION_CONFLICT": "A published Hub version is immutable; publish a strictly newer version.",
+  "error.HUB_DEPENDENCY_INVALID": "The exact Hub dependency closure is missing, foreign, cyclic or over its bound.",
+  "error.HUB_SECRET_REFUSED": "The Hub package contains secret material and cannot be published.",
+  "error.HUB_REVIEW_REFUSED": "The Hub reviewer is not eligible for this countersignature.",
+  "error.HUB_STORE_UNSAFE": "The Hub store identity, schema or filesystem custody is unsafe.",
+  "error.HUB_STORE_CONFLICT": "The Hub store changed; inspect the current revision before a new action.",
+  "error.HUB_RESOURCE_UNKNOWN": "The requested Hub skill or resource does not exist.",
+  "error.HUB_STORE_UNSUPPORTED": "This platform cannot enforce the Hub filesystem storage boundary.",
+  "error.HUB_STORE_OUTCOME_UNKNOWN": "The Hub transaction outcome is unknown. Reconcile retained evidence before any new action."
 }

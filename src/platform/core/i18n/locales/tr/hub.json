@@ -13,5 +13,15 @@
   "error.HUB_FOREIGN_PACKAGE": "Paket seçilen Hub ile eşleşen bir onay imzası taşımıyor.",
   "error.HUB_FEED_REPLAYED": "Hub iptal listesi eski veya daha önce kabul edilmiş.",
   "error.HUB_FEED_STALE": "İmzalı Hub iptal listesinin süresi dolmuş veya zamanı gelecekte. Devam etmeden önce yenileyin.",
-  "error.HUB_SKILL_INVALID": "Skill içeriği veya paket üst bilgisi geçersiz."
+  "error.HUB_SKILL_INVALID": "Skill içeriği veya paket üst bilgisi geçersiz.",
+  "error.HUB_SERVER_DENIED": "Hub işlemi bu aktörün veya kapsamın yetkisi dışında.",
+  "error.HUB_VERSION_CONFLICT": "Yayımlanan Hub sürümü değiştirilemez; daha yeni bir sürüm yayımlayın.",
+  "error.HUB_DEPENDENCY_INVALID": "Hub bağımlılığı eksik, başka kaynağa ait, döngüsel veya sınırı aşıyor.",
+  "error.HUB_SECRET_REFUSED": "Hub paketi sır içeriyor ve yayımlanamaz.",
+  "error.HUB_REVIEW_REFUSED": "Hub inceleyicisi bu karşı imza için uygun değil.",
+  "error.HUB_STORE_UNSAFE": "Hub deposunun kimliği, şeması veya dosya sistemi koruması güvenli değil.",
+  "error.HUB_STORE_CONFLICT": "Hub deposu değişti; yeni işlemden önce güncel revizyonu inceleyin.",
+  "error.HUB_RESOURCE_UNKNOWN": "İstenen Hub becerisi veya kaynağı yok.",
+  "error.HUB_STORE_UNSUPPORTED": "Bu platform Hub dosya deposunun güvenlik sınırını uygulayamıyor.",
+  "error.HUB_STORE_OUTCOME_UNKNOWN": "Hub işleminin sonucu bilinmiyor. Yeni işlemden önce kalıcı kanıtı uzlaştırın."
 }
