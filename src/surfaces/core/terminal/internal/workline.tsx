@@ -565,8 +565,14 @@ export function WorklineApp(props: WorklineProps) {
         }
         if (result.resumePicker) {
           // The drain stays inside this call, so a line queued while the list loads cannot run under the picker.
-          const choice = await panel.pick(execution, { kind: 'resume', rows: result.resumePicker }, result.resumePicker.map((_, index) => String(index)));
-          if (choice !== null && !execution.signal.aborted) push((await session.run('resume', String(Number(choice) + 1), history, execution)).entries);
+          let picker = result.resumePicker;
+          while (!execution.signal.aborted) {
+            const choice = await panel.pick(execution, { kind: 'resume', rows: picker }, picker.map((_, index) => String(index)));
+            if (choice === null || execution.signal.aborted) break;
+            const item = picker[Number(choice)], resumed = await session.run('resume', item?.sessionId.startsWith('--') ? item.sessionId : String(Number(choice) + 1), history, execution);
+            push(resumed.entries);
+            if (!resumed.resumePicker) break; else picker = resumed.resumePicker;
+          }
         } else push(result.entries);
       }
       catch (error) { push([notice('error', errorText(error))]); }

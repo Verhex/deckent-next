@@ -56,6 +56,24 @@ describe('/rename', () => {
 });
 
 describe('/resume picker', () => {
+  it('U7 can widen an empty current-folder list and load a session from all folders', async () => {
+    const list = vi.fn(async (all?: boolean) => all ? [row(2, 'another folder')] : []);
+    const load = vi.fn(async () => [{ role: 'user' as const, content: 'q' }]);
+    const view = mountWorkline({ labels: { ...labels, sessions: { ...sessions, folders: { all: 'ALL-FOLDERS', current: 'THIS-FOLDER' } } },
+      sessions: { async save() { /* unused */ }, list, load } });
+    await ready(view); await send(view, '/resume\r');
+    await until(() => frameOf(view).includes('ALL-FOLDERS'), 'widen choice');
+    view.stdin.write(ENTER);
+    await until(() => frameOf(view).includes('another folder') && frameOf(view).includes('THIS-FOLDER'), 'all folders');
+    view.stdin.write(DOWN); await settle(30); view.stdin.write(ENTER);
+    await until(() => frameOf(view).includes('ALL-FOLDERS') && !frameOf(view).includes('another folder'), 'current folder again');
+    view.stdin.write(ENTER);
+    await until(() => frameOf(view).includes('another folder'), 'all folders again');
+    view.stdin.write(ENTER);
+    await until(() => load.mock.calls.length === 1, 'resumed');
+    expect(list.mock.calls.map(call => call[0])).toEqual([false, true, false, true, true]);
+    expect(load.mock.calls[0]![0]).toBe(row(2, '').sessionId);
+  });
   const list = [row(1, 'alpha question'), row(2, 'beta question', 'My Release Notes'), row(3, 'gamma question')];
   const port = (load = vi.fn(async () => [{ role: 'user' as const, content: 'q' }])) => ({ async save() { /* unused */ }, async list() { return list; }, load });
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { main as runCli, resolveCliLocale } from '#surfaces/index.js';
-import { isMainModule, envValue, loadConfigLanguage, loadConfigAgentEnvironment, type Locale } from '#platform/index.js';
+import { isMainModule, envValue, loadConfigLanguage, loadConfigAgentEnvironment, resolveProjectRoot, DeckentError, formatHumanError, exitCodeFor, type Locale, type ProjectRootResolution } from '#platform/index.js';
 /**
  * L-KIT: the call's locale, resolved once here and handed to every command (`context.locale`): `--lang`, DECKENT_LANGUAGE/DECKENT_LANG,
  * config `language`, LC_ALL, LC_MESSAGES, LANG. Presentation only: a config that cannot be read falls back to the environment, never blocks.
@@ -20,14 +20,27 @@ export const SIGNAL_COMMANDS: readonly (readonly [string, string?])[] = Object.f
   ['task', 'integration-deliver'], ['task', 'integration-adopt'], ['task', 'integration-rollback']]);
 /** INIT-D7: the installation's `cli.agentEnvironment`, read like the language (presentation only); unreadable or invalid → the kit default. */
 export const hostAgentEnvironment = (root: string, env: NodeJS.ProcessEnv = process.env) => loadConfigAgentEnvironment(root, { env }).catch(() => undefined);
+/** U7-1: the project this call belongs to, walked up from the launch folder; `init --here` keeps the exact folder (a nested installation).
+ * Git is asked (lazily, read-only) only when an installation above the folder lies in a work tree. A refusal is printed in the caller's language. */
+export async function hostProjectRoot(argv: readonly string[], start: string, env: NodeJS.ProcessEnv = process.env): Promise<ProjectRootResolution> {
+  return resolveProjectRoot(start, env, { exact: argv[0] === 'init' && argv.includes('--here'),
+    ports: { tracked: async (directory, paths) => (await import('./git-tracked.js')).gitTracksPaths(directory, paths, env) } });
+}
 export async function main(argv: readonly string[] = process.argv.slice(2), serviceEntry?: string) {
-  const root = process.cwd();
+  let resolution: ProjectRootResolution;
+  try { resolution = await hostProjectRoot(argv, process.cwd()); }
+  catch (error) {
+    if (!(error instanceof DeckentError)) throw error;
+    process.stderr.write(`${formatHumanError(error, { locale: await hostLocale(argv, process.cwd()), env: process.env, isTTY: Boolean(process.stderr.isTTY) })}\n`);
+    return exitCodeFor(error);
+  }
+  const root = resolution.root;
   const [locale, agentEnvironment] = await Promise.all([hostLocale(argv, root), hostAgentEnvironment(root)]);
   const isRuntimeServe = argv[0] === 'runtime' && argv[1] === 'serve', handlesSignals = isRuntimeServe || SIGNAL_COMMANDS.some(([family, action]) => argv[0] === family && (action === undefined || argv[1] === action));
   const controller = new AbortController();
   const stop = () => controller.abort();
   if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
-  const base = { root, locale, ...(agentEnvironment ? { agentEnvironment } : {}), signal: controller.signal };
+  const base = { root, rootResolution: resolution, locale, ...(agentEnvironment ? { agentEnvironment } : {}), signal: controller.signal };
   // COLDSTART: host operations remain lazy. Model-connect help alone loads the public adapter metadata boundary for its current kinds.
   try { return await runCli(argv, { ...base, helpParams: async key => {
     if (key !== 'cli.help.modelsConnect') return {};

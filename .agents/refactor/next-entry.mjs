@@ -33,8 +33,8 @@ const env = { ...process.env, DECKENT_GLOBAL_HOME: resolve(homedir(), '.local/st
 delete env.DECKENT_HOME;
 delete env.DECKENT_NEXT_INSTALL_ROOT;
 const entry = surface === 'node' ? [] : [resolve(codeRoot(), `dist/composition/core/${surface}/internal/entry.js`)];
-// cwd stays the project root (its config and live data) whichever tree the code comes from.
-const child = spawn(process.execPath, [...entry, ...args], { cwd: root, env, stdio: 'inherit' });
+// The code stays pinned to its staged version; the product resolver starts in the caller's folder (Q-U7 = A).
+const child = spawn(process.execPath, [...entry, ...args], { cwd: process.cwd(), env, stdio: 'inherit' });
 const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 for (const signal of signals) process.on(signal, () => child.kill(signal));
 child.on('error', () => { process.stderr.write('NEXT_ENTRY_FAILED\n'); process.exitCode = 1; });

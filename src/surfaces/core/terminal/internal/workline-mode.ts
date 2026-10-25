@@ -118,10 +118,7 @@ export async function runModeCommand(args: string, port: WorklinePermissionModeP
   // A v1 policy has no modes: there is nothing to set, so the service is not asked (it would only refuse, and the person needs the way forward).
   if (!base.supported) return done([notice('error', line(base, labels, fullAccess))], base);
   const target = start ? 'full-access' : mode ?? base.mode;
-  if (closedMode(target, base) && port.open) {
-    if (!await port.open(target as Exclude<PermissionMode, 'standart'>)) return done([], base);
-    base = await port.inspect();
-  }
+  if (closedMode(target, base) && port.open) { if (!await port.open(target as Exclude<PermissionMode, 'standart'>)) return done([], base); base = await port.inspect(); }
   const changed = mode === 'full-access' ? await port.set(target, base.revision, undefined, terminal) : await port.set(target, base.revision, askEdits);
   const { previous, changed: wrote, ...view } = changed;
   if (start) return done([notice('info', labels.startSaved ?? line(view, labels, fullAccess))], view);
@@ -161,10 +158,7 @@ const closedMode = (mode: PermissionMode, view: PermissionModeView) => mode === 
 async function stepPermissionMode(port: WorklinePermissionModePort, base: PermissionModeView, labels: WorklineModeLabels, current: PermissionModeStop, next: PermissionModeStop,
   session: WorklineModeSession): Promise<{ readonly entries: readonly WorkLedgerEntry[]; readonly view: PermissionModeView | null; readonly fullAccess: boolean }> {
   const target = STOP_TARGET[next];
-  if (closedMode(target.mode, base) && port.open) {
-    if (!await port.open(target.mode as Exclude<PermissionMode, 'standart'>)) return { entries: [], view: base, fullAccess: current === 'full-access' };
-    base = await port.inspect();
-  }
+  if (closedMode(target.mode, base) && port.open) { if (!await port.open(target.mode as Exclude<PermissionMode, 'standart'>)) return { entries: [], view: base, fullAccess: current === 'full-access' }; base = await port.inspect(); }
   // FA-SESSION: the full-access stop is this session's only; every other stop is stored (the next launch's mode).
   const changed = next === 'full-access' ? await port.set('full-access', base.revision, undefined, session) : await port.set(target.mode, base.revision, target.askEdits);
   const view: PermissionModeView = Object.freeze({ schemaVersion: changed.schemaVersion, scopeId: changed.scopeId, supported: changed.supported, mode: changed.mode,

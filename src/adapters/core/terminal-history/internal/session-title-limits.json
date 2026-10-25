@@ -1,1 +1,1 @@
-{ "titleChars": 80, "titleFileMaxBytes": 1024 }
+{ "titleChars": 80, "titleFileMaxBytes": 1024, "originFileMaxBytes": 32768, "originSuffix": ".origin" }

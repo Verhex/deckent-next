@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { agentTurnMessageSchema, type AgentTurnMessage } from '#domain/index.js';
 import { redactText } from '#adapters/core/native-connection/index.js';
 import titleLimits from './session-title-limits.json' with { type: 'json' };
+import { sessionOriginMatches, writeSessionOrigin, type TerminalSessionFilter, type TerminalSessionOrigin } from './session-origin.js';
 
 export const TERMINAL_SESSION_LIMITS = Object.freeze({ maxSessions: 50, maxFileBytes: 16 * 1024 * 1024, previewChars: 120 });
 const sessionIdSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
@@ -18,9 +19,9 @@ export interface TerminalSessionSummary {
   readonly title?: string;
 }
 export interface TerminalSessionStore {
-  save(snapshot: TerminalSessionSnapshot): Promise<void>;
+  save(snapshot: TerminalSessionSnapshot, origin?: TerminalSessionOrigin): Promise<void>;
   /** Newest first, only this scope's sessions. */
-  list(scopeId: string): Promise<readonly TerminalSessionSummary[]>;
+  list(scopeId: string, filter?: TerminalSessionFilter): Promise<readonly TerminalSessionSummary[]>;
   load(scopeId: string, sessionId: string): Promise<readonly AgentTurnMessage[] | null>;
   /** Names one saved session of this scope; false when no such snapshot exists (nothing is written then). A title is display text, never authority. */
   rename(scopeId: string, sessionId: string, title: string): Promise<boolean>;
@@ -73,22 +74,25 @@ export function openTerminalSessionStore(directory: string, limits = TERMINAL_SE
     return snapshots.filter((value): value is TerminalSessionSnapshot => value !== null).sort((a, b) => b.updatedAtMs - a.updatedAtMs);
   };
   const store: TerminalSessionStore = {
-    async save(input) {
+    async save(input, origin) {
       // An oversized history is refused before any redaction work (redaction never grows text beyond a small constant).
       if (Buffer.byteLength(JSON.stringify(input.messages), 'utf8') > limits.maxFileBytes) throw new RangeError('TERMINAL_SESSION_TOO_LARGE');
       const snapshot = snapshotSchema.parse({ ...input, messages: input.messages.filter(message => message.role !== 'system' && (message.role !== 'assistant' || message.content.trim() || message.toolCalls.length)).map(redacted) });
       const body = JSON.stringify(snapshot);
       if (Buffer.byteLength(body, 'utf8') > limits.maxFileBytes) throw new RangeError('TERMINAL_SESSION_TOO_LARGE');
       const target = pathOf(snapshot.sessionId), temporary = `${target}.${process.pid}.tmp`;
+      if (origin && !(await read(target))) await writeSessionOrigin(`${target}${titleLimits.originSuffix}`, origin);
       const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
       try { await handle.writeFile(body); await handle.sync(); } finally { await handle.close(); }
       await rename(temporary, target);
       // The cap is per scope: only this scope's readable snapshots are ever pruned.
       const kept = (await all()).filter(other => other.scopeId === snapshot.scopeId);
-      await Promise.all(kept.slice(limits.maxSessions).flatMap(old => [unlink(pathOf(old.sessionId)), unlink(titlePath(old.sessionId))].map(removal => removal.catch(() => undefined))));
+      await Promise.all(kept.slice(limits.maxSessions).flatMap(old => [unlink(pathOf(old.sessionId)), unlink(titlePath(old.sessionId)), unlink(`${pathOf(old.sessionId)}${titleLimits.originSuffix}`)].map(removal => removal.catch(() => undefined))));
     },
-    async list(scopeId) {
-      const own = (await all()).filter(snapshot => snapshot.scopeId === scopeId);
+    async list(scopeId, filter) {
+      const scoped = (await all()).filter(snapshot => snapshot.scopeId === scopeId);
+      const matches = await Promise.all(scoped.map(snapshot => sessionOriginMatches(pathOf(snapshot.sessionId), filter)));
+      const own = scoped.filter((_, index) => matches[index]);
       const titles = await Promise.all(own.map(snapshot => readTitle(snapshot.sessionId)));
       return Object.freeze(own.map((snapshot, index) => {
         const first = snapshot.messages.find(message => message.role === 'user'), title = titles[index];

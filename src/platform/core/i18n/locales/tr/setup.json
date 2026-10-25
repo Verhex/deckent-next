@@ -274,5 +274,8 @@
   "setup.work.card.yes": "Tanımla",
   "setup.work.poolCard.title": "{pool} worker havuzu kurulsun mu?",
   "setup.work.poolCard.body": "{pool} havuzunu {execution} çalışma ve {inFlight} süren iş yeriyle deftere kaydeder; ardından Run'lar worker başlatabilir.",
-  "setup.work.poolCard.yes": "Kur"
+  "setup.work.poolCard.yes": "Kur",
+  "setup.offer.recommended": "{path} (önerilen)",
+  "setup.offer.here": "Bu klasör: {path}",
+  "setup.enclosing": "Üst klasördeki {path} kurulumu kullanılıyor. Bu klasöre ayrı kurulum için deckent init --here çalıştırın."
 }

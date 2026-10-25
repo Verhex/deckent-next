@@ -7,8 +7,8 @@ import { parseArgs } from 'node:util';
 import { resolve } from 'node:path';
 import { serveStdio, StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { loadConfiguredInstallationIdentity } from '#composition/core/scoped-request/index.js';
-import { resolveLocale, isMainModule, DeckentError, formatHumanError, loadConfigLanguage, t, type Locale } from '#platform/index.js';
-import { withMcpPrincipal, createBoundedMcpTransport } from '#adapters/index.js';
+import { resolveLocale, isMainModule, DeckentError, formatHumanError, loadConfigLanguage, resolveProjectRoot, t, type Locale } from '#platform/index.js';
+import { withMcpPrincipal, createBoundedMcpTransport, gitTracksPaths } from '#adapters/index.js';
 import { loadMcpSurface } from '#surfaces/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { inspectDeclaredModels, inspectModelBinding } from '#composition/core/provider-catalog/index.js';
@@ -73,12 +73,18 @@ import { inspectMonitor } from '#composition/core/monitor/index.js';
 /** Shared argument contract for Core and a distribution executable using `deckent/extensions`. */ export async function run(argv: readonly string[] = process.argv.slice(2)) {
   const { values } = parseArgs({ args: [...argv], options: { project: { type: 'string' } }, strict: true, allowPositionals: false });
   if (values.project !== undefined && !values.project.trim()) throw new Error('MCP_PROJECT_INVALID');
-  return main(resolve(values.project ?? process.cwd()));
+  return main(await mcpProjectRoot(values.project));
+}
+/** U7-1: without `--project` the server serves the installation of the folder it was started in, found by the CLI's own walk-up (same
+ * refusals); `--project` names the root exactly, as before. */
+async function mcpProjectRoot(project: string | undefined, env: NodeJS.ProcessEnv = process.env): Promise<string> {
+  return (await resolveProjectRoot(resolve(project ?? process.cwd()), env, { exact: project !== undefined,
+    ports: { tracked: (directory, paths) => gitTracksPaths(directory, paths, env) } })).root;
 }
 /** Presentation only (like the CLI host): the `--project` directory's configured `language`, read without healing or locks; unreadable or absent → undefined. */
 export async function mcpConfigLanguage(argv: readonly string[], env: NodeJS.ProcessEnv = process.env): Promise<Locale | undefined> {
   const at = argv.indexOf('--project'), project = at >= 0 && argv[at + 1] && !argv[at + 1]!.startsWith('-') ? argv[at + 1]! : undefined;
-  try { return await loadConfigLanguage(resolve(project ?? process.cwd()), { env }); } catch { return undefined; }
+  try { return await loadConfigLanguage(await mcpProjectRoot(project, env).catch(() => resolve(project ?? process.cwd())), { env }); } catch { return undefined; }
 }
 /** Start-up failure on stderr (stdout carries the protocol): `MCP_START_FAILED`, then a typed Deckent error's localized message and code (identity or configuration that could not load); any other error stays the bare line. */
 export const mcpStartFailureText = (error: unknown, env: NodeJS.ProcessEnv = process.env, configLanguage?: Locale): string => 'MCP_START_FAILED\n' + (error instanceof DeckentError ? `${formatHumanError(error, { locale: resolveLocale(undefined, env, configLanguage), env, isTTY: false })}\n` : '');

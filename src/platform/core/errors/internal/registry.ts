@@ -149,6 +149,12 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   BACKUP_AUDIT_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_AUDIT_UNAVAILABLE', p, l) }) },
   BACKUP_SCHEDULE_IDENTITY_REQUIRED: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_SCHEDULE_IDENTITY_REQUIRED', p, l) }) },
   BACKUP_SCHEDULE_SECRET_REQUIRED: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_SCHEDULE_SECRET_REQUIRED', p, l) }) },
+  // U7 (İ-6): the walk-up from a subfolder found an installation above it that it may not adopt (params path/root; reason picks the sentence).
+  INSTALLATION_ROOT_UNSAFE: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'mode' ? t('error.INSTALLATION_ROOT_UNSAFE.mode', p, l) : t('error.INSTALLATION_ROOT_UNSAFE', p, l) }) },
+  INSTALLATION_ROOT_FOREIGN: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_ROOT_FOREIGN', p, l) }) },
+  INSTALLATION_ROOT_INSIDE_DATA_ROOT: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_ROOT_INSIDE_DATA_ROOT', p, l) }) },
+  INSTALLATION_ROOT_WALK_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_ROOT_WALK_UNSUPPORTED', p, l) }) },
+  INSTALLATION_ROOT_TRACKED: { category: 'config', render: (p, l) => ({ message: p['reason'] === 'unknown' ? t('error.INSTALLATION_ROOT_TRACKED.unknown', p, l) : t('error.INSTALLATION_ROOT_TRACKED', p, l) }) },
   INSTALLATION_IDENTITY_RELOCATED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_RELOCATED', p, l) }) },
   INSTALLATION_IDENTITY_RESOLUTION_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_RESOLUTION_INVALID', p, l) }) },
   INSTALLATION_IDENTITY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_IDENTITY_INVALID', p, l) }) },

@@ -86,6 +86,24 @@ describe('markers shared with the engine and the mention composition', () => {
 });
 
 
+it.skipIf(process.platform === 'win32')('U7 binds the configured session store to the OS user and launch folder through the public workline port', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dn-u7-origin-'));
+  try {
+    await mkdir(join(root, '.deckent'));
+    await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, terminal: { persistHistory: true } }));
+    const options = { env: { HOME: root, USERPROFILE: root, XDG_CONFIG_HOME: join(root, '.config'), DECKENT_GLOBAL_HOME: join(root, 'global') } };
+    const rootPort = bindSessionScope((await openConfiguredTerminalSessions(root, options))!, 'scope', () => 1);
+    const folderPort = bindSessionScope((await openConfiguredTerminalSessions(root, options, 'a'))!, 'scope', () => 2);
+    const rootId = 'aaaaaaaa-1111-4111-8111-111111111111', folderId = 'bbbbbbbb-2222-4222-8222-222222222222';
+    await rootPort.save({ sessionId: rootId, messages: [user('root')] });
+    await folderPort.save({ sessionId: folderId, messages: [user('folder')] });
+    expect((await rootPort.list()).map(row => row.sessionId)).toEqual([rootId]);
+    expect((await folderPort.list()).map(row => row.sessionId)).toEqual([folderId]);
+    expect((await folderPort.list(true)).map(row => row.sessionId)).toEqual([folderId, rootId]);
+    expect(await folderPort.load(rootId)).toEqual([user('root')]); // Origin is display data, never load authority.
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 it.skipIf(process.platform === 'win32').each(['ordinary', 'known-control'] as const)('S06 %s real config snapshot → full store preview/replay → selected Workline surfaces preserves loaded code units', async variant => {
   const root = await mkdtemp(join(tmpdir(), 'dn-s06-producer-'));
   const canary = `fictitious-s06-${variant === 'known-control' ? '\u0001' : ''}known-value-0123456789`;

@@ -433,7 +433,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...terminalStartupLabels(locale, { version: PACKAGE_VERSION, project: basename(root), path: where, model: chatTarget(chat, locale) }, ascii) };
   // History is a convenience: an unavailable history file never blocks the terminal.
   const inputHistory = context.openTerminalHistory ? await context.openTerminalHistory(root, options).catch(() => null) : null;
-  const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options).catch(() => null) : null;
+  const sessionStore = context.openTerminalSessions ? await context.openTerminalSessions(root, options, context.rootResolution?.folder ?? '').catch(() => null) : null;
   const sessions = sessionStore ? bindSessionScope(sessionStore, scopeId) : null;
   // TERM-UX-1 a: the first `@` finds the service's file list already walked. One empty query warms it in the background (same authorization
   // and deny as any `@`); a service that is not there or refuses is left to the person's own first `@`.
