@@ -25,7 +25,7 @@ export async function agentsWrite(action: 'define' | 'define-skill', input: stri
   const { locale, scope } = io, sinks = sinksOf(context), scopeId = scope.scopeId;
   emit(scopeNotice(scope, locale), sinks);
   const raw = await readJsonInput(resolvePath(io.root, input), io.inputMaxBytes,
-    { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
+    { subject: 'cli.input.subject.agent', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
   const ask = async (title: string, body: string[]) => await io.ask({ title, body, options: options(locale) }) === 'apply';
   const cancelled = () => { emit(t('agents.cancelled', {}, locale), { level: 'warning', ...sinks }); return EXIT_CODES.error; };
   if (!context.inspectSkill || (action === 'define' ? !context.inspectAgent || !context.defineAgent : !context.defineSkill)) throw ErrorRegistry.createError('AGENT_CATALOG_UNAVAILABLE');

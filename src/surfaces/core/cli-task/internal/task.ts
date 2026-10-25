@@ -191,7 +191,8 @@ export async function taskCommand(argv: readonly string[], context: TaskCommandC
   const resolveLatest = ['patch-preview', 'transcript', 'integration-inspect'].includes(action) && !attemptId && !layoutRevision && !generation;
   let identity: AttemptIdentity, resolvedNotice: Readonly<{ attempt: string; generation: number; layout: string; run: string; task: string }> | undefined;
   if (action === 'inspect') {
-    if (!scopeId || !runId || !taskId || attemptId || layoutRevision || generation) throw usage('--task');
+    if (!scopeId || !runId || !taskId) throw usage(!scopeId ? '--scope' : !runId ? '--run' : '--task');
+    if (attemptId || layoutRevision || generation) throw usage(attemptId ? '--attempt' : layoutRevision ? '--layout-revision' : '--generation');
     await inspectTask({ scopeId, runId, taskId }, context, json, earlyLocale, switches.has('--verbose')); return;
   }
   if (resolveLatest) {

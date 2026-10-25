@@ -80,22 +80,22 @@ export async function modelSpendingCommand(argv: readonly string[], context: Mod
   if (args.action === 'audit-spending' && !context.auditProviderSpendAccount) throw ErrorRegistry.createError('PROVIDER_SPEND_UNAVAILABLE');
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env, heal: false }, config = await loadConfig(root, options);
   const source = args.source!, input = await readJsonInput(source === '-' ? source : resolve(root, source), config.cli.invocationInputMaxBytes,
-    { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
+    { subject: 'cli.input.subject.spending', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
   if (args.action === 'reconcile-spending' || args.action === 'revise-budget') {
     if (!context.manageProviderSpend) throw ErrorRegistry.createError('PROVIDER_SPEND_UNAVAILABLE');
     let command: ProviderSpendManagementCommand;
-    try { command = parseProviderSpendManagementCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
-    if ((args.action === 'reconcile-spending') !== (command.kind === 'reconcile')) throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID');
+    try { command = parseProviderSpendManagementCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID', { params: { subject: 'cli.input.subject.spending' } }); }
+    if ((args.action === 'reconcile-spending') !== (command.kind === 'reconcile')) throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID', { params: { subject: 'cli.input.subject.spending' } });
     const result = await context.manageProviderSpend(root, command, options);
     emit(result, { ...sinks, json: args.json, render: value => t('models.spending.managementRecorded', { command: value.receipt.command.commandId }, locale) });
   } else if (args.action === 'spending') {
     let query: ProviderSpendAccountQuery;
-    try { query = parseProviderSpendAccountQuery(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
+    try { query = parseProviderSpendAccountQuery(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID', { params: { subject: 'cli.input.subject.spending' } }); }
     const result = await context.inspectProviderSpendAccount!(root, query, options);
     emit(result, { ...sinks, json: args.json, render: value => render(value, locale) });
   } else {
     let command: ProviderSpendAuditCommand;
-    try { command = parseProviderSpendAuditCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID'); }
+    try { command = parseProviderSpendAuditCommand(input); } catch { throw ErrorRegistry.createError('CLI_INVOCATION_INPUT_INVALID', { params: { subject: 'cli.input.subject.spending' } }); }
     const result = await context.auditProviderSpendAccount!(root, command, options);
     emit(result, { ...sinks, json: args.json, render: value => renderAudit(value, locale) });
   }

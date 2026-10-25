@@ -283,3 +283,12 @@ describe('delivery queue CLI card summaries (alpha.53 A3)', () => {
     expect(p.requests).toMatchObject([{ operation: 'deliver', topPaths: 0 }]);
   });
 });
+
+it('ISY-35: a settled ticket keeps its result summary without asking for consent again', async () => {
+  const p = project('tr');
+  const context = { ...(p.context as object), deliveryQueue: { async inspectTargetQueue() { return { schemaVersion: 1, record: sampleView('q1', { state: 'settled', outcome: 'adopted', nextAction: 'inspect-receipt', position: null }) }; } },
+    async describeDeliverySummaries() { return [deliverySummaryFixture()]; } };
+  await queueCommand(['task', 'integration-queue-inspect', '--scope', 's', '--command-id', 'q1'], context as never);
+  const output = p.output.join('');
+  expect(output).toContain('Değişen:'); expect(output).not.toContain('Evet:'); expect(output).not.toContain('Hayır:');
+});

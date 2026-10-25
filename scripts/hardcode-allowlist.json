@@ -248,7 +248,7 @@
   {"file":"src/adapters/core/workspace-read/internal/views.ts","fingerprint":"bd8ce3e46610469f5b97e152403e56919ca934549c7b98a4553acda6d8b5cbf4","rule":"G2"},
   {"file":"src/adapters/core/workspace-read/internal/views.ts","fingerprint":"eff1243ef77e0004f46323a91ab0294fe3eeb4c8b73d280978caaa409d88bb98","rule":"G1"},
   {"file":"src/adapters/core/workspace-read/internal/views.ts","fingerprint":"f700f52a4a0f043a7ab084341035c4b4b4a1e2c351b19d9d89f21de92f5accd4","rule":"G2"},
-  {"file":"src/adapters/core/workspace-write/internal/diff.ts","fingerprint":"e2d57a868f04094614d0c9609c26d5504c0a54c7e0c44d0dcdec3db495269ced","rule":"G2"},
+  {"file":"src/platform/core/common/internal/unified-diff.ts","origin":"src/adapters/core/workspace-write/internal/diff.ts","fingerprint":"e2d57a868f04094614d0c9609c26d5504c0a54c7e0c44d0dcdec3db495269ced","rule":"G2"},
   {"file":"src/adapters/core/workspace-write/internal/files.ts","fingerprint":"0e391e84e5d8999bf9a9f4152f10d66455f118fd4e84dbd012e2a3dfcd379e58","rule":"G3"},
   {"file":"src/adapters/core/workspace-write/internal/files.ts","fingerprint":"25535937fee5aa052bfb5b12f084129d1a1e02d810fcfd5d45ef35ca79bf242c","rule":"G2"},
   {"file":"src/adapters/core/workspace-write/internal/files.ts","fingerprint":"278711c5d5f7748f9f96d15a3e1733a8c396960b124d279c228ff1126688cad2","rule":"G3"},

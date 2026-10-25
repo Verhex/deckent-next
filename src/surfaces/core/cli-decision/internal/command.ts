@@ -64,7 +64,7 @@ export async function decisionCommand(argv: readonly string[], context: Decision
   if (args.schema) { emit(inputSchemaText(schema), sinks); return; }
   const root = context.root ?? process.cwd(), options = { env }, config = await loadConfig(root, options);
   const input = await readJsonInput(args.input === '-' ? '-' : resolve(root, args.input!), config.cli.invocationInputMaxBytes,
-    { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
+    { subject: 'cli.input.subject.decision', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
   // The refusal names the first wrong field and shows a small example (CLI review §decide), before anything is sent.
   assertInputFields(`deckent decide ${args.action}`, schema, input, JSON.stringify(registry.examples[args.action]));
   if (args.action === 'prepare') {

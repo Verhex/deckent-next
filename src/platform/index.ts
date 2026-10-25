@@ -97,3 +97,4 @@ export type { ConfigChoiceDeclaration, ConfigChoiceSource, ConfigNumberUnit, Con
 
 export { EMPTY_RECORD_STREAM, RECORD_STREAM_LOOKBACK, feedRecordStream, previewRecordStream, finishRecordStream } from '#platform/core/redaction/index.js';
 export type { RecordStreamState } from '#platform/core/redaction/index.js';
+export { unifiedDiff } from '#platform/core/common/index.js';

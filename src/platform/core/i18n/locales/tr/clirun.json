@@ -31,7 +31,7 @@
   "cli.run.inspect.model": "  Deneme {attempt}: {line}",
   "cli.run.lifecycle.result": "Run {run} | revizyon {revision} | durum: {state} | neden: {reason}",
   "cli.run.lifecycle.outcome": "  Sonuç: {outcome}",
-  "cli.run.lifecycle.deadline": "  Bekleme başlangıcı {since}; son süre {deadline} (epoch ms)",
+  "cli.run.lifecycle.deadline": "Bekleme başlangıcı: {since} | son tarih: {deadline}",
   "cli.run.lifecycle.reason": "  Neden: {reason}",
   "cli.run.lifecycle.note": "  Tutma nedeni: {note}",
   "cli.run.list.stateReason": "{state}: {reason}",
@@ -104,5 +104,7 @@
   "cli.run.inventory.col.output": "Çıktı",
   "cli.run.inventory.see": "Run'lar ve durumları: deckent run list · canlı worker'lar (bu kurulum ve yapılandırılmış diğer kaynaklar): deckent workers list",
   "cli.run.inventory.limitHint": "Sayfa başına en çok {max}; --limit {max} kullanın.",
-  "cli.run.control.holdDetail": "Bekletilirken yeni görev başlamaz; zaten çalışan iş sürer, durdurulmaz. Bekletmeyi deckent run resume kaldırır."
+  "cli.run.control.holdDetail": "Bekletilirken yeni görev başlamaz; zaten çalışan iş sürer, durdurulmaz. Bekletmeyi deckent run resume kaldırır.",
+  "cli.do.command": "Komut kimliği: {command}",
+  "cli.run.inspect.status": "Durum: {state}"
 }

@@ -60,3 +60,11 @@ it.each([
   expect(await main(args, { stderr, async executeTask() { calls++; throw new Error(); }, async evaluateTask() { calls++; throw new Error(); } })).toBe(2);
   expect(calls).toBe(0);
 });
+
+it('ISY-24: task inspect names its unsupported attempt flag before reading a task', async () => {
+  let output = '', calls = 0;
+  expect(await main(['task', 'inspect', '--scope', 's', '--run', 'r', '--task', 't', '--attempt', 'a', '--lang', 'tr'], {
+    stderr: { write(text: string) { output += text; } }, async inspectRun() { calls++; return {} as never; },
+  })).toBe(2);
+  expect(output).toContain('için --attempt geçersiz'); expect(calls).toBe(0);
+});

@@ -4,9 +4,11 @@ import { poolDriftLine, poolWaitLine } from '#surfaces/core/cli-admin/index.js';
 import type { RunView } from '#engine/index.js';
 import { briefQualifiesAcceptance, notAcceptedLabel, notAcceptedNextStep, quotaWaitText, quotaAskLines, renderAcceptanceLine, renderBriefLines, renderCostSummary, renderGraphSummaryLines, renderWorkerModelLine } from '#surfaces/core/monitor/index.js';
 import { runHoldNextText, runHoldReasonText } from '#surfaces/core/recovery-text/index.js';
-import { runTitle, shownId } from './run-human.js';
+import { runStateWord, runTitle, shownId } from './run-human.js';
 import type { RunCommandContext } from './context.js';
 import REGISTRY from './run.json' with { type: 'json' };
+
+const localTime = (ms: number, locale: Locale) => new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'long' }).format(ms);
 
 type TaskView = RunView['tasks'][number];
 type InspectData = Pick<Awaited<ReturnType<NonNullable<RunCommandContext['inspectRun']>>>, 'run' | 'models'>;
@@ -52,7 +54,7 @@ function taskLines(run: RunView, task: TaskView, models: InspectData['models'], 
     t('cli.run.inspect.stateLabel', { phase: task.acceptedEvidence === 'model-unverified' ? t('cli.task.decision.acceptedUnverified', {}, locale) : phaseText(task.phase, locale) }, locale),
     ...(task.notAcceptedReason ? [notAcceptedLabel(task.notAcceptedReason, locale), ...notAcceptedNextStep(task.notAcceptedReason, task.profile, locale)] : []),
     ...(task.skippedReason ? [t('cli.run.lifecycle.reason', { reason: task.skippedReason }, locale)] : []),
-    ...(task.decision ? [t('cli.run.lifecycle.deadline', { since: task.decision.since, deadline: task.decision.deadline }, locale), t('cli.run.lifecycle.reason', { reason: task.decision.reason }, locale)] : []),
+    ...(task.decision ? [t('cli.run.lifecycle.deadline', { since: localTime(task.decision.since, locale), deadline: localTime(task.decision.deadline, locale) }, locale), t('cli.run.lifecycle.reason', { reason: task.decision.reason }, locale)] : []),
     ...(task.decision?.question ? [t('cli.run.lifecycle.question', { question: task.decision.question }, locale)] : []),
     // PRE-1 B3: the brief's evaluation line already names it; printed once.
     ...(task.acceptedEvidence === 'model-unverified' || (task.resultBrief && briefQualifiesAcceptance(task.taskBrief, task.resultBrief.evaluation.verdict)) ? [] : acceptanceEvidenceLines(run, task, locale)),
@@ -94,12 +96,11 @@ export function renderRunInspect(data: InspectData, locale: Locale, verbose: boo
     t('cli.run.inspect.heading', { run: runShown, revision: run.revision }, locale),
     t('cli.run.inspect.request', { title: runTitle(run, locale) }, locale),
     ...(run.proposal ? [t('proposal.budget.notice', {}, locale)] : []),
-    t('cli.run.lifecycle.result', { run: runShown, revision: run.revision, state: run.state.kind, reason: 'reason' in run.state ? run.state.reason : '—' }, locale),
+    t('cli.run.inspect.status', { state: runStateWord(run, locale) }, locale),
     ...(run.channelWaits ?? []).map(wait => `${wait.taskId}: ${quotaWaitText(wait.deadline, wait.resetsAtMs !== null, locale)}`),
-    ...(run.state.kind === 'terminal' ? [t('cli.run.lifecycle.outcome', { outcome: run.state.outcome }, locale)] : []),
     ...(run.state.kind === 'parked' && run.state.reason === 'quota-exhausted' ? [quotaWaitText(run.state.deadline, (run.quotaWaits ?? []).every(wait => wait.resetsAtMs !== null), locale, (run.quotaWaits ?? []).some(wait => wait.retryLimitReached))] : []),
     ...(run.state.kind === 'parked' && run.state.reason === 'quota-ask' ? quotaAskLines((run.quotaWaits ?? []).map(wait => wait.resetsAtMs), locale) : []),
-    ...(run.state.kind === 'parked' && run.state.reason !== 'quota-ask' ? [t('cli.run.lifecycle.deadline', { since: run.state.since, deadline: run.state.deadline }, locale)] : []),
+    ...(run.state.kind === 'parked' && run.state.reason !== 'quota-ask' ? [t('cli.run.lifecycle.deadline', { since: localTime(run.state.since, locale), deadline: localTime(run.state.deadline, locale) }, locale)] : []),
     // PRE-7: an environment park names the unmet requirement as an installation defect and its next step (fix, then resume: the preflight runs again).
     ...(run.state.kind === 'parked' && run.state.failureCode ? [run.state.reason === 'environment-not-ready' ? t('cli.run.lifecycle.environmentNotReady', { requirement: run.state.failureCode, run: runShown }, locale)
       : t('cli.run.lifecycle.failure', { code: run.state.failureCode }, locale)] : []),

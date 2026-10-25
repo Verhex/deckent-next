@@ -63,7 +63,7 @@ export async function identityDistributionCommand(argv: readonly string[], conte
   if (path) {
     if (scope || (apply && !expect)) throw usage();
     const body = await readJsonInput(path, IDENTITY_PROFILE_LIMITS.maxInputBytes,
-      { limit: 'IDENTITY_PREVIEW_LIMIT', invalid: 'IDENTITY_PREVIEW_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'IDENTITY_PREVIEW_UNAVAILABLE' }, stdin);
+      { subject: 'cli.input.subject.identity', limit: 'IDENTITY_PREVIEW_LIMIT', invalid: 'IDENTITY_PREVIEW_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'IDENTITY_PREVIEW_UNAVAILABLE' }, stdin);
     if (apply) { emit(await context.applyIdentityDistribution(root, body, expect!, options), { ...sinks, render: result }); return; }
     emit(await context.previewIdentityDistribution(root, body, options), { ...sinks, render: value => `${renderIdentityPreview(value.preview, locale)}\n${t('identity.distributionExpect', { digest: value.digest }, locale)}` }); return;
   }

@@ -55,7 +55,7 @@ export async function approvalsCommand(argv: readonly string[], context: Approva
   const handler = args.action === 'renew' ? context.renewApproval : args.action === 'list' ? context.listApprovals : args.action === 'inspect' ? context.inspectApproval : context.decideApproval;
   if (!handler) throw ErrorRegistry.createError('CLI_USAGE');
   const input = await readJsonInput(args.source === '-' ? args.source : resolve(root, args.source), config.cli.invocationInputMaxBytes,
-    { limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
+    { subject: 'cli.input.subject.approval', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin);
   // B1: the CLI declares its channel (a record, never authority); a channel the input already names is kept as declared.
   const sent = args.action === 'decide' && input !== null && typeof input === 'object' && !Array.isArray(input) && !('channel' in input) ? { ...input, channel: 'local-cli' } : input;
   assertInputFields(`${registry.command} ${args.action}`, SCHEMAS[args.action], sent, JSON.stringify(registry.examples[args.action]));

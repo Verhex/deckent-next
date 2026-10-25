@@ -56,3 +56,13 @@ it('inference metrics only calls the composition handler', async () => {
   expect(missing).toBe(2);
   expect(calls).toBe(1);
 });
+
+it('MOD inference: every explicit action without a serving profile fails with the same typed error; bare status remains a read', async () => {
+  const f = await project();
+  await writeFile(join(f.projectRoot, '.deckent/config.json'), '{}'); clearConfigCache();
+  let calls = 0;
+  const context = { root: f.projectRoot, env: f.env, stdout: { write() {} }, stderr: { write() {} },
+    async readInferenceMetrics() { calls++; return { ok: true as const, url: '', body: '' }; } };
+  for (const action of ['plan', 'budget', 'metrics']) expect(await main(['inference', action], context)).toBe(1);
+  expect(calls).toBe(0); expect(await main(['inference'], context)).toBe(0);
+});
