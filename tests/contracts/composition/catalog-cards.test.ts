@@ -99,7 +99,7 @@ describe('a lesson draft at card time (§6 fold A, N23, N36)', () => {
 describe('the signed AI path on MCP and the monitor lines', () => {
   it('the MCP actor promotes only with a grant naming the WorkClass and its own enrolled key; a person may not use this path; the monitor names the open suggestion', async () => {
     const f = await fixture([{ id: 'mcp-feature', effect: 'allow', actions: ['promote', 'inspect'], scopes: ['scope'], resource: { kind: 'agent-catalog', ids: ['scope/feature', 'scope'] } }]);
-    expect(await inspectConfiguredCatalogMonitor(f.project, 'scope', f.options)).toEqual(['catalog-aggregator-unsigned']);
+    expect(await inspectConfiguredCatalogMonitor(f.project, 'scope', f.options)).toEqual([`catalog-aggregator-unsigned:${JSON.stringify(['scope', f.aggregator.issuer, f.aggregator.subject])}`]);
     await defineConfiguredAgent(f.project, { schemaVersion: 1, commandId: 'a1', scopeId: 'scope', agentId: 'auditor', expectedRevision: null,
       content: { name: 'A', persona: 'Faturaları eşleştirirsin.', workClasses: ['feature'], skills: [], parentAgentId: null } }, f.options, person);
     await f.enrol(f.aggregator, 'e-aggregator');

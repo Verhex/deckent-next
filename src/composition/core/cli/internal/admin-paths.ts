@@ -1,3 +1,4 @@
+import { configuredHeadlessLoginRoot } from '#composition/core/model-connect/index.js';
 import { join } from 'node:path';
 import { ENCRYPTED_FILE_SECRET_STORE_ID, ENCRYPTED_FILE_SECRET_STORE_KEY, ENCRYPTED_FILE_SECRET_STORE_NAME, FILE_SECRET_STORE_ID, FILE_SECRET_STORE_NAME, mcpGlobalRoot,
   mcpRegistryPaths, readSecretsConfig, runtimeSocketLocation } from '#adapters/index.js';
@@ -11,5 +12,5 @@ export async function inspectConfiguredAdminPaths(projectRoot: string, options: 
   const files = !state ? [] : store === FILE_SECRET_STORE_ID ? [join(state, FILE_SECRET_STORE_NAME)]
     : store === ENCRYPTED_FILE_SECRET_STORE_ID ? [join(state, ENCRYPTED_FILE_SECRET_STORE_NAME), join(state, ENCRYPTED_FILE_SECRET_STORE_KEY)] : [];
   return { schemaVersion: 1 as const, runtimeSocket: attempt(() => runtimeSocketLocation(config.productLayout)), mcp: attempt(() => mcpRegistryPaths(config.projectRoot, mcpGlobalRoot(env))),
-    secretStore: { store, files } };
+    headlessLogins: attempt(() => configuredHeadlessLoginRoot(options)), secretStore: { store, files, keyFile: store === ENCRYPTED_FILE_SECRET_STORE_ID && state ? join(state, ENCRYPTED_FILE_SECRET_STORE_KEY) : null } };
 }

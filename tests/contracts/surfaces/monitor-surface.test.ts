@@ -824,3 +824,14 @@ it.each(['en', 'tr'] as const)('shows the frozen task billing axis in monitor de
   const serialized = view.tabs.runs.flatMap(block => block.kind === 'table' ? block.rows : []).flatMap(row => row.detail().flat()).map(span => span.text).join('\n');
   expect(serialized).toContain(locale === 'tr' ? 'abonelik planı' : 'subscription plan');
 });
+
+it('unknown monitor scope is refused consistently in text, JSON and slash reads', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'monitor-f1-')); roots.push(root);
+  const context = { root, env: { DECKENT_GLOBAL_HOME: join(root, 'global') }, inspectMonitor: async () => fullSnapshot };
+  for (const flags of [['--once'], ['--json'], []]) {
+    const errors: string[] = [];
+    expect(await main(['monitor', '--scope', 'does-not-exist', ...flags], { ...context, stdin: { isTTY: true } as never, stdout: { isTTY: true, write() {} }, stderr: { write: (s: string) => { errors.push(s); } } })).toBe(1);
+    expect(errors.join('')).toContain('SCOPE_UNKNOWN');
+  }
+  await expect(monitorSlash(root, '--scope does-not-exist', context, {}, 'en', 120)).rejects.toMatchObject({ code: 'SCOPE_UNKNOWN' });
+});

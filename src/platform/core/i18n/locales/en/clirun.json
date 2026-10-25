@@ -104,5 +104,8 @@
   "cli.run.inventory.col.output": "Output",
   "cli.run.inventory.see": "Runs and their state: deckent run list · live workers (this installation and other configured sources): deckent workers list",
   "cli.run.inventory.limitHint": "At most {max} per page; use --limit {max}.",
-  "cli.run.control.holdDetail": "While it is held no new task starts; work already running continues and is not stopped. deckent run resume lifts the hold."
+  "cli.run.control.holdDetail": "While it is held no new task starts; work already running continues and is not stopped. deckent run resume lifts the hold.",
+  "cli.run.report.channelHeading": "Usage by channel (this Run)",
+  "cli.run.report.channelColumns": "Channel|Attempts|Measured API (USD)|API unmeasured|Measured subscription calls",
+  "cli.run.report.channelEvidence": "Visible attempts only; measured tariff cost is not provider billing. Missing subscription counts stay unknown. No billing period or reset is inferred."
 }

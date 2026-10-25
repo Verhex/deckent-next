@@ -1,5 +1,6 @@
 import { MESSAGE_REGISTRY, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { DoctorRenderInput } from './report.js';
+import { describeDiagnostics } from '#surfaces/core/monitor-view/index.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
 import { shortImageId } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
@@ -18,6 +19,7 @@ export type DoctorCheck = Readonly<{ group: DoctorGroup; id: string; state: Doct
 
 /** Facts the grouped view reads besides the collected report; each is null when it was not measured (the row then says "not tested"). */
 export interface DoctorCheckFacts {
+  readonly catalogDiagnostics?: readonly string[] | null;
   readonly scopeId: string | null;
   readonly toolchainsRequested: boolean;
   /** `missing` when the configuration selects no identity profile (solo / team / enterprise / custom). */
@@ -82,7 +84,7 @@ function setupChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Doct
   else if (r.serviceConfig === 'stopped') rows.push(row('setup', 'setup.service', 'ok', t('doctor.check.service.stopped', {}, l)));
   else if (r.serviceConfig === 'unknown') rows.push(row('setup', 'setup.service', 'untested', t('doctor.check.service.unknown', {}, l)));
   if (f.identityProfile) rows.push(f.identityProfile.state === 'selected' ? row('setup', 'setup.identity', 'ok', t('doctor.check.identity.ok', { profile: f.identityProfile.id }, l))
-    : row('setup', 'setup.identity', 'warning', t('doctor.check.identity.missing', {}, l), 'deckent config set identity.profile --global'));
+    : row('setup', 'setup.identity', 'warning', t('doctor.check.identity.missing', {}, l), 'deckent config'));
   const admin = r.policyAdministration;
   if (admin) rows.push(admin.recoveryRequired ? row('setup', 'setup.policy', 'error', t('doctor.check.policy.recovery', {}, l), scoped('deckent policy status', f))
     : admin.bootstrapRequired ? row('setup', 'setup.policy', 'warning', t('doctor.check.policy.bootstrap', {}, l), 'deckent init')
@@ -99,6 +101,7 @@ function setupChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Doct
 
 function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   const rows: DoctorCheck[] = [], fix = (check: string) => registry.fixes.find(entry => entry.checks.includes(check))?.id;
+  for (const diagnostic of describeDiagnostics(f.catalogDiagnostics ?? [], l).filter(item => item.code === 'catalog-aggregator-unsigned')) rows.push(row('security', 'security.catalogSigner', 'warning', diagnostic.text, diagnostic.action));
   const audit = r.auditIntegrity;
   if (audit) rows.push(audit.status === 'match' ? row('security', 'security.audit', 'ok', t('doctor.check.audit.ok', {}, l))
     // A new installation has no checkpoint to compare with yet: nothing to fix, nothing verified.
@@ -156,7 +159,7 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   if (f.retiringModels === null) rows.push(row('work', 'work.models', 'untested', t('doctor.check.models.unknown', {}, l)));
   else if (!f.retiringModels.length) rows.push(row('work', 'work.models', 'ok', t('doctor.check.models.ok', {}, l)));
   else for (const model of f.retiringModels) rows.push(row('work', 'work.models', 'warning', t('doctor.check.models.retiring', { model: model.modelId, channel: model.channelId, state: model.state === 'retired' ? t('doctor.check.models.state.retired', {}, l) : t('doctor.check.models.state.deprecated', {}, l), date: model.date ?? '-' }, l),
-    scoped('deckent models list', f)));
+    scoped('deckent models', f)));
   // M2: a new catalog model fails closed until a person gives it a tier and roles; shown up to the registry bound, then counted.
   const pending = f.pendingRoleModels ?? [], shown = pending.slice(0, registry.pendingRoleRowsShown);
   for (const model of shown) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.pending', { model: terminalSafeText(model.modelId), channel: terminalSafeText(model.channelId) }, l),
@@ -174,7 +177,7 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
       more: login.egress.hosts.length > shownHosts.length ? t('doctor.headless.egressMore', { count: login.egress.hosts.length - shownHosts.length }, l) : '' }, l);
     // s3c (owner 2026-10-24): which dir it is; a connection sealed to another one keeps working, and the next step is the move (sign-in, then reconnect).
     const own = login.owned === true ? t('doctor.headless.owned', {}, l) : login.owned === false ? t('doctor.headless.notOwned', {}, l) : '';
-    const next = login.owned === false ? 'deckent models login --connection claude-cli-subscription' : login.state === 'open' ? undefined : scoped('deckent models connect --connection claude-cli-subscription', f);
+    const next = login.owned === false ? 'deckent models login --connection claude-cli-subscription' : login.state === 'open' ? undefined : scoped('deckent models connect', f);
     rows.push(login.state === 'unknown' ? row('work', 'work.brainLogin', 'untested', t('doctor.headless.loginUnknown', { dir }, l) + own, login.owned === false ? next : undefined)
       : row('work', 'work.brainLogin', login.state === 'open' ? 'ok' : 'warning', t('doctor.headless.login', { method: terminalSafeText(login.authMethod ?? '-'),
         plan: login.subscriptionType ? ` (${terminalSafeText(login.subscriptionType)})` : '', dir, state: login.state === 'open' ? t('doctor.headless.open', {}, l) : t('doctor.headless.closed', {}, l), consent }, l) + own + isolated + refused,

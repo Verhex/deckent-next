@@ -81,7 +81,7 @@
   "agentsevo.monitor.signerRevoked": "İmzalayan iptal edildi: imzaladığı {count} terfi hâlâ geçerli",
   "agentsevo.monitor.signerRevokedAction": "Düşürmek için: deckent agents demote <ajan-id> --work-class <id>",
   "agentsevo.monitor.unsigned": "Katalog toplayıcının imza anahtarı yok: hiçbir şey yazmıyor",
-  "agentsevo.monitor.unsignedAction": "Eklemek için: deckent agents enrol-signer --principal <issuer>/catalog-aggregator:<subject> --label aggregator",
+  "agentsevo.monitor.unsignedAction": "Eklemek için: deckent agents enrol-signer --scope {scope} --principal {principal} --label aggregator",
   "agentsevo.monitor.registry": "Katalog gelişim registry'si kullanılamıyor: öneri ve daraltma yok (Run'lar etkilenmez)",
   "mcp.tool.listAgentSuggestions": "Kataloğun mühürlü önerilerini (terfi, yeniden tasarım, revize, yeni ajan, yeni skill) mühürlendikleri sayılarla listeler: yalnız referans, özet ve sayı; okuyamadığınız dersler yalnız sayılır. İlişkidir, nedensellik değil (salt okunur).",
   "mcp.tool.inspectAgentSuggestion": "Mühürlü bir öneriyi, durum geçmişini ve ilgili olduğu ajan durumunu gösterir: yalnız referans, özet ve sayı; taslak ya da ders metni asla (salt okunur).",
@@ -96,5 +96,6 @@
   "agentsevo.help.action.restore": "daraltılmış bir ajanı adaya geri al (kişinin kartı)",
   "agentsevo.help.action.retire": "bir ajan sürümünü bir iş türünde emekliye ayır (kişinin kartı)",
   "agentsevo.help.action.dismiss": "açık bir öneriyi reddet (kişinin kartı)",
-  "agentsevo.help.action.standing": "iş türünü sıfırla: tüm ajanları adaya döner (kişinin kartı)"
+  "agentsevo.help.action.standing": "iş türünü sıfırla: tüm ajanları adaya döner (kişinin kartı)",
+  "agentsevo.monitor.unsignedUnknownAction": "İmza kimliklerini inceleyin: deckent agents signers"
 }

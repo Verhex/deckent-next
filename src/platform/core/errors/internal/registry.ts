@@ -7,6 +7,12 @@ import { ERROR_DEFINITION_FRAGMENTS } from './defs/index.js';
 export type { ErrorEntry } from './definition.js';
 /** MCP_SANDBOX_COMMAND_UNREACHABLE (MCP-SANDBOX-PATHS): one catalog sentence per diagnosis kind (params name, kind, role, path, target
  * ('' = none), runner); `{targetSuffix}` is ' -> <target>' when the link target differs, the role is its own localized label. */
+function installationFileUnsafe(p: Params, l: Locale): string {
+  const reasons = { type: t('installation.fileUnsafe.type', {}, l), owner: t('installation.fileUnsafe.owner', {}, l), mode: t('installation.fileUnsafe.mode', {}, l),
+    links: t('installation.fileUnsafe.links', {}, l), size: t('installation.fileUnsafe.size', {}, l) };
+  const reason = String(p['reason']);
+  return p['path'] && Object.hasOwn(reasons, reason) ? t('installation.fileUnsafeDetail', { ...p, reason: reasons[reason as keyof typeof reasons] }, l) : t('error.INSTALLATION_FILE_UNSAFE', p, l);
+}
 /** PATCH_LIMIT names the exceeded bound (params detail, observed, limit, field); an unknown or absent detail keeps the generic sentence. */
 function patchLimit(p: Params, l: Locale): string {
   switch (p['detail']) {
@@ -786,7 +792,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   INSTALLATION_JOURNAL_EXPIRED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_JOURNAL_EXPIRED', p, l) }) },
   INSTALLATION_JOURNAL_UNSUPPORTED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_JOURNAL_UNSUPPORTED', p, l) }) },
   INSTALLATION_FILE_CONFLICT: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_FILE_CONFLICT', p, l) }) },
-  INSTALLATION_FILE_UNSAFE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_FILE_UNSAFE', p, l) }) },
+  INSTALLATION_FILE_UNSAFE: { category: 'config', render: (p, l) => ({ message: installationFileUnsafe(p, l) }) },
   INSTALLATION_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_FILE_INVALID', p, l) }) },
   INSTALLATION_FILE_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_FILE_UNAVAILABLE', p, l) }) },
   INSTALLATION_FILE_OUTCOME_UNKNOWN: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_FILE_OUTCOME_UNKNOWN', p, l) }) },

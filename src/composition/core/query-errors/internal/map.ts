@@ -24,6 +24,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   if (error instanceof RunLifecycleError && error.approvalId) return registeredFailure(error.code, { params: { approvalId: error.approvalId } });
   if (error instanceof RunProgressionFailure) return queryFailure(error.cause);
   if (error instanceof DeckentError) return error.code === 'QUERY_UNEXPECTED_FAILURE' ? sanitizeQueryFailure(error) : ErrorRegistry.has(error.code) ? error : registeredFailure(error.code);
+  if (error instanceof InstallationFileError) return registeredFailure(error.code, { params: error.params });
   if (error instanceof HandoffError || error instanceof NativeConnectionError) return registeredFailure(error.code);
   if (error instanceof ProviderSpendError) return registeredFailure(error.code === 'PROVIDER_SPEND_DATA_POLICY_REFUSED' ? 'OPENROUTER_PRIVACY_UNAVAILABLE' : error.code, { params: {
     ...(error.amounts ? { requested: error.amounts.requested, currency: error.amounts.currency } : {}),
@@ -50,7 +51,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   if (error instanceof InstallationProfileError || error instanceof InstallationProfileFileError || error instanceof InstallationEvidenceError
     || error instanceof InstallationArtifactError || error instanceof DockerImageProbeError || error instanceof InstallationRecoveryError
     || error instanceof InstallationPublicationError || error instanceof InstallationJournalError || error instanceof InstallationLedgerError
-    || error instanceof InstallationFileError || error instanceof BootstrapStateError || error instanceof InstallationIdentityError || error instanceof ProjectIdentityError) return registeredFailure(error.code);
+    || error instanceof BootstrapStateError || error instanceof InstallationIdentityError || error instanceof ProjectIdentityError) return registeredFailure(error.code);
   if (error instanceof RunWorkspaceCustodyError && error.reason === 'adapter-version-mismatch') return registeredFailure(error.code, { params: { reason: error.reason } });
   if (error instanceof ManagedFileError && error.diagnostic) {
     const d = error.diagnostic;

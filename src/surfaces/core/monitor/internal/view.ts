@@ -1,3 +1,4 @@
+import { ErrorRegistry } from '#platform/index.js';
 import { renderAcceptanceLine } from './acceptance.js';
 import { t, type Locale } from '#platform/index.js';
 import { projectHumanState, projectRunStop, projectStopCause, resolveWorkerUsage, type StopCause, type MonitorApproval, type MonitorAttempt, type MonitorBlocker, type MonitorDeliveryState, type MonitorInstall, type MonitorPool, type MonitorRun, type MonitorRunState, type MonitorSnapshot, type MonitorTask,
@@ -51,6 +52,9 @@ const timeText = (ms: number | null | undefined) => ms === null || ms === undefi
 export function filterSnapshot(snapshot: MonitorSnapshot, filters: MonitorFilters): MonitorSnapshot {
   if (filters.install === undefined && filters.scope === undefined) return snapshot;
   const scope = filters.scope;
+  if (scope !== undefined && !snapshot.installs.some(install => (filters.install === undefined || install.id === filters.install) && install.scopeIds.includes(scope))) {
+    throw ErrorRegistry.createError('SCOPE_UNKNOWN', { params: { scope } });
+  }
   const installs = snapshot.installs.filter(install => filters.install === undefined || install.id === filters.install).map(install => scope === undefined ? install : {
     ...install, scopeIds: install.scopeIds.filter(id => id === scope), runs: install.runs.filter(run => run.scopeId === scope),
     workers: install.workers.filter(worker => worker.identity?.scopeId === scope), approvals: install.approvals.filter(approval => approval.scopeId === scope) });

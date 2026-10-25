@@ -17,7 +17,12 @@ export async function identityCommand(argv: readonly string[], context: Installa
   }
   const root = context.root ?? process.cwd(), options = { ...(context.env ? { env: context.env } : {}), heal: false };
   const locale = resolveLocale(language, context.env, await loadConfigLanguage(root, options)); context.onLocale?.(locale);
-  if (!choice) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_RELOCATED');
+  if (!choice) {
+    if (!context.loadInstallationIdentity) throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
+    const observed = await context.loadInstallationIdentity(root, options);
+    if (observed.status !== 'available') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
+    emit(observed, { json, ...(context.stdout ? { stdout: context.stdout } : {}), render: () => t('cli.identity.healthy', { id: observed.value.installationId }, locale) }); return;
+  }
   if (!context.resolveInstallationIdentity) throw ErrorRegistry.createError('CLI_USAGE');
   const result = await context.resolveInstallationIdentity(root, choice, options);
   emit(result, { json, ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}),

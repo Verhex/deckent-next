@@ -13,6 +13,7 @@ export interface InstallationCommandContext {
   onLocale?: (locale: Locale) => void;
   /** The locale the host resolved once for this call (config language included). */
   locale?: Locale;
+  loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<import('#engine/index.js').InstallationIdentityRead>;
   resolveInstallationIdentity?: (root: string, choice: InstallationIdentityChoice, options: ConfigLoadOptions) => Promise<InstallationIdentityResolution>;
   previewInstallation?: InstallationPreviewHandler;
   inspectInstallation?: InstallationInspectionHandler;

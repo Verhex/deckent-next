@@ -58,7 +58,7 @@ const columns = (locale: Locale) => [t('cli.paths.column.what', {}, locale), t('
 
 /** Owner CLI review 2026-10-19 (`paths`): one table per group (configuration, records and data, security, runtime, terminal) with exists/missing. */
 async function layoutSection(inspection: Inspection, locale: Locale, style: CliTableStyle, extras: AdminPathsView | null): Promise<string[]> {
-  const resources = inspection.resources as Readonly<Record<string, string>>;
+  const resources: Readonly<Record<string, string>> = { ...inspection.resources, ...(extras?.headlessLogins ? { headlessLogins: extras.headlessLogins } : {}) };
   const lines: string[] = [];
   for (const group of [...GROUPS, 'other' as const]) {
     const names = group === 'other' ? Object.keys(resources).filter(name => !LISTED.has(name)) : registry.groups[group].filter(name => resources[name]);
@@ -76,7 +76,7 @@ async function globalSection(global: Inspection | null, locale: Locale, style: C
   const rows: Row[] = [];
   if (global) rows.push(await row(t('cli.paths.globalRoot', {}, locale), global.root, locale), await row(t('cli.paths.globalConfig', {}, locale), global.bootstrapConfigPath, locale));
   if (extras?.mcp) rows.push(await row(t('cli.paths.mcpProject', {}, locale), extras.mcp.project, locale), await row(t('cli.paths.mcpPersonal', {}, locale), extras.mcp.personal, locale));
-  for (const file of extras?.secretStore.files ?? []) rows.push(await row(t('cli.paths.secretStore', {}, locale), file, locale));
+  for (const file of extras?.secretStore.files ?? []) rows.push(await row(file === extras?.secretStore.keyFile ? t('cli.paths.secretStoreKey', {}, locale) : t('cli.paths.secretStore', {}, locale), file, locale));
   if (extras && !extras.secretStore.files.length) rows.push([t('cli.paths.secretStore', {}, locale), t('cli.paths.secretStoreNoFile', { store: terminalSafeText(extras.secretStore.store) }, locale), '—']);
   return rows.length ? ['', t('cli.paths.group.global', {}, locale), renderCliTable(columns(locale), rows, style)] : [];
 }

@@ -67,7 +67,7 @@
   "doctor.check.service.stopped": "The runtime service is not running (it starts on the first command that needs it)",
   "doctor.check.service.unknown": "The runtime service did not answer; its configuration state is unknown",
   "doctor.check.identity.ok": "Identity profile: {profile}",
-  "doctor.check.identity.missing": "No identity profile is chosen (solo, team, enterprise or custom)",
+  "doctor.check.identity.missing": "No identity profile selected. In the configuration window, select identity.profile and the global (user) layer.",
   "doctor.check.policy.ok": "Policy: {count} administrator(s) can manage it",
   "doctor.check.policy.bootstrap": "Policy has no administrator yet",
   "doctor.check.policy.recovery": "Policy needs recovery: no administrator can manage it",
@@ -190,5 +190,14 @@
   "doctor.check.roles.more": "New model: role pending — {count} more catalog models; see deckent models roles",
   "doctor.check.workerImage.ok": "Worker image {image} is on this Docker",
   "doctor.check.workerImage.missing": "The configured worker image {image} is not on this Docker: Runs cannot start workers",
-  "doctor.check.workerImage.unknown": "Whether worker image {image} is on this Docker could not be checked"
+  "doctor.check.workerImage.unknown": "Whether worker image {image} is on this Docker could not be checked",
+  "cli.identity.healthy": "Installation identity is healthy ({id}); no recovery is needed. Use --keep or --new only for a relocated installation.",
+  "cli.init.registry.exists": "An admission registry already exists; nothing changed. Run deckent config get admission to inspect it, or deckent coding template --help to add a kind.",
+  "installation.fileUnsafeDetail": "Unsafe installation path {path}: {reason} (mode {mode}, owner uid {owner}).",
+  "installation.fileUnsafe.type": "unexpected file type or symbolic link",
+  "installation.fileUnsafe.owner": "foreign owner",
+  "installation.fileUnsafe.mode": "unsafe permissions",
+  "installation.fileUnsafe.links": "unexpected hard-link count",
+  "installation.fileUnsafe.size": "file size outside the permitted bound",
+  "cli.paths.secretStoreKey": "Secret store encryption key"
 }

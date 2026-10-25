@@ -1,11 +1,15 @@
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { configCommand, configSlash, renderConfigInspection, renderConfigExplanation } from '#surfaces/core/config/index.js';
 import { restartConfigDigest } from '#engine/index.js';
-import { loadConfig } from '#platform/index.js';
+import { registerProviderConfig } from '#adapters/index.js';
+import { createConfiguredConfigApplication } from '#composition/core/config/index.js';
+import { clearConfigCache, type ConfigLoadOptions, loadConfig } from '#platform/index.js';
 import { homeEnv } from '../support/host-platform.js';
+const roots: string[] = [];
+afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const field = { key: 'max_workers', value: 2, defaultValue: 'auto', descriptionKey: 'config.field.max_workers', description: 'Workers', schema: { type: 'number' }, source: 'project', binding: { state: 'bound', consumers: ['src/composition/core/runs'] }, apply: 'restart', redacted: false } as const;
 const snapshot = { schemaVersion: 1 as const, digest: 'digest', layer: 'project' as const, fields: [field] };
 function fixture() {
@@ -124,4 +128,21 @@ describe('restart-apply change against the running service (K6/#16)', () => {
     const docker = (memoryBytes: number) => ({ ...base, execution: { docker: { memoryBytes, cpus: 1, pids: 128 } } });
     expect(restartConfigDigest(docker(8_589_934_592))).not.toBe(restartConfigDigest(docker(1_073_741_824)));
   });
+});
+
+it('global summary excludes project overrides and get renders the declared shell default with its source', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'config-f1-')); roots.push(root);
+  await mkdir(join(root, '.deckent'), { recursive: true }); const global = join(root, 'global'); await mkdir(global);
+  await writeFile(join(root, '.deckent/config.json'), JSON.stringify({ max_workers: 2 }));
+  await writeFile(join(global, 'config.json'), JSON.stringify({ max_workers: 3 }));
+  const env = { DECKENT_GLOBAL_HOME: global }, output: string[] = [];
+  registerProviderConfig();
+  const ctx = { root, env, locale: 'en' as const, stdout: { write: (s: string) => { output.push(s); } },
+    configApplication: (at: string, options: ConfigLoadOptions) => createConfiguredConfigApplication(at, options) };
+  await configCommand(['config', '--global', '--json'], ctx);
+  const view = JSON.parse(output.join('')); expect(view.layer).toBe('global');
+  expect(view.fields.find((item: { key: string }) => item.key === 'max_workers')).toMatchObject({ value: 3, source: 'global' });
+  output.length = 0; await configCommand(['config', 'get', 'terminal.shell.realm'], ctx);
+  expect(output.join('')).toContain('prefer-sandbox'); expect(output.join('')).toContain('source: default');
+  output.length = 0; await configCommand(['config', 'get', 'terminal.shell.realm', '--json'], ctx); expect(JSON.parse(output.join(''))).toBe('prefer-sandbox');
 });

@@ -11,6 +11,7 @@ import { ErrorRegistry, globalStateRoot, normalizeGlobalScopePlatform, preparePr
 type Env = NodeJS.ProcessEnv;
 const stateRoot = (env: Env) => resolveGlobalScopePaths(normalizeGlobalScopePlatform(process.platform, env), env).stateDir;
 const loginsLayout = (env: Env) => { const root = stateRoot(env); return resolveProductLayout({ projectRoot: root, root }); };
+export const configuredHeadlessLoginRoot = (options: ConfigLoadOptions = {}) => productResourcePath(loginsLayout(options.env ?? process.env), 'headlessLogins');
 /** s3c (owner 2026-10-24): the Brain's own login dir of a CLI family under the global state root (layout `headlessLogins`, 0700, never backed up). */
 async function ownedLoginDir(family: string, env: Env): Promise<string> {
   const resource = await prepareProductDirectory(loginsLayout(env), 'headlessLogins').catch(() => { throw ErrorRegistry.createError('HEADLESS_PREFLIGHT_FAILED', { params: { check: 'state-dir' } }); });
@@ -43,7 +44,7 @@ export function headlessConnectPorts(command: ModelConnectCommand, options: Conf
 }
 /** The doctor's Brain-login rows (no spawn, nothing created): s3c each connection says whether it uses the Brain's own login dir. */
 export async function readConfiguredHeadlessLogins(section: unknown, scopeId: string, options: ConfigLoadOptions = {}) {
-  const env = options.env ?? process.env, root = await realpath(productResourcePath(loginsLayout(env), 'headlessLogins')).catch(() => null);
+  const root = await realpath(configuredHeadlessLoginRoot(options)).catch(() => null);
   return readHeadlessLogins(section, scopeId, root);
 }
 export type HeadlessLoginCommand = Readonly<{ connection: string; configDir?: string | undefined; executable?: string | undefined; sso?: boolean | undefined }>;

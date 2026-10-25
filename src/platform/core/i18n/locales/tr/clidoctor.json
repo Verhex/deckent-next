@@ -67,7 +67,7 @@
   "doctor.check.service.stopped": "Runtime servisi çalışmıyor (gereken ilk komutta başlar)",
   "doctor.check.service.unknown": "Runtime servisi yanıt vermedi; yapılandırma durumu bilinmiyor",
   "doctor.check.identity.ok": "Kimlik profili: {profile}",
-  "doctor.check.identity.missing": "Kimlik profili seçilmemiş (solo, ekip, kurumsal ya da özel)",
+  "doctor.check.identity.missing": "Kimlik profili seçilmemiş. Yapılandırma penceresinde identity.profile ve genel (kullanıcı) katmanını seçin.",
   "doctor.check.policy.ok": "Politika: {count} yönetici yönetebiliyor",
   "doctor.check.policy.bootstrap": "Politikanın henüz yöneticisi yok",
   "doctor.check.policy.recovery": "Politika kurtarma bekliyor: yönetebilen yönetici yok",
@@ -190,5 +190,14 @@
   "doctor.check.roles.more": "Yeni model: rol bekliyor — {count} katalog modeli daha; deckent models roles ile bakın",
   "doctor.check.workerImage.ok": "Worker imajı {image} bu Docker'da var",
   "doctor.check.workerImage.missing": "Ayarlı worker imajı {image} bu Docker'da yok: Run'lar worker başlatamaz",
-  "doctor.check.workerImage.unknown": "Worker imajı {image} bu Docker'da mı denetlenemedi"
+  "doctor.check.workerImage.unknown": "Worker imajı {image} bu Docker'da mı denetlenemedi",
+  "cli.identity.healthy": "Kurulum kimliği sağlıklı ({id}); kurtarma gerekmiyor. --keep veya --new yalnız taşınmış kurulum içindir.",
+  "cli.init.registry.exists": "Admission registry zaten var; hiçbir şey değişmedi. İncelemek için deckent config get admission; iş türü eklemek için deckent coding template --help çalıştırın.",
+  "installation.fileUnsafeDetail": "Güvenli olmayan kurulum yolu {path}: {reason} (mod {mode}, sahip uid {owner}).",
+  "installation.fileUnsafe.type": "beklenmeyen dosya türü veya sembolik bağ",
+  "installation.fileUnsafe.owner": "farklı kullanıcıya ait",
+  "installation.fileUnsafe.mode": "güvenli olmayan izinler",
+  "installation.fileUnsafe.links": "beklenmeyen sabit bağ sayısı",
+  "installation.fileUnsafe.size": "dosya boyutu izin verilen sınırın dışında",
+  "cli.paths.secretStoreKey": "Gizli depo şifreleme anahtarı"
 }

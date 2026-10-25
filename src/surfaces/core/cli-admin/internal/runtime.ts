@@ -59,7 +59,8 @@ export type RuntimeServiceShutdownHandler = (root: string, command: ShutdownComm
 /** The files the product layout does not list (composition reads them; nothing is created): the real runtime socket, MCP definition files,
  * the selected secret store's files. */
 export interface AdminPathsView { readonly schemaVersion: 1; readonly runtimeSocket: string | null; readonly mcp: Readonly<{ project: string; personal: string }> | null;
-  readonly secretStore: Readonly<{ store: string; files: readonly string[] }> }
+  readonly headlessLogins?: string | null;
+  readonly secretStore: Readonly<{ store: string; files: readonly string[]; keyFile?: string | null }> }
 export type AdminPathsHandler = (root: string, options: ConfigLoadOptions) => Promise<AdminPathsView>;
 
 /** What the service is running now, from the configured scope's pool (local ledger read; null when it cannot be read). */

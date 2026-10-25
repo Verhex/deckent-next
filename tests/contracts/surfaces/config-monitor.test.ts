@@ -1,3 +1,4 @@
+import { main } from '#surfaces/core/cli/index.js';
 import { expect, it, vi } from 'vitest';
 import { configSlash } from '#surfaces/core/config/index.js';
 import { mountWorkline, settle, until } from '../support/workline-harness.js';
@@ -37,4 +38,11 @@ it('terminal /config renders shared inspect as notices and never becomes a chat 
     await until(() => terminal.stdout.text.includes('read only'), 'config refusal');
     expect(set).not.toHaveBeenCalled(); expect(chat).not.toHaveBeenCalled();
   } finally { terminal.instance.unmount(); }
+});
+
+it('monitor --config returns exit zero through the real dispatcher', async () => {
+  const output: string[] = [], errors: string[] = [];
+  expect(await main(['monitor', '--config'], { root: '/tmp/f1-monitor-config', env: {}, configApplication: () => ({ inspect: async () => view }) as never,
+    stdout: { write: (s: string) => { output.push(s); } }, stderr: { write: (s: string) => { errors.push(s); } } })).toBe(0);
+  expect(output.join('')).toContain('max_workers'); expect(errors).toEqual([]);
 });

@@ -32,6 +32,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
   const secretUse = inventory === null ? null : [...inventory.findings.map(finding => ({ kind: finding.kind, name: finding.name })),
     ...inventory.rows.filter(row => row.vault === 'main' && row.usedBy.length > 0 && row.presence === 'missing' && row.grant.state === 'granted').map(row => ({ kind: 'not-stored' as const, name: row.name }))];
   return {
+    catalogDiagnostics: context.inspectCatalogMonitor && scopeId ? await context.inspectCatalogMonitor(root, scopeId, options).catch(() => null) : null,
     scopeId, toolchainsRequested, poolStatus, toolchainUpdateEnabled: config.toolchains.update.mode !== 'off',
     firstJob: { execution: !!docker && workerImage !== 'missing', registry: !!config.admission?.registry }, // I-S7: the first-job steps doctor names
     imageId: docker?.imageId ?? null, executionEnvironment, workerImage,

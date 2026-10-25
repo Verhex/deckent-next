@@ -15,7 +15,7 @@ import { inspectConfiguredMemory, listConfiguredMemory, searchConfiguredMemory, 
   reviewConfiguredMemory, listConfiguredMemorySource, purgeConfiguredMemory, resolveConfiguredMemoryContest, countConfiguredMemoryPurgesPending } from '#composition/core/memory/index.js';
 import { listConfiguredAgents, inspectConfiguredAgent, listConfiguredSkills, inspectConfiguredSkill, defineConfiguredAgent, defineConfiguredSkill, importConfiguredSkill,
   listConfiguredSigners, enrolConfiguredSigner, addConfiguredSigner, revokeConfiguredSigner, repairConfiguredSigners, inspectConfiguredAgentStats, listConfiguredSuggestions, inspectConfiguredSuggestion,
-  changeConfiguredStanding, dismissConfiguredSuggestion, bulkConfiguredStanding, listConfiguredRevokedPromotions, draftConfiguredSuggestion, defineConfiguredFromSuggestion } from '#composition/core/agent-catalog/index.js';
+  inspectConfiguredCatalogMonitor, changeConfiguredStanding, dismissConfiguredSuggestion, bulkConfiguredStanding, listConfiguredRevokedPromotions, draftConfiguredSuggestion, defineConfiguredFromSuggestion } from '#composition/core/agent-catalog/index.js';
 import { prepareConfiguredDecision, askConfiguredDecision, recordConfiguredDecision, outcomeConfiguredDecision, inspectConfiguredDecision, listConfiguredDecisions } from '#composition/core/decision/index.js';
 import { inspectMonitor, inspectSurfaceAccess, inspectSurfaceRunIds, followLedgerSurface } from '#composition/core/monitor/index.js';
 import { inspectConfiguredToolchainCurrency, updateConfiguredToolchains, inspectToolchainRefresh } from '#composition/core/toolchains/index.js';
@@ -74,7 +74,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     prepareWorkspacePatch: prepareConfiguredWorkspacePatch, previewWorkspacePatch: previewConfiguredWorkspacePatch, renderUnifiedDiff: unifiedDiff,
     configChoiceSources: configuredConfigChoiceSources, configApplication: createConfiguredConfigApplication, resolveConfigPrincipal: resolveConfiguredConfigPrincipal,
     openConfigPanel: openConfigWindow, // C-SETUP: `deckent config` on a terminal = the `/config` window (lazy view)
-    inspectToolchainRefresh,
+    inspectCatalogMonitor: inspectConfiguredCatalogMonitor, inspectToolchainRefresh,
     inspectWorkers: inspectConfiguredWorkers, inspectMonitor, inspectToolchainCurrency: (projectRoot, options) => inspectConfiguredToolchainCurrency(projectRoot, options), inspectSurfaceAccess, inspectSurfaceRunIds, followSurfaceEvents: followLedgerSurface,
     ensureRuntimeService: (projectRoot, options) => ensureConfiguredRuntimeService(projectRoot, options, undefined, serviceEntry),
     restartRuntimeService: (projectRoot, options) => restartConfiguredRuntimeService(projectRoot, options, undefined, serviceEntry),

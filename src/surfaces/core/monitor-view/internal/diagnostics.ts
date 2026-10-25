@@ -10,6 +10,16 @@ export interface MonitorDiagnostic { readonly code: string; readonly note: boole
   /** The next step a person can take, only where one real command answers it (PB-MON-UX "→ Yapılacak"); absent otherwise, never invented. */
   readonly action?: string }
 
+const shellWord = (value: string) => `'${value.replace(/'/gu, `'\\''`)}'`;
+function aggregatorAction(detail: string, locale: Locale): string {
+  try {
+    const parts: unknown = JSON.parse(detail);
+    if (Array.isArray(parts) && parts.length === 3 && parts.every(part => typeof part === 'string' && part.length > 0)) {
+      return t('agentsevo.monitor.unsignedAction', { scope: shellWord(parts[0] as string), principal: shellWord(`${parts[1]}:${parts[2]}`) }, locale);
+    }
+  } catch { /* Old observations carry no identity. */ }
+  return t('agentsevo.monitor.unsignedUnknownAction', {}, locale);
+}
 const scopesUnavailable = (count: string, reason: string, locale: Locale) =>
   t('monitor.diagnostic.scopesUnavailable', { count, code: reason ? ` (${reason})` : '' }, locale);
 /** MON-NAMES `scope-refused|scope-failed:<CODE>:<scope>`: the reader names a scope only to a viewer holding the scope-diagnostics grant; the
@@ -81,7 +91,7 @@ export function describeDiagnostic(raw: string, locale: Locale): MonitorDiagnost
     'model-roles-pending': () => t('monitor.action.modelRolesPending', {}, locale),
     'catalog-suggestions-open': () => t('agentsevo.monitor.openAction', {}, locale),
     'catalog-signer-revoked': () => t('agentsevo.monitor.signerRevokedAction', {}, locale),
-    'catalog-aggregator-unsigned': () => t('agentsevo.monitor.unsignedAction', {}, locale),
+    'catalog-aggregator-unsigned': () => aggregatorAction(detail, locale),
   };
   return { code, note, text: Object.hasOwn(words, code) ? words[code]!() : body, ...(Object.hasOwn(actions, code) ? { action: actions[code]!() } : {}) };
 }

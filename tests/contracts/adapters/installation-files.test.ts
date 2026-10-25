@@ -3,6 +3,7 @@ import { chmod, link, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } 
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, afterEach, expect, it } from 'vitest';
+import { queryFailure } from '#composition/core/query-errors/index.js';
 import { inspectInstallationFile, publishInstallationFile } from '../../../src/adapters/core/installation-files/index.js';
 
 const roots: string[] = [], maxBytes = 4096;
@@ -75,4 +76,13 @@ it('rejects oversized content before creating directories', async () => {
   await expect(lstat(join(f.root, 'nested'))).rejects.toMatchObject({ code: 'ENOENT' });
 });
 
+});
+
+it.skipIf(process.platform === 'win32')('keeps unsafe permission refusal and reports the exact file, mode and owner through CLI error translation', async () => {
+  const f = await fixture(); await mkdir(join(f.root, 'nested'), { mode: 0o700 }); await writeFile(f.path, 'private-content', { mode: 0o644 });
+  const error = await inspectInstallationFile({ ...f, maxBytes }).then(() => { throw new Error('expected refusal'); }, (error: unknown) => error);
+  expect(error).toMatchObject({ code: 'INSTALLATION_FILE_UNSAFE', params: { path: f.path, reason: 'mode', mode: '0644', owner: String(process.getuid!()) } });
+  const message = queryFailure(error).localize!('tr').message;
+  expect(message).toContain(f.path); expect(message).toContain('0644'); expect(message).toContain('güvenli olmayan izinler'); expect(message).not.toContain('private-content');
+  expect(await readFile(f.path, 'utf8')).toBe('private-content');
 });

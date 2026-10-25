@@ -38,6 +38,25 @@ function notMeasurable(report: WorkCostReport, locale: Locale): string[] {
   return lines;
 }
 
+/** Read-only channel totals of this Run's visible attempts; missing measurements remain explicit, without billing periods or budget changes. */
+function channelUsage(report: WorkCostReport, context: RunCommandContext, locale: Locale): string[] {
+  if (!report.attempts.length) return [];
+  const groups = new Map<string | null, Attempt[]>();
+  for (const attempt of report.attempts) {
+    const channel = attempt.model?.channelId ?? null;
+    const rows = groups.get(channel) ?? []; rows.push(attempt); groups.set(channel, rows);
+  }
+  const unknown = t('resource.unknown', {}, locale);
+  const columns = t('cli.run.report.channelColumns', {}, locale).split('|').map(header => ({ header }));
+  const rows = [...groups].map(([channel, attempts]) => {
+    const api = attempts.flatMap(row => row.axes.apiMoney ? [BigInt(row.axes.apiMoney.amountUsdNanos)] : []);
+    const calls = attempts.flatMap(row => row.axes.subscription?.calls == null ? [] : [row.axes.subscription.calls]);
+    return [channel ?? unknown, String(attempts.length), api.length ? formatDecimal(Number(api.reduce((sum, value) => sum + value, 0n)) / USD_NANOS, locale, 4) : unknown,
+      String(attempts.length - api.length), calls.length ? String(calls.reduce((sum, value) => sum + value, 0)) : unknown];
+  });
+  return [t('cli.run.report.channelHeading', {}, locale), renderCliTable(columns, rows, cliTableStyle(context)), t('cli.run.report.channelEvidence', {}, locale)];
+}
+
 /**
  * The report a person reads (CLI review §report): Known — result, what acceptance rests on, per attempt duration, CPU, peak memory, model —
  * then Not measurable, each axis with its reason (e.g. "a subscription call has no measurable charge"). Readable units (0,49 s, 557 MB, 20,9 s);
@@ -63,7 +82,7 @@ export function renderHumanReport(report: WorkCostReport, run: RunView, context:
     ...(s.measuredCpuSeconds === null ? [] : [t('cli.run.report.cpuTotal', { cpu: formatDuration(s.measuredCpuSeconds * 1000, locale) }, locale)]),
     ...(s.sampledPeakBytes === null ? [] : [t('cli.run.report.peakTotal', { peak: formatBytes(s.sampledPeakBytes, locale) }, locale)]),
     ...(s.measuredApiUsdNanos === null ? [] : [t('cli.run.report.apiTotal', { api: formatDecimal(Number(s.measuredApiUsdNanos) / USD_NANOS, locale, 4) }, locale)]),
-    table,
+    table, ...channelUsage(report, context, locale),
     t('cli.run.report.unmeasuredHeading', {}, locale),
     ...(unmeasured.length ? unmeasured : [t('cli.run.report.allMeasured', {}, locale)]),
     report.recommendations?.length ? t('cli.run.report.comparison', { count: report.recommendations.length }, locale) : t('resource.recommendation.empty', {}, locale),

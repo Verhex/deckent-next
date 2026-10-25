@@ -104,5 +104,8 @@
   "cli.run.inventory.col.output": "Çıktı",
   "cli.run.inventory.see": "Run'lar ve durumları: deckent run list · canlı worker'lar (bu kurulum ve yapılandırılmış diğer kaynaklar): deckent workers list",
   "cli.run.inventory.limitHint": "Sayfa başına en çok {max}; --limit {max} kullanın.",
-  "cli.run.control.holdDetail": "Bekletilirken yeni görev başlamaz; zaten çalışan iş sürer, durdurulmaz. Bekletmeyi deckent run resume kaldırır."
+  "cli.run.control.holdDetail": "Bekletilirken yeni görev başlamaz; zaten çalışan iş sürer, durdurulmaz. Bekletmeyi deckent run resume kaldırır.",
+  "cli.run.report.channelHeading": "Kanala göre kullanım (bu Run)",
+  "cli.run.report.channelColumns": "Kanal|Deneme|Ölçülen API (USD)|API ölçülmedi|Ölçülen abonelik çağrısı",
+  "cli.run.report.channelEvidence": "Yalnız görülebilen denemeler; ölçülen tarife maliyeti sağlayıcı faturası değildir. Eksik abonelik sayıları bilinmiyor kalır. Fatura dönemi veya sıfırlama varsayılmaz."
 }
