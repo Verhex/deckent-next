@@ -15,6 +15,9 @@ import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, until as untilWorkline, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { BLOCKER_CODES, emptySnapshot, fullSnapshot, longIdSnapshot, OBSERVED_AT } from '../../fixtures/monitor/snapshots.js';
 import { MonitorSourceMemo } from '#engine/index.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
+import { createMcpServer } from '#surfaces/core/mcp/index.js';
 
 /** MONITOR-SURFACE: the text snapshot, `--json`, the typed unavailable error and the fullscreen view, all from fixture MonitorSnapshots. */
 const surface = await loadMonitorSurface();
@@ -823,4 +826,34 @@ it.each(['en', 'tr'] as const)('shows the frozen task billing axis in monitor de
   const view = surface.buildMonitorView(snapshot, locale, true);
   const serialized = view.tabs.runs.flatMap(block => block.kind === 'table' ? block.rows : []).flatMap(row => row.detail().flat()).map(span => span.text).join('\n');
   expect(serialized).toContain(locale === 'tr' ? 'abonelik planı' : 'subscription plan');
+});
+
+// GOZ-30: one installation's snapshot (103,565 characters) exceeded what Claude Code keeps inline. The MCP answer is a bounded summary by default;
+// every list is reachable through paged sections and `snapshot` still returns the whole v1 value.
+it('MCP inspect_monitor answers a bounded summary by default and reaches every list through paged sections', async () => {
+  const runs = Array.from({ length: 40 }, (_, index) => ({ ...fullSnapshot.installs[0]!.runs[index % 3]!, runId: `run-many-${index}` }));
+  const snapshot = { ...fullSnapshot, installs: [{ ...fullSnapshot.installs[0]!, runs: [...fullSnapshot.installs[0]!.runs, ...runs] }, ...fullSnapshot.installs.slice(1)] };
+  const server = createMcpServer({ async inspectRun() { return {}; }, async inspectInventory() { return {}; }, inspectMonitor: async () => snapshot },
+    { maxConcurrentCalls: 1, responseMaxBytes: 4_000_000 }, 'en');
+  const [ct, st] = InMemoryTransport.createLinkedPair(); await server.connect(st);
+  const client = new Client({ name: 'monitor-page-test', version: '1' }); await client.connect(ct);
+  const call = async (args: Record<string, unknown>) => {
+    const result = await client.callTool({ name: 'inspect_monitor', arguments: { schemaVersion: 1, ...args } });
+    expect(result.isError).not.toBe(true);
+    return { text: (result.content as { text: string }[])[0]!.text, value: result.structuredContent as Record<string, unknown> & { items: { install: string; item: unknown }[]; nextPage: number | null } };
+  };
+  try {
+    const full = await call({ section: 'snapshot' }), summary = await call({});
+    expect(full.value).toEqual(snapshot);
+    expect(summary.text.length).toBeLessThan(full.text.length / 4);
+    expect(summary.value).toMatchObject({ schemaVersion: 2, section: 'summary', sourcesRead: snapshot.sourcesRead,
+      installs: [{ id: 'current', counts: { runs: snapshot.installs[0]!.runs.length, workers: snapshot.installs[0]!.workers.length }, attentionTruncated: true }, {}, {}] });
+    for (const section of ['runs', 'workers', 'approvals', 'pools', 'brainWaits', 'map', 'diagnostics'] as const) {
+      const items: unknown[] = []; let page: number | null = 0;
+      while (page !== null) { const { value } = await call({ section, page, pageSize: 7 }); items.push(...value.items); page = value.nextPage; }
+      const expected = snapshot.installs.flatMap(install => (section === 'map' ? (install.map ? [install.map] : []) : section === 'brainWaits' ? install.brainWaits ?? [] : install[section])
+        .map(item => ({ install: install.id, item })));
+      expect(items, section).toEqual(JSON.parse(JSON.stringify(expected)));
+    }
+  } finally { await client.close(); await server.close(); }
 });

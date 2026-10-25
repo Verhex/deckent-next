@@ -5,11 +5,12 @@ import { brainPlanCommandSchema, type BrainPlanCommand } from '#domain/index.js'
 import { runProposalQuerySchema, type RunProposalQuery } from '#engine/index.js';
 import { AuditError, providerSpendManagementCommandSchema, parseProviderSpendManagementCommand, type ProviderSpendManagementCommand } from '#domain/index.js';
 import type { ProviderSpendManagementResult } from '#engine/index.js';
-import { monitorQuerySchema, type MonitorQuery, type MonitorSnapshot } from '#engine/index.js';
+import type { MonitorQuery, MonitorSnapshot } from '#engine/index.js';
 import { approvalListSchema, approvalQuerySchema, approvalRenewalSchema, checkModelIngressArguments, projectModelIngressSchema, type ModelIngressProjection } from '#engine/index.js';
 import { boundedToolDelivery, completeToolResult, jsonToolResult, modelToolDelivery, toolResultFits } from './delivery.js';
 import { operationToolDefinitions } from './operation-tools.js';
 import { rootObjectSchema } from './input-schema.js';
+import { mcpMonitorQuerySchema, monitorCollectionQuery, projectMonitorForMcp } from './monitor-page.js';
 import { isMcpWithheldTool } from './tool-inventory.js';
 import { modelActivationQuerySchema, modelActivationCommandSchema, modelCatalogCommandSchema, modelCatalogQuerySchema, modelInvocationCancellationCommandSchema, modelInvocationCommandSchema, modelInvocationPurgeCommandSchema, modelInvocationQuerySchema, providerSpendExactAccountQuerySchema, providerSpendAuditCommandInputSchema, providerSpendAuditCommandSchema,
   type ModelActivationQuery, type ModelActivationCommand, type ModelCatalogCommand, type ModelCatalogQuery, type ModelInvocationCancellationCommand, type ModelInvocationCommand, type ModelInvocationPurgeCommand, type ModelInvocationQuery, type ProviderSpendAccountQuery, type ProviderSpendAuditCommand } from '#domain/index.js';
@@ -133,8 +134,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   const renewApproval = applications.renewApproval;
   const inspectMonitor = applications.inspectMonitor;
   if (inspectMonitor) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_monitor',
-    description: t('mcp.tool.inspectMonitor', {}, locale), schema: monitorQuerySchema,
-    invoke: input => inspectMonitor.call(applications, monitorQuerySchema.parse(input)) });
+    description: t('mcp.tool.inspectMonitor', {}, locale), schema: mcpMonitorQuerySchema,
+    invoke: async input => { const query = mcpMonitorQuerySchema.parse(input); return projectMonitorForMcp(await inspectMonitor.call(applications, monitorCollectionQuery(query)), query); } });
   const inspectDecision = applications.inspectDecision;
   if (inspectDecision) definitions.push({ readOnly: true, destructive: false, idempotent: true, openWorld: false, name: 'inspect_decision',
     description: t('mcp.tool.inspectDecision', {}, locale), schema: decisionQuerySchema,
