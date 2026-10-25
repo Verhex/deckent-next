@@ -116,7 +116,7 @@ it.skipIf(process.platform !== 'linux')('compiled MCP execute_operation: pending
       intent: { approval: { approvalId: pending.approval!.approvalId } } } });
     // A scope without a trusted grant is a typed tool error before any ledger access; nothing is sent.
     const refused = await bounded(client.callTool({ name: 'execute_operation', arguments: { ...command, commandId: 'x', scopeId: 'elsewhere' } }), 'MCP_REFUSED_TIMEOUT');
-    expect(refused.isError).toBe(true); expect(JSON.parse((refused.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: 'POLICY_DENIED' });
+    expect(refused.isError).toBe(true); expect(JSON.parse((refused.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: 'POLICY_DENIED', message: expect.any(String) });
     expect(records.operations).toHaveLength(1);
     const db = new DatabaseSync(ledger, { readOnly: true });
     try {

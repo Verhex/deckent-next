@@ -51,7 +51,7 @@ async function callMcp(project: string, env: Record<string, string>, name: strin
       `MCP_CALL_TIMEOUT:${Buffer.concat(diagnostics).toString('utf8').slice(-2048)}`);
     if (expectedError) {
       expect(result.isError).toBe(true);
-      expect(JSON.parse((result.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: expectedError });
+      expect(JSON.parse((result.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: expectedError , message: expect.any(String) });
     } else expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
     return result.structuredContent;
   } finally {

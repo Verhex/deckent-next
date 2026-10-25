@@ -155,7 +155,7 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
   expect(reportedCliJson).toEqual(reportedSdk.value);
   const mcpDenied = await inspectMcp(project, env, releasedQuery);
   expect(mcpDenied.isError).toBe(true);
-  expect(JSON.parse((mcpDenied.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: 'POLICY_DENIED' });
+  expect(JSON.parse((mcpDenied.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: 'POLICY_DENIED' , message: expect.any(String) });
   expect(ledgerSnapshot(ledger)).toBe(before);
   await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'inspect-mcp', restrictions: [], grants:
     [{ id: 'inspect', effect: 'allow', actions: ['inspect'], scopes: ['scope'],
