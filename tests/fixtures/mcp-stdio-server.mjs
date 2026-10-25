@@ -1,5 +1,5 @@
 // A real local MCP server over stdio (SDK v2), for the MCP client tests. `--mode legacy` answers only the 2025-11-25 `initialize`
-// handshake (no `server/discover`); `dual` serves both eras (`serveStdio`); `modern` refuses 2025-era openings. The tool list is read from
+// handshake (no `server/discover`); `legacy-2025-06` answers it with 2025-06-18 only (an older server, YTK-40); `dual` serves both eras (`serveStdio`); `modern` refuses 2025-era openings. The tool list is read from
 // `--tools <json>` on every `tools/list` (a test edits the file to change a definition under a running server); every start and call is
 // appended to `--log <jsonl>` (what reached the server is the evidence, never the client's claim).
 import { appendFileSync, readFileSync } from 'node:fs';
@@ -17,7 +17,7 @@ process.stderr.write('fixture stderr: token=abcdef0123456789abcdef\n');
 
 function build() {
   const server = new Server({ name: 'deckent-mcp-fixture', version: '1.0.0' }, { capabilities: { tools: {} },
-    ...(mode === 'legacy' ? { supportedProtocolVersions: ['2025-11-25', '2025-06-18'] } : {}) });
+    ...(mode === 'legacy' ? { supportedProtocolVersions: ['2025-11-25', '2025-06-18'] } : mode === 'legacy-2025-06' ? { supportedProtocolVersions: ['2025-06-18'] } : {}) });
   // `--page-size N` serves `tools/list` in pages (an opaque numeric cursor); `--endless` never stops sending a cursor (a hostile server).
   server.setRequestHandler('tools/list', async request => {
     const all = definitions().map(tool => Object.fromEntries(Object.entries(tool).filter(([key]) => key !== 'behavior' && key !== 'structured')));
@@ -50,5 +50,5 @@ function build() {
   return server;
 }
 
-if (mode === 'legacy') await build().connect(new StdioServerTransport());
+if (mode.startsWith('legacy')) await build().connect(new StdioServerTransport());
 else serveStdio(() => build(), mode === 'modern' ? { legacy: 'reject' } : {});

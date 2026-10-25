@@ -283,8 +283,8 @@ than Claude Code, which binds approval to the name and asks only for project ser
 offered; `deckent mcp approve` starts it in its realm, shows the card (the registry template, never an expanded `${VAR}`) and pins its
 tools; every scope needs approval (no silent trust on first use). The agent's read floor protects `.deckent/mcp.json` (read tools, shell
 classification, bubblewrap mask, Landlock). The service owns one pool (`RuntimeChatTurnHost.mcp`): a server starts with the first turn that
-needs it, negotiates the era with SDK `versionNegotiation: auto` (2026-07-28 via `server/discover`, else the 2025-11-25 `initialize`; on
-stdio the SDK probes with a sibling process), is listed every turn and kept for the service's life; the client SDK loads with the first
+needs it, negotiates the era with SDK `versionNegotiation: auto` (2026-07-28 via `server/discover`, else the `initialize` handshake offering 2025-11-25 and accepting a server's
+answer of 2025-06-18, 2025-03-26 or 2024-11-05, YTK-40; on stdio the SDK probes with a sibling process), is listed every turn and kept for the service's life; the client SDK loads with the first
 server start; a crash restarts on next use at most `maxRestarts` times; service stop awaits closing all of them (stdin, then
 SIGTERM/SIGKILL) before the endpoint and ledger custody are released. Realm per stdio server (K4): the default is `sandbox-net`
 (bubblewrap wraps the long-lived process through the optional `ShellSandbox.usable().launch`, with network and a private persistent HOME
