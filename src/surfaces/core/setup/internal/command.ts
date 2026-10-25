@@ -1,6 +1,6 @@
 import { ErrorRegistry, emit, type Locale } from '#platform/index.js';
 import { planSetup, SETUP_PLAN_SCHEMA_VERSION, type SetupObservation, type SetupPlan, type SetupStageRegistry } from '#engine/index.js';
-import { cliMode, resolveCommandScope, scopeLister } from '#surfaces/core/cli-human/index.js';
+import { cliMode, holdTerminalInput, lendHeldInput, resolveCommandScope, scopeLister } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from './contract.js';
 import { observeSetup } from './observe.js';
@@ -69,11 +69,15 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
     const [{ createSetupController }, { mountSetupWindow }] = await Promise.all([import('./controller.js'), import('#surfaces/core/project-instructions/index.js')]);
     const controller = createSetupController({ context, root, locale, observed, flags });
     // The window ↔ terminal handoff: a stage whose owner takes the terminal (sudo's prompt, a card, a picker) runs only after the window
-    // unmounted and stdin stopped reading; then the window reopens on a fresh observation. Bounded: each such stage runs at most once.
-    do {
-      await mountSetupWindow(controller.model(), controller.step, { stdin, stdout, env });
-      stdin.pause();
-    } while (await controller.runPending());
+    // unmounted; then the window reopens on a fresh observation. Bounded: each such stage runs at most once. Between the window and the owner's
+    // cards the terminal is held (raw, typed keys discarded: no `^[[B` echo, no stray answer); each view borrows it, a child gets it plain.
+    const release = holdTerminalInput(stdin);
+    try {
+      do {
+        const giveBack = lendHeldInput(stdin);
+        try { await mountSetupWindow(controller.model(), controller.step, { stdin, stdout, env }); } finally { giveBack(); }
+      } while (await controller.runPending());
+    } finally { release(); stdin.pause(); }
     const outcome = controller.outcome();
     emit(renderSetupLines(outcome.plan, locale, { requested: false, results: outcome.results }, outcome.firstJob), sinks);
     return;

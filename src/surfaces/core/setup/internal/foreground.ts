@@ -1,6 +1,6 @@
 import { emit, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { SetupStage } from '#engine/index.js';
-import { askCliCard, type CliCardIo } from '#surfaces/core/cli-human/index.js';
+import { askCliCard, lendHeldInput, type CliCardIo } from '#surfaces/core/cli-human/index.js';
 import { modelsCommand, type ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 import { runKernelCommand, type KernelCommandContext } from '#surfaces/core/cli-observe/index.js';
 import type { SetupApplyResult, SetupCommandContext } from './contract.js';
@@ -48,11 +48,17 @@ export async function runForegroundStage(context: SetupCommandContext, root: str
   const human = { ...context, env, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr, locale };
   try {
     if (op === 'doctor.inspect') { await runKernelCommand(['doctor'], human as unknown as KernelCommandContext); return result('applied'); }
-    if (op === 'project-instructions.initialize') { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['init'], human); return result('applied'); }
+    if (op === 'project-instructions.initialize') {
+      const giveBack = lendHeldInput(process.stdin);
+      try { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['init'], human); } finally { giveBack(); }
+      return result('applied');
+    }
     if (!scopeId) return result('refused', 'CLI_SCOPE_REQUIRED');
     if (op === 'model.connect') { await modelsCommand(['models', 'connect', '--scope', scopeId], human as unknown as ModelCommandContext); return result('applied'); }
     if (op === 'execution-environment.install' && context.installExecutionEnvironment) {
-      const status = await context.installExecutionEnvironment(root, scopeId, io);
+      // sudo asks on the terminal itself: the held input goes back to the line discipline for the whole install (its card included).
+      const giveBack = lendHeldInput(process.stdin, { plain: true });
+      const status = await context.installExecutionEnvironment(root, scopeId, io).finally(giveBack);
       return result(status === 'succeeded' || status === 'present' ? 'applied' : 'refused', status === 'succeeded' || status === 'present' ? undefined : `SETUP_INSTALL_${status.toUpperCase()}`);
     }
     if (op === 'execution.worker-image' && context.prepareWorkerImage) {

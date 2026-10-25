@@ -5,6 +5,7 @@ export { formatAgo, formatBytes, formatClock, formatDecimal, formatDuration, for
 export { cliTableStyle, renderCliTable, safeCell, textCells, type CliTableColumn, type CliTableStyle } from './internal/table.js';
 export { displayId, listRunIds, matchIdPrefix, requireIdPrefix, type IdMatch } from './internal/short-id.js';
 export { resolveCommandScope, scopeLister, scopeNotice, type ScopePick, type ScopeResolution } from './internal/scope.js';
+export { holdTerminalInput, lendHeldInput } from './internal/input-hold.js';
 export { askCliCard, cliCardGate, standingCardOptions, type CliCardIo, type CliCardOption, type CliCardRequest, type StandingAnswer } from './internal/card.js';
 export { renderInputSchema, schemaRequested } from './internal/schema.js';
 export { acceptanceEvidenceQualifier, acceptanceEvidenceText } from './internal/acceptance.js';
