@@ -24,7 +24,7 @@ async function validateScope(root: string, scopeId: string, options: ConfigLoadO
 export async function inspectConfiguredMcpCapabilities(root: string, scopeId: string, options: ConfigLoadOptions = {}) {
   await validateScope(root, scopeId, options);
   const config = await loadComposedConfig(root, { ...options, heal: false }), target = selectWorkTarget(config.execution)?.id ?? null;
-  return withPolicyAdministration(root, scopeId, options, 'read', (deps, person) => new McpCapabilities(deps, mcpCapabilityRegistry, target).inspect(scopeId, person));
+  return withPolicyAdministration(root, scopeId, options, 'read', (deps, person) => new McpCapabilities(deps, mcpCapabilityRegistry, target, config.policy.mcp.optInGroups).inspect(scopeId, person));
 }
 /** Apply is only a reviewed digest selection on an attested terminal. Its subordinate approval and final policy write retain their checks. */
 export async function changeConfiguredMcpCapabilities(root: string, input: McpCapabilityRequest, options: ConfigLoadOptions = {}) {
@@ -38,9 +38,9 @@ export async function changeConfiguredMcpCapabilities(root: string, input: McpCa
     if (!await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('APPROVAL_INTERACTIVE_REQUIRED');
   }
   // Compute under a read-only context first: an invalid digest never bootstraps a ledger, identities or a session.
-  const preview = await withPolicyAdministration(root, input.scopeId, options, 'read', (deps, person) => new McpCapabilities(deps, mcpCapabilityRegistry, target).run({ ...input, mode: 'preview' }, person, ''));
+  const preview = await withPolicyAdministration(root, input.scopeId, options, 'read', (deps, person) => new McpCapabilities(deps, mcpCapabilityRegistry, target, config.policy.mcp.optInGroups).run({ ...input, mode: 'preview' }, person, ''));
   if (input.mode === 'preview' || preview.status !== 'preview') return preview;
   if (input.expect !== preview.digest) return { ...preview, status: 'conflict' as const };
   if (preview.missing.length) return { ...preview, status: 'refused' as const };
-  return withPolicyAdministration(root, input.scopeId, options, 'write', (deps, person) => new McpCapabilities(deps, mcpCapabilityRegistry, target).run(input, person, `MCP ${input.action}: ${input.groupId}, ${input.scopeId}`));
+  return withPolicyAdministration(root, input.scopeId, options, 'write', (deps, person) => new McpCapabilities(deps, mcpCapabilityRegistry, target, config.policy.mcp.optInGroups).run(input, person, `MCP ${input.action}: ${input.groupId}, ${input.scopeId}`));
 }

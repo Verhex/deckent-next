@@ -47,7 +47,7 @@ describe('MCP capability catalog and governed preview contract', () => {
     const cells = mcpCapabilityRegistry.list().flatMap(group => group.cells);
     for (const tool of refused) expect(cells.filter(cell => Object.hasOwn(cell.tools, tool)), tool).not.toHaveLength(0);
     expect(cells.some(cell => cell.resource.kind === 'approval' && cell.actions.includes('decide'))).toBe(false);
-    expect(mcpCapabilityRegistry.get('dogfood-worker').proposed).toBe(true);
+    expect(mcpCapabilityRegistry.get('dogfood-worker').availability).toBe('opt-in');
     expect(mcpCapabilityRegistry.get('dogfood-worker').cells.every(cell => ['run', 'attempt', 'pool', 'work-target'].includes(cell.resource.kind))).toBe(true);
   });
   it.each(['work', 'dogfood-worker'])('%s requires Run inspection as well as Attempt authority for evaluation', groupId => {
@@ -85,6 +85,27 @@ describe('MCP capability catalog and governed preview contract', () => {
     const files = authorityDocuments(policy());
     document = resolvePolicyBindings({ ...files.policy, revision: 'changed' }, files.bindings);
     expect((await app.run(request, actor, '')).digest).not.toBe(first.digest);
+  });
+  it('opt-in availability hides an unheld group, accepts legacy catalog data, and keeps held rules visible for revocation', async () => {
+    let document = policy();
+    const deps = { policy: { async load() { return document; } }, administration: { submit: async () => { throw Error('unexpected'); } }, approve: async () => { throw Error('unexpected'); } };
+    const app = new McpCapabilities(deps), group = mcpCapabilityRegistry.get('dogfood-worker');
+    expect((await app.inspect('scope', actor)).groups.some(row => row.group.id === group.id)).toBe(false);
+    expect((await new McpCapabilities(deps, mcpCapabilityRegistry, null, [group.id]).inspect('scope', actor)).groups.some(row => row.group.id === group.id)).toBe(true);
+    const { availability, ...legacy } = group; expect(availability).toBe('opt-in');
+    const registry = new McpCapabilityRegistry([{ ...legacy, schemaVersion: 1, proposed: true }]);
+    expect(registry.get(group.id)).toMatchObject({ schemaVersion: 2, availability: 'opt-in', version: 1 });
+    const preview = await app.run({ scopeId: 'scope', groupId: group.id, action: 'grant', mode: 'preview' }, actor, '');
+    const files = authorityDocuments(document);
+    document = resolvePolicyBindings({ ...files.policy, grants: [...files.policy.grants, preview.rules[0]!] }, files.bindings);
+    expect((await app.inspect('scope', actor)).groups.find(row => row.group.id === group.id)?.managed).toBe('partial');
+    expect((await app.run({ scopeId: 'scope', groupId: group.id, action: 'revoke', mode: 'preview' }, actor, '')).rules).toEqual([preview.rules[0]]);
+    expect((await app.inspect('other', { ...actor, scopeIds: ['other'] })).groups.some(row => row.group.id === group.id)).toBe(false);
+    const configured = new McpCapabilities(deps, mcpCapabilityRegistry, 'previous-target');
+    const target = (await configured.run({ scopeId: 'scope', groupId: group.id, action: 'grant', mode: 'preview' }, actor, '')).rules.find(rule => rule.resource.kind === 'work-target')!;
+    document = resolvePolicyBindings({ ...files.policy, grants: [...files.policy.grants, target] }, files.bindings);
+    expect((await app.inspect('scope', actor)).groups.some(row => row.group.id === group.id)).toBe(true);
+    expect((await app.run({ scopeId: 'scope', groupId: group.id, action: 'revoke', mode: 'preview' }, actor, '')).rules).toEqual([target]);
   });
   it('company deny precedence and global cells remain visible, while the MCP actor cannot administer the catalog', async () => {
     const current = policy(); if (current.schemaVersion !== 2) throw Error('fixture');

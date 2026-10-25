@@ -17,7 +17,7 @@ export { policyResources, getPolicyVocabulary } from './internal/vocabulary.js';
 export type { CorePolicyResource, CorePolicyAction } from './internal/vocabulary.js';
 export { authorityDocuments, DELEGATION_CELL_LIMIT, delegationWithin, installationOwnerPermissions, INSTALLATION_OWNER_ROLE_ID, kindCovers, planPolicyChange, POLICY_CHANGE_MAX, PolicyChangeError,
   policyChangeSchema, POLICY_RECOVERY_CHANGE_KIND, RECOVERY_RAISE_KINDS, type DelegationOptions } from './internal/administer.js';
-export type { DelegatedRule, DelegationVerdict, PolicyChange, PolicyChangePlan } from './internal/administer.js';
+export type { DelegatedRule, DelegationCell, DelegationVerdict, PolicyChange, PolicyChangePlan } from './internal/administer.js';
 export { describePolicyChange, POLICY_CHANGE_SUMMARY_MAX } from './internal/describe.js';
 export { policyBindingSchema, policyGrantSchema } from './internal/schema.js';
 export type { PolicyBinding, PolicyGrant } from './internal/schema.js';
@@ -27,7 +27,7 @@ export { isMcpGrantId, MCP_GRANT_PREFIX, mcpGrantRuleIds, mcpToolGrantChange, mc
 export type { SessionCell, SessionPattern, SessionPatternResult, StandingCell, StandingPattern, StandingPatternResult, StandingRefusal } from './internal/standing.js';
 export { policyRoleSchema, principalGrants } from './internal/schema.js';
 export { mcpCapabilityGroupSchema, mcpCapabilityRules, sameMcpCapabilityRule } from './internal/mcp-capabilities.js';
-export type { McpCapabilityGroup, McpCapabilityAction, McpCapabilitySelection, McpCapabilityRequest, McpCapabilityState, McpCapabilityView, McpCapabilityPreview } from './internal/mcp-capabilities.js';
+export type { McpCapabilityGroup, McpCapabilityGroupInput, McpCapabilityAction, McpCapabilitySelection, McpCapabilityRequest, McpCapabilityState, McpCapabilityView, McpCapabilityPreview } from './internal/mcp-capabilities.js';
 
 export { assertPolicyAdministrationPreserved, usablePolicyAdmins, PolicyLastAdminError, type AdministrationAssurance } from './internal/administration.js';
 

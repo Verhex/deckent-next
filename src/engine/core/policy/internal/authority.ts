@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { AUDIT_EVENT_SCHEMA_VERSION, assertPolicyAdministrationPreserved, policySchema, resolvePolicyBindings, type AdministrationAssurance, type AuditEvent } from '#domain/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, assertPolicyAdministrationPreserved, authorityDocuments, policyNamedPeople, type Policy, type ApprovalActor, policySchema, resolvePolicyBindings, type AdministrationAssurance, type AuditEvent, type DelegationCell, type DelegationVerdict } from '#domain/index.js';
 import { auditPolicyDigest } from '#engine/core/audit/index.js';
 import type { PermissionModeSnapshot } from './permission-mode-admin.js';
 
@@ -25,8 +25,27 @@ export interface AuthorityDocumentStore {
   /** Stable identity of the documents (the C11 target binding pins it). */
   identity(): string;
 }
+/**
+ * Display facts of a delegation-bound refusal (alpha.56 U5-S1): the cell it stopped at, why, and who the policy names in the scope — `sole`: the
+ * decider is the only person it names. They choose the refusal text's hint only; the bound decided before they were read. `detail` stays the raw
+ * `ruleId:reason` (audit and callers compare it).
+ */
+export interface DelegationRefusalFacts {
+  readonly cell: DelegationCell; readonly reason: Extract<DelegationVerdict, { ok: false }>['reason'];
+  readonly sole: boolean; readonly people: readonly { readonly issuer: string; readonly subject: string }[];
+}
 export class AuthorityChangeError extends Error {
-  constructor(readonly code: 'POLICY_CONFLICT' | 'POLICY_DELEGATION_EXCEEDS', readonly detail: string | null = null) { super(code); this.name = 'AuthorityChangeError'; }
+  constructor(readonly code: 'POLICY_CONFLICT' | 'POLICY_DELEGATION_EXCEEDS', readonly detail: string | null = null, readonly refusal: DelegationRefusalFacts | null = null) {
+    super(code); this.name = 'AuthorityChangeError';
+  }
+}
+/** The bound's refusal with its display facts (alpha.56 U5-S1): who this scope's policy names beside the decider; never a decision input. */
+export function delegationExceeded(verdict: Extract<DelegationVerdict, { ok: false }>, policy: Policy, scopeId: string, decider: ApprovalActor): AuthorityChangeError {
+  let named: readonly { readonly issuer: string; readonly subject: string }[] = [];
+  try { named = policyNamedPeople(authorityDocuments(policy).policy, scopeId, 3); } catch { /* no hint facts: the refusal stands */ }
+  const self = (person: { readonly issuer: string; readonly subject: string }) => person.issuer === decider.issuer && person.subject === decider.subject;
+  return new AuthorityChangeError('POLICY_DELEGATION_EXCEEDS', `${verdict.ruleId}:${verdict.reason}`, { cell: verdict.cell, reason: verdict.reason,
+    sole: named.length === 1 && self(named[0]!), people: named.filter(person => !self(person)).slice(0, 2) });
 }
 /**
  * The next revision of an authority document: `prefix-` + sha256(tag, previous revision, new body)[:40]. Chained, so returning to earlier

@@ -73,6 +73,9 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     /** INIT-D7 (UX only, never a security boundary): exact environment variable names that mark an AI agent caller (no prefix match); any
      * non-empty value other than 0/false makes the CLI plain and never asks a question. Evidence of each default: L-KIT HANDOFF (2026-10-19). */
     agentEnvironment: z.array(z.string().regex(/^[A-Z_][A-Z0-9_]{0,63}$/)).max(64).default(['CLAUDECODE', 'AI_AGENT', 'CODEX_SANDBOX', 'CODEX_THREAD_ID', 'CURSOR_AGENT', 'GEMINI_CLI']) }).strict().default({}), [], LAYOUT_CONTRACT_SINCE),
+  policy: field('config.field.policy', { state: 'bound', consumers: ['src/composition/core/approvals'] }, 'live', z.object({
+    mcp: z.object({ optInGroups: z.array(z.string().regex(/^[a-z][a-z0-9.-]{0,47}$/u)).max(64).default([]) }).strict().default({}),
+  }).strict().default({})),
   mcp: field('config.field.mcp', { state: 'bound', consumers: ['src/composition/core/agent-turn'] }, 'restart', z.object({
     inputMaxBytes: z.number().int().positive().safe().default(1048576),
     responseMaxBytes: z.number().int().positive().safe().default(1048576),

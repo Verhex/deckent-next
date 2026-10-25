@@ -16,7 +16,7 @@ export function policyPanelPort(root: string, host: McpCapabilityHandlers, optio
       const view = await host.inspectMcpCapabilities(root, scopeId, options);
       return { groups: view.groups.map(state => ({ id: state.group.id, label: words.label(state.group.labelKey, state.group.id),
         detail: `${words.state[state.managed]} / ${words.effective[state.effective]}`,
-        note: [words.label(state.group.noteKey, state.group.id), ...(state.group.proposed ? [t('policy.mcp.proposed', {}, locale)] : []), t('policy.mcp.revokeLimit', {}, locale)].join('\n') })) };
+        note: [words.label(state.group.noteKey, state.group.id), ...(state.group.availability === 'opt-in' ? [t('policy.mcp.optIn', {}, locale)] : []), t('policy.mcp.revokeLimit', {}, locale)].join('\n') })) };
     },
     async preview(scopeId, groupId, action) {
       if (delegation && groupId.startsWith('decision:')) {

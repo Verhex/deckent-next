@@ -78,6 +78,7 @@ describe('/mode window', () => {
     const labels = terminalPanelLabels('en').mode;
     expect(modePanelTree({ ...VIEW, supported: false }, null, labels).items.every(item => item.blocked)).toBe(true);
     expect(modePanelTree({ ...VIEW, fullAuto: false } as PermissionModeView, 'standart', labels).items.find(item => item.id === 'full-auto')!.blocked?.reason).toBe(labels.fullAutoOff);
+    expect(modePanelTree({ ...VIEW, fullAuto: false, fullAccess: false }, 'standart', labels, true).items.every(item => !item.blocked)).toBe(true);
     expect(modePanelTree({ ...VIEW, fullAccess: true }, 'standart', labels).items.find(item => item.id === 'full-access')!.blocked).toBeUndefined();
   });
 });

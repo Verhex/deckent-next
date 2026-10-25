@@ -469,7 +469,8 @@
         "src/domain/core/provider-catalog",
         "src/engine/core/agent-catalog",
         "src/domain/core/agent-catalog",
-        "src/domain/core/catalog-evolution"
+        "src/domain/core/catalog-evolution",
+        "src/platform/core/output"
       ],
       "plan": "FOUNDATION"
     },
@@ -791,7 +792,10 @@
         "src/engine/core/provider-spend",
         "src/domain/core/primitives",
         "src/domain/core/audit",
-        "src/engine/core/audit"
+        "src/engine/core/audit",
+        "src/platform/core/integrity",
+        "src/domain/core/approval",
+        "src/domain/core/command"
       ],
       "plan": "SECURITY"
     },
@@ -1363,7 +1367,8 @@
         "src/surfaces/core/terminal-delivery",
         "src/engine/core/run-proposal",
         "src/surfaces/core/delivery-summary",
-        "src/engine/core/delivery-summary"
+        "src/engine/core/delivery-summary",
+        "src/surfaces/core/cli-human"
       ],
       "plan": "SURFACES"
     },
@@ -1472,7 +1477,9 @@
         "src/adapters/core/audit-store",
         "src/engine/core/audit",
         "src/composition/core/secrets",
-        "src/composition/core/config"
+        "src/composition/core/config",
+        "src/domain/core/policy",
+        "src/platform/core/errors"
       ],
       "plan": "INSTALLATION"
     },

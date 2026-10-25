@@ -3,7 +3,7 @@ import { PRINCIPAL_EFFECT_PRODUCER, AUTHORITY_DOCUMENT_TARGET_KIND, POLICY_ADMIN
   type PolicyChangePlan, type VerifiedPrincipal } from '#domain/index.js';
 import type { IntegrityAuthority, TrustedClock } from '#platform/index.js';
 import { authenticateSession, type SessionAuthority, type SessionVerifier } from '#engine/core/authentication/index.js';
-import { AuthorityChangeError, authorityChangeAuditEvent, authorityRefusalAuditEvent, chainAuthorityRevision, governedPolicyDigest, type AuthorityDocumentStore, type PermissionModeAudit, type PolicySource } from '#engine/core/policy/index.js';
+import { AuthorityChangeError, delegationExceeded, authorityChangeAuditEvent, authorityRefusalAuditEvent, chainAuthorityRevision, governedPolicyDigest, type AuthorityDocumentStore, type PermissionModeAudit, type PolicySource } from '#engine/core/policy/index.js';
 import { EffectApplication, EffectTargetError, OperationPolicyAuthorization, type EffectAdmission, type EffectApplyRequest, type EffectApprovalContext,
   type EffectApprovalGate, type EffectOutcome, type EffectStore, type EffectTarget } from '#engine/core/effect/index.js';
 import type { ApprovalStore } from './store.js';
@@ -93,7 +93,7 @@ export class DelegationBoundGate implements EffectApprovalGate {
       const current = policySchema.parse(await this.policy.load());
       const files = authorityDocuments(current);
       const verdict = delegationWithin(current, boundActor(stored.actor, principal), planPolicyChange(files.policy, files.bindings, command.input).touched, this.options);
-      if (!verdict.ok) throw new AuthorityChangeError('POLICY_DELEGATION_EXCEEDS', `${verdict.ruleId}:${verdict.reason}`);
+      if (!verdict.ok) throw delegationExceeded(verdict, current, command.scopeId, stored.actor);
     }
     return admission;
   }
@@ -153,7 +153,8 @@ export class PolicyAdministrationApplication {
     const target = new AuthorityDocumentTarget(deps.authority, {
       bound(snapshot, touched) {
         const verdict = submission.decider ? delegationWithin(snapshot, boundActor(submission.decider, submission.requester), touched, options) : null;
-        if (!verdict?.ok) throw new AuthorityChangeError('POLICY_DELEGATION_EXCEEDS', verdict && !verdict.ok ? `${verdict.ruleId}:${verdict.reason}` : null);
+        if (verdict && !verdict.ok) throw delegationExceeded(verdict, snapshot, command.scopeId, submission.decider!);
+        if (!verdict?.ok) throw new AuthorityChangeError('POLICY_DELEGATION_EXCEEDS', null);
       },
       audit(change) {
         const { requester, decider, approvalId, inputDigest } = submission;

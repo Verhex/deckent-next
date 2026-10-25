@@ -1,3 +1,4 @@
+import { permissionModeOpener } from './mode-open-card.js';
 import { lineInstructionContext, instructionModelContext, instructionSourceLine, projectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
 import { configPanelPort, configTtySlash } from '#surfaces/core/config/index.js';
@@ -383,16 +384,23 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   }
   if (!tty.stdin || !tty.stdout) throw ErrorRegistry.createError('TERMINAL_TTY_REQUIRED');
   // T-L4 slice 4c: the mode is read and set through the runtime service (v15); this surface reads and writes no policy file.
+  const openMode = permissionModeOpener(root, scopeId, options, locale, context, config.approvals.sessionTtlMs);
   const modePort = context.inspectPermissionMode && context.setPermissionMode ? {
+    ...(openMode ? { open: openMode } : {}),
     inspect: (signal?: AbortSignal) => context.inspectPermissionMode!(root, { schemaVersion: 1, scopeId }, options, signal),
     set: (mode: PermissionMode, expectedRevision: string, askEdits?: boolean, session?: { readonly sessionId: string | null }) => context.setPermissionMode!(root,
       { schemaVersion: 1, scopeId, mode, expectedRevision, ...(askEdits === undefined ? {} : { askEdits }), ...(session ? { session: { sessionId: session.sessionId } } : {}) }, options) } : null;
   // MODES-3: full access starts only here — `--full-access` or the person's stored start mode — and only on the company grant (the service asks
-  // it again on every turn and call). An explicit flag without the grant is refused; a stored start mode without it opens a standart session.
+  // it again on every turn and call). A closed explicit mode offers the host PRE-9 card; a stored mode without its grant starts standart.
   let fullAccess = false;
   if (parsed.fullAccess && !modePort) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
-  const view = modePort ? await (parsed.fullAccess ? modePort.inspect(context.signal) : modePort.inspect(context.signal).catch(() => null)) : null;
-  if (parsed.fullAccess && !view?.fullAccess) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
+  let view = modePort ? await (parsed.fullAccess ? modePort.inspect(context.signal) : modePort.inspect(context.signal).catch(() => null)) : null;
+  if (parsed.fullAccess && !view?.fullAccess) {
+    if (!modePort?.open) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
+    if (!await modePort.open('full-access')) return;
+    view = await modePort.inspect(context.signal);
+    if (!view.fullAccess) throw ErrorRegistry.createError('PERMISSION_MODE_DENIED', { params: { mode: 'full-access' } });
+  }
   if (parsed.fullAccess || (view?.mode === 'full-access' && view.fullAccess)) fullAccess = true;
   else if (view?.mode === 'full-access') accessNotices.push({ level: 'error', text: t('terminal.fullAccess.startDenied', {}, locale) });
   // A mode, stated calmly (owner 2026-10-18): the warning tone, not the error tone; the facts are unchanged.

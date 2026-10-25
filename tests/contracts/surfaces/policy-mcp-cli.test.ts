@@ -1,3 +1,5 @@
+import { registerProviderConfig } from '#adapters/index.js';
+import { toggleMcp } from '#surfaces/core/cli-approval/index.js';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -53,4 +55,18 @@ it('unknown values, arbitrary rule input and noncanonical flags never reach the 
     ['--group', 'spend', '--scope', 'scope', '--scope', 'scope'], ['--group', 'spend', '--scope', 'scope', '--preview', '--apply'],
   ]) expect(await main([...prefix, ...suffix], context)).not.toBe(0);
   expect(seen).toEqual([]);
+});
+
+it('the read phase uses the single valid scope or configured default without a scope-change card', async () => {
+  registerProviderConfig();
+  const f = await fixture(), questions: string[] = [];
+  const context = { ...f.context, configChoiceSources: () => ({ list: async () => [{ value: 'scope' }] }) };
+  const ask = async (question: { title: string }) => { questions.push(question.title); return null; };
+  await toggleMcp(context, 'en', undefined, 1000, ask);
+  expect(questions).toEqual(['MCP groups in scope scope — choose one to switch']);
+  expect(f.seen).toEqual([]);
+  await writeFile(join(context.root, '.deckent/config.json'), JSON.stringify({ terminal: { scopeId: 'scope' } })); clearConfigCache();
+  questions.length = 0;
+  await toggleMcp({ ...context, configChoiceSources: () => ({ list: async () => { throw Error('default read needs no picker'); } }) }, 'en', undefined, 1000, ask);
+  expect(questions).toEqual(['MCP groups in scope scope — choose one to switch']); expect(f.seen).toEqual([]);
 });

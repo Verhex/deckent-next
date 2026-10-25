@@ -32,7 +32,7 @@ import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredP
   changeConfiguredRecoveryPolicy, configuredRecoveryReview } from '#composition/core/runs/index.js';
 import { ensureConfiguredRuntimeService, openConfiguredTerminalHistory, openConfiguredTerminalSessions, restartConfiguredRuntimeService, stopConfiguredRuntimeService } from './runtime-autostart.js';
 import { openConfigWindow, askDeliveryConfirmation, attachTerminalMentions, findTerminalMentions, streamTerminalAgentTurn, type main as runCli } from '#surfaces/index.js';
-import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
+import { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation, applyPolicyTemplateInstallationWithSecretDefault, inspectPolicyTemplate, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation, openPermissionModesInstallation, openOwnPermissionMode, installConfiguredExecutionPool } from '#composition/core/installation/index.js';
 import { inspectConfiguredShellRealm, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { getConfigFieldDefault, loadConfig, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -138,6 +138,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
       { find: findRuntimeWorkspaceFiles, attach: attachRuntimeWorkspaceFile }),
     attachTerminalMentions: (projectRoot, input, options, signal) => attachTerminalMentions({ projectRoot, ...input, options, ...(signal ? { signal } : {}) },
       { find: findRuntimeWorkspaceFiles, attach: attachRuntimeWorkspaceFile }),
+    openOwnPermissionMode,
     inspectPermissionMode: (projectRoot, input, options, signal) => createConfiguredRuntimeClient(projectRoot, options).inspectPermissionMode(input, signal),
     setPermissionMode: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setPermissionMode(input),
     inspectScratch: (projectRoot, input, options, signal) => createConfiguredRuntimeClient(projectRoot, options).inspectScratch(input, signal),

@@ -10,7 +10,8 @@ import { AUTHORITY_DOCUMENT_TARGET_KIND, getPolicyVocabulary, installationOwnerP
   evaluatePolicy, type AuditEvent, type EffectCommand, type VerifiedPrincipal } from '#domain/index.js';
 import { ApprovalApplication, AuditApplication, auditPolicyDigest, AuthorityDocumentTarget, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization,
   PermissionModeApplication, PolicyAdministrationApplication, PolicyAdministrationInspection } from '#engine/index.js';
-import { createHmacIntegrity } from '#platform/index.js';
+import { createHmacIntegrity, ErrorRegistry } from '#platform/index.js';
+import { queryFailure } from '#composition/core/query-errors/index.js';
 
 // POLICY-ADMIN P3: `policy.administer@1` is a Core catalog operation over the C11 effect port. Every change opens a C12 approval (a card)
 // even on an allow grant; the change is bounded by the decider's authority at the effect (I3); it is audited before the files change;
@@ -119,6 +120,32 @@ describe.skipIf(process.platform === 'win32')('policy.administer@1 (POLICY-ADMIN
     expect((await f.files()).policy.grants.map((grant: { id: string }) => grant.id)).toEqual(['request', 'mine', 'decide', 'edit']);
     expect(f.events().filter(event => event.subject.kind === 'authority-change')[0]).toMatchObject({ principal: f.me,
       subject: { decider: { issuer: owner.issuer, subject: owner.subject }, commandId: 'm2' } });
+  });
+
+  it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] U5-S1: the bound\'s refusal names the cell and a hint from who the policy names; nothing is written', async () => {
+    const base = (me: Actor) => [{ id: 'request', effect: 'allow', actions: ['execute'], scopes: ['s'], principals: [me], resource: { kind: 'operation', ids: ['policy.administer'] } },
+      readTool('mine', me), { id: 'decide', effect: 'allow', actions: 'all', scopes: ['s'], principals: 'all', resource: { kind: 'approval', ids: 'all' } }];
+    const placeholder = () => [{ id: 'root', principals: [{ issuer: 'placeholder', subject: '1' }], roles: [INSTALLATION_OWNER_ROLE_ID], scopes: 'all' }];
+    const refusal = async (f: Awaited<ReturnType<typeof fixture>>) => {
+      const wide = { schemaVersion: 1, changes: [{ kind: 'grant.add', grant: { ...readTool('resume', { issuer: `${f.me.issuer}/mcp`, subject: f.me.subject }), actions: ['resume'], resource: { kind: 'run-decision', ids: 'all' } } }] };
+      const pending = await f.admin.submit(f.command('x', wide));
+      if (pending.status !== 'approval-pending') throw new Error('pending expected');
+      await f.decide(f.principal, pending.approval.approvalId);
+      const error = await f.admin.submit(f.command('x', wide)).then(() => null, (caught: unknown) => caught);
+      expect((await f.files()).policy.grants.map((grant: { id: string }) => grant.id)).not.toContain('resume');
+      return error as { code: string; detail: string };
+    };
+    // The sole person this scope's policy names decides a change beyond their own cells: the cell is named, never "ask someone else".
+    const sole = await refusal(await fixture(base, placeholder));
+    expect(sole).toMatchObject({ code: 'POLICY_DELEGATION_EXCEEDS', detail: 'resume:no-grant' });
+    const soleText = queryFailure(sole).message;
+    expect(soleText).toContain('resume on run-decision (all, scope s)'); expect(soleText).toContain('only person this policy names'); expect(soleText).not.toContain('{');
+    // Another person is named in the scope: the hint names them (the decider is never listed as someone to ask).
+    const other = { issuer: 'host', subject: '424242' };
+    const shared = queryFailure(await refusal(await fixture(me => [...base(me), readTool('theirs', other)], placeholder)));
+    expect(ErrorRegistry.createError('POLICY_DELEGATION_EXCEEDS', { params: { kind: 'k', action: 'a', target: 't', scope: 's', reason: 'no-grant', hint: 'other', people: 'host/424242' }, locale: 'tr' }).message)
+      .toContain('s kapsamında politikada adı geçen diğer kişiler: host/424242');
+    expect(shared.message).toContain('Other people named by this policy in s: host/424242.');
   });
 
   it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc identity] refuses a stale revision at the effect (conditional write): nothing is written and the record is not settled', async () => {
