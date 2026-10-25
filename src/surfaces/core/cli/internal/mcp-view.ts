@@ -1,6 +1,6 @@
 import { emit, getConfigFieldDefault, loadConfig, t, terminalSafeText, type Locale } from '#platform/index.js';
 import { askCliCard, cliTableStyle, orderPendingFirst, renderCliTable, type CliCardOption, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
-import { mcpTrustQuestion } from '#surfaces/core/cli-terminal/index.js';
+import { mcpServerStateWord, mcpTrustQuestion } from '#surfaces/core/cli-terminal/index.js';
 import type { CommandContext } from './kernel-commands.js';
 
 /** One server as `mcp list` returns it (adapter summary + health); only the fields a person reads. */
@@ -14,20 +14,8 @@ export const mcpSafe = (text: unknown): string => terminalSafeText(String(text ?
 export const mcpScopeWord = (scope: string, locale: Locale): string => scope === 'local' ? t('terminal.mcp.scope.local', {}, locale)
   : scope === 'project' ? t('terminal.mcp.scope.project', {}, locale) : scope === 'user' ? t('terminal.mcp.scope.user', {}, locale) : mcpSafe(scope);
 const waiting = (server: McpListedServer) => server.status !== 'trusted';
-/** A server's state in words; a record trusted before alpha.48 (SEC-2 D6, `trust-moved`) is approved again on its card. */
-export function mcpStateWord(server: McpListedServer, locale: Locale): string {
-  if (server.reason === 'trust-moved') return t('climodels.mcp.state.moved', {}, locale);
-  if (server.reason === 'trust-store-in-project') return t('climodels.mcp.state.storeInProject', {}, locale);
-  switch (server.status) {
-    case 'trusted': return t('terminal.mcp.status.trusted', {}, locale);
-    case 'pending-approval': return t('terminal.mcp.status.pending', {}, locale);
-    case 'changed': return t('terminal.mcp.status.changed', {}, locale);
-    case 'declined': return t('terminal.mcp.status.declined', {}, locale);
-    case 'invalid-launch': return t('terminal.mcp.status.invalidLaunch', {}, locale);
-    case 'trust-store-unavailable': return t('terminal.mcp.status.trustUnreadable', {}, locale);
-    default: return mcpSafe(server.status);
-  }
-}
+/** A server's state in words: the one renderer shared with the `/mcp` window (`mcpServerStateWord`), terminal-safe. */
+export const mcpStateWord = (server: McpListedServer, locale: Locale): string => mcpSafe(mcpServerStateWord(server, locale));
 /** The connection column: only `--check` starts anything, and only trusted servers (owner review: a deliberate difference from Claude Code). */
 function connectionWord(server: McpListedServer, checked: boolean, locale: Locale): string {
   if (!checked) return t('climodels.mcp.connection.unchecked', {}, locale);

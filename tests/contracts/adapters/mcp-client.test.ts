@@ -22,7 +22,7 @@ afterEach(async () => {
 const echo: McpLiveTool & { behavior?: string } = { name: 'echo', description: 'Echo the arguments', inputSchema: { type: 'object', properties: { text: { type: 'string' } } },
   annotations: { readOnlyHint: true } };
 const tool = (name: string, behavior: string, extra: Partial<McpLiveTool> = {}) => ({ name, description: `${name} tool`, inputSchema: { type: 'object', properties: {} }, behavior, ...extra });
-function fixture(mode: 'legacy' | 'dual' | 'modern', tools: unknown[] = [echo], extraArgs: string[] = []) {
+function fixture(mode: 'legacy' | 'legacy-2025-06' | 'dual' | 'modern', tools: unknown[] = [echo], extraArgs: string[] = []) {
   const root = mkdtempSync(join(tmpdir(), 'deckent-mcp-client-')); roots.push(root);
   const toolsFile = join(root, 'tools.json'), logFile = join(root, 'log.jsonl');
   writeFileSync(toolsFile, JSON.stringify(tools)); appendFileSync(logFile, '');
@@ -101,7 +101,8 @@ describe('MCP client: pin and names (pure)', () => {
 });
 
 describe('MCP client: both protocol eras over stdio (real SDK servers)', () => {
-  it.each([['legacy', 'legacy', '2025-11-25'], ['dual', 'modern', '2026-07-28'], ['modern', 'modern', '2026-07-28']] as const)(
+  // YTK-40: a legacy server that answers `initialize` with an older revision (2025-06-18, e.g. microsoft-learn) is spoken to, not refused.
+  it.each([['legacy', 'legacy', '2025-11-25'], ['legacy-2025-06', 'legacy', '2025-06-18'], ['dual', 'modern', '2026-07-28'], ['modern', 'modern', '2026-07-28']] as const)(
     'a %s server connects in the %s era (%s) and lists its pinned tool', async (mode, era, version) => {
       const f = fixture(mode), server = f.server([pinOf(echo)]);
       const state = await pool().open(server, settings([server]), context(f.root));

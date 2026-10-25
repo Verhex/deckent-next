@@ -14,7 +14,10 @@ import { cells } from '#surfaces/core/terminal-render/index.js';
 import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, until as untilWorkline, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { BLOCKER_CODES, emptySnapshot, fullSnapshot, longIdSnapshot, OBSERVED_AT } from '../../fixtures/monitor/snapshots.js';
-import { MonitorSourceMemo } from '#engine/index.js';
+import { MONITOR_BLOCKER_CODES, MonitorSourceMemo, type MonitorBlockerCode } from '#engine/index.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
+import { createMcpServer } from '#surfaces/core/mcp/index.js';
 
 /** MONITOR-SURFACE: the text snapshot, `--json`, the typed unavailable error and the fullscreen view, all from fixture MonitorSnapshots. */
 const surface = await loadMonitorSurface();
@@ -46,12 +49,22 @@ describe('monitor text snapshot', () => {
   }
   it('words every blocker code, puts the oldest stuck Run first and keeps the reason visible without colour', () => {
     const text = surface.renderMonitorText(fullSnapshot, { locale: 'en', width: 200, ascii: true });
-    const labels = { none: 'progressing normally', 'waiting-pool-slot': 'waiting for a pool slot', 'pool-held': 'pool on hold',
+    // TC: every blocker code of the engine contract is worded (the label map is complete by type) and rendered, not only the fixture's.
+    const labels: Record<MonitorBlockerCode, string> = { parked: 'Run parked; human decision or timeout', 'awaiting-decision': 'awaiting human decision',
+      'waiting-execution-slot': 'waiting for an execution slot', 'waiting-scope-conflict': 'waiting: another task is changing the same resource',
+      'worker-silent': 'worker silent (no events)', none: 'progressing normally', 'waiting-pool-slot': 'waiting for a pool slot', 'pool-held': 'pool on hold',
       'waiting-dependency': 'waiting for a dependency', 'awaiting-approval': 'awaiting approval', 'worker-running': 'worker running',
       'worker-stale-heartbeat': 'worker silent (stale heartbeat)', 'worker-exited-unevaluated': 'worker exited, not evaluated',
       'evaluation-not-ready': 'evaluation not ready', 'evaluation-unknown': 'evaluation result unknown', 'unresolved-effect': 'effect outcome uncertain',
-      'cancellation-pending': 'cancellation pending', 'not-admitted': 'not admitted yet', unknown: 'reason unknown' } as const;
+      'cancellation-pending': 'cancellation pending', 'not-admitted': 'not admitted yet', unknown: 'reason unknown' };
     for (const code of BLOCKER_CODES) expect(text, code).toContain(labels[code]);
+    const base = fullSnapshot.installs[0]!.runs[0]!;
+    const every = { ...fullSnapshot, installs: [{ ...fullSnapshot.installs[0]!, runs: MONITOR_BLOCKER_CODES.map((code, index) => ({ ...base, runId: `run-every-${code}`, state: 'blocked' as const,
+      blocker: { code, taskId: 'build', sinceMs: OBSERVED_AT - (index + 1) * 60_000, detail: null } })) }] };
+    const everyText = surface.renderMonitorText(every, { locale: 'en', width: 200, ascii: true });
+    // The Runs table cuts a long reason with an ellipsis; its first 40 characters are always shown.
+    for (const code of MONITOR_BLOCKER_CODES) expect(everyText, code).toContain(labels[code].slice(0, 40));
+    expect(surface.renderMonitorText(every, { locale: 'tr', width: 200, ascii: true })).not.toContain('monitor.blocker.');
     const summary = text.slice(text.indexOf('Stuck or waiting'), text.indexOf('Workers running now'));
     // The approval wait (3 h 12 min) is the oldest; the `unknown` blocker has no proven start and goes last; moving Runs are not stuck.
     expect(summary.indexOf('run-blocked-approval')).toBeLessThan(summary.indexOf('run-waiting-pool-slot'));
@@ -823,4 +836,34 @@ it.each(['en', 'tr'] as const)('shows the frozen task billing axis in monitor de
   const view = surface.buildMonitorView(snapshot, locale, true);
   const serialized = view.tabs.runs.flatMap(block => block.kind === 'table' ? block.rows : []).flatMap(row => row.detail().flat()).map(span => span.text).join('\n');
   expect(serialized).toContain(locale === 'tr' ? 'abonelik planı' : 'subscription plan');
+});
+
+// GOZ-30: one installation's snapshot (103,565 characters) exceeded what Claude Code keeps inline. The MCP answer is a bounded summary by default;
+// every list is reachable through paged sections and `snapshot` still returns the whole v1 value.
+it('MCP inspect_monitor answers a bounded summary by default and reaches every list through paged sections', async () => {
+  const runs = Array.from({ length: 40 }, (_, index) => ({ ...fullSnapshot.installs[0]!.runs[index % 3]!, runId: `run-many-${index}` }));
+  const snapshot = { ...fullSnapshot, installs: [{ ...fullSnapshot.installs[0]!, runs: [...fullSnapshot.installs[0]!.runs, ...runs] }, ...fullSnapshot.installs.slice(1)] };
+  const server = createMcpServer({ async inspectRun() { return {}; }, async inspectInventory() { return {}; }, inspectMonitor: async () => snapshot },
+    { maxConcurrentCalls: 1, responseMaxBytes: 4_000_000 }, 'en');
+  const [ct, st] = InMemoryTransport.createLinkedPair(); await server.connect(st);
+  const client = new Client({ name: 'monitor-page-test', version: '1' }); await client.connect(ct);
+  const call = async (args: Record<string, unknown>) => {
+    const result = await client.callTool({ name: 'inspect_monitor', arguments: { schemaVersion: 1, ...args } });
+    expect(result.isError).not.toBe(true);
+    return { text: (result.content as { text: string }[])[0]!.text, value: result.structuredContent as Record<string, unknown> & { items: { install: string; item: unknown }[]; nextPage: number | null } };
+  };
+  try {
+    const full = await call({ section: 'snapshot' }), summary = await call({});
+    expect(full.value).toEqual(snapshot);
+    expect(summary.text.length).toBeLessThan(full.text.length / 4);
+    expect(summary.value).toMatchObject({ schemaVersion: 2, section: 'summary', sourcesRead: snapshot.sourcesRead,
+      installs: [{ id: 'current', counts: { runs: snapshot.installs[0]!.runs.length, workers: snapshot.installs[0]!.workers.length }, attentionTruncated: true }, {}, {}] });
+    for (const section of ['runs', 'workers', 'approvals', 'pools', 'brainWaits', 'map', 'diagnostics'] as const) {
+      const items: unknown[] = []; let page: number | null = 0;
+      while (page !== null) { const { value } = await call({ section, page, pageSize: 7 }); items.push(...value.items); page = value.nextPage; }
+      const expected = snapshot.installs.flatMap(install => (section === 'map' ? (install.map ? [install.map] : []) : section === 'brainWaits' ? install.brainWaits ?? [] : install[section])
+        .map(item => ({ install: install.id, item })));
+      expect(items, section).toEqual(JSON.parse(JSON.stringify(expected)));
+    }
+  } finally { await client.close(); await server.close(); }
 });

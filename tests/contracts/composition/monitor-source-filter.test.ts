@@ -138,7 +138,7 @@ it.skipIf(process.platform === 'win32')('[unsupported on Windows: managed privat
     expect(result.isError).not.toBe(true); expect(result.structuredContent).toMatchObject({ sourcesRead: ['current'], installs: [{ id: 'current', status: 'available' }] });
     untouched(f.other); const connections = [...trace.databases];
     const invalid = await client.callTool({ name: 'inspect_monitor', arguments: { schemaVersion: 1, install: 'other', extra: true } });
-    expect(invalid.isError).toBe(true); expect(invalid.content).toEqual([{ type: 'text', text: JSON.stringify({ schemaVersion: 1, code: 'MCP_INPUT_INVALID' }) }]);
+    expect(invalid.isError).toBe(true); expect(JSON.parse((invalid.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: 'MCP_INPUT_INVALID', message: expect.any(String) });
     expect(calls).toBe(1); expect(trace.databases).toEqual(connections); untouched(f.other);
   } finally { await client.close(); await server.close(); }
 });

@@ -12,8 +12,9 @@ import { verifyMcpTools, mcpToolPinDigest, type McpClientServerSettings, type Mc
 import { mcpEndpointRefusal } from './registry.js';
 import { modelTextPrefix } from '#domain/index.js';
 
-/** Protocol revisions this client speaks: the modern era first (probed with `server/discover`), the 2025 `initialize` era as the fallback. */
-export const MCP_CLIENT_PROTOCOL_VERSIONS: readonly string[] = Object.freeze(['2026-07-28', '2025-11-25']);
+/** Protocol revisions this client speaks: the modern era first (probed with `server/discover`), the `initialize` era as the fallback — 2025-11-25
+ * offered first, every earlier published revision accepted when a server answers with it (spec 2025-11-25 lifecycle "Version Negotiation"; YTK-40). */
+export const MCP_CLIENT_PROTOCOL_VERSIONS: readonly string[] = Object.freeze(['2026-07-28', '2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']);
 /** K4: the directory (under the data root's `integrations`) that holds each `sandbox-net` server's private HOME. */
 export const MCP_SERVER_HOMES_DIR = 'mcp-home';
 /** Bounds of what one server may declare and of the stderr tail kept for `inspect`. */

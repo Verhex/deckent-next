@@ -498,6 +498,11 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   // or runner); the sentence is chosen by the diagnosis kind.
   MCP_SANDBOX_COMMAND_UNREACHABLE: { category: 'error', render: (p, l) => ({ message: mcpSandboxUnreachable(p, l) }) },
   MCP_TOOL_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_TOOL_UNKNOWN', p, l) }) },
+  // The Deckent MCP server's own refusals (Ek A: an MCP error carries its localized message).
+  MCP_BUSY: { category: 'error', render: (p, l) => ({ message: t('error.MCP_BUSY', p, l) }) },
+  MCP_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_INPUT_INVALID', p, l) }) },
+  MCP_RESPONSE_LIMIT: { category: 'error', render: (p, l) => ({ message: t('error.MCP_RESPONSE_LIMIT', p, l) }) },
+  MCP_TOOL_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.MCP_TOOL_FAILED', p, l) }) },
   MCP_REGISTRY_FILE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.MCP_REGISTRY_FILE_INVALID', p, l) }) },
   MCP_SERVER_NOT_TRUSTED: { category: 'usage', render: (p, l) => ({ message: t('error.MCP_SERVER_NOT_TRUSTED', p, l) }) },
   MCP_TRUST_STORE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.MCP_TRUST_STORE_UNAVAILABLE', p, l) }) },

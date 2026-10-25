@@ -74,7 +74,7 @@ it('selects configured inference profiles identically through CLI and MCP and ty
   expect(unknown.code).toBe(2); expect(unknown.stdout).toBe(''); expect(unknown.stderr).toContain('INFERENCE_PROFILE_UNKNOWN');
   const unknownMcp = await mcp(configured.projectRoot, configured.env, { profileId: 'typo' });
   expect(unknownMcp.isError).toBe(true);
-  expect(JSON.parse((unknownMcp.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: 'INFERENCE_PROFILE_UNKNOWN' });
+  expect(JSON.parse((unknownMcp.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: 'INFERENCE_PROFILE_UNKNOWN' , message: expect.any(String) });
   await expect(describeMcpInference(configured.projectRoot, 'budget', 'typo', { env: configured.env })).rejects.toMatchObject({ code: 'INFERENCE_PROFILE_UNKNOWN' });
 
   // No inference_serving section: absence on both surfaces, with or without a requested profile.
