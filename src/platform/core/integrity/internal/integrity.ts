@@ -5,7 +5,7 @@ export interface IntegrityAuthority {
   sign(encoded: string): string;
   verify(encoded: string, mac: string, keyId: string): boolean;
 }
-export function sha256(encoded: string): string { return createHash('sha256').update(encoded).digest('hex'); }
+export function sha256(encoded: string | Uint8Array): string { return createHash('sha256').update(encoded).digest('hex'); }
 export function constantTimeDigestEqual(left: string, right: string): boolean {
   return /^[a-f0-9]{64}$/.test(left) && /^[a-f0-9]{64}$/.test(right)
     && timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));

@@ -4014,6 +4014,23 @@
         "src/platform/core/integrity"
       ],
       "plan": "M5-D5 Brain ve Auditor"
+    },
+    "src/domain/core/hub": {
+      "dependencies": [
+        "src/domain/core/primitives",
+        "src/domain/core/agent-catalog",
+        "src/domain/core/command"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/engine/core/hub": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/domain/core/command",
+        "src/domain/core/agent-catalog",
+        "src/platform/core/integrity"
+      ],
+      "plan": "LEARNING"
     }
   },
   "composition": {
@@ -4130,6 +4147,7 @@
       "assignment",
       "agents",
       "agentsign",
+      "hub",
       "tuicopy",
       "tuinotify",
       "tuiqueue",
