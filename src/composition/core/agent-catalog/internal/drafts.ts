@@ -69,7 +69,10 @@ export async function inspectConfiguredCatalogMonitor(root: string, scopeId: str
   const context = await loadConfiguredScopeContext(root, scopeId, { ...options, heal: false }, 'read'), out: string[] = [], mode = context.config.catalogEvolution.mode;
   if (!catalogEvolutionRegistryAvailable(context.config.catalogEvolution.overlay)) out.push('catalog-evolution-registry-unavailable');
   const viewer = new AgentStandingApplication(catalogDependencies(context)), soft = <T>(work: Promise<T>) => work.catch(() => null);
-  if ((CATALOG_EVOLUTION_PASS_MODES as readonly string[]).includes(mode) && !await soft(new AgentStandingApplication(catalogDependencies(context, catalogAggregatorFor(context.principal, scopeId))).ready(scopeId))) out.push('catalog-aggregator-unsigned');
+  if ((CATALOG_EVOLUTION_PASS_MODES as readonly string[]).includes(mode) && !await soft(new AgentStandingApplication(catalogDependencies(context, catalogAggregatorFor(context.principal, scopeId))).ready(scopeId))) {
+    const principal = catalogAggregatorFor(context.principal, scopeId);
+    out.push(`catalog-aggregator-unsigned:${JSON.stringify([scopeId, principal.issuer, principal.subject])}`);
+  }
   const open = (await soft(viewer.listSuggestions({ schemaVersion: 1, scopeId, open: true, limit: AGENT_CATALOG_LIMITS.pageMax })))?.items.filter(row => row.state === 'open' && row.mode === 'on').length;
   if (open) out.push(`catalog-suggestions-open:${open}`);
   const revoked = (await soft(viewer.revokedPromotions({ schemaVersion: 1, scopeId })))?.length;

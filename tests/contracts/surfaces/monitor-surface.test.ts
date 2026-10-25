@@ -867,3 +867,14 @@ it('MCP inspect_monitor answers a bounded summary by default and reaches every l
     }
   } finally { await client.close(); await server.close(); }
 });
+
+it('unknown monitor scope is refused consistently in text, JSON and slash reads', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'monitor-f1-')); roots.push(root);
+  const context = { root, env: { DECKENT_GLOBAL_HOME: join(root, 'global') }, inspectMonitor: async () => fullSnapshot };
+  for (const flags of [['--once'], ['--json'], []]) {
+    const errors: string[] = [];
+    expect(await main(['monitor', '--scope', 'does-not-exist', ...flags], { ...context, stdin: { isTTY: true } as never, stdout: { isTTY: true, write() {} }, stderr: { write: (s: string) => { errors.push(s); } } })).toBe(1);
+    expect(errors.join('')).toContain('SCOPE_UNKNOWN');
+  }
+  await expect(monitorSlash(root, '--scope does-not-exist', context, {}, 'en', 120)).rejects.toMatchObject({ code: 'SCOPE_UNKNOWN' });
+});

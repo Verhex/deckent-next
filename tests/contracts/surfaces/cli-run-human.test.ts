@@ -297,3 +297,19 @@ it('D4: run cancel/hold/resume/close/reserve/create off a terminal without --sco
   }
   expect(calls).toEqual([]);
 });
+
+it('report groups visible attempt usage by channel and leaves missing API or subscription measurements unknown', () => {
+  const attempt = { schemaVersion: 1, identity: { scopeId: 's', runId: LONG, taskId: 't', attemptId: 'a', layoutRevision: 'l', generation: 1 },
+    profile: { id: 'coding', version: 1 }, model: { channelId: 'channel-one', modelId: 'model', evidence: 'requested' }, effort: null,
+    acceptance: { workClass: null, policyRevision: null, profileVersion: null, evaluationId: null, criteria: [], outcome: 'accepted', score: null, ceilingReasons: [] },
+    axes: { cpuSeconds: null, sampledPeakBytes: null, kernelPeakBytes: null, wallMs: null, apiMoney: { basis: 'measured-tariff', amountUsdNanos: '1250000000', tariffDigest: 'a'.repeat(64) }, subscription: null, localModel: null, humanInterventions: null },
+    quality: { reworkCount: null, rollbackCount: null, interventionCount: null, followup: 'unknown' }, coverage: 'partial', sampleCount: 0, gapCount: 1 };
+  const second = { ...attempt, identity: { ...attempt.identity, taskId: 't2', attemptId: 'a2' }, axes: { ...attempt.axes, apiMoney: null, subscription: { calls: null, durationMs: null, limit: null } } };
+  const third = { ...second, identity: { ...attempt.identity, taskId: 't3', attemptId: 'a3' }, model: null };
+  const report = summarizeWorkCosts({ scopeId: 's', runId: LONG, runRevision: 1, observedAtMs: 1, withheld: 1, attempts: [attempt, second, third] as never });
+  const text = renderHumanReport(report, view() as never, { env: {} } as never, 'en', false);
+  expect(text).toContain('Usage by channel (this Run)');
+  expect(text).toMatch(/channel-one\s+2\s+1.25\s+1\s+unknown/u);
+  expect(text).toMatch(/unknown\s+1\s+unknown\s+1\s+unknown/u);
+  expect(text).toContain('No billing period or reset is inferred'); expect(report.attempts).toHaveLength(3);
+});

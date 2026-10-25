@@ -384,3 +384,11 @@ it('paths: grouped tables with exists/missing for a person, the unchanged layout
   expect(await main(['paths', '--json'], json.context)).toBe(0);
   expect(JSON.parse(json.out.text())).toEqual(JSON.parse(JSON.stringify(await inspectProductPaths(f.root, { env: f.env }))));
 });
+
+it('paths shows the composed Brain login root and distinguishes the encryption key file', async () => {
+  const f = await project(), human = io(f);
+  const root = join(f.root, 'headless-logins'), data = join(f.root, 'vault'), key = join(f.root, 'vault-key');
+  expect(await main(['paths'], { ...human.context, inspectAdminPaths: async () => ({ schemaVersion: 1, runtimeSocket: null, mcp: null,
+    headlessLogins: root, secretStore: { store: 'fixture', files: [data, key], keyFile: key } }) })).toBe(0);
+  const text = human.out.text(); expect(text).toContain(root); expect(text).toContain('Brain login root'); expect(text).toContain('Secret store encryption key');
+});

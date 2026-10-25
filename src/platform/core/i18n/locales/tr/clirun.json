@@ -106,5 +106,8 @@
   "cli.run.inventory.limitHint": "Sayfa başına en çok {max}; --limit {max} kullanın.",
   "cli.run.control.holdDetail": "Bekletilirken yeni görev başlamaz; zaten çalışan iş sürer, durdurulmaz. Bekletmeyi deckent run resume kaldırır.",
   "cli.do.command": "Komut kimliği: {command}",
-  "cli.run.inspect.status": "Durum: {state}"
+  "cli.run.inspect.status": "Durum: {state}",
+  "cli.run.report.channelHeading": "Kanala göre kullanım (bu Run)",
+  "cli.run.report.channelColumns": "Kanal|Deneme|Ölçülen API (USD)|API ölçülmedi|Ölçülen abonelik çağrısı",
+  "cli.run.report.channelEvidence": "Yalnız görülebilen denemeler; ölçülen tarife maliyeti sağlayıcı faturası değildir. Eksik abonelik sayıları bilinmiyor kalır. Fatura dönemi veya sıfırlama varsayılmaz."
 }

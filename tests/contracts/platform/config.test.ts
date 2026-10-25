@@ -275,3 +275,15 @@ describe('new config contract and write authority', () => {
   });
 
 });
+
+it('names an invalid global file and its unknown keys in the selected language, without its values', async () => {
+  const f = await fixture();
+  await writeFile(f.globalPath, JSON.stringify({ approval: 'private-value', provider_limits: {} }));
+  try { await loadConfig(f.project, { env: { ...f.env, DECKENT_LANGUAGE: 'tr' }, heal: false }); throw new Error('expected refusal'); }
+  catch (error) {
+    expect(error).toBeInstanceOf(ConfigValidationError);
+    const message = (error as ConfigValidationError).localize!('tr').message;
+    expect(message).toContain(f.globalPath); expect(message).toContain('approval'); expect(message).toContain('provider_limits');
+    expect(message).toContain('bilinmeyen yapılandırma anahtarı'); expect(message).not.toContain('private-value');
+  }
+});

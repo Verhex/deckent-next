@@ -7,7 +7,7 @@ export type InstallationFileErrorCode = 'INSTALLATION_FILE_CONFLICT' | 'INSTALLA
   | 'INSTALLATION_FILE_INVALID' | 'INSTALLATION_FILE_UNAVAILABLE' | 'INSTALLATION_FILE_OUTCOME_UNKNOWN'
   | 'INSTALLATION_FILE_UNSUPPORTED';
 export class InstallationFileError extends Error {
-  constructor(readonly code: InstallationFileErrorCode) { super(code); this.name = 'InstallationFileError'; }
+  constructor(readonly code: InstallationFileErrorCode, readonly params: Readonly<Record<string, string>> = {}) { super(code); this.name = 'InstallationFileError'; }
 }
 export interface InstallationFileRequest { readonly root: string; readonly path: string; readonly maxBytes: number }
 export interface InstallationFilePublishRequest extends InstallationFileRequest { readonly transactionId: string }
@@ -28,8 +28,13 @@ function inputs(request: InstallationFileRequest) {
   if (root === '/' || !within || within === '..' || within.startsWith(`..${sep}`)) fail('INSTALLATION_FILE_INVALID');
   return { root, path, maxBytes: request.maxBytes, uid: BigInt(process.getuid()) };
 }
-function directorySafe(stat: BigIntStats, uid: bigint, privateCustody: boolean) {
-  if (!stat.isDirectory() || stat.isSymbolicLink() || (privateCustody && (stat.uid !== uid || (stat.mode & 0o022n) !== 0n))) fail('INSTALLATION_FILE_UNSAFE');
+function unsafe(path: string, stat: BigIntStats, reason: string): never {
+  throw new InstallationFileError('INSTALLATION_FILE_UNSAFE', { path, reason, mode: (stat.mode & 0o777n).toString(8).padStart(4, '0'), owner: stat.uid.toString() });
+}
+function directorySafe(path: string, stat: BigIntStats, uid: bigint, privateCustody: boolean) {
+  if (!stat.isDirectory() || stat.isSymbolicLink()) unsafe(path, stat, 'type');
+  if (privateCustody && stat.uid !== uid) unsafe(path, stat, 'owner');
+  if (privateCustody && (stat.mode & 0o022n) !== 0n) unsafe(path, stat, 'mode');
 }
 async function syncDirectory(path: string) {
   try { const handle = await open(path, constants.O_RDONLY | constants.O_DIRECTORY); try { await handle.sync(); } finally { await handle.close(); } }
@@ -41,7 +46,7 @@ async function directories(root: string, parent: string, uid: bigint, create: bo
   for (const segment of segments) {
     cursor = resolve(cursor, segment);
     const withinRoot = cursor === root || (!relative(root, cursor).startsWith(`..${sep}`) && relative(root, cursor) !== '..');
-    try { directorySafe(await lstat(cursor, { bigint: true }), uid, withinRoot || createdCustody); }
+    try { directorySafe(cursor, await lstat(cursor, { bigint: true }), uid, withinRoot || createdCustody); }
     catch (error) {
       if (error instanceof InstallationFileError) throw error;
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') unavailable(error);
@@ -49,7 +54,7 @@ async function directories(root: string, parent: string, uid: bigint, create: bo
       try { await mkdir(cursor, { mode: 0o700 }); }
       catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'EEXIST') unavailable(cause); }
       createdCustody = true;
-      try { directorySafe(await lstat(cursor, { bigint: true }), uid, true); await syncDirectory(dirname(cursor)); }
+      try { directorySafe(cursor, await lstat(cursor, { bigint: true }), uid, true); await syncDirectory(dirname(cursor)); }
       catch (cause) { unavailable(cause); }
     }
   }
@@ -61,8 +66,11 @@ async function readStable(path: string, maxBytes: number, uid: bigint, links: re
   try { linked = await lstat(path, { bigint: true }); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; return unavailable(error); }
   const validate = (stat: BigIntStats) => {
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== uid || !links.includes(stat.nlink)
-      || ![0o400n, 0o600n].includes(stat.mode & 0o777n) || stat.size < 0n || stat.size > BigInt(maxBytes)) fail('INSTALLATION_FILE_UNSAFE');
+    if (!stat.isFile() || stat.isSymbolicLink()) unsafe(path, stat, 'type');
+    if (stat.uid !== uid) unsafe(path, stat, 'owner');
+    if (![0o400n, 0o600n].includes(stat.mode & 0o777n)) unsafe(path, stat, 'mode');
+    if (!links.includes(stat.nlink)) unsafe(path, stat, 'links');
+    if (stat.size < 0n || stat.size > BigInt(maxBytes)) unsafe(path, stat, 'size');
   };
   validate(linked); let handle;
   try {

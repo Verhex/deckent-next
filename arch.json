@@ -1265,7 +1265,8 @@
         "src/platform/core/output",
         "src/engine/core/recovery",
         "src/surfaces/core/recovery-text"
-      , "src/domain/core/recovery"],
+      , "src/domain/core/recovery",
+        "src/surfaces/core/monitor-view"],
       "plan": "SURFACES"
     },
     "src/surfaces/core/cli-installation": {

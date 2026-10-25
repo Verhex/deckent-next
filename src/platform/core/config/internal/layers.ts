@@ -66,7 +66,11 @@ export async function loadGlobalConfig(options: Pick<ConfigLoadOptions, 'env' | 
     options.onWarning?.({ code: 'CONFIG_GLOBAL_CORRUPT', path, message: t('config.globalCorrupt', {}, resolveLocale(undefined, options.env)) });
     return null;
   }
-  return versionedConfig(result.value, options.onWarning, resolveLocale(undefined, options.env));
+  try { return versionedConfig(result.value, options.onWarning, resolveLocale(undefined, options.env)); }
+  catch (error) {
+    if (error instanceof ConfigValidationError) throw new ConfigValidationError(error.issues, resolveLocale(undefined, options.env), Object.fromEntries(error.issues.map(issue => [issue.path, path])));
+    throw error;
+  }
 }
 /** Presentation-only projection through the same layer readers. No provider registration, secrets, healing or locks.
  * Absent language stays absent so the caller can use the system locale; this is not execution config validation. */
@@ -129,7 +133,13 @@ export async function loadConfig(projectRoot = process.cwd(), options: ConfigLoa
   const layered = mergeConfigLayers(global, normalizedProject);
   const effective = applyConfigEnvironment(layered, env);
   const locale: Locale = resolveLocale(undefined, env, effective.language);
-  const checked = validateConfig(effective, locale);
+  let checked;
+  try { checked = validateConfig(effective, locale); }
+  catch (error) {
+    if (error instanceof ConfigValidationError) throw new ConfigValidationError(error.issues, locale, Object.fromEntries(error.issues.map(issue => [issue.path,
+      Object.hasOwn(normalizedProject, issue.path.split('.')[0]!) ? projectPath : Object.hasOwn(global, issue.path.split('.')[0]!) ? globalPath : projectPath])));
+    throw error;
+  }
   warnings.push(...checked.warnings);
   const recommended = getSystemProfile().recommendedMaxWorkers;
   if (typeof effective.max_workers === 'number' && effective.max_workers > recommended) warnings.push({ code: 'CONFIG_WORKER_PRESSURE', path: 'max_workers', message: t('config.workers', { workers: effective.max_workers, recommended }, locale) });

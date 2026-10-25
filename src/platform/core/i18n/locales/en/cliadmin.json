@@ -235,7 +235,7 @@
   "cli.paths.resource.autonomyShadow": "delivery autonomy shadow records (rule off, advice only)",
   "cli.paths.resource.memoryPurges": "memory purge journal (kept across a backup restore, re-applied before work starts)",
   "cli.paths.resource.brainWaits": "active Brain quota waits before a Run exists (removed when the wait ends; not evidence)",
-  "cli.paths.resource.headlessLogins": "the subscription Brain's own Claude login (one folder per CLI, 0700; the CLI writes it, Deckent never reads it; never in a backup)",
+  "cli.paths.resource.headlessLogins": "Brain login root (one folder per CLI; never in a backup)",
   "cli.paths.resource.scratch": "scratch space",
   "cli.paths.resource.audit": "audit records",
   "cli.paths.resource.approvals": "approvals and their key",

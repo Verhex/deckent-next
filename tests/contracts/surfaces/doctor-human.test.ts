@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
-import { clearConfigCache } from '#platform/index.js';
+import { main } from '#surfaces/core/cli/index.js';
+import { ErrorRegistry, t, clearConfigCache } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { poolReadinessLines } from '#surfaces/core/cli-admin/index.js';
@@ -47,7 +48,7 @@ describe('doctor rows (pure)', () => {
     expect(text).toContain('tamam      Node.js v26.10.0 (en az 24.22.0)');
     expect(text).toContain('uyarı      Kimlik profili seçilmemiş');
     // Lead J3 (I-S3 Q2): the next step is the command that writes the fact, never a bare `deckent init` that cannot (no loop).
-    expect(checks.find(row => row.id === 'setup.identity')?.next).toBe('deckent config set identity.profile --global');
+    expect(checks.find(row => row.id === 'setup.identity')?.next).toBe('deckent config');
     // I-S7: no registry yet → the first missing first-job step (the registry, which also names the pool), never `init pool` without --preview|--apply (CLI_USAGE).
     expect(doctorChecks(report, facts({ poolStatus: 'unconfigured' }), 'tr').find(row => row.id === 'work.pool')?.next).toMatch(/^İlk iş türünü ve worker havuzunu tanımlayın: .*; komut: deckent init registry --scope live --provider /u);
     expect(text).toContain('uyarı      Kurulum klasörü başka kullanıcılara açık (mod 0755)');
@@ -116,7 +117,7 @@ describe('doctor rows (pure)', () => {
     const rows = doctorChecks(report, facts({ headlessLogins: logins }), 'tr').filter(row => row.id === 'work.brainLogin');
     expect(rows.map(row => [row.state, row.text, row.next])).toEqual([
       ['ok', 'Brain girişi: claude.ai (max), dizin /home/p/.claude, kanal açık, onay ai, system', undefined],
-      ['warning', 'Brain girişi: -, dizin /home/p/.claude-team, kanal kapalı, onay yok (yalnız siz)', 'deckent models connect --connection claude-cli-subscription --scope live'],
+      ['warning', 'Brain girişi: -, dizin /home/p/.claude-team, kanal kapalı, onay yok (yalnız siz)', 'deckent models connect --scope live'],
       ['untested', 'Brain girişi: henüz denetlenmedi (dizin /home/p/.other); ilk çağrı ya da yeniden bağlama denetimi koşar', undefined]]);
     expect(doctorChecks(report, facts({ headlessLogins: logins.slice(0, 1) }), 'en').find(row => row.id === 'work.brainLogin')?.text)
       .toBe('Brain login: claude.ai (max), directory /home/p/.claude, channel open, consent ai, system');
@@ -319,10 +320,40 @@ describe('PRE-8 v2: doctor names the keys a model here cannot use, with the exac
   });
 });
 
-it('reports the unsigned aggregator with the enrol command and distinguishes an unreadable check', () => {
-  const missing = doctorChecks(report, facts({ catalogDiagnostics: ['catalog-aggregator-unsigned'] }), 'en').find(row => row.id === 'work.catalogSigner');
-  expect(missing).toMatchObject({ state: 'warning', text: expect.stringContaining('signing key'), next: expect.stringContaining('deckent agents enrol-signer') });
-  expect(missing?.next).toContain('--scope live');
-  expect(doctorChecks(report, facts({ catalogDiagnostics: null }), 'tr').find(row => row.id === 'work.catalogSigner')).toMatchObject({ state: 'untested' });
-  expect(doctorChecks(report, facts({ catalogDiagnostics: [] }), 'en').some(row => row.id === 'work.catalogSigner')).toBe(false);
+it('reports an unreadable catalog monitor as not tested and no row when the monitor has nothing to say (HAF-37)', () => {
+  expect(doctorChecks(report, facts({ catalogDiagnostics: null }), 'tr').find(row => row.id === 'security.catalogSigner')).toMatchObject({ state: 'untested' });
+  expect(doctorChecks(report, facts({ catalogDiagnostics: [] }), 'en').some(row => row.id === 'security.catalogSigner')).toBe(false);
+});
+
+it('doctor shares the catalog signer warning and uses the observed aggregator identity in its next command', () => {
+  const checks = doctorChecks(report, facts({ catalogDiagnostics: ['catalog-aggregator-unsigned:["live","local/catalog-aggregator","person"]'] }), 'tr');
+  const warning = checks.find(row => row.id === 'security.catalogSigner')!;
+  expect(warning.state).toBe('warning'); expect(warning.next).toContain("--principal 'local/catalog-aggregator:person'");
+  expect(warning.next).toContain("--scope 'live'"); expect(warning.next).not.toContain('<issuer>');
+});
+
+it('parses every doctor next-step command from the generated warning rows through the real CLI, including subscription and model guidance', async () => {
+  const root = await project(), stopped = async () => { throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE'); };
+  const variants = [facts({ catalogDiagnostics: ['catalog-aggregator-unsigned:["live","local/catalog-aggregator","person"]'],
+    headlessLogins: [{ state: 'closed', authMethod: null, subscriptionType: null, configDir: '/tmp/login', consent: [] }] }),
+    facts({ headlessLogins: [{ state: 'closed', authMethod: null, subscriptionType: null, configDir: '/tmp/login', owned: false, consent: [] }], poolStatus: 'missing' })];
+  variants.push(facts({ poolStatus: 'drift', pendingRoleModels: [{ channelId: 'fixture-channel', modelId: 'fixture-model' }],
+    secretUse: [{ kind: 'grant-required', name: 'FIXTURE_KEY' }, { kind: 'declared-missing', name: 'FIXTURE_KEY' }, { kind: 'not-stored', name: 'FIXTURE_KEY' }] }));
+  const reports = [report, { ...report, serviceConfig: 'stale', policyAdministration: { usableAdminCount: 0, bootstrapRequired: false, recoveryRequired: true },
+    installationBinding: { capability: 'source-invalid', strength: null, source: 'platform' }, auditIntegrity: { status: 'unknown', reason: 'unavailable' },
+    modelInvocationDelivery: [{ profileId: 'fixture', reference: { modelId: 'fixture' }, surface: 'mcp' }, { profileId: 'fixture', reference: { modelId: 'fixture' }, surface: 'service' }] }];
+  const commands = new Set(reports.flatMap(r => variants.flatMap(f => doctorChecks(r as never, f, 'en'))).flatMap(row => row.next?.match(/deckent [^;\n]+/gu) ?? []));
+  commands.add(t('error.HEADLESS_DELEGATION_REFUSED', {}, 'en').match(/`(deckent [^`]+)`/u)![1]!);
+  for (const command of commands) {
+    const errors: string[] = [];
+    const words = command.match(/'[^']*'|"[^"]*"|\S+/gu)!.map(word => word.replace(/^['"]|['"]$/gu, ''));
+    const argv = words.slice(1).map(word => word.startsWith('<') ? word === '<n>' ? '2' : word === '<tier>' ? 'frontier' : word.includes('disabled') ? 'disabled' : word.includes('claude') ? 'claude' : 'fixture' : word);
+    const context = { root, env: { DECKENT_GLOBAL_HOME: join(root, 'global'), TERM: 'xterm' }, locale: 'en' as const,
+      stdin: { isTTY: true } as never, stdout: { isTTY: true, write() {} }, stderr: { write: (s: string) => { errors.push(s); } },
+      configApplication: () => ({ inspect: stopped, explain: stopped }) as never, openConfigPanel: async () => [], restartRuntimeService: stopped,
+      inspectModelCatalog: stopped, inspectModelRoles: stopped, assignModelRole: stopped, setSecret: stopped, setProjectSecret: stopped, changeSecretGrant: stopped, listSecretStores: stopped, inspectPolicyAdministration: stopped, listSecretNames: stopped, inspectSecretStore: stopped, initializeNativeCodingRegistry: stopped,
+      installConfiguredExecutionPool: stopped, inspectPoolCapacity: stopped, verifyAudit: stopped, loginHeadless: stopped, connectModel: stopped, updateToolchains: stopped, inspectToolchainCurrency: stopped };
+    await main(argv, context as never);
+    expect(errors.join(''), command).not.toMatch(/CLI_USAGE|CLI_ARGUMENT_MISSING|CLI_CONFIG_VALUE_MISSING/u);
+  }
 });
