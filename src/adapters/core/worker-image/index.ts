@@ -2,3 +2,6 @@ export { readWorkerImageHeldVersion, readWorkerImageSources, prepareWorkerImageB
 export type { WorkerImageBuildErrorCode, WorkerImageBuildRunner } from './internal/build.js';
 export { buildWorkerImageInHome, observeWorkerImage, readBuiltWorkerLineage, readNewestWorkerReceipt, workerImagePresence, workerImageSetupPorts } from './internal/setup.js';
 export type { WorkerImagePresence, WorkerImageReceiptView } from './internal/setup.js';
+
+export { resolveWorkerBuildPlan } from './internal/resolve.js';
+export type { WorkerResolution } from './internal/resolve.js';

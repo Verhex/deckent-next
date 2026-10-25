@@ -1,11 +1,13 @@
 import { z } from 'zod';
+import { layeredWorkerRecipeSchema } from './image-plan.js';
 import { identitySchema, counterSchema } from '#domain/index.js';
 import { toolchainCurrencyReportSchema, toolchainCatalog, type ToolchainCurrencyReport } from './contract.js';
 
 const imageVersion = z.string().regex(/^r[1-9][0-9]*-\d{8}$/);
 /** The installed builder recipe fields this planner reads and rewrites; other fields pass through untouched. */
-export const workerImageRecipeSchema = z.object({ schemaVersion: z.literal(2), repository: z.string().min(1), imageVersion,
+const legacyRecipeSchema = z.object({ schemaVersion: z.literal(2), repository: z.string().min(1), imageVersion,
   previousVersion: imageVersion.nullable(), baseImage: z.string().min(1) }).passthrough();
+export const workerImageRecipeSchema = z.union([layeredWorkerRecipeSchema, legacyRecipeSchema]);
 export type WorkerImageRecipe = z.infer<typeof workerImageRecipeSchema>;
 const profileReference = z.object({ id: identitySchema, version: counterSchema.positive() }).strict();
 export const affectedProfileSchema = z.object({ profile: profileReference, provider: identitySchema, cliVersion: z.string().min(1),
@@ -55,23 +57,28 @@ export function planToolchainUpdate(input: Readonly<{ report: ToolchainCurrencyR
   const version = nextImageVersion(recipe.data.imageVersion, input.plannedAt, input.heldVersion ?? null);
   const skipped = input.heldVersion && counterOf(input.heldVersion) > counterOf(recipe.data.imageVersion) ? `; counter past daemon-held ${input.heldVersion}` : '';
   const reasons = stale.map(provider => { const entry = input.report.providers.find(item => item.provider === provider)!; return `${provider} ${entry.admitted.map(item => item.version ?? item.cliVersion).join('/')} -> ${entry.latest?.version ?? '?'}`; }).join('; ');
-  const historyLine = `# version ${version} | ${input.plannedAt.slice(0, 10)} | base ${recipe.data.baseImage} | supersedes ${recipe.data.imageVersion} | toolchain currency: ${reasons}${skipped}`;
+  const historyLine = `# version ${version} | ${input.plannedAt.slice(0, 10)} | base ${recipe.data.schemaVersion === 3 ? recipe.data.base.image : recipe.data.baseImage} | supersedes ${recipe.data.imageVersion} | toolchain currency: ${reasons}${skipped}`;
   const nextRecipe = workerImageRecipeSchema.parse({ ...recipe.data, imageVersion: version, previousVersion: recipe.data.imageVersion });
   return toolchainUpdatePlanSchema.parse({ schemaVersion: 1, kind: 'toolchain-update-plan', plannedAt: input.plannedAt, decision: 'build', staleProviders: stale, report: input.report, current,
-    next: { imageVersion: version, previousVersion: recipe.data.imageVersion, historyLine, recipe: nextRecipe }, affectedProfiles: affected, basis });
+    next: { imageVersion: version, previousVersion: recipe.data.imageVersion, historyLine, recipe: recipe.data.schemaVersion === 3 ? recipe.data : nextRecipe }, affectedProfiles: affected, basis });
 }
-const receiptSchema = z.object({ schemaVersion: z.literal(2), imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/), imageVersion, tag: z.string().nullable(),
-  manifest: z.object({ providers: z.array(z.object({ id: identitySchema, version: z.string().min(1) }).passthrough()) }).passthrough() }).passthrough();
+const manifestSchema = z.object({ providers: z.array(z.object({ id: identitySchema, version: z.string().min(1) }).passthrough()) }).passthrough();
+const receiptSchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3)]), imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/), imageVersion, tag: z.string().nullable(),
+  manifest: manifestSchema.optional(), images: z.array(z.object({ imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/u), manifest: manifestSchema }).passthrough()).optional() }).passthrough();
 /** Exact profile changes derived from a build receipt; applying them is a separate installation revision, never done here. */
 export function proposeProfileRevisions(plan: ToolchainUpdatePlan, receiptInput: unknown, proposedAt: string): ProfileRevisionProposal {
   const receipt = receiptSchema.safeParse(receiptInput);
   if (!receipt.success || plan.decision !== 'build' || !plan.next || receipt.data.imageVersion !== plan.next.imageVersion) throw new ToolchainUpdateError('TOOLCHAIN_RECEIPT_INVALID');
-  const versions = new Map(receipt.data.manifest.providers.map(provider => [provider.id, provider.version]));
+  const images = receipt.data.schemaVersion === 3 ? receipt.data.images : receipt.data.manifest ? [{ imageId: receipt.data.imageId, manifest: receipt.data.manifest }] : null;
+  if (!images?.length) throw new ToolchainUpdateError('TOOLCHAIN_RECEIPT_INVALID');
+  const entries = images.flatMap(image => image.manifest.providers.map(provider => [provider.id, { version: provider.version, imageId: image.imageId }] as const));
+  const versions = new Map(entries);
+  if (versions.size !== entries.length) throw new ToolchainUpdateError('TOOLCHAIN_RECEIPT_INVALID');
   const profiles = plan.affectedProfiles.flatMap(item => {
     if (!(item.provider in toolchainCatalog.providers)) return [];
     const to = versions.get(item.provider);
     if (!to) throw new ToolchainUpdateError('TOOLCHAIN_RECEIPT_INVALID');
-    return [{ profile: item.profile, provider: item.provider, changes: { cliVersion: { from: item.cliVersion, to }, imageId: { from: item.imageId, to: receipt.data.imageId } } }];
+    return [{ profile: item.profile, provider: item.provider, changes: { cliVersion: { from: item.cliVersion, to: to.version }, imageId: { from: item.imageId, to: to.imageId } } }];
   });
   return profileRevisionProposalSchema.parse({ schemaVersion: 1, kind: 'profile-revision-proposal', proposedAt, imageVersion: receipt.data.imageVersion, imageId: receipt.data.imageId, tag: receipt.data.tag,
     profiles, application: 'not-applied', basis: 'apply through a new installation profile revision; in-flight Runs keep their imageId; previous image versions remain for rollback' });

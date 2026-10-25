@@ -23,7 +23,7 @@
     "src/domain/core/policy/index.ts": "e81fc0b92284a587bcfa82b17c8f8f69679b2ebdb1963854867d88c9153175db",
     "src/domain/core/policy/internal/administer.ts": "23913532637344f14475a60eb4d10994b1321ab5d45ec42b904f1d69582e8cef",
     "src/domain/core/policy/internal/administration.ts": "c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b",
-    "src/domain/core/policy/internal/ai-floor.ts": "3998d5bd342377063d6fc3f1c6f377358e497cdad41e7cc2ad250f03d9c7b289",
+    "src/domain/core/policy/internal/ai-floor.ts": "dc68ca80f2254099c0eb735272bc5bb2c3e5f9a4793ab7b238aee92a60dee890",
     "src/domain/core/policy/internal/decision-step.ts": "70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe",
     "src/domain/core/policy/internal/delegations.ts": "c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320",
     "src/domain/core/policy/internal/describe.ts": "0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df",
@@ -72,10 +72,10 @@
     "src/domain/core/worker-event/internal/report.ts": "535b46a53f41c862886431212127067c6dc007d888c6af86d95651082326ca60"
   },
   "summary": {
-    "routes": 339,
-    "floorRoutes": 252,
+    "routes": 355,
+    "floorRoutes": 268,
     "contexts": 6,
-    "policyChecks": 2034,
+    "policyChecks": 2130,
     "stepChecks": 48,
     "violations": 0
   },
@@ -16714,6 +16714,870 @@
     },
     {
       "kind": "config",
+      "id": "global:toolchains",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.currency.registryEndpoint[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "global:toolchains.image[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
       "id": "project:",
       "action": "write",
       "floor": true,
@@ -27187,6 +28051,870 @@
       },
       "verdict": "uyumlu",
       "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.currency.registryEndpoint[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image.fixture",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-no-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "ai-granting-cell",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "human-tty-policy",
+      "expected": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "actual": {
+        "decision": "allow",
+        "reason": "GRANTED"
+      },
+      "verdict": "uyumlu",
+      "reason": "GRANTED"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "legacy-mcp-os-user-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "workload-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
+    },
+    {
+      "kind": "config",
+      "id": "project:toolchains.image[0]",
+      "action": "write",
+      "floor": true,
+      "family": "configuration",
+      "context": "token-granted",
+      "expected": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "actual": {
+        "decision": "deny",
+        "reason": "AI_NON_DELEGABLE"
+      },
+      "verdict": "uyumlu",
+      "reason": "AI_NON_DELEGABLE"
     },
     {
       "kind": "decision",

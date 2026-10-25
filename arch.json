@@ -2293,6 +2293,7 @@
     },
     "src/engine/core/toolchain-currency": {
       "dependencies": [
+        "src/platform/core/errors",
         "src/domain/core/primitives",
         "src/domain/core/run"
       ],
@@ -2349,11 +2350,13 @@
     },
     "src/adapters/core/worker-image": {
       "dependencies": [
+        "src/platform/core/config-fields",
         "src/platform/core/errors",
         "src/adapters/core/process-runner",
         "src/engine/core/toolchain-currency",
         "src/adapters/core/docker-supervisor",
-        "src/engine/core/worker-setup"
+        "src/engine/core/worker-setup",
+        "src/adapters/core/npm-registry"
       ],
       "plan": "PROVIDERS"
     },

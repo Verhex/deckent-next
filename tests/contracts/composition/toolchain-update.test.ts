@@ -21,7 +21,7 @@ async function fixture(update: Record<string, unknown>) {
   const root = await mkdtemp(join(tmpdir(), 'deckent-toolchain-update-')); roots.push(root);
   const project = join(root, 'project'); await mkdir(join(project, '.deckent'), { recursive: true, mode: 0o700 });
   const profiles = [nativeProfile('codex-pinned', 'codex', 'codex-cli 0.155.1'), nativeProfile('claude-pinned', 'claude', '2.1.278 (Claude Code)')];
-  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, toolchains: { currency: { registryEndpoint: 'http://127.0.0.1:1' }, update },
+  await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, toolchains: { currency: { registryEndpoint: 'https://registry.example.invalid' }, update },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'r', profiles,
       kinds: profiles.map(profile => ({ kind: profile.id, profile: { id: profile.id, version: profile.version } })), evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } } }));
   const latest: Record<string, string> = { '@openai/codex': '0.156.0', '@anthropic-ai/claude-code': '2.1.278' };
@@ -34,8 +34,9 @@ async function fixture(update: Record<string, unknown>) {
       return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null, stdoutBase64: heldAnswer(null), stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
     }
     runs.push(command.args.join(' '));
-    const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { imageVersion: string; repository: string };
-    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + 'b'.repeat(64), imageVersion: recipe.imageVersion, tag: `${recipe.repository}:${recipe.imageVersion}`,
+    const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { repository: string };
+    const plan = JSON.parse(await readFile(join(command.cwd, 'plan.json'), 'utf8')) as { imageVersion: string };
+    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + 'b'.repeat(64), imageVersion: plan.imageVersion, tag: `${recipe.repository}:${plan.imageVersion}`,
       manifest: { providers: [{ id: 'codex', version: 'codex-cli 0.156.0' }, { id: 'claude', version: '2.1.278 (Claude Code)' }, { id: 'cursor', version: '2026.09.18-9a7762b' }] } }));
     return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null, stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 5 };
   };
@@ -59,7 +60,7 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
     expect(JSON.parse(await readFile(built.planPath!, 'utf8'))).toMatchObject({ next: { imageVersion: 'r17-20261017' } });
     const { parseVersionHistory } = await import(pathToFileURL(join(process.cwd(), 'assets/worker-image/history.mjs')).href) as { parseVersionHistory(dockerfile: string, recipe: unknown): { id: string; supersedes: string; reason: string }[] };
     const context = join(f.home, 'builds', 'r17-20261017');
-    const history = parseVersionHistory(await readFile(join(context, 'Dockerfile'), 'utf8'), JSON.parse(await readFile(join(context, 'recipe.json'), 'utf8')));
+    const history = parseVersionHistory(await readFile(join(context, 'history.log'), 'utf8'), { ...JSON.parse(await readFile(join(context, 'recipe.json'), 'utf8')), imageVersion: 'r17-20261017', previousVersion: 'r4-20260930' });
     expect(history[0]).toMatchObject({ id: 'r17-20261017', supersedes: 'r4-20260930', reason: expect.stringMatching(/counter past daemon-held r16-20261016$/) });
     // An unreadable daemon answer stops before any plan artifact or build context.
     const g = await fixture({});
@@ -105,7 +106,7 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
       proposal: { imageVersion: 'r5-20260923', application: 'not-applied', profiles: [{ profile: { id: 'codex-pinned' }, changes: { cliVersion: { from: 'codex-cli 0.155.1', to: 'codex-cli 0.156.0' }, imageId: { from: imageId, to: 'sha256:' + 'b'.repeat(64) } } }] } });
     expect(f.checks).toEqual([[join(process.cwd(), 'assets/worker-image/build.mjs'), '--held-version']]);
     expect(f.runs).toHaveLength(1); expect(f.runs[0]).toMatch(/builds\/r5-20260923\/build\.mjs .*receipts\/r5-20260923\.json$/);
-    expect((await readdir(join(f.home, 'builds', 'r5-20260923'))).sort()).toEqual(['Dockerfile', 'build.mjs', 'history.mjs', 'inspect.mjs', 'install.mjs', 'recipe.json']);
+    expect((await readdir(join(f.home, 'builds', 'r5-20260923'))).sort()).toEqual(['build.mjs', 'history.log', 'history.mjs', 'inspect.mjs', 'install.mjs', 'layers.mjs', 'lineage.json', 'lineage.lock.json', 'plan.json', 'recipe.json']);
     expect(JSON.parse(await readFile(built.proposalPath!, 'utf8'))).toEqual(built.proposal);
     // Installed config is never rewritten by the update operation.
     expect(JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8')).admission.registry.profiles[0].parameters.nativeSubscription.preflight.cliVersion).toBe('codex-cli 0.155.1');
