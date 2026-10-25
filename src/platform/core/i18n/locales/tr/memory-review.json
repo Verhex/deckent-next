@@ -4,7 +4,7 @@
   "memory.review.title": "{scope} kapsamında hafıza incelemesi: bakılacak {items} kayıt ve {contests} itiraz.",
   "memory.review.none": "İncelenecek bir şey yok: bu kapsamda aday, itirazlı ya da bayat kayıt yok.",
   "memory.review.incomplete": "Yalnız en yeni kayıtlar okundu; bunlardan eski kayıtlar bu incelemede yok.",
-  "memory.review.card.title": "Bu hafıza kaydını incele ({position} / {count})",
+  "memory.review.card.title": "Bu hafıza kaydını inceleyin ({position})",
   "memory.review.option.verify": "Doğrula",
   "memory.review.option.retire": "Emekliye ayır",
   "memory.review.option.purge": "Sil…",

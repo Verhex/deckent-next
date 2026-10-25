@@ -318,3 +318,11 @@ describe('PRE-8 v2: doctor names the keys a model here cannot use, with the exac
     expect(out.join('')).toContain('deckent secret grant DECKENT_ANTHROPIC_KEY --scope live');
   });
 });
+
+it('reports the unsigned aggregator with the enrol command and distinguishes an unreadable check', () => {
+  const missing = doctorChecks(report, facts({ catalogDiagnostics: ['catalog-aggregator-unsigned'] }), 'en').find(row => row.id === 'work.catalogSigner');
+  expect(missing).toMatchObject({ state: 'warning', text: expect.stringContaining('signing key'), next: expect.stringContaining('deckent agents enrol-signer') });
+  expect(missing?.next).toContain('--scope live');
+  expect(doctorChecks(report, facts({ catalogDiagnostics: null }), 'tr').find(row => row.id === 'work.catalogSigner')).toMatchObject({ state: 'untested' });
+  expect(doctorChecks(report, facts({ catalogDiagnostics: [] }), 'en').some(row => row.id === 'work.catalogSigner')).toBe(false);
+});

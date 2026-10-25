@@ -69,7 +69,8 @@ export async function resolveSuggestion(prefix: string, context: AgentsCommandCo
     const shown = await need(context.inspectSuggestion)(io.root, { schemaVersion: 1, scopeId, suggestionId: wanted }, io.options);
     if (shown.status === 'ok') return shown.item;
   }
-  const rows = wanted.length >= 12 ? (await need(context.listSuggestions)(io.root, { schemaVersion: 1, scopeId, limit: limits.list.limit }, io.options)).items.filter(row => row.suggestionId.startsWith(wanted)) : [];
+  if (wanted.length < 12) throw ErrorRegistry.createError('CLI_ID_TOO_SHORT', { params: { prefix: safeCell(prefix), min: 12 } });
+  const rows = (await need(context.listSuggestions)(io.root, { schemaVersion: 1, scopeId, limit: limits.list.limit }, io.options)).items.filter(row => row.suggestionId.startsWith(wanted));
   if (rows.length !== 1) throw ErrorRegistry.createError('AGENT_CATALOG_NOT_FOUND');
   return rows[0]!;
 }

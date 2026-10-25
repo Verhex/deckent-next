@@ -112,6 +112,8 @@ it('the review card resolves the contest first, then shows each entry with its e
   await memoryCommand(['memory', 'review', '--scope', 'scope', '--lang', 'en'], { root: f.root, env: f.env, stdin: tty(), stdout: out.sink, ...handlers(calls) });
   expect(out.text()).toContain('2 more entries are hidden');
   const [contestCard, contestedCard, candidateCard, staleCard] = card.asked.map(request => JSON.stringify(request));
+  expect(card.asked[2]?.title).toBe('Review this memory entry (2/3)');
+  expect(JSON.stringify(card.asked)).not.toContain('{count}');
   expect(contestCard).toContain('Eski kural'); expect(contestCard).toContain('Masraf merkezi zorunlu');
   expect(contestedCard).toContain('Contested'); expect(contestedCard).not.toContain('"verify"');
   for (const text of ['Run r1, task t1, attempt a1', 'rule E3@1', "worker's claim", 'shadow, verifies nothing', 'channel-b/model-b of maker-b', 'family invoice']) expect(candidateCard).toContain(text);

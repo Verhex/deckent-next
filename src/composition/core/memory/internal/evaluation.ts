@@ -62,7 +62,7 @@ export function prepareConfiguredMemoryEvaluation(projectRoot: string, options: 
     last.set(scopeId, now);
     const path = await c.path(), integrity = await openLocalIntegrityAuthority(c.layout, c.config.approvals.keyFile, true), evaluator = memoryEvaluatorFor(c.principal, scopeId);
     const policy = new MemoryPolicyAuthorization({ async load() { return c.document; } }), view = await policy.readFilter(evaluator, scopeId);
-    return await withModelFacts(c, path, async (facts, roles) => {
+    return await withModelFacts(c, path, scopeId, async (facts, roles) => {
       const sources = await openMemoryEvaluationSourceReader(path, c.config.storage.sqlite, (channelId, modelId) => facts.get(memoryCatalogKey(channelId, modelId))?.maker ?? null,
         runId => view({ kind: 'run', id: runId }, 'inspect'));
       try {
@@ -78,11 +78,11 @@ export function prepareConfiguredMemoryEvaluation(projectRoot: string, options: 
   } catch (error) { throw queryFailure(error); } } });
 }
 /** The catalog facts (makers, billing, prices) and the S2 role sources of one read, closed after `work`. */
-async function withModelFacts<T>(c: Context, path: string, work: (facts: ReadonlyMap<string, MemoryCatalogFact>, roles: RoleModelSources) => Promise<T>): Promise<T> {
+async function withModelFacts<T>(c: Context, path: string, scopeId: string, work: (facts: ReadonlyMap<string, MemoryCatalogFact>, roles: RoleModelSources) => Promise<T>): Promise<T> {
   const busyTimeoutMs = c.config.storage.sqlite.busyTimeoutMs, catalog = await openSqliteModelCatalogReader(path, { busyTimeoutMs });
   try {
     const activation = await openSqliteModelActivationReader(path, { busyTimeoutMs });
-    try { return await work(await memoryCatalogFacts(catalog), { modelRoles: c.config['model_roles'], providerCatalog: c.config['provider_catalog'],
+    try { return await work(await memoryCatalogFacts(catalog, scopeId), { modelRoles: c.config['model_roles'], providerCatalog: c.config['provider_catalog'],
       activation: (scope, reference) => activation.loadRecord(scope, reference) }); } finally { activation.close(); }
   } finally { catalog.close(); }
 }
@@ -91,7 +91,7 @@ export async function inspectConfiguredMemoryEvaluators(projectRoot: string, sco
   try {
     const c = await loadConfiguredScopeContext(projectRoot, scopeId, { ...options, heal: false }, 'read');
     await new MemoryPolicyAuthorization({ async load() { return c.document; } }).authorize('inspect', scopeId, c.principal);
-    return await withModelFacts(c, await c.path(), async (facts, roles) =>
+    return await withModelFacts(c, await c.path(), scopeId, async (facts, roles) =>
       memoryEvaluatorView(await scopeRows(c, roles, facts, scopeId), facts, c.config.memoryAutomation.overlay));
   } catch (error) { throw queryFailure(error); }
 }

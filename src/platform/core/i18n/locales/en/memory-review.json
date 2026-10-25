@@ -4,7 +4,7 @@
   "memory.review.title": "Memory review in scope {scope}: {items} entries and {contests} contests to look at.",
   "memory.review.none": "Nothing to review: no candidate, contested or stale entry in this scope.",
   "memory.review.incomplete": "Only the newest entries were read; entries older than these are not on this review.",
-  "memory.review.card.title": "Review this memory entry ({position} of {count})",
+  "memory.review.card.title": "Review this memory entry ({position})",
   "memory.review.option.verify": "Verify",
   "memory.review.option.retire": "Retire",
   "memory.review.option.purge": "Purge…",

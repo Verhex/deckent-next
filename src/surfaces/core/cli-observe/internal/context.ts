@@ -10,6 +10,7 @@ import type { ApprovalCommandContext } from '#surfaces/core/cli-approval/index.j
 export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandContext, 'verifyAudit' | 'inspectToolchainCurrency' | 'inspectSecretStore' | 'inspectSecretInventory' | 'describeRuntimeService'
   | 'inspectPoolCapacity' | 'inspectPoolHold' | 'listSecretNames' | 'updateToolchains' | 'inspectAdminPaths'>, Pick<ApprovalCommandContext, 'inspectPolicyAdministration'> {
   // C-DOCTOR: the same read-only catalog listing as `deckent models list` (model retirement rows); read-soft, never a runtime-service view.
+  inspectCatalogMonitor?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly string[]>;
   inspectModelCatalog?: (root: string, query: ModelCatalogQuery, options: ConfigLoadOptions) => Promise<ModelCatalogInspection>;
   // M2: the same read view as `deckent models roles` (catalog models with no tier/role row: "new model: role pending"); read-soft.
   inspectModelRoles?: (root: string, query: ModelRoleQuery, options: ConfigLoadOptions) => Promise<ModelRoleInspection>;

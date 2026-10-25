@@ -28,6 +28,13 @@ are measured on N1; no number is a literal in logic.
 | `runRuntime.recovery.mode` | off, shadow, live | the recovery decision for a lost worker |
 | `catalogEvolution.mode` | off, shadow, on | the agent statistics pass |
 
+Extraction, verification, Nervous and catalog aggregation mode changes take effect after the runtime service restarts.
+Memory context mode is read at each Run admission. The rollout status shows the last consecutively reached phase in
+`assets/memory/rollout.json` order; later switches remain visible, but cannot make an earlier missing phase appear complete.
+The evaluator listing excludes inactive catalog channels/models, groups equal maker/price explanations and formats money in the viewer's locale.
+An unsigned catalog aggregator writes nothing even in shadow; `deckent doctor` and `deckent agents` name the missing key and the person's
+`deckent agents enrol-signer` command. A failed post-turn policy audit appears in the service log and the turn's result note; it does not change decisions or completed effects.
+
 The memory switches are declared in `src/platform/core/config-fields/internal/fields.ts` (`MEMORY_AUTOMATION_MODES`), and a newly set
 memory phase 3 or 4 is refused with `MEMORY_ROLLOUT_CRITERIA_UNMET` until its measured criteria hold (see Memory). The policy template
 that grants the new identities their exact rights is first-run template v15 (`FIRST_RUN_POLICY_TEMPLATE_VERSION`,

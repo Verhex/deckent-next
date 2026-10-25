@@ -34,12 +34,15 @@
   "agentstats.workClasses": "WorkClasses",
   "agentstats.none": "No agents in this scope.",
   "agentstats.notFound": "No agent {id} in this scope.",
-  "agentstats.config.section": "Agent catalog aggregation (protected; no AI may change it): mode turns on the pass that records agent and skill statistics and sealed suggestions from sealed metrics (off; shadow: suggestions as evidence only, no card or narrowing; on: suggestions for cards, narrowing only on calibrated rules); the pass writes only signed by the aggregator's own key; overlay replaces registry rule rows or lowers its bounds.",
+  "agentstats.config.section": "Agent catalog aggregation (protected; no AI may change it): mode turns on the pass that records agent and skill statistics and sealed suggestions from sealed metrics (off; shadow: suggestions as evidence only, no card or narrowing; on: suggestions for cards, narrowing only on calibrated rules); the pass writes only signed by the aggregator's own key; overlay replaces registry rule rows or lowers its bounds. Mode changes require a runtime service restart.",
   "error.CATALOG_EVOLUTION_REGISTRY_UNAVAILABLE": "The catalog statistics rules are missing or invalid. No statistic was computed and nothing was written; Runs, agent selection and standings are unaffected.",
   "error.CATALOG_EVOLUTION_CORRUPT": "A catalog statistics record or metric row failed its integrity check. Nothing was changed.",
   "error.CATALOG_EVOLUTION_POSITION_CONFLICT": "Another aggregation pass of this scope moved first. Nothing was written twice; the next pass continues from its position.",
   "agentstats.percent": "{n}%",
   "mcp.tool.inspectAgentStats": "Show agent statistics from sealed work: accepted outcomes with a confidence interval, time, measured cost, every failure kind and what was set apart, beside the WorkClass overall; with agentId also per revision, per model, per pinned skill and the team total. Associations, not causes; acceptance rates, not accuracy (read-only).",
   "agentstats.config.name": "Agent catalog aggregation",
-  "agentstats.help.action.stats": "show agent statistics from sealed work (associations, acceptance rates)"
+  "agentstats.help.action.stats": "show agent statistics from sealed work (associations, acceptance rates)",
+  "agentstats.mode.label.shadow": "shadow",
+  "agentstats.mode.label.on": "on",
+  "agentstats.signer.unavailable": "Catalog signing-key readiness could not be read."
 }

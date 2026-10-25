@@ -3,7 +3,7 @@
   "error.MEMORY_ROLLOUT_CRITERIA_UNMET": "Not written: memory rollout phase {phase} may be switched on only when every exit criterion holds in scope {scope}; not met: {criteria}. Nothing was changed.",
   "memory.held.next.MEMORY_ROLLOUT_CRITERIA_UNMET": "Run deckent memory rollout --scope {scope} to see each number and what moves it; keep the earlier phases running until every criterion holds.",
   "memory.rollout.title": "Memory rollout in scope {scope}: phase {phase} — {name}.",
-  "memory.rollout.title.none": "Memory rollout in scope {scope}: not started (no memory switch is on).",
+  "memory.rollout.title.none": "Memory rollout in scope {scope}: phase 0 has not started; later switches may already be set.",
   "memory.rollout.modes": "Switches: extraction {extraction} · verification {verification} · context {context}.",
   "memory.rollout.step.extraction.on": "candidates are written from accepted work (nothing reaches a model)",
   "memory.rollout.step.verification.shadow": "the independent evaluator judges candidates in shadow (nothing is verified)",

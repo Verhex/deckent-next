@@ -78,5 +78,6 @@
   "agents.inspect.standings": "İş türüne göre durum: {standings}",
   "agents.inspect.standingNone": "İş türüne göre durum: kayıt yok (durumlardan önce tanımlandı; açmak için ajanı revize edin)",
   "agent.standing.redesign-required": "yeniden tasarım gerekli",
-  "agent.standing.retired": "emekli"
+  "agent.standing.retired": "emekli",
+  "agent.policyTurn.auditFailed": "Turun politika denetim kaydı yazılamadı (policy-turn). Kararlar ve tamamlanmış etkiler değişmedi; hizmetin denetim deposunu deckent doctor ile inceleyin."
 }
