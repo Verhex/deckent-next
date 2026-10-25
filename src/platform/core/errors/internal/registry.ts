@@ -5,6 +5,19 @@ import type { ErrorDefinitions, ErrorEntry } from './definition.js';
 import { mergeErrorDefinitions } from './merge.js';
 import { ERROR_DEFINITION_FRAGMENTS } from './defs/index.js';
 export type { ErrorEntry } from './definition.js';
+function invocationInputSubject(p: Params, l: Locale): string {
+  switch (p['subject']) {
+    case 'cli.input.subject.queue': return t('cli.input.subject.queue', {}, l);
+    case 'cli.input.subject.memory': return t('cli.input.subject.memory', {}, l);
+    case 'cli.input.subject.approval': return t('cli.input.subject.approval', {}, l);
+    case 'cli.input.subject.operation': return t('cli.input.subject.operation', {}, l);
+    case 'cli.input.subject.decision': return t('cli.input.subject.decision', {}, l);
+    case 'cli.input.subject.spending': return t('cli.input.subject.spending', {}, l);
+    case 'cli.input.subject.identity': return t('cli.input.subject.identity', {}, l);
+    case 'cli.input.subject.agent': return t('cli.input.subject.agent', {}, l);
+    default: return t('cli.input.subject.model', {}, l);
+  }
+}
 /** MCP_SANDBOX_COMMAND_UNREACHABLE (MCP-SANDBOX-PATHS): one catalog sentence per diagnosis kind (params name, kind, role, path, target
  * ('' = none), runner); `{targetSuffix}` is ' -> <target>' when the link target differs, the role is its own localized label. */
 /** PATCH_LIMIT names the exceeded bound (params detail, observed, limit, field); an unknown or absent detail keeps the generic sentence. */
@@ -157,10 +170,10 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   INTEGRITY_KEY_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.INTEGRITY_KEY_UNAVAILABLE', p, l) }) },
   PREFIX_CACHE_SALT_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.PREFIX_CACHE_SALT_UNAVAILABLE', p, l) }) },
 
-  CLI_INVOCATION_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_LIMIT', p, l) }) },
-  CLI_INVOCATION_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_INVALID', p, l) }) },
-  CLI_INVOCATION_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_TTY', p, l) }) },
-  CLI_INVOCATION_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_UNAVAILABLE', p, l) }) },
+  CLI_INVOCATION_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_LIMIT', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
+  CLI_INVOCATION_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_INVALID', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
+  CLI_INVOCATION_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_TTY', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
+  CLI_INVOCATION_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_INVOCATION_INPUT_UNAVAILABLE', { ...p, subject: invocationInputSubject(p, l) }, l) }) },
   CLI_CATALOG_INPUT_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_LIMIT', p, l) }) },
   CLI_CATALOG_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_INVALID', p, l) }) },
   CLI_CATALOG_INPUT_TTY: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_TTY', p, l) }) },
@@ -197,6 +210,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   AGENT_TURN_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.AGENT_TURN_UNAVAILABLE', p, l) }) },
   TERMINAL_TTY_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_TTY_REQUIRED', p, l) }) },
   INFERENCE_METRICS_UNREAD: { category: 'error', render: (p, l) => ({ message: t('error.INFERENCE_METRICS_UNREAD', p, l) }) },
+  INFERENCE_NOT_CONFIGURED: { category: 'error', render: (_p, l) => ({ message: t('inference.notConfigured', {}, l) }) },
   INFERENCE_PROFILE_UNKNOWN: { category: 'usage', render: (p, l) => ({ message: t('error.INFERENCE_PROFILE_UNKNOWN', p, l) }) },
   DECISION_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.DECISION_INVALID', p, l) }) },
   DECISION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.DECISION_UNAVAILABLE', p, l) }) },

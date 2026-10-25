@@ -19,3 +19,14 @@ it('Windows file input refuses visibly before dispatch while bounded stdin prese
     expect(await readFile(file, 'utf8')).toBe(bytes); expect(await readdir(root)).toEqual(['input.json']);
   } finally { Object.defineProperty(process, 'platform', original); await rm(root, { recursive: true, force: true }); }
 });
+
+it('ISY-33: shared JSON input errors retain the calling surface subject for every transport failure', async () => {
+  const inputErrors = { subject: 'cli.input.subject.queue', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE', invalid: 'CLI_INVOCATION_INPUT_INVALID', limit: 'CLI_INVOCATION_INPUT_LIMIT', tty: 'CLI_INVOCATION_INPUT_TTY' };
+  const malformed = await readJsonInput('-', 1024, inputErrors, Readable.from(['{'])).catch(error => error);
+  expect(malformed.localize('tr').message).toBe('Kuyruk JSON verisi veya komut şeması geçersiz.');
+  expect(malformed.localize('en').message).not.toContain('Model invocation');
+  const memory = await readJsonInput('/missing-input-for-f2', 1024, { ...inputErrors, subject: 'cli.input.subject.memory' }).catch(error => error);
+  expect(memory.localize('tr').message).toBe('Hafıza girdisi okunamadı.');
+  const limit = await readJsonInput('-', 1, { ...inputErrors, subject: 'cli.input.subject.approval' }, Readable.from(['{}'])).catch(error => error);
+  expect(limit.localize('tr').message).toContain('Onay girdisi');
+});
