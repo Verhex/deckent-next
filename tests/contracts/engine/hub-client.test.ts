@@ -6,7 +6,9 @@ import { SignerKeyApplication } from '#engine/core/agent-catalog/index.js';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { HUB_LIMITS, canonicalHubJson } from '#domain/index.js';
-import { HubClientApplication, decodeHubBundle, encodeHubBundle } from '#engine/core/hub-client/index.js';
+import { classifyLaunchRefusal } from '#engine/core/runs/index.js';
+import { ErrorRegistry } from '#platform/index.js';
+import { HubClientApplication, decodeHubBundle, encodeHubBundle, selectedHubSkillFiles } from '#engine/core/hub-client/index.js';
 import { AgentCatalogApplication, AgentStandingApplication, pinnedAgentSkills } from '#engine/core/agent-catalog/index.js';
 import { readHubPackageFile, writeHubPackageFile } from '#adapters/core/hub-package-file/index.js';
 import { ai, bundle, count, feed, fixture, hub, install, otherPublisher, personTrust, publisher, source } from '../../fixtures/hub-client.js';
@@ -260,4 +262,27 @@ it('source cards validate endpoints, replay exactly, remove without deletion and
   await f.app.removeSource({ schemaVersion: 1, scopeId: 's', commandId: 'remove', hubId: hub.keyId, expectedRevision: 1 });
   expect((await f.app.listSources({ schemaVersion: 1, scopeId: 's' })).length).toBe(HUB_LIMITS.sourcesPerScopeMax - 1);
   expect(count(f.path, 'hub_sources')).toBe(HUB_LIMITS.sourcesPerScopeMax);
+});
+
+it('delivers only frozen selected v2 files, retaining an old Run pin through update and retirement; tamper and cross-scope refuse', async () => {
+  const note = Buffer.from('invoice reference'), value = bundle({ supporting: [{ path: 'references/order.txt', mediaType: 'text/plain', bytes: note }] });
+  const f = await setup(); await f.app.installFile(install('files', value));
+  const store = await f.deps.openStore('read');
+  const agent = (await store.loadAgent('s', 'invoice-agent'))!;
+  const seal = { schemaVersion: 1 as const, agentId: agent.agentId, revision: agent.revision, workClass: 'invoice-review', personaDigest: agent.personaDigest,
+    skillSetDigest: agent.skillSetDigest, skills: agent.content.skills, standing: 'candidate' as const, standingRevision: 1,
+    selection: { eligible: 1, position: 0, reason: 'first-candidate' as const } };
+  try {
+    expect(classifyLaunchRefusal(ErrorRegistry.createError('HUB_SKILL_FILES_UNAVAILABLE'))).toEqual({ disposition: 'permanent', code: 'HUB_SKILL_FILES_UNAVAILABLE' });
+    expect(await selectedHubSkillFiles(store, { read: async () => { throw new Error('eager fetch'); } }, 's', undefined)).toEqual([]);
+    const files = await selectedHubSkillFiles(store, f.deps.artifacts, 's', seal);
+    expect(files.map(file => file.path)).toEqual(['invoice/1/invoice/SKILL.md', 'invoice/1/invoice/references/order.txt']);
+    expect(files[1]!.bytes).toEqual(note);
+    await f.app.updateFile(install('new', bundle({ version: '1.0.1' })));
+    await f.app.uninstall({ schemaVersion: 1, scopeId: 's', commandId: 'retire', hubId: hub.keyId, packageId: 'acme/invoice', expectedRevision: 1 });
+    expect(await selectedHubSkillFiles(store, f.deps.artifacts, 's', seal)).toEqual(files);
+    expect((await store.retainedArtifacts()).length).toBe(2);
+    await expect(selectedHubSkillFiles(store, f.deps.artifacts, 'other', seal)).rejects.toThrow(code('HUB_STORE_CORRUPT'));
+    await expect(selectedHubSkillFiles(store, { read: async () => Buffer.from('changed') }, 's', seal)).rejects.toThrow();
+  } finally { store.close(); }
 });

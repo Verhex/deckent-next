@@ -61,6 +61,21 @@ class Store extends SqliteAgentCatalogStore implements HubClientStore {
       VALUES(?,?,?,?,?,?,(SELECT coalesce(max(seq),0)+1 FROM hub_installs WHERE scope_id=?),?) ON CONFLICT(scope_id,hub_id,package_id,version)
       DO UPDATE SET state=excluded.state,revision=excluded.revision,record=excluded.record`).run(next.scopeId, next.hubId, next.packageId, next.version, next.state, next.revision, next.scopeId, this.seal(next));
   }
+  private retainedInstalls() {
+    return this.db.prepare('SELECT scope_id,hub_id,package_id,version FROM hub_installs ORDER BY scope_id,seq').all();
+  }
+  async retainedArtifacts() {
+    const receipts = [];
+    for (const row of this.retainedInstalls()) receipts.push((await this.install(String(row['scope_id']), String(row['hub_id']), String(row['package_id']), String(row['version'])))!.bundle);
+    return receipts;
+  }
+  async skillBundle(scopeId: string, skillId: string, revision: number, digest: string) {
+    for (const row of this.retainedInstalls().filter(row => row['scope_id'] === scopeId)) {
+      const installed = (await this.install(scopeId, String(row['hub_id']), String(row['package_id']), String(row['version'])))!;
+      if (installed.items.some(item => item.kind === 'skill' && item.id === skillId && item.revision === revision && item.digest === digest)) return installed.bundle;
+    }
+    return null;
+  }
   async feed(scopeId: string, hubId: string) {
     const row = this.db.prepare('SELECT sequence,record FROM hub_revocation_snapshots WHERE scope_id=? AND hub_id=? ORDER BY sequence DESC LIMIT 1').get(scopeId, hubId);
     if (!row) return null;

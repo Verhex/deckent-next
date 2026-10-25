@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { HUB_LIMITS, HUB_TRUST_POLICIES, counterSchema, identitySchema, hubDigestSchema, hubPackageIdSchema, hubVersionSchema,
   type AuditEvent, type HubRevocationFeed, type VerifiedPrincipal } from '#domain/index.js';
-import { artifactReceiptSchema, type ArtifactStore } from '#capabilities/index.js';
+import { artifactReceiptSchema, type ArtifactReceipt, type ArtifactStore } from '#capabilities/index.js';
 import type { AgentCatalogDependencies, AgentCatalogStore } from '#engine/core/agent-catalog/index.js';
 import type { HubPackageVerification, HubPackageFile, HubVerificationKey } from '#engine/core/hub/index.js';
 import type { HubEnvelope, HubPackage } from '#domain/index.js';
@@ -30,6 +30,9 @@ export interface HubClientStore extends AgentCatalogStore {
   saveSource(previous: HubSource | null, next: HubSource): Promise<void>;
   install(scopeId: string, hubId: string, packageId: string, version?: string): Promise<HubInstall | null>;
   saveInstall(previous: HubInstall | null, next: HubInstall): Promise<void>;
+  /** Retained revisions include retired packages: admitted Runs may still pin them. */
+  retainedArtifacts(): Promise<readonly ArtifactReceipt[]>;
+  skillBundle(scopeId: string, skillId: string, revision: number, digest: string): Promise<ArtifactReceipt | null>;
   feed(scopeId: string, hubId: string): Promise<HubRevocationFeed | null>;
   revocations(scopeId: string, hubId: string, targets: readonly Pick<HubRevocationFeed['entries'][number], 'kind' | 'id'>[]): Promise<HubRevocationFeed['entries']>;
   saveFeed(scopeId: string, feed: HubRevocationFeed): Promise<void>;

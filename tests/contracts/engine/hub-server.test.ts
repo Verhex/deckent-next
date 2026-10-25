@@ -73,6 +73,9 @@ it('persists immutable publish, hub attestation and signed receipt, then reopens
   const reopened = openHubStore(f.options); closers.push(reopened.close);
   expect((await reopened.store.get('acme/invoice', '1.0.0'))?.envelope).toEqual(result.envelope);
   expect(await f.app.readFile(context, 'acme/invoice', '1.0.0', 'skills/invoice/SKILL.md')).toEqual(b.files[0]!.bytes);
+  expect(await f.app.readFile(context, 'acme/invoice', '1.0.0', 'skills/invoice/references/ürün notu.txt')).toEqual(Buffer.from('order reference'));
+  const next = bundle('1.0.1');
+  await expect(f.app.publish(context, next.manifest, next.envelope, [next.files[0]!, { ...next.files[1]!, bytes: Buffer.from('changed reference') }])).rejects.toThrow(code('HUB_DIGEST_MISMATCH'));
   await expect(publish(f, bundle('1.0.0', 'Changed bytes.'))).rejects.toThrow(code('HUB_VERSION_CONFLICT'));
   await expect(publish(f, bundle('0.9.0'))).rejects.toThrow(code('HUB_VERSION_CONFLICT'));
   await publish(f, bundle('1.0.1'));
