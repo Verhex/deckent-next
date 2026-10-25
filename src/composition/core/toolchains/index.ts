@@ -4,3 +4,8 @@ export { updateConfiguredToolchains } from './internal/update.js';
 export type { ToolchainUpdateResult, ToolchainUpdateDependencies } from './internal/update.js';
 export { refreshConfiguredToolchains, startToolchainRefresh, readToolchainRefreshState, inspectToolchainRefresh, isToolchainRefreshInProgress } from './internal/refresh.js';
 export type { ToolchainRefreshEvent, ToolchainRefreshObserver, ToolchainRefreshOutcome, ToolchainRefreshDependencies, ToolchainRefreshHandle } from './internal/refresh.js';
+
+export { consentConfiguredWorkerImage } from './internal/consent.js';
+
+export { acquireConfiguredWorkerImage, inspectConfiguredWorkerImage, startWorkerImageAcquisition } from './internal/acquire.js';
+export type { WorkerAcquisitionDependencies } from './internal/acquire.js';

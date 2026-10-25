@@ -4,5 +4,12 @@
   "receipts": 64,
   "receiptBytes": 1048576,
   "probeTimeoutMs": 5000,
-  "probeOutputBytes": 65536
+  "probeOutputBytes": 65536,
+  "custody": {
+    "lock": "builder.lock",
+    "owner": "builder-owner.json",
+    "counter": "counter.json",
+    "receipts": "receipts",
+    "waitMs": 25
+  }
 }

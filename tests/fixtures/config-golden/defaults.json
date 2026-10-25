@@ -314,6 +314,7 @@
     },
     "image": {
       "baseRefreshMs": 604800000,
+      "consents": [],
       "providers": [],
       "sources": {
         "baseImage": null,

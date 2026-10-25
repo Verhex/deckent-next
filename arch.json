@@ -579,8 +579,10 @@
         "src/engine/core/recovery",
         "src/adapters/core/sqlite-model-invocation",
         "src/adapters/core/recovery-case-store",
-        "src/composition/core/terminal-chat"
-      , "src/composition/core/approvals", "src/domain/core/recovery"],
+        "src/composition/core/terminal-chat",
+        "src/composition/core/approvals",
+        "src/domain/core/recovery"
+      ],
       "plan": "EXECUTION"
     },
     "src/composition/core/runtime": {
@@ -1273,9 +1275,10 @@
         "src/domain/core/audit",
         "src/platform/core/output",
         "src/engine/core/recovery",
-        "src/surfaces/core/recovery-text"
-      , "src/domain/core/recovery",
-        "src/surfaces/core/monitor-view"],
+        "src/surfaces/core/recovery-text",
+        "src/domain/core/recovery",
+        "src/surfaces/core/monitor-view"
+      ],
       "plan": "SURFACES"
     },
     "src/surfaces/core/cli-installation": {
@@ -2364,7 +2367,11 @@
         "src/composition/core/config",
         "src/platform/core/errors",
         "src/platform/core/host",
-        "src/adapters/core/local-principal"
+        "src/adapters/core/local-principal",
+        "src/engine/core/worker-setup",
+        "src/adapters/core/process-runner",
+        "src/engine/core/runtime",
+        "src/platform/core/config-fields"
       ],
       "plan": "PROVIDERS"
     },
@@ -2376,7 +2383,9 @@
         "src/engine/core/toolchain-currency",
         "src/adapters/core/docker-supervisor",
         "src/engine/core/worker-setup",
-        "src/adapters/core/npm-registry"
+        "src/adapters/core/npm-registry",
+        "src/platform/core/utils",
+        "src/adapters/core/local-runtime-socket"
       ],
       "plan": "PROVIDERS"
     },
@@ -2685,8 +2694,14 @@
         "src/platform/core/output",
         "src/engine/core/workspace-patch",
         "src/domain/core/principal",
-        "src/engine/core/recovery"
-      , "src/engine/core/audit", "src/engine/core/nervous", "src/adapters/core/audit-store", "src/adapters/core/local-keyring", "src/adapters/core/recovery-case-store", "src/domain/core/recovery"],
+        "src/engine/core/recovery",
+        "src/engine/core/audit",
+        "src/engine/core/nervous",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/recovery-case-store",
+        "src/domain/core/recovery"
+      ],
       "plan": "MONITOR"
     },
     "src/composition/core/monitor": {
@@ -3412,8 +3427,10 @@
         "src/engine/core/approval",
         "src/engine/core/config",
         "src/domain/core/approval",
-        "src/domain/core/policy"
-      , "src/domain/core/recovery", "src/engine/core/recovery"],
+        "src/domain/core/policy",
+        "src/domain/core/recovery",
+        "src/engine/core/recovery"
+      ],
       "plan": "SURFACES"
     },
     "src/surfaces/core/cli-admin": {
@@ -3532,7 +3549,9 @@
         "src/engine/core/setup",
         "src/engine/core/toolchain-currency",
         "src/platform/core/errors",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/platform/core/config-fields",
+        "src/platform/core/integrity"
       ],
       "plan": "INSTALLATION"
     },
@@ -3930,8 +3949,11 @@
         "src/platform/core/integrity",
         "src/domain/core/model-invocation",
         "src/engine/core/model-activation",
-        "src/domain/core/provider-catalog"
-      , "src/platform/core/errors", "src/engine/core/approval", "src/engine/core/policy"],
+        "src/domain/core/provider-catalog",
+        "src/platform/core/errors",
+        "src/engine/core/approval",
+        "src/engine/core/policy"
+      ],
       "plan": "EXECUTION"
     },
     "src/adapters/core/recovery-case-store": {

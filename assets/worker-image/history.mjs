@@ -1,8 +1,9 @@
 // Pure validation of the worker image recipe (schema 3), the build plan, the version history and the daemon's tag counter. No Docker, no
 // filesystem: the builder runs these on its private build context before any Docker call, and the product's tests run them directly.
 const VERSION = /^r[1-9][0-9]*-\d{8}$/;
-/** A daemon tag of either repository: `<version>` (schema 2 images, and every base) or `<version>-<provider>[-<provider>...]` (schema 3). */
-const TAG = /^(r[1-9][0-9]*-\d{8})(?:-[a-z0-9]{1,32})*$/;
+/** Legacy dated tags remain readable; new tags are rN for the base and rN-provider for each provider image. */
+const LEGACY_TAG = /^(r[1-9][0-9]*-\d{8})(?:-[a-z0-9]{1,32})*$/;
+const TAG = /^(r[1-9][0-9]*)(?:-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?$/;
 const LINE = /^# version (\S+) \| (\d{4}-\d{2}-\d{2}) \| base (\S+) \| supersedes (\S+) \| (.+)$/;
 const ID = /^[a-z0-9]{1,32}$/;
 const REPOSITORY = /^[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*$/;
@@ -10,7 +11,7 @@ const IMAGE = /^[a-z0-9][\w./:@-]{0,254}$/;
 const NPM_PACKAGE = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/;
 const NPM_VERSION = /^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/;
 const fail = code => { throw new Error(code); };
-const counter = id => Number(/^r([1-9][0-9]*)-/.exec(id)[1]);
+const counter = id => Number(/^r([1-9][0-9]*)(?:-|$)/.exec(id)[1]);
 const strings = (value, pattern) => Array.isArray(value) && value.every(item => typeof item === 'string' && pattern.test(item));
 
 /** A source URL the build may contact: https only (an http registry/installer, or a downgrade, is refused) and never with credentials,
@@ -85,10 +86,10 @@ export function parseVersionHistory(text, plan) {
   return entries;
 }
 
-/** The highest revision the daemon holds over the given tags of both repositories (schema 2 `r<N>-<date>` and schema 3 `r<N>-<date>-<providers>`), or
+/** Highest counter over canonical base/provider and legacy dated tags. Canonical tags carry the zero-date sentinel, or
  * null. Installations sharing one daemon share this one counter, so the planner floors its next counter on it (ISCI-IMAJ-SAYAC, U6 §12). */
 export function heldVersion(existingTags) {
-  return existingTags.flatMap(tag => TAG.exec(tag)?.[1] ?? []).sort((a, b) => counter(b) - counter(a))[0] ?? null;
+  return existingTags.flatMap(tag => LEGACY_TAG.exec(tag)?.[1] ?? (TAG.exec(tag)?.[1] ? `${TAG.exec(tag)[1]}-00000000` : [])).sort((a, b) => counter(b) - counter(a))[0] ?? null;
 }
 
 /** A label match is adoption evidence, never proof that this daemon image was built from these sources. */

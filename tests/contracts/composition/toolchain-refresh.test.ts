@@ -9,9 +9,9 @@ import { inspectToolchainRefresh, isToolchainRefreshInProgress, readToolchainRef
   type ToolchainRefreshEvent } from '#composition/core/toolchains/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { openSqliteLedger } from '#adapters/core/sqlite-ledger/index.js';
-import { configServiceState, restartConfigDigest } from '#engine/index.js';
+import { workerConsentBinding, configServiceState, restartConfigDigest } from '#engine/index.js';
 import { clearConfigCache, getConfigFieldDefault, loadConfig, prepareProductFile, productResourcePath, resolveProductLayout } from '#platform/index.js';
-import type { WorkerImageBuildRunner } from '#adapters/index.js';
+import { readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
 
 beforeEach(context => { if (process.platform !== 'linux') context.skip('configured policy/integrity flows need a verified POSIX UID'); });
 const roots: string[] = [];
@@ -38,10 +38,18 @@ async function fixture(update: Record<string, unknown> = {}) {
     service: { identity: { scopeId: 'installation', serviceId: 'refresh-service' } }, toolchains: { currency: { registryEndpoint: 'https://registry.example.invalid' }, update },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'r', profiles,
       kinds: profiles.map(profile => ({ kind: profile.id, profile: { id: profile.id, version: profile.version } })), evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } } }));
+  const source = await readWorkerImageSources(process.cwd()), document = JSON.parse(await readFile(path, 'utf8'));
+  const binding = workerConsentBinding({ recipe: source.recipe, providers: ['codex'], npmRegistry: 'https://registry.example.invalid', sources: {} });
+  const consent = { operation: 'worker-image.consent@1', id: 'fixture-consent', person: { id: 'fixture', issuer: 'local-os', subject: 'fixture' }, scopeId: 'installation', ...binding, createdAt: new Date().toISOString() };
+  document.toolchains.image = { consents: [consent] }; await writeFile(path, JSON.stringify(document));
+  const imageHome = join(root, '.deckent/workspaces/toolchains'); await mkdir(imageHome, { recursive: true });
+  await writeFile(join(imageHome, 'worker-image-state.json'), JSON.stringify({ schemaVersion: 1, revision: 1, instanceId: 'fixture', consentId: consent.id, phase: 'ready', step: null,
+    startedAt: consent.createdAt, lastProgressAt: consent.createdAt, expiresAt: consent.createdAt, daemonId: 'fixture-daemon', images: [], code: null, context: null }));
   const latest: Record<string, string> = { '@openai/codex': '0.156.0', '@anthropic-ai/claude-code': '2.1.278' };
   const fetcher = async (request: { package: string }) => ({ version: latest[request.package]!, source: `fixture/${request.package}`, observedAt: new Date().toISOString() });
   const state = { builds: 0, failFirst: 0, gate: null as Promise<void> | null, tags: ['r4-20260930'], checks: [] as string[], fill: null as string | null };
   const runner: WorkerImageBuildRunner = async (command, signal) => {
+    if (command.args[1] === '--daemon-identity') return { ...ok(command.requestId), stdoutBase64: Buffer.from(JSON.stringify({ daemonId: 'fixture-daemon', endpoint: 'unix:///fixture' })).toString('base64') };
     if (command.args[1] === '--held-version') {
       const heldVersion = (await historyOwner()).heldVersion(state.tags); state.checks.push(heldVersion ?? 'none');
       return { ...ok(command.requestId), stdoutBase64: Buffer.from(JSON.stringify({ heldVersion }) + '\n').toString('base64') };
@@ -55,7 +63,7 @@ async function fixture(update: Record<string, unknown> = {}) {
     (await historyOwner()).parseVersionHistory(await readFile(join(command.cwd, 'history.log'), 'utf8'), plan); // the context's own history chain must validate
     (await historyOwner()).assertVersionAdvances(plan.imageVersion, state.tags); // the builder's own guard before it tags
     state.tags.push(plan.imageVersion);
-    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + (state.fill ?? (state.builds % 2 ? 'b' : 'c')).repeat(64), imageVersion: plan.imageVersion, tag: `${recipe.repository}:${plan.imageVersion}`,
+    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, daemonId: 'fixture-daemon', imageId: 'sha256:' + (state.fill ?? (state.builds % 2 ? 'b' : 'c')).repeat(64), imageVersion: plan.imageVersion, tag: `${recipe.repository}:${plan.imageVersion}`,
       manifest: { providers: [{ id: 'codex', version: `codex-cli ${latest['@openai/codex']}` }, { id: 'claude', version: '2.1.278 (Claude Code)' }, { id: 'cursor', version: '2026.09.18-9a7762b' }] } }));
     return ok(command.requestId);
   };
@@ -139,7 +147,7 @@ describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
   it.each([['off', {}], ['propose', {}], ['auto', { atStartup: false, intervalMs: 0 }]])('mode %s with these settings never starts a build', async (mode, extra) => {
     const f = await fixture({ mode, ...extra });
     const controller = new AbortController(); const handle = startToolchainRefresh(f.root, f.options, f.observer, controller.signal, f.deps);
-    await handle.done.then(() => undefined); controller.abort();
+    await new Promise(resolve => setTimeout(resolve, 30)); controller.abort(); await handle.done;
     expect(f.state.builds).toBe(0); expect(f.events).toEqual([]); expect(await readToolchainRefreshState(f.root, f.options)).toBeNull();
   });
 

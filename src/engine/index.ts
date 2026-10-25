@@ -98,3 +98,7 @@ export { validateAuthorityWrite, PolicyAdministrationInspection, policyAdministr
 export type { AuthorityHistorySource, AuthorityRevision } from '#engine/core/policy/index.js';
 export * from '#engine/core/oauth-connection/index.js';
 export * from '#engine/core/hub/index.js';
+
+export { workerImageBudget, workerConsentBinding, matchingWorkerConsent, interruptedWorkerImage, workerImageStateSchema, consentProviders, type WorkerImageState, type WorkerConsentBinding } from '#engine/core/worker-setup/index.js';
+
+export { hasWorkerKind } from '#engine/core/worker-setup/index.js';

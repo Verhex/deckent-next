@@ -1,10 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, writeSync, mkdtempSync, rmSync, existsSync, statSync, accessSync, lstatSync, readdirSync, realpathSync, constants } from 'node:fs';
+import { readFileSync, writeFileSync, writeSync, mkdtempSync, rmSync, existsSync, statSync, accessSync, lstatSync, realpathSync, constants } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { validateRecipe, validatePlan, parseVersionHistory, assertVersionAdvances, heldVersion, adoptionProvenance } from './history.mjs';
+import { retainedWorkerHistory } from './receipts.mjs';
 import { baseDockerfile, imageDockerfile, imageTag } from './layers.mjs';
 
 // Explicit build/adopt operation over one private build context (recipe schema 3, U6 §4/§12): the shipped recipe.json, lineage.json and
@@ -28,8 +29,9 @@ if (secretIndex >= 0) {
   if (!info?.isFile() || info.nlink !== 1 || info.uid !== process.getuid?.() || info.mode & 0o077 || realpathSync(npmrcSecret) !== npmrcSecret
     || npmrcSecret.startsWith(root + '/')) throw new Error('WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED');
 }
-const heldCheck = receipt === '--held-version';
-if (heldCheck && (option !== undefined || existingImage !== undefined || extra.length)) throw new Error('WORKER_RECIPE_VERSION: --held-version takes no arguments.');
+const identityCheck = receipt === '--daemon-identity';
+const heldCheck = receipt === '--held-version' || identityCheck;
+if (heldCheck && ((option !== undefined && (identityCheck || !isAbsolute(option))) || (option === undefined ? existingImage !== undefined || extra.length : extra.length !== 1))) throw new Error('WORKER_RECIPE_VERSION: --held-version takes no arguments.');
 if (!heldCheck) {
   if (!receipt || extra.length || !isAbsolute(receipt) || existsSync(receipt)
     || (option !== undefined && (option !== '--image-id' || !/^sha256:[a-f0-9]{64}$/.test(existingImage ?? '')))) {
@@ -58,12 +60,14 @@ const run = (args, timeout, build = false) => {
   return result.stdout?.trim();
 };
 const endpointOf = () => JSON.parse(run(['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}'], 20_000));
+const rawReceiptBounds = () => { const bounds = { files: Number(existingImage), bytes: Number(extra[0]) }; if (![bounds.files, bounds.bytes].every(value => Number.isSafeInteger(value) && value > 0)) throw new Error('WORKER_HISTORY_IDS'); return bounds; };
 const tagsOf = (command, repository) => command(['image', 'ls', repository, '--format', '{{.Tag}}'], 20_000).split('\n');
 // Read-only preflight from the installed assets (no plan, no context): the highest revision the daemon holds over both repositories, so the
 // planner floors its one shared counter on it; the eventual build still refuses a counter another installation took meanwhile.
 if (heldCheck) {
   const endpoint = endpointOf(), command = (args, timeout) => run(['--host', endpoint, ...args], timeout);
-  writeSync(1, JSON.stringify({ heldVersion: heldVersion([recipe.repository, recipe.baseRepository].flatMap(name => tagsOf(command, name))) }) + '\n');
+  if (identityCheck) { writeSync(1, JSON.stringify({ endpoint, daemonId: command(['info', '--format', '{{.ID}}'], 20_000) }) + '\n'); process.exit(0); }
+  writeSync(1, JSON.stringify({ heldVersion: heldVersion([... [recipe.repository, recipe.baseRepository].flatMap(name => tagsOf(command, name)), ...(option ? retainedWorkerHistory(join(option, 'receipts'), command(['info', '--format', '{{.ID}}'], 20_000), rawReceiptBounds()) : [])]) }) + '\n');
   process.exit(0);
 }
 const rawPlan = readJson('plan.json');
@@ -84,8 +88,9 @@ const sourceRevision = (() => {
     return `${head.stdout.trim()}${dirty.stdout.trim() ? '-dirty' : ''}`;
   } catch { return 'unknown'; }
 })();
+if (!Number.isSafeInteger(plan.totalBudgetMs) || plan.totalBudgetMs < plan.buildTimeoutMs) throw new Error('WORKER_PLAN_INVALID');
 const started = Date.now();
-let deadline = started + plan.buildTimeoutMs;
+const deadline = started + plan.totalBudgetMs;
 const left = () => deadline - Date.now();
 const temporary = mkdtempSync(join(tmpdir(), 'deckent-image-build-'));
 const cidfiles = [];
@@ -102,8 +107,8 @@ try {
   };
   /** A short hardened container on a local image with no network and a read-only root (the probe, and the base's package list). */
   const container = (image, entrypoint, args, mounts = []) => {
-    const cidfile = join(temporary, `container-${cidfiles.length}`); cidfiles.push(cidfile);
-    return command(['run', '--rm', '--cidfile', cidfile, '--pull=never', '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges',
+    const cidfile = join(root, `probe-${cidfiles.length}.cid`); cidfiles.push(cidfile);
+    return command(['run', '--rm', '--label', `dev.deckent.worker.probe=${plan.probeOwner}`, '--cidfile', cidfile, '--pull=never', '--network=none', '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges',
       '--pids-limit=128', '--memory=1g', '--memory-swap=1g', '--cpus=2', '--tmpfs', '/tmp:rw,nosuid,nodev,size=268435456',
       ...mounts.flatMap(([source, target]) => ['--mount', `type=bind,src=${join(root, source)},dst=${target},readonly`]), '--entrypoint', entrypoint, image, ...args], Math.min(90_000, left()));
   };
@@ -122,24 +127,22 @@ try {
     // Same-home receipts retain the counter even when an image was removed. S3 supplies the shared daemon receipt location and lock.
     const bounds = plan.receiptLimits;
     if (!Number.isSafeInteger(bounds?.files) || bounds.files <= 0 || !Number.isSafeInteger(bounds?.bytes) || bounds.bytes <= 0) throw new Error('WORKER_PLAN_INVALID');
-    const prior = readdirSync(dirname(receipt)).filter(name => /^r[1-9][0-9]*-\d{8}\.json$/.test(name));
-    if (prior.length > bounds.files) throw new Error('WORKER_HISTORY_IDS');
-    const receiptVersions = prior.flatMap(name => {
-      const file = join(dirname(receipt), name), info = lstatSync(file);
-      if (!info.isFile() || info.size > bounds.bytes) throw new Error('WORKER_HISTORY_IDS');
-      const previous = JSON.parse(readFileSync(file, 'utf8'));
-      if (![2, 3].includes(previous.schemaVersion) || !/^r[1-9][0-9]*-\d{8}$/.test(previous.imageVersion ?? '')) throw new Error('WORKER_HISTORY_IDS');
-      return [previous.imageVersion, ...(previous.history ?? []).map(entry => entry.id)];
-    });
+    const receiptVersions = retainedWorkerHistory(dirname(receipt), daemonId, bounds);
+    if (plan.reservation) {
+      if (plan.reservation.daemonId !== daemonId || plan.reservation.version !== plan.imageVersion
+        || !Number.isSafeInteger(plan.reservation.floor) || Number(/^r([0-9]+)/.exec(plan.imageVersion)[1]) <= plan.reservation.floor) throw new Error('WORKER_HISTORY_COUNTER');
+      receiptVersions.push(`r${plan.reservation.floor || 1}-00000000`);
+    }
     assertVersionAdvances(plan.imageVersion, [...receiptVersions, ...[recipe.repository, recipe.baseRepository].flatMap(name => tagsOf(command, name))]);
     // The in-build proxy is a predefined build argument: Docker leaves it out of `docker history` and the cache key (Dockerfile reference,
     // "Predefined ARGs"); the plan already refused a proxy URL with credentials. Base pulls use the daemon's own proxy configuration.
     const proxy = plan.proxy ? ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy'].flatMap(name => ['--build-arg', `${name}=${plan.proxy}`]) : [];
+    const progress = step => writeFileSync(join(root, 'progress.json'), JSON.stringify({ step, at: new Date().toISOString() }), { mode: 0o600 });
     const buildOne = (name, text, pull) => {
+      progress(name === 'Dockerfile.base' ? 'base' : `layer:${plan.images[Number(/image-(\d+)/.exec(name)[1]) - 1][0]}`);
       writeFileSync(join(root, name), text, { flag: 'wx', mode: 0o600 });
       const iidfile = join(temporary, `${name}.id`), at = Date.now();
-      deadline = at + plan.buildTimeoutMs;
-      command(['build', ...(pull ? ['--pull'] : []), ...proxy, ...(npmrcSecret ? ['--secret', `id=worker-npmrc,src=${npmrcSecret}`] : []), '--progress=plain', '-f', join(root, name), '--iidfile', iidfile, root], left(), true);
+      command(['build', ...(pull ? ['--pull'] : []), ...proxy, ...(npmrcSecret ? ['--secret', `id=worker-npmrc,src=${npmrcSecret}`] : []), '--progress=plain', '-f', join(root, name), '--iidfile', iidfile, root], Math.min(plan.buildTimeoutMs, left()), true);
       const id = readFileSync(iidfile, 'utf8').trim();
       if (!/^sha256:[a-f0-9]{64}$/.test(id) || idOf(id) !== id) throw new Error('WORKER_IMAGE_ID_INVALID');
       return { id, ms: Date.now() - at };
@@ -152,6 +155,7 @@ try {
       packages: container(builtBase.id, 'dpkg-query', ['-W', '-f=${Package}=${Version}\\n']).split('\n').filter(Boolean) };
     images = plan.images.map((providers, index) => {
       const built = buildOne(`Dockerfile.image-${index + 1}`, imageDockerfile(recipe, plan, providers, { recipeSha256, sourceRevision, secret: npmrcSecret !== null }), false);
+      progress('probe');
       const manifest = probe(built.id, providers);
       tagAs(built.id, targets[index]); timings.images.push(built.ms);
       const labels = labelsOf(built.id);
@@ -171,13 +175,13 @@ try {
   }
   if (command(['info', '--format', '{{.ID}}'], 20_000) !== daemonId) throw new Error('WORKER_DAEMON_CHANGED');
   const imageVersion = adopt ? images[0].version ?? plan.imageVersion : plan.imageVersion;
-  const files = ['recipe.json', 'plan.json', 'history.log', 'lineage.json', 'lineage.lock.json', 'build.mjs', 'history.mjs', 'layers.mjs', 'install.mjs', 'inspect.mjs',
+  const files = ['recipe.json', 'plan.json', 'history.log', 'lineage.json', 'lineage.lock.json', 'build.mjs', 'history.mjs', 'receipts.mjs', 'recover.mjs', 'layers.mjs', 'install.mjs', 'inspect.mjs',
     ...(adopt ? [] : ['Dockerfile.base', ...plan.images.map((_, index) => `Dockerfile.image-${index + 1}`)])];
   writeFileSync(resolve(receipt), JSON.stringify({ schemaVersion: 3, measuredAt: new Date().toISOString(), endpoint, daemonId,
     repository: recipe.repository, baseRepository: recipe.baseRepository, imageVersion, previousVersion: adopt ? null : plan.previousVersion,
     // The default image: the first image of the plan. `execution.docker.imageId` falls back to it where no profile pins its own (U6 §13 point 5).
     imageId: images[0].imageId, tag: images[0].tag,
-    images: images.map(({ providers, imageId, tag, labels, manifest }) => ({ providers, imageId, tag, labels, manifest })), base,
+    images: images.map(({ providers, imageId, tag, labels, manifest }) => ({ providers, imageId, tag, tagVersion: tag?.split(':').pop() ?? null, labels, manifest })), base,
     install: adopt ? null : { providers: plan.providers, npmRegistry: plan.npmRegistry ?? null, proxy: plan.proxy, secretMountUsed: npmrcSecret !== null }, buildTimeoutMs: adopt ? null : plan.buildTimeoutMs,
     recipeSha256, lineage: listed ? 'listed' : 'unlisted', sourceRevision: adopt ? null : sourceRevision, history,
     sources: Object.fromEntries(files.filter(name => existsSync(join(root, name))).map(name => [name, sha256(name)])),

@@ -285,5 +285,8 @@
   "setup.window.deferred": "{count} step(s) put off: {titles}. Run deckent init again to reopen them.",
   "setup.apply.declined": "{stage}: not applied (you said no).",
   "setup.summary.state": "{stage}: {state} (observed again).",
-  "setup.install.done": "Setup is complete. Type deckent: on the first open we set up the provider and the first job together."
+  "setup.install.done": "Setup is complete. Type deckent: on the first open we set up the provider and the first job together.",
+  "setup.execution.noWorkKind": "No worker image is needed until a work kind is selected.",
+  "setup.execution.workerConsentRequired": "Confirm the worker image sources in onboarding or /setup before acquiring an image.",
+  "setup.execution.workerAcquisition": "Worker image: {phase}; step: {step}; reason: {code}."
 }

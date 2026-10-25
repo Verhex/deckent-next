@@ -118,3 +118,4 @@ export { detectExecutionFacts, executionSetupFamily, WORKER_IMAGE_ESTIMATED_GB, 
 export { detectCodingFacts, codingSetupFamily, gitTracksPaths } from '#adapters/core/setup-detect-coding/index.js';
 export * from '#adapters/core/execution-env-docker/index.js';
 export { providerConnectHelpKinds } from '#adapters/core/provider-connect/index.js';
+export { withWorkerBuilder, readWorkerHistory, type WorkerReservation } from '#adapters/core/worker-image/index.js';

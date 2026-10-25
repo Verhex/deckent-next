@@ -528,5 +528,11 @@
   "models.connect.cause.not-listable": "bu bağlantı modelleri listeleyemiyor",
   "models.connect.cause.unexpected": "beklenmeyen hata",
   "toolchain.cursor.noVersionFeed": "Üretici sürüm akışı yayınlamıyor; kabul edilmiş worker imajı sürümü {version}. Güncellik doğrulanmadı.",
-  "cli.help.modelsConnect.kindsFromProvider": "/provider ile listeleyin"
+  "cli.help.modelsConnect.kindsFromProvider": "/provider ile listeleyin",
+  "error.WORKER_IMAGE_CONSENT_MISSING": "İşçi imajı onayı seçili sağlayıcı, tarif veya tam kaynaklarla eşleşmiyor. Yeni onay kartını inceleyin.",
+  "error.WORKER_IMAGE_CONSENT_INVALID": "İşçi imajı onayı tanıklı kişinin ve kapsamın yeni, değiştirilemez kaydı olmalıdır.",
+  "error.WORKER_IMAGE_PROVIDERS_READ_ONLY": "İşçi imajı sağlayıcıları onay kayıtlarından türetilir. Bir iş türü seçip onay kartını doğrulayın.",
+  "error.WORKER_IMAGE_BUILDING": "Bu daemon için başka bir işçi imajı oluşturma işlemi sürüyor. Tamamlanmasını bekleyin veya kesilen işi inceleyin.",
+  "error.WORKER_IMAGE_DOCKER_WAITING": "İşçi imajı edinme işlemi erişilebilir Docker daemon bekliyor.",
+  "error.WORKER_IMAGE_BUILD_INTERRUPTED": "İşçi imajı edinme işlemi kesildi. Yeni denemeyi onaylamadan önce saklanan kanıtı inceleyin."
 }

@@ -285,5 +285,8 @@
   "setup.window.deferred": "{count} adım ertelendi: {titles}. Tekrar açmak için deckent init'i yeniden çalıştırın.",
   "setup.apply.declined": "{stage}: uygulanmadı (vazgeçtiniz).",
   "setup.summary.state": "{stage}: {state} (yeniden gözlendi).",
-  "setup.install.done": "Kurulum tamam. deckent yazın: ilk açılışta sağlayıcıyı ve ilk işi birlikte ayarlarız."
+  "setup.install.done": "Kurulum tamam. deckent yazın: ilk açılışta sağlayıcıyı ve ilk işi birlikte ayarlarız.",
+  "setup.execution.noWorkKind": "Bir iş türü seçilene kadar işçi imajı gerekmiyor.",
+  "setup.execution.workerConsentRequired": "İmaj edinmeden önce onboarding veya /setup üzerinden işçi imajı kaynaklarını onaylayın.",
+  "setup.execution.workerAcquisition": "İşçi imajı: {phase}; adım: {step}; neden: {code}."
 }

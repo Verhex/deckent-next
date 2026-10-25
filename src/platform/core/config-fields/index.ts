@@ -10,3 +10,6 @@ export type { ConfigStepper } from './internal/numeric.js';
 export { RESOURCE_OBSERVATION_SETTINGS } from './internal/resource-observation.js';
 export type { ResourceObservationSettings } from './internal/resource-observation.js';
 export { CORE_TURN_ASSURANCE_REFERENCE } from './internal/approval-assurance.js';
+
+export { workerImageConsentSchema } from './internal/worker-consent.js';
+export type { WorkerImageConsent } from './internal/worker-consent.js';

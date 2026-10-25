@@ -1,3 +1,4 @@
+import { assertWorkerConsentChange } from './worker-consent.js';
 import { clientCommandIdSchema } from '#domain/index.js';
 import { randomUUID } from 'node:crypto';
 import { AUDIT_EVENT_SCHEMA_VERSION, CONFIG_CHANGE_DISPLAY_MAX, encodeCommandProjection, identitySchema, isAiPrincipal, protectedConfigKey, verifiedPrincipalSchema, type AuditEvent } from '#domain/index.js';
@@ -47,7 +48,7 @@ export class ConfigApplication {
     const approvals = this.authority.approvals;
     if (!approvals) return null;
     const pairs = input.keys.flatMap(keyPath => input.layers.map(layer => ({ keyPath, layer })));
-    const asked = pairs.filter(pair => configPath(pair.keyPath)[0] !== 'secrets');
+    const asked = pairs.filter(pair => configPath(pair.keyPath)[0] !== 'secrets' && !/^toolchains\.image\.providers(?:\.|$)/u.test(pair.keyPath));
     const writes = asked.map(pair => ({ keyPath: pair.keyPath, layer: pair.layer, principal: input.principal, scopeId: input.scopeId, commandId: randomUUID() }));
     const decided = approvals.evaluateMany ? await approvals.evaluateMany(writes) : await Promise.all(writes.map(write => approvals.evaluate(write)
       .then(value => ({ decision: value.decision, ruleId: value.ruleId }), (error: unknown) => {
@@ -93,6 +94,7 @@ export class ConfigApplication {
   /** Layer validation, the person-only subscription profiles and the precondition port, in that order, over one planned document. */
   private async check(input: ConfigWriteInput, snapshot: ConfigSnapshot, document: Record<string, unknown>) {
     const checked = validateConfigLayers(snapshot, document); assertSubscriptionProfilesByPerson(input, snapshot.document, document);
+    await assertWorkerConsentChange(input, snapshot.effective, checked.config, this.authority.witness);
     await this.authority.precondition?.(input, snapshot.effective, checked.config);
   }
   private admitInput(input: ConfigWriteInput) {

@@ -278,7 +278,6 @@
   {"file":"src/composition/core/toolchains/internal/currency.ts","fingerprint":"289af9bfbbfa67bbaa3203a972fd462de8e94a5e7e532f6285a2961925534a80","rule":"G4"},
   {"file":"src/composition/core/toolchains/internal/currency.ts","fingerprint":"9a61ff4631655d06f3f1818ee9ce48e1042c449cb68148872993cb554a969c8d","rule":"G4"},
   {"file":"src/composition/core/toolchains/internal/update.ts","fingerprint":"77db29f8a4df87f60b61c05f58eeb8728d606299330622560f5680342b56f3b4","rule":"G3"},
-  {"file":"src/composition/core/toolchains/internal/update.ts","fingerprint":"fd1c8430836c42ade3bdb54fad8a35cdb860e9b8a1a9fcf34bfc7ede06951c7c","rule":"G3"},
   {"file":"src/domain/core/agent-turn/internal/scratch.ts","fingerprint":"ada3ed5e2bfeaf5978f00995edde08dcc7f1cf1f4b6e1535654d771727438951","rule":"G2"},
   {"file":"src/domain/core/agent-turn/internal/workspace-files.ts","fingerprint":"0d1384edc808105442355e608f27c8fa10b75c87887e25198eca7097392d024d","rule":"G2"},
   {"file":"src/domain/core/agent-turn/internal/workspace-files.ts","fingerprint":"1d8f697ab7f03538b15db5410c7a4c37dd98938a34347e14d55f6b1b22315879","rule":"G2"},

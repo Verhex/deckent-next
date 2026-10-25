@@ -82,7 +82,7 @@ describe('config defaults (zod 4 .default/.prefault guard)', () => {
       workers: { heartbeatMs: 2000, staleMs: 10_000, maxFileBytes: 65_536, maxEntries: 4096, sources: [] } });
     expect(d.toolchains).toEqual({ currency: { mode: 'report', registryEndpoint: 'https://registry.npmjs.org', timeoutMs: 5000, responseMaxBytes: 65_536 },
       update: { mode: 'auto', buildTimeoutMs: 1_800_000, outputBytes: 1_048_576, atStartup: true, intervalMs: 86_400_000, failedContextsKept: 3 },
-      image: { providers: [], baseRefreshMs: 604_800_000, sources: { baseImage: null, proxy: null, installerUrls: {} } } });
+      image: { providers: [], consents: [], baseRefreshMs: 604_800_000, sources: { baseImage: null, proxy: null, installerUrls: {} } } });
     expect(d.company).toEqual({ id: 'default' });
     for (const retired of ['live_trace', 'providers', 'mode', 'auth_mode', 'spawn_backend']) expect(d).not.toHaveProperty(retired);
     for (const key of ['execution', 'cancellation', 'cancellationRuntime', 'reconciliationRuntime', 'admission'] as const) expect(d[key], key).toBeNull();

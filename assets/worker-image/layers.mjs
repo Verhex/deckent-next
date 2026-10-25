@@ -6,8 +6,8 @@
 const INSTALLER = '/opt/deckent-worker/install.mjs';
 const label = entries => 'LABEL ' + Object.entries(entries).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(' ');
 
-/** `deckent/worker-base:<version>` or `deckent/worker:<version>-<provider>[-<provider>...]`. */
-export const imageTag = (repository, imageVersion, providers = []) => `${repository}:${[imageVersion, ...providers].join('-')}`;
+/** Canonical rN base and rN-provider tags; dated versions remain receipt/history identities. */
+export const imageTag = (repository, imageVersion, providers = []) => `${repository}:${[/^r[1-9][0-9]*/.exec(imageVersion)[0], ...providers].join('-')}`;
 
 /** What one provider's RUN line installs: exactly the plan's resolved input, nothing taken from the network at build time unplanned. */
 export function installDescriptor(recipe, plan, id) {

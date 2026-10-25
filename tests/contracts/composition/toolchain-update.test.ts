@@ -1,3 +1,5 @@
+import { workerConsentBinding } from '#engine/index.js';
+import { readWorkerImageSources } from '#adapters/index.js';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,11 +26,16 @@ async function fixture(update: Record<string, unknown>) {
   await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: join(root, 'data') }, toolchains: { currency: { registryEndpoint: 'https://registry.example.invalid' }, update },
     admission: { poolId: 'p', executionSlots: 1, inFlightSlots: 1, ordering: 'input-order', registry: { schemaVersion: 1, revision: 'r', profiles,
       kinds: profiles.map(profile => ({ kind: profile.id, profile: { id: profile.id, version: profile.version } })), evaluators: [{ id: 'process-exit', version: 1, implementation: { id: 'process-exit', version: 1 } }] } } }));
+  const source = await readWorkerImageSources(process.cwd()), configPath = join(project, '.deckent/config.json'), document = JSON.parse(await readFile(configPath, 'utf8'));
+  const binding = workerConsentBinding({ recipe: source.recipe, providers: ['codex'], npmRegistry: 'https://registry.example.invalid', sources: {} });
+  document.toolchains.image = { consents: [{ operation: 'worker-image.consent@1', id: 'fixture-consent', person: { id: 'fixture', issuer: 'local-os', subject: 'fixture' }, scopeId: 'installation', ...binding, createdAt: new Date().toISOString() }] };
+  await writeFile(configPath, JSON.stringify(document));
   const latest: Record<string, string> = { '@openai/codex': '0.156.0', '@anthropic-ai/claude-code': '2.1.278' };
   const fetcher = async (request: { package: string }) => ({ version: latest[request.package]!, source: `fixture/${request.package}`, observedAt: new Date().toISOString() });
   const options = { env: { HOME: join(root, 'home'), PATH: process.env.PATH ?? '/usr/bin' } };
   const runs: string[] = []; const checks: string[][] = [];
   const runner: WorkerImageBuildRunner = async command => {
+    if (command.args[1] === '--daemon-identity') return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null, stdoutBase64: Buffer.from(JSON.stringify({ daemonId: 'fixture-daemon', endpoint: 'unix:///fixture' })).toString('base64'), stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
     if (command.args[1] === '--held-version') {
       checks.push([...command.args]);
       return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null, stdoutBase64: heldAnswer(null), stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
@@ -36,7 +43,7 @@ async function fixture(update: Record<string, unknown>) {
     runs.push(command.args.join(' '));
     const recipe = JSON.parse(await readFile(join(command.cwd, 'recipe.json'), 'utf8')) as { repository: string };
     const plan = JSON.parse(await readFile(join(command.cwd, 'plan.json'), 'utf8')) as { imageVersion: string };
-    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, imageId: 'sha256:' + 'b'.repeat(64), imageVersion: plan.imageVersion, tag: `${recipe.repository}:${plan.imageVersion}`,
+    await writeFile(command.args[1]!, JSON.stringify({ schemaVersion: 2, daemonId: 'fixture-daemon', imageId: 'sha256:' + 'b'.repeat(64), imageVersion: plan.imageVersion, tag: `${recipe.repository}:${plan.imageVersion}`,
       manifest: { providers: [{ id: 'codex', version: 'codex-cli 0.156.0' }, { id: 'claude', version: '2.1.278 (Claude Code)' }, { id: 'cursor', version: '2026.09.18-9a7762b' }] } }));
     return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null, stdoutBase64: '', stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 5 };
   };
@@ -55,16 +62,17 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
       return { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 0, signal: null, stdoutBase64: heldAnswer('r16-20261016'), stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
     };
     const built = await updateToolchains(f.project, { apply: true }, f.options, { fetcher: f.fetcher, runner, now: () => '2026-10-17T08:00:00.000Z' });
-    expect(seen[0]).toEqual([join(process.cwd(), 'assets/worker-image/build.mjs'), '--held-version']);
+    expect(seen[0]).toEqual([join(process.cwd(), 'assets/worker-image/build.mjs'), '--daemon-identity']);
+    expect(seen[1]).toEqual([join(process.cwd(), 'assets/worker-image/build.mjs'), '--held-version']);
     expect(built).toMatchObject({ decision: 'built', build: { tag: 'deckent/worker:r17-20261017' }, plan: { current: { imageVersion: 'r4-20260930' }, next: { imageVersion: 'r17-20261017', previousVersion: 'r4-20260930' } } });
     expect(JSON.parse(await readFile(built.planPath!, 'utf8'))).toMatchObject({ next: { imageVersion: 'r17-20261017' } });
     const { parseVersionHistory } = await import(pathToFileURL(join(process.cwd(), 'assets/worker-image/history.mjs')).href) as { parseVersionHistory(dockerfile: string, recipe: unknown): { id: string; supersedes: string; reason: string }[] };
     const context = join(f.home, 'builds', 'r17-20261017');
     const history = parseVersionHistory(await readFile(join(context, 'history.log'), 'utf8'), { ...JSON.parse(await readFile(join(context, 'recipe.json'), 'utf8')), imageVersion: 'r17-20261017', previousVersion: 'r4-20260930' });
-    expect(history[0]).toMatchObject({ id: 'r17-20261017', supersedes: 'r4-20260930', reason: expect.stringMatching(/counter past daemon-held r16-20261016$/) });
+    expect(history[0]).toMatchObject({ id: 'r17-20261017', supersedes: 'r4-20260930', reason: expect.stringMatching(/counter past daemon-held r16-(?:20261016|00000000)$/) });
     // An unreadable daemon answer stops before any plan artifact or build context.
     const g = await fixture({});
-    const broken: WorkerImageBuildRunner = async command => command.args[1] === '--held-version'
+    const broken: WorkerImageBuildRunner = async command => command.args[1] === '--daemon-identity' ? f.runner(command) : command.args[1] === '--held-version'
       ? { schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit', exitCode: 1, signal: null, stdoutBase64: '', stderrBase64: Buffer.from('Error: WORKER_IMAGE_COMMAND_FAILED:image').toString('base64'), stdoutTruncated: false, stderrTruncated: false, durationMs: 1 }
       : g.runner(command);
     await expect(updateToolchains(g.project, { apply: true }, g.options, { fetcher: g.fetcher, runner: broken, now: () => '2026-10-17T08:00:00.000Z' })).rejects.toMatchObject({ code: 'WORKER_IMAGE_COMMAND_FAILED' });
@@ -74,7 +82,7 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
   });
   it.each(['en', 'tr'])('surfaces the builder typed counter reason and a bounded redacted excerpt in CLI JSON (%s)', async language => {
     const f = await fixture({});
-    const runner: WorkerImageBuildRunner = async command => ({ schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit',
+    const runner: WorkerImageBuildRunner = async command => command.args[1] === '--daemon-identity' ? f.runner(command) : ({ schemaVersion: 1, requestId: command.requestId, started: true, reason: 'exit',
       exitCode: command.args[1] === '--held-version' ? 0 : 1, signal: null, stdoutBase64: command.args[1] === '--held-version' ? heldAnswer(null) : '',
       stderrBase64: command.args[1] === '--held-version' ? '' : Buffer.from('Error: WORKER_VERSION_COUNTER_TAKEN: r5-20261003 blocked; token=fixture-secret Bearer fixture-bearer sk-ant-fixturekey ' + 'x'.repeat(2000) + '\n    at builder (/private/path:1:1)').toString('base64'),
       stdoutTruncated: false, stderrTruncated: false, durationMs: 1 });
@@ -106,7 +114,7 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
       proposal: { imageVersion: 'r5-20260923', application: 'not-applied', profiles: [{ profile: { id: 'codex-pinned' }, changes: { cliVersion: { from: 'codex-cli 0.155.1', to: 'codex-cli 0.156.0' }, imageId: { from: imageId, to: 'sha256:' + 'b'.repeat(64) } } }] } });
     expect(f.checks).toEqual([[join(process.cwd(), 'assets/worker-image/build.mjs'), '--held-version']]);
     expect(f.runs).toHaveLength(1); expect(f.runs[0]).toMatch(/builds\/r5-20260923\/build\.mjs .*receipts\/r5-20260923\.json$/);
-    expect((await readdir(join(f.home, 'builds', 'r5-20260923'))).sort()).toEqual(['build.mjs', 'history.log', 'history.mjs', 'inspect.mjs', 'install.mjs', 'layers.mjs', 'lineage.json', 'lineage.lock.json', 'plan.json', 'recipe.json']);
+    expect((await readdir(join(f.home, 'builds', 'r5-20260923'))).sort()).toEqual(['build.mjs', 'history.log', 'history.mjs', 'inspect.mjs', 'install.mjs', 'layers.mjs', 'lineage.json', 'lineage.lock.json', 'plan.json', 'receipts.mjs', 'recipe.json', 'recover.mjs']);
     expect(JSON.parse(await readFile(built.proposalPath!, 'utf8'))).toEqual(built.proposal);
     // Installed config is never rewritten by the update operation.
     expect(JSON.parse(await readFile(join(f.project, '.deckent/config.json'), 'utf8')).admission.registry.profiles[0].parameters.nativeSubscription.preflight.cliVersion).toBe('codex-cli 0.155.1');
