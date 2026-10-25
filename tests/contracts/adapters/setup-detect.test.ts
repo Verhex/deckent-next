@@ -7,7 +7,7 @@ import { planSetup, SetupStageRegistry, type SetupObservation, type SetupStage }
 import { MESSAGE_REGISTRY } from '#platform/index.js';
 import { HOST_EXECUTION_PORTS, detectExecutionFacts, executionSetupFamily, parseExecutionRuntimes, type ExecutionDetectPorts,
   type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
-import { codingSetupFamily, detectCodingFacts, type CodingFacts } from '#adapters/core/setup-detect-coding/index.js';
+import { applyFirstCommit, codingSetupFamily, detectCodingFacts, firstCommitGit, previewFirstCommit, type CodingFacts, type FirstCommitGit } from '#adapters/core/setup-detect-coding/index.js';
 import { resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 import { observeSetup, setupMessage } from '#surfaces/core/setup/index.js';
 
@@ -133,7 +133,7 @@ describe.skipIf(posix)('I-S2 coding/git detection', () => {
     git(plain, 'init', '-q');
     const empty = await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, ports: { selfSource: async () => false } });
     expect(empty).toMatchObject({ repository: 'present', commits: 'none' });
-    expect(coding(empty, 0)).toMatchObject({ state: 'blocked', reason: { code: 'setup.coding.noCommits' } });
+    expect(coding(empty, 0)).toMatchObject({ state: 'skipped', reason: { code: 'setup.coding.noCommitsInfo' } });
     await writeFile(join(plain, 'a.txt'), 'a'); git(plain, 'add', '.'); git(plain, 'commit', '-q', '-m', 'first');
     const clone = await temp('clone'); await mkdir(join(clone, '.git'));
     const full = await detectCodingFacts({ root: plain, env: { PATH: hostPath, HOME: plain }, workTargets: [clone, plain, '/nonexistent/target'], ports: { selfSource: async () => false } });
@@ -146,6 +146,44 @@ describe.skipIf(posix)('I-S2 coding/git detection', () => {
     expect(coding(noGit, 0)).toMatchObject({ state: 'skipped', reason: { code: 'setup.coding.gitMissing' } });
     expect(coding({ ...full, repository: 'unknown' }, 0)).toMatchObject({ state: 'blocked', reason: { code: 'setup.coding.repositoryUnknown' } });
     expect(coding({ ...full, hosts: [{ id: 'codex', cli: 'found', login: 'absent' }] }, 1)).toMatchObject({ state: 'skipped', reason: { code: 'setup.coding.hostsInstalled', params: { hosts: 'codex' } } });
+  });
+
+  it('first commit (alpha.56 U4-1c): a failed commit-tree and a ref race leave the repository as it was; a flagged .env is committed only when ticked', async () => {
+    const repo = async (identity: boolean) => {
+      const root = await temp('first'); git(root, 'init', '-q');
+      const set = (key: string, value: string) => execFileSync('git', ['config', key, value], { cwd: root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' } });
+      if (identity) { set('user.name', 'Person'); set('user.email', 'person@example.test'); } else set('user.useConfigOnly', 'true');
+      await writeFile(join(root, 'a.txt'), 'a\n'); await writeFile(join(root, '.env'), 'API_TOKEN=live-value-0123456789\n');
+      return { root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' }, message: 'First commit' };
+    };
+    const sh = (root: string, ...args: string[]) => execFileSync('git', ['--no-optional-locks', ...args], { cwd: root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' }, encoding: 'utf8' });
+    const status = (root: string) => sh(root, 'status', '--porcelain=v2', '--untracked-files=all');
+    const leftovers = async (root: string) => (await readdir(join(root, '.git'))).filter(name => name === 'index' || name === 'index.lock' || name.startsWith('deckent-first-commit.'));
+    // 1. No identity (user.useConfigOnly): the preview says so; the apply fails at commit-tree and writes nothing.
+    const bare = await repo(false), seen = await previewFirstCommit(bare);
+    expect(seen).toMatchObject({ state: 'offered', identity: false, sign: false, hooks: 'not-run', total: 2, selected: 1, flagged: 1, rows: [{ path: '.env', flag: 'secret-name' }, { path: 'a.txt', flag: null }] });
+    const before = status(bare.root);
+    await expect(applyFirstCommit({ ...bare, digest: seen.state === 'offered' ? seen.digest : '' })).rejects.toMatchObject({ code: 'SETUP_FIRST_COMMIT_FAILED', params: { step: 'commit-tree' } });
+    expect(status(bare.root)).toBe(before); expect(await leftovers(bare.root)).toEqual([]);
+    // 2. Another commit lands between commit-tree and update-ref: the zero-oid ref update refuses, the person's commit and index stay as they were.
+    const raced = await repo(true), real = await firstCommitGit(raced.root, raced.env), racing = sh(raced.root, 'commit-tree', '-m', 'race', sh(raced.root, 'hash-object', '-t', 'tree', '/dev/null').trim()).trim();
+    let atRace = '';
+    const port: FirstCommitGit = async (args, options) => {
+      if (args[0] === 'update-ref') { sh(raced.root, 'update-ref', 'HEAD', racing); atRace = status(raced.root); }
+      return real(args, options);
+    };
+    const offer = await previewFirstCommit(raced);
+    await expect(applyFirstCommit({ ...raced, git: port, digest: offer.state === 'offered' ? offer.digest : '' })).rejects.toMatchObject({ code: 'SETUP_FIRST_COMMIT_CHANGED' });
+    expect(status(raced.root)).toBe(atRace); expect(sh(raced.root, 'rev-parse', 'HEAD').trim()).toBe(racing); expect(await leftovers(raced.root)).toEqual([]);
+    // 3. Default selection: .env stays untracked, a.txt is committed and clean (the index was swapped); ticking .env needs its own digest.
+    const plain = await repo(true), first = await previewFirstCommit(plain), digest = first.state === 'offered' ? first.digest : '';
+    await expect(applyFirstCommit({ ...plain, include: ['.env'], digest })).rejects.toMatchObject({ code: 'SETUP_FIRST_COMMIT_CHANGED' });
+    await expect(applyFirstCommit({ ...plain, digest })).resolves.toMatchObject({ operation: 'coding.first-commit@1', files: 1, signed: false });
+    expect(sh(plain.root, 'ls-tree', '-r', '--name-only', 'HEAD')).toBe('a.txt\n'); expect(status(plain.root)).toBe('? .env\n');
+    expect(await previewFirstCommit(plain)).toEqual({ state: 'has-commits' });
+    const ticked = await repo(true), withEnv = await previewFirstCommit({ ...ticked, include: ['.env'] });
+    await applyFirstCommit({ ...ticked, include: ['.env'], digest: withEnv.state === 'offered' ? withEnv.digest : '' });
+    expect(sh(ticked.root, 'ls-tree', '-r', '--name-only', 'HEAD')).toBe('.env\na.txt\n'); expect(status(ticked.root)).toBe('');
   });
 
   it('coding-CLI sign-ins: presence by lstat only — an unreadable sign-in file is still "found", its content never leaves', async () => {

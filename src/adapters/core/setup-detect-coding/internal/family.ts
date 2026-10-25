@@ -17,7 +17,8 @@ function repository({ facts }: SetupStageContext): SetupDecision {
   if (!observed) return { state: 'blocked', reason: reason('unavailable') };
   if (observed.git === 'absent' || observed.repository === 'none') return { state: 'skipped', reason: reason(observed.git === 'absent' ? 'gitMissing' : 'notRepository') };
   if (observed.repository !== 'present' || observed.commits === 'unknown') return { state: 'blocked', reason: reason('repositoryUnknown') };
-  if (observed.commits === 'none') return { state: 'blocked', reason: reason('noCommits') };
+  // İ-3: a repository without commits is an onboarding item (the first-commit card), never an install gate.
+  if (observed.commits === 'none') return { state: 'skipped', reason: reason('noCommitsInfo') };
   // This build's own source checkout: deliveries go to a separate clone (work target), never into the checkout itself.
   return { state: 'done', reason: reason(observed.productSource ? 'productSource' : 'repository', { targets: observed.workTargets.present, version: observed.gitVersion ?? '-' }) };
 }

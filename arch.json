@@ -3516,10 +3516,16 @@
     "src/adapters/core/setup-detect-coding": {
       "dependencies": [
         "src/engine/core/setup",
+        "src/engine/core/workspaces",
         "src/domain/core/provider-catalog",
+        "src/platform/core/common",
+        "src/platform/core/errors",
+        "src/platform/core/redaction",
         "src/adapters/core/native-cli-registry",
         "src/adapters/core/agent-workspace-floor",
-        "src/adapters/core/setup-detect-execution"
+        "src/adapters/core/setup-detect-execution",
+        "src/adapters/core/workspace-read",
+        "src/adapters/core/worker-tree-gate"
       ],
       "plan": "INSTALLATION"
     },
