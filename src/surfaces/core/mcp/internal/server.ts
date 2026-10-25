@@ -343,8 +343,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   const coded = (body: Record<string, unknown>): CallToolResult => completeToolResult({ isError: true, content: [{ type: 'text', text: JSON.stringify({ schemaVersion: 1, ...body }) }] });
   // Ek A: the localized catalog message rides with the code, like the CLI (installation language; DeckentError text through its own localizer,
   // redacted; a zod or unexpected failure gets catalog text only, never its own message). An answer that would not fit drops back to the code.
-  const failure = (id: RequestId, code: string, extra: { note?: string; error?: DeckentError; params?: Record<string, string> } = {}): CallToolResult => {
-    const message = extra.error ? extra.error.localize?.(locale).message ?? extra.error.message : ErrorRegistry.get(code, locale, extra.params)?.message;
+  const failure = (id: RequestId, code: string, extra: { note?: string; error?: DeckentError; message?: string } = {}): CallToolResult => {
+    const message = extra.message ?? (extra.error ? extra.error.localize?.(locale).message ?? extra.error.message : ErrorRegistry.get(code, locale)?.message);
     const full = coded({ code, ...(extra.note ? { note: extra.note } : {}), ...(message ? { message: redactSensitive(message) } : {}) });
     return toolResultFits(id, full, limits.responseMaxBytes) ? full : coded({ code });
   };
@@ -358,7 +358,8 @@ export function createMcpServer(applications: McpApplications, limits: McpLimits
   }))) }));
   server.setRequestHandler('tools/call', async (request, context) => {
     const tool = definitions.find(value => value.name === request.params.name), id = context.mcpReq.id;
-    if (!tool) return failure(id, 'MCP_TOOL_UNKNOWN', { params: { name: request.params.name } });
+    // The same answer for every unknown name (an unadvertised tool such as decide_approval is indistinguishable); the name is never echoed.
+    if (!tool) return failure(id, 'MCP_TOOL_UNKNOWN', { message: t('mcp.error.toolUnknown', {}, locale) });
     if (active >= limits.maxConcurrentCalls) return failure(id, 'MCP_BUSY');
     active++;
     try {

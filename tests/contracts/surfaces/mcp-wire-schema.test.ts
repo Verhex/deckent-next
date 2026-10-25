@@ -19,6 +19,8 @@ const descriptor = (id: string, compensation: string | null = null) => Object.fr
 const noop = async () => ({});
 const applications = {
   renewApproval: noop, listApprovals: noop, inspectApproval: noop,
+  // alpha.56 F3: the root-union tools (flattened to one object) and the paged monitor input are pinned too.
+  applyRunControl: noop, inspectDecision: noop, applyModelCatalog: noop, manageProviderSpend: noop, inspectMonitor: noop,
   inspectModelActivation: noop, admitModelActivation: noop, inspectModelInvocation: noop, invokeModel: noop,
   purgeModelInvocationContent: noop, cancelModelInvocation: noop, inspectProviderSpendAccount: noop,
   auditProviderSpendAccount: noop, inspectDeclaredModels: noop, inspectModelBinding: noop, inspectToolchainCurrency: noop,
@@ -45,10 +47,11 @@ describe('MCP tool wire schema (zod 4 / JSON Schema dialect guard)', () => {
 
   it('dialect and root shape are explicit: draft-07 URI, object root, no outputSchema', async () => {
     const tools = await listTools();
-    expect(tools).toHaveLength(33);
+    expect(tools).toHaveLength(38);
     for (const tool of tools) {
       expect(tool.inputSchema['$schema'], tool.name).toBe('http://json-schema.org/draft-07/schema#');
       expect(tool.inputSchema.type, tool.name).toBe('object');
+      expect(['anyOf', 'oneOf', 'allOf'].filter(key => key in tool.inputSchema), tool.name).toEqual([]); // Ek A: one object at the root
       expect(tool.outputSchema, tool.name).toBeUndefined();
     }
   });
