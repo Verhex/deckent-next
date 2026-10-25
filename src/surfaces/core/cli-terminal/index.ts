@@ -8,7 +8,7 @@ export type { RunCancellationDeliveryHandler, RunCancellationRenderer, RunLifecy
 export type { TerminalChatMessage, TerminalChatPlanHandler, TerminalChatPlanView, TerminalChatStreamHandler, TerminalChatTurnHandler, TerminalMentionAttachHandler,
   TerminalMentionFindHandler, TerminalPermissionModeInspectHandler, TerminalPermissionModeSetHandler, TerminalScratchClearHandler,
   TerminalScratchInspectHandler } from './internal/terminal-chat.js';
-export { mcpPanelPort, mcpTrustQuestion, type McpPanelRequest, type McpPanelRun } from './internal/mcp-panel.js';
+export { mcpPanelPort, mcpServerStateWord, mcpTrustQuestion, type McpPanelRequest, type McpPanelRun } from './internal/mcp-panel.js';
 export { secretGrantCardPort, type TerminalSecretGrantHandlers } from './internal/secret-grant-card.js';
 export { modelPanelSource } from './internal/model-panel.js';
 export { providerPanelPort, providerOutcomeWord } from './internal/provider-panel.js';

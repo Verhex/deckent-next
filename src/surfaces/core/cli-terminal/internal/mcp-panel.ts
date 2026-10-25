@@ -11,7 +11,7 @@ export type McpPanelRequest = { readonly verb: 'list'; readonly health?: boolean
 /** The host's MCP registry command (`McpCommandHandler`): `ask` answers one trust card (yes, no, or null: no answer, nothing recorded). */
 export type McpPanelRun = (root: string, request: McpPanelRequest, options: ConfigLoadOptions, ask: (card: unknown) => Promise<boolean | null>, locale?: Locale) => Promise<unknown>;
 
-type ServerSummary = { name: string; scope: string; file?: string; status: string; realm?: string | null; transport?: string; command?: string; args?: string[]; envNames?: string[];
+type ServerSummary = { name: string; scope: string; file?: string; status: string; reason?: string; realm?: string | null; transport?: string; command?: string; args?: string[]; envNames?: string[];
   headerNames?: string[]; pinnedTools?: number; definitionDigest?: string; lastStart?: { text?: string; phase?: string };
   grant?: { status: 'granted'; scopes: 'all' | string[] } | { status: 'none' } };
 type TrustCard = { phase?: string; name?: string; scope?: string; file?: string; definitionDigest?: string; transport?: string; command?: string; args?: string[];
@@ -19,15 +19,19 @@ type TrustCard = { phase?: string; name?: string; scope?: string; file?: string;
   tools?: { name: string; digest: string; description: string | null; alwaysAsk: boolean }[] };
 const array = <T>(value: unknown): T[] => Array.isArray(value) ? value as T[] : [];
 const digest12 = (value: unknown) => typeof value === 'string' ? value.slice(0, 12) : '-';
-function statusWord(status: string, locale: Locale) {
-  switch (status) {
+/** A server's state in words, one renderer for `deckent mcp list|get` and the `/mcp` window (YTK-40: both read the same trust record the same way);
+ * a record trusted before alpha.48 (SEC-2 D6, `trust-moved`) is approved again on its card; an unknown status stays its typed name. */
+export function mcpServerStateWord(server: { readonly status: string; readonly reason?: string | undefined }, locale: Locale): string {
+  if (server.reason === 'trust-moved') return t('climodels.mcp.state.moved', {}, locale);
+  if (server.reason === 'trust-store-in-project') return t('climodels.mcp.state.storeInProject', {}, locale);
+  switch (server.status) {
     case 'trusted': return t('terminal.mcp.status.trusted', {}, locale);
     case 'pending-approval': return t('terminal.mcp.status.pending', {}, locale);
     case 'changed': return t('terminal.mcp.status.changed', {}, locale);
     case 'declined': return t('terminal.mcp.status.declined', {}, locale);
     case 'invalid-launch': return t('terminal.mcp.status.invalidLaunch', {}, locale);
     case 'trust-store-unavailable': return t('terminal.mcp.status.trustUnreadable', {}, locale);
-    default: return status;
+    default: return server.status;
   }
 }
 function scopeWord(scope: string, locale: Locale) {
@@ -79,7 +83,7 @@ export function mcpPanelPort(root: string, run: McpPanelRun, options: ConfigLoad
   return {
     async list(): Promise<McpPanelList> {
       const listed = (await call({ verb: 'list', health: false })) as { servers?: unknown; problems?: unknown };
-      const servers = array<ServerSummary>(listed.servers).map(server => ({ name: server.name, scope: scopeWord(server.scope, locale), status: statusWord(server.status, locale),
+      const servers = array<ServerSummary>(listed.servers).map(server => ({ name: server.name, scope: scopeWord(server.scope, locale), status: mcpServerStateWord(server, locale),
         attention: server.status !== 'trusted' || Boolean(server.lastStart), tools: server.pinnedTools ? toolsWord(server.pinnedTools, locale) : '',
         realm: realmWord(server.realm, locale).split(':')[0]!, launch: [server.command ?? '', ...array<string>(server.args)].join(' '), trusted: server.status === 'trusted' }));
       const problems = array<{ name: string | null; scope: string; reason: string }>(listed.problems).map(problem => problem.name === null
@@ -92,7 +96,7 @@ export function mcpPanelPort(root: string, run: McpPanelRun, options: ConfigLoad
       const server = got.server ?? { name, scope: '-', status: '-' }, pins = array<{ name: string; digest: string; alwaysAsk?: boolean }>(server.trust?.tools);
       const http = server.transport === 'http';
       return [
-        { label: t('tui.panel.mcp.field.status', {}, locale), text: statusWord(server.status, locale), ...(server.status === 'trusted' ? {} : { tone: 'warning' as const }) },
+        { label: t('tui.panel.mcp.field.status', {}, locale), text: mcpServerStateWord(server, locale), ...(server.status === 'trusted' ? {} : { tone: 'warning' as const }) },
         { label: t('tui.panel.mcp.field.scope', {}, locale), text: `${scopeWord(server.scope, locale)} · ${server.file ?? '-'}` },
         { label: http ? t('tui.panel.mcp.field.url', {}, locale) : t('tui.panel.mcp.field.command', {}, locale), text: [server.command ?? '', ...array<string>(server.args)].join(' ') },
         http ? { label: t('tui.panel.mcp.field.headers', {}, locale), text: array<string>(server.headerNames).join(', ') || t('tui.panel.mcp.none', {}, locale) }

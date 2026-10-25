@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mcpPanelPort, type McpPanelRequest } from '#surfaces/core/cli-terminal/index.js';
 import type { McpTrustQuestion } from '#surfaces/core/terminal-panels/index.js';
+import { t } from '#platform/index.js';
 
 // T3 L4 PANELS — `/mcp`: the window's port over the host's registry command (the same handler as `deckent mcp`). It changes nothing itself:
 // every action is one registry request; trust cards become the window's questions in the person's language. Integration (L4 ↔ L1): HTTP entries,
@@ -26,6 +27,9 @@ describe('/mcp window port', () => {
     expect(list.servers).toEqual([{ name: 'files', scope: 'yerel', status: 'onaydan sonra değişti, yeniden onay gerekir', attention: true, tools: '2 araç',
       realm: 'host', launch: 'npx -y files', trusted: false }]);
     expect(list.problems).toEqual(['proje MCP dosyasında sorun: invalid json']);
+    // YTK-40: the window words a waiting server exactly as `deckent mcp list` does (one renderer): a pre-alpha.48 trust says why it asks again.
+    const moved = await mcpPanelPort('/p', host({ list: { servers: [{ ...SERVER, status: 'pending-approval', reason: 'trust-moved' }] } }).run, {}, 'tr').list();
+    expect(moved.servers[0]!.status).toBe(t('climodels.mcp.state.moved', {}, 'tr'));
     expect(requests).toEqual([{ verb: 'list', health: false }]);
     const detail = await port.detail('files');
     const text = detail.map(line => `${line.label}|${line.text}|${line.tone ?? ''}`);
