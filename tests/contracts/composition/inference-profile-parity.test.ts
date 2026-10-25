@@ -77,10 +77,10 @@ it('selects configured inference profiles identically through CLI and MCP and ty
   expect(JSON.parse((unknownMcp.content as { text: string }[])[0]!.text)).toEqual({ schemaVersion: 1, code: 'INFERENCE_PROFILE_UNKNOWN' , message: expect.any(String) });
   await expect(describeMcpInference(configured.projectRoot, 'budget', 'typo', { env: configured.env })).rejects.toMatchObject({ code: 'INFERENCE_PROFILE_UNKNOWN' });
 
-  // No inference_serving section: absence on both surfaces, with or without a requested profile.
+  // No inference_serving section: an explicit plan/budget/metrics request fails (exit 1, alpha.56 F2 "MOD inference"); MCP still reports absence.
   const empty = await project(undefined);
   const absent = await cli(empty.projectRoot, empty.env, '--profile', 'typo');
-  expect(absent.code).toBe(0); expect(absent.stderr).toContain('inference_serving is not configured');
+  expect(absent.code).toBe(1); expect(absent.stderr).toContain('inference_serving is not configured');
   expect((await mcp(empty.projectRoot, empty.env, { profileId: 'typo' })).structuredContent).toEqual({ schemaVersion: 1, configured: false });
 });
 
