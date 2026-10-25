@@ -66,7 +66,9 @@ export async function signersCommand(action: SignerAction, args: { readonly id?:
   }
   if (action === 'revoke-signer') {
     // A full key id, or a unique prefix of at least the shown 12 characters.
-    const wanted = args.id!.toLowerCase(), rows = (await listing()).items.filter(row => wanted.length >= 12 && row.keyId.startsWith(wanted));
+    const wanted = args.id!.toLowerCase();
+    if (wanted.length < 12) throw ErrorRegistry.createError('CLI_ID_TOO_SHORT', { params: { prefix: safeCell(args.id!), min: 12 } });
+    const rows = (await listing()).items.filter(row => row.keyId.startsWith(wanted));
     if (rows.length !== 1) throw ErrorRegistry.createError('AGENT_CATALOG_NOT_FOUND');
     const row = rows[0]!;
     if (!await card(t('agentsign.card.revoke.title', {}, locale), t('agentsign.card.revoke.body', { ...fields(row, locale), count: row.signedRows }, locale).split('\n'))) return cancelled();

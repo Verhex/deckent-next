@@ -29,7 +29,7 @@ export function agentStatsView(view: AgentStatsView, locale: Locale, nowMs = Dat
   const lines = [t('agentstats.title', {}, locale), modeLine(view.mode, locale),
     t('agentstats.registry', { revision: safeCell(view.registry.revision), status: view.registry.status === 'calibrated' ? t('agentstats.registry.calibrated', {}, locale) : t('agentstats.registry.provisional', {}, locale), rows: view.rows.read,
       truncated: view.rows.truncated ? t('agentstats.truncated', {}, locale) : '' }, locale),
-    view.lastPass ? t('agentstats.lastPass', { position: view.lastPass.position, keys: view.lastPass.keys.length, mode: modeLine(view.lastPass.mode, locale),
+    view.lastPass ? t('agentstats.lastPass', { position: view.lastPass.position, keys: view.lastPass.keys.length, mode: view.lastPass.mode === 'shadow' ? t('agentstats.mode.label.shadow', {}, locale) : t('agentstats.mode.label.on', {}, locale),
       ago: formatAgo(view.lastPass.asOfMs, nowMs, locale) }, locale) : t('agentstats.lastPass.none', {}, locale)];
   if (!view.agents.length) return [...lines, t('agentstats.none', {}, locale)].join('\n');
   for (const agent of view.agents) {

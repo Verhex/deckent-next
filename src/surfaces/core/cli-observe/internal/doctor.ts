@@ -39,6 +39,7 @@ async function checkFacts(root: string, config: DoctorConfig, context: KernelCom
     backupPassphraseStored: names === null ? null : names.includes(DOCTOR_BACKUP_PASSPHRASE_SECRET),
     retiringModels: catalog === null ? null : retiringModels(catalog, config.models.retirementWarningDays), secretUse,
     recoveryMode, recoveryRollout,
+    catalogDiagnostics: context.inspectCatalogMonitor && scopeId ? await context.inspectCatalogMonitor(root, scopeId, options).catch(() => null) : null,
     pendingRoleModels: roles === null ? null : roles.models.filter(entry => entry.state === 'pending').map(entry => ({ modelId: entry.modelId, channelId: entry.channelId })),
     headlessLogins: context.readHeadlessLogins && scopeId ? await context.readHeadlessLogins((config as Record<string, unknown>)['provider_invocation_profiles'], scopeId, options).catch(() => null) : null,
   };

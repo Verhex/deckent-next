@@ -1,6 +1,6 @@
 import { ErrorRegistry, emit, loadConfig, t, type ExitCode } from '#platform/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
-import { cliMode, resolveCommandScope, safeCell, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
+import { cliMode, resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cli-human/index.js';
 import { cardIo, sinksOf } from '#surfaces/core/cli-approval/index.js';
 import { catalogSuggestionViewRefusal } from '#engine/index.js';
 import type { AgentsCommandContext } from './context.js';
@@ -66,7 +66,7 @@ export async function agentsCommand(argv: readonly string[], context: AgentsComm
   const ask = cardIo(context, locale, config.approvals.sessionTtlMs).ask;
   const scope = await resolveCommandScope({ command: 'deckent agents', locale, explicit: args.scope, configured: typeof configured === 'string' ? configured : undefined,
     mutating: writing, interactive, listScopes: scopeLister(context, root, options), pick: ask });
-  if (!scope) return writing ? 1 : undefined;
+  if (!scope) { emit(t('agents.cancelled', {}, locale), { ...sinks, level: 'warning' }); return 1; }
   const io = { root, options, locale, scope, ask, inputMaxBytes: config.cli.invocationInputMaxBytes };
   if ((SIGNER_ACTIONS as readonly string[]).includes(args.action ?? '')) return signersCommand(args.action as SignerAction, { ...args, id: args.words[0] }, context, { ...io, json: args.json });
   if ((EVOLUTION_ACTIONS as readonly string[]).includes(args.action ?? '')) return evolutionCommand(args.action as EvolutionAction, args, context, { ...io, json: args.json });
@@ -77,19 +77,25 @@ export async function agentsCommand(argv: readonly string[], context: AgentsComm
   if (refused) throw ErrorRegistry.createError(refused);
   if (writing) return agentsWrite(args.action as 'define' | 'define-skill', args.input!, context, { ...io, ...(named ? { suggestion: named.suggestionId } : {}) });
   const scopeId = scope.scopeId, id = args.words[0]!, lines = [scopeNotice(scope, locale)];
+  if (!args.json && (args.action === null || args.action === 'stats')) {
+    const diagnostics = await context.inspectCatalogMonitor?.(root, scopeId, options).catch(() => null);
+    if (diagnostics?.includes('catalog-aggregator-unsigned')) lines.push(t('agentsevo.monitor.unsigned', {}, locale), t('agentsevo.monitor.unsignedAction', {}, locale));
+    else if (diagnostics === null) lines.push(t('agentstats.signer.unavailable', {}, locale));
+  }
   const show = (result: unknown, text: () => string) => { if (args.json) emit(result, { ...sinks, json: true }); else emit([...lines, text()].join('\n'), sinks); };
   if (args.action === 'stats') {
     const view = await context.inspectAgentStats?.(root, { schemaVersion: 1, scopeId, ...(args.words[0] ? { agentId: args.words[0] } : { limit: limits.list.limit }) }, options);
     if (!view) throw ErrorRegistry.createError('AGENT_CATALOG_UNAVAILABLE');
-    show(view, () => view.status === 'not-found' ? t('agentstats.notFound', { id: safeCell(id) }, locale) : agentStatsView(view, locale));
+    if (view.status === 'not-found') throw ErrorRegistry.createError('AGENT_CATALOG_NOT_FOUND');
+    show(view, () => agentStatsView(view, locale));
     return;
   }
   if (args.action === 'inspect' || args.action === 'skill') {
     const result = args.action === 'inspect' ? await context.inspectAgent?.(root, { schemaVersion: 1, scopeId, agentId: id }, options)
       : await context.inspectSkill?.(root, { schemaVersion: 1, scopeId, skillId: id }, options);
     if (!result) throw ErrorRegistry.createError('AGENT_CATALOG_UNAVAILABLE');
-    show(result, () => result.status === 'not-found' ? t('agents.notFound', { id: safeCell(result.id) }, locale)
-      : 'agentId' in result.item ? agentView(result.item, result.history as never, locale, 'standings' in result ? result.standings : [], result.signers)
+    if (result.status === 'not-found') throw ErrorRegistry.createError('AGENT_CATALOG_NOT_FOUND');
+    show(result, () => 'agentId' in result.item ? agentView(result.item, result.history as never, locale, 'standings' in result ? result.standings : [], result.signers)
         : skillView(result.item, result.history as never, locale, result.signers));
     return;
   }

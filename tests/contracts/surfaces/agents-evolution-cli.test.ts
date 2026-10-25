@@ -178,3 +178,10 @@ describe('define from a file naming a suggestion (REVISE 2742 R1)', () => {
     expect(calls).toMatchObject([['defineAgent', { agentId: 'auditor', expectedRevision: 1, fromSuggestion: d('a') }]]);
   });
 });
+
+it('a suggestion digest shorter than the displayed twelve characters reports the short prefix, before listing', async () => {
+  const f = await project(), listing = vi.fn();
+  await expect(agentsCommand(['agents', 'suggestions', 'show', 'abc', '--scope', 'scope'], { root: f.root, env: f.env, stdout: capture().sink,
+    listSuggestions: listing })).rejects.toMatchObject({ code: 'CLI_ID_TOO_SHORT', params: { prefix: 'abc', min: 12 } });
+  expect(listing).not.toHaveBeenCalled();
+});

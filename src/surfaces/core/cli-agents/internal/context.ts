@@ -9,6 +9,7 @@ import type { AgentDefinition, AgentStanding, SkillDefinition } from '#domain/in
 
 /** S7 agent/skill catalog: reads use the application's `inspect` authorization; define and define-skill run only from a person's terminal card. */
 export interface AgentsCommandContext extends CliBaseContext, Pick<TerminalLaunchContext, 'configChoiceSources'> {
+  inspectCatalogMonitor?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly string[]>;
   listAgents?: (root: string, input: AgentListQuery, options: ConfigLoadOptions) => Promise<AgentListing>;
   inspectAgent?: (root: string, input: AgentInspectQuery, options: ConfigLoadOptions) => Promise<AgentInspection>;
   listSkills?: (root: string, input: SkillListQuery, options: ConfigLoadOptions) => Promise<SkillListing>;

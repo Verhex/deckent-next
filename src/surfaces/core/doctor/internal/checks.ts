@@ -50,6 +50,7 @@ export interface DoctorCheckFacts {
   readonly recoveryMode?: RecoveryModeState | null;
   /** alpha.56 G4: the scope's rollout view when recovery is not off (null: not read). */
   readonly recoveryRollout?: RecoveryRolloutView | null;
+  readonly catalogDiagnostics?: readonly string[] | null;
   /** PRE-8 v2: keys this project's profiles use that cannot be read here (no grant, not declared, not stored); names only, never a value. */
   readonly secretUse?: readonly DoctorSecretUse[] | null;
 }
@@ -147,6 +148,9 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
     : row('work', 'work.image', 'ok', image.status === 'updating' ? t('doctor.check.image.updating', {}, l)
       : image.imageVersion || shortImageId(f.imageId) ? t('doctor.check.image.current', { version: image.imageVersion ?? shortImageId(f.imageId)! }, l) : t('doctor.check.image.currentUnnamed', {}, l)));
   rows.push(executionRow(f, l));
+  if (f.catalogDiagnostics?.includes('catalog-aggregator-unsigned')) rows.push(row('work', 'work.catalogSigner', 'warning',
+    t('agentsevo.monitor.unsigned', {}, l), scoped(t('agentsevo.monitor.unsignedAction', {}, l), f)));
+  else if (f.catalogDiagnostics === null) rows.push(row('work', 'work.catalogSigner', 'untested', t('agentstats.signer.unavailable', {}, l)));
   const worker = f.workerImage && f.imageId ? { image: shortImageId(f.imageId) ?? '-' } : null;
   if (worker) rows.push(f.workerImage === 'present' ? row('work', 'work.workerImage', 'ok', t('doctor.check.workerImage.ok', worker, l))
     : f.workerImage === 'missing' ? row('work', 'work.workerImage', 'error', t('doctor.check.workerImage.missing', worker, l), 'deckent init')
