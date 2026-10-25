@@ -5,3 +5,5 @@ export { listConfiguredAgents, inspectConfiguredAgent, listConfiguredSkills, ins
 export { draftConfiguredSuggestion, defineConfiguredFromSuggestion, inspectConfiguredCatalogMonitor, type ConfiguredCatalogDraft } from './internal/drafts.js';
 export { inspectConfiguredAgentStats, prepareConfiguredCatalogAggregation } from './internal/stats.js';
 export { configuredAgentSelection } from './internal/selection.js';
+
+export { catalogDependencies, type ScopeContext } from './internal/application.js';

@@ -103,3 +103,4 @@ export { workerImageBudget, workerConsentBinding, matchingWorkerConsent, interru
 
 export { hasWorkerKind } from '#engine/core/worker-setup/index.js';
 export * from '#engine/core/hub-server/index.js';
+export * from '#engine/core/hub-client/index.js';

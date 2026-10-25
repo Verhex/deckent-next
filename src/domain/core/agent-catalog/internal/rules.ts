@@ -25,7 +25,7 @@ export function defineAgentRevision(previous: AgentDefinition | null, input: { r
 }
 
 /** A new skill or its next revision. `signature` is `unsigned` for a person's local text, `verified` only after the import floor passed. */
-export function defineSkillRevision(previous: SkillDefinition | null, input: { readonly scopeId: string; readonly skillId: string; readonly commandId: string;
+export function defineSkillRevision(previous: Pick<SkillDefinition, 'scopeId' | 'skillId' | 'revision'> | null, input: { readonly scopeId: string; readonly skillId: string; readonly commandId: string;
   readonly content: unknown; readonly contentDigest: string; readonly source: unknown; readonly author: Actor; readonly atMs: number; readonly signed?: Signed; readonly origin?: Origin;
   readonly signature: { readonly status: 'unsigned' } | ({ readonly status: 'verified' } & SkillSignature) }): SkillDefinition {
   const content = skillContentSchema.safeParse(input.content), source = skillSourceSchema.safeParse(input.source);

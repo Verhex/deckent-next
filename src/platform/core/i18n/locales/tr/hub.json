@@ -23,5 +23,16 @@
   "error.HUB_STORE_CONFLICT": "Hub deposu değişti; yeni işlemden önce güncel revizyonu inceleyin.",
   "error.HUB_RESOURCE_UNKNOWN": "İstenen Hub becerisi veya kaynağı yok.",
   "error.HUB_STORE_UNSUPPORTED": "Bu platform Hub dosya deposunun güvenlik sınırını uygulayamıyor.",
-  "error.HUB_STORE_OUTCOME_UNKNOWN": "Hub işleminin sonucu bilinmiyor. Yeni işlemden önce kalıcı kanıtı uzlaştırın."
+  "error.HUB_STORE_OUTCOME_UNKNOWN": "Hub işleminin sonucu bilinmiyor. Yeni işlemden önce kalıcı kanıtı uzlaştırın.",
+  "error.HUB_SOURCE_INVALID": "Hub kaynağı geçersiz veya kaynak sınırına ulaşıldı.",
+  "error.HUB_SOURCE_NOT_FOUND": "Seçilen Hub kaynağı bulunamadı veya kaldırılmış.",
+  "error.HUB_AUTHORITY_REFUSED": "Bu Hub işlemi kişi kartı veya etkin imza anahtarı ve izin gerektirir.",
+  "error.HUB_INSTALL_CONFLICT": "Hub komutu veya katalog revizyonu kayıtlı durumla çelişiyor. Yeniden denemeden önce inceleyin.",
+  "error.HUB_DEPENDENCY_REFUSED": "Tam bağımlılık kümesi veya yerel WorkClass eşlemesi doğrulanamadı.",
+  "error.HUB_DOWNGRADE_REFUSED": "Güncelleme için daha yüksek bir paket sürümü seçilmelidir.",
+  "error.HUB_PACKAGE_REVOKED": "İmzalı Hub akışı bu paketi, yayıncıyı veya imza anahtarını geri çekmiş.",
+  "error.HUB_STORE_CORRUPT": "Hub deposu bütünlük denetiminden geçemedi. Kanıtı koruyup defteri inceleyin.",
+  "error.HUB_STORE_UNAVAILABLE": "Hub deposuna erişilemiyor.",
+  "error.HUB_OUTCOME_UNKNOWN": "Hub kayıt işleminin sonucu bilinmiyor. Aynı komut kimliğiyle uzlaştırın.",
+  "error.HUB_FILE_UNSUPPORTED": "Bu platformda güvenli Hub dosyası içe aktarma kullanılamıyor."
 }

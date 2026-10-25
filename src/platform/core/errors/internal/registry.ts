@@ -928,6 +928,17 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   HUB_FEED_REPLAYED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FEED_REPLAYED', p, l) }) },
   HUB_FEED_STALE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FEED_STALE', p, l) }) },
   HUB_SKILL_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SKILL_INVALID', p, l) }) },
+  HUB_FILE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FILE_UNSUPPORTED', p, l) }) },
+  HUB_SOURCE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SOURCE_INVALID', p, l) }) },
+  HUB_SOURCE_NOT_FOUND: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SOURCE_NOT_FOUND', p, l) }) },
+  HUB_AUTHORITY_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_AUTHORITY_REFUSED', p, l) }) },
+  HUB_INSTALL_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.HUB_INSTALL_CONFLICT', p, l) }) },
+  HUB_DEPENDENCY_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_DEPENDENCY_REFUSED', p, l) }) },
+  HUB_DOWNGRADE_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_DOWNGRADE_REFUSED', p, l) }) },
+  HUB_PACKAGE_REVOKED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_PACKAGE_REVOKED', p, l) }) },
+  HUB_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.HUB_STORE_CORRUPT', p, l) }) },
+  HUB_STORE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_STORE_UNAVAILABLE', p, l) }) },
+  HUB_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.HUB_OUTCOME_UNKNOWN', p, l) }) },
   CLI_USAGE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_USAGE', { ...p, command: p.command ?? 'deckent', usage: p.usage ?? t('cli.usage.help', {}, l), flag: p.flag ?? t('cli.usage.arguments', {}, l) }, l) }) },
 });
 // Duplicate codes across the core table and the family fragments fail at load (ERROR_REGISTRY_DUPLICATE), never last-wins.

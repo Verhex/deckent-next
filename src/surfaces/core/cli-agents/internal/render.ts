@@ -1,12 +1,12 @@
 import { t, type Locale } from '#platform/index.js';
-import type { AgentContent, AgentDefinition, AgentStanding, SkillDefinition } from '#domain/index.js';
+import type { AgentContent, AgentDefinition, AgentStanding, ReadableSkillDefinition } from '#domain/index.js';
 import { cliTableStyle, formatAgo, renderCliTable, safeCell } from '#surfaces/core/cli-human/index.js';
 import type { AgentsCommandContext } from './context.js';
 
 const who = (author: { issuer: string; subject: string; ai: boolean }, locale: Locale) =>
   `${safeCell(`${author.issuer}:${author.subject}`)} (${author.ai ? t('agents.view.author.ai', {}, locale) : t('agents.view.author.person', {}, locale)})`;
 export const skillRefs = (content: AgentContent) => content.skills.map(ref => safeCell(`${ref.skillId}@${ref.revision} ${ref.digest.slice(0, 12)}`)).join(', ');
-const source = (skill: SkillDefinition, locale: Locale) => skill.source.kind === 'local' ? t('agents.skill.source.local', {}, locale)
+const source = (skill: ReadableSkillDefinition, locale: Locale) => skill.source.kind === 'local' ? t('agents.skill.source.local', {}, locale)
   : t('agents.skill.source.import', { ref: safeCell(skill.source.ref), key: safeCell(skill.signature.status === 'verified' ? skill.signature.keyId : '-') }, locale);
 /** The requirement lines of one agent definition, shared by the card and the inspect view. */
 export function agentLines(agentId: string, content: AgentContent, locale: Locale): string[] {
@@ -23,7 +23,7 @@ export function agentTable(items: readonly AgentDefinition[], locale: Locale, co
   items.map(item => [item.agentId, item.content.name, item.revision, item.content.parentAgentId ?? '-', item.content.workClasses.join(', '), item.content.skills.length,
     formatAgo(item.provenance.definedAtMs, now, locale)]), cliTableStyle(context));
 }
-export function skillTable(items: readonly SkillDefinition[], locale: Locale, context: AgentsCommandContext): string {
+export function skillTable(items: readonly ReadableSkillDefinition[], locale: Locale, context: AgentsCommandContext): string {
   const now = Date.now();
   return renderCliTable([{ header: t('agents.column.id', {}, locale) }, { header: t('agents.column.name', {}, locale), shrink: true }, { header: t('agents.column.revision', {}, locale) },
     { header: t('agents.column.source', {}, locale) }, { header: t('agents.column.digest', {}, locale) }, { header: t('agents.column.changed', {}, locale) }],
@@ -31,9 +31,9 @@ export function skillTable(items: readonly SkillDefinition[], locale: Locale, co
 }
 /** S8-5 (owner Q-S13): an AI/system revision names its signing key; one signed by a key revoked since then is marked "signer revoked". */
 type Signers = Readonly<Record<string, 'active' | 'revoked'>>;
-const signedMark = (row: AgentDefinition | SkillDefinition, signers: Signers, locale: Locale) => !row.provenance.signed ? '' : ` · ${t('agentsign.view.signed', { keyId: row.provenance.signed.keyId.slice(0, 12) }, locale)}${
+const signedMark = (row: AgentDefinition | ReadableSkillDefinition, signers: Signers, locale: Locale) => !row.provenance.signed ? '' : ` · ${t('agentsign.view.signed', { keyId: row.provenance.signed.keyId.slice(0, 12) }, locale)}${
   signers[row.provenance.signed.keyId] === 'active' ? '' : ` · ${t('agentsign.view.signerRevoked', {}, locale)}`}`;
-const revisions = (history: readonly (AgentDefinition | SkillDefinition)[], locale: Locale, signers: Signers) => [t('agents.view.history', {}, locale),
+const revisions = (history: readonly (AgentDefinition | ReadableSkillDefinition)[], locale: Locale, signers: Signers) => [t('agents.view.history', {}, locale),
   ...history.map(row => t('agents.view.revision', { revision: row.revision, by: who(row.provenance.author, locale), at: formatAgo(row.provenance.definedAtMs, Date.now(), locale) }, locale)
     + signedMark(row, signers, locale))];
 /** S8-1a: what the system may select the agent for — its standing per bound WorkClass (one fixed label per standing, EN/TR). */
@@ -52,7 +52,7 @@ export function agentView(item: AgentDefinition, history: readonly AgentDefiniti
   return [...agentLines(item.agentId, item.content, locale), t('agents.view.identity', { revision: item.revision, skillSet: item.skillSetDigest.slice(0, 12) }, locale),
     t('agents.view.tier', {}, locale), standingLine(standings, item.provenance.author, locale), ...noCarry, ...revisions(history, locale, signers)].join('\n');
 }
-export function skillView(item: SkillDefinition, history: readonly SkillDefinition[], locale: Locale, signers: Signers = {}): string {
+export function skillView(item: ReadableSkillDefinition, history: readonly ReadableSkillDefinition[], locale: Locale, signers: Signers = {}): string {
   return [`${safeCell(item.skillId)} · ${safeCell(item.content.name)}`, safeCell(item.content.text), t('agents.skill.view.pin', { revision: item.revision, digest: item.contentDigest }, locale),
     source(item, locale), ...revisions(history, locale, signers)].join('\n');
 }

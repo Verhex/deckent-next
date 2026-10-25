@@ -15,7 +15,9 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 70;
+export const CURRENT_LEDGER_VERSION = 71;
+// H2 additive client metadata and v2 skill reader. Older binaries refuse v71; rollback restores the pre-switch backup, never drops installed rows.
+export const HUB_CLIENT_LEDGER_VERSION = 71;
 // S8-3/S8-4 catalog suggestions (lane v70 after s82's v69; the lead renumbers at landing): sealed suggestion rows whose state moves once from `open`
 // (one revision, CAS) with append-only state history, and the aggregator's rebuildable per-key window cache. Additive; older code ignores the tables.
 // Downgrade = restore the pre-switch backup (an older build refuses v70).
@@ -88,6 +90,25 @@ export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const append = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;`).join('');
 const memoryAppend = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;`).join('');
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  [HUB_CLIENT_LEDGER_VERSION]: `CREATE TABLE hub_sources(scope_id TEXT NOT NULL,hub_id TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN('active','removed')),
+    revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,hub_id));
+    CREATE TABLE hub_installs(scope_id TEXT NOT NULL,hub_id TEXT NOT NULL,package_id TEXT NOT NULL,version TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN('installed','retired')),revision INTEGER NOT NULL CHECK(revision>0),seq INTEGER NOT NULL,record TEXT NOT NULL,
+    PRIMARY KEY(scope_id,hub_id,package_id,version));
+    CREATE INDEX hub_installs_current ON hub_installs(scope_id,hub_id,package_id,seq DESC);
+    CREATE TABLE hub_revocation_snapshots(scope_id TEXT NOT NULL,hub_id TEXT NOT NULL,sequence INTEGER NOT NULL CHECK(sequence>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,hub_id,sequence));
+    CREATE TABLE hub_revocation_entries(scope_id TEXT NOT NULL,hub_id TEXT NOT NULL,kind TEXT NOT NULL,id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,hub_id,kind,id));
+    CREATE TABLE hub_client_receipts(scope_id TEXT NOT NULL,command_id TEXT NOT NULL,record TEXT NOT NULL,PRIMARY KEY(scope_id,command_id));
+    CREATE TRIGGER hub_sources_no_delete BEFORE DELETE ON hub_sources BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_sources_forward BEFORE UPDATE ON hub_sources WHEN NEW.scope_id!=OLD.scope_id OR NEW.hub_id!=OLD.hub_id OR NEW.revision!=OLD.revision+1 BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_installs_no_delete BEFORE DELETE ON hub_installs BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_installs_forward BEFORE UPDATE ON hub_installs WHEN NEW.scope_id!=OLD.scope_id OR NEW.hub_id!=OLD.hub_id OR NEW.package_id!=OLD.package_id OR NEW.version!=OLD.version OR NEW.revision!=OLD.revision+1 BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_feed_no_delete BEFORE DELETE ON hub_revocation_snapshots BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_feed_forward BEFORE UPDATE ON hub_revocation_snapshots BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_revocation_no_delete BEFORE DELETE ON hub_revocation_entries BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_receipts_no_delete BEFORE DELETE ON hub_client_receipts BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    CREATE TRIGGER hub_receipts_no_update BEFORE UPDATE ON hub_client_receipts BEGIN SELECT RAISE(ABORT,'HUB_APPEND_ONLY'); END;
+    PRAGMA user_version=71;`,
   [CATALOG_SUGGESTION_LEDGER_VERSION]: `CREATE TABLE catalog_suggestions(scope_id TEXT NOT NULL,suggestion_id TEXT NOT NULL,kind TEXT NOT NULL,key_digest TEXT NOT NULL,
     state TEXT NOT NULL CHECK(state IN('open','decided','dismissed','superseded')),state_revision INTEGER NOT NULL CHECK(state_revision>0),seq INTEGER NOT NULL,record TEXT NOT NULL,
     state_record TEXT NOT NULL,PRIMARY KEY(scope_id,suggestion_id)); CREATE INDEX catalog_suggestions_key ON catalog_suggestions(scope_id,key_digest,state);
@@ -399,7 +420,7 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
     const sql = migrations[next];
     if (!sql) throw new AttemptStoreError('ATTEMPT_STORE_VERSION');
     if (next === RUN_PROPOSAL_LEDGER_VERSION || next === MEMORY_AUTOMATION_LEDGER_VERSION || next === RECOVERY_CASES_LEDGER_VERSION || next === AGENT_STANDING_LEDGER_VERSION || next === SIGNER_KEY_LEDGER_VERSION || next === CATALOG_EVOLUTION_LEDGER_VERSION
-      || next === CATALOG_SUGGESTION_LEDGER_VERSION) {
+      || next === CATALOG_SUGGESTION_LEDGER_VERSION || next === HUB_CLIENT_LEDGER_VERSION) {
       // A previous version cannot contain proposal objects. Refuse a contradictory
       // schema; never silently adopt an existing table or bypass append-only triggers.
       try { db.exec(sql); } catch { throw new AttemptStoreError('ATTEMPT_STORE_VERSION'); }

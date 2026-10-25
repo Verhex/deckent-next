@@ -1,8 +1,9 @@
+import { skillSignatureV2Message, type HubVerificationKey } from '#engine/index.js';
 import { createRequire } from 'node:module';
 import { isDeepStrictEqual } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
 import { agentDefinitionSchema, agentStandingSchema, catalogActionBytes, catalogActionSchema, checkAgentOrgTree, encodeCommandProjection, requireActionSigner, signerKeySchema, AgentCatalogError,
-  skillDefinitionSchema, AGENT_CATALOG_LIMITS, SIGNATURE_LABELS, type AgentDefinition, type AgentStanding, type SignerKey, type SkillDefinition } from '#domain/index.js';
+  readableSkillDefinitionSchema, AGENT_CATALOG_LIMITS, SIGNATURE_LABELS, type AgentDefinition, type AgentStanding, type SignerKey, type ReadableSkillDefinition } from '#domain/index.js';
 import { AuditApplication, AgentCatalogStoreError, catalogEvolutionActions, catalogSuggestionIdOf, catalogSuggestionSchema, catalogSuggestionStateSchema, requireCatalogSuggestionDecidable, skillSignatureMessage, type AgentCatalogChange,
   type AgentCatalogReceipt, type AgentCatalogStore, type CatalogEvolutionChange, type CatalogSuggestion, type CatalogSuggestionState, type SignerChange, type StoredCatalogSuggestion } from '#engine/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
@@ -20,27 +21,27 @@ const TABLE = { agent: { current: 'agent_definitions', revisions: 'agent_definit
  * cross-checked against its columns on read; revisions and receipts are append-only and current rows undeletable (ledger triggers). An agent
  * commit re-checks the scope's org tree (`checkAgentOrgTree`) over the rows it holds inside the same BEGIN IMMEDIATE transaction.
  */
-class SqliteAgentCatalogStore implements AgentCatalogStore {
+export class SqliteAgentCatalogStore implements AgentCatalogStore {
   private readonly audit: AuditApplication;
-  constructor(private readonly db: DatabaseSync, private readonly integrity: IntegrityAuthority) { this.audit = new AuditApplication(new SqliteAuditStore(db), integrity); }
-  private seal(value: unknown) { return JSON.stringify({ value, keyId: this.integrity.keyId, mac: this.integrity.sign(encodeCommandProjection(SEAL, value)) }); }
-  private open(input: unknown): unknown {
+  constructor(protected readonly db: DatabaseSync, protected readonly integrity: IntegrityAuthority, private readonly hubImportAnchor?: { readonly scopeId: string; readonly key: HubVerificationKey }) { this.audit = new AuditApplication(new SqliteAuditStore(db), integrity); }
+  protected seal(value: unknown) { return JSON.stringify({ value, keyId: this.integrity.keyId, mac: this.integrity.sign(encodeCommandProjection(SEAL, value)) }); }
+  protected open(input: unknown): unknown {
     try {
       const sealed = JSON.parse(String(input)) as { value: unknown; mac: string; keyId: string };
       if (this.integrity.verify(encodeCommandProjection(SEAL, sealed.value), sealed.mac, sealed.keyId)) return sealed.value;
     } catch { /* fall through */ }
     throw corrupt();
   }
-  private row<K extends Kind>(kind: K, row: Record<string, unknown>, scopeId: string): K extends 'agent' ? AgentDefinition : SkillDefinition {
-    const parsed = (kind === 'agent' ? agentDefinitionSchema : skillDefinitionSchema).safeParse(this.open(row['record']));
+  private row<K extends Kind>(kind: K, row: Record<string, unknown>, scopeId: string): K extends 'agent' ? AgentDefinition : ReadableSkillDefinition {
+    const parsed = (kind === 'agent' ? agentDefinitionSchema : readableSkillDefinitionSchema).safeParse(this.open(row['record']));
     if (!parsed.success) throw corrupt();
-    const item = parsed.data as AgentDefinition | SkillDefinition, id = 'agentId' in item ? item.agentId : item.skillId;
+    const item = parsed.data as AgentDefinition | ReadableSkillDefinition, id = 'agentId' in item ? item.agentId : item.skillId;
     if (item.scopeId !== scopeId || id !== row[TABLE[kind].id] || item.revision !== row['revision']
       || ('parent_id' in row && 'agentId' in item && item.content.parentAgentId !== row['parent_id'])
       || ('content_digest' in row && 'skillId' in item && item.contentDigest !== row['content_digest'])) throw corrupt();
-    return item as K extends 'agent' ? AgentDefinition : SkillDefinition;
+    return item as K extends 'agent' ? AgentDefinition : ReadableSkillDefinition;
   }
-  private read<T>(work: () => T): T {
+  protected read<T>(work: () => T): T {
     try { return work(); } catch (error) { throw error instanceof AgentCatalogStoreError || error instanceof AgentCatalogError ? error : new AgentCatalogStoreError('AGENT_CATALOG_UNAVAILABLE'); }
   }
   private load<K extends Kind>(kind: K, scopeId: string, id: string, revision?: number) {
@@ -143,12 +144,15 @@ class SqliteAgentCatalogStore implements AgentCatalogStore {
    * key; an AI/system author's write carries an action signature by an active `action` key bound to the event's principal, over exactly this
    * change's `catalog-action:1` bytes, and the row names that key. A person's row carries none. A key revoked before this point refuses the write.
    */
-  private verifySignatures(change: AgentCatalogChange, next: AgentDefinition | SkillDefinition) {
+  private verifySignatures(change: AgentCatalogChange, next: AgentDefinition | ReadableSkillDefinition) {
     const { signed, receipt, event } = change, mark = next.provenance.signed, b64 = (value: string) => Buffer.from(value, 'base64');
     if ('skillId' in next && next.signature.status === 'verified') {
       const key = this.loadSigner(next.scopeId, next.signature.keyId);
-      if (key?.state !== 'active' || key.purpose !== 'import'
-        || !verifyEd25519(b64(key.publicKey), skillSignatureMessage({ skillId: next.skillId, contentDigest: next.contentDigest }), b64(next.signature.value))) throw new AgentCatalogError('SKILL_IMPORT_SIGNATURE_UNVERIFIED');
+      const anchor = next.schemaVersion === 2 && this.db.isTransaction && this.hubImportAnchor?.scopeId === next.scopeId
+        && this.hubImportAnchor.key.keyId === next.signature.keyId && this.hubImportAnchor.key.active && !key ? this.hubImportAnchor.key : null;
+      const publicKey = key?.state === 'active' && key.purpose === 'import' ? key.publicKey : anchor?.publicKey;
+      if (!publicKey
+        || !verifyEd25519(b64(publicKey), (next.schemaVersion === 2 ? skillSignatureV2Message : skillSignatureMessage)({ skillId: next.skillId, contentDigest: next.contentDigest }), b64(next.signature.value))) throw new AgentCatalogError('SKILL_IMPORT_SIGNATURE_UNVERIFIED');
     }
     if (next.provenance.author.ai !== (signed !== undefined)) throw new AgentCatalogError('CATALOG_SIGNATURE_REQUIRED');
     if (!signed) return;
@@ -161,6 +165,7 @@ class SqliteAgentCatalogStore implements AgentCatalogStore {
   }
   private transaction<T>(work: () => T): T {
     return this.read(() => {
+      if (this.db.isTransaction) return work(); // H2 owns the outer all-or-nothing catalog transaction.
       this.db.exec('BEGIN IMMEDIATE');
       try {
         const result = work();
@@ -170,13 +175,13 @@ class SqliteAgentCatalogStore implements AgentCatalogStore {
     });
   }
   async commit(change: AgentCatalogChange) {
-    const next = change.kind === 'agent' ? agentDefinitionSchema.parse(change.next) : skillDefinitionSchema.parse(change.next), { receipt } = change;
+    const next = change.kind === 'agent' ? agentDefinitionSchema.parse(change.next) : readableSkillDefinitionSchema.parse(change.next), { receipt } = change;
     const id = 'agentId' in next ? next.agentId : next.skillId;
     if (next.revision !== (change.previous?.revision ?? 0) + 1 || next.scopeId !== receipt.scopeId || id !== receipt.itemId || next.revision !== receipt.revision
       || change.kind !== receipt.kind) throw corrupt();
     return this.transaction(() => this.apply(change.kind, next, change));
   }
-  private apply(kind: Kind, next: AgentDefinition | SkillDefinition, change: AgentCatalogChange) {
+  private apply(kind: Kind, next: AgentDefinition | ReadableSkillDefinition, change: AgentCatalogChange) {
     const { receipt } = change, prior = this.loadReceipt(receipt.scopeId, receipt.commandId), t = TABLE[kind];
     if (prior) {
       const item = prior.digest === receipt.digest && prior.kind === kind ? this.load(kind, prior.scopeId, prior.itemId, prior.revision) : null;

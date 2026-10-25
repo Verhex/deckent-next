@@ -44,7 +44,7 @@ async function v57Ledger() {
 }
 
 it('upgrades a populated v57 journal to v58: every row kept byte for byte, stamped pre-v58, and the old uniqueness still holds', async () => {
-  expect(CURRENT_LEDGER_VERSION).toBe(70); expect(ADOPTION_REPOSITORY_LEDGER_VERSION).toBe(58);
+  expect(CURRENT_LEDGER_VERSION).toBe(71); expect(ADOPTION_REPOSITORY_LEDGER_VERSION).toBe(58);
   const { path, backups } = await v57Ledger();
   const before = rows(path, 'SELECT scope_id,command_id,target_ref,sequence,kind,intent,settled FROM workspace_adoptions ORDER BY target_ref,sequence');
   expect(before).toHaveLength(22);

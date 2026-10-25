@@ -38,18 +38,18 @@ async function v62() {
 }
 
 it('pins the step: v63 is the effect-producer index (S7 v64 is current)', () => {
-  expect(EFFECT_PRODUCER_LEDGER_VERSION).toBe(63); expect(CURRENT_LEDGER_VERSION).toBe(70);
+  expect(EFFECT_PRODUCER_LEDGER_VERSION).toBe(63); expect(CURRENT_LEDGER_VERSION).toBe(71);
 });
 it('backs up v62 and adds only the index; the older intent stays byte for byte and reads without producer', async () => {
   const f = await v62();
   expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-23T00:00:00Z'));
-  expect(upgrade).toMatchObject({ from: 62, to: 70 });
+  expect(upgrade).toMatchObject({ from: 62, to: 71 });
   const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true });
   try { expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(62); expect(indexed(backup)).toBe(false); } finally { backup.close(); }
   const db = new DatabaseSync(f.path, { readOnly: true });
   try {
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(70); expect(indexed(db)).toBe(true);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(71); expect(indexed(db)).toBe(true);
     expect(db.prepare('SELECT record FROM effect_intents').get()?.record).toBe(f.legacy);
   } finally { db.close(); }
   const store = await openSqliteAttemptStore(f.path, options, { now: () => 1, timeoutMs: 1000 }, 'forbid');
@@ -69,7 +69,7 @@ it('backs up v62 and adds only the index; the older intent stays byte for byte a
 it('the v63 → v62 fixture and the down step are exact for a ledger without producer records, and the upgrade replays to the same state', async () => {
   const f = await v62(); const db = new DatabaseSync(f.path);
   try {
-    migrateLedger(db, 'allow'); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(70); expect(indexed(db)).toBe(true);
+    migrateLedger(db, 'allow'); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(71); expect(indexed(db)).toBe(true);
     db.exec(DOWNGRADE_TO_V62_LEDGER_SQL); expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(62); expect(indexed(db)).toBe(false);
     migrateLedger(db, 'allow'); expect(indexed(db)).toBe(true);
     db.exec('BEGIN IMMEDIATE'); revertEffectProducerIndex(db); db.exec('COMMIT'); expect(indexed(db)).toBe(false);

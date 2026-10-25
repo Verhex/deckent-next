@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { agentContentSchema, catalogIdSchema, catalogSignatureSchema, clientCommandIdSchema, counterSchema, identitySchema, signerPublicKeySchema, skillContentSchema, skillSignatureSchema,
-  skillSourceRefSchema, SIGNER_PURPOSES, AGENT_CATALOG_LIMITS, type AgentDefinition, type AgentStanding, type AuditEvent, type CatalogAction, type SignerKey, type SkillDefinition,
+  skillSourceRefSchema, SIGNER_PURPOSES, AGENT_CATALOG_LIMITS, type AgentDefinition, type AgentStanding, type AuditEvent, type CatalogAction, type SignerKey, type ReadableSkillDefinition,
   type VerifiedPrincipal } from '#domain/index.js';
 import type { PrincipalVerifier } from '#engine/core/authentication/index.js';
 import type { CatalogEvolutionChange, CatalogLessonRef, CatalogSuggestion, CatalogSuggestionState, StoredCatalogSuggestion } from './suggestions.js';
@@ -57,9 +57,9 @@ export type SkillInspectQuery = z.infer<typeof skillInspectQuerySchema>;
 type Inspection<T> = { readonly schemaVersion: 1; readonly status: 'ok'; readonly item: T; readonly history: readonly T[]; readonly signers: Readonly<Record<string, 'active' | 'revoked'>> } | { readonly schemaVersion: 1; readonly status: 'not-found'; readonly id: string };
 /** S8-1a: an agent's inspection also names the current revision's standing per bound WorkClass (what the system may select it for). */
 export type AgentInspection = (Extract<Inspection<AgentDefinition>, { status: 'ok' }> & { readonly standings: readonly AgentStanding[] }) | Extract<Inspection<AgentDefinition>, { status: 'not-found' }>;
-export type SkillInspection = Inspection<SkillDefinition>;
+export type SkillInspection = Inspection<ReadableSkillDefinition>;
 export interface AgentListing { readonly schemaVersion: 1; readonly scopeId: string; readonly items: readonly AgentDefinition[] }
-export interface SkillListing { readonly schemaVersion: 1; readonly scopeId: string; readonly items: readonly SkillDefinition[] }
+export interface SkillListing { readonly schemaVersion: 1; readonly scopeId: string; readonly items: readonly ReadableSkillDefinition[] }
 export interface AgentCatalogMutation<T> { readonly schemaVersion: 1; readonly replayed: boolean; readonly item: T }
 
 /** Idempotency record of one command: the fingerprint of (command, principal) and the row revision it produced. */
@@ -75,7 +75,7 @@ type DecidedSuggestion = { readonly previous: CatalogSuggestionState; readonly n
 export type AgentCatalogChange = { readonly kind: 'agent'; readonly previous: AgentDefinition | null; readonly next: AgentDefinition; readonly receipt: AgentCatalogReceipt; readonly event: AuditEvent;
     /** S8-1a: the new revision's opening standing per bound WorkClass, written in the same transaction (rows of earlier revisions stay as they are). */
     readonly standings: readonly AgentStanding[]; readonly signed?: SignedCatalogAction; readonly suggestion?: DecidedSuggestion }
-  | { readonly kind: 'skill'; readonly previous: SkillDefinition | null; readonly next: SkillDefinition; readonly receipt: AgentCatalogReceipt; readonly event: AuditEvent; readonly signed?: SignedCatalogAction;
+  | { readonly kind: 'skill'; readonly previous: ReadableSkillDefinition | null; readonly next: ReadableSkillDefinition; readonly receipt: AgentCatalogReceipt; readonly event: AuditEvent; readonly signed?: SignedCatalogAction;
     readonly suggestion?: DecidedSuggestion };
 /** One signer-row change (add or revoke), applied atomically: receipt replay or conflict, compare-and-set on `previous`, the row, its revision, the audit event. */
 export interface SignerChange { readonly previous: SignerKey | null; readonly next: SignerKey; readonly event: AuditEvent;
@@ -89,15 +89,15 @@ export interface AgentCatalogStore {
   agentHistory(scopeId: string, agentId: string, limit: number): Promise<readonly AgentDefinition[]>;
   /** Current agents of the scope, most recently changed first, at most `limit`. */
   listAgents(scopeId: string, limit: number): Promise<readonly AgentDefinition[]>;
-  loadSkill(scopeId: string, skillId: string, revision?: number): Promise<SkillDefinition | null>;
-  skillHistory(scopeId: string, skillId: string, limit: number): Promise<readonly SkillDefinition[]>;
-  listSkills(scopeId: string, limit: number): Promise<readonly SkillDefinition[]>;
+  loadSkill(scopeId: string, skillId: string, revision?: number): Promise<ReadableSkillDefinition | null>;
+  skillHistory(scopeId: string, skillId: string, limit: number): Promise<readonly ReadableSkillDefinition[]>;
+  listSkills(scopeId: string, limit: number): Promise<readonly ReadableSkillDefinition[]>;
   receipt(scopeId: string, commandId: string): Promise<AgentCatalogReceipt | null>;
   /** S8-1a: the standings of one agent revision, ordered by WorkClass id. */
   standings(scopeId: string, agentId: string, revision: number): Promise<readonly AgentStanding[]>;
   /** S8-1b: the scope's agents whose CURRENT revision holds an `active` or `candidate` standing for `workClass`, ordered by agent id, at most `limit`. */
   eligibleAgents(scopeId: string, workClass: string, limit: number): Promise<readonly Readonly<{ agent: AgentDefinition; standing: AgentStanding }>[]>;
-  commit(change: AgentCatalogChange): Promise<{ readonly replayed: boolean; readonly item: AgentDefinition | SkillDefinition }>;
+  commit(change: AgentCatalogChange): Promise<{ readonly replayed: boolean; readonly item: AgentDefinition | ReadableSkillDefinition }>;
   /** S8-5: the scope's signer rows (oldest first, at most `limit`), one row, a command receipt, and the committed catalog revisions a key signed. */
   signers(scopeId: string, limit: number): Promise<readonly SignerKey[]>;
   signer(scopeId: string, keyId: string): Promise<SignerKey | null>;
