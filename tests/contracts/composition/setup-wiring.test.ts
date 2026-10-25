@@ -71,7 +71,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
     const stages = async () => (JSON.parse((await f.run(['init', '--json'])).stdout) as { stages: SetupStage[] }).stages;
     const ready = (await stages()).find(stage => stage.id === 'core:profile')!;
     expect(ready).toMatchObject({ state: 'ready', autoEligible: false, operation: { id: 'identity-profile.preview', input: { scopeId: 'erp-demo', profile: { id: 'core:solo', version: 1 } } } });
-    expect((await f.run(['doctor'])).stdout).toMatch(/warning\s+No identity profile is chosen/u);
+    expect((await f.run(['doctor'])).stdout).toMatch(/warning\s+No identity profile selected\./u);
     // alpha.55.1: `identity.profile` is protected — off a person's terminal the stage is refused by name and nothing is written.
     expect(await configuredSetup({}, { attest: async () => false }).applySetupStage(f.root, ready, { env: f.env, scopeId: 'erp-demo' }))
       .toEqual({ stage: 'core:profile', operation: 'identity-profile.preview', status: 'refused', code: 'AUTHORITY_WITNESS_REQUIRED' });

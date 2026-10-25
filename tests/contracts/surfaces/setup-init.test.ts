@@ -46,7 +46,7 @@ describe('I-S4 bare deckent init', () => {
     expect(() => parseSetupFlags(['init', '--here', '--here'])).toThrow(expect.objectContaining({ code: 'CLI_USAGE' }));
     const run = harness();
     await setupInitCommand(['init', '--json'], { ...run.context, rootResolution: { root: run.context.root!, folder: 'a', found: true, gitTop: null } });
-    expect(JSON.parse(run.out()).schemaVersion).toBe(1);
+    expect(JSON.parse(run.out()).schemaVersion).toBe(2);
     expect(run.err()).toContain('deckent init --here');
     expect(run.err()).toContain(run.context.root);
   });
