@@ -538,6 +538,9 @@ refresh, usage and dogfood closure remain open.
   configuration generation. JSON/YAML, if supported, are parsers into the same schema and precedence chain.
   IDENTITY.md is descriptive context, not connection, permission or infrastructure-selection authority.
   Config contains secret references, not credentials. Active operations retain their resolved binding/revision. **SEC-3 (alpha.48, F33):** `$DECK:NAME` resolves from the installation (global) layer only: the project layer (`.deckent/config.json`, another person's commit) refuses an exact reference in any field before any resolver read (`SECRET_REFERENCE_PROJECT_LAYER`, path = top-level field, no name or value), as project MCP files already do; host-leaving values (`execution.git.deliveryIdentity`) refuse one in every layer (`SECRET_REFERENCE_LEAVES_HOST`); a section's `secretReferences: 'allow'` therefore means installation layer only.
+- **Provider key custody (alpha.56 U1):** before a key is entered the witnessed composition checks the store and retries an absent
+  encrypted-store default through the governed switch (audited). The key card names the project; a `card`-sourced project grant goes only through
+  the identity-profile/terminal gate; a refused grant keeps the stored key and returns its typed partial result (team: the admin command).
 - **SECRET-HELPER (2026-10-10; landed in alpha.25):** `createSecretHelperFactory` on `deckent/extensions` registers a read-only/non-enumerable
   SecretStore v1 backend before composition seals. Trusted distribution code pins non-secret absolute executable/cwd, argv and bounds;
   `secrets.store` selects only its registered id. Every lookup requires the owning application's current typed authorization decision before
@@ -885,17 +888,11 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   Shared-layer profiles are named and held under the same subset rule as cache migration. HTTP400 vendor details require the existing content
   inspection policy and localized next step; the common failure wrapper's translation belongs to W6-MODEL-SWITCH. Synthetic parser/SQLite/config
   author evidence is separate from independent review and live acceptance; sources/proof: `proof/OPENAI-RESPONSES-2026-10-09/`.
-- **SIWC author foundation (alpha.56 U9-2/U9-1, unreviewed):** `siwc-responses@1` uses the same typed chat invocation and bounded SSE reader, with
-  registry-sourced request fields, `store:false`, `stream:true`, full history, system instructions and namespaced function tools. It accepts only
-  `response.completed`; the local output-token hint is not a provider-enforced cap. Account models are read from `models[]` by exact slug and
-  `visibility:list`. Rejection body v1 is unchanged; v2 introduces only `plan-unavailable`. Older readers reject v2 as unknown/null; domain
-  readers receive the subscription adapter-id set from their caller and never import an adapter registry. Existing callers keep their v1/CLI
-  scope until the SIWC composition slice supplies the new set. OAuth leases expose only `{accessToken, expiresAtMs}` to a trusted host caller
-  acting for the connection's person in the same installation/company/scope. Refreshes hold a per-connection cross-process lock, and secret
-  custody only for reads and generation-CAS writes; uncertain refreshes cannot reuse a rotating token. The record remains v1. Connect/dispatch,
-  consent surfaces, personal-store attestation and live acceptance are later U9 slices; `chatgpt-login` stays unavailable. Generic secret-name
-  exclusions are the U1 integration prerequisite; this foundation alone does not establish the option-3 ban. Author evidence is external
-  `proof/ALPHA56-2026-10-24/lanes/U9/`; no installed/live or independent acceptance is claimed.
+- **SIWC foundation (alpha.56 U9-2/U9-1):** `siwc-responses@1` reuses the typed chat invocation and bounded SSE reader (registry request fields,
+  `store:false`, `stream:true`, namespaced tools; only `response.completed` succeeds); account models come from `models[]` by slug and `visibility`.
+  Rejection body v2 adds only `plan-unavailable`; domain readers get the subscription adapter-id set from their caller. OAuth leases give a
+  trusted host caller acting for the connection's person (same installation/company/scope) only `{accessToken, expiresAtMs}`; refresh holds a
+  per-connection lock. Connect/dispatch, consent and `chatgpt-login` availability are later U9 slices (design `proof/ALPHA56-2026-10-24/`).
 - **Provider diagnosis and workspace selection (W9, 2026-10-09; landed in alpha.25):** HTTP400 names the exact registry endpoint kind;
   protocol migration is suggested only when that exact profile has a migration offer. Unknown endpoints use neutral EN/TR text.
   Registry-scoped Z.ai 429 codes 1113/1302 distinguish spend/rate only with authorized retained content; unknown content stays unknown.

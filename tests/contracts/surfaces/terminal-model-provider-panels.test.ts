@@ -2,7 +2,7 @@ import { PassThrough, Writable } from 'node:stream';
 import { createElement, type ReactElement } from 'react';
 import { render } from 'ink';
 import { afterEach, describe, expect, it } from 'vitest';
-import { t } from '#platform/index.js';
+import { ErrorRegistry, t } from '#platform/index.js';
 import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/terminal-kit/index.js';
 import { RenderGlyphsContext, cells, resolveRenderGlyphs } from '#surfaces/core/terminal-render/index.js';
 import { DECISION_ARM_DEFAULT, WindowStackProvider } from '#surfaces/core/terminal-window/index.js';
@@ -734,3 +734,58 @@ describe('TERM-PANEL: /provider, /model, budget and cache windows draw one title
   });
 });
 
+
+it('U1 confirms the named project before masked key entry and carries that consent once to the connection', async () => {
+  const { port, requests } = providerPort();
+  let prepared = 0;
+  const provider = { ...port, prepareKey: async () => { prepared++; return { grant: true, lines: [{ label: 'Project', text: 'This key will be used in project ERP-DEMO.' }] }; } };
+  const { element, calls } = panel('provider', { provider });
+  const view = mount(element, 100, 40);
+  await settle(80);
+  await view.press(`${ENTER}${ENTER}`, 80);
+  expect(prepared).toBe(1); expect(requests).toEqual([]);
+  expect(view.frame()).toContain('This key will be used in project ERP-DEMO.');
+  expect(view.frame()).not.toContain('TRANSPARENCY-NOTE');
+  await armed(view.frame, 'y use it'); await view.press('y', 80);
+  expect(view.frame()).toContain('TRANSPARENCY-NOTE');
+  await view.press(CANARY, 40); await view.press(ENTER, 120);
+  expect(requests).toEqual([{ kind: 'anthropic-api', endpoint: null, key: CANARY, grant: true }]);
+  expect(view.all()).not.toContain(CANARY); expect(calls.errors).toEqual([]);
+});
+
+it('U1 optional-key local connections can skip custody and key entry explicitly', async () => {
+  const { port, requests } = providerPort();
+  let prepared = 0;
+  const provider = { ...port, prepareKey: async () => { prepared++; throw new Error('custody must not run without a key'); } };
+  const { element, calls } = panel('provider', { provider });
+  const view = mount(element, 100, 40);
+  await settle(80);
+  await view.press(`${DOWN}${ENTER}${ENTER}`, 80); // local kind, Connect, address list
+  await view.press(ENTER, 80); // existing local address
+  expect(view.frame()).toContain('Use an API key?');
+  await armed(view.frame, 'n without key'); await view.press('n', 100);
+  expect(requests).toEqual([{ kind: 'local-openai', endpoint: 'http://127.0.0.1:8000', key: null }]);
+  expect(prepared).toBe(0); expect(calls.errors).toEqual([]);
+});
+
+it('U1 a stored main key opens the existing first-use card without re-entry; only its answer unlocks model binding', async () => {
+  const { port, requests } = providerPort();
+  let granted = false, grants = 0;
+  const provider: ProviderPanelPort = { ...port,
+    inspect: async () => ({ ...KINDS, kinds: [{ ...KINDS.kinds[0]!, keyStored: true, grantRequired: !granted,
+      modelBlocked: granted ? null : 'SECRET_GRANT_REQUIRED', models: [{ id: 'seed:fixture', label: 'Fixture', detail: '' }] }] }),
+    secretGrant: { offer: async () => true, question: name => ({ title: `Grant ${name} to ERP-DEMO?`, lines: [], prompt: 'y/n' }),
+      check: async name => { if (!granted) throw ErrorRegistry.createError('SECRET_GRANT_REQUIRED', { params: { name, project: 'ERP-DEMO' } }); },
+      grant: async () => { grants++; granted = true; } },
+  };
+  const { element, calls } = panel('provider', { provider });
+  const view = mount(element, 100, 40);
+  await settle(80); await view.press(ENTER, 60);
+  expect(view.frame()).toContain('Use the stored key in this project');
+  await view.press(`${DOWN}${ENTER}`, 80);
+  expect(view.frame()).toContain('Grant DECKENT_ANTHROPIC_KEY to ERP-DEMO?');
+  expect(grants).toBe(0); expect(requests).toEqual([]);
+  await armed(view.frame, 'y/n'); await view.press('y', 100);
+  expect(grants).toBe(1); expect(granted).toBe(true); expect(requests).toEqual([]); expect(calls.errors).toEqual([]);
+  expect(view.all()).not.toContain(CANARY);
+});

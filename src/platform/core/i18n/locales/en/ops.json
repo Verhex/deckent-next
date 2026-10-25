@@ -497,5 +497,13 @@
   "doctor.modelInvocationDelivery": "Model delivery: profile {profile}, model {model}, scope {scope}, surface {surface}; required {required} bytes, available {available} bytes — increase {setting} or reduce the profile's limits.responseMaxBytes.",
   "doctor.modelInvocationDelivery.config.runtime-service": "service.responseMaxBytes (runtime service)",
   "doctor.modelInvocationDelivery.config.mcp": "mcp.responseMaxBytes (MCP surface)",
-  "error.AUTONOMY_SHADOW_NOT_RECORDED": "The rule-off shadow evaluation of a delivery queue ticket could not be recorded. The queue and the ticket are unaffected: nothing was delivered or held because of it. Check that the runtime state directory is writable."
+  "error.AUTONOMY_SHADOW_NOT_RECORDED": "The rule-off shadow evaluation of a delivery queue ticket could not be recorded. The queue and the ticket are unaffected: nothing was delivered or held because of it. Check that the runtime state directory is writable.",
+  "tui.provider.key.projectUse": "This key will be used in project {project}. Confirm before entering the key.",
+  "tui.provider.key.adminGrant": "The key is kept in the main vault; project {project} needs an administrator grant: deckent secret grant {name} --scope {scope}.",
+  "tui.provider.key.optionalQuestion": "Use an API key? Yes: enter and store a key; No: connect without a key.",
+  "tui.provider.key.optionalKeys": "y key · n without key · Esc cancel",
+  "doctor.secretStore.globalRootUnsafe": "SECRET_STORE_UNSAFE: installation secret directory {path} has mode {mode}. Make this directory private (chmod 700); Deckent did not change its permissions.",
+  "doctor.secretStore.leftoverCode": "Secret-store inspection refused: {backend} ({code}).",
+  "tui.provider.result.grantMissing": "Key stored; project access unavailable: {kind}",
+  "tui.provider.action.grant": "Use the stored key in this project"
 }

@@ -4,4 +4,4 @@ export { applySuppliedInstallation, resumeInstallation } from './internal/apply.
 export type { InstallationApplyChoices } from './internal/apply.js';
 export { applyPolicyTemplateInstallation, inspectPolicyTemplate, openPermissionModesInstallation, previewPolicyTemplateInstallation, upgradePolicyTemplateInstallation } from './internal/policy-template.js';
 export { installConfiguredExecutionPool } from './internal/pool.js';
-export { applyPolicyTemplateInstallationWithSecretDefault, type InstallationSecretStoreDefault } from './internal/secret-default.js';
+export { applyPolicyTemplateInstallationWithSecretDefault, defaultSecretStore, type InstallationSecretStoreDefault } from './internal/secret-default.js';

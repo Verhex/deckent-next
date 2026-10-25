@@ -205,13 +205,15 @@ export type ProviderPanelKind = Readonly<{ id: string; label: string; detail: st
   models: readonly Readonly<{ id: string; label: string; detail: string; blocked?: string }>[]; modelBlocked: string | null;
   /** Seedless kinds offer the model action before a list exists; the selected address supplies that list. */
   discoversModels?: boolean;
+  /** A stored main key needs the existing first-use card before models can be bound here. */
+  grantRequired?: boolean;
   /** K6: shown on the row (muted) when the kind stores a key but no model can be connected to it yet. */
   pendingNote?: string;
   /** (c) A key under a name no row uses any more: listed with a warning, its only action is removal. */
   legacy?: true }>;
 export type ProviderPanelView = Readonly<{ title: string; kinds: readonly ProviderPanelKind[]; notes: readonly string[];
   invocableModels?: readonly import('#engine/index.js').InvocableModel[] }>;
-export type ProviderConnectRequest = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
+export type ProviderConnectRequest = Readonly<{ kind: string; endpoint: string | null; key: string | null; grant?: boolean }>;
 /** A connect's typed result as labelled rows (no key, no answer body); `stored`: the key went to the secret store. */
 /** `keyName` (PRE-8 v2): the main-vault name a successful connect stored, so the window can ask the first-use card for this project right away. */
 export type ProviderConnectOutcome = Readonly<{ stored: boolean; title: string; lines: readonly PanelLine[]; keyName?: string | null }>;
@@ -235,6 +237,7 @@ export interface ProviderPanelPort {
    * check will call (the preview), or the localized reason it is refused. */
   endpoint(kind: string, text: string): Readonly<{ ok: true; base: string; check: string }> | Readonly<{ ok: false; reason: string }>;
   /** The free check, then (only on success) the key into the secret store through the runtime service. */
+  prepareKey?(kind: string, endpoint: string | null): Promise<Readonly<{ lines: readonly PanelLine[]; grant: boolean }>>;
   connect(request: ProviderConnectRequest): Promise<ProviderConnectOutcome>;
   /** Removes the kind's stored key through the runtime service. */
   disconnect(kind: string): Promise<readonly string[]>;
@@ -254,13 +257,14 @@ export interface ProviderPanelPort {
 }
 export interface ProviderPanelLabels {
   readonly title: string; readonly hints: string;
-  readonly actions: Readonly<Record<'connect' | 'replace' | 'disconnect' | 'model', string>>;
+  readonly actions: Readonly<Record<'connect' | 'replace' | 'disconnect' | 'model' | 'grant', string>>;
   /** T4-B: the model list's title (`{kind}`), its empty note, and the key-name row the key step shows. */
   readonly modelTitle: string; readonly modelEmpty: string; readonly keyName: string;
   readonly endpointTitle: string; readonly endpointHint: string;
   /** The list's last row (a typed address) and its preview question: title, the two rows' labels, the key row. */
   readonly endpointOther: string; readonly previewTitle: string; readonly previewAddress: string; readonly previewCheck: string; readonly previewKeys: string;
   /** `{kind}`: the key step's title; its hints (required key / optional key). */
+  readonly optionalKeyQuestion: string; readonly optionalKeyKeys: string;
   readonly keyTitle: string; readonly keyHint: string; readonly keyOptionalHint: string; readonly keyRequired: string;
   readonly checking: string; readonly resultHints: string;
   /** `{kind}`: the question before a disconnect; its key row. */
