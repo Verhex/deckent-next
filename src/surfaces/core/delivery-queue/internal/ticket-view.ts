@@ -24,7 +24,7 @@ export function renderQueueTicket(view: TargetQueueView, scopeId: string, locale
   const state = word(view.outcome ? `queue.outcome.${view.outcome}` : `queue.state.${view.state}`, locale);
   const next = word(view.nextAction === 'prepare-current' ? view.display.prepareActionKey : `queue.next.${view.nextAction}`, locale);
   const lines = [t('queue.cli.ticket.title', { ticket: cell(view.commandId), task: cell(view.identity.taskId), operation: (view.operation === 'delivery' ? t('queue.cli.ticket.operation.delivery', {}, locale) : t('queue.cli.ticket.operation.rollback', {}, locale)) }, locale),
-    ...ticketSummaryBlock(extras.summary, extras.shadow, locale),
+    ...ticketSummaryBlock(extras.summary, extras.shadow, locale, view.state === 'settled'),
     t('queue.cli.ticket.target', { label: word(view.display.labelKey, locale), target: cell(view.target.id) }, locale),
     t('queue.cli.ticket.state', { state }, locale),
     ...(view.position !== null ? [t('queue.cli.ticket.position', { position: view.position }, locale)] : []),

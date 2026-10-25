@@ -132,8 +132,21 @@ describe('DeliverySummary projector', () => {
     const file = (text: string) => ({ mode: '100644' as const, text, digest: 'd'.repeat(64) });
     const patch = { changes: [{ path: 'src/a.ts', before: file('a\nb\n'), after: file('a\nc\nd\n') }, { path: 'docs/x.md', before: null, after: file('x\n') }] };
     expect(workspacePatchChangeFacts(patch, classifyPatchScope(patch, ['src/**'], 'warn', INSTRUCTION_SURFACE_PATHS))).toEqual({ adapter: 'workspace-patch', paths: ['src/a.ts', 'docs/x.md'],
-      added: 4, removed: 2, scope: 'out-of-scope', outOfScope: ['docs/x.md'] });
+      added: 3, removed: 1, scope: 'out-of-scope', outOfScope: ['docs/x.md'] });
     expect(workspacePatchChangeFacts(patch, classifyPatchScope(patch, null, 'warn', INSTRUCTION_SURFACE_PATHS))).toMatchObject({ scope: 'unscoped', outOfScope: [] });
+  });
+  it('ISY-35: a four-line addition in two existing files stays small and ignores unchanged base lines', () => {
+    const file = (text: string) => ({ mode: '100644' as const, text, digest: 'd'.repeat(64) });
+    const before = 'unchanged\n'.repeat(580);
+    const patch = { changes: ['src/a.ts', 'src/b.ts'].map(path => ({ path, before: file(before), after: file(before + 'new one\nnew two\n') })) };
+    const change = workspacePatchChangeFacts(patch, classifyPatchScope(patch, ['src/**'], 'warn', INSTRUCTION_SURFACE_PATHS));
+    expect(change).toMatchObject({ added: 4, removed: 0 });
+    expect(projectDeliverySummary(facts({ change })).risk.sizeBucket).toBe('tiny');
+  });
+  it('ISY-35: an uncomputed oversized comparison counts as a full replacement, never as zero changed lines', () => {
+    const file = (text: string) => ({ mode: '100644' as const, text, digest: 'd'.repeat(64) });
+    const patch = { changes: [{ path: 'src/large.ts', before: file('old\n'.repeat(2001)), after: file('new\n'.repeat(2001)) }] };
+    expect(workspacePatchChangeFacts(patch, classifyPatchScope(patch, ['src/**'], 'warn', INSTRUCTION_SURFACE_PATHS))).toMatchObject({ added: 2001, removed: 2001 });
   });
   it('G1: carries instruction-surface writes from the scope classification into the change facts and flags them on the risk line', () => {
     const file = (text: string) => ({ mode: '100644' as const, text, digest: 'd'.repeat(64) });
