@@ -40,7 +40,8 @@ function compareResponsesOutput(items: ReadonlyMap<number, Item>, texts: Readonl
 /** Responses has a terminal response event, no [DONE]. Interim usage never settles; later contradictions withdraw terminal usage. */
 export function createResponsesStream(request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits,
   onFinalUsage?: (usage: JsonObject, tier?: unknown) => void, onWithdraw?: () => void,
-  onOutput?: (items: readonly Record<string, unknown>[], message: unknown) => void): NativeJsonHttpStream {
+  onOutput?: (items: readonly Record<string, unknown>[], message: unknown) => void,
+  policy: Readonly<{ completedOnly?: boolean; enforceOutputLimit?: boolean; functionNamespace?: string; onError?: (event: Readonly<Record<string, unknown>>) => void }> = {}): NativeJsonHttpStream {
   const hash = createHash('sha256'), items = new Map<number, Item>(), texts = new Map<string, Text>();
   let wireBytes = 0, events = 0, line = Buffer.alloc(0), data: string[] = [], eventBytes = 0, assembledBytes = 0;
   let invalid: ModelInvocationRejectionReason | null = null, terminal: NativeJsonHttpParsed | null = null, finalRaw: Record<string, unknown> | null = null;
@@ -64,7 +65,7 @@ export function createResponsesStream(request: OpenAiChatTextRequest, limits: Op
     const e = copied.data as Record<string, unknown>, type = e['type'];
     if (typeof type !== 'string' || !index(e['sequence_number']) || e['sequence_number'] <= sequence) { fail(); return; }
     sequence = e['sequence_number']; events++;
-    if (type === 'error' || type === 'response.failed') { fail(); return; }
+    if (type === 'error' || type === 'response.failed') { policy.onError?.(e); fail(); return; }
     if (['response.created', 'response.in_progress', 'response.completed', 'response.incomplete'].includes(type)) {
       const r = object(e['response']);
       if (!r || typeof r['id'] !== 'string' || r['object'] !== 'response' || r['model'] !== request.model) {
@@ -81,7 +82,8 @@ export function createResponsesStream(request: OpenAiChatTextRequest, limits: Op
         return; // usage here is deliberately ignored.
       }
       if (r['status'] !== (type === 'response.completed' ? 'completed' : 'incomplete') || !compareOutput(r['output'])) { fail(); return; }
-      const parsed = parseResponsesResponse(r, request, limits);
+      if (policy.completedOnly && type !== 'response.completed') { fail(); return; }
+      const parsed = parseResponsesResponse(r, request, limits, policy.enforceOutputLimit ?? true, policy.functionNamespace);
       if ('reason' in parsed) { fail(parsed.reason); return; }
       // Terminal usage is published only after the object and all observed deltas have passed validation.
       terminal = parsed; finalRaw = r; reported = true;
@@ -93,7 +95,8 @@ export function createResponsesStream(request: OpenAiChatTextRequest, limits: Op
       const found = items.get(position);
       if (type === 'response.output_item.added') {
         if (found || position !== items.size || [...items.values()].some(value => value.id === item['id'])
-          || (item['type'] === 'function_call' && (!validTool(item['name']) || typeof item['call_id'] !== 'string'))) { fail(); return; }
+          || (item['type'] === 'function_call' && (!validTool(item['name']) || typeof item['call_id'] !== 'string'
+            || policy.functionNamespace !== undefined && item['namespace'] !== policy.functionNamespace))) { fail(); return; }
         items.set(position, { id: item['id'], type: String(item['type']), arguments: '',
           ...(item['type'] === 'function_call' ? { name: item['name'] as string, callId: item['call_id'] as string } : {}) });
         assembledBytes += Buffer.byteLength(JSON.stringify(items.get(position)), 'utf8');

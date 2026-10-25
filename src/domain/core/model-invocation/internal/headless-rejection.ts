@@ -12,16 +12,19 @@ export type HeadlessEgress = z.infer<typeof headlessEgressSchema>;
  * `guard` (field), `model-mismatch`, `quota` (resetsAtMs), `credits-required`, `login-required`, `invalid-output` (subtype), `provider-error`
  * (status), `response-limit`; f5: `resource-limit` (field: cpu-time, processes or memory) and `egress`, the call's gateway summary.
  */
-export const headlessRejectionBodySchema = z.object({ schemaVersion: z.literal(1),
+const baseRejectionSchema = z.object({ schemaVersion: z.literal(1),
   refusal: z.enum(['guard', 'model-mismatch', 'quota', 'credits-required', 'login-required', 'invalid-output', 'provider-error', 'response-limit', 'resource-limit']),
   field: z.string().max(64).optional(), subtype: z.string().max(64).optional(), resetsAtMs: counterSchema.nullable().optional(), status: counterSchema.nullable().optional(),
   egress: headlessEgressSchema.optional() }).strict().readonly();
+/** v1 stays byte-compatible; an older reader rejects v2 as unknown instead of misclassifying a new refusal. */
+export const headlessRejectionBodySchema = z.discriminatedUnion('schemaVersion', [baseRejectionSchema.unwrap(),
+  baseRejectionSchema.unwrap().extend({ schemaVersion: z.literal(2), refusal: z.literal('plan-unavailable') }).strict()]).readonly();
 export type HeadlessRejectionBody = z.infer<typeof headlessRejectionBodySchema>;
-/** The headless step's adapter id (its evidence is the only one whose body is read as this shape). */
+/** Legacy CLI readers keep their original evidence scope; composition explicitly supplies any additional subscription adapter ids. */
 export const NATIVE_CLI_HEADLESS_ADAPTER_ID = 'native-cli-headless';
 /** The headless body of a rejected receipt's evidence (base64 JSON), or null when the evidence is another adapter's or not this shape. */
-export function readHeadlessRejection(evidence: Readonly<{ adapter: Readonly<{ id: string }>; body: Readonly<{ data: string }> }>): HeadlessRejectionBody | null {
-  if (evidence.adapter.id !== NATIVE_CLI_HEADLESS_ADAPTER_ID) return null;
+export function readHeadlessRejection(evidence: Readonly<{ adapter: Readonly<{ id: string }>; body: Readonly<{ data: string }> }>, adapterIds: ReadonlySet<string> = new Set([NATIVE_CLI_HEADLESS_ADAPTER_ID])): HeadlessRejectionBody | null {
+  if (!adapterIds.has(evidence.adapter.id)) return null;
   try { const parsed = headlessRejectionBodySchema.safeParse(JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(evidence.body.data), char => char.charCodeAt(0))))); return parsed.success ? parsed.data : null; }
   catch { return null; }
 }

@@ -3262,13 +3262,20 @@
     "src/engine/core/oauth-connection": {
       "dependencies": [
         "src/domain/core/audit",
+        "src/domain/core/model-invocation",
         "src/engine/core/secret-store"
       ],
       "plan": "PROVIDERS"
     },
     "src/adapters/core/provider-siwc": {
       "dependencies": [
-        "src/engine/core/oauth-connection"
+        "src/engine/core/oauth-connection",
+        "src/engine/core/model-invocation",
+        "src/domain/core/model-invocation",
+        "src/domain/core/provider-catalog",
+        "src/adapters/core/provider-openai-chat",
+        "src/adapters/core/provider-http-json",
+        "src/platform/core/config"
       ],
       "plan": "PROVIDERS"
     },

@@ -1,6 +1,9 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { createSiwcOAuthTransport, SIWC_PROTOCOL, SIWC_LIMITS, SiwcOAuthTransportError, verifySiwcIdentity, siwcBrowserAuthorization } from '#adapters/index.js';
+import { createSiwcConnectionLock, createSiwcOAuthTransport, SIWC_PROTOCOL, SIWC_LIMITS, SiwcOAuthTransportError, verifySiwcIdentity, siwcBrowserAuthorization } from '#adapters/index.js';
 import { OAuthConnectionError } from '#engine/index.js';
 
 const TIME = 1_800_000_000_000, CLIENT = 'oaiapp_fixture', NONCE = 'nonce-fixture', TOKEN = 'fixture-token-canary';
@@ -137,4 +140,25 @@ describe('SIWC fixture-only OAuth transport', () => {
     await expect(transport.exchange(new URLSearchParams(), AbortSignal.abort())).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_CANCELLED' });
     expect(send).not.toHaveBeenCalled();
   });
+});
+
+it('uses an independent, cancellation-aware cross-instance connection lock and rejects path-shaped ids before work', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'siwc-lock-'));
+  const id = '314bd19c-07b4-416e-a222-314af4dc8e2a', other = '314bd19c-07b4-416e-a222-314af4dc8e2b';
+  const first = createSiwcConnectionLock(join(root, 'custody')), second = createSiwcConnectionLock(join(root, 'custody'));
+  let release!: () => void, entered!: () => void;
+  const ready = new Promise<void>(yes => { entered = yes; }), barrier = new Promise<void>(yes => { release = yes; });
+  const active = first(id, async () => { entered(); await barrier; }, new AbortController().signal);
+  try {
+    await ready;
+    let reached = false;
+    const controller = new AbortController();
+    const waiting = second(id, async () => { reached = true; }, controller.signal);
+    const rejected = expect(waiting).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_CANCELLED' });
+    await second(other, async () => { expect(reached).toBe(false); }, new AbortController().signal);
+    controller.abort(); await rejected;
+    const work = vi.fn(async () => {});
+    await expect(second('../escape', work, new AbortController().signal)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_INVALID' });
+    expect(work).not.toHaveBeenCalled();
+  } finally { release(); await active; await rm(root, { recursive: true, force: true }); }
 });
