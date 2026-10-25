@@ -146,3 +146,15 @@ alpha.55 adds protected configuration switches for memory automation, Nervous, r
 or MCP actor may write them. The switch table, modes and defaults are in
 [core layers](core-layers.md#one-rule-for-every-switched-layer-off-until-a-person-turns-it-on). The S3-3 key `models.headless.preview`
 is retired: it still parses and is no longer offered.
+
+F1 (alpha.56 author candidate): bare `config --global` reads defaults plus the global layer and environment without loading project overrides;
+write previews retain the existing full validation and authority path. A missing optional leaf with a schema default is shown with its default
+source by `config get`; JSON retains the value. `init registry --preview` reports an existing authored registry as information; apply retains its
+refusal. Bare `init identity` reads the installation identity without recovery and reports a healthy identity when available. Unsafe installation
+files remain refused with their path, mode, owner and reason. Config validation messages name the source file and failing keys without values.
+Doctor's identity guidance opens the configuration window and names the global layer. Doctor and monitor share the catalog signer observation;
+commands carry the observed scope and aggregator principal. Paths uses the same global Brain login root as login observation and labels the
+secret-store data and encryption key separately. Monitor refuses an unknown scope before fullscreen startup. Worker model columns use model
+evidence or unknown, never an execution backend. The CLI Run report includes read-only per-channel totals of visible attempts; missing values,
+partial coverage and measured-tariff versus provider billing remain explicit, with no period or reset semantics. These are source/author claims;
+independent, hosted and live acceptance remain separate.
