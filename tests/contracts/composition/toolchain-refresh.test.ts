@@ -75,6 +75,38 @@ async function fixture(update: Record<string, unknown> = {}) {
 const settle = async (check: () => boolean | Promise<boolean>) => { for (let i = 0; i < 400; i++) { if (await check()) return; await new Promise(resolve => setTimeout(resolve, 10)); } throw new Error('condition not reached'); };
 
 describe('autonomous worker image refresh (WORKER-AUTO-REFRESH)', () => {
+  it('INT2: legacy refresh needs exact installed provider receipts and default sources; a non-default source still needs consent', async () => {
+    const f = await fixture(), document = JSON.parse(await readFile(f.path, 'utf8'));
+    document.toolchains.image = { consents: [] };
+    const write = async () => { await writeFile(f.path, JSON.stringify(document)); clearConfigCache(); };
+    const receipts = join(f.root, '.deckent/workspaces/toolchains/receipts'); await mkdir(receipts, { recursive: true });
+    const receiptPath = join(receipts, 'r4-20260930.json');
+    const receipt = { schemaVersion: 2, daemonId: 'fixture-daemon', imageVersion: 'r4-20260930', imageId: bounds.imageId, measuredAt: new Date().toISOString(),
+      manifest: { providers: [{ id: 'codex', version: 'codex-cli 0.155.1' }] } };
+    await writeFile(receiptPath, JSON.stringify(receipt)); await write();
+    const refused = async () => {
+      expect(await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps)).toMatchObject({ outcome: 'failed', event: { code: 'WORKER_IMAGE_CONSENT_MISSING' } });
+      expect(f.state.builds).toBe(0); expect(f.state.checks).toEqual([]);
+    };
+    await refused(); // custom registry, despite an exact receipt
+    document.toolchains.currency.registryEndpoint = getConfigFieldDefault('toolchains').currency.registryEndpoint;
+    document.toolchains.image.sources = { proxy: 'https://proxy.example.invalid' }; await write(); await refused();
+    document.toolchains.image.sources = {}; await write();
+    await rm(receiptPath); await refused(); // registry pins alone never fabricate consent
+    await writeFile(receiptPath, JSON.stringify({ ...receipt, imageId: 'sha256:' + 'f'.repeat(64) })); await refused();
+    await writeFile(receiptPath, JSON.stringify({ ...receipt, manifest: { providers: [...receipt.manifest.providers, { id: 'claude', version: '2.1.278' }] } })); await refused();
+    await writeFile(receiptPath, JSON.stringify(receipt));
+    expect(await refreshConfiguredToolchains(f.root, 'startup', f.options, f.deps)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, code: null } });
+    expect(f.state.builds).toBe(1);
+    // A layered receipt binds providers to each image, including a provider image that is not its first entry.
+    await writeFile(receiptPath, JSON.stringify({ ...receipt, schemaVersion: 3, imageId: 'sha256:' + 'f'.repeat(64), images: [
+      { imageId: 'sha256:' + 'f'.repeat(64), providers: ['claude'] }, { imageId: bounds.imageId, providers: ['codex'] },
+    ] }));
+    await write(); // the same old registry pins, now attested by the layered receipt
+    expect(await refreshConfiguredToolchains(f.root, 'interval', f.options, f.deps)).toMatchObject({ outcome: 'current', event: { appliedProfiles: 1, code: null } });
+    expect(f.state.builds).toBe(2);
+  });
+
   it('a stale install starts the refresh in the background without delaying the caller, then revises only the active profile version', async () => {
     const f = await fixture(); let release!: () => void; f.state.gate = new Promise<void>(resolve => { release = resolve; });
     const controller = new AbortController();

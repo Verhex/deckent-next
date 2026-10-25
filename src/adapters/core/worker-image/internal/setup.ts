@@ -13,7 +13,7 @@ const PACKAGE_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url));
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u), RECEIPT = /^(?:r[1-9][0-9]*-\d{8}|adopted-\d{1,16})\.json$/u;
 const imagePin = z.object({ imageId: digest, providers: z.array(z.string().regex(/^[a-z0-9]{1,32}$/u)).nonempty() }).passthrough();
 const receiptSchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3)]), imageId: digest, imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}$/u),
-  images: z.array(imagePin).nonempty().optional(), measuredAt: z.string().datetime() }).passthrough()
+  images: z.array(imagePin).nonempty().optional(), manifest: z.object({ providers: z.array(z.object({ id: z.string().regex(/^[a-z0-9]{1,32}$/u) }).passthrough()).nonempty() }).passthrough().optional(), measuredAt: z.string().datetime() }).passthrough()
   .refine(value => value.schemaVersion === 2 || value.images?.[0]?.imageId === value.imageId);
 export type WorkerImagePresence = 'present' | 'missing' | 'unknown';
 export type WorkerImageReceiptView = Readonly<{ imageId: string; imageVersion: string; images?: readonly Readonly<{ imageId: string; providers: readonly string[] }>[] }>;
@@ -24,17 +24,18 @@ export async function workerImagePresence(input: Readonly<{ executable: string; 
   return probeDockerImageAvailability(probe).then(() => 'present' as const, async (error: unknown) => !(error instanceof DockerImageProbeError) || error.probeCause !== 'exit' ? 'unknown'
     : runNodeDockerCommand({ executable: probe.executable, args: ['info', '--format', '{{.ID}}'], timeoutMs: probe.timeoutMs, outputBytes: probe.outputBytes }).then(() => 'missing' as const, () => 'unknown' as const));
 }
-/** Newest bounded regular build/adoption receipt. */
-export async function readNewestWorkerReceipt(home: string): Promise<WorkerImageReceiptView | null> {
+/** Newest bounded regular build/adoption receipt, optionally for one exact installed image. */
+export async function readNewestWorkerReceipt(home: string, imageId?: string): Promise<WorkerImageReceiptView | null> {
   const directory = join(home, 'receipts'), names = (await readdir(directory).catch(() => [] as string[])).filter(name => RECEIPT.test(name)).slice(0, limits.receiptScan);
   const files = (await Promise.all(names.map(async name => ({ name, info: await lstat(join(directory, name)).catch(() => null) }))))
     .filter(entry => entry.info?.isFile() && entry.info.size <= limits.receiptBytes).sort((a, b) => b.info!.mtimeMs - a.info!.mtimeMs).slice(0, limits.receipts);
   let newest: z.infer<typeof receiptSchema> | null = null;
   for (const { name } of files) {
     const parsed = receiptSchema.safeParse(await readFile(join(directory, name), 'utf8').then(text => JSON.parse(text) as unknown).catch(() => null));
-    if (parsed.success && (!newest || parsed.data.measuredAt > newest.measuredAt)) newest = parsed.data;
+    if (parsed.success && (!imageId || (parsed.data.schemaVersion === 3 ? parsed.data.images?.some(image => image.imageId === imageId) : parsed.data.imageId === imageId))
+      && (!newest || parsed.data.measuredAt > newest.measuredAt)) newest = parsed.data;
   }
-  return newest && { imageId: newest.imageId, imageVersion: newest.imageVersion, ...(newest.schemaVersion === 3 ? { images: newest.images! } : {}) };
+  return newest && { imageId: newest.imageId, imageVersion: newest.imageVersion, ...(newest.schemaVersion === 3 ? { images: newest.images! } : imageId && newest.manifest ? { images: [{ imageId: newest.imageId, providers: newest.manifest.providers.map(provider => provider.id) }] } : {}) };
 }
 /** Observed fallback image and receipt, without effects. */
 export async function observeWorkerImage(input: Readonly<{ home: string; executable: string | null; configured: string | null; git: string | null }>) {

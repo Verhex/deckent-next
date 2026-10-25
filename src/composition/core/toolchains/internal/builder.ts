@@ -1,17 +1,33 @@
 import limits from './limits.json' with { type: 'json' };
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { loadConfig, normalizeGlobalScopePlatform, prepareProductDirectory, resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions, ErrorRegistry } from '#platform/index.js';
-import { workerImageBudget, matchingWorkerConsent, workerConsentBinding, type WorkerConsentBinding } from '#engine/index.js';
-import { readWorkerHistory, withWorkerBuilder, readWorkerImageHeldVersion, readWorkerImageSources, runNodeProcess, type WorkerImageBuildRunner, type WorkerReservation } from '#adapters/index.js';
+import { getConfigFieldDefault, loadConfig, normalizeGlobalScopePlatform, prepareProductDirectory, resolveGlobalScopePaths, resolveProductLayout, type ConfigLoadOptions, ErrorRegistry } from '#platform/index.js';
+import { affectedToolchainProfiles, workerImageBudget, matchingWorkerConsent, workerConsentBinding, type WorkerConsentBinding } from '#engine/index.js';
+import { readNewestWorkerReceipt, readWorkerHistory, withWorkerBuilder, readWorkerImageHeldVersion, readWorkerImageSources, runNodeProcess, type WorkerImageBuildRunner, type WorkerReservation } from '#adapters/index.js';
 import { writeArtifact } from './update.js';
 const counter = (value: string) => Number(/^r([0-9]+)/u.exec(value)?.[1] ?? 0);
 /** Refresh and acquisition enter this same daemon-only owner before counter reservation or any build context. */
 export async function configuredWorkerBuilder<T>(projectRoot: string, options: ConfigLoadOptions, input: { packageRoot: string; home: string;
-  binding: WorkerConsentBinding; plannedAt?: string; instanceId?: string; runner?: WorkerImageBuildRunner; signal?: AbortSignal },
+  binding: WorkerConsentBinding; refreshExisting?: boolean; plannedAt?: string; instanceId?: string; runner?: WorkerImageBuildRunner; signal?: AbortSignal },
   run: (reservation: WorkerReservation, signal: AbortSignal, retain: (receipt: unknown) => Promise<void>) => Promise<T>): Promise<T> {
   const config = await loadConfig(projectRoot, { ...options, force: true, heal: false });
-  matchingWorkerConsent(config.toolchains.image.consents, input.binding);
+  const authorize = async (current: typeof config, binding: WorkerConsentBinding) => {
+    // Existing installs may refresh only packaged sources and the exact providers their installed image receipts attest.
+    if (input.refreshExisting && current.execution?.docker
+      && JSON.stringify(current.toolchains.image.sources) === JSON.stringify(getConfigFieldDefault('toolchains').image.sources)
+      && current.toolchains.currency.registryEndpoint === getConfigFieldDefault('toolchains').currency.registryEndpoint) {
+      const profiles = affectedToolchainProfiles(current).filter(profile => binding.providers.includes(profile.provider));
+      const providers = new Set<string>();
+      for (const profile of profiles) {
+        const installed = profile.imageId ? (await readNewestWorkerReceipt(input.home, profile.imageId))?.images?.filter(image => image.imageId === profile.imageId).flatMap(image => image.providers) : null;
+        if (!installed?.includes(profile.provider)) { matchingWorkerConsent(current.toolchains.image.consents, binding); return; }
+        installed.forEach(provider => providers.add(provider));
+      }
+      if (providers.size === binding.providers.length && binding.providers.every(provider => providers.has(provider))) return;
+    }
+    matchingWorkerConsent(current.toolchains.image.consents, binding);
+  };
+  await authorize(config, input.binding);
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'
     && ['PATH', 'HOME', 'DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_CONFIG', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(entry[0])));
   const runner = input.runner ?? runNodeProcess;
@@ -32,7 +48,7 @@ export async function configuredWorkerBuilder<T>(projectRoot: string, options: C
     const sources = await readWorkerImageSources(input.packageRoot);
     const binding = workerConsentBinding({ recipe: sources.recipe, providers: input.binding.providers, npmRegistry: fresh.toolchains.currency.registryEndpoint, sources: fresh.toolchains.image.sources });
     if (JSON.stringify(binding) !== JSON.stringify(input.binding)) throw ErrorRegistry.createError('WORKER_IMAGE_CONSENT_MISSING');
-    matchingWorkerConsent(fresh.toolchains.image.consents, binding);
+    await authorize(fresh, binding);
     const held = await readWorkerImageHeldVersion({ packageRoot: input.packageRoot, timeoutMs: fresh.toolchains.currency.timeoutMs, outputBytes: fresh.toolchains.update.outputBytes, env, ...(input.signal ? { signal: input.signal } : {}) }, runner);
     const history = await readWorkerHistory({ packageRoot: input.packageRoot, home: input.home, daemonId: identity.daemonId });
     const reservation = await custody.reserve(Math.max(counter(held ?? ''), ...history.map(counter), counter((sources.recipe as { imageVersion: string }).imageVersion)), input.plannedAt ?? new Date().toISOString());

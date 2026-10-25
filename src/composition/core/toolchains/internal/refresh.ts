@@ -72,7 +72,7 @@ async function runRefresh(projectRoot: string, trigger: ToolchainRefreshTrigger,
     // Before any build: a registry a global layer contributes to is never revised automatically (see `registryLayerHold`); no image is built for it.
     if (registryLayerHold(await snapshotConfiguredConfig(projectRoot, options, 'project')) === 'TOOLCHAIN_REGISTRY_LAYER_HOLD') throw holdError('TOOLCHAIN_REGISTRY_LAYER_HOLD');
     // The `updating` marker (what admission and the surfaces read) exists only once a build is certain, never during the currency check itself.
-    result = await updateConfiguredToolchains(projectRoot, { apply: true }, options, { ...dependencies, onBuild: async (plan, expiresAt) => {
+    result = await updateConfiguredToolchains(projectRoot, { apply: true }, options, { ...dependencies, refreshExisting: true, onBuild: async (plan, expiresAt) => {
       base.startedAt = now(); base.expiresAt = expiresAt ?? new Date(Date.parse(base.startedAt) + workerImageBudget(policy.buildTimeoutMs, plan.staleProviders.length)).toISOString();
       await writeState(home, { ...base, phase: 'updating', finishedAt: null, imageVersion: plan.next?.imageVersion ?? null, imageId: null, staleProviders: plan.staleProviders, appliedProfiles: 0, reason: null });
       await emit('started', { imageVersion: plan.next?.imageVersion ?? null }); await dependencies.onBuild?.(plan);
