@@ -14,7 +14,7 @@ import { cells } from '#surfaces/core/terminal-render/index.js';
 import { WORKLINE_SLASH_COMMANDS } from '#surfaces/core/terminal-kit/index.js';
 import { mountWorkline, until as untilWorkline, WORKLINE_TEST_LABELS } from '../support/workline-harness.js';
 import { BLOCKER_CODES, emptySnapshot, fullSnapshot, longIdSnapshot, OBSERVED_AT } from '../../fixtures/monitor/snapshots.js';
-import { MonitorSourceMemo } from '#engine/index.js';
+import { MONITOR_BLOCKER_CODES, MonitorSourceMemo, type MonitorBlockerCode } from '#engine/index.js';
 import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { createMcpServer } from '#surfaces/core/mcp/index.js';
@@ -49,12 +49,22 @@ describe('monitor text snapshot', () => {
   }
   it('words every blocker code, puts the oldest stuck Run first and keeps the reason visible without colour', () => {
     const text = surface.renderMonitorText(fullSnapshot, { locale: 'en', width: 200, ascii: true });
-    const labels = { none: 'progressing normally', 'waiting-pool-slot': 'waiting for a pool slot', 'pool-held': 'pool on hold',
+    // TC: every blocker code of the engine contract is worded (the label map is complete by type) and rendered, not only the fixture's.
+    const labels: Record<MonitorBlockerCode, string> = { parked: 'Run parked; human decision or timeout', 'awaiting-decision': 'awaiting human decision',
+      'waiting-execution-slot': 'waiting for an execution slot', 'waiting-scope-conflict': 'waiting: another task is changing the same resource',
+      'worker-silent': 'worker silent (no events)', none: 'progressing normally', 'waiting-pool-slot': 'waiting for a pool slot', 'pool-held': 'pool on hold',
       'waiting-dependency': 'waiting for a dependency', 'awaiting-approval': 'awaiting approval', 'worker-running': 'worker running',
       'worker-stale-heartbeat': 'worker silent (stale heartbeat)', 'worker-exited-unevaluated': 'worker exited, not evaluated',
       'evaluation-not-ready': 'evaluation not ready', 'evaluation-unknown': 'evaluation result unknown', 'unresolved-effect': 'effect outcome uncertain',
-      'cancellation-pending': 'cancellation pending', 'not-admitted': 'not admitted yet', unknown: 'reason unknown' } as const;
+      'cancellation-pending': 'cancellation pending', 'not-admitted': 'not admitted yet', unknown: 'reason unknown' };
     for (const code of BLOCKER_CODES) expect(text, code).toContain(labels[code]);
+    const base = fullSnapshot.installs[0]!.runs[0]!;
+    const every = { ...fullSnapshot, installs: [{ ...fullSnapshot.installs[0]!, runs: MONITOR_BLOCKER_CODES.map((code, index) => ({ ...base, runId: `run-every-${code}`, state: 'blocked' as const,
+      blocker: { code, taskId: 'build', sinceMs: OBSERVED_AT - (index + 1) * 60_000, detail: null } })) }] };
+    const everyText = surface.renderMonitorText(every, { locale: 'en', width: 200, ascii: true });
+    // The Runs table cuts a long reason with an ellipsis; its first 40 characters are always shown.
+    for (const code of MONITOR_BLOCKER_CODES) expect(everyText, code).toContain(labels[code].slice(0, 40));
+    expect(surface.renderMonitorText(every, { locale: 'tr', width: 200, ascii: true })).not.toContain('monitor.blocker.');
     const summary = text.slice(text.indexOf('Stuck or waiting'), text.indexOf('Workers running now'));
     // The approval wait (3 h 12 min) is the oldest; the `unknown` blocker has no proven start and goes last; moving Runs are not stuck.
     expect(summary.indexOf('run-blocked-approval')).toBeLessThan(summary.indexOf('run-waiting-pool-slot'));
