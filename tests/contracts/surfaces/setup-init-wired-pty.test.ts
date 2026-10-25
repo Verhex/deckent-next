@@ -10,10 +10,9 @@ import { terminalBuffers } from '../../fixtures/terminal-screen.js';
 
 /**
  * I-S3 on a real pseudo-terminal: `deckent init` sets an installation up stage by stage through each stage's existing owner (the compiled
- * CLI), resumes by observing again, and hands the terminal to a stage whose owner takes it (I-D2's Docker install: the window closes, sudo
- * asks on the plain terminal, the window reopens on a fresh observation). The Docker case runs the production window and composition
- * through tests/fixtures/setup-init-handoff-driver.mjs with a FAKE sudo that only records; Docker is never installed and the real sudo
- * never runs. Requires `npm run build`.
+ * CLI), resumes by observing again, and hands the terminal to the witnessed policy-upgrade card. Init contains only installation
+ * stages. The retained Docker/first-job scenarios are TODOs for U4/U6 onboarding; their original safety assertions remain below.
+ * Requires a fresh build by the lead; author lanes do not run this file.
  */
 const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
@@ -95,8 +94,13 @@ async function fixture(name = 'erp-demo') {
     .then(result => ({ code: 0, ...result }), (error: { code?: number; stdout?: string; stderr?: string }) => ({ code: error.code ?? -1, stdout: error.stdout ?? '', stderr: error.stderr ?? '' }));
   const plan = async (args: readonly string[] = []) => {
     const result = await deckent(['init', '--json', ...args]);
-    const at = result.stdout.indexOf('{"schemaVersion":1,"planSchemaVersion"');
-    const doc = JSON.parse(result.stdout.slice(at, result.stdout.indexOf('\n', at) < 0 ? undefined : result.stdout.indexOf('\n', at))) as { stages: { id: string; state: string; reason: { code: string } }[] };
+    expect(result.code, result.stderr).toBe(0);
+    const line = result.stdout.split(/\r?\n/u).find(text => text.startsWith('{"schemaVersion":'));
+    expect(line, result.stdout).toBeDefined();
+    const doc = JSON.parse(line!) as { schemaVersion: number; stages: { id: string; phase: string; state: string; reason: { code: string } }[] };
+    expect(doc.schemaVersion).toBe(2);
+    expect(doc.stages.every(stage => stage.phase === 'install')).toBe(true);
+    expect(doc.stages.some(stage => stage.id.startsWith('execution:') || stage.id.startsWith('work:') || stage.id === 'core:model' || stage.id === 'instructions:bridges')).toBe(false);
     return Object.fromEntries(doc.stages.map(stage => [stage.id, `${stage.state}:${stage.reason.code}`]));
   };
   return { base, root, home, work, env, pty, deckent, plan };
@@ -104,67 +108,60 @@ async function fixture(name = 'erp-demo') {
 const screen = (output: string) => terminalBuffers(output, COLUMNS, ROWS).text;
 
 describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (compiled CLI)', () => {
-  it('sets up an empty folder stage by stage through each owner; the final check runs the human doctor between windows; a re-run reads done', async () => {
+  it('sets up only installation stages; answers language and profile before permissions; re-observes every write and a re-run reads done', async () => {
     await access(cli);
     const f = await fixture();
-    // A Docker that never answers (any host, any CI): the execution stages stay blocked, so this flow never offers a real worker-image build (BR1).
-    const run = await f.pty('full-init', [process.execPath, cli, 'init'], [['Enter confirm', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'], ['> 6. Permissions', '1\r'],
-      ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 5. Who uses this installation · ready', '1\r'], ['> 11. Model connection', '2\r'], ['> 13. Project instructions', '2\r'], ['> 16. Final check', '1\r'], ['Final check: applied; observed again.', '1\r']],
-      { DOCKER_HOST: 'unix:///nonexistent/docker.sock' });
+    const run = await f.pty('full-init', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['> 1. Language · ready', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
+      ['Who uses this installation: applied', '\u001b']], { DOCKER_HOST: 'unix:///nonexistent/docker.sock' });
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.status, run.output.slice(-2000)).toBe(0);
-    // The human doctor ran on the plain terminal between two windows (its summary line, then the window again).
-    const doctor = run.output.indexOf('Status: ');
-    expect(doctor).toBeGreaterThan(0);
-    expect(run.output.indexOf('Deckent setup', doctor)).toBeGreaterThan(doctor);
+    const permissions = run.output.indexOf('Permissions: applied');
+    expect(permissions).toBeGreaterThan(0);
+    // The answers are visible before the first permission write. Persistence uses the existing config owner only after installation.
+    expect(run.output.slice(0, permissions)).toContain('1. Language · answered; saved after permissions');
+    expect(run.output.slice(0, permissions)).toContain('5. Who uses this installation · answered; saved after permissions');
+    expect(run.output.indexOf('Language: applied', permissions)).toBeGreaterThan(permissions);
+    expect(run.output.indexOf('Who uses this installation: applied')).toBeGreaterThan(run.output.indexOf('Language: applied', permissions));
     const summary = screen(run.output);
-    for (const line of ['2. Language · done', '6. Permissions · done', '3. Folder and scope · done · This folder already uses the scope "erp-demo"', '13. Project instructions · skipped', '9. Worker image · blocked'])
-      expect(summary).toContain(line);
-    expect(summary).toContain('core:policy: applied'); expect(summary).toContain('core:language: applied'); expect(summary).toContain('core:final-check: applied');
-    // SOLO-PROFILE (owner 2026-10-20): the solo choice is saved like any profile (the user's global layer) and doctor no longer asks for one.
-    expect(summary).toContain('core:profile: applied');
+    for (const line of ['1. Language · done', '6. Permissions · done', '3. Folder and scope · done', '5. Who uses this installation · done', '8. Final check · done']) expect(summary).toContain(line);
+    for (const result of ['Permissions: applied', 'Language: applied', 'Who uses this installation: applied']) expect(summary).toContain(result);
+    for (const title of ['Model connection', 'Worker image', 'Execution environment', 'Project instructions', 'First work kind', 'Worker pool']) expect(summary).not.toContain(title);
+    expect(summary).not.toContain('Final check: applied'); // KUR-14: the observed warnings settle; no read-only apply loop.
+    expect(summary).toContain('Setup is complete.');
     expect(JSON.parse(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8'))).toMatchObject({ identity: { profile: { id: 'core:solo', version: 1 } } });
-    // I-S7: the summary ends with what the first job still needs, in order, each with its exact command (configuration and ledger reads only).
-    const firstJob = summary.slice(summary.indexOf('Before the first job (/do), still to do, in this order:'));
-    expect(firstJob.length).toBeLessThan(summary.length);
-    // BR1: the worker image and execution settings are `deckent init` itself; no source-checkout command, no hand JSON.
-    for (const command of ['$ deckent init registry --scope erp-demo --provider', '$ deckent init pool --scope erp-demo --preview']) expect(firstJob).toContain(command);
-    expect(firstJob).toMatch(/^\s*1\. Build or adopt the worker image.*\n\s*\$ deckent init\s*$/mu);
-    expect(firstJob).not.toMatch(/worker:image|config set execution/u);
-    expect(firstJob.indexOf('init registry')).toBeLessThan(firstJob.indexOf('init pool'));
-    // No hand-written JSON: the folder holds the installation the owners wrote; nothing else (no DECKENT.md: the bridges were declined).
     expect((await readdir(f.root)).sort()).toEqual(['.deckent']);
-    // Done stages are detected again on the next run, not remembered.
-    const again = await f.plan();
-    expect(again).toMatchObject({ 'core:language': 'done:setup.reason.languageConfigured', 'core:folder': 'done:setup.reason.scopeConfigured', 'core:policy': 'done:setup.reason.policyCurrent',
-      'core:profile': 'done:setup.reason.profileConfigured' });
+    expect(await f.plan()).toMatchObject({ 'core:language': 'done:setup.reason.languageConfigured', 'core:folder': 'done:setup.reason.scopeConfigured',
+      'core:policy': 'done:setup.reason.policyCurrent', 'core:profile': 'done:setup.reason.profileConfigured' });
     const checked = await f.deckent(['doctor']);
     expect(checked.code).toBe(0);
-    expect(checked.stdout).toMatch(/ok\s+Identity profile: core:solo/u); expect(checked.stdout).not.toContain('No identity profile is chosen');
-    // A re-run on a person's terminal shows the profile stage done and never asks it again.
+    expect(checked.stdout).toMatch(/ok\s+Identity profile: core:solo/u);
+    expect(checked.stdout).not.toContain('No identity profile is chosen');
+    const repeat = await f.deckent(['init', '--yes', '--scope', 'erp-demo', '--json']);
+    expect(repeat.code, repeat.stderr).toBe(0);
+    expect(JSON.parse(repeat.stdout).apply.results).toEqual([]);
     const rerun = await f.pty('rerun', [process.execPath, cli, 'init'], [['Deckent setup', '\u001b']]);
     expect(rerun.timeout, rerun.output?.slice(-3000)).toBeUndefined();
-    // The plain summary after the window (raw bytes: the line is wider than the test terminal).
-    expect(rerun.output).toContain('5. Who uses this installation · done · The identity profile core:solo is already saved in your user\'s configuration.');
+    expect(rerun.status).toBe(0);
+    expect(rerun.output).toContain("5. Who uses this installation · done · The identity profile core:solo is already saved in your user's configuration.");
     expect(rerun.output).not.toContain('Will only you use this installation?');
   }, 240_000);
 
-  it('interrupted after the permissions (Esc): the next run shows them done and asks the rest again', async () => {
+  it('interrupted after the permissions (Esc): the next run shows them done and asks the unsaved selections again', async () => {
     await access(cli);
     const f = await fixture();
-    const run = await f.pty('interrupt', [process.execPath, cli, 'init'], [['Enter confirm', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'], ['> 6. Permissions', '1\r'],
-      ['Apply now', '1\r'], ['Permissions: applied', '\u001b']]);
+    const run = await f.pty('interrupt', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Permissions: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.status).toBe(0);
-    const again = await f.plan();
-    expect(again).toMatchObject({ 'core:policy': 'done:setup.reason.policyCurrent', 'core:folder': 'done:setup.reason.scopeConfigured',
+    expect(await f.plan()).toMatchObject({ 'core:policy': 'done:setup.reason.policyCurrent', 'core:folder': 'done:setup.reason.scopeConfigured',
       'core:language': 'needs-answer:setup.reason.languageDetected' });
+    expect(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8').catch(() => '')).not.toContain('core:solo');
   }, 240_000);
 
   it('a crash in the middle of the permissions: the next run shows an unknown result to complete (never by --yes); the window completes it', async () => {
     await access(cli);
     const f = await fixture('erp');
-    // The ledger's folder refuses writes: the journal and the first two documents land, then the install stops (as a crash would).
     const state = join(f.root, '.deckent', 'state');
     await mkdir(state, { recursive: true }); await chmod(state, 0o555);
     const crashed = await f.deckent(['init', '--yes', '--scope', 'erp', '--json']);
@@ -172,24 +169,32 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(crashed.code).not.toBe(0);
     expect(crashed.stderr).toContain('core:policy');
     expect(await readFile(join(f.root, '.deckent', 'installation', 'journal.json'), 'utf8')).toContain('pending');
-    expect(await f.plan(['--scope', 'erp'])).toMatchObject({ 'core:policy': 'needs-answer:setup.reason.policyPending' });
-    // `--yes` never resumes a pending install (INIT-D5): the policy stays pending.
-    await f.deckent(['init', '--yes', '--scope', 'erp', '--json']);
-    expect(await f.plan(['--scope', 'erp'])).toMatchObject({ 'core:policy': 'needs-answer:setup.reason.policyPending' });
-    const run = await f.pty('resume-pending', [process.execPath, cli, 'init'], [['Enter confirm', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
+    expect(await f.plan(['--scope', 'erp'])).toMatchObject({ 'core:policy': 'blocked:setup.reason.waitsFor' });
+    const journal = await readFile(join(f.root, '.deckent', 'installation', 'journal.json'), 'utf8');
+    const unattended = await f.deckent(['init', '--yes', '--scope', 'erp', '--json']);
+    expect(unattended.code, unattended.stderr).toBe(0);
+    const pending = JSON.parse(unattended.stdout);
+    expect(pending.apply.results).toEqual([]);
+    expect(pending.stages.find((stage: { id: string }) => stage.id === 'core:policy')).toMatchObject({ state: 'needs-answer', reason: { code: 'setup.reason.policyPending' } });
+    expect(await readFile(join(f.root, '.deckent', 'installation', 'journal.json'), 'utf8')).toBe(journal);
+    const run = await f.pty('resume-pending', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
       ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Permissions: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
+    expect(run.status).toBe(0);
+    expect(run.output).toContain('An earlier install stopped midway; what it wrote is unknown');
     expect(await f.plan()).toMatchObject({ 'core:policy': 'done:setup.reason.policyCurrent', 'core:folder': 'done:setup.reason.scopeConfigured' });
     expect(await readFile(join(f.root, '.deckent', 'installation', 'journal.json'), 'utf8').catch(() => '')).not.toContain('"pending"');
   }, 240_000);
 
-  it('a team profile is saved as the installation-wide selection (global layer, as `config set identity.profile --global`); doctor reads it', async () => {
+  it('a team profile is saved through the witnessed installation-wide writer (global layer); doctor reads it', async () => {
     await access(cli);
     const f = await fixture();
-    const run = await f.pty('team-profile', [process.execPath, cli, 'init'], [['Enter confirm', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '4\r'],
-      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['> 2. Language', '1\r'], ['> 5. Who uses this installation · ready', '1\r'], ['Who uses this installation: applied', '\u001b']]);
+    const run = await f.pty('team-profile', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '4\r'],
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['> 1. Language · ready', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
+      ['Who uses this installation: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
-    expect(screen(run.output)).toContain('core:profile: applied');
+    expect(run.status).toBe(0);
+    expect(screen(run.output)).toContain('Who uses this installation: applied');
     expect(JSON.parse(await readFile(join(f.home, '.deckent', 'config.json'), 'utf8'))).toMatchObject({ identity: { profile: { id: 'core:team', version: 1 } } });
     expect((await f.deckent(['doctor'])).stdout).toMatch(/ok\s+Identity profile: core:team/u);
   }, 240_000);
@@ -198,15 +203,14 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     await access(cli);
     const f = await fixture('erp');
     expect((await f.deckent(['init', '--yes', '--scope', 'erp'])).code).toBe(0);
-    // The installation as v15 left it: the same first-run policy without the v16 rules.
     const path = join(f.root, '.deckent', 'policy.json'), current = JSON.parse(await readFile(path, 'utf8')) as { grants: { id: string }[] };
     const delta: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
     await writeFile(path, JSON.stringify({ ...current, revision: 'first-run-template-v15', grants: current.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
     expect(await f.plan()).toMatchObject({ 'core:policy': 'needs-answer:setup.reason.policyUpgrade' });
     const run = await f.pty('policy-upgrade', [process.execPath, cli, 'init'], [['> 5. Who uses', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
-      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'],
-      ['Add these rules', 'y'], ['Permissions: applied', '\u001b']]);
+      ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Add these rules', 'y'], ['Permissions: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
+    expect(run.status).toBe(0);
     const card = run.output.indexOf('Upgrade the permissions'), reopened = run.output.indexOf('Permissions: applied', card);
     expect(card).toBeGreaterThan(0); expect(reopened).toBeGreaterThan(card);
     for (const id of delta) expect(run.output.slice(card, reopened)).toContain(id);
@@ -215,7 +219,8 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(delta.every(id => upgraded.grants.some(rule => rule.id === id))).toBe(true);
   }, 240_000);
 
-  it('Docker install stage: the window closes, sudo asks on the plain terminal (fake sudo), detection runs again, the window reopens', async () => {
+  // U4 onboarding + U6-S3/S4 own this handoff; init no longer offers execution stages. Keep the sudo/witness assertions for migration.
+  it.todo('U4/U6 onboarding — Docker install stage: the window closes, sudo asks on the plain terminal (fake sudo), detection runs again, the window reopens', async () => {
     await access(driver);
     const f = await fixture('project');
     const sudo = join(f.work, 'fake-sudo'), work = f.work;
@@ -268,7 +273,8 @@ printf 'fake-sudo ran: %s\\n' "\${*:2}"
 });
 
 describe.skipIf(process.platform !== 'linux')('BR1 deckent init to the first job on a real PTY (compiled CLI, fake Docker)', () => {
-  it('BR1 first durable job without hand JSON: build the worker image after a card, apply the composed settings, declare the kind and the pool; a second init reads done', async () => {
+  // U4-1r/U4-2 + U6-S3/S4 own ready-card ordering and restart; init no longer creates image/registry/pool. Keep all effect assertions.
+  it.todo('U4/U6 onboarding — BR1 first durable job without hand JSON: build the worker image after a card, apply the composed settings, declare the kind and the pool; a second init reads done', async () => {
     await access(cli);
     const f = await fixture(), state = join(f.work, 'docker-state'), bin = join(f.work, 'bin'), sock = join(f.work, 'docker.sock');
     await mkdir(state, { recursive: true }); await writeFile(sock, '');

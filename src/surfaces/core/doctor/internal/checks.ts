@@ -3,7 +3,7 @@ import type { DoctorRenderInput } from './report.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
 import { shortImageId } from './report.js';
 import registry from './doctor.json' with { type: 'json' };
-import { firstJobCommand, firstJobSteps, firstJobTitle } from './first-job.js';
+import { firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './first-job.js';
 import type { RecoveryModeState } from '#engine/index.js';
 import type { RecoveryRolloutView } from '#domain/index.js';
 import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
@@ -135,11 +135,11 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
 
 function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {
   const rows: DoctorCheck[] = [], fix = registry.fixes.find(entry => entry.checks.includes('work.image'))?.id;
-  // Not set up yet (no registry, or no ledger row): a warning naming the first missing first-job step, the same ordered list `deckent init` shows.
-  const first = firstJobSteps({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId)[0];
+  // Not set up yet (no registry, or no ledger row): a warning naming the first onboarding stage the first job still needs, set up on the first open.
+  const first = firstJobSteps(firstJobStages({ execution: f.firstJob?.execution ?? true, registry: f.firstJob?.registry ?? f.poolStatus !== 'unconfigured', pool: false }, f.scopeId))[0];
   rows.push(f.poolStatus === 'ready' ? row('work', 'work.pool', 'ok', t('doctor.check.pool.ok', {}, l))
     : (f.poolStatus === 'unconfigured' || f.poolStatus === 'missing') && first ? row('work', 'work.pool', 'warning',
-      f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, l) : t('doctor.check.pool.unconfigured', {}, l), t('doctor.firstJob.next', { step: firstJobTitle(first, l), command: firstJobCommand(first) }, l))
+      f.poolStatus === 'missing' ? t('doctor.check.pool.missing', {}, l) : t('doctor.check.pool.unconfigured', {}, l), onboardingNext(firstJobTitle(first, l), l))
       : row('work', 'work.pool', 'error', f.poolStatus === 'drift' ? t('doctor.check.pool.drift', {}, l) : t('doctor.check.pool.unavailable', {}, l), scoped('deckent pool status', f)));
   const image = r.imageRefresh;
   if (image && image.status !== 'unknown') rows.push(image.status === 'failed'
@@ -149,7 +149,7 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
   rows.push(executionRow(f, l));
   const worker = f.workerImage && f.imageId ? { image: shortImageId(f.imageId) ?? '-' } : null;
   if (worker) rows.push(f.workerImage === 'present' ? row('work', 'work.workerImage', 'ok', t('doctor.check.workerImage.ok', worker, l))
-    : f.workerImage === 'missing' ? row('work', 'work.workerImage', 'error', t('doctor.check.workerImage.missing', worker, l), 'deckent init')
+    : f.workerImage === 'missing' ? row('work', 'work.workerImage', 'error', t('doctor.check.workerImage.missing', worker, l), onboardingNext(t('setup.execution.workerTitle', {}, l), l))
       : row('work', 'work.workerImage', 'untested', t('doctor.check.workerImage.unknown', worker, l)));
   for (const finding of r.modelInvocationDelivery ?? []) rows.push(row('work', 'work.delivery', 'warning', t('doctor.check.delivery', { profile: finding.profileId, model: finding.reference.modelId }, l),
     finding.surface === 'mcp' ? 'deckent config set mcp.responseMaxBytes' : 'deckent config set service.responseMaxBytes'));
@@ -206,7 +206,8 @@ function executionRow(f: DoctorCheckFacts, l: Locale): DoctorCheck {
   const text = setupReasonText(view.reason.code, view.reason.params, l);
   if (view.state === 'done') return row('work', 'work.docker', 'ok', text);
   if (view.reason.code === 'setup.execution.unknown' || view.reason.code === 'setup.execution.unavailable') return row('work', 'work.docker', 'untested', text);
-  return row('work', 'work.docker', f.firstJob?.execution ? 'error' : 'warning', text, 'deckent init');
+  // The execution environment is an onboarding stage (U3-1a): it is set up on the first open, never by `deckent init`.
+  return row('work', 'work.docker', f.firstJob?.execution ? 'error' : 'warning', text, onboardingNext(t('setup.execution.title', {}, l), l));
 }
 
 function toolChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): DoctorCheck[] {

@@ -36,24 +36,14 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   *Workaround:* use x86_64.
 - **No npm package yet.** You install from source (see [Get started](../README.md#get-started)).
 - **Some install-time messages are English only** (build and sandbox preparation messages appear before translation exists).
-- **`deckent init` prepares the first job only for a person at a terminal** (alpha.54 BR1; alpha.48 I-S3). It applies the
-  first-run permissions, the language, the sandbox check, the Docker install (person only), the model connection (`models connect`),
-  the project instructions and the final check, each through its existing command. Since alpha.54 it also builds the worker image from
-  the installed package after a card that names its size and time limit (or adopts an image you name with `deckent init --image-id
-  sha256:<id>`), writes the execution settings from the Docker and Git paths it found, declares the first work kind `coding` on the
-  coding CLI you pick with the pool `workers` and one running slot, and sets up that pool, each after its own card. *Impact:* each of these
-  steps waits for a person's card, and `--yes` never builds, adopts or declares anything: the summary (and `deckent init --json`, `firstJob`) lists the missing
-  first-job steps in order with their exact commands (`deckent init`, `deckent init registry`, `deckent init pool`) and doctor names the
-  first one. Another kind, pool name or capacity still needs `deckent init registry` with its own flags. The image build needs Docker
-  and the network, and a running service reads the new `execution` settings and pool capacity only after `deckent runtime restart` (the admission
-  registry is read on every request).
-  `deckent doctor` checks read-only (`docker image inspect`, no container) that the configured image is on this Docker. A delivery
-  clone is not a setup stage. The profile you choose (solo, team, enterprise or custom) is saved in your user's global configuration
-  (`identity.profile`; distribution stays `deckent identity distribute`); the next `deckent init` reads it back and shows the stage done,
-  and doctor no longer asks for one. Unattended `--yes` does not save the profile. The final check is doctor's own rows: it reads done only with no
-  warning and every other stage done or skipped. Unattended `deckent init --yes --scope <id>` applies only the fresh permissions, the
-  language and the final check.
-- **Docker Engine install from setup is new** (alpha.48 I-D2; offered in the `deckent init` window since I-S3, only to a
+- **`deckent init` installs only.** Language is the first step; the profile is answered before permissions and saved through the
+  existing configuration owner once installation exists. Model, execution, work and instruction stages are onboarding; init neither asks
+  nor applies them. `init --json` is schema v2 with `phase`, without `firstJob`; `init --json --phase onboarding` is read-only.
+  The interactive first-open onboarding is a separate integration; the phase document alone does not prove that journey works.
+  `--yes --scope <id>` applies only fresh permissions and language, never read-only checks or person-only stages. It does not save the profile.
+  The final check settles only over install stages; a completed check with warnings can be done, with warnings visible. A repeat `--yes`
+  applies no already-settled work. Doctor derives work guidance from the setup stage evaluators and points onboarding work to `deckent` / `/setup`.
+- **Docker Engine install from setup is new** (alpha.48 I-D2; an onboarding stage, excluded from `deckent init`, only to a
   person at a real terminal). It installs only from Docker's official apt repository on the Ubuntu and Debian releases Docker
   lists (checked 2026-10-19), with Docker's signing key shipped in Deckent; everything else (native Windows/macOS, Docker
   Desktop on WSL, derivatives such as Linux Mint, conflicting `docker.io`/`containerd`/`runc` packages, an older

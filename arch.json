@@ -1259,9 +1259,10 @@
     "src/surfaces/core/doctor": {
       "dependencies": [
         "src/engine/core/toolchain-currency",
+        "src/engine/core/setup",
+        "src/engine/core/worker-setup",
         "src/platform/core/i18n",
         "src/domain/core/audit",
-        "src/domain/core/provider-catalog",
         "src/platform/core/output",
         "src/engine/core/recovery",
         "src/surfaces/core/recovery-text"
@@ -3580,7 +3581,6 @@
         "src/surfaces/core/project-instructions",
         "src/domain/core/model-activation",
         "src/engine/core/model-activation",
-        "src/surfaces/core/cli-models",
         "src/surfaces/core/cli-observe",
         "src/surfaces/core/doctor",
         "src/surfaces/core/cli-admin",

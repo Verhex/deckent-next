@@ -1,5 +1,5 @@
 import { ErrorRegistry, emit, type Locale } from '#platform/index.js';
-import { planSetup, SETUP_PLAN_SCHEMA_VERSION, type SetupObservation, type SetupPlan, type SetupStageRegistry } from '#engine/index.js';
+import { planSetup, SETUP_PHASES, SETUP_PLAN_SCHEMA_VERSION, type SetupPhase, type SetupObservation, type SetupPlan, SetupStageRegistry } from '#engine/index.js';
 import { cliMode, resolveCommandScope, scopeLister } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from './contract.js';
@@ -14,30 +14,31 @@ export function setupFormat(context: SetupCommandContext, json: boolean): SetupF
   return registry.formats[cliMode(context, json).reason] as SetupFormat;
 }
 /** `imageId` (BR1, owner Q2): adopt this existing image as the worker image instead of building one (a person confirms it on a card). */
-export type SetupFlags = Readonly<{ json: boolean; yes: boolean; scope?: string; lang?: string; imageId?: string }>;
+export type SetupFlags = Readonly<{ json: boolean; yes: boolean; scope?: string; lang?: string; imageId?: string; phase?: SetupPhase }>;
 export function parseSetupFlags(argv: readonly string[]): SetupFlags {
-  let json = false, yes = false, scope: string | undefined, lang: string | undefined, imageId: string | undefined;
+  let json = false, yes = false, scope: string | undefined, lang: string | undefined, imageId: string | undefined, phase: SetupPhase | undefined;
   for (let index = 1; index < argv.length; index++) {
     const flag = argv[index], value = () => { const next = argv[++index]; if (!next || next.startsWith('-')) throw ErrorRegistry.createError('CLI_USAGE'); return next; };
     if (flag === '--json' && !json) json = true;
     else if (flag === '--yes' && !yes) yes = true;
     else if (flag === '--scope' && scope === undefined) scope = value();
     else if (flag === '--lang' && lang === undefined) lang = value();
+    else if (flag === '--phase' && phase === undefined && (SETUP_PHASES as readonly string[]).includes(argv[index + 1] ?? '')) phase = value() as SetupPhase;
     else if (flag === '--image-id' && imageId === undefined && /^sha256:[a-f0-9]{64}$/u.test(argv[index + 1] ?? '')) imageId = value();
     else if (flag !== '--no-color') throw ErrorRegistry.createError('CLI_USAGE');
   }
-  return { json, yes, ...(scope === undefined ? {} : { scope }), ...(lang === undefined ? {} : { lang }), ...(imageId === undefined ? {} : { imageId }) };
+  if (phase === 'onboarding' && (!json || yes)) throw ErrorRegistry.createError('CLI_USAGE');
+  return { json, yes, ...(phase ? { phase } : {}), ...(scope === undefined ? {} : { scope }), ...(lang === undefined ? {} : { lang }), ...(imageId === undefined ? {} : { imageId }) };
 }
 
-/** The answers a call brings without a window: `--scope` answers the folder stage (never derived); without a person the profile is solo
- * (INIT-D4, ANALYSIS §4.2 row 4); `--yes` (INIT-D5) also confirms the detected language and a fresh first-run policy, nothing else. */
-export function unattendedAnswers(observation: SetupObservation, flags: SetupFlags, person: boolean): Readonly<Record<string, unknown>> {
+/** The answers a call brings without a window: `--scope` answers the folder stage (never derived); without a person the profile comes from the setup registry's unattended default; `--yes` (INIT-D5) also confirms the detected language and a fresh first-run policy, nothing else. */
+export function unattendedAnswers(observation: SetupObservation, flags: SetupFlags, person: boolean, stageRegistry: SetupStageRegistry = new SetupStageRegistry()): Readonly<Record<string, unknown>> {
   const values: Record<string, unknown> = {};
   if (flags.scope !== undefined) values['core:folder'] = flags.scope;
   // Only where the execution family is observed (the composed CLI); it is never applied by `--yes` (family stages are not auto-eligible).
   if (flags.imageId !== undefined && observation.families?.['execution'] !== undefined) values['execution:worker'] = { imageId: flags.imageId };
-  const solo = observation.profile.available.find(entry => entry.id === 'core:solo');
-  if (!person && solo) values['core:profile'] = { id: solo.id, version: solo.version };
+  const preset = observation.profile.available.find(entry => entry.id === stageRegistry.unattendedProfile);
+  if (!person && preset && flags.phase !== 'onboarding') values['core:profile'] = { id: preset.id, version: preset.version };
   if (flags.yes) {
     const language = observation.language;
     if (!language.configured) values['core:language'] = language.requested ?? language.system ?? 'en';
@@ -45,12 +46,12 @@ export function unattendedAnswers(observation: SetupObservation, flags: SetupFla
   }
   return values;
 }
-export const planFor = (observed: Readonly<{ observation: SetupObservation; registry: SetupStageRegistry }>, values: Readonly<Record<string, unknown>>): SetupPlan =>
-  planSetup(observed.observation, { schemaVersion: SETUP_PLAN_SCHEMA_VERSION, values: { ...values } }, observed.registry);
+export const planFor = (observed: Readonly<{ observation: SetupObservation; registry: SetupStageRegistry }>, values: Readonly<Record<string, unknown>>, phase: SetupPhase = 'install'): SetupPlan =>
+  planSetup(observed.observation, { schemaVersion: SETUP_PLAN_SCHEMA_VERSION, values: { ...values } }, observed.registry, { phase });
 
 /**
  * Bare `deckent init` (I-S4): detect → plan → render. Without a person nothing is applied; `--yes` applies only stages the planner marks
- * `autoEligible` (fresh policy, language, final check), one at a time, each followed by a fresh observation. The apply port (I-S3,
+ * `autoEligible` and mutating (fresh policy and language), one at a time, each followed by a fresh observation. The apply port (I-S3,
  * composition/core/setup) calls each stage's existing owner; a refused stage stops the call with SETUP_STAGE_REFUSED naming it, and a build
  * without that port says so with SETUP_APPLY_UNAVAILABLE. A person on a real terminal gets the window instead.
  */
@@ -75,24 +76,24 @@ export async function setupInitCommand(argv: readonly string[], context: SetupCo
       stdin.pause();
     } while (await controller.runPending());
     const outcome = controller.outcome();
-    emit(renderSetupLines(outcome.plan, locale, { requested: false, results: outcome.results }, outcome.firstJob), sinks);
+    emit(renderSetupLines(outcome.plan, controller.locale(), { requested: false, results: outcome.results }), sinks);
     return;
   }
-  let plan = planFor(observed, unattendedAnswers(observed.observation, flags, false));
+  let plan = planFor(observed, unattendedAnswers(observed.observation, flags, false, observed.registry), flags.phase);
   const results: SetupApplyResult[] = [], apply = context.applySetupStage ?? notWiredApply;
   // Bounded by the stage count: each round applies one eligible stage, then re-detects; a stage is never attempted twice in a call.
   for (let round = 0; flags.yes && round < plan.stages.length; round++) {
-    const next = plan.stages.find(stage => stage.autoEligible && stage.state === 'ready' && stage.operation && !results.some(result => result.stage === stage.id));
+    const next = plan.stages.find(stage => stage.autoEligible && stage.state === 'ready' && stage.operation && !registry.readOnly.includes(stage.operation.id) && !results.some(result => result.stage === stage.id));
     if (!next) break;
     const result = await apply(root, next, { env, ...(flags.scope === undefined ? {} : { scopeId: flags.scope }) });
     results.push(result);
     if (result.status !== 'applied') break;
     observed = await observeSetup(context, root, flags.lang);
-    plan = planFor(observed, unattendedAnswers(observed.observation, flags, false));
+    plan = planFor(observed, unattendedAnswers(observed.observation, flags, false, observed.registry), flags.phase);
   }
   const outcome = { requested: flags.yes, results };
-  if (format === 'json') emit(setupDocument(plan, outcome, observed.firstJob), { ...sinks, json: true });
-  else emit(renderSetupLines(plan, locale, outcome, observed.firstJob), sinks);
+  if (format === 'json') emit(setupDocument(plan, outcome), { ...sinks, json: true });
+  else emit(renderSetupLines(plan, locale, outcome), sinks);
   if (results.some(result => result.status === 'not-wired')) throw ErrorRegistry.createError('SETUP_APPLY_UNAVAILABLE');
   // A refused stage (no terminal, no witness, no grant): typed, naming the stage; nothing after it was attempted.
   const refused = results.find(result => result.status === 'refused');

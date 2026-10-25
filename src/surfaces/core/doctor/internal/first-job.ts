@@ -1,30 +1,24 @@
-import { nativeCliIds } from '#domain/index.js';
-import { MESSAGE_REGISTRY, t, terminalSafeText, type Locale, type MessageKey } from '#platform/index.js';
-import registry from './first-job.json' with { type: 'json' };
+import { WORK_SETUP_FAMILY, SetupStageRegistry, type SetupStage, type SetupStageState } from '#engine/index.js';
+import { MESSAGE_REGISTRY, t, type Locale, type MessageKey } from '#platform/index.js';
 
-/** What settles each first-job step (I-S7): an execution section names a worker image the daemon has (BR1: a read-only `image inspect` by the
- * caller; `missing` unsettles it), an admission registry is authored, the pool's ledger row exists. The registry preview, which starts a
- * container, never runs from an observation, a pipe, `--json` or `--yes`. */
+/** Configuration and pool-ledger facts; the work family's own evaluators interpret them. Never run a registry preview here. */
 export type FirstJobFacts = Readonly<{ execution: boolean; registry: boolean; pool: boolean }>;
-export type FirstJobStep = Readonly<{ id: string; title: MessageKey; argv: readonly string[] }>;
-type Fact = keyof FirstJobFacts;
-
-/** The pool readiness statuses that mean the ledger row exists (drift is reported by doctor's own pool row). */
+export type FirstJobStep = Pick<SetupStage, 'id' | 'phase' | 'title' | 'state'>;
 export const poolProvisioned = (status: string) => status === 'ready' || status === 'drift';
 
-/** The missing first-job steps in registry order, each with its exact command (the scope filled in, the providers from the native CLI
- * registry); empty when the installation is ready for the first job. Pure: the same facts give the same list. */
-export function firstJobSteps(facts: FirstJobFacts, scopeId: string | null): readonly FirstJobStep[] {
-  const fill = (part: string) => part === '{scope}' ? scopeId ?? '<scope>' : part === '{providers}' ? `<${nativeCliIds.join('|')}>` : part;
-  return registry.steps.filter(step => !facts[step.fact as Fact])
-    .map(step => Object.freeze({ id: step.id, title: step.title as MessageKey, argv: Object.freeze(step.command.map(fill)) }));
+/** Doctor already observes these facts without a setup verdict (which itself calls doctor). Reuse the registered work evaluators;
+ * the execution environment has its own doctor row. There is no second first-job list or a recursive setup observation. */
+export function firstJobStages(facts: FirstJobFacts, scopeId: string | null): readonly FirstJobStep[] {
+  const registry = new SetupStageRegistry([WORK_SETUP_FAMILY]), states = new Map<string, SetupStageState>();
+  return registry.list().flatMap(family => family.stages).map(stage => {
+    const decision = stage.evaluate({ facts, scopeId, answer: undefined, states });
+    states.set(stage.id, decision.state);
+    return { id: stage.id, phase: stage.phase, title: stage.title, state: decision.state };
+  });
 }
-/** A step's title in the person's language (registry data names the message key, as the setup plan's stage titles do). */
-export const firstJobTitle = (step: FirstJobStep, locale: Locale) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[step.title] ?? step.title;
-/** The command as a person types it: a JSON argument is single-quoted for the shell, every part made terminal-safe. */
-export const firstJobCommand = (step: FirstJobStep) => step.argv.map(part => terminalSafeText(/^[{[]/u.test(part) ? `'${part}'` : part)).join(' ');
-/** One line per missing step (title, then the command), or the single ready line. */
-export function firstJobLines(steps: readonly FirstJobStep[], locale: Locale): string[] {
-  if (!steps.length) return [t('doctor.firstJob.ready', {}, locale)];
-  return [t('doctor.firstJob.header', {}, locale), ...steps.flatMap((step, index) => [`${index + 1}. ${firstJobTitle(step, locale)}`, `   $ ${firstJobCommand(step)}`])];
+/** Missing onboarding stages come from the setup states, including execution stages when supplied by the full planner. */
+export function firstJobSteps(stages: readonly FirstJobStep[]): readonly FirstJobStep[] {
+  return stages.filter(stage => stage.phase === 'onboarding' && stage.state !== 'done' && stage.state !== 'skipped');
 }
+export const firstJobTitle = (step: FirstJobStep, locale: Locale) => (MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>)[step.title as MessageKey] ?? step.title;
+export const onboardingNext = (step: string, locale: Locale) => t('doctor.firstJob.next', { step }, locale);

@@ -1,7 +1,6 @@
 import { emit, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { SetupStage } from '#engine/index.js';
 import { askCliCard, type CliCardIo } from '#surfaces/core/cli-human/index.js';
-import { modelsCommand, type ModelCommandContext } from '#surfaces/core/cli-models/index.js';
 import { runKernelCommand, type KernelCommandContext } from '#surfaces/core/cli-observe/index.js';
 import type { SetupApplyResult, SetupCommandContext } from './contract.js';
 import registry from './modes.json' with { type: 'json' };
@@ -29,7 +28,7 @@ async function declareWorkKind(context: SetupCommandContext, root: string, stage
   const params = { kind: terminalSafeText(request.kind), provider: terminalSafeText(request.provider), profile: terminalSafeText(`${preview.profile.id}@${preview.profile.version}`),
     pool: terminalSafeText(request.poolId), execution: request.executionSlots, inFlight: request.inFlightSlots };
   if (!await confirmed(io, t('setup.work.card.title', params, locale), [t('setup.work.card.body', params, locale), t('setup.work.card.write', {}, locale)], t('setup.work.card.yes', {}, locale))) {
-    return result('refused', 'SETUP_STAGE_DECLINED');
+    return result('declined');
   }
   const applied = await context.initializeNativeCodingRegistry!(root, { ...request, apply: true }, options);
   return applied.status === 'applied' || applied.status === 'current' ? result('applied') : result('refused', `INITIAL_REGISTRY_${applied.status.toUpperCase()}`);
@@ -37,10 +36,10 @@ async function declareWorkKind(context: SetupCommandContext, root: string, stage
 
 /**
  * One foreground stage through its existing human owner, on the process terminal and only after the window has unmounted (never while Ink
- * holds stdin in raw mode): Docker install (I-D2 card, `sudo -k`, foreground sudo), the project-instruction bridge window, `models connect`
- * (its connection and model picker), the first-run policy upgrade (rules on a card, then the witnessed apply with the preview's `--expect`),
+ * holds stdin in raw mode): Docker install (I-D2 card, `sudo -k`, foreground sudo), the first-run policy upgrade (rules on a card, then the witnessed apply with the preview's `--expect`),
  * the worker image (BR1: its card, then the build or the adoption check), the first work kind and the pool (BR1 1b: each owner's preview, a card,
- * then its apply) and the human doctor (with its own fix cards). The result never decides the next state; the caller observes again.
+ * then its apply) and the human doctor (with its own fix cards). A "no" on a card is `declined`. The result never decides the next state; the
+ * caller observes again. The model connection and the project-instruction bridges are onboarding (U3-1a): never a `deckent init` stage.
  */
 export async function runForegroundStage(context: SetupCommandContext, root: string, stage: SetupStage, scopeId: string | null, locale: Locale): Promise<SetupApplyResult> {
   const op = stage.operation!.id, env = context.env ?? process.env, io: CliCardIo = { locale, env, stdin: process.stdin, stdout: process.stdout };
@@ -48,16 +47,15 @@ export async function runForegroundStage(context: SetupCommandContext, root: str
   const human = { ...context, env, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr, locale };
   try {
     if (op === 'doctor.inspect') { await runKernelCommand(['doctor'], human as unknown as KernelCommandContext); return result('applied'); }
-    if (op === 'project-instructions.initialize') { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['init'], human); return result('applied'); }
     if (!scopeId) return result('refused', 'CLI_SCOPE_REQUIRED');
-    if (op === 'model.connect') { await modelsCommand(['models', 'connect', '--scope', scopeId], human as unknown as ModelCommandContext); return result('applied'); }
     if (op === 'execution-environment.install' && context.installExecutionEnvironment) {
       const status = await context.installExecutionEnvironment(root, scopeId, io);
+      if (status === 'declined') return result('declined');
       return result(status === 'succeeded' || status === 'present' ? 'applied' : 'refused', status === 'succeeded' || status === 'present' ? undefined : `SETUP_INSTALL_${status.toUpperCase()}`);
     }
     if (op === 'execution.worker-image' && context.prepareWorkerImage) {
       const imageId = stage.operation!.input['imageId'], status = await context.prepareWorkerImage(root, io, typeof imageId === 'string' ? { imageId } : {});
-      return status === 'declined' ? result('refused', 'SETUP_STAGE_DECLINED') : result('applied');
+      return status === 'declined' ? result('declined') : result('applied');
     }
     if (op === 'work.registry' && context.initializeNativeCodingRegistry) return await declareWorkKind(context, root, stage, scopeId, io, result);
     if (op === 'work.pool' && context.installConfiguredExecutionPool) {
@@ -65,7 +63,7 @@ export async function runForegroundStage(context: SetupCommandContext, root: str
       if (preview.status === 'current') return result('applied');
       if (preview.status !== 'preview' || !pool) return result('refused', `POOL_${preview.status.toUpperCase()}`);
       const params = { pool: terminalSafeText(pool.poolId), execution: pool.capacity.executionSlots, inFlight: pool.capacity.inFlightSlots };
-      if (!await confirmed(io, t('setup.work.poolCard.title', params, locale), [t('setup.work.poolCard.body', params, locale)], t('setup.work.poolCard.yes', {}, locale))) return result('refused', 'SETUP_STAGE_DECLINED');
+      if (!await confirmed(io, t('setup.work.poolCard.title', params, locale), [t('setup.work.poolCard.body', params, locale)], t('setup.work.poolCard.yes', {}, locale))) return result('declined');
       const applied = await context.installConfiguredExecutionPool(root, scopeId, true);
       return applied.status === 'created' || applied.status === 'current' ? result('applied') : result('refused', `POOL_${applied.status.toUpperCase()}`);
     }
@@ -75,7 +73,7 @@ export async function runForegroundStage(context: SetupCommandContext, root: str
       const rules = (preview.rules ?? []).map(rule => { const grant = rule as { id?: string; resource?: { kind?: string } }; return `+ ${terminalSafeText(grant.id ?? '-')}: ${terminalSafeText(grant.resource?.kind ?? '-')}`; });
       const answer = await askCliCard({ title: t('setup.foreground.upgradeTitle', {}, locale), body: [t('setup.foreground.upgradeBody', { scope: terminalSafeText(scopeId) }, locale), ...rules],
         options: [{ id: 'apply', label: t('setup.foreground.upgradeApply', {}, locale), key: 'y' }, { id: 'no', label: t('setup.window.no', {}, locale), key: 'n' }] }, io);
-      if (answer !== 'apply') { emit(t('setup.foreground.notApplied', {}, locale), { stdout: process.stdout }); return result('refused', 'SETUP_STAGE_DECLINED'); }
+      if (answer !== 'apply') { emit(t('setup.foreground.notApplied', {}, locale), { stdout: process.stdout }); return result('declined'); }
       const applied = await context.upgradePolicyTemplateInstallation(root, scopeId, true, preview.expect);
       return result(applied.status === 'upgraded' ? 'applied' : 'refused', applied.status === 'upgraded' ? undefined : `POLICY_UPGRADE_${applied.status.toUpperCase()}`);
     }

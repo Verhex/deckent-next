@@ -8,8 +8,9 @@ import type { PoolCapacityInspectHandler } from '#surfaces/core/cli-admin/index.
 import type { FirstJobFacts } from '#surfaces/core/doctor/index.js';
 
 /** What applying one stage did. `not-wired`: this build has no apply owner for the stage yet (I-S3 wires each operation to its existing
- * owner); nothing was written. A surface never reports a stage as done from an apply result, only from the next observation. */
-export type SetupApplyResult = Readonly<{ stage: string; operation: string; status: 'not-wired' | 'applied' | 'refused'; code?: string }>;
+ * owner); nothing was written. `declined`: the person said no on the owner's card. A surface never reports a stage as done from an apply
+ * result, only from the next observation. */
+export type SetupApplyResult = Readonly<{ stage: string; operation: string; status: 'not-wired' | 'applied' | 'refused' | 'declined'; code?: string }>;
 /** `scopeId`: the folder stage's answer, else the configured scope. `foreground`: the person's terminal is free (no window holds it), so an
  * owner that takes the terminal itself (a card, a picker, sudo's own prompt) may run; without it such a stage is refused, never half-run. */
 export type SetupApplyOptions = ConfigLoadOptions & Readonly<{ scopeId?: string; foreground?: boolean }>;
@@ -19,7 +20,7 @@ export type SetupApplyHandler = (root: string, stage: SetupStage, options: Setup
 export type SetupObserveOptions = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string }>;
 /** Read-only observation and the stage registry for one root (I-S2/I-S3 detection). */
 export type SetupObserveHandler = (root: string, options: SetupObserveOptions) => Promise<Readonly<{ observation: SetupObservation; registry: SetupStageRegistry;
-  /** I-S7: what the first job still needs after setup (configuration and pool ledger reads only). */
+  /** I-S7: what the first job still needs after setup (configuration and pool ledger reads only); the `work` family's facts. */
   firstJob?: FirstJobFacts }>>;
 
 /** The shell realm doctor reports (structural: only the fields setup reads). */

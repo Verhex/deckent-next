@@ -17,4 +17,6 @@ export const setupErrors: ErrorDefinitions = Object.freeze({
   SETUP_STAGE_REFUSED: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_STAGE_REFUSED', p, l) }) },
   // BR1: the worker-image stage found no reachable Docker when the person confirmed; nothing was built or checked.
   SETUP_WORKER_DOCKER_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.SETUP_WORKER_DOCKER_UNAVAILABLE', p, l) }) },
+  // alpha.56 U3-1a: an answer to a stage of the other phase (an onboarding stage given to `deckent init`); refused, never ignored.
+  SETUP_STAGE_NOT_IN_PHASE: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_STAGE_NOT_IN_PHASE', p, l) }) },
 });

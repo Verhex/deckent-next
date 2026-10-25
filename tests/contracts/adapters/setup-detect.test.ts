@@ -179,7 +179,7 @@ describe.skipIf(posix)('I-S2 coding/git detection', () => {
   });
 });
 
-const observation = (families: Record<string, unknown>): SetupObservation => ({ schemaVersion: 1, environment: { platform: 'wsl', node: 'supported' },
+const observation = (families: Record<string, unknown>): SetupObservation => ({ schemaVersion: 2, environment: { platform: 'wsl', node: 'supported' },
   language: { configured: null, requested: null, system: 'tr' }, folder: { installation: 'none', homeRoot: false, configuredScope: null, suggestedScope: 'erp' },
   profile: { available: [{ id: 'core:solo', version: 1 }] }, policy: { state: 'absent' }, sandbox: { realm: 'bubblewrap', selfTest: 'ok', usernsRestricted: false },
   model: { connections: 0 }, check: { state: 'not-run' }, families });
@@ -193,8 +193,8 @@ describe('I-S2 families in the setup plan', () => {
   const at = (stages: readonly SetupStage[], id: string) => stages.find(stage => stage.id === id)!;
   it('a fresh dev machine: repository after the folder stage, the runtime after the sandbox stage, sign-ins after the model stage', () => {
     const plan = planSetup(observation({ execution: ready, coding: repo }), undefined, registry);
-    expect(plan.stages.map(stage => stage.id)).toEqual(['core:environment', 'core:language', 'core:folder', 'coding:repository', 'core:profile', 'core:policy',
-      'core:sandbox', 'execution:runtime', 'execution:worker', 'execution:worker-settings', 'core:model', 'coding:hosts', 'core:final-check']);
+    expect(plan.stages.map(stage => stage.id)).toEqual(['core:language', 'core:environment', 'core:folder', 'coding:repository', 'core:profile', 'core:policy',
+      'core:sandbox', 'core:final-check', 'execution:runtime', 'execution:worker', 'execution:worker-settings', 'core:model', 'coding:hosts']);
     expect(['coding:repository', 'execution:runtime', 'coding:hosts'].map(id => at(plan.stages, id).state)).toEqual(['done', 'done', 'done']);
     expect(plan.stages.filter(stage => stage.namespace !== 'core').every(stage => !stage.autoEligible && stage.operation === null)).toBe(true);
     for (const stage of plan.stages.filter(item => item.namespace !== 'core')) for (const locale of ['en', 'tr'] as const) {

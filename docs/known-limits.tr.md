@@ -35,22 +35,14 @@ Deckent bir ön sürümdür. Buradaki hiçbir şey tarih vaadi değildir.
   *Yol:* x86_64 kullanın.
 - **Henüz npm paketi yok.** Kaynaktan kurarsınız ([Başlarken](../README.tr.md#başlarken)).
 - **Bazı kurulum mesajları yalnız İngilizce** (derleme ve sandbox hazırlığı mesajları çeviri var olmadan önce çıkar).
-- **`deckent init` ilk işi yalnız terminaldeki bir kişi için hazırlar** (alpha.54 BR1; alpha.48 I-S3). İlk kurulum izinlerini,
-  dili, sandbox kontrolünü, Docker kurulumunu (yalnız kişi), model bağlantısını (`models connect`), proje yönergelerini ve son
-  kontrolü, her birini kendi mevcut komutuyla uygular. alpha.54'ten beri ayrıca, boyutu ve süre sınırını söyleyen bir karttan sonra
-  worker imajını kurulu paketten derler (ya da `deckent init --image-id sha256:<kimlik>` ile verdiğiniz imajı benimser), bulduğu
-  Docker ve Git yollarından yürütme ayarlarını yazar, seçtiğiniz kodlama CLI'ı üzerinde `coding` ilk iş türünü `workers` havuzu ve
-  bir çalışma yuvasıyla tanımlar ve o havuzu kurar; her biri kendi kartından sonra. *Etki:* bu adımların her biri bir kişinin
-  kartını bekler ve `--yes` hiçbir zaman derlemez, benimsemez ya da tanımlamaz: özet (ve `deckent init --json`, `firstJob`) ilk iş için eksik adımları sırayla ve tam komutlarıyla
-  listeler (`deckent init`, `deckent init registry`, `deckent init pool`), doctor ilkini gösterir. Başka bir iş türü, havuz adı ya da
-  kapasite hâlâ kendi bayraklarıyla `deckent init registry` ister. İmaj derlemesi Docker ve ağ ister; çalışan servis yeni `execution`
-  ayarlarını ve havuz kapasitesini ancak `deckent runtime restart` sonrasında okur (kabul kaydı her istekte okunur). `deckent doctor` yapılandırılan imajın bu Docker'da
-  olduğunu salt okunur denetler (`docker image inspect`, konteyner yok). Teslim klonu kurulum aşaması değildir.
-  Seçtiğiniz profil (tek kullanıcı, ekip, kurum ya da özel) kullanıcınızın genel yapılandırmasına kaydedilir
-  (`identity.profile`; dağıtım `deckent identity distribute` olarak kalır); sonraki `deckent init` onu geri okur ve aşamayı tamam
-  gösterir, doctor da artık profil istemez. Gözetimsiz `--yes` profili kaydetmez. Son kontrol
-  doctor'ın kendi satırlarıdır: yalnız hiç uyarı yokken ve diğer her aşama tamam ya da atlanmışken "tamam" olur. Gözetimsiz `deckent init --yes --scope <kimlik>` yalnız yeni izinleri, dili ve son kontrolü uygular.
-- **Kurulumdan Docker Engine kurmak yeni** (alpha.48 I-D2; I-S3'ten beri `deckent init` penceresinde, yalnız gerçek bir
+- **`deckent init` yalnız kurar.** İlk adım dildir; profil izinlerden önce cevaplanır ve kurulum oluştuktan sonra mevcut
+  yapılandırma yolu üzerinden kaydedilir. Model, çalıştırma, iş ve talimat aşamaları ilk açılışa (`onboarding`) aittir; init bunları sormaz
+  ve uygulamaz. `init --json` şema v2 kullanır: `phase` vardır, `firstJob` yoktur; `init --json --phase onboarding` yalnız okur.
+  Etkileşimli ilk açılış ayrı bir entegrasyondur; faz belgesi tek başına o yolculuğun çalıştığını kanıtlamaz.
+  `--yes --scope <kimlik>` yalnız yeni izinleri ve dili uygular; salt okunur kontrolleri veya kişi isteyen aşamaları uygulamaz, profili kaydetmez.
+  Son kontrol yalnız kurulum aşamalarını bekler; ölçülmüş uyarılar görünür kalırken tamam sayılabilir. Tekrar `--yes`, bitmiş işi uygulamaz.
+  Doctor iş yönlendirmesini kurulum aşamalarının değerlendiricilerinden türetir; ilk iş için `deckent` / `/setup` yolunu gösterir.
+- **Kurulumdan Docker Engine kurmak yeni** (alpha.48 I-D2; ilk açılış aşamasıdır, `deckent init` dışında, yalnız gerçek bir
   terminaldeki kişiye önerilir). Yalnız Docker'ın resmi apt deposundan, Docker'ın listelediği Ubuntu ve Debian sürümlerinde
   (2026-10-19'da kontrol edildi), Deckent ile gelen Docker imza anahtarıyla kurar; geri kalan her durumda (yerel
   Windows/macOS, WSL'de Docker Desktop, Linux Mint gibi türevler, çakışan `docker.io`/`containerd`/`runc` paketleri, eski bir

@@ -48,8 +48,8 @@ describe('doctor rows (pure)', () => {
     expect(text).toContain('uyarı      Kimlik profili seçilmemiş');
     // Lead J3 (I-S3 Q2): the next step is the command that writes the fact, never a bare `deckent init` that cannot (no loop).
     expect(checks.find(row => row.id === 'setup.identity')?.next).toBe('deckent config set identity.profile --global');
-    // I-S7: no registry yet → the first missing first-job step (the registry, which also names the pool), never `init pool` without --preview|--apply (CLI_USAGE).
-    expect(doctorChecks(report, facts({ poolStatus: 'unconfigured' }), 'tr').find(row => row.id === 'work.pool')?.next).toMatch(/^İlk iş türünü ve worker havuzunu tanımlayın: .*; komut: deckent init registry --scope live --provider /u);
+    // alpha.56 U3: the first work kind is an onboarding step — doctor points to the terminal (/setup), never back to `deckent init`.
+    expect(doctorChecks(report, facts({ poolStatus: 'unconfigured' }), 'tr').find(row => row.id === 'work.pool')?.next).toBe("İlk iş türü: deckent'i açın, ilk açılışta ayarlanır (terminalde: /setup)");
     expect(text).toContain('uyarı      Kurulum klasörü başka kullanıcılara açık (mod 0755)');
     expect(text).toContain('sonraki adım: chmod 700 /home/me/.deckent');
     expect(text).toContain('Yedek parolası bu kurulumun içinde saklanıyor'); // J2e: owner wording, joined with C-ADMIN's backup line
@@ -66,8 +66,9 @@ describe('doctor rows (pure)', () => {
     const docker = (state: string, code: string, extra: Partial<DoctorCheckFacts> = {}) => doctorChecks(report, facts({ executionEnvironment: { state, reason: { code, params: { runtime: 'Docker', version: '27.3.1' } } }, ...extra }), 'tr')
       .find(row => row.id === 'work.docker')!;
     expect(docker('done', 'setup.execution.ready')).toEqual({ group: 'work', id: 'work.docker', state: 'ok', text: 'Docker 27.3.1 hazır: Run, /do ve teslim onu kullanabilir.' });
-    expect(docker('blocked', 'setup.execution.stopped')).toMatchObject({ state: 'warning', next: 'deckent init', text: expect.stringContaining('Docker kurulu ama hizmeti çalışmıyor') });
-    expect(docker('blocked', 'setup.execution.stopped', { firstJob: { execution: true, registry: true } })).toMatchObject({ state: 'error', next: 'deckent init' });
+    const onboarding = "Çalıştırma ortamı: deckent'i açın, ilk açılışta ayarlanır (terminalde: /setup)";
+    expect(docker('blocked', 'setup.execution.stopped')).toMatchObject({ state: 'warning', next: onboarding, text: expect.stringContaining('Docker kurulu ama hizmeti çalışmıyor') });
+    expect(docker('blocked', 'setup.execution.stopped', { firstJob: { execution: true, registry: true } })).toMatchObject({ state: 'error', next: onboarding });
     expect(docker('blocked', 'setup.execution.none')).toMatchObject({ state: 'warning', text: expect.stringContaining('Kurulu çalıştırma ortamı yok') });
     expect(docker('blocked', 'setup.execution.noPermission', { firstJob: { execution: true, registry: true } })).toMatchObject({ state: 'error' });
     expect(docker('blocked', 'setup.execution.unknown')).toMatchObject({ state: 'untested' });
