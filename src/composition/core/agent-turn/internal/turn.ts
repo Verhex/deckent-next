@@ -354,7 +354,9 @@ export async function runPeerConfiguredChatTurn(projectRoot: string, input: unkn
     const answerBytes = answer === null ? 0 : Buffer.byteLength(answer, 'utf8');
     // The answer came as text events; the result repeats it only while it fits the replay bound and the caller's delivery.
     const kept = answer !== null && answerBytes <= Math.min(AGENT_TURN_ANSWER_MAX_BYTES, Math.max(0, delivery.maxResultBytes - 1024)) ? answer : null;
-    return Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note: withMcpNotices(mcpNotices, result.note), rounds: result.rounds,
+    const policyRecorded = await flushPolicy?.(); flushPolicy = null;
+    const notices = policyRecorded === false ? [t('agent.policyTurn.auditFailed', {}, language), ...mcpNotices] : mcpNotices;
+    return Object.freeze({ schemaVersion: 1, turnId: command.turnId, finish: result.finish, note: withMcpNotices(notices, result.note), rounds: result.rounds,
       toolCalls: result.toolCalls, answer: kept, answerBytes, replayed: result.replayed, recorded: result.recorded });
   } finally {
     /* S5 D1: the turn's `policy-turn` record, however the turn ends. */ await flushPolicy?.(); connection.stop();

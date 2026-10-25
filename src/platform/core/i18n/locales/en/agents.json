@@ -78,5 +78,6 @@
   "agents.inspect.standings": "Standing per work class: {standings}",
   "agents.inspect.standingNone": "Standing per work class: none recorded (defined before standings existed; revise the agent to open them)",
   "agent.standing.redesign-required": "redesign required",
-  "agent.standing.retired": "retired"
+  "agent.standing.retired": "retired",
+  "agent.policyTurn.auditFailed": "The turn’s policy audit record could not be saved (policy-turn). Decisions and completed effects are unchanged; inspect the service audit store with deckent doctor."
 }
