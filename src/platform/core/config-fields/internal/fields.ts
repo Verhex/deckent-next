@@ -1,3 +1,4 @@
+import { workerImageConsentSchema } from './worker-consent.js';
 import { TARGET_QUEUE_SETTINGS } from './target-queue.js';
 import { APPROVAL_ASSURANCE_SELECTION } from './approval-assurance.js';
 import { DOCKER_EXECUTION_SETTINGS, GIT_EXECUTION_SETTINGS, ARTIFACT_STORAGE_LIMITS, ADOPTION_TARGET_SETTINGS, WORK_TARGET_SETTINGS, WORKER_INSTRUCTION_SETTINGS, EXECUTION_RETENTION_SETTINGS, EXECUTION_SECRET_GATE_SETTINGS, RUN_PARKING_SETTINGS, QUOTA_RECOVERY_SETTINGS, STALL_RECOVERY_SETTINGS } from './execution.js';
@@ -175,6 +176,7 @@ export const CONFIG_FIELDS = Object.freeze(mergeConfigFields({
     responseMaxBytes: z.number().int().positive().safe().default(65536),
   }).strict().default({}), image: z.object({
     providers: z.array(z.string().regex(/^[a-z0-9]{1,32}$/u)).default([]),
+    consents: z.array(workerImageConsentSchema).max(1024).default([]),
     baseRefreshMs: z.number().int().positive().max(2_147_483_647).default(604_800_000),
     sources: z.object({ baseImage: z.string().regex(/^[a-z0-9][\w./:@-]{0,254}$/u).nullable().default(null),
       proxy: z.string().url().refine(value => { if (!URL.canParse(value)) return true; /* .url() already reported it */ const url = new URL(value); return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash; }, 'WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED').nullable().default(null),

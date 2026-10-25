@@ -277,5 +277,8 @@
   "setup.work.poolCard.yes": "Set up",
   "setup.offer.recommended": "{path} (recommended)",
   "setup.offer.here": "This folder: {path}",
-  "setup.enclosing": "Using the enclosing installation at {path}. To install separately in this folder, run deckent init --here."
+  "setup.enclosing": "Using the enclosing installation at {path}. To install separately in this folder, run deckent init --here.",
+  "setup.execution.noWorkKind": "No worker image is needed until a work kind is selected.",
+  "setup.execution.workerConsentRequired": "Confirm the worker image sources in onboarding or /setup before acquiring an image.",
+  "setup.execution.workerAcquisition": "Worker image: {phase}; step: {step}; reason: {code}."
 }

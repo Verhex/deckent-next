@@ -1,10 +1,12 @@
+import limits from './limits.json' with { type: 'json' };
+import { configuredWorkerBuilder } from './builder.js';
 import { constants } from 'node:fs';
 import { mkdir, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
-import { selectWorkerLineage, toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type LayeredWorkerRecipe, type WorkerInstallInput, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
-import { buildWorkerImageInHome, readBuiltWorkerLineage, readWorkerImageHeldVersion, localPrincipalChannel, readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { workerConsentBinding, selectWorkerLineage, toolchainUpdateApplies, affectedToolchainProfiles, insertHistoryLine, planToolchainUpdate, proposeProfileRevisions, type LayeredWorkerRecipe, type WorkerInstallInput, type ProfileRevisionProposal, type ToolchainUpdatePlan } from '#engine/index.js';
+import { buildWorkerImageInHome, readBuiltWorkerLineage, localPrincipalChannel, readWorkerImageSources, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { inspectConfiguredToolchainCurrency, type NpmLatestVersionFetcher } from './currency.js';
 const packageRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; decision: 'disabled' | 'no-change' | 'planned' | 'built';
@@ -14,7 +16,7 @@ export interface ToolchainUpdateDependencies { readonly fetcher?: NpmLatestVersi
   /** Ends a running build (the service stopping): the builder process is terminated and the build context is kept as `failed-`. */
   readonly signal?: AbortSignal;
   /** Called once a build is certain (plan written, daemon preflight passed), before its context is created: the refresh's durable `updating` marker. */
-  readonly onBuild?: (plan: ToolchainUpdatePlan) => void | Promise<void> }
+  readonly onBuild?: (plan: ToolchainUpdatePlan, expiresAt?: string) => void | Promise<void> }
 export async function writeArtifact(directory: string, name: string, value: unknown) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const path = join(directory, name);
@@ -43,22 +45,30 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
   if (proposed.decision === 'no-change') return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'no-change', plan: proposed, planPath: null, build: null, proposal: null, proposalPath: null });
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'));
   if (mcpCheckOnly) return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan: proposed, planPath: null, build: null, proposal: null, proposalPath: null });
-  const apply = toolchainUpdateApplies(input.apply), signal = dependencies.signal ? { signal: dependencies.signal } : {};
-  const plan = apply ? planFor(await readWorkerImageHeldVersion({ packageRoot: root, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, env, ...signal }, dependencies.runner)) : proposed;
-  const planPath = await writeArtifact(join(home, 'plans'), `${plan.next!.imageVersion}-${plannedAt.replace(/[:.]/g, '-')}.json`, plan);
-  if (!apply) return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan, planPath, build: null, proposal: null, proposalPath: null });
-  await dependencies.onBuild?.(plan);
-  // A failed build keeps its context as evidence under another name (bounded retention), so the next attempt may reuse the planned version.
-  const built = await buildWorkerImageInHome({ packageRoot: root, home, imageVersion: plan.next!.imageVersion, dockerfile: insertHistoryLine(lineage.dockerfile, plan.next!.historyLine),
-    recipe: sources.recipe, resolution: { selected: plan.staleProviders, npmRegistry: config.toolchains.currency.registryEndpoint,
-      sources: config.toolchains.image.sources, refreshMs: config.toolchains.image.baseRefreshMs, plannedAt, previousVersion: plan.next!.previousVersion,
-      resolved: Object.fromEntries(plan.report.providers.flatMap(entry => {
-        const installer = (sources.recipe as LayeredWorkerRecipe).providers.find(provider => provider.id === entry.provider)?.installer;
-        return installer?.kind === 'npm' && entry.latest ? [[entry.provider, { kind: 'npm', package: installer.package, version: entry.latest.version } satisfies WorkerInstallInput]] : [];
-      })), ...(dependencies.fetcher ? { lookup: dependencies.fetcher } : {}),
-      timeoutMs: config.toolchains.currency.timeoutMs, responseMaxBytes: config.toolchains.currency.responseMaxBytes }, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, failedContextsKept: policy.failedContextsKept, env, ...signal }, dependencies.runner);
-  const proposal = proposeProfileRevisions(plan, built.receipt, now());
-  const proposalPath = await writeArtifact(join(home, 'proposals'), `${plan.next!.imageVersion}.json`, proposal);
-  return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'built', plan, planPath,
-    build: { context: built.context, receiptPath: built.receiptPath, imageId: proposal.imageId, tag: proposal.tag }, proposal, proposalPath });
+  const apply = toolchainUpdateApplies(input.apply);
+  if (!apply) {
+    const planPath = await writeArtifact(join(home, 'plans'), limits.planTemplate.replace('{version}', proposed.next!.imageVersion).replace('{at}', plannedAt.replace(/[:.]/g, '-')), proposed);
+    return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan: proposed, planPath, build: null, proposal: null, proposalPath: null });
+  }
+  const binding = workerConsentBinding({ recipe: sources.recipe, providers: proposed.staleProviders, npmRegistry: config.toolchains.currency.registryEndpoint, sources: config.toolchains.image.sources });
+  return configuredWorkerBuilder(projectRoot, options, { packageRoot: root, home, binding, plannedAt, ...(dependencies.runner ? { runner: dependencies.runner } : {}), ...(dependencies.signal ? { signal: dependencies.signal } : {}) }, async (reservation, buildSignal, retain) => {
+    const signal = { signal: buildSignal };
+    const plan = planFor(`r${Number(/^r([0-9]+)/u.exec(reservation.version)![1]) - 1}-00000000`);
+    const planPath = await writeArtifact(join(home, 'plans'), limits.planTemplate.replace('{version}', plan.next!.imageVersion).replace('{at}', plannedAt.replace(/[:.]/g, '-')), plan);
+    await dependencies.onBuild?.(plan, reservation.expiresAt);
+    // Failed contexts remain evidence; the reserved counter stays consumed.
+    const built = await buildWorkerImageInHome({ packageRoot: root, home, imageVersion: plan.next!.imageVersion, dockerfile: insertHistoryLine(lineage.dockerfile, plan.next!.historyLine),
+      recipe: sources.recipe, reservation, resolution: { selected: plan.staleProviders, npmRegistry: config.toolchains.currency.registryEndpoint,
+        sources: config.toolchains.image.sources, refreshMs: config.toolchains.image.baseRefreshMs, plannedAt, previousVersion: plan.next!.previousVersion,
+        resolved: Object.fromEntries(plan.report.providers.flatMap(entry => {
+          const installer = (sources.recipe as LayeredWorkerRecipe).providers.find(provider => provider.id === entry.provider)?.installer;
+          return installer?.kind === 'npm' && entry.latest ? [[entry.provider, { kind: 'npm', package: installer.package, version: entry.latest.version } satisfies WorkerInstallInput]] : [];
+        })), ...(dependencies.fetcher ? { lookup: dependencies.fetcher } : {}),
+        timeoutMs: config.toolchains.currency.timeoutMs, responseMaxBytes: config.toolchains.currency.responseMaxBytes }, timeoutMs: policy.buildTimeoutMs, outputBytes: policy.outputBytes, failedContextsKept: policy.failedContextsKept, env, ...signal }, dependencies.runner);
+    await retain(built.receipt);
+    const proposal = proposeProfileRevisions(plan, built.receipt, now());
+    const proposalPath = await writeArtifact(join(home, 'proposals'), `${plan.next!.imageVersion}.json`, proposal);
+    return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'built', plan, planPath,
+      build: { context: built.context, receiptPath: built.receiptPath, imageId: proposal.imageId, tag: proposal.tag }, proposal, proposalPath });
+  });
 }

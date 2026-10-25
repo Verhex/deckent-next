@@ -106,3 +106,27 @@ it('refuses cyclic and accessor values as typed JSON failures before evaluating 
   let reads = 0; const getter = Object.defineProperty({}, 'credential', { enumerable: true, get() { reads++; return 'PRIVATE'; } });
   expect(() => planConfigChange({}, 'layout.resources', getter, false)).toThrow(); expect(reads).toBe(0);
 });
+
+it('worker consent uses the governed config transaction: a witnessed person only; immutable history and read-only provider projection', async () => {
+  const record = { operation: 'worker-image.consent@1', id: 'consent', person: { id: principal.id, issuer: principal.issuer, subject: principal.subject },
+    scopeId: 'test', providers: ['codex'], sources: ['https://registry.example.invalid:8443/npm/prefix'], proxy: null,
+    recipeDigest: 'a'.repeat(64), baseRef: 'node:24', createdAt: '2026-10-26T00:00:00.000Z' };
+  const write = { ...command, commandId: 'consent', keyPath: 'toolchains.image.consents', value: [record] };
+  const f = fixture();
+  await expect(f.app.set(write)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  expect(f.events).toHaveLength(0); expect(f.published()).toBeUndefined();
+  const effective = createDefaultConfig(), snapshot = { document: {}, global: {}, project: {}, effective, digest: null, layer: 'project' as const, env: {} };
+  const calls: string[] = [];
+  const app = new ConfigApplication({ snapshot: async () => snapshot, publish: async (input, plan) => {
+    const result = await plan(snapshot); snapshot.document = result.document; snapshot.project = result.document;
+    snapshot.effective = validateConfig({ ...createDefaultConfig(), ...result.document }).config;
+    return { keyPath: input.keyPath, layer: 'project', beforeDigest: null, afterDigest: digestText(JSON.stringify(result.document)), backupPath: null, overridden: false };
+  } }, { authorize: async () => 'policy', audit: async () => { calls.push('audit'); }, witness: async operation => { calls.push(operation); } });
+  // Approval/witness is exercised before asserting the requested effect, never substituted with a safe command.
+  await expect(app.submit('set', write)).resolves.toMatchObject({ status: 'applied' });
+  expect(calls).toContain('workerImage'); expect(calls.filter(call => call === 'audit')).toHaveLength(1);
+  expect(await app.explain({ keyPath: 'toolchains.image.providers' })).toMatchObject({ value: ['codex'] });
+  await expect(app.set({ ...write, value: [] })).rejects.toMatchObject({ code: 'WORKER_IMAGE_CONSENT_INVALID' });
+  await expect(app.set({ ...write, value: [{ ...record, id: 'ai' }], commandId: 'ai', principal: { ...principal, assurance: 'workload-verified' } })).rejects.toThrow();
+  await expect(app.set({ ...write, keyPath: 'toolchains.image.providers', value: ['claude'] })).rejects.toMatchObject({ code: 'WORKER_IMAGE_PROVIDERS_READ_ONLY' });
+});

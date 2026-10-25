@@ -277,5 +277,8 @@
   "setup.work.poolCard.yes": "Kur",
   "setup.offer.recommended": "{path} (önerilen)",
   "setup.offer.here": "Bu klasör: {path}",
-  "setup.enclosing": "Üst klasördeki {path} kurulumu kullanılıyor. Bu klasöre ayrı kurulum için deckent init --here çalıştırın."
+  "setup.enclosing": "Üst klasördeki {path} kurulumu kullanılıyor. Bu klasöre ayrı kurulum için deckent init --here çalıştırın.",
+  "setup.execution.noWorkKind": "Bir iş türü seçilene kadar işçi imajı gerekmiyor.",
+  "setup.execution.workerConsentRequired": "İmaj edinmeden önce onboarding veya /setup üzerinden işçi imajı kaynaklarını onaylayın.",
+  "setup.execution.workerAcquisition": "İşçi imajı: {phase}; adım: {step}; neden: {code}."
 }

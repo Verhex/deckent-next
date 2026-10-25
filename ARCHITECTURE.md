@@ -385,15 +385,15 @@ changes must retain those historical read semantics. The shipped session-events 
 verified evidence; Codex reports `client-reported` evidence (alpha.54, owner Q4): the admitted model's name is accepted by criteria with that label, another name is `client-reported-mismatch` and held for a person, and a missing name stays `unverified` and is accepted by criteria as before. Cursor declares `session-start-name` evidence (alpha.52, owner K1/K2): verdicts `start-name-matched` and `provider-chosen` (catalog `selection: provider`) are accepted by criteria and shown, another model's recorded name is `substituted`, and a missing or unknown name is `unverified` and held for a human; `verified` still means per-model usage evidence only.
 Author targeted proof and remaining limits: external `proof/HARDCODE-P1-A-2026-10-03/review.md`.
 
-Worker image versioning (owner 2026-09-22) is an explicit operator build operation shipped in `assets/worker-image`:
-recipe schema 2 names `repository`, `imageVersion`, `previousVersion` and the base image; the Dockerfile's
-newest-first `# version <id> | <date> | base <image> | supersedes <id|none> | <reason>` comment lines are the
-human-readable history, validated against the recipe before any Docker call and copied into the image. Each
-version maps to exactly one immutable imageId, tagged `<repository>:<imageVersion>` with OCI version/revision/base
-labels; rebuilding a version whose tag already names another image is refused. Receipts (schema 2) record version,
-tag, labels, history, source hashes and the probed provider manifest; earlier receipts are archived, earlier images
-and tags are retained for active Runs and rollback. The product still binds execution only by `imageId`; tags,
-labels and history are operator evidence, not authority, and no image is pulled, activated or removed by the product.
+Worker images use the shipped schema-3 recipe: one shared base and one image per selected provider. Receipts retain
+separate dated `imageVersion`/history and canonical `rN` base / `rN-provider` tags (`tagVersion`); legacy dated tags remain readable.
+A witnessed person records `worker-image.consent@1` through ConfigApplication policy/approval/CAS/audit, binding principal,
+scope, provider, complete registry/installer URLs, proxy, recipe digest and base ref; provider choices are a read-only projection.
+The acquisition service and refresh refuse unmatched consent. A marker alone starts nothing. Both use one daemon-keyed
+builder lock and durable counter under the global layout resource; retained local/global receipts floor each reservation.
+Failed reservations remain consumed. Kernel custody fences builders; reconciled stale ownership is audited before takeover.
+The revisioned marker publishes provider/image/receipt facts; restart fails interrupted work and reconciles its private context/labelled probes.
+Runtime uses immutable imageIds; old images/tags remain untouched. Initial registry/pool/proposal writes, ready-card wiring and real Docker acceptance are separate.
 
 Native authoring v2 also accepts mutually exclusive raw prompt or structured composition-v1.
 A packaged versioned common core plus explicitly selected persona/skills/context and task/scope/

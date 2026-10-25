@@ -528,5 +528,11 @@
   "models.connect.cause.not-listable": "this connection does not list models",
   "models.connect.cause.unexpected": "unexpected failure",
   "toolchain.cursor.noVersionFeed": "Vendor publishes no version feed; the admitted worker-image version is {version}. Currency is unverified.",
-  "cli.help.modelsConnect.kindsFromProvider": "see /provider"
+  "cli.help.modelsConnect.kindsFromProvider": "see /provider",
+  "error.WORKER_IMAGE_CONSENT_MISSING": "Worker image consent does not match the selected providers, recipe or complete sources. Review a new consent card.",
+  "error.WORKER_IMAGE_CONSENT_INVALID": "Worker image consent must be a new immutable record of the witnessed person and scope.",
+  "error.WORKER_IMAGE_PROVIDERS_READ_ONLY": "Worker image providers are derived from consent records. Select a work kind and confirm its consent card.",
+  "error.WORKER_IMAGE_BUILDING": "Another worker image builder holds this daemon. Wait for it to finish or inspect the interrupted job.",
+  "error.WORKER_IMAGE_DOCKER_WAITING": "Worker image acquisition is waiting for a reachable Docker daemon.",
+  "error.WORKER_IMAGE_BUILD_INTERRUPTED": "Worker image acquisition was interrupted. Inspect its retained evidence before confirming a new attempt."
 }

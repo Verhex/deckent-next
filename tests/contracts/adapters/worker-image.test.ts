@@ -149,7 +149,7 @@ esac
     const dockerfile = sources.dockerfile.replace(/^# version r/m, `# version r99-20260923 | 2026-09-23 | base node:24-trixie-slim | supersedes ${(sources.recipe as { imageVersion: string }).imageVersion} | test\n# version r`);
     const parent = await mkdtemp(join(tmpdir(), 'deckent-worker-image-')); roots.push(parent);
     const prepared = await prepareWorkerImageBuildContext({ packageRoot, parent: join(parent, 'builds'), imageVersion: 'r99-20260923', dockerfile, recipe });
-    expect((await readdir(prepared.context)).sort()).toEqual(['build.mjs', 'history.log', 'history.mjs', 'inspect.mjs', 'install.mjs', 'layers.mjs', 'lineage.json', 'lineage.lock.json', 'recipe.json']);
+    expect((await readdir(prepared.context)).sort()).toEqual(['build.mjs', 'history.log', 'history.mjs', 'inspect.mjs', 'install.mjs', 'layers.mjs', 'lineage.json', 'lineage.lock.json', 'receipts.mjs', 'recipe.json', 'recover.mjs']);
     expect((await stat(prepared.context)).mode & 0o077).toBe(0);
     const copied = validateRecipe(JSON.parse(await readFile(join(prepared.context, 'recipe.json'), 'utf8')));
     expect(parseVersionHistory(await readFile(join(prepared.context, 'history.log'), 'utf8'), copied)[0]).toMatchObject({ id: 'r99-20260923', supersedes: copied.previousVersion });
@@ -175,4 +175,27 @@ esac
     const silent: WorkerImageBuildRunner = async command => evidence({ requestId: command.requestId }) as never;
     await expect(runWorkerImageBuild({ context: prepared.context, receiptPath: join(parent, 'r4.json'), timeoutMs: 5000, outputBytes: 4096 }, silent)).rejects.toMatchObject({ code: 'WORKER_IMAGE_RECEIPT_MISSING' });
   });
+});
+
+it('canonical tags and retained adoption/failed/archive history keep one daemon counter; unsafe or incomplete receipts refuse', async () => {
+  const { retainedWorkerHistory } = await import('../../../assets/worker-image/receipts.mjs');
+  const { imageTag } = await import('../../../assets/worker-image/layers.mjs');
+  const { symlink } = await import('node:fs/promises');
+  const home = await mkdtemp(join(tmpdir(), 'worker-history-')); roots.push(home);
+  const archive = join(home, 'archive'); await mkdir(archive);
+  const receipt = (n: number, daemonId = 'daemon') => ({ schemaVersion: 3, imageVersion: `r${n}-20261026`, daemonId, history: [{ id: 'r31-20261024' }] });
+  await writeFile(join(home, 'adopted-1.json'), JSON.stringify(receipt(32)));
+  await writeFile(join(home, 'r33-20261026.json.failed-123'), JSON.stringify(receipt(33)));
+  await writeFile(join(archive, 'retained.json'), JSON.stringify(receipt(34)));
+  await writeFile(join(home, 'foreign.json'), JSON.stringify(receipt(90, 'foreign')));
+  expect(imageTag('deckent/worker', 'r32-20261026', ['codex'])).toBe('deckent/worker:r32-codex');
+  expect(imageTag('deckent/worker-base', 'r32-20261026')).toBe('deckent/worker-base:r32');
+  expect(heldVersion(['r32-claude', 'r7', 'r31-20261024-codex'])).toBe('r32-00000000');
+  expect(() => assertVersionAdvances('r32-20261026', ['r32-claude'])).toThrow('WORKER_VERSION_COUNTER_TAKEN');
+  const bounds = { files: 16, bytes: 4096 }, versions = retainedWorkerHistory(home, 'daemon', bounds);
+  expect(versions).toContain('r34-20261026'); expect(versions).not.toContain('r90-20261026');
+  expect(() => assertVersionAdvances('r34-20261026', versions)).toThrow('WORKER_VERSION_COUNTER_TAKEN');
+  expect(() => retainedWorkerHistory(home, 'daemon', { ...bounds, files: 1 })).toThrow('WORKER_HISTORY_IDS');
+  await symlink(join(home, 'adopted-1.json'), join(home, 'unsafe.json'));
+  expect(() => retainedWorkerHistory(home, 'daemon', bounds)).toThrow('WORKER_HISTORY_IDS');
 });

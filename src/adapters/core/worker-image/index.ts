@@ -5,3 +5,5 @@ export type { WorkerImagePresence, WorkerImageReceiptView } from './internal/set
 
 export { resolveWorkerBuildPlan } from './internal/resolve.js';
 export type { WorkerResolution } from './internal/resolve.js';
+
+export { withWorkerBuilder, readWorkerHistory, type WorkerReservation } from './internal/custody.js';
