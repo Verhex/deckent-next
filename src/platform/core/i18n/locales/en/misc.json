@@ -723,7 +723,7 @@
   "brain.cancelHint": "Esc / Ctrl+C: cancel planning",
   "brain.requestHint": "Enter /do followed by the work you want planned.",
   "cli.help.summary.do": "Plan an intent through Brain and existing approval gates",
-  "cli.help.do": "deckent do --request <intent> [--scope <scope>] [--command-id <id>] [--json]. Reuse the command id and identical request to replay; this command never decides approvals.",
+  "cli.help.do": "deckent do --request <intent> --scope <scope> [--command-id <id>] [--json]. Reuse the command id and identical request to replay; this command never decides approvals.",
   "mcp.tool.planRun": "Generate a receipted RunProposal from an intent with the selected active model and provider-spend budget. Same command/input replays. MCP cannot decide approvals.",
   "config.field.brain_planner": "Versioned Brain planning template registry",
   "error.BRAIN_CONTEXT_TOO_LARGE": "Planning context exceeds the {limit} {unit} limit (observed {observed}). Narrow the intent/catalog selection or use an explicitly activated model with a larger context window; no automatic retry.",

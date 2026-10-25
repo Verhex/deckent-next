@@ -216,7 +216,8 @@ export class SqliteRunJournal {
     return this.transaction(() => {
       const replay = this.receipt(scopeId, runId, parsed.commandId, command); if (replay) return replay;
       const row = this.db.prepare('SELECT revision,snapshot FROM runs WHERE scope_id=? AND run_id=?').get(scopeId, runId);
-      if (!row || row.revision !== parsed.expectedRevision) throw new RunStoreError('RUN_STORE_CONFLICT');
+      if (!row) throw new RunStoreError('RUN_NOT_FOUND');
+      if (row.revision !== parsed.expectedRevision) throw new RunStoreError('RUN_STORE_CONFLICT');
       const current = decodeRunSnapshot(row.snapshot, scopeId, runId);
       if (current.revision !== row.revision) throw new RunStoreError('RUN_STORE_CORRUPT');
       propagateRunCancellation(this.db, current, parsed.actor);

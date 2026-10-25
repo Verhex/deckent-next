@@ -126,7 +126,7 @@ export async function runCommand(argv: readonly string[], context: RunCommandCon
   }
   if (action === 'close' || action === 'resume' || action === 'hold') {
     const commandId = values.get('--command-id'), revision = values.get('--expected-revision');
-    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage('--expected-revision');
+    if (!commandId || !revision || !/^(0|[1-9][0-9]*)$/.test(revision) || !Number.isSafeInteger(Number(revision))) throw usage(!commandId ? '--command-id' : '--expected-revision');
     if (!context.applyRunLifecycle) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
     const answer = values.get('--answer'), taskId = values.get('--task'), holdReason = values.get('--reason'), quota = quotaChoice(values.get('--quota'), usage);
     if (quota !== undefined && (action !== 'resume' || answer !== undefined)) throw usage('--quota');
