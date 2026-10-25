@@ -1,0 +1,17 @@
+{
+  "error.HUB_PACKAGE_SCHEMA_UNSUPPORTED": "Bu Hub paketi şema sürümü desteklenmiyor. İçe aktarmadan önce okuyucuyu güncelleyin.",
+  "error.HUB_ENVELOPE_SCHEMA_UNSUPPORTED": "Bu Hub imza zarfı sürümü desteklenmiyor.",
+  "error.HUB_FEED_SCHEMA_UNSUPPORTED": "Bu Hub iptal listesi sürümü desteklenmiyor.",
+  "error.HUB_PACKAGE_INVALID": "Hub paketi sürümlü sözleşmesine uymuyor.",
+  "error.HUB_ENVELOPE_INVALID": "Hub imza zarfı geçersiz veya yinelenen roller içeriyor.",
+  "error.HUB_FEED_INVALID": "Hub iptal listesi veya doğrulama bağlamı geçersiz.",
+  "error.HUB_LIMIT_EXCEEDED": "Hub girdisi bir registry sınırını aşıyor.",
+  "error.HUB_DIGEST_MISMATCH": "Hub içeriği imzalanan özet veya boyutla eşleşmiyor.",
+  "error.HUB_SIGNATURE_INVALID": "Hub imzası doğrulanamadı.",
+  "error.HUB_SIGNER_UNTRUSTED": "Hub imza anahtarı bilinmiyor, etkin değil veya seçilen güven kaynağıyla eşleşmiyor.",
+  "error.HUB_IDENTITY_MISMATCH": "Hub kimliği sabitlenmiş kaynakla eşleşmiyor.",
+  "error.HUB_FOREIGN_PACKAGE": "Paket seçilen Hub ile eşleşen bir onay imzası taşımıyor.",
+  "error.HUB_FEED_REPLAYED": "Hub iptal listesi eski veya daha önce kabul edilmiş.",
+  "error.HUB_FEED_STALE": "İmzalı Hub iptal listesinin süresi dolmuş veya zamanı gelecekte. Devam etmeden önce yenileyin.",
+  "error.HUB_SKILL_INVALID": "Skill içeriği veya paket üst bilgisi geçersiz."
+}

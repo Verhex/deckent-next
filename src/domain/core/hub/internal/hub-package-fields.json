@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "packageSchema": 1,
+  "optionalFields": [
+    { "object": "dependency", "field": "hubId", "reader": "hub-id-v1" },
+    { "object": "signature", "field": "reviewLevel", "reader": "review-level-v1" },
+    { "object": "signature", "field": "moderatorKeyIds", "reader": "moderator-keys-v1" }
+  ]
+}

@@ -1,3 +1,5 @@
+import huben from '../locales/en/hub.json' with { type: 'json' };
+import hubtr from '../locales/tr/hub.json' with { type: 'json' };
 import configen from '../locales/en/config.json' with { type: 'json' };
 import configtr from '../locales/tr/config.json' with { type: 'json' };
 import clien from '../locales/en/cli.json' with { type: 'json' };
@@ -88,6 +90,7 @@ import agentsevoen from '../locales/en/agentsevo.json' with { type: 'json' };
 import agentsevotr from '../locales/tr/agentsevo.json' with { type: 'json' };
 
 export const families = [
+  { en: huben, tr: hubtr },
   { en: configen, tr: configtr },
   { en: clien, tr: clitr },
   { en: tuien, tr: tuitr },

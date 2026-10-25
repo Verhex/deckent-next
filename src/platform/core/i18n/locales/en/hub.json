@@ -1,0 +1,17 @@
+{
+  "error.HUB_PACKAGE_SCHEMA_UNSUPPORTED": "This Hub package schema version is unsupported. Update the reader before importing.",
+  "error.HUB_ENVELOPE_SCHEMA_UNSUPPORTED": "This Hub signature envelope version is unsupported.",
+  "error.HUB_FEED_SCHEMA_UNSUPPORTED": "This Hub revocation feed version is unsupported.",
+  "error.HUB_PACKAGE_INVALID": "The Hub package does not match its versioned contract.",
+  "error.HUB_ENVELOPE_INVALID": "The Hub signature envelope is invalid or has duplicate roles.",
+  "error.HUB_FEED_INVALID": "The Hub revocation feed or its verification context is invalid.",
+  "error.HUB_LIMIT_EXCEEDED": "The Hub input exceeds a registry limit.",
+  "error.HUB_DIGEST_MISMATCH": "The Hub content differs from its signed digest or size.",
+  "error.HUB_SIGNATURE_INVALID": "The Hub signature could not be verified.",
+  "error.HUB_SIGNER_UNTRUSTED": "The Hub signing key is unknown, inactive or does not match the selected trust anchor.",
+  "error.HUB_IDENTITY_MISMATCH": "The Hub identity differs from the pinned source.",
+  "error.HUB_FOREIGN_PACKAGE": "The package has no matching attestation from the selected Hub.",
+  "error.HUB_FEED_REPLAYED": "The Hub revocation feed is older or has already been accepted.",
+  "error.HUB_FEED_STALE": "The signed Hub revocation feed is expired or has a future timestamp. Refresh it before continuing.",
+  "error.HUB_SKILL_INVALID": "The skill content or its package frontmatter is invalid."
+}
