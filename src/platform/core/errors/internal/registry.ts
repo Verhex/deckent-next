@@ -5,6 +5,23 @@ import type { ErrorDefinitions, ErrorEntry } from './definition.js';
 import { mergeErrorDefinitions } from './merge.js';
 import { ERROR_DEFINITION_FRAGMENTS } from './defs/index.js';
 export type { ErrorEntry } from './definition.js';
+function discoveryCause(p: Params, l: Locale): string {
+  switch (p['cause']) {
+    case 'no-credential': return t('models.connect.cause.no-credential', { status: p['status'] ?? '-' }, l);
+    case 'credential-rejected': return t('models.connect.cause.credential-rejected', { status: p['status'] ?? '-' }, l);
+    case 'access-denied': return t('models.connect.cause.access-denied', { status: p['status'] ?? '-' }, l);
+    case 'rate-limit': return t('models.connect.cause.rate-limit', { status: p['status'] ?? '-' }, l);
+    case 'spend-limit': return t('models.connect.cause.spend-limit', { status: p['status'] ?? '-' }, l);
+    case 'limit-reached': return t('models.connect.cause.limit-reached', { status: p['status'] ?? '-' }, l);
+    case 'http-status': return t('models.connect.cause.http-status', { status: p['status'] ?? '-' }, l);
+    case 'redirect': return t('models.connect.cause.redirect', { status: p['status'] ?? '-' }, l);
+    case 'network': return t('models.connect.cause.network', { status: p['status'] ?? '-' }, l);
+    case 'timeout': return t('models.connect.cause.timeout', { status: p['status'] ?? '-' }, l);
+    case 'invalid-list': return t('models.connect.cause.invalid-list', { status: p['status'] ?? '-' }, l);
+    case 'not-listable': return t('models.connect.cause.not-listable', { status: p['status'] ?? '-' }, l);
+    default: return t('models.connect.cause.unexpected', {}, l);
+  }
+}
 /** MCP_SANDBOX_COMMAND_UNREACHABLE (MCP-SANDBOX-PATHS): one catalog sentence per diagnosis kind (params name, kind, role, path, target
  * ('' = none), runner); `{targetSuffix}` is ' -> <target>' when the link target differs, the role is its own localized label. */
 /** PATCH_LIMIT names the exceeded bound (params detail, observed, limit, field); an unknown or absent detail keeps the generic sentence. */
@@ -167,7 +184,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   CLI_CATALOG_INPUT_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_CATALOG_INPUT_UNAVAILABLE', p, l) }) },
   RUNTIME_CHAT_EVENT_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.RUNTIME_CHAT_EVENT_TOO_LARGE', p, l) }) },
   TERMINAL_CHAT_NOT_CONFIGURED: { category: 'usage', render: (p, l) => ({ message: t('error.TERMINAL_CHAT_NOT_CONFIGURED', p, l) }) },
-  MODEL_CONNECT_DISCOVERY_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE', p, l) }) },
+  MODEL_CONNECT_DISCOVERY_UNAVAILABLE: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE', { ...p, cause: discoveryCause(p, l) }, l) }) },
   MODEL_CONNECT_DISCOVERY_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_INVALID', p, l) }) },
   MODEL_CONNECT_DISCOVERY_LIMIT: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_DISCOVERY_LIMIT', p, l) }) },
   MODEL_CONNECT_PRICE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.MODEL_CONNECT_PRICE_REQUIRED', p, l) }) },

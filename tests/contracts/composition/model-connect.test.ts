@@ -17,7 +17,9 @@ const grants = (extra: Record<string, unknown>[] = []) => [
   { id: 'config', effect: 'allow', actions: ['write'], scopes: 'all', principals: me, resource: { kind: 'config', ids: 'all' } },
   { id: 'activation', effect: 'allow', actions: ['activate', 'deactivate', 'inspect'], scopes: 'all', principals: me, resource: { kind: 'model-activation', ids: 'all' } },
   { id: 'invoke-all', effect: 'allow', actions: ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'], scopes: ['scope'], principals: me, resource: { kind: 'model-invocation', ids: 'all' } },
-  { id: 'approvals', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } }, ...extra];
+  { id: 'approvals', effect: 'allow', actions: ['inspect', 'decide'], scopes: ['scope'], principals: me, resource: { kind: 'approval', ids: 'all' } },
+  // İ-12 budget step reads the scope's spend account, as the first-run founder can (template spending rule).
+  { id: 'spend-inspect', effect: 'allow', actions: ['inspect'], scopes: ['scope'], principals: me, resource: { kind: 'provider-spend-account', ids: 'all' } }, ...extra];
 /** A registry like the shipped one whose two seeded rows take a typed (local) address: the scripted server stands in for both vendors. */
 const localRegistry = parseProviderConnectRegistry({ ...PROVIDER_CONNECT_REGISTRY, kinds: [
   { id: 'vendor-one', labelKey: 'tui.provider.kind.openaiApi', available: true, endpoint: { default: null, editable: true }, probe: null,
@@ -158,9 +160,13 @@ describe.skipIf(process.platform !== 'linux')('models.connect', () => {
     for (const model of ['glm-5.3', 'glm-4.7-flash']) {
       expect(await connect(`c-${model}`, 'zai-api', model)).toMatchObject({ status: 'connected', tariff: 'published' });
     }
+    // İ-12: a priced model's result carries the budget step — the harness configures a scope budget, so it is present.
+    expect((await connect('c-sol-again', 'openai-api', 'gpt-6.1-sol')).budget).toEqual({ state: 'present' });
+    // Budget 0 USD (no account, no configured budget): the connection still completes and says priced turns need a budget first.
+    const unbudgeted = await f.config(); delete unbudgeted['provider_spending']; await writeFile(f.path, JSON.stringify(unbudgeted), { mode: 0o600 }); clearConfigCache();
     const b = await connect('c-b', 'deepseek-api', 'deepseek-flash');
     // The DeepSeek key is not stored yet: the result says so (the profile names it; turns are refused until it is stored).
-    expect([b.credentialRef, b.keyStored, b.status, b.tariff]).toEqual(['DECKENT_DEEPSEEK_KEY', false, 'connected', 'published']);
+    expect([b.credentialRef, b.keyStored, b.status, b.tariff, b.budget]).toEqual(['DECKENT_DEEPSEEK_KEY', false, 'connected', 'published', { state: 'missing' }]);
     const profiles = (await f.config())['provider_invocation_profiles'].profiles as { reference: { providerId: string }; adapter: { definition: { endpoint: string;
       authentication: unknown; tariff: unknown } } }[];
     const byVendor = Object.fromEntries(profiles.map(profile => [profile.reference.providerId, profile.adapter.definition]));

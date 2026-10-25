@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { ErrorRegistry } from '#platform/index.js';
 import { modelInvocationProfileSchema } from '#domain/index.js';
 import { openInvocationWorkspaceSelection, type WorkspaceSelectionPorts, type WorkspaceSelectionContext } from '#engine/index.js';
 import { providerProfileWorkspaceOffer, connectionAdapter, providerConnectKind } from '#adapters/core/provider-connect/index.js';
@@ -38,12 +39,20 @@ it('keeps choice custody, re-reads discovery at confirmation and plans only the 
 it('a revoked invoke grant blocks before credential resolution and discovery; foreign scope stays inaccessible', async () => {
   const f = fixture(), session = await openInvocationWorkspaceSelection('scope', f.ports); f.calls.length = 0; f.revoke();
   await expect(session.list('profile')).rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' });
-  await expect(session.list('foreign')).rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' });
+  await expect(session.list('foreign')).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
   expect(f.calls).toEqual(['authorize']);
 });
 
 it('identity changes after asynchronous credential resolution refuse before a network request', async () => {
   const f = fixture(), session = await openInvocationWorkspaceSelection('scope', f.ports); f.calls.length = 0; f.stale();
-  await expect(session.list('profile')).rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' });
+  await expect(session.list('profile')).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
   expect(f.calls).toEqual(['authorize', 'credential']);
+});
+
+it('preserves typed custody/config refusals and distinguishes missing credentials from unknown failures', async () => {
+  const f = fixture();
+  const session = await openInvocationWorkspaceSelection('scope', { ...f.ports, credential: async () => { throw ErrorRegistry.createError('SECRET_GRANT_REQUIRED'); } });
+  await expect(session.list('profile')).rejects.toMatchObject({ code: 'SECRET_GRANT_REQUIRED' });
+  const missing = await openInvocationWorkspaceSelection('scope', { ...f.ports, credential: async () => undefined });
+  await expect(missing.list('profile')).rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE', params: { cause: 'no-credential' } });
 });

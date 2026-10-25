@@ -6,9 +6,10 @@ import choices from './budget-choices.json' with { type: 'json' };
 
 /**
  * Stage 1 scope budget choices (owner 2026-10-08): one shared USD limit per scope across every API provider, chosen from presets or stepped
- * within bounds — never typed. Mutable data (`budget-choices.json`); the CLI `--usd` takes the same bounds.
+ * within bounds — never typed. Mutable data (`budget-choices.json`); the CLI `--usd` takes the same bounds. `defaultPresetUsd` (owner İ-12,
+ * 2026-10-25): the preset a first budget card offers highlighted; the person confirms or changes it.
  */
-export const SCOPE_BUDGET_CHOICES: Readonly<{ presetsUsd: readonly number[]; minUsd: number; maxUsd: number; stepUsd: number; minorUnitsPerUsd: number }> = Object.freeze(choices);
+export const SCOPE_BUDGET_CHOICES: Readonly<{ presetsUsd: readonly number[]; defaultPresetUsd: number; minUsd: number; maxUsd: number; stepUsd: number; minorUnitsPerUsd: number }> = Object.freeze(choices);
 export type ScopeBudgetSurface = 'cli' | 'terminal';
 
 /** Whole dollars within the bounds, or null. */

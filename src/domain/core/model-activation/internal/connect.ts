@@ -52,6 +52,9 @@ export type ModelConnectResult = Readonly<{
   carriedModels: readonly z.infer<typeof modelReferenceSchema>[];
   /** `published`: the profile carries the vendor's published tariff; `unmetered`: the adapter takes only a zero-rate tariff, spend is not metered. */
   tariff: 'published' | 'unmetered';
+  /** İ-12 (owner 2026-10-25), a connected `published` model only (additive): whether the scope has a budget for its priced turns — `present`, `missing`
+   * (Budget: 0 USD; priced turns stay refused until the person sets one) or `unknown` (not readable for this caller, with the typed code). */
+  budget?: Readonly<{ state: 'present' | 'missing' | 'unknown'; code?: string }>;
   /** S3-3, a CLI kind only: the connected login directory (s3c `owned`: the Brain's own) and who besides the person may spend it (empty: nobody). */
   cli?: Readonly<{ configDir: string; owned?: boolean; delegate: readonly ('ai' | 'system')[] }>;
   /** The pending approval that stopped the run (the same command continues after it is allowed). */

@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { discoverProviderModels, discoveredProviderCatalog, providerConnectKind, providerDiscoveryChannel, PROVIDER_CONNECT_LIMITS,
-  type ProviderProbeFetch } from '#adapters/core/provider-connect/index.js';
+  ProviderModelListError, type ProviderProbeFetch } from '#adapters/core/provider-connect/index.js';
 
 const local = providerConnectKind('local-openai')!, generic = providerConnectKind('openai-compatible')!;
 const key = 'sk-discovery-canary-41db79';
@@ -74,7 +74,7 @@ describe('seedless provider model discovery', () => {
     const stream = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode('{"data":[')); },
       cancel() { cancelled = true; } });
     await expect(discoverProviderModels(local, 'http://127.0.0.1', null, { timeoutMs: 30, fetch: async () => new Response(stream) }))
-      .rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' });
+      .rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE', cause: 'timeout' });
     expect(cancelled).toBe(true);
   });
 
@@ -102,4 +102,17 @@ describe('seedless provider model discovery', () => {
     const pending = discoverProviderModels(local, endpoint, null, { signal: controller.signal });
     controller.abort(reason); await expect(pending).rejects.toBe(reason);
   });
+});
+
+it('retains closed discovery causes without leaking response or transport text', async () => {
+  const endpoint = 'https://llm.example';
+  for (const [status, text, cause] of [[401, key, 'credential-rejected'], [403, key, 'access-denied'],
+    [429, '{"error":{"code":"insufficient_quota"}}', 'spend-limit'], [429, '{"error":{"type":"rate_limit_error"}}', 'rate-limit'],
+    [429, key, 'limit-reached'], [503, key, 'http-status'], [302, key, 'redirect']] as const) {
+    await expect(discoverProviderModels(generic, endpoint, key, { fetch: reply(text, status) })).rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE', cause, status });
+  }
+  await expect(discoverProviderModels(generic, endpoint, null)).rejects.toMatchObject({ cause: 'no-credential' });
+  await expect(discoverProviderModels(generic, endpoint, key, { fetch: async () => { throw new Error(key); } })).rejects.toMatchObject({ cause: 'network' });
+  const failure = new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'credential-rejected', 401);
+  expect(JSON.stringify(failure)).not.toContain(key);
 });

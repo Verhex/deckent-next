@@ -5,6 +5,8 @@ import type { ModelConnectCommand, ModelConnectResult } from '#domain/index.js';
 import { createMcpServer, type McpApplications } from '#surfaces/core/mcp/index.js';
 import { modelsCommand } from '#surfaces/core/cli-models/index.js';
 import { connectConfiguredModel } from '#composition/core/model-connect/index.js';
+import { PROVIDER_CONNECT_KINDS, providerConnectFamily, providerConnectHelpKinds } from '#adapters/core/provider-connect/index.js';
+import { main as cliMain } from '#surfaces/core/cli/index.js';
 import * as sdk from '../../../src/index.js';
 
 // T4-B models.connect: one typed contract on every surface — the CLI, MCP and the SDK hand the same command to the same application and return
@@ -69,4 +71,20 @@ describe('models.connect surface parity', () => {
   it('the SDK exports the same application function', () => {
     expect(sdk.connectModel).toBe(connectConfiguredModel);
   });
+});
+
+it('connect help lists current connectable kinds from host data in both languages', async () => {
+  for (const locale of ['en', 'tr']) {
+    const out: string[] = [], kinds = PROVIDER_CONNECT_KINDS.map(kind => ({ id: kind.id, labelKey: kind.labelKey, available: kind.available, connectFamily: providerConnectFamily(kind) }));
+    await modelsCommand(['models', 'connect', '--help', '--lang', locale], { env: {}, stdout: { write: (text: string) => { out.push(text); return true; } } as never,
+      providerConnect: { kinds } } as never);
+    expect(out.join('')).toContain('openrouter'); expect(out.join('')).toContain('claude-cli-subscription');
+    expect(out.join('')).not.toContain('chatgpt-login'); expect(out.join('')).not.toContain('{kinds}');
+    out.length = 0;
+    expect(await cliMain(['models', 'connect', '--help', '--lang', locale], { env: {},
+      stdout: { write: (text: string) => { out.push(text); return true; } } as never,
+      helpParams: async key => key === 'cli.help.modelsConnect' ? { kinds: providerConnectHelpKinds() } : {},
+      loadHost: async () => { throw new Error('help must not initialize the host'); } })).toBe(0);
+    expect(out.join('')).toContain('openrouter'); expect(out.join('')).toContain('claude-cli-subscription'); expect(out.join('')).not.toContain('{kinds}');
+  }
 });

@@ -36,7 +36,7 @@ import { previewSuppliedInstallation, inspectSuppliedInstallation, applySupplied
 import { inspectConfiguredShellRealm, runConfiguredMcpCommand, chatTurnRoundCommandId } from '#composition/core/agent-turn/index.js';
 import { getConfigFieldDefault, loadConfig, type Locale } from '#platform/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
-import { inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
+import { recordConfiguredProviderFailure, inspectDeclaredModels, inspectModelBinding, openConfiguredProviderWorkspaces } from '#composition/core/provider-catalog/index.js';
 import { prepareNativeCodingProfile, configureNativeCodingTemplate, initializeNativeCodingRegistry } from '#composition/core/native-coding/index.js';
 import { assertConfiguredTerminalCredential, assertTerminalChatReady, completeTerminalChatTurn, describeTerminalChat, terminalSecretGrantOffer } from '#composition/core/terminal-chat/index.js';
 import { assessConfiguredModelInvocationDelivery, inspectConfiguredModelInvocationCommand, inspectConfiguredInvocableModels } from '#composition/core/model-invocation/index.js';
@@ -95,8 +95,9 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     /* T4 PROVIDER-CONNECT: the /provider kinds (adapter data) and the free check, run in this terminal process with the key the person typed; the key then goes only to `setSecret` above (runtime service, audited by name). No environment variable, file or worker sees it. */ providerConnect: { kinds: PROVIDER_CONNECT_KINDS.map(kind => ({ id: kind.id, labelKey: kind.labelKey, available: kind.available, endpointDefault: kind.endpoint.default,
       endpointEditable: kind.endpoint.editable, keyRequired: kind.key?.required ?? false, secretName: kind.key?.secretName ?? null, probePath: kind.probe?.path ?? null,
       endpointChoices: kind.endpoint.choices, catalogProviderId: kind.connect?.seed ?? null, connectFamily: providerConnectFamily(kind), seeded: Boolean(kind.connect?.seed),
-      priceRequired: kind.connect?.priceRequired ?? false })),
-    endpoint: providerEndpoint, probe: (input, signal) => probeProviderConnection(input, signal ? { signal } : {}),
+      priceRequired: kind.connect?.priceRequired ?? false, billing: kind.billing })),
+    endpoint: providerEndpoint, probe: async (input, signal) => { const result = await probeProviderConnection(input, signal ? { signal } : {});
+      if (result.cause) await recordConfiguredProviderFailure(base.root, 'provider-probe', { code: 'PROVIDER_PROBE_REFUSED', cause: result.cause, status: result.httpStatus }); return result; },
     legacyKeys: PROVIDER_CONNECT_LEGACY_KEYS,
     /* T4-B: the per-connection key name (the generic row derives it from the host) and a seeded kind's models (exact ids from its packaged seed). */ secretName: (id, endpoint) => { const kind = providerConnectKind(id); if (!kind) return null; const base = endpoint === null ? null : providerEndpoint(endpoint);
       return providerConnectSecretName(kind, base?.ok ? base.base : null); },

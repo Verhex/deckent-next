@@ -1537,7 +1537,10 @@
         "src/composition/core/config",
         "src/composition/core/scoped-request",
         "src/engine/core/model-invocation",
-        "src/composition/core/secrets"
+        "src/composition/core/secrets",
+        "src/platform/core/errors",
+        "src/adapters/core/runtime-launcher",
+        "src/platform/core/managed-files"
       ],
       "plan": "PROVIDERS"
     },
@@ -1666,7 +1669,8 @@
         "src/platform/core/config",
         "src/platform/core/errors",
         "src/platform/core/host",
-        "src/platform/core/managed-files"
+        "src/platform/core/managed-files",
+        "src/composition/core/provider-spend"
       ],
       "plan": "PROVIDERS"
     },

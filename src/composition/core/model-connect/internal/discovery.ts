@@ -1,3 +1,4 @@
+import { recordConfiguredProviderFailure } from '#composition/core/provider-catalog/index.js';
 import { ModelCatalogPolicyAuthorization, ModelConnectError } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, discoverProviderModels, discoveredProviderCatalog, providerDiscoveryChannel, providerConnectSecretName,
   providerProbeBase, connectionAdapter, providerConnectModelPriced, ProviderModelListError, ProviderConnectError, ProviderProbeError,
@@ -27,7 +28,9 @@ export async function listConfiguredConnectionModels(projectRoot: string, scopeI
     await authorize();
     return ids.map(nativeId => ({ nativeId, displayName: nativeId, priced: providerConnectModelPriced(kind, nativeId, base) }));
   } catch (error) {
-    if (error instanceof ModelConnectError || error instanceof ProviderModelListError || error instanceof ProviderConnectError || error instanceof ProviderProbeError) {
+    if (error instanceof ProviderModelListError) { await recordConfiguredProviderFailure(projectRoot, 'model-discovery', error, options);
+      throw ErrorRegistry.createError(error.code, { params: { cause: error.cause, status: error.status ?? '' } }); }
+    if (error instanceof ModelConnectError || error instanceof ProviderConnectError || error instanceof ProviderProbeError) {
       throw ErrorRegistry.createError(error.code);
     }
     throw queryFailure(error);

@@ -8,3 +8,6 @@ export { providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from
 export { providerRequestDiagnosis } from './internal/diagnosis.js';
 export { listProviderWorkspaces, providerProfileWorkspaceOffer, type ProviderWorkspace } from './internal/workspaces.js';
 export { discoverProviderModels, discoveredProviderCatalog, providerDiscoveryChannel, ProviderModelListError } from './internal/discovery.js';
+
+export type { ProviderDiscoveryCause } from './internal/failure.js';
+export { providerConnectHelpKinds } from './help.js';

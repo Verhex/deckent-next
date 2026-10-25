@@ -1,3 +1,4 @@
+import { providerConnectHelpKinds } from '#adapters/core/provider-connect/index.js';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -44,6 +45,7 @@ it.each(['en', 'tr'] as const)('every registered command has side-effect-free %s
   for (const command of CLI_COMMANDS) {
     let output = ''; let initialized = false;
     const code = await main([...command.path, '--help', '--lang', language], {
+      helpParams: async key => key === 'cli.help.modelsConnect' ? { kinds: providerConnectHelpKinds() } : {},
       env: { DECKENT_LANG: language, NO_COLOR: '1' },
       initialize: () => { initialized = true; throw new Error('help initialized execution'); },
       stdout: { write: text => { output += text; } },

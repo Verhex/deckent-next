@@ -405,6 +405,8 @@
   "onboarding.ui.summary.mode": "Mode: {mode} (brain/worker tier: {strategy})",
   "onboarding.ui.summary.providers": "Providers — brain: {brain}, worker: {worker}, fallback: {fallback}",
   "onboarding.ui.summary.scope": "Scope: {scope} (root: {root})",
+  "onboarding.budget.zero": "Budget: 0 USD — Deckent makes no paid API call. Subscriptions and local servers work without a budget.",
+  "onboarding.budget.setNow": "Will you use a paid API? Set a budget now: {usd} USD is suggested — accept it or choose another amount.",
   "output.details": "Details: {value}",
   "output.status": "{phase}: {completed}/{total}; active workers: {workers}",
   "output.unknown": "unknown",

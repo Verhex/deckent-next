@@ -117,3 +117,4 @@ export { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 export { detectExecutionFacts, executionSetupFamily, WORKER_IMAGE_ESTIMATED_GB, type ExecutionDetectPorts, type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
 export { detectCodingFacts, codingSetupFamily } from '#adapters/core/setup-detect-coding/index.js';
 export * from '#adapters/core/execution-env-docker/index.js';
+export { providerConnectHelpKinds } from '#adapters/core/provider-connect/index.js';

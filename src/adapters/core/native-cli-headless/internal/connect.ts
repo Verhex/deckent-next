@@ -1,6 +1,6 @@
 import { readFile, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join } from 'node:path';
-import { delegatedUseConsentSchema, headlessEgressSchema, type DelegatedUseConsent, type JsonObject } from '#domain/index.js';
+import { delegatedUseConsentSchema, headlessEgressSchema, headlessEgressReasons, type DelegatedUseConsent, type JsonObject } from '#domain/index.js';
 import { nativeCliHeadless } from '#adapters/core/native-cli-registry/index.js';
 import { findExecutable } from '#adapters/core/setup-detect-execution/index.js';
 import { NATIVE_CLI_HEADLESS_ADAPTER, isNativeCliHeadlessAdapter, nativeCliHeadlessDefinitionSchema, refuse, type NativeCliHeadlessDefinition } from './contract.js';
@@ -56,9 +56,9 @@ export const headlessConnectionAdapter = (definition: NativeCliHeadlessDefinitio
 async function readEgress(stateDir: string) {
   const raw = await readFile(join(stateDir, HEADLESS_EGRESS_RECORD), 'utf8').then(text => JSON.parse(text) as unknown, () => null);
   const { schemaVersion, lastRefusedAtMs, ...summary } = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
-  const parsed = schemaVersion === 1 && typeof lastRefusedAtMs === 'number' ? headlessEgressSchema.safeParse(summary) : null;
+  const parsed = (schemaVersion === 1 || schemaVersion === 2) && typeof lastRefusedAtMs === 'number' ? headlessEgressSchema.safeParse(summary) : null;
   return parsed?.success && parsed.data.refused > 0 ? Object.freeze({ refused: parsed.data.refused, lastRefusedAtMs: lastRefusedAtMs as number,
-    hosts: Object.entries(parsed.data.hosts).sort(([a, x], [b, y]) => y - x || a.localeCompare(b)).map(([host]) => host), other: parsed.data.other }) : null;
+    ...headlessEgressReasons(parsed.data), hosts: Object.entries(parsed.data.hosts).sort(([a, x], [b, y]) => y - x || a.localeCompare(b)).map(([host]) => host), other: parsed.data.other }) : null;
 }
 /** Doctor (read-soft, no spawn): each subscription connection of the scope with its last preflight record's state, login kind and isolation (S3-5:
  * the launcher a passing check ran in, or `unavailable` when the realm closed the channel; `unknown`: no record yet), f5 its gateway refusals and s3c whether
