@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { terminalSecretGrantOffer } from '#composition/core/terminal-chat/index.js';
-import { clearConfigCache, resolveGlobalConfigPaths } from '#platform/index.js';
+import { connectProvider, type ProviderSecretHost } from '#composition/core/model-connect/index.js';
+import { clearConfigCache, ErrorRegistry, resolveGlobalConfigPaths } from '#platform/index.js';
 
 // PRE-8 first-use card (owner decisions 2026-10-21): only a solo installation's attested human terminal is offered the card; a team or
 // enterprise selection, or a process without its own controlling terminal (a pipe, an agent's shell), gets the refusal and its command only.
@@ -38,4 +39,33 @@ describe('terminalSecretGrantOffer', () => {
     const solo = await installation({ id: 'core:solo', version: 1 });
     expect(await terminalSecretGrantOffer(solo.projectRoot, solo.options)).toBe(false);
   });
+});
+
+it('U1 custody → key → card grant: refusal never advances; a failed/closed grant keeps the stored key', async () => {
+  const solo = await installation({ id: 'core:solo', version: 1 }), team = await installation({ id: 'core:team', version: 1 });
+  const calls: string[] = [], name = 'SYNTHETIC_PROVIDER_KEY', value = 'synthetic-only-never-returned', backend = 'core.secret-store.encrypted-file@1';
+  let custody = false, set = true, grant = false, root = solo;
+  const host: ProviderSecretHost = {
+    prepare: async () => { calls.push('custody'); return custody ? { state: 'ready', backend } : { state: 'refused', backend: null, code: 'SECRET_STORE_UNSAFE' }; },
+    set: async () => { calls.push('set'); if (!set) throw ErrorRegistry.createError('SECRET_STORE_READ_ONLY'); return { backend }; },
+    offer: async () => { calls.push('offer'); return terminalSecretGrantOffer(root.projectRoot, root.options, human); },
+    grant: async () => { calls.push('grant'); if (!grant) throw ErrorRegistry.createError('SECRET_CHANGE_DENIED'); },
+  };
+  const run = () => connectProvider(root.projectRoot, { scopeId: 'scope', name, value, grant: true }, root.options, host);
+  expect(await run()).toMatchObject({ custody: { state: 'refused', code: 'SECRET_STORE_UNSAFE' }, key: { state: 'skipped' }, grant: { state: 'skipped' } });
+  expect(calls.splice(0)).toEqual(['custody']);
+  custody = true; set = false;
+  expect(await run()).toMatchObject({ key: { state: 'refused', code: 'SECRET_STORE_READ_ONLY' }, grant: { state: 'skipped' } });
+  expect(calls.splice(0)).toEqual(['custody', 'set']);
+  set = true;
+  expect(await run()).toMatchObject({ key: { state: 'stored' }, grant: { state: 'refused', code: 'SECRET_CHANGE_DENIED' } });
+  expect(calls.splice(0)).toEqual(['custody', 'set', 'offer', 'grant']);
+  root = team;
+  expect(await run()).toMatchObject({ key: { state: 'stored' }, grant: { state: 'admin', code: 'SECRET_GRANT_REQUIRED' } });
+  expect(calls.splice(0)).toEqual(['custody', 'set', 'offer']);
+  root = solo; grant = true;
+  const connected = await run();
+  expect(connected).toMatchObject({ key: { state: 'stored' }, grant: { state: 'granted' } });
+  expect(calls).toEqual(['custody', 'set', 'offer', 'grant']);
+  expect(JSON.stringify(connected)).not.toContain(value);
 });

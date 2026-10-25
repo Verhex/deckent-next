@@ -5,5 +5,5 @@ export { activeStage, createSetupController, stageChoices } from './internal/con
 export { observeCoreSetup, observeSetup, suggestScope } from './internal/observe.js';
 export { renderSetupLines, setupDocument, setupMessage, SETUP_DOCUMENT_SCHEMA_VERSION, type SetupDocument } from './internal/render.js';
 export { isForegroundStage, runForegroundStage } from './internal/foreground.js';
-export { notWiredApply, type SetupApplyHandler, type SetupApplyOptions, type SetupObserveOptions, type SetupApplyResult, type SetupCommandContext, type SetupObserveHandler } from './internal/contract.js';
+export { notWiredApply, type SetupApplyHandler, type SetupApplyOptions, type SetupObserveOptions, type SetupApplyResult, type SetupSecretStoreDetail, type SetupCommandContext, type SetupObserveHandler } from './internal/contract.js';
 export { workerImageConfirm } from './internal/worker-image.js';

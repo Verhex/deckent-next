@@ -538,6 +538,11 @@ refresh, usage and dogfood closure remain open.
   configuration generation. JSON/YAML, if supported, are parsers into the same schema and precedence chain.
   IDENTITY.md is descriptive context, not connection, permission or infrastructure-selection authority.
   Config contains secret references, not credentials. Active operations retain their resolved binding/revision. **SEC-3 (alpha.48, F33):** `$DECK:NAME` resolves from the installation (global) layer only: the project layer (`.deckent/config.json`, another person's commit) refuses an exact reference in any field before any resolver read (`SECRET_REFERENCE_PROJECT_LAYER`, path = top-level field, no name or value), as project MCP files already do; host-leaving values (`execution.git.deliveryIdentity`) refuse one in every layer (`SECRET_REFERENCE_LEAVES_HOST`); a section's `secretReferences: 'allow'` therefore means installation layer only.
+- **Provider key custody (alpha.56 U1):** before a main-vault key is entered, the witnessed composition checks the selected store and retries
+  an absent encrypted-store default through the governed switch, sealing its audit before selection. Explicit selections and directory permissions
+  are preserved. The provider key card names the project before masked input; confirmation permits a `card`-sourced project grant only through
+  the existing identity-profile/terminal gate. A failed grant retains the stored key and returns its typed partial result; team installations
+  receive the administrator command. Model binding stays blocked while a required key or project grant is unavailable.
 - **SECRET-HELPER (2026-10-10; landed in alpha.25):** `createSecretHelperFactory` on `deckent/extensions` registers a read-only/non-enumerable
   SecretStore v1 backend before composition seals. Trusted distribution code pins non-secret absolute executable/cwd, argv and bounds;
   `secrets.store` selects only its registered id. Every lookup requires the owning application's current typed authorization decision before

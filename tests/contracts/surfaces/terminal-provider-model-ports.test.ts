@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { clearConfigCache, t } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, t } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { probeProviderConnection, providerEndpoint } from '#adapters/core/provider-connect/index.js';
 import { modelPanelSource, providerOutcomeWord, providerPanelPort, type ProviderConnectHost, type TerminalLaunchContext } from '#surfaces/core/cli-terminal/index.js';
@@ -446,4 +446,25 @@ describe('/model source', () => {
       .inspect();
     expect(view.choices).toEqual([]); expect(view.notes[0]).toContain('buradan eklenmez');
   });
+});
+
+it('U1 provider port blocks unknown/grantless keys and renders custody refusal or retained-key administrator action without the value', async () => {
+  const { root, options } = await project({}), store = secrets(['DECKENT_ANTHROPIC_KEY']);
+  let ready = false;
+  const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: connectHost('ok'),
+    prepareMainSecret: async () => ready ? { state: 'ready', backend: 'core.secret-store.encrypted-file@1' }
+      : { state: 'refused', backend: null, code: 'SECRET_STORE_UNSAFE', path: root },
+    connectProviderSecret: async (_root, input) => ({ name: input.name, backend: 'core.secret-store.encrypted-file@1', custody: { state: 'ready' },
+      key: { state: 'stored' }, grant: { state: 'admin', code: 'SECRET_GRANT_REQUIRED' } }),
+  }, options, 'tr', errorText, { offer: async () => false, grant: async () => {}, question: () => ({ title: '', lines: [], prompt: '' }),
+    check: async () => { throw ErrorRegistry.createError('SECRET_GRANT_REQUIRED'); } });
+  expect((await port.inspect()).kinds[0]).toMatchObject({ modelBlocked: 'ERR:SECRET_GRANT_REQUIRED', grantRequired: true });
+  await expect(port.prepareKey!('anthropic-api', null)).rejects.toMatchObject({ code: 'SECRET_STORE_UNSAFE', params: { path: root } });
+  expect(store.sets).toEqual([]);
+  ready = true;
+  const card = await port.prepareKey!('anthropic-api', null);
+  expect(card.grant).toBe(false); expect(card.lines[0]!.text).toContain('deckent secret grant DECKENT_ANTHROPIC_KEY --scope scope');
+  const connected = await port.connect({ kind: 'anthropic-api', endpoint: null, key: CANARY, grant: false });
+  expect(connected.stored).toBe(true); expect(connected.title).toContain('proje izni yok'); expect(connected.lines.at(-1)!.text).toContain('yönetici izni');
+  expect(JSON.stringify(connected)).not.toContain(CANARY); expect(store.sets).toEqual([]);
 });

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
+import { ErrorRegistry, loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
 import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/index.js';
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
@@ -54,7 +54,7 @@ function custodyText(backend: string, locale: Locale): string {
   return t('tui.panel.provider.transparency', { backend }, locale);
 }
 
-type Host = Pick<TerminalLaunchContext, 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels' | 'inspectProviderSpendAccount' | 'inspectInvocableModels'>;
+type Host = Pick<TerminalLaunchContext, 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'prepareMainSecret' | 'connectProviderSecret'>;
 const SEED = 'seed:', DECLARED = 'ref:', LEGACY = 'legacy:';
 const referenceKey = (reference: ModelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
 /** The connection's result as the window's rows: the model, what each governed step did, the key's name, spending and the service. */
@@ -109,6 +109,16 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
   const refs = async () => credentialRefs(await loadConfig(root, options) as Record<string, unknown>, scopeId);
   return {
     ...(secretGrant ? { secretGrant } : {}),
+    ...(host.prepareMainSecret ? { async prepareKey(kind: string, endpoint: string | null) {
+      const custody = await host.prepareMainSecret!(root, scopeId, options);
+      if (custody.state !== 'ready') throw ErrorRegistry.createError(custody.code ?? 'SECRET_STORE_UNAVAILABLE', {
+        params: { backend: custody.backend ?? '-', path: custody.path ?? '' } });
+      backend = custody.backend ?? '-';
+      const grant = Boolean(host.connectProviderSecret && await secretGrant?.offer());
+      const name = connect.secretName?.(kind, endpoint) ?? kindOf(kind)?.secretName ?? '-';
+      return { grant, lines: [{ label: t('tui.provider.field.key', {}, locale), text: grant ? t('tui.provider.key.projectUse', { project: root }, locale) : t('tui.provider.key.adminGrant', { project: root, scope: scopeId, name }, locale) },
+        { label: t('tui.provider.field.storage', {}, locale), text: custodyText(backend, locale), tone: 'muted' as const }] };
+    } } : {}),
     async inspect() {
       const notes: string[] = [];
       let names: readonly string[] | null = null;
@@ -151,18 +161,22 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       }
       const models = new Map(await Promise.all(connect.kinds.map(async kind => [kind.id,
         await connectionModelRows(kind, connect, Boolean(host.connectModel), declared, locale)] as const)));
-      const kinds: ProviderPanelKind[] = connect.kinds.map(kind => {
+      const kinds: ProviderPanelKind[] = await Promise.all(connect.kinds.map(async kind => {
         const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
         const detail = !kind.available ? '' : keyName === null ? '-' : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale)
           : stored ? t('tui.provider.state.stored', { name: keyName, count: using }, locale) : t('tui.provider.state.notConnected', {}, locale);
+        let grantBlocked: string | null = null, grantRequired = false;
+        if (stored && host.connectProviderSecret && secretGrant?.check) { try { await secretGrant.check(keyName!); } catch (error) {
+          grantBlocked = errorText(error); grantRequired = (error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED';
+        } }
         // A key-only registry kind explains its unavailable model binding. OpenRouter v5 now lists its seeded models.
         const pending = kind.available && kind.connectFamily === null && keyName !== null ? t('tui.provider.state.modelsNextSlice', {}, locale) : null;
-        return { id: kind.id, label: kindLabel(kind, kind.id, locale), detail, blocked: kind.available ? null : t('tui.provider.unavailable', {}, locale), keyName, keyStored: stored,
+        return { id: kind.id, label: kindLabel(kind, kind.id, locale), detail, blocked: kind.available ? null : t('tui.provider.unavailable', {}, locale), keyName, keyStored: stored, grantRequired,
           endpointEditable: kind.endpointEditable, endpointDefault: kind.endpointDefault, keyRequired: kind.keyRequired, endpointChoices: choicesOf(kind),
           models: models.get(kind.id) ?? [], discoversModels: Boolean(kind.connectFamily && !kind.seeded && connect.discoverModels), ...(pending ? { pendingNote: pending } : {}),
           // A vendor key must be stored before a model is bound to it (the generic row's name depends on the address chosen next: checked on connect).
-          modelBlocked: kind.keyRequired && keyName !== null && names !== null && !stored ? t('tui.provider.model.needsKey', {}, locale) : null };
-      });
+          modelBlocked: kind.keyRequired && keyName !== null ? grantBlocked ?? (!stored ? t('tui.provider.model.needsKey', {}, locale) : null) : null };
+      }));
       // (c) A key kept under a name no row uses any more (T4-A's shared OpenAI-compatible slot): warned, removable, never used.
       for (const legacy of connect.legacyKeys ?? []) {
         if (names === null || !names.includes(legacy.secretName)) continue;
@@ -201,10 +215,23 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       let keyLine: PanelLine;
       let stored = false;
       if (request.key === null || name === null) keyLine = { label: t('tui.provider.field.key', {}, locale), text: t('tui.provider.key.none', {}, locale) };
-      else if (!host.setSecret) keyLine = { label: t('tui.provider.field.key', {}, locale), text: t('tui.provider.note.noStore', {}, locale), tone: 'warning' };
+      else if (!host.setSecret && !host.connectProviderSecret) keyLine = { label: t('tui.provider.field.key', {}, locale), text: t('tui.provider.note.noStore', {}, locale), tone: 'warning' };
       else {
         try {
-          const change = await host.setSecret(root, { schemaVersion: 1, scopeId, name, value: request.key }, options);
+          if (host.connectProviderSecret) {
+            const result = await host.connectProviderSecret(root, { scopeId, name, value: request.key, grant: request.grant === true }, options);
+            stored = result.key.state === 'stored'; backend = result.backend ?? backend;
+            const failed = result.custody.state === 'refused' ? result.custody : result.key.state === 'refused' ? result.key : result.grant;
+            const lines: PanelLine[] = [check, ...where, { label: t('tui.provider.field.key', {}, locale),
+              text: stored ? t('tui.provider.key.stored', { name, backend }, locale) : t('tui.provider.key.notStored', {}, locale), tone: stored ? 'success' : 'warning' }];
+            if (failed.code) lines.push({ label: t('tui.provider.field.next', {}, locale), text: failed.state === 'admin'
+              ? t('tui.provider.key.adminGrant', { project: root, scope: scopeId, name }, locale)
+              : errorText(ErrorRegistry.createError(failed.code, { params: { path: failed.path ?? '', name, project: root, scopeId, backend } })), tone: 'warning' });
+            const title = !stored ? t('tui.provider.result.refused', { kind: label }, locale) : result.grant.state === 'granted'
+              ? t('tui.provider.result.ok', { kind: label }, locale) : t('tui.provider.result.grantMissing', { kind: label }, locale);
+            return { stored, title, lines, ...(stored ? { keyName: name } : {}) };
+          }
+          const change = await host.setSecret!(root, { schemaVersion: 1, scopeId, name, value: request.key }, options);
           stored = true; backend = change.backend;
           keyLine = { label: t('tui.provider.field.key', {}, locale), text: t('tui.provider.key.stored', { name, backend: change.backend }, locale), tone: 'success' };
         } catch (error) {

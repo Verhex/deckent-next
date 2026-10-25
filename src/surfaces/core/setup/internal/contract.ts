@@ -9,7 +9,10 @@ import type { FirstJobFacts } from '#surfaces/core/doctor/index.js';
 
 /** What applying one stage did. `not-wired`: this build has no apply owner for the stage yet (I-S3 wires each operation to its existing
  * owner); nothing was written. A surface never reports a stage as done from an apply result, only from the next observation. */
-export type SetupApplyResult = Readonly<{ stage: string; operation: string; status: 'not-wired' | 'applied' | 'refused'; code?: string }>;
+export type SetupApplyResult = Readonly<{ stage: string; operation: string; status: 'not-wired' | 'applied' | 'refused'; code?: string; secretStore?: SetupSecretStoreDetail }>;
+/** U1 S1 (additive): what the fresh installation's secret store default did, on the policy stage's result (store ids, a typed code and the refused
+ * directory only; never a name or value). `not-set` keeps the stage `applied`: the installation stands, the default was refused. */
+export type SetupSecretStoreDetail = Readonly<{ status: 'set' | 'kept' | 'platform' | 'not-set'; backend: string | null; code?: string; path?: string }>;
 /** `scopeId`: the folder stage's answer, else the configured scope. `foreground`: the person's terminal is free (no window holds it), so an
  * owner that takes the terminal itself (a card, a picker, sudo's own prompt) may run; without it such a stage is refused, never half-run. */
 export type SetupApplyOptions = ConfigLoadOptions & Readonly<{ scopeId?: string; foreground?: boolean }>;

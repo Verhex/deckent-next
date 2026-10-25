@@ -78,6 +78,8 @@ export type TerminalDeliveryHandlers = Readonly<{ assertAvailable(): Promise<voi
 /** The installation secret store through the runtime service (SECRET-WRITE): the same handlers as `deckent secret` — names only, never values back. */
 export type TerminalSecretNamesHandler = (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ schemaVersion: 1; backend: string; names: readonly string[] }>>;
 export type TerminalSecretChange = Readonly<{ schemaVersion: 1; scopeId: string; name: string; action: 'set' | 'delete'; backend: string; removed: boolean | null }>;
+export type ProviderSecretStepView = Readonly<{ state: 'ready' | 'stored' | 'granted' | 'refused' | 'admin' | 'skipped'; code?: string; path?: string }>;
+export type ProviderCustodyView = ProviderSecretStepView & Readonly<{ backend: string | null }>;
 export type TerminalSecretSetHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string; value: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
 export type TerminalSecretDeleteHandler = (root: string, input: Readonly<{ schemaVersion: 1; scopeId: string; name: string }>, options: ConfigLoadOptions) => Promise<TerminalSecretChange>;
 
@@ -116,6 +118,10 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   }>;
   listSecretNames?: TerminalSecretNamesHandler;
   setSecret?: TerminalSecretSetHandler;
+  /** U1: custody is checked before key entry; the same governed connection keeps partial key/grant results. */
+  prepareMainSecret?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<ProviderCustodyView>;
+  connectProviderSecret?: (root: string, input: Readonly<{ scopeId: string; name: string; value: string; grant: boolean }>, options: ConfigLoadOptions) => Promise<Readonly<{
+    name: string; backend: string | null; custody: ProviderSecretStepView; key: ProviderSecretStepView; grant: ProviderSecretStepView }>>;
   deleteSecret?: TerminalSecretDeleteHandler;
   loadInstallationIdentity?: (root: string, options: ConfigLoadOptions) => Promise<InstallationIdentityRead>;
   loadProjectIdentity?: (root: string, options: ConfigLoadOptions) => Promise<IdentityRead<ProjectIdentity>>;

@@ -497,5 +497,13 @@
   "doctor.modelInvocationDelivery": "Model teslimi: profil {profile}, model {model}, kapsam {scope}, yüzey {surface}; gerekli {required} bayt, mevcut {available} bayt — {setting} değerini artırın veya profilin limits.responseMaxBytes değerini azaltın.",
   "doctor.modelInvocationDelivery.config.runtime-service": "service.responseMaxBytes (çalışma servisi)",
   "doctor.modelInvocationDelivery.config.mcp": "mcp.responseMaxBytes (MCP yüzeyi)",
-  "error.AUTONOMY_SHADOW_NOT_RECORDED": "Bir teslim kuyruğu kaydı için kapalı kuralın gölge değerlendirmesi kaydedilemedi. Kuyruk ve kayıt etkilenmedi: bu yüzden hiçbir şey teslim edilmedi ya da bekletilmedi. Çalışma durumu klasörünün yazılabilir olduğunu denetleyin."
+  "error.AUTONOMY_SHADOW_NOT_RECORDED": "Bir teslim kuyruğu kaydı için kapalı kuralın gölge değerlendirmesi kaydedilemedi. Kuyruk ve kayıt etkilenmedi: bu yüzden hiçbir şey teslim edilmedi ya da bekletilmedi. Çalışma durumu klasörünün yazılabilir olduğunu denetleyin.",
+  "tui.provider.key.projectUse": "Bu anahtar {project} projesinde kullanılacak. Anahtarı girmeden önce onaylayın.",
+  "tui.provider.key.adminGrant": "Anahtar ana kasada saklanır; {project} projesi için yönetici izni gerekir: deckent secret grant {name} --scope {scope}.",
+  "tui.provider.key.optionalQuestion": "API anahtarı kullanılsın mı? Evet: anahtarı girip saklayın; Hayır: anahtarsız bağlanın.",
+  "tui.provider.key.optionalKeys": "y anahtar · n anahtarsız · Esc iptal",
+  "doctor.secretStore.globalRootUnsafe": "SECRET_STORE_UNSAFE: kurulumun sır dizini {path}, izinleri {mode}. Dizini özel yapın (chmod 700); Deckent izinleri değiştirmedi.",
+  "doctor.secretStore.leftoverCode": "Sır deposu denetimi reddedildi: {backend} ({code}).",
+  "tui.provider.result.grantMissing": "Anahtar saklandı; proje izni yok: {kind}",
+  "tui.provider.action.grant": "Saklanan anahtarı bu projede kullan"
 }

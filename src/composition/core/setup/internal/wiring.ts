@@ -51,8 +51,9 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
       if (op === 'installation.policy-template') {
         // The owner's own preview first (the same deterministic plan the apply journals), then the journaled first-run install.
         await previewPolicyTemplateInstallation(root, scopeId, options);
-        const { status } = await applyPolicyTemplateInstallationWithSecretDefault(root, scopeId, options);
-        return status === 'installed' || status === 'replayed' ? result('applied') : result('refused', status);
+        // U1 S1: the store default's outcome rides on the stage result (the installation stands even when the default was refused).
+        const installed = await applyPolicyTemplateInstallationWithSecretDefault(root, scopeId, options), secretStore = 'secretStore' in installed ? installed.secretStore : undefined;
+        return installed.status === 'installed' || installed.status === 'replayed' ? { ...result('applied'), ...(secretStore ? { secretStore } : {}) } : result('refused', installed.status);
       }
       if (op === 'config.set') { await config(String(input['keyPath']), input['value'], input['layer'] === 'global' ? 'global' : 'project'); return result('applied'); }
       // Every profile's selection, solo included (SOLO-PROFILE; template data, never authority; the `identity` section is global-layer only,

@@ -1637,6 +1637,9 @@
     },
     "src/composition/core/model-connect": {
       "dependencies": [
+        "src/composition/core/installation",
+        "src/composition/core/terminal-chat",
+        "src/composition/core/runtime-service",
         "src/adapters/core/audit-store",
         "src/adapters/core/contract",
         "src/adapters/core/local-keyring",
