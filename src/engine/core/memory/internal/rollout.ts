@@ -52,7 +52,7 @@ export const memoryRolloutCriterionMet: (criterion: MemoryRolloutCriterion, valu
 export interface MemoryRolloutCriterionView { readonly criterion: MemoryRolloutCriterion; readonly measure: MemoryRolloutMeasure | null; readonly met: boolean }
 export interface MemoryRolloutPhaseView { readonly phase: number; readonly section: MemoryRolloutSection; readonly set: typeof MEMORY_AUTOMATION_MODES[number]; readonly reached: boolean; readonly met: boolean;
   readonly criteria: readonly MemoryRolloutCriterionView[] }
-/** `phase`: the highest phase whose switch is set (null: none); `next`: the first phase not yet set; `liveUnmet`: phases set whose criteria do not hold now. */
+/** `phase`: the highest consecutive phase whose switch is set (null: the first is missing); `next`: the first phase not yet set; `liveUnmet`: phases set whose criteria do not hold now. */
 export interface MemoryRolloutView { readonly phase: number | null; readonly next: MemoryRolloutPhaseView | null; readonly phases: readonly MemoryRolloutPhaseView[]; readonly liveUnmet: readonly number[] }
 const reachedIn = (phase: MemoryRolloutRegistry['phases'][number], modes: MemoryRolloutModes) => phase.reached.includes(modes[phase.section]);
 export function memoryRolloutView(modes: MemoryRolloutModes, measures: MemoryRolloutMeasures, registry: MemoryRolloutRegistry = MEMORY_ROLLOUT): MemoryRolloutView {
@@ -61,8 +61,8 @@ export function memoryRolloutView(modes: MemoryRolloutModes, measures: MemoryRol
       return Object.freeze({ criterion, measure: value, met: memoryRolloutCriterionMet(criterion, value) }); });
     return Object.freeze({ phase: phase.phase, section: phase.section, set: phase.set, reached: reachedIn(phase, modes), met: criteria.every(row => row.met), criteria: Object.freeze(criteria) });
   });
-  const reached = phases.filter(phase => phase.reached);
-  return Object.freeze({ phase: reached.at(-1)?.phase ?? null, next: phases.find(phase => !phase.reached) ?? null, phases: Object.freeze(phases),
+  const reached = phases.filter(phase => phase.reached), missing = phases.findIndex(phase => !phase.reached);
+  return Object.freeze({ phase: (missing < 0 ? phases.at(-1) : phases[missing - 1])?.phase ?? null, next: missing < 0 ? null : phases[missing]!, phases: Object.freeze(phases),
     liveUnmet: Object.freeze(reached.filter(phase => !phase.met).map(phase => phase.phase)) });
 }
 /** The gated phases (those with criteria) a change from `before` to `after` newly sets; empty: nothing to measure. A step back is never gated. */

@@ -6,16 +6,18 @@ import type { MemoryEvaluatorRow } from './contract.js';
 /** The S2 role a memory evaluator model must hold (registry data; the role registry restricts V5 to its rows). */
 export const MEMORY_EVALUATOR_ROLE = 'memory-evaluator';
 const BILLING: Readonly<Record<string, MemoryEvaluatorRow['billing']>> = Object.freeze({ subscription: 'subscription', 'per-token': 'metered', 'self-hosted': 'local' });
-export type MemoryCatalogFact = { readonly maker: string | null; readonly billing: MemoryEvaluatorRow['billing']; readonly pricing: unknown };
+export type MemoryCatalogFact = { readonly maker: string | null; readonly billing: MemoryEvaluatorRow['billing']; readonly pricing: unknown; readonly active?: boolean };
 export const memoryCatalogKey = (channelId: string, modelId: string) => JSON.stringify([channelId, modelId]);
 /** S4B-3 §6.7: every registered catalog model with its canonical maker (alias registry; provider-chosen = unknown), its channel's billing and its
  * catalog price, read once per pass. No model or vendor name is a literal here: everything is catalog data. */
-export async function memoryCatalogFacts(catalog: ModelCatalogReader): Promise<ReadonlyMap<string, MemoryCatalogFact>> {
+export async function memoryCatalogFacts(catalog: ModelCatalogReader, scopeId?: string): Promise<ReadonlyMap<string, MemoryCatalogFact>> {
   const facts = new Map<string, MemoryCatalogFact>();
   for (const channel of await catalog.channels()) {
     const billing = (channel.channel as { billing?: string }).billing;
+    const activeChannel = scopeId === undefined || (await catalog.activation(scopeId, channel.channelId, null))?.state === 'active';
     for (const row of await catalog.models(channel.channelId)) facts.set(memoryCatalogKey(row.channelId, row.modelId), { maker: canonicalModelMaker(row.model),
-      billing: billing === undefined ? null : BILLING[billing] ?? null, pricing: (row.model as { pricing?: unknown }).pricing ?? null });
+      billing: billing === undefined ? null : BILLING[billing] ?? null, pricing: (row.model as { pricing?: unknown }).pricing ?? null,
+      ...(scopeId === undefined ? {} : { active: activeChannel && (await catalog.activation(scopeId, row.channelId, row.modelId))?.state === 'active' }) });
   }
   return facts;
 }
@@ -62,7 +64,7 @@ export function memoryEvaluatorView(rows: readonly MemoryEvaluatorRow[], facts: 
       ? { kind: 'per-token', inputPerMTok: pricing.inputPerMTok!, outputPerMTok: pricing.outputPerMTok!, asOf: pricing.asOf, answersPerDayCeiling: perMillion(pricing.outputPerMTok!, cap) }
       : { kind: 'not-verified' };
   };
-  const listed = rows.map(row => ({ ...row, price: priced(row) }));
+  const listed = rows.filter(row => row.invocable && row.maker !== null && facts.get(memoryCatalogKey(row.channelId, row.modelId))?.active !== false).map(row => ({ ...row, price: priced(row) }));
   return Object.freeze({ schemaVersion: 1 as const, callsPerDay: evaluation.perScopePerDay, maxCompletionTokens: evaluation.maxCompletionTokens, rows: listed,
     available: listed.some(row => row.invocable && row.maker !== null) });
 }

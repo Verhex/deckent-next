@@ -105,3 +105,14 @@ it('converts schemas once per registry generation and remasks changing provenanc
     expect(spy.mock.calls.length).toBeGreaterThan(initial);
   } finally { spy.mockClear(); }
 });
+
+it('explains protected memory and nervous modes with their restart semantics and the leaf description', async () => {
+  const effective = createDefaultConfig();
+  const app = new ConfigApplication({ snapshot: async () => ({ document: {}, global: {}, project: {}, effective, digest: null, layer: 'project', env: {} }), publish: async () => { throw Error('read only'); } },
+    { authorize: async () => { throw Error('read only'); }, audit: async () => { throw Error('read only'); } });
+  expect(await app.explain({ keyPath: 'memoryAutomation.extraction.mode' })).toMatchObject({ apply: 'restart', description: expect.stringContaining('on writes candidates') });
+  expect(await app.explain({ keyPath: 'memoryAutomation.verification.mode' })).toMatchObject({ apply: 'restart' });
+  expect(await app.explain({ keyPath: 'catalogEvolution.mode' })).toMatchObject({ apply: 'restart' });
+  expect(await app.explain({ keyPath: 'runRuntime.nervous.mode' })).toMatchObject({ apply: 'restart', descriptionKey: 'config.field.runRuntime.nervous.mode',
+    description: expect.stringContaining('protected; no AI may change it') });
+});

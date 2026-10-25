@@ -114,8 +114,9 @@ export function configFieldView(snapshot: ConfigSnapshot, keyPath: string): Conf
   const secretPaths = new Set<string>(Array.isArray(provenance) ? provenance.filter((item): item is string => typeof item === 'string') : []);
   const declaredDefault = schema.safeParse(undefined);
   const value = redact(atConfigPath(snapshot.effective, path), path, secretPaths), defaultValue = redact(atConfigPath(defaults, path) ?? (declaredDefault.success ? declaredDefault.data : undefined), path);
-  return { key: keyPath, value, defaultValue, source, descriptionKey: definition.descriptionKey,
-    description: (MESSAGE_REGISTRY.catalogs[resolveLocale(undefined, snapshot.env, snapshot.effective.language)] as Readonly<Record<string, string>>)[definition.descriptionKey] ?? definition.descriptionKey, schema: schemaDisplayView(jsonSchemaView(schema, schemaKey), path, secretPaths),
+  const descriptionKey = schema.description ?? definition.descriptionKey;
+  return { key: keyPath, value, defaultValue, source, descriptionKey,
+    description: (MESSAGE_REGISTRY.catalogs[resolveLocale(undefined, snapshot.env, snapshot.effective.language)] as Readonly<Record<string, string>>)[descriptionKey] ?? descriptionKey, schema: schemaDisplayView(jsonSchemaView(schema, schemaKey), path, secretPaths),
     binding: definition.binding, apply: definition.apply, redacted: value === '[REDACTED]' };
 }
 /** A card's bounded display copy of a value at `keyPath` (T3 L2): redacted like every field view, JSON text, cut with "…" past `max`. */

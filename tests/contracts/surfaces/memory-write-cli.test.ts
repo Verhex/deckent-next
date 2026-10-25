@@ -83,3 +83,14 @@ it('a cancelled card writes nothing and exits 1; retire passes reason and replac
     ['propose', { scopeId: 'scope', content: { title: 'Fatura kuralı' }, origin: { kind: 'human', ref: null } }]]);
   expect(JSON.stringify(card.asked.at(-1))).toContain('İrsaliyesiz fatura onaya düşer.');
 });
+
+it('groups equal evaluator prices with localized currency and hides ineligible rows', async () => {
+  const f = await project(), out = capture();
+  const row = { channelId: 'channel', modelId: 'one', maker: 'maker', billing: 'metered' as const, invocable: true,
+    price: { kind: 'per-token' as const, inputPerMTok: '3', outputPerMTok: '20', asOf: '2026-10-25', answersPerDayCeiling: '1.2288' } };
+  await memoryCommand(['memory', '--scope', 'scope', '--lang', 'tr'], { root: f.root, env: f.env, stdout: out.sink, ...handlers([]),
+    inspectMemoryEvaluators: async () => ({ schemaVersion: 1, available: true, callsPerDay: 30, maxCompletionTokens: 2048,
+      rows: [row, { ...row, modelId: 'two' }, { ...row, modelId: 'inactive', invocable: false }] }) });
+  expect(out.text()).toContain('channel/one, channel/two'); expect(out.text()).toContain('1,2288 USD');
+  expect(out.text()).not.toContain('inactive'); expect(out.text().match(/1,2288 USD/gu)).toHaveLength(1);
+});

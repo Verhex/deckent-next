@@ -3,7 +3,7 @@
   "error.MEMORY_ROLLOUT_CRITERIA_UNMET": "Yazılmadı: hafıza geçişinin {phase}. aşaması yalnız {scope} kapsamında her çıkış ölçütü sağlandığında açılabilir; sağlanmayan: {criteria}. Hiçbir şey değişmedi.",
   "memory.held.next.MEMORY_ROLLOUT_CRITERIA_UNMET": "Her sayıyı ve onu neyin ilerlettiğini görmek için deckent memory rollout --scope {scope} çalıştırın; her ölçüt sağlanana kadar önceki aşamaları sürdürün.",
   "memory.rollout.title": "{scope} kapsamında hafıza geçişi: {phase}. aşama — {name}.",
-  "memory.rollout.title.none": "{scope} kapsamında hafıza geçişi başlamadı (hiçbir hafıza anahtarı açık değil).",
+  "memory.rollout.title.none": "{scope} kapsamında hafıza geçişi: 0. aşama başlamadı; sonraki anahtarlar açık olabilir.",
   "memory.rollout.modes": "Anahtarlar: damıtma {extraction} · doğrulama {verification} · bağlam {context}.",
   "memory.rollout.step.extraction.on": "kabul edilen işten aday kayıt yazılır (hiçbiri modele gitmez)",
   "memory.rollout.step.verification.shadow": "bağımsız değerlendirici adayları gölgede değerlendirir (hiçbiri doğrulanmaz)",
