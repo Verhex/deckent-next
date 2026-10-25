@@ -310,7 +310,12 @@ export function WorklineApp(props: WorklineProps) {
   const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
   const followWorkers = ledger?.followEvents ? undefined : ledger?.followWorkers, followRuns = ledger?.followEvents ? undefined : ledger?.followRuns;
   const failed = useCallback((error: unknown) => setWatchStatusLines([`${labels.watchFailed}: ${errorText(error)}`]), [errorText, labels.watchFailed]);
-  const mode = useWorklineMode(props.permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true, sessionId);
+  const slot = useWindowSlot();
+  const permissionMode = useMemo(() => props.permissionMode ? { ...props.permissionMode,
+    ...(props.permissionMode.open ? { open: (target: Exclude<import('#domain/index.js').PermissionMode, 'standart'>) => props.permissionMode!.open!(target,
+      (question, signal) => askGrantWindow(slot, labels.work?.window.position ?? '{from}-{to}/{total}', question, signal)) } : {}) } : undefined,
+  [props.permissionMode, slot, labels.work?.window.position]);
+  const mode = useWorklineMode(permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true, sessionId);
   const work = useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, pushLive, watchingWorkers: watch.workers,
     context: { ...(props.projectRoot ? { project: props.projectRoot } : {}), ...(props.homeDirectory ? { home: props.homeDirectory } : {}), ...(mode.stop ? { mode: mode.stop } : {}) },
     ...(props.approvalPollMs === undefined ? {} : { approvalPollMs: props.approvalPollMs }) });
@@ -320,7 +325,6 @@ export function WorklineApp(props: WorklineProps) {
   const refreshMode = mode.refresh;
   const reasoning = useReasoningPreview(push, labels.reasoning);
   // SLASH-WINDOWS: the one local window slot (information and list windows); `ask` shows a list window in it.
-  const slot = useWindowSlot();
   const windows = { ask: (spec: SlashPickSpec) => askSlashWindow(slot, labels.windows, spec) };
   // T4 MODEL-SWITCH (S19): the model this session pinned with `/model`; read when a turn starts, so the next turn carries it (protocol v23).
   // Astra 2452 P1: the pin belongs to one conversation (sessionId → pin). `/clear` starts a conversation without one; `/resume` finds the resumed
@@ -340,7 +344,7 @@ export function WorklineApp(props: WorklineProps) {
   const scratch = useWorklineScratch(props.scratch, session.id, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.scratch);
   useEffect(() => { void refreshMode(); }, [refreshMode]);
   // T3 L4: `/mode`, `/config`, `/mcp` windows; `/mode`'s port is this view's mode hook (the same service set, grant check and audit as Shift+Tab).
-  const settings = useWorklineSettings({ panels: props.panels, permissionMode: props.permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
+  const settings = useWorklineSettings({ panels: props.panels, permissionMode, mode, panel, state, push, errorText, blocked: work.modalOpen,
     // The pin rides only on the streamed turn (v23); a plain turn could not carry it, so no `/model` window is offered there.
     ...(props.streamTurn ? { sessionModel: { ...sessionModel, reasoning: () => reasoning.current.current ? undefined : 'off' as const } } : {}),
     openApprovals: (approvalId, execution) => work.openApproval(approvalId, execution) });

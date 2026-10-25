@@ -153,12 +153,16 @@ export const POLICY_RECOVERY_CHANGE_KIND = 'policy-recovery';
  */
 export const RECOVERY_RAISE_KINDS: readonly string[] = Object.freeze([policyResources.recoveryAction.kind, policyResources.nervousRule.kind]);
 export type DelegationOptions = Readonly<{ changeKind?: typeof POLICY_RECOVERY_CHANGE_KIND }>;
-export type DelegationVerdict = { readonly ok: true } | { readonly ok: false; readonly ruleId: string; readonly reason: 'deny' | 'require-approval' | 'no-grant' | 'mode-eligible' };
+/** The one cell a refusal stopped at (`'all'`: that whole dimension); display facts for the refusal text, never a decision input. */
+export type DelegationCell = { readonly kind: string; readonly action: string; readonly id: string; readonly scope: string };
+export type DelegationVerdict = { readonly ok: true }
+  | { readonly ok: false; readonly ruleId: string; readonly reason: 'deny' | 'require-approval' | 'no-grant' | 'mode-eligible'; readonly cell: DelegationCell };
 const ALL: unique symbol = Symbol('all');
 type Cell = string | typeof ALL;
 const cells = (selection: Selection): readonly Cell[] => selection === 'all' ? [ALL] : selection;
 const covers = (selection: Selection, value: Cell) => selection === 'all' || (value !== ALL && selection.includes(value));
 const meets = (selection: Selection, value: Cell) => selection === 'all' || value === ALL || selection.includes(value);
+const shown = (value: Cell) => value === ALL ? 'all' : value;
 
 /**
  * The delegation bound (I2): every touched rule must lie inside the actor's own authority, cell by cell (action × id × scope; an
@@ -199,14 +203,16 @@ export function delegationWithin(input: Policy, actor: { readonly issuer: string
   // Defence in depth (audit cbbe28b5f): a raise stands alone — the change set is exactly that one replace (its old and new side), so no other
   // rule in the same set (an added require-approval on the cell, anything else) can leave the raised allow dormant, whatever the caller sends.
   const lone = touched.find(value => raised(value) !== undefined);
-  if (lone && !(touched.length === 2 && touched[0] === lone.replaces && touched[1] === lone)) return Object.freeze({ ok: false as const, ruleId: lone.id, reason: 'require-approval' as const });
+  if (lone && !(touched.length === 2 && touched[0] === lone.replaces && touched[1] === lone)) return Object.freeze({ ok: false as const, ruleId: lone.id, reason: 'require-approval' as const,
+    cell: Object.freeze({ kind: lone.resource.kind, action: shown(cells(lone.actions)[0]!), id: shown(cells(lone.resource.ids)[0]!), scope: shown(cells(lone.scopes)[0]!) }) });
   for (const value of touched) {
     const raise = raised(value);
     for (const action of cells(value.actions)) for (const id of cells(value.resource.ids)) for (const scope of cells(value.scopes)) {
       const hit = (other: { readonly actions: Selection; readonly scopes: Selection; readonly resource: { readonly kind: string; readonly ids: Selection } },
         test: (selection: Selection, cell: Cell) => boolean) => kindCovers(other.resource.kind, value.resource.kind) && test(other.actions, action)
           && test(other.resource.ids, id) && test(other.scopes, scope);
-      const refuse = (reason: 'deny' | 'require-approval' | 'no-grant' | 'mode-eligible') => Object.freeze({ ok: false as const, ruleId: value.id, reason });
+      const refuse = (reason: 'deny' | 'require-approval' | 'no-grant' | 'mode-eligible') => Object.freeze({ ok: false as const, ruleId: value.id, reason,
+        cell: Object.freeze({ kind: value.resource.kind, action: shown(action), id: shown(id), scope: shown(scope) }) });
       if (denies.some(other => hit(other, meets))) return refuse('deny');
       if (![...asks, ...allows].some(other => hit(other, covers))) return refuse('no-grant');
       const asked = asks.filter(other => hit(other, meets));

@@ -46,7 +46,7 @@ export function useWorklineSettings(input: { readonly panels: WorklinePanels | u
     if (!panels) return null;
     const { model, ...rest } = panels.ports;
     return { ...rest, ...(permissionMode ? { mode: {
-      inspect: () => permissionMode.inspect(), current: () => modeNow.current.stop ?? null, select: (stop: PermissionModeStop) => modeNow.current.select(stop) } } : {}),
+      canOpen: Boolean(permissionMode.open), inspect: () => permissionMode.inspect(), current: () => modeNow.current.stop ?? null, select: (stop: PermissionModeStop) => modeNow.current.select(stop) } } : {}),
     // The host's whole `/model` source (budget window, shadow answers) plus the session pin; dropping an optional port hides its rows.
     ...(model && pinnable ? { model: { inspect: () => model.inspect(), ...(model.makeDefault ? { makeDefault: (choice: ModelPanelChoice) => model.makeDefault!(choice) } : {}),
       ...(model.prepare ? { prepare: (choice: ModelPanelChoice) => model.prepare!(choice, sessionModel.current?.reasoning?.()) } : {}),

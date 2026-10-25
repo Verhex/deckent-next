@@ -10,14 +10,19 @@ import { LocalRuntimeSocketError } from '#adapters/index.js';
 import { RunError, TaskEvaluationError, TaskGraphError, WorkClassRegistryError, WorkerEffortError } from '#domain/index.js';
 import { EvaluationEvidenceError } from '#capabilities/index.js';
 import { ZodError } from 'zod';
-import { DeckentError, ErrorRegistry, unexpectedQueryFailure, sanitizeQueryFailure, ManagedFileError, BootstrapStateError } from '#platform/index.js';
+import { DeckentError, ErrorRegistry, unexpectedQueryFailure, sanitizeQueryFailure, ManagedFileError, BootstrapStateError, terminalSafeText } from '#platform/index.js';
 import { HandoffError, SupervisorError, RunProgressionFailure, RunLifecycleError, reservationDiagnosticParams, ServiceShutdownError, ReconciliationRecoveryError, ReconciliationRuntimeLoopError, CancellationRuntimeLoopError, RuntimeServiceProtocolError, RuntimeServiceLifecycleError, RunWorkspaceCustodyError, WorkspaceError, CancellationDeliveryError, TaskEvidenceError, ExecutionRegistryError, AuthenticationError, AttemptStoreError, DispatchError, DispatchInventoryError, PolicyAuthorizationError, RunStoreError, ScopeRegistrationError, WorkTargetError } from '#engine/index.js';
 const GRAPH_INPUT_CODES: ReadonlySet<string> = new Set(['TASK_GRAPH_INVALID', 'TASK_DUPLICATE', 'TASK_DEPENDENCY_DUPLICATE', 'TASK_DEPENDENCY_MISSING',
   'TASK_GRAPH_CYCLE', 'TASK_ACCEPTANCE_DUPLICATE', 'TASK_CRITERION_DEFINITION_MISSING', 'TASK_CRITERION_DEFINITION_UNUSED', 'TASK_CRITERION_DEFINITION_DUPLICATE']);
 const registeredFailure = (code: string, options?: Parameters<typeof ErrorRegistry.createError>[1]) => ErrorRegistry.has(code)
   ? ErrorRegistry.createError(code, options) : ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+const delegationRefusalParams = (facts: NonNullable<AuthorityChangeError['refusal']>) => ({ kind: facts.cell.kind, action: facts.cell.action, target: facts.cell.id,
+  scope: facts.cell.scope, reason: facts.reason, hint: facts.reason === 'deny' ? 'deny' : facts.reason !== 'no-grant' ? 'approval' : facts.sole ? 'owner' : facts.people.length ? 'other' : 'unnamed',
+  people: facts.people.map(person => terminalSafeText(`${person.issuer}/${person.subject}`)).join(', ') });
 /** Preserve stable failures without private details; account totals require a freshly policy-authorized account from the caller. */
 export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAccount): DeckentError {
+  // alpha.56 U5-S1: the bound's refusal names the cell it stopped at and a hint chosen from display facts (never a decision input).
+  if (error instanceof AuthorityChangeError && error.refusal) return registeredFailure(error.code, { params: delegationRefusalParams(error.refusal) });
   if (error instanceof AuthorityChangeError || error instanceof PolicyChangeError || error instanceof DecisionDelegationError || error instanceof PolicyLastAdminError || error instanceof CommandIdError || error instanceof DecisionError || error instanceof DecisionApplicationError || error instanceof MemoryJournalError || error instanceof MemoryError || error instanceof AgentCatalogStoreError || error instanceof AgentCatalogError || error instanceof ApprovalError || error instanceof SessionAuthenticationError
     || error instanceof TargetQueueError || error instanceof CandidateBindingError || error instanceof AuditError || error instanceof WorkerObservationError || error instanceof WorkspaceAdoptionError || error instanceof EffectError || error instanceof NervousError || error instanceof CatalogEvolutionError) return registeredFailure(error.code);
   if (error instanceof WorkspacePatchError) return registeredFailure(error.code, error.detail ? { params: { ...error.params, detail: error.detail, field: patchLimitFields[error.detail] } } : error.params ? { params: error.params } : {});

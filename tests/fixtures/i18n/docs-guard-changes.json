@@ -618,7 +618,7 @@
     },
     "mcp.grant.reason.delegation": {
       "before": "you may not grant this server in this scope (your own policy does not hold mcp-server authority); a policy administrator can, and a first-run installation takes the v5 rules with deckent init policy --scope <id> --upgrade --preview, then --apply",
-      "after": "you may not grant this server in this scope (your own policy does not hold mcp-server authority); a policy administrator can, and a first-run installation takes the missing first-run rules with deckent init policy --scope <id> --upgrade --preview, then --apply"
+      "after": "Your own policy does not cover the requested authority. Nothing was changed; an administrator who holds it must review the policy."
     },
     "cli.help.run": {
       "before": "Usage: deckent run <action>\n  create --scope <id> --id <run> --command-id <id> --graph <file|-> [--json]\n    [--lang en|tr] [--no-color]\n  reserve --scope <id> --id <run> --command-id <id> --expected-revision <n>\n    [--json] [--lang en|tr] [--no-color]\n  inspect --scope <id> --id <run> [--json] [--lang en|tr] [--no-color]\n  cancel --scope <id> --id <run> --command-id <id> --expected-revision <n>\n    [--json] [--lang en|tr] [--no-color]\nRun creation admits a graph; reservation selects Tasks and generates Attempt\n    identities. Neither command executes Tasks or accepts a caller verdict.",
@@ -1244,7 +1244,7 @@
     },
     "mcp.grant.reason.delegation": {
       "before": "bu sunucu için bu kapsamda izin veremezsiniz (kendi policy kurallarınız mcp-server yetkisini içermiyor); bir policy yöneticisi verebilir, ilk kurulum ise v5 kurallarını deckent init policy --scope <id> --upgrade --preview ve ardından --apply ile alır",
-      "after": "bu sunucu için bu kapsamda izin veremezsiniz (kendi policy kurallarınız mcp-server yetkisini içermiyor); bir policy yöneticisi verebilir, ilk kurulum ise eksik ilk kurulum kurallarını deckent init policy --scope <id> --upgrade --preview ve ardından --apply ile alır"
+      "after": "İstenen yetki kendi politikanızda yok. Hiçbir şey değişmedi; bu yetkiye sahip bir yönetici politikayı incelemeli."
     },
     "cli.help.run": {
       "before": "Kullanım: deckent run <eylem>\n  create --scope <id> --id <run> --command-id <id> --graph <dosya|-> [--json]\n    [--lang en|tr] [--no-color]\n  reserve --scope <id> --id <run> --command-id <id> --expected-revision <n>\n    [--json] [--lang en|tr] [--no-color]\n  inspect --scope <id> --id <run> [--json] [--lang en|tr] [--no-color]\n  cancel --scope <id> --id <run> --command-id <id> --expected-revision <n>\n    [--json] [--lang en|tr] [--no-color]\nRun oluşturma grafiği kabul eder; ayırma görevleri seçer ve Attempt kimlikleri\n    üretir. Hiçbiri görev yürütmez veya çağıranın sonucu belirlemesine izin\n    vermez.",

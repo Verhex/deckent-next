@@ -41,9 +41,12 @@ export function mcpTable(view: McpCapabilityView, locale: Locale, style: ReturnT
 export async function toggleScope(context: ApprovalCommandContext, locale: Locale, explicit: string | undefined, command: string, ask: Ask): Promise<ScopeResolution | null> {
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
   const configured = ((await loadConfig(root, options)).terminal as { scopeId?: unknown } | undefined)?.scopeId;
-  // A policy change is a change: a person picks the scope (the configured one preselected), it is never a silent default.
-  return resolveCommandScope({ command, locale, explicit, configured: typeof configured === 'string' ? configured : undefined, mutating: true, interactive: true,
-    listScopes: scopeLister(context, root, options), pick: ask });
+  const listScopes = scopeLister(context, root, options);
+  const scopes = !explicit && typeof configured !== 'string' ? await listScopes() : null;
+  if (scopes?.length === 1) return { scopeId: scopes[0]!, source: 'default' };
+  // This phase only reads. The eventual change has its own scope-bound, governed preview card.
+  return resolveCommandScope({ command, locale, explicit, configured: typeof configured === 'string' ? configured : undefined, mutating: false, interactive: true,
+    listScopes: scopes ? async () => scopes : listScopes, pick: ask });
 }
 
 /**

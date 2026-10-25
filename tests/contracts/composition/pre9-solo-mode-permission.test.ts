@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { applyPolicyTemplateInstallation, openPermissionModesInstallation } from '#composition/core/installation/index.js';
+import { applyPolicyTemplateInstallation, openOwnPermissionMode, openPermissionModesInstallation } from '#composition/core/installation/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { readLocalOsIdentity, withLocalPrincipalChannel } from '#adapters/index.js';
 import { FIRST_RUN_POLICY_TEMPLATE_VERSION, INSTALLER_PERMISSION_MODES_COMMAND_PREFIX, delegationWithin, evaluatePolicy, firstRunPolicyTemplate, fullAccessGrant, installerPermissionModeRuleId,
@@ -100,6 +100,33 @@ describe.skipIf(process.platform !== 'linux')('PRE-9: the installation owner ope
     expect(permissionModeView(policySchema.parse(await f.load()), f.person, SCOPE)).toMatchObject({ fullAuto: true, fullAccess: true });
     expect(await f.set('full-auto')).toMatchObject({ result: { mode: 'full-auto', changed: true } });
     expect(admitFullAccessTurn(await f.load(), { principal: f.person, scopeId: SCOPE, turnId: 't1', sessionId: null, eventId: 'e1', atMs: 1 }).allowed).toBe(true);
+  });
+
+  it('U5-S5: own-mode card refuses AI, no witness and foreign owner; decline is inert, yes uses one audited PRE-9 write and retains another open mode', async () => {
+    const f = await freshInstallation(), before = await snapshot(f.root); let asks = 0;
+    const input = { scopeId: SCOPE, mode: 'full-access' as const, confirm: async () => { asks++; return true; } };
+    await expect(withLocalPrincipalChannel('mcp', () => openOwnPermissionMode(f.root, input, {}, uid(), attested))).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    await expect(openOwnPermissionMode(f.root, input, {}, uid(), { attest: async () => false })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+    await expect(openOwnPermissionMode(f.root, input, {}, uid()! + 1, attested)).rejects.toMatchObject({ code: 'PERMISSION_MODE_DENIED' });
+    expect(asks).toBe(0); expect(await snapshot(f.root)).toEqual(before);
+    expect(await openOwnPermissionMode(f.root, { ...input, confirm: async () => false }, {}, uid(), attested)).toBe(false);
+    expect(await snapshot(f.root)).toEqual(before);
+    const cancel = new AbortController();
+    expect(await openOwnPermissionMode(f.root, { ...input, signal: cancel.signal, confirm: async () => { cancel.abort(); return true; } }, {}, uid(), attested)).toBe(false);
+    expect(await snapshot(f.root)).toEqual(before);
+    await openWitnessed(f.root, ['full-auto']);
+    const prior = f.audit().filter(event => event.subject.kind === 'authority-change').length;
+    expect(await openOwnPermissionMode(f.root, input, {}, uid(), attested)).toBe(true); expect(asks).toBe(1);
+    expect((await f.permissionRules()).map(rule => rule.id)).toEqual([RULE_IDS['full-auto'], RULE_IDS['full-access']]);
+    expect(f.audit().filter(event => event.subject.kind === 'authority-change')).toHaveLength(prior + 1);
+    // Review an old revision, then move it with another authorized writer. The accepted old card must never apply.
+    await openWitnessed(f.root, []);
+    await expect(openOwnPermissionMode(f.root, { ...input, confirm: async () => { await openWitnessed(f.root, ['full-auto']); return true; } }, {}, uid(), attested))
+      .rejects.toMatchObject({ code: 'PERMISSION_MODE_CONFLICT' });
+    expect((await f.permissionRules()).map(rule => rule.id)).toEqual([RULE_IDS['full-auto']]);
+    const custom = await freshInstallation(policy => ({ ...policy, grants: policy.grants.filter(rule => (rule as PolicyGrant).id !== 'first-run-read-tools') }));
+    expect(await openOwnPermissionMode(custom.root, input, {}, uid(), attested)).toBe(true);
+    expect((await custom.permissionRules()).map(rule => rule.id)).toEqual([RULE_IDS['full-access']]);
   });
 
   it('a pipe (no controlling terminal) and the MCP actor cannot open the modes: typed refusal, every file byte-identical', async () => {
@@ -272,5 +299,5 @@ it('guard: the governed chain cannot open it — the delegation bound refuses a 
   const person = { issuer: 'host', subject: 'owner' };
   const built = firstRunPolicyTemplate({ scopeId: SCOPE, principal: person, ...FIRST_RUN_TOOL_NAMES });
   const rule = { id: RULE_IDS['full-auto'], effect: 'allow' as const, actions: ['set'], scopes: [SCOPE], principals: [person], resource: { kind: 'permission-mode', ids: ['full-auto'] } };
-  expect(delegationWithin(resolvePolicyBindings(built.policy, built.bindings), person, [rule])).toEqual({ ok: false, ruleId: RULE_IDS['full-auto'], reason: 'no-grant' });
+  expect(delegationWithin(resolvePolicyBindings(built.policy, built.bindings), person, [rule])).toEqual({ ok: false, ruleId: RULE_IDS['full-auto'], reason: 'no-grant', cell: { kind: 'permission-mode', action: 'set', id: 'full-auto', scope: SCOPE } });
 });

@@ -106,6 +106,9 @@ function mcpSandboxUnreachable(p: Params, l: Locale): string {
 const DOCKER_IMAGE_PROBE_CAUSES: Readonly<Record<string, (l: Locale) => string>> = { deadline: l => t('docker.imageProbe.cause.deadline', {}, l),
   exit: l => t('docker.imageProbe.cause.exit', {}, l), signal: l => t('docker.imageProbe.cause.signal', {}, l), parse: l => t('docker.imageProbe.cause.parse', {}, l) };
 const dockerImageProbeCause = (cause: unknown) => typeof cause === 'string' && Object.hasOwn(DOCKER_IMAGE_PROBE_CAUSES, cause) ? DOCKER_IMAGE_PROBE_CAUSES[cause]! : null;
+/** alpha.56 U5-S1: the delegation refusal's next step, chosen by the caller from display facts (the bound already decided). */
+const DELEGATION_HINTS: Readonly<Record<string, (p: Params, l: Locale) => string>> = { owner: (p, l) => t('policy.hint.owner', p, l), other: (p, l) => t('policy.hint.other', p, l),
+  unnamed: (p, l) => t('policy.hint.unnamed', p, l), deny: (p, l) => t('policy.hint.deny', p, l), approval: (p, l) => t('policy.hint.approval', p, l) };
 const coreDefinitions: ErrorDefinitions = Object.freeze({
   SECRET_STORE_PROTECTION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_PROTECTION_REQUIRED', p, l) }) },
   OAUTH_CONNECTION_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED', p, l) }) },
@@ -649,7 +652,9 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   // C12 Q8: require-approval outside the operation catalog (no broker there yet). Typed and distinct from POLICY_DENIED.
   POLICY_APPROVAL_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_APPROVAL_UNSUPPORTED', p, l) }) },
   // POLICY-ADMIN P1-P3: typed refusals of policy.administer@1; no surface maps them yet (authority producer surface is P5).
-  POLICY_DELEGATION_EXCEEDS: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_DELEGATION_EXCEEDS', p, l) }) },
+  // alpha.56 U5-S1: params kind, action, target, scope, reason, hint (owner|other|unnamed|deny|approval), people; without them the summary sentence.
+  POLICY_DELEGATION_EXCEEDS: { category: 'error', render: (p, l) => ({ message: p['kind'] === undefined ? t('error.POLICY_DELEGATION_EXCEEDS.summary', p, l)
+    : t('error.POLICY_DELEGATION_EXCEEDS', { ...p, hint: (DELEGATION_HINTS[String(p['hint'])] ?? DELEGATION_HINTS['unnamed']!)(p, l) }, l) }) },
   POLICY_LAST_ADMIN: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_LAST_ADMIN', p, l) }) },
   POLICY_CHANGE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_INVALID', p, l) }) },
   POLICY_CHANGE_TOO_LARGE: { category: 'error', render: (p, l) => ({ message: t('error.POLICY_CHANGE_TOO_LARGE', p, l) }) },
@@ -700,7 +705,8 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   SECRET_VAULT_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.SECRET_VAULT_REQUIRED', p, l) }) },
   PERMISSION_MODE_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_CONFLICT', p, l) }) },
   PERMISSION_MODE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_UNSUPPORTED', p, l) }) },
-  PERMISSION_MODE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_DENIED', p, l) }) },
+  PERMISSION_MODE_DENIED: { category: 'error', render: (p, l) => ({ message: (p['scope'] === undefined ? t('error.PERMISSION_MODE_DENIED', p, l) : t('error.PERMISSION_MODE_DENIED.scoped', p, l))
+    + (p['hint'] === 'modeOwner' ? ` ${t('policy.hint.modeOwner', p, l)}` : '') }) },
   PERMISSION_MODE_LOCKED: { category: 'error', render: (p, l) => ({ message: t('error.PERMISSION_MODE_LOCKED', p, l) }) },
   PERMISSION_MODE_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.PERMISSION_MODE_INVALID', p, l) }) },
   AUDIT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.AUDIT_INVALID', p, l) }) },

@@ -1,3 +1,4 @@
+import type { PermissionMode } from '#domain/index.js';
 import type { QueueSubmitClient, QueueQuery, QueueConsent, TargetBatchExecution } from '#engine/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
 import type { BrainPlanCommand, BrainPlanObserver } from '#domain/index.js';
@@ -143,6 +144,9 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   secretGrantCard?: TerminalSecretGrantHandlers;
   findTerminalMentions?: TerminalMentionFindHandler;
   attachTerminalMentions?: TerminalMentionAttachHandler;
+  /** CLI host custody only; the callback displays the exact PRE-9 preview, no wire authority. */
+  openOwnPermissionMode?: (root: string, input: { scopeId: string; mode: Exclude<PermissionMode, 'standart'>;
+    confirm: (preview: import('#engine/index.js').InstallerPermissionModesResult) => Promise<boolean>; signal?: AbortSignal }, options: ConfigLoadOptions) => Promise<boolean>;
   inspectPermissionMode?: TerminalPermissionModeInspectHandler;
   setPermissionMode?: TerminalPermissionModeSetHandler;
   inspectScratch?: TerminalScratchInspectHandler;

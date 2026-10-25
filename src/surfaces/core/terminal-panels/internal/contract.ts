@@ -15,6 +15,7 @@ export type PanelLine = Readonly<{ label: string; text: string; tone?: 'warning'
 
 /** `/mode`: the person's permission mode through the runtime service (the same port and audit as `/mode <mode>` and Shift+Tab). */
 export interface ModePanelPort {
+  readonly canOpen?: boolean;
   inspect(): Promise<PermissionModeView>;
   /** The stop this session runs in now (full access is the session's own), or null when unknown. */
   current(): PermissionModeStop | null;

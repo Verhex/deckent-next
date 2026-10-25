@@ -24,7 +24,7 @@ export { HARD_FLOOR_APPROVAL_CELLS, agentToolApprovalFacts, approvalAssuranceReg
 export type { ApprovalAssuranceOptions } from './internal/application.js';
 export type { AgentToolApprovalFacts, TurnDecisionCapabilities } from './internal/assurance.js';
 export { approvalCommandFingerprint } from './internal/application.js';
-export { McpCapabilities, McpCapabilityRegistry, mcpCapabilityRegistry, mcpCapabilityScopeCandidates, registerMcpCapabilityGroup } from './internal/mcp-capabilities.js';
+export { McpCapabilities, McpCapabilityRegistry, mcpCapabilityRegistry, registerMcpCapabilityGroup } from './internal/mcp-capabilities.js';
 export { DecisionDelegations } from './internal/delegations.js';
 export { sessionStandingResultSchema, sessionApprovalResultSchema, parseApprovalAnswer, clearSessionStandingSchema, sessionStandingClearanceSchema, acceptSessionStandingClearance } from './internal/session-contract.js';
 export type { SessionStandingResult, SessionApprovalResult, ClearSessionStanding, SessionStandingClearance } from './internal/session-contract.js';
@@ -33,3 +33,4 @@ export { RunCreateApprovalBroker, RUN_CREATE_SUBJECT_PROTOCOL_VERSION } from './
 export type { RunCreateApprovalInput } from './internal/run-create.js';
 export { ApprovalAssuranceProducerRegistry, approvalAssuranceProducerRegistry, registerApprovalAssuranceProducer, approvalAssuranceRegistrationEvent, resolveAuditedApprovalAssurance, approvalAssuranceProducerInventory } from './internal/producer-registry.js';
 export type { ApprovalAssuranceAttester, ApprovalAssuranceProducerManifest, ApprovalAssuranceProducerRegistration } from './internal/producer-registry.js';
+export { mcpCapabilityScopeCandidates } from '#engine/core/policy/index.js';

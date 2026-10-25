@@ -2219,8 +2219,8 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/effect/internal/candidate.ts`: `350152c8473d63f5ea9abed7f4afe7f30f4399997a18a6feb8e7b74238bac806`
 - `src/domain/core/effect/internal/contract.ts`: `70ea58374330703e678ace49e21c9ff1a5f7c0b3c5f4e8a4476767a6adc6607e`
 - `src/domain/core/effect/internal/queue.ts`: `5bc5b04b4e6f9964af821800aa70625447499c120b89df8a9f242bbc1dff9f60`
-- `src/domain/core/policy/index.ts`: `e81fc0b92284a587bcfa82b17c8f8f69679b2ebdb1963854867d88c9153175db`
-- `src/domain/core/policy/internal/administer.ts`: `23913532637344f14475a60eb4d10994b1321ab5d45ec42b904f1d69582e8cef`
+- `src/domain/core/policy/index.ts`: `2fcf1e6b7c5fdd431c204a3cbf8ab755bcfe791da20420a592d965e8660c5a81`
+- `src/domain/core/policy/internal/administer.ts`: `630a4f0a578b8fbd061d2c2ee1f97b87265824863e648e05c360ade40e6e4778`
 - `src/domain/core/policy/internal/administration.ts`: `c056637d8f0940205cace17dd8f1b688e7305c84d1f40931d5b3471427ac3b3b`
 - `src/domain/core/policy/internal/ai-floor.ts`: `dc68ca80f2254099c0eb735272bc5bb2c3e5f9a4793ab7b238aee92a60dee890`
 - `src/domain/core/policy/internal/decision-step.ts`: `70beee67f939c8c3a0c03469e2d5a48304d16ea4ee0a833a1bbf2b7b714ed4fe`
@@ -2228,7 +2228,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/describe.ts`: `0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df`
 - `src/domain/core/policy/internal/evaluate.ts`: `61b1172eabcab5da8a7a0935bc2d0bf523d5327a4c95e96b4a70ec7b191714f2`
 - `src/domain/core/policy/internal/first-run-template.ts`: `07e170166e1b0107fccb3ff6e998deb6514a234c1142be5cd1de29600b4bf072`
-- `src/domain/core/policy/internal/mcp-capabilities.ts`: `c864257ab5ce5852f0799805d358f7b8790ec54fe8656157a1e4addd8cdeafb4`
+- `src/domain/core/policy/internal/mcp-capabilities.ts`: `fb3ec282d7a65751a5d374cd7c98ef8581f13d45f73b04ceee860c8b67770d00`
 - `src/domain/core/policy/internal/mcp-grant.ts`: `8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a`
 - `src/domain/core/policy/internal/mode.ts`: `b1f9479911852c8b3842c6b2135156534e16a8e2016e3c7120c2b4f627f4c444`
 - `src/domain/core/policy/internal/permission-mode-grant.ts`: `cb8e1567461e8a4cc9a384e4b02fe9edb8b583d2fbee565383bb534c6d540505`

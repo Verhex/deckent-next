@@ -176,6 +176,11 @@
     "targets": []
   },
   "output_mode": "standard",
+  "policy": {
+    "mcp": {
+      "optInGroups": []
+    }
+  },
   "projectName": "deckent-project",
   "reconciliationRuntime": null,
   "resourceObservation": {

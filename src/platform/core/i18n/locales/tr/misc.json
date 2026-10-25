@@ -730,5 +730,6 @@
   "config.field.brain_planner": "Sürümlü Brain planlama şablonu kaydı",
   "error.BRAIN_CONTEXT_TOO_LARGE": "Planlama bağlamı {limit} {unit} sınırını aşıyor (gözlenen {observed}). İsteği/katalog seçimini daraltın veya daha geniş bağlamlı, açıkça etkinleştirilmiş model seçin; otomatik tekrar yok.",
   "error.BRAIN_GRAPH_INVALID": "Model planı {rule} graph kuralını ihlal ediyor. İsteği veya model planını düzeltin. Run oluşturulmadı.",
-  "error.BRAIN_PROVIDER_REJECTED": "Planlama sağlayıcısı isteği reddetti ({reason}, HTTP {status}). Yeni istekten önce çağrı makbuzunu inceleyip yapılandırmayı veya bağlamı düzeltin; otomatik tekrar yok."
+  "error.BRAIN_PROVIDER_REJECTED": "Planlama sağlayıcısı isteği reddetti ({reason}, HTTP {status}). Yeni istekten önce çağrı makbuzunu inceleyip yapılandırmayı veya bağlamı düzeltin; otomatik tekrar yok.",
+  "config.field.policy": "Politika görünümü seçenekleri; isteğe bağlı MCP yetki grupları (izinler ayrıca yönetilir)."
 }
