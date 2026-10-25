@@ -352,7 +352,10 @@
         "src/platform/core/utils",
         "src/composition/core/runs",
         "src/adapters/core/native-coding",
-        "src/domain/core/run"
+        "src/domain/core/run",
+        "src/adapters/core/hub-cache",
+        "src/adapters/core/hub-client-store",
+        "src/engine/core/hub-client"
       ],
       "plan": "EXECUTION"
     },
@@ -4133,10 +4136,21 @@
       "dependencies": [
         "src/engine/core/hub-client",
         "src/adapters/core/hub-client-store",
-        "src/adapters/core/file-artifacts",
         "src/adapters/core/local-keyring",
         "src/platform/core/managed-files",
-        "src/composition/core/agent-catalog"
+        "src/composition/core/agent-catalog",
+        "src/adapters/core/hub-cache"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/hub-cache": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/domain/core/primitives",
+        "src/capabilities/core/artifacts",
+        "src/platform/core/config",
+        "src/platform/core/integrity",
+        "src/adapters/core/file-artifacts"
       ],
       "plan": "LEARNING"
     }

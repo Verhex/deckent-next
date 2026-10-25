@@ -927,6 +927,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   HUB_FOREIGN_PACKAGE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FOREIGN_PACKAGE', p, l) }) },
   HUB_FEED_REPLAYED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FEED_REPLAYED', p, l) }) },
   HUB_FEED_STALE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FEED_STALE', p, l) }) },
+  HUB_SKILL_FILES_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SKILL_FILES_UNAVAILABLE', p, l) }) },
   HUB_SKILL_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SKILL_INVALID', p, l) }) },
   HUB_FILE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_FILE_UNSUPPORTED', p, l) }) },
   HUB_SOURCE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.HUB_SOURCE_INVALID', p, l) }) },
