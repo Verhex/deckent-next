@@ -25,4 +25,6 @@ export const setupErrors: ErrorDefinitions = Object.freeze({
   SETUP_FIRST_COMMIT_INDEX_PENDING: { category: 'error', render: (p, l) => ({ message: t('error.SETUP_FIRST_COMMIT_INDEX_PENDING', p, l) }) },
   // A step before the ref update failed (params step, detail: Git's redacted last stderr line or an errno code); HEAD and the index unchanged.
   SETUP_FIRST_COMMIT_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.SETUP_FIRST_COMMIT_FAILED', p, l) }) },
+  // alpha.56 U3-1a: an answer to a stage of the other phase (an onboarding stage given to `deckent init`); refused, never ignored.
+  SETUP_STAGE_NOT_IN_PHASE: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_STAGE_NOT_IN_PHASE', p, l) }) },
 });

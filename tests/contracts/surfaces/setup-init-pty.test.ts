@@ -47,8 +47,11 @@ for wait, send in steps:
     read_for(0.4)
     marks.append(len(out.decode('utf8', 'replace')))
     since = len(out)
-    for char in send:
-        os.write(fd, char.encode()); time.sleep(0.15)
+    if send.startswith('\x1b['):
+        os.write(fd, send.encode()); time.sleep(0.15)
+    else:
+        for char in send:
+            os.write(fd, char.encode()); time.sleep(0.15)
 deadline = time.time() + 25
 status = None
 while status is None and time.time() < deadline:
@@ -71,12 +74,13 @@ describe.skipIf(process.platform === 'win32')('bare deckent init on a real PTY (
     await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'erp-demo' }));
     // A clean environment: no AI-agent or CI marker (the test runner may itself run inside one), English, a real terminal type.
     const env = { PATH: process.env['PATH'] ?? '', HOME: home, XDG_CONFIG_HOME: join(home, '.config'), LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' };
-    const steps = [['Enter confirm', '1'], ['Enter confirm', '\r'], ['> 3. Folder and scope', '1'], ['Enter confirm', '\r'], ['> 5. Who uses', '\u001b']];
+    const steps = [['Enter confirm', '\u001b[B'], ['Enter confirm', '\r'], ['> 3. Folder and scope', '1'], ['Enter confirm', '\r'], ['> 5. Who uses', '\u001b']];
     const { stdout } = await execute('python3', ['-c', DRIVER, JSON.stringify(steps), JSON.stringify([process.execPath, cli, 'init']), root],
       { env: { ...env, PATH: process.env['PATH'] ?? '' }, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 }).catch((error: { stdout?: string }) => ({ stdout: error.stdout ?? '{}' }));
     const run = JSON.parse(stdout) as { status?: number | string; output: string; marks: number[]; timeout?: string };
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();
     expect(run.status, run.output.slice(-2000)).toBe(0);
+    expect(run.output).not.toContain('^[[B');
     // Cut at the last complete frame (synchronized-output end) before the mark: a mark can fall inside a frame being written.
     const complete = (end: number) => { const at = run.output.lastIndexOf('\u001b[?2026l', end); return at < 0 ? end : at + '\u001b[?2026l'.length; };
     const screen = (mark: number) => terminalBuffers(run.output.slice(0, complete(run.marks[mark]!)), COLUMNS, ROWS).text.split('\n');

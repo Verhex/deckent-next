@@ -1,7 +1,8 @@
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as cards from '#surfaces/core/cli-human/index.js';
 import { SetupStageRegistry, type SetupObservation, type SetupStage } from '#engine/index.js';
 import { MESSAGE_REGISTRY, clearConfigCache } from '#platform/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
@@ -9,7 +10,7 @@ import { createSetupController, setupInitCommand, parseSetupFlags, type SetupApp
 import { offerTarget } from '#surfaces/core/cli-kit/index.js';
 
 // I-S4: bare `deckent init` renders the I-S1 plan as JSON, plain lines or the window, and applies only what INIT-D5 allows.
-const base: SetupObservation = { schemaVersion: 1,
+const base: SetupObservation = { schemaVersion: 2,
   environment: { platform: 'linux', node: 'supported' }, language: { configured: null, requested: null, system: 'tr' },
   folder: { installation: 'none', homeRoot: false, configuredScope: null, suggestedScope: 'my-erp' },
   profile: { available: [{ id: 'core:solo', version: 1 }, { id: 'core:team', version: 1 }] }, policy: { state: 'absent' },
@@ -53,10 +54,9 @@ describe('I-S4 bare deckent init', () => {
     const run = harness();
     await setupInitCommand(['init', '--json'], run.context);
     const document = JSON.parse(run.out()) as { schemaVersion: number; stages: { id: string; state: string }[]; apply: unknown };
-    expect(document.schemaVersion).toBe(1);
+    expect(document.schemaVersion).toBe(2);
     expect(document.apply).toEqual({ requested: false, results: [] });
-    expect(document.stages.map(stage => stage.id)).toEqual(['core:environment', 'core:language', 'core:folder', 'core:profile', 'core:policy', 'core:sandbox',
-      'core:model', 'instructions:bridges', 'core:final-check']);
+    expect(document.stages.map(stage => stage.id)).toEqual(['core:language', 'core:environment', 'core:folder', 'core:profile', 'core:policy', 'core:sandbox', 'core:final-check']);
     expect(run.applied).toEqual([]); expect(run.rawMode()).toBe(0);
     await expect(`${JSON.stringify(document, null, 2)}\n`).toMatchFileSnapshot('../../fixtures/setup/plan-fresh.json');
     // The same call in Turkish prints the same document: the contract carries message keys, not text.
@@ -71,11 +71,46 @@ describe('I-S4 bare deckent init', () => {
     const text = run.out(), catalog = MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>;
     expect(text).not.toMatch(/setup\.(?:stage|reason|question|instructions|state|render)\./u);
     expect(text).not.toMatch(/\{[a-z]+\}/u);
-    for (const key of ['setup.stage.policy', 'setup.instructions.title', 'setup.stage.finalCheck', 'setup.render.nothingApplied']) expect(text).toContain(catalog[key]!.split('{')[0]!.trim().slice(0, 20));
-    expect(text).toContain('$ deckent init policy --scope my-erp --apply');
+    for (const key of ['setup.stage.policy', 'setup.stage.finalCheck', 'setup.render.nothingApplied']) expect(text).toContain(catalog[key]!.split('{')[0]!.trim().slice(0, 20));
+    expect(text).not.toContain('Model connection');
     expect(run.applied).toEqual([]); expect(run.rawMode()).toBe(0);
     expect(text.endsWith('\n') && !text.endsWith('\n\n')).toBe(true); // the command prints one final newline (Astra 2664 item 4)
     await expect(text).toMatchFileSnapshot(`../../fixtures/setup/plan-plain-${locale}.txt`);
+  });
+
+  it('U3-2: language switches immediately, declined foreground stays unapplied, warnings do not enter a repeated --yes loop', async () => {
+    const fresh = harness(), first = createSetupController({ context: fresh.context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
+    const turkish = (await first.step('tr'))!;
+    expect(turkish.title).toBe(MESSAGE_REGISTRY.catalogs.tr['setup.window.title']);
+    expect(first.locale()).toBe('tr');
+    const saved: SetupObservation = { ...base, language: { configured: 'en', requested: null, system: null },
+      profile: { ...base.profile, selected: { id: 'core:solo', version: 1 } }, folder: { ...base.folder, installation: 'present', configuredScope: 'my-erp' },
+      policy: { state: 'upgradable' }, check: { state: 'warnings' } };
+    const run = harness({ observation: () => saved }), controller = createSetupController({ context: run.context, root: '/x', locale: 'en',
+      observed: { observation: saved, registry }, flags: { json: false, yes: false } });
+    run.context.upgradePolicyTemplateInstallation = async () => ({ status: 'preview', expect: 'preview-digest', rules: [] });
+    const stub = vi.spyOn(cards, 'askCliCard').mockResolvedValueOnce('no');
+    try {
+      await controller.step('yes');
+      expect(await controller.step('apply')).toBeNull();
+      expect(await controller.runPending()).toBe(true);
+      expect(controller.model().rows.join('\n')).toContain('not applied');
+      expect(controller.model().rows.join('\n')).not.toContain('applied; observed again');
+      await controller.step('later'); // defer the read-only check
+      expect(controller.model().rows.join('\n')).toContain('step(s) put off');
+      expect(controller.model().rows.join('\n')).not.toContain('Nothing left to answer');
+    } finally { stub.mockRestore(); }
+    const rerun = harness({ observation: () => ({ ...saved, policy: { state: 'current' } }), apply: () => 'applied' });
+    await setupInitCommand(['init', '--yes', '--scope', 'my-erp', '--json'], rerun.context);
+    expect(rerun.applied).toEqual([]);
+    const doc = JSON.parse(rerun.out());
+    expect(doc.stages.find((stage: { id: string }) => stage.id === 'core:final-check').state).toBe('done');
+    expect(doc).not.toHaveProperty('firstJob');
+    const onboard = harness();
+    await setupInitCommand(['init', '--json', '--phase', 'onboarding'], onboard.context);
+    expect(JSON.parse(onboard.out()).stages.map((stage: { id: string }) => stage.id)).toEqual(['core:model', 'instructions:bridges']);
+    expect(onboard.applied).toEqual([]);
+    expect(await failure(setupInitCommand(['init', '--json', '--phase', 'onboarding', '--yes', '--scope', 's'], onboard.context))).toBe('CLI_USAGE');
   });
 
   it('EN/TR parity: both locales render the same stages and line structure, in different words', async () => {
@@ -129,10 +164,9 @@ describe('I-S4 bare deckent init', () => {
     const after = [base, { ...base, policy: { state: 'current' as const }, folder: { ...base.folder, installation: 'present' as const, configuredScope: 'my-erp' } }];
     const run = harness({ apply: () => 'applied', observation: round => after[Math.min(round, 1)]! });
     await setupInitCommand(['init', '--yes', '--scope', 'my-erp'], run.context);
-    expect(run.applied.map(stage => [stage.id, stage.operation!.id])).toEqual([['core:policy', 'installation.policy-template'], ['core:language', 'config.set'],
-      ['core:final-check', 'doctor.inspect']]);
+    expect(run.applied.map(stage => [stage.id, stage.operation!.id])).toEqual([['core:policy', 'installation.policy-template'], ['core:language', 'config.set']]);
     expect(run.applied.find(stage => stage.id === 'core:language')!.operation!.input).toEqual({ keyPath: 'language', value: 'tr', layer: 'project' });
-    expect(run.observed()).toBe(4);
+    expect(run.observed()).toBe(3);
     expect(run.applied.some(stage => NEVER_UNATTENDED.includes(stage.operation!.id))).toBe(false);
   });
 
@@ -149,7 +183,7 @@ describe('I-S4 bare deckent init', () => {
       if (observation.policy.state !== 'absent') expect(run.applied.map(stage => stage.operation!.id)).not.toContain('installation.policy-template');
       if (observation.environment.platform === 'windows') {
         expect(run.applied).toEqual([]);
-        expect((JSON.parse(run.out()) as { stages: { state: string }[] }).stages.slice(1).every(stage => stage.state === 'unsupported')).toBe(true);
+        expect((JSON.parse(run.out()) as { stages: { id: string; state: string }[] }).stages.filter(stage => stage.id !== 'core:environment').every(stage => stage.state === 'unsupported')).toBe(true);
       }
     }
   });
@@ -173,12 +207,45 @@ describe('I-S4 bare deckent init', () => {
 });
 
 describe('I-S4 setup window controller (no Ink)', () => {
+  it('U3 lead round 1: language and profile answers precede permissions; only the installation permits saving them', async () => {
+    let observed = base;
+    const run = harness({ observation: () => observed, apply: stage => {
+      if (stage.id === 'core:policy') observed = { ...observed, policy: { state: 'current' }, folder: { ...base.folder, installation: 'present', configuredScope: 'my-erp' } };
+      if (stage.id === 'core:language') observed = { ...observed, language: { ...base.language, configured: 'en' } };
+      if (stage.id === 'core:profile') observed = { ...observed, profile: { ...base.profile, selected: { id: 'core:team', version: 1 } } };
+      return 'applied';
+    } });
+    const controller = () => createSetupController({ context: run.context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
+    const deferred = controller();
+    await deferred.step('later'); await deferred.step('yes'); await deferred.step('core:team');
+    expect(deferred.outcome().plan.stages.find(stage => stage.id === 'core:policy')).toMatchObject({ state: 'blocked', operation: null,
+      reason: { code: 'setup.reason.waitsFor', params: { stage: 'core:language' } } });
+    const fresh = controller();
+    await fresh.step('en'); await fresh.step('yes');
+    expect(fresh.model().rows.join('\n')).toContain('1. Language · answered');
+    await fresh.step('later');
+    expect(fresh.outcome().plan.stages.find(stage => stage.id === 'core:policy')).toMatchObject({ state: 'blocked', operation: null,
+      reason: { code: 'setup.reason.waitsFor', params: { stage: 'core:profile' } } });
+    const chosen = controller();
+    await chosen.step('en'); await chosen.step('yes'); await chosen.step('core:team');
+    expect(chosen.model().rows.join('\n')).toContain('4. Who uses this installation · answered');
+    expect(run.applied).toEqual([]);
+    await chosen.step('yes'); await chosen.step('apply');
+    expect(run.applied[0]!.operation!.input).toEqual({ scopeId: 'my-erp' });
+    expect(chosen.model().rows.find(row => row.startsWith('>'))).toContain('1. Language');
+    await chosen.step('apply');
+    expect(chosen.model().rows.find(row => row.startsWith('>'))).toContain('4. Who uses this installation');
+    await chosen.step('apply');
+    expect(run.applied.map(stage => stage.id)).toEqual(['core:policy', 'core:language', 'core:profile']);
+    expect(chosen.outcome().plan.stages.filter(stage => ['core:language', 'core:profile', 'core:policy'].includes(stage.id)).every(stage => stage.state === 'done')).toBe(true);
+  });
+
   it('keeps one height, answers re-plan, "not now" and a not-wired apply put a stage off, and nothing is applied without Apply', async () => {
     const run = harness();
     const controller = createSetupController({ context: run.context, root: '/x', locale: 'en', observed: { observation: base, registry }, flags: { json: false, yes: false } });
     const first = controller.model();
     expect(first.options.map(option => option.id)).toEqual(['en', 'tr', 'later']);
-    expect(first.rows[1]).toMatch(/^> 2\. Language/u);
+    expect(first.rows[0]).toMatch(/^> 1\. Language/u);
     const sizes = [first.rows.length];
     let model = (await controller.step('en'))!; sizes.push(model.rows.length);
     expect(model.rows[2]).toMatch(/^> 3\. Folder and scope/u); expect(model.options.map(option => option.id)).toEqual(['yes', 'later']);

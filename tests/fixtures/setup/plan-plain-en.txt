@@ -1,15 +1,11 @@
-Deckent setup plan 3a07808e37b5
-1. Environment · done · The environment is supported (linux).
-2. Language · needs your answer · Detected language: Turkish.
+Deckent setup plan 04a6ef264866
+1. Language · needs your answer · Detected language: Turkish.
    ? Continue in Turkish?
+2. Environment · done · The environment is supported (linux).
 3. Folder and scope · done · The scope "my-erp" was chosen.
-4. Who uses this installation · blocked · Waits for the Permissions stage to finish first.
-5. Permissions · needs your answer · No permissions are installed yet.
-   ? Install the first-run permissions? (you administer; in standard mode edits and shell commands ask first)
-   $ deckent init policy --scope my-erp --apply
+4. Who uses this installation · answered; saved after permissions · core:solo · saved once setup has written the permissions.
+5. Permissions · blocked · Waits for the Language stage to finish first.
 6. Command sandbox · done · The command sandbox works (bubblewrap).
-7. Model connection · blocked · Waits for the Permissions stage to finish first.
-8. Project instructions · blocked · Waits for the permissions: project files are written through them.
-9. Final check · ready to apply · Ready for the final check.
+7. Final check · ready to apply · Ready for the final check.
    $ deckent doctor --json
-Nothing was applied. On a terminal, deckent init asks stage by stage; unattended: deckent init --yes --scope <id> (fresh permissions, language and final check only).
+Nothing was applied. On a terminal, deckent init asks stage by stage; unattended: deckent init --yes --scope <id> (fresh permissions and the language only; the final check is read-only and only reported).

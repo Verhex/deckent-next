@@ -16,7 +16,7 @@ import { createSetupController, setupInitCommand, type SetupApplyResult, type Se
  */
 const execute = promisify(execFile);
 const cli = resolve('dist/composition/core/cli/internal/entry.js');
-const ELIGIBLE = ['installation.policy-template', 'config.set', 'doctor.inspect'];
+const ELIGIBLE = ['installation.policy-template', 'config.set'];
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
@@ -36,21 +36,21 @@ async function fixture() {
 const digest = async (path: string) => createHash('sha256').update(await readFile(path)).digest('hex');
 
 describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --yes through the real owners (real binary)', () => {
-  it('--yes --scope in a pipe: fresh policy, language and final check through their owners; a second run is replay-safe', async () => {
+  it('--yes --scope in a pipe: fresh policy and language through their owners; a second run applies nothing', async () => {
     await access(cli);
     const f = await fixture();
     const first = await f.run(['init', '--yes', '--scope', 'erp-demo', '--json']);
     expect(first.code, first.stderr).toBe(0);
     const one = f.document(first.stdout);
     expect(one.apply.results.map(result => [result.stage, result.operation, result.status])).toEqual([['core:policy', 'installation.policy-template', 'applied'],
-      ['core:language', 'config.set', 'applied'], ['core:final-check', 'doctor.inspect', 'applied']]);
+      ['core:language', 'config.set', 'applied']]);
     const state = (doc: Document, id: string) => doc.stages.find(stage => stage.id === id)?.state;
     expect([state(one, 'core:policy'), state(one, 'core:language'), state(one, 'core:folder')]).toEqual(['done', 'done', 'done']);
     // No hand-written JSON: the installation's documents exist and name the scope; the language is the detected one.
     const policy = join(f.root, '.deckent', 'policy.json');
     expect(await readFile(policy, 'utf8')).toContain('erp-demo');
     expect(await readFile(join(f.root, '.deckent', 'config.json'), 'utf8')).toMatch(/"language":\s*"en"/u);
-    // Never anything but the three eligible operations, never the Docker install (no person answers in a pipe).
+    // Never anything but the two eligible operations, never the Docker install (no person answers in a pipe).
     expect(one.apply.results.every(result => ELIGIBLE.includes(result.operation))).toBe(true);
     expect(one.stages.some(stage => stage.operation?.id === 'execution-environment.install')).toBe(false);
     const before = await digest(policy);
@@ -59,7 +59,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
     const two = f.document(second.stdout);
     // Done stages are detected again, not remembered: the policy and language are not applied a second time.
     expect([state(two, 'core:policy'), state(two, 'core:language')]).toEqual(['done', 'done']);
-    expect(two.apply.results.map(result => result.operation).filter(id => id !== 'doctor.inspect')).toEqual([]);
+    expect(two.apply.results).toEqual([]);
     expect(await digest(policy)).toBe(before);
   }, 180_000);
 
@@ -95,12 +95,12 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
     expect(plan.code, plan.stderr).toBe(0);
     const doc = f.document(plan.stdout);
     expect(doc.apply).toEqual({ requested: false, results: [] });
-    expect(doc.stages.find(stage => stage.id === 'execution:runtime')).toMatchObject({ state: 'blocked', operation: null });
+    expect(doc.stages.find(stage => stage.id === 'execution:runtime')).toBeUndefined();
     expect(await readdir(f.root)).toEqual([]);
     // The same without an agent marker: `--json` and `--yes` are never a person answering, so no install offer either (I-D2 delta §1).
     for (const args of [['init', '--json'], ['init', '--yes', '--scope', 'erp-demo', '--json']]) {
       const document = f.document((await f.run(args, { PATH: f.empty })).stdout);
-      expect(document.stages.find(stage => stage.id === 'execution:runtime'), args.join(' ')).toMatchObject({ state: 'blocked', operation: null });
+      expect(document.stages.find(stage => stage.id === 'execution:runtime'), args.join(' ')).toBeUndefined();
     }
     const yes = await f.run(['init', '--yes', '--scope', 'erp-demo'], { CLAUDECODE: '1', PATH: f.empty });
     const applied = f.document(yes.stdout);
@@ -128,7 +128,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
 });
 
 describe('I-S3 apply port: stages that take the terminal are refused off the window, nothing half-run', () => {
-  const stage = (id: string, operation: string, input: Record<string, string> = { scopeId: 'erp-demo' }): SetupStage => ({ id, namespace: id.split(':')[0]!, title: 'setup.stage.policy',
+  const stage = (id: string, operation: string, input: Record<string, string> = { scopeId: 'erp-demo' }): SetupStage => ({ id, namespace: id.split(':')[0]!, phase: id === 'core:policy' ? 'install' : 'onboarding', title: 'setup.stage.policy',
     state: 'ready', reason: { code: 'setup.reason.policyUpgrade', params: {} }, operation: { id: operation, version: 1, input }, question: null, default: null, cli: null, autoEligible: false });
   it.each([['core:policy', 'installation.policy-upgrade'], ['execution:runtime', 'execution-environment.install'], ['core:model', 'model.connect'],
     ['instructions:bridges', 'project-instructions.initialize']])('%s (%s) → refused TERMINAL_TTY_REQUIRED, the folder stays empty', async (id, operation) => {
@@ -139,7 +139,7 @@ describe('I-S3 apply port: stages that take the terminal are refused off the win
   });
 });
 
-const base: SetupObservation = { schemaVersion: 1, environment: { platform: 'linux', node: 'supported' }, language: { configured: 'en', requested: null, system: 'en' },
+const base: SetupObservation = { schemaVersion: 2, environment: { platform: 'linux', node: 'supported' }, language: { configured: 'en', requested: null, system: 'en' },
   folder: { installation: 'present', homeRoot: false, configuredScope: 'erp-demo', suggestedScope: 'erp-demo' }, profile: { available: [{ id: 'core:solo', version: 1 }],
     selected: { id: 'core:solo', version: 1 } }, policy: { state: 'current' }, sandbox: { realm: 'bubblewrap', selfTest: 'ok', usernsRestricted: false }, model: { connections: 1 }, check: { state: 'not-run' },
   families: { instructions: { file: 'present', bridges: [] } } };
@@ -154,12 +154,12 @@ function surface(apply: (stage: SetupStage) => SetupApplyResult['status'], obser
 
 describe('I-S3 surface: refusals are typed and name the stage; the window never runs a terminal-taking owner inside itself', () => {
   it('--yes: a refused stage stops the call with SETUP_STAGE_REFUSED naming it, after the plan and its results are printed', async () => {
-    const run = surface(() => 'refused');
+    const run = surface(() => 'refused', { ...base, policy: { state: 'absent' }, folder: { ...base.folder, installation: 'none' } });
     const error = await setupInitCommand(['init', '--yes', '--scope', 'erp-demo', '--json'], run.context).then(() => null, (failure: { code?: string; params?: Record<string, unknown> }) => failure);
     expect(error?.code).toBe('SETUP_STAGE_REFUSED');
-    expect(error?.params).toMatchObject({ stage: 'core:final-check', code: 'TERMINAL_TTY_REQUIRED' });
-    expect(run.applied).toEqual(['doctor.inspect']);
-    expect((JSON.parse(run.out()) as { apply: { results: SetupApplyResult[] } }).apply.results).toEqual([{ stage: 'core:final-check', operation: 'doctor.inspect', status: 'refused', code: 'TERMINAL_TTY_REQUIRED' }]);
+    expect(error?.params).toMatchObject({ stage: 'core:policy', code: 'TERMINAL_TTY_REQUIRED' });
+    expect(run.applied).toEqual(['installation.policy-template']);
+    expect((JSON.parse(run.out()) as { apply: { results: SetupApplyResult[] } }).apply.results).toEqual([{ stage: 'core:policy', operation: 'installation.policy-template', status: 'refused', code: 'TERMINAL_TTY_REQUIRED' }]);
   });
 
   it('the window closes for a terminal-taking stage (the final check runs the human doctor) instead of calling the apply port inside it', async () => {
@@ -193,10 +193,10 @@ describe('I-S3 surface: refusals are typed and name the stage; the window never 
     await controller.step('apply');
     expect(run.applied).toEqual(['config.set']);
     // The observation still says "not configured" (a fake port): the stage is put off; the window moves on.
-    // The solo profile is already saved (observed done), so the window goes on to the model. No model yet: the window offers to start `models connect` (its own picker), or not now.
-    expect(controller.model().rows.find(row => row.startsWith('>'))).toMatch(/Model connection/u);
-    expect(controller.model().options.map(option => option.id)).toEqual(['connect', 'later']);
-    expect(await controller.step('connect')).toBeNull();
+    // The profile is saved and model connection belongs to onboarding, so init goes on to its read-only final check.
+    expect(controller.model().rows.find(row => row.startsWith('>'))).toMatch(/Final check/u);
+    expect(controller.model().options.map(option => option.id)).toEqual(['apply', 'later']);
+    expect(await controller.step('apply')).toBeNull();
     expect(run.applied).toEqual(['config.set']);
   });
 });
