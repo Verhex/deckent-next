@@ -17,4 +17,12 @@ export const setupErrors: ErrorDefinitions = Object.freeze({
   SETUP_STAGE_REFUSED: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_STAGE_REFUSED', p, l) }) },
   // BR1: the worker-image stage found no reachable Docker when the person confirmed; nothing was built or checked.
   SETUP_WORKER_DOCKER_UNAVAILABLE: { category: 'config', render: (p, l) => ({ message: t('error.SETUP_WORKER_DOCKER_UNAVAILABLE', p, l) }) },
+  // alpha.56 U4-1c (coding.first-commit@1): the repository changed after the preview (a commit, staging, a Git lock, another file list); nothing written.
+  SETUP_FIRST_COMMIT_CHANGED: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_FIRST_COMMIT_CHANGED', p, l) }) },
+  // The candidate files exceed the card's bound (params observed, limit); nothing written, the person uses Git directly.
+  SETUP_FIRST_COMMIT_TOO_LARGE: { category: 'usage', render: (p, l) => ({ message: t('error.SETUP_FIRST_COMMIT_TOO_LARGE', p, l) }) },
+  // HEAD was committed but the index swap failed (params command: the recovery command).
+  SETUP_FIRST_COMMIT_INDEX_PENDING: { category: 'error', render: (p, l) => ({ message: t('error.SETUP_FIRST_COMMIT_INDEX_PENDING', p, l) }) },
+  // A step before the ref update failed (params step, detail: Git's redacted last stderr line or an errno code); HEAD and the index unchanged.
+  SETUP_FIRST_COMMIT_FAILED: { category: 'error', render: (p, l) => ({ message: t('error.SETUP_FIRST_COMMIT_FAILED', p, l) }) },
 });
