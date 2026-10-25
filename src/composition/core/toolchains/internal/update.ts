@@ -13,6 +13,8 @@ export type ToolchainUpdateResult = Readonly<{ schemaVersion: 1; mode: string; d
   plan: ToolchainUpdatePlan | null; planPath: string | null; build: Readonly<{ context: string; receiptPath: string; imageId: string; tag: string | null }> | null;
   proposal: ProfileRevisionProposal | null; proposalPath: string | null }>;
 export interface ToolchainUpdateDependencies { readonly fetcher?: NpmLatestVersionFetcher; readonly runner?: WorkerImageBuildRunner; readonly packageRoot?: string; readonly now?: () => string;
+  /** Only the background refresh may continue an existing receipt-bound installation without a new acquisition consent. */
+  readonly refreshExisting?: boolean;
   /** Ends a running build (the service stopping): the builder process is terminated and the build context is kept as `failed-`. */
   readonly signal?: AbortSignal;
   /** Called once a build is certain (plan written, daemon preflight passed), before its context is created: the refresh's durable `updating` marker. */
@@ -51,7 +53,7 @@ export async function updateConfiguredToolchains(projectRoot: string, input: Rea
     return Object.freeze({ schemaVersion: 1, mode: policy.mode, decision: 'planned', plan: proposed, planPath, build: null, proposal: null, proposalPath: null });
   }
   const binding = workerConsentBinding({ recipe: sources.recipe, providers: proposed.staleProviders, npmRegistry: config.toolchains.currency.registryEndpoint, sources: config.toolchains.image.sources });
-  return configuredWorkerBuilder(projectRoot, options, { packageRoot: root, home, binding, plannedAt, ...(dependencies.runner ? { runner: dependencies.runner } : {}), ...(dependencies.signal ? { signal: dependencies.signal } : {}) }, async (reservation, buildSignal, retain) => {
+  return configuredWorkerBuilder(projectRoot, options, { packageRoot: root, home, binding, refreshExisting: dependencies.refreshExisting === true, plannedAt, ...(dependencies.runner ? { runner: dependencies.runner } : {}), ...(dependencies.signal ? { signal: dependencies.signal } : {}) }, async (reservation, buildSignal, retain) => {
     const signal = { signal: buildSignal };
     const plan = planFor(`r${Number(/^r([0-9]+)/u.exec(reservation.version)![1]) - 1}-00000000`);
     const planPath = await writeArtifact(join(home, 'plans'), limits.planTemplate.replace('{version}', plan.next!.imageVersion).replace('{at}', plannedAt.replace(/[:.]/g, '-')), plan);

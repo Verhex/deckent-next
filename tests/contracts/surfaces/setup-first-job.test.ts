@@ -10,7 +10,7 @@ import { doctorChecks, firstJobStages, firstJobSteps, onboardingNext, type Docto
 describe('U3-1a first-job states', () => {
   it('derives missing onboarding steps from family states, preserves supplied execution states and points doctor to the terminal', () => {
     const stages = firstJobStages({ execution: false, registry: false, pool: false }, 'erp-demo');
-    expect(firstJobSteps(stages).map(stage => [stage.id, stage.state])).toEqual([['work:kind', 'blocked'], ['work:pool', 'blocked']]);
+    expect(firstJobSteps(stages).map(stage => [stage.id, stage.state])).toEqual([['work:kind', 'needs-answer'], ['work:pool', 'blocked']]);
     expect(firstJobSteps(firstJobStages({ execution: true, registry: true, pool: false }, 'erp-demo')).map(stage => stage.id)).toEqual(['work:pool']);
     expect(firstJobSteps(firstJobStages({ execution: true, registry: true, pool: true }, 'erp-demo'))).toEqual([]);
     expect(firstJobSteps([{ id: 'execution:worker', phase: 'onboarding', title: 'setup.execution.workerTitle', state: 'needs-answer' },
