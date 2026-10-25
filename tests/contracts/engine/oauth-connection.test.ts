@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { OAuthConnectionApplication, OAuthConnectionError, oauthConnectionRecordSchema, type OAuthConnectionPorts } from '#engine/index.js';
 import { SIWC_PROTOCOL, createEncryptedFileSecretStore } from '#adapters/index.js';
-import { auditEventSchema } from '#domain/index.js';
+import { auditEventSchema, recoveryPrincipalRef } from '#domain/index.js';
 
 const OWNER = { installationId: 'installation-fixture', companyId: 'company-fixture', scopeId: 'scope-fixture',
   principal: { issuer: 'os-fixture', subject: 'person-fixture' } };
@@ -13,9 +13,15 @@ const TIME = 1_800_000_000_000;
 function fixture(overrides: Partial<OAuthConnectionPorts> = {}) {
   const values = new Map<string, string>(), audits: unknown[] = [], forms: URLSearchParams[] = [], urls: string[] = [];
   let tail = Promise.resolve();
+  const connections = new Map<string, Promise<void>>();
   const tokenSet = () => ({ accessToken: SECRET, refreshToken: `${SECRET}-refresh`, idToken: `${SECRET}-id`,
     scopes: [...SIWC_PROTOCOL.identityScopes, ...SIWC_PROTOCOL.usageScopes], expiresAtMs: TIME + 60_000, earliestRefreshAtMs: null });
   const ports: OAuthConnectionPorts = {
+    connectionLock: async (id, work) => {
+      const before = connections.get(id) ?? Promise.resolve(); let release!: () => void;
+      const current = new Promise<void>(yes => { release = yes; }); connections.set(id, current);
+      await before; try { return await work(); } finally { release(); if (connections.get(id) === current) connections.delete(id); }
+    },
     protocol: { ...SIWC_PROTOCOL, timeoutMs: 500 }, owner: OWNER, now: () => TIME,
     store: { descriptor: { id: SIWC_PROTOCOL.encryptedStoreId, writable: true, enumerable: true, encryptedAtRest: true },
       get: async name => values.get(name), set: async (name, value) => { values.set(name, value); }, delete: async name => values.delete(name),
@@ -271,5 +277,86 @@ describe('OAuth connection renewal and recovery', () => {
     f.ports.protocol = { ...f.ports.protocol, timeoutMs: 10 };
     await expect(f.app.connect({ planUse: true })).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_TIMEOUT' });
     expect([...f.values.values()].join('')).not.toContain(SECRET);
+  });
+});
+
+describe('host-only OAuth access token leases', () => {
+  it('returns only an access token for this owner/scope, refusing identity-only, foreign callers and unusable states before refresh', async () => {
+    const f = fixture({ protocol: { ...SIWC_PROTOCOL, refreshMarginMs: 1000, timeoutMs: 500 } });
+    const view = await f.app.connect({ planUse: true });
+    const exchange = vi.fn(f.ports.exchange); f.ports.exchange = exchange;
+    expect(await f.app.lease(view.connectionId, OWNER)).toEqual({ accessToken: SECRET, expiresAtMs: TIME + 60000 });
+    expect(await f.app.lease(view.connectionId, { ...OWNER, principal: recoveryPrincipalRef(OWNER.principal) })).toEqual({ accessToken: SECRET, expiresAtMs: TIME + 60000 });
+    for (const caller of [{ ...OWNER, principal: { ...OWNER.principal, subject: 'other' } }, { ...OWNER, scopeId: 'other' },
+      { ...OWNER, companyId: 'other' }, { ...OWNER, installationId: 'other' }]) {
+      await expect(f.app.lease(view.connectionId, caller)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_DENIED' });
+    }
+    const saved = record(f, view.connectionId);
+    for (const patch of [{ state: 'refresh-unknown' }, { state: 'revoked' }, { state: 'refresh-pending' },
+      { planUseEnabled: false }, { tokens: { ...saved.value.tokens, scopes: ['openid'] } }, { tokens: { ...saved.value.tokens, accessToken: null } }]) {
+      f.values.set(saved.name, JSON.stringify({ ...saved.value, ...patch }));
+      await expect(f.app.lease(view.connectionId, OWNER)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
+    }
+    expect(exchange).not.toHaveBeenCalled();
+    expect(JSON.stringify(f.audits)).not.toContain(SECRET);
+  });
+  it('refreshes once for concurrent near-expiry leases, lets unrelated secret custody proceed during network, then returns the new access token', async () => {
+    const f = fixture(), view = await f.app.connect({ planUse: true });
+    let release!: () => void, started!: () => void;
+    const ready = new Promise<void>(yes => { started = yes; }), barrier = new Promise<void>(yes => { release = yes; });
+    const exchange = vi.fn(async () => { started(); await barrier; return { ...f.tokenSet(), accessToken: 'renewed-access', refreshToken: 'renewed-refresh', expiresAtMs: TIME + 3600000 }; });
+    f.ports.exchange = exchange;
+    const first = f.app.lease(view.connectionId, OWNER); await ready;
+    const second = new OAuthConnectionApplication(f.ports).lease(view.connectionId, OWNER);
+    await f.ports.custody.exclusive(async () => { f.values.set('UNRELATED', 'value'); });
+    expect(f.values.get('UNRELATED')).toBe('value');
+    expect(record(f, view.connectionId).value.state).toBe('refresh-pending');
+    release();
+    const leases = await Promise.all([first, second]);
+    expect(leases).toEqual([{ accessToken: 'renewed-access', expiresAtMs: TIME + 3600000 }, { accessToken: 'renewed-access', expiresAtMs: TIME + 3600000 }]);
+    expect(exchange).toHaveBeenCalledTimes(1);
+  });
+  it('serializes sign-out after refresh, fences stale completions and never retries an uncertain rotating token', async () => {
+    const f = fixture(), view = await f.app.connect({ planUse: true });
+    let release!: () => void, started!: () => void;
+    const ready = new Promise<void>(yes => { started = yes; }), barrier = new Promise<void>(yes => { release = yes; });
+    f.ports.exchange = async () => { started(); await barrier; return { ...f.tokenSet(), refreshToken: 'latest-rotating-token', expiresAtMs: TIME + 3600000 }; };
+    const revoke = vi.fn(async () => true); f.ports.revoke = revoke;
+    const lease = f.app.lease(view.connectionId, OWNER); await ready;
+    const disconnect = f.app.disconnect(view.connectionId); release();
+    await lease; await disconnect;
+    expect(revoke).toHaveBeenCalledWith('oaiapp_fixture', 'latest-rotating-token', expect.any(AbortSignal));
+    expect(record(f, view.connectionId).value).toMatchObject({ state: 'disconnected', tokens: null });
+    const g = fixture(), live = await g.app.connect({ planUse: true }), exchange = vi.fn(async () => { throw new Error(SECRET); });
+    g.ports.exchange = exchange;
+    await expect(g.app.lease(live.connectionId, OWNER)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_UNAVAILABLE' });
+    await expect(g.app.lease(live.connectionId, OWNER)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
+    expect(exchange).toHaveBeenCalledTimes(1);
+    const stale = fixture(), liveStale = await stale.app.connect({ planUse: true });
+    stale.ports.exchange = async () => {
+      const saved = record(stale, liveStale.connectionId);
+      stale.values.set(saved.name, JSON.stringify({ ...saved.value, state: 'disconnected', tokens: null, generation: saved.value.generation + 1 }));
+      return stale.tokenSet();
+    };
+    await expect(stale.app.lease(liveStale.connectionId, OWNER)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_CHANGED' });
+    expect(record(stale, liveStale.connectionId).value).toMatchObject({ state: 'disconnected', tokens: null });
+  });
+  it('honors earliest-refresh and cancellation without granting an expired or late token', async () => {
+    const f = fixture(), view = await f.app.connect({ planUse: true }), saved = record(f, view.connectionId);
+    f.values.set(saved.name, JSON.stringify({ ...saved.value, tokens: { ...saved.value.tokens, expiresAtMs: TIME, earliestRefreshAtMs: TIME + 10000 } }));
+    const exchange = vi.fn(f.ports.exchange); f.ports.exchange = exchange;
+    await expect(f.app.lease(view.connectionId, OWNER)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
+    await expect(f.app.lease(view.connectionId, OWNER, AbortSignal.abort())).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_CANCELLED' });
+    expect(exchange).not.toHaveBeenCalled();
+    const g = fixture(), connected = await g.app.connect({ planUse: true });
+    let started!: () => void; const ready = new Promise<void>(yes => { started = yes; });
+    const delayed = vi.fn(async (_form, signal: AbortSignal) => { started(); return new Promise((_yes, no) => signal.addEventListener('abort', () => no(new Error(SECRET)), { once: true })); });
+    g.ports.exchange = delayed;
+    const controller = new AbortController(), pending = g.app.lease(connected.connectionId, OWNER, controller.signal);
+    await ready; controller.abort();
+    await expect(pending).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_CANCELLED' });
+    await expect(g.app.lease(connected.connectionId, OWNER)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_REAUTHORIZE' });
+    expect(record(g, connected.connectionId).value).toMatchObject({ state: 'refresh-unknown' });
+    expect(delayed).toHaveBeenCalledTimes(1);
   });
 });

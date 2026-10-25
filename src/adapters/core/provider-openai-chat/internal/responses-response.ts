@@ -29,12 +29,12 @@ const responseSchema = z.object({ id: z.string().min(1), object: z.literal('resp
   service_tier: z.string().optional().nullable() }).passthrough();
 
 /** Validate the final provider object, then project onto the existing typed facade. Reasoning is a subset of output, never charged twice. */
-export function parseResponsesResponse(raw: unknown, request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits): NativeJsonHttpParsed {
+export function parseResponsesResponse(raw: unknown, request: OpenAiChatTextRequest, limits: OpenAiChatHttpLimits, enforceOutputLimit = true, functionNamespace?: string): NativeJsonHttpParsed {
   const copied = openAiChatWireObjectSchema.safeParse(raw), parsed = copied.success && responseSchema.safeParse(copied.data);
   if (!parsed || !parsed.success) return { reason: 'invalid-response' };
   const value = parsed.data;
   if (value.model !== request.model) return { reason: 'model-mismatch' };
-  if (value.status === 'failed' || value.error != null || value.usage === null || value.usage.output_tokens > request.max_completion_tokens) return { reason: 'invalid-response' };
+  if (value.status === 'failed' || value.error != null || value.usage === null || (enforceOutputLimit && value.usage.output_tokens > request.max_completion_tokens)) return { reason: 'invalid-response' };
   if (new Set(value.output.map(item => item.id)).size !== value.output.length) return { reason: 'invalid-response' };
   let content = '', refusal = '', reasoning = '';
   const calls = [];
@@ -43,7 +43,10 @@ export function parseResponsesResponse(raw: unknown, request: OpenAiChatTextRequ
       if (entry.type === 'output_text') content += entry.text; else refusal += entry.refusal;
     }
     else if (item.type === 'reasoning') reasoning += item.summary.map(entry => entry.text).join('');
-    else calls.push({ id: item.call_id, type: 'function', function: { name: item.name, arguments: item.arguments } });
+    else {
+      if (functionNamespace !== undefined && item['namespace'] !== functionNamespace) return { reason: 'invalid-response' };
+      calls.push({ id: item.call_id, type: 'function', function: { name: item.name, arguments: item.arguments } });
+    }
     if (value.status === 'completed' && 'status' in item && item.status !== undefined && item.status !== 'completed') return { reason: 'invalid-response' };
   }
   const checked = checkedToolCalls(calls.length ? calls : null, request);

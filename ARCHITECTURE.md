@@ -885,6 +885,17 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   Shared-layer profiles are named and held under the same subset rule as cache migration. HTTP400 vendor details require the existing content
   inspection policy and localized next step; the common failure wrapper's translation belongs to W6-MODEL-SWITCH. Synthetic parser/SQLite/config
   author evidence is separate from independent review and live acceptance; sources/proof: `proof/OPENAI-RESPONSES-2026-10-09/`.
+- **SIWC author foundation (alpha.56 U9-2/U9-1, unreviewed):** `siwc-responses@1` uses the same typed chat invocation and bounded SSE reader, with
+  registry-sourced request fields, `store:false`, `stream:true`, full history, system instructions and namespaced function tools. It accepts only
+  `response.completed`; the local output-token hint is not a provider-enforced cap. Account models are read from `models[]` by exact slug and
+  `visibility:list`. Rejection body v1 is unchanged; v2 introduces only `plan-unavailable`. Older readers reject v2 as unknown/null; domain
+  readers receive the subscription adapter-id set from their caller and never import an adapter registry. Existing callers keep their v1/CLI
+  scope until the SIWC composition slice supplies the new set. OAuth leases expose only `{accessToken, expiresAtMs}` to a trusted host caller
+  acting for the connection's person in the same installation/company/scope. Refreshes hold a per-connection cross-process lock, and secret
+  custody only for reads and generation-CAS writes; uncertain refreshes cannot reuse a rotating token. The record remains v1. Connect/dispatch,
+  consent surfaces, personal-store attestation and live acceptance are later U9 slices; `chatgpt-login` stays unavailable. Generic secret-name
+  exclusions are the U1 integration prerequisite; this foundation alone does not establish the option-3 ban. Author evidence is external
+  `proof/ALPHA56-2026-10-24/lanes/U9/`; no installed/live or independent acceptance is claimed.
 - **Provider diagnosis and workspace selection (W9, 2026-10-09; landed in alpha.25):** HTTP400 names the exact registry endpoint kind;
   protocol migration is suggested only when that exact profile has a migration offer. Unknown endpoints use neutral EN/TR text.
   Registry-scoped Z.ai 429 codes 1113/1302 distinguish spend/rate only with authorized retained content; unknown content stays unknown.

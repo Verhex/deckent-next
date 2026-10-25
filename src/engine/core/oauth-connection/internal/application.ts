@@ -1,9 +1,9 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { AUDIT_EVENT_SCHEMA_VERSION, type AuditEvent } from '#domain/index.js';
+import { AUDIT_EVENT_SCHEMA_VERSION, delegationOwner, type AuditEvent } from '#domain/index.js';
 import { isSecretName, isSecretValue, RENEWABLE_SECRET_PREFIX, assertSecretStorageProtection } from '#engine/core/secret-store/index.js';
 import { OAuthConnectionError, oauthConnectionOwnerSchema, oauthConnectionConnectSchema, oauthConnectionRecordSchema, oauthTokenSetSchema,
-  type OAuthConnectionOwner, type OAuthConnectionPorts, type OAuthConnectionRecord, type OAuthConnectionView } from './contract.js';
+  type OAuthAccessTokenLease, type OAuthConnectionOwner, type OAuthConnectionPorts, type OAuthConnectionRecord, type OAuthConnectionView } from './contract.js';
 /** Node timers use a signed 32-bit duration; this is a platform invariant, not a retry/timeout policy. */
 const NODE_SIGNED_INTEGER_CEILING = 2_147_483_647;
 
@@ -14,7 +14,8 @@ export class OAuthConnectionApplication {
   constructor(private readonly ports: OAuthConnectionPorts) {
     this.owner = oauthConnectionOwnerSchema.parse(ports.owner);
     const p = ports.protocol;
-    if (!Number.isSafeInteger(p.timeoutMs) || p.timeoutMs <= 0 || p.timeoutMs > NODE_SIGNED_INTEGER_CEILING
+    if (!Number.isSafeInteger(p.refreshMarginMs) || p.refreshMarginMs <= 0 || typeof ports.connectionLock !== 'function'
+      || !Number.isSafeInteger(p.timeoutMs) || p.timeoutMs <= 0 || p.timeoutMs > NODE_SIGNED_INTEGER_CEILING
       || !Number.isSafeInteger(p.maxPending) || p.maxPending <= 0 || !Number.isSafeInteger(p.maxConnections) || p.maxConnections <= 0 || !isSecretName(p.hostSecretName)
       || !p.connectionSecretPrefix.startsWith(RENEWABLE_SECRET_PREFIX)
       || !isSecretName(`${p.connectionSecretPrefix}${randomUUID().replaceAll('-', '').toUpperCase()}`)) throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
@@ -95,48 +96,102 @@ export class OAuthConnectionApplication {
     }); } finally { this.pending--; }
   }
 
-  async refresh(connectionId: string, signal?: AbortSignal): Promise<OAuthConnectionView> {
-    return this.bounded(signal, bounded => this.exclusive(async () => {
-      this.checkSignal(bounded);
-      const record = await this.read(connectionId), tokens = record.tokens;
-      if (record.state !== 'connected' || !tokens?.refreshToken) throw new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE');
-      if (tokens.earliestRefreshAtMs !== null && this.ports.now() < tokens.earliestRefreshAtMs) return this.view(record);
-      await this.write({ ...record, state: 'refresh-pending', generation: record.generation + 1 });
-      try {
-        const replacement = this.tokens(await this.ports.exchange(new URLSearchParams({ grant_type: 'refresh_token', client_id: record.clientId,
-          refresh_token: tokens.refreshToken, resource: this.ports.protocol.resource }), bounded));
-        this.checkSignal(bounded);
-        if (!replacement.refreshToken) throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
-        if (replacement.idToken) {
-          const identity = await this.ports.verifyIdentity(replacement.idToken, record.clientId, null, bounded);
-          if (!record.identity || !this.sameIdentity(record.identity, identity)) throw new OAuthConnectionError('OAUTH_CONNECTION_IDENTITY_INVALID');
-        }
-        this.checkSignal(bounded);
-        // Refresh is session continuity, not an account picker. Identity remains the last signature-verified registration.
-        await this.write({ ...record, tokens: { ...replacement, idToken: replacement.idToken ?? tokens.idToken }, state: 'connected', generation: record.generation + 2 });
-      } catch (error) {
-        const revoked = this.ports.unusableRefresh(error);
-        await this.write({ ...record, tokens: revoked ? null : tokens, state: revoked ? 'revoked' : 'refresh-unknown', generation: record.generation + 2 });
-        throw new OAuthConnectionError(revoked ? 'OAUTH_CONNECTION_REAUTHORIZE' : 'OAUTH_CONNECTION_UNAVAILABLE');
+  /** The verified caller acts for the same person in the same installation/company/project. No name/grant path. */
+  async lease(connectionId: string, callerInput: OAuthConnectionOwner, signal?: AbortSignal): Promise<OAuthAccessTokenLease> {
+    const parsed = oauthConnectionOwnerSchema.safeParse(callerInput);
+    if (!parsed.success) throw new OAuthConnectionError('OAUTH_CONNECTION_DENIED');
+    const caller = parsed.data, person = delegationOwner(caller.principal);
+    if (caller.installationId !== this.owner.installationId || caller.companyId !== this.owner.companyId || caller.scopeId !== this.owner.scopeId
+      || !this.sameIdentity(person, this.owner.principal)) throw new OAuthConnectionError('OAUTH_CONNECTION_DENIED');
+    return this.bounded(signal, bounded => this.connection(connectionId, bounded, async () => {
+      let record = await this.exclusive(() => this.read(connectionId));
+      this.planRecord(record);
+      if (record.tokens!.expiresAtMs! - this.ports.now() <= this.ports.protocol.refreshMarginMs) {
+        await this.renew(connectionId, bounded);
+        record = await this.exclusive(() => this.read(connectionId));
       }
-      return this.view(await this.read(connectionId));
+      this.checkSignal(bounded); this.planRecord(record);
+      if (this.ports.now() >= record.tokens!.expiresAtMs!) throw new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE');
+      return Object.freeze({ accessToken: record.tokens!.accessToken!, expiresAtMs: record.tokens!.expiresAtMs! });
     }));
   }
 
-  async disconnect(connectionId: string, signal?: AbortSignal): Promise<OAuthConnectionView> {
+  async refresh(connectionId: string, signal?: AbortSignal): Promise<OAuthConnectionView> {
+    return this.bounded(signal, bounded => this.connection(connectionId, bounded, () => this.renew(connectionId, bounded)));
+  }
+  private connection<T>(id: string, signal: AbortSignal, work: () => Promise<T>): Promise<T> {
+    this.name(id);
+    return this.ports.connectionLock(id, async () => { this.checkSignal(signal); return work(); }, signal);
+  }
+  private planRecord(record: OAuthConnectionRecord): void {
+    if (record.state !== 'connected' || !record.identity || !record.planUseEnabled || !record.tokens?.accessToken
+      || record.tokens.expiresAtMs === null || !record.tokens.scopes.includes(this.ports.protocol.usagePermission))
+      throw new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE');
+  }
+  /** Only short reads/CAS writes hold installation custody; rotating-token network I/O holds the connection lock. */
+  private async renew(connectionId: string, bounded: AbortSignal): Promise<OAuthConnectionView> {
+    const initial = await this.exclusive(async () => {
+      this.checkSignal(bounded);
+      const record = await this.read(connectionId), tokens = record.tokens;
+      if (record.state !== 'connected' || !tokens?.refreshToken) throw new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE');
+      if (tokens.earliestRefreshAtMs !== null && this.ports.now() < tokens.earliestRefreshAtMs) return { record, pending: false };
+      const pending = { ...record, state: 'refresh-pending' as const, generation: record.generation + 1 };
+      await this.write(pending);
+      return { record, pending: true };
+    });
+    const { record } = initial, tokens = record.tokens!;
+    if (!initial.pending) return this.view(record);
+    const generation = record.generation + 1;
+    try {
+      this.checkSignal(bounded);
+      const replacement = this.tokens(await this.bounded(bounded, remote => this.ports.exchange(new URLSearchParams({ grant_type: 'refresh_token', client_id: record.clientId,
+        refresh_token: tokens.refreshToken!, resource: this.ports.protocol.resource }), remote)));
+      this.checkSignal(bounded);
+      if (!replacement.refreshToken) throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
+      if (replacement.idToken) {
+        const identity = await this.bounded(bounded, remote => this.ports.verifyIdentity(replacement.idToken!, record.clientId, null, remote));
+        if (!record.identity || !this.sameIdentity(record.identity, identity)) throw new OAuthConnectionError('OAUTH_CONNECTION_IDENTITY_INVALID');
+      }
+      this.checkSignal(bounded);
+      const saved = await this.replace(connectionId, generation, 'refresh-pending', { ...record,
+        tokens: { ...replacement, idToken: replacement.idToken ?? tokens.idToken }, state: 'connected', generation: generation + 1 }, bounded);
+      return this.view(saved);
+    } catch (error) {
+      if (error instanceof OAuthConnectionError && error.code === 'OAUTH_CONNECTION_CHANGED') throw error;
+      const revoked = this.ports.unusableRefresh(error);
+      await this.replace(connectionId, generation, 'refresh-pending', { ...record, tokens: revoked ? null : tokens,
+        state: revoked ? 'revoked' : 'refresh-unknown', generation: generation + 1 });
+      throw new OAuthConnectionError(revoked ? 'OAUTH_CONNECTION_REAUTHORIZE' : 'OAUTH_CONNECTION_UNAVAILABLE');
+    }
+  }
+  private replace(id: string, generation: number, state: OAuthConnectionRecord['state'], next: OAuthConnectionRecord, signal?: AbortSignal) {
     return this.exclusive(async () => {
-      const record = await this.read(connectionId);
+      if (signal) this.checkSignal(signal);
+      const current = await this.read(id);
+      if (current.generation !== generation || current.state !== state) throw new OAuthConnectionError('OAUTH_CONNECTION_CHANGED');
+      await this.write(next); return next;
+    });
+  }
+
+  async disconnect(connectionId: string, signal?: AbortSignal): Promise<OAuthConnectionView> {
+    // Serialize with refresh so revocation uses the latest rotating token. A cancelled remote call still clears local credentials.
+    return this.bounded(undefined, bounded => this.connection(connectionId, bounded, async () => {
+      const record = await this.exclusive(async () => {
+        const current = await this.read(connectionId);
+        if (current.state !== 'disconnected') await this.write({ ...current, state: 'disconnecting', generation: current.generation + 1 });
+        return current;
+      });
       if (record.state === 'disconnected') return this.view(record);
-      await this.write({ ...record, state: 'disconnecting', generation: record.generation + 1 });
       let confirmed = false;
       if (record.tokens?.refreshToken) {
-        try { confirmed = await this.bounded(signal, bounded => this.ports.revoke(record.clientId, record.tokens!.refreshToken!, bounded)); }
+        try { confirmed = await this.bounded(signal ? AbortSignal.any([bounded, signal]) : bounded,
+          remote => this.ports.revoke(record.clientId, record.tokens!.refreshToken!, remote)); }
         catch { /* Local stop is unconditional; unconfirmed remote revocation is retained explicitly. */ }
       }
-      await this.write({ ...record, state: 'disconnected', tokens: null, generation: record.generation + 2,
-        remoteRevocation: confirmed ? 'confirmed' : 'unconfirmed' });
-      return this.view(await this.read(connectionId));
-    });
+      const saved = await this.replace(connectionId, record.generation + 1, 'disconnecting', { ...record, state: 'disconnected', tokens: null,
+        generation: record.generation + 2, remoteRevocation: confirmed ? 'confirmed' : 'unconfirmed' });
+      return this.view(saved);
+    }));
   }
 
   private name(id: string): string {

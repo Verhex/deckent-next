@@ -31,9 +31,14 @@ export interface OAuthConnectionProtocol {
   readonly issuer: string; readonly dynamicClientId: string; readonly authorizationEndpoint: string; readonly tokenEndpoint: string;
   readonly resource: string; readonly appName: string; readonly identityScopes: readonly string[]; readonly usageScopes: readonly string[];
   readonly usagePermission: string; readonly callbackPath: string; readonly hostSecretName: string; readonly connectionSecretPrefix: string;
-  readonly encryptedStoreId: string; readonly timeoutMs: number; readonly maxPending: number; readonly maxConnections: number;
+  readonly encryptedStoreId: string; readonly refreshMarginMs: number; readonly timeoutMs: number; readonly maxPending: number; readonly maxConnections: number;
 }
+/** One send's host-only access credential; never the renewable token set or identity record. */
+export type OAuthAccessTokenLease = Readonly<{ accessToken: string; expiresAtMs: number }>;
+/** Cross-process, per-connection lock; bounded waiting and cancellation, independent of installation secret custody. */
+export type OAuthConnectionLock = <T>(connectionId: string, work: () => Promise<T>, signal: AbortSignal) => Promise<T>;
 export interface OAuthConnectionPorts {
+  readonly connectionLock: OAuthConnectionLock;
   readonly protocol: OAuthConnectionProtocol; readonly owner: OAuthConnectionOwner; readonly store: SecretStore; readonly custody: SecretCustody;
   readonly authorize: SecretChangeAuthorization; readonly audit: SecretChangeAudit; readonly now: () => number;
   /** Trusted local adapter: starts the listener before opening the browser; closes it on every terminal path. */

@@ -16,7 +16,7 @@ type Prepared = Readonly<{ profile: ModelInvocationProfile; definition: NativeCl
   effortArgs: readonly string[] }>;
 type Quota = Record<string, { utilizationPermille: number; resetsAtMs: number | null }>;
 type Refusal = Readonly<{ reason: ModelInvocationRejectionReason; status: number | null; body: HeadlessRejectionBody }>;
-const reject = (reason: ModelInvocationRejectionReason, body: Omit<HeadlessRejectionBody, 'schemaVersion'>, status: number | null = null): Refusal =>
+const reject = (reason: ModelInvocationRejectionReason, body: Omit<Extract<HeadlessRejectionBody, { schemaVersion: 1 }>, 'schemaVersion'>, status: number | null = null): Refusal =>
   Object.freeze({ reason, status, body: { schemaVersion: 1 as const, ...body } });
 const list = (value: unknown) => Array.isArray(value) ? value : null;
 const count = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
