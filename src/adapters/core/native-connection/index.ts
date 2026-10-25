@@ -10,3 +10,4 @@ export { nativePromptArguments, nativePreflightCapabilities, nativeReportArgumen
 export type { NativeWorkerCapabilities } from './internal/worker.js';
 // B7 generated mirror entries, exposed for parity/custody checks; product callers use the platform producer.
 export { redactForRecord as workerRedactForRecord, redactForDecision as workerRedactForDecision, snapshotKnownSecrets as workerSnapshotKnownSecrets } from './internal/worker.js';
+export { tunnelNativeConnect } from './internal/egress.js';

@@ -50,9 +50,11 @@ export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; a
   /** T4-B: the protocol family a connected model must speak (null: no model can be connected to this kind); `seeded`: its models come from its catalog seed. */
   connectFamily?: string | null; seeded?: boolean;
   /** Owner W5: remote models require a verified published price; the endpoint-selected model row shows the refusal. */
-  priceRequired?: boolean }>;
+  priceRequired?: boolean;
+  /** İ-12: the registry billing class (kinds arrive no-spend first: subscription, local, then metered). */
+  billing?: 'subscription' | 'local' | 'metered' }>;
 /** The free check's typed outcome (no body, no key). `outcome` is one of the adapter's `PROVIDER_PROBE_OUTCOMES`. */
-export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified'; workspaceRequired?: true }>;
+export type ProviderConnectProbeView = Readonly<{ outcome: string; httpStatus: number | null; key: 'verified' | 'none' | 'unverified'; workspaceRequired?: true; cause?: string }>;
 /** What the host binds for `/provider`: the kinds, the endpoint rule and the free check (a refusal before any request is a typed error with `code`). */
 export interface ProviderConnectHost {
   readonly kinds: readonly ProviderConnectKindView[];

@@ -28,8 +28,12 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
   const stop = () => controller.abort();
   if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   const base = { root, locale, ...(agentEnvironment ? { agentEnvironment } : {}), signal: controller.signal };
-  // COLDSTART: the host's operations load only when a command or the terminal runs; help, `--version` and an unknown command never need them.
-  try { return await runCli(argv, { ...base, loadHost: async () => (await import('./host.js')).createCliHost(base, serviceEntry) }); }
+  // COLDSTART: host operations remain lazy. Model-connect help alone loads the public adapter metadata boundary for its current kinds.
+  try { return await runCli(argv, { ...base, helpParams: async key => {
+    if (key !== 'cli.help.modelsConnect') return {};
+    const { modelConnectHelpKinds } = await import('./model-help.js');
+    return { kinds: modelConnectHelpKinds() };
+  }, loadHost: async () => (await import('./host.js')).createCliHost(base, serviceEntry) }); }
   finally { if (handlesSignals) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } }
 }
 /** A reader that closed the pipe (`deckent … | head`) is a SIGPIPE: 128 + 13, the code a shell reports for `cat`, `git` and `yes` there. */

@@ -906,7 +906,7 @@
   "models.budget.replayed": "(zaten kayıtlı; hiçbir şey değişmedi)",
   "error.PROVIDER_SPEND_BUDGET_ABSENT": "{scope} kapsamının henüz harcama bütçesi yok. Oluşturun: deckent models create-budget --scope {scope} --usd <tutar> (ya da /model → Bütçe oluştur).",
   "agent.spend.budgetAbsent": "Bu kapsamda harcama bütçesi yok. /model → Bütçe oluştur.",
-  "error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE": "Model listesi okunamadı. Adresi ve kayıtlı anahtarı kontrol edip yeniden deneyin. Hiçbir model bağlanmadı.",
+  "error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE": "Model listesi okunamadı: {cause}.",
   "error.MODEL_CONNECT_DISCOVERY_INVALID": "Uç nokta geçersiz bir model listesi döndürdü. /v1/models yanıtında birebir model kimlikleri listelenmeli. Hiçbir model bağlanmadı.",
   "error.MODEL_CONNECT_DISCOVERY_LIMIT": "Model listesi izin verilen yanıt boyutunu veya model sayısını aşıyor. Daha küçük liste sunan bir uç nokta seçin; hiçbir model bağlanmadı.",
   "error.LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG": "Runtime soket yolu çok uzun: {path}. Kısa ve özel bir runtime dizini kullanın.",

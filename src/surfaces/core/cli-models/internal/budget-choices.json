@@ -1,5 +1,6 @@
 {
   "presetsUsd": [5, 10, 25, 50, 100],
+  "defaultPresetUsd": 10,
   "minUsd": 1,
   "maxUsd": 1000,
   "stepUsd": 1,

@@ -1,3 +1,4 @@
+import { ProviderModelListError, readProviderPart, type ProviderDiscoveryCause } from './failure.js';
 import { classifyProviderRejection, type ProviderRejectionKind } from '#engine/index.js'; import { endpointMayCarryKey } from '#domain/index.js';
 import { PROVIDER_CONNECT_LIMITS, providerConnectKind, providerEndpoint, type ProviderConnectKind } from './registry.js';
 import { listKindProviderWorkspaces } from './workspaces.js';
@@ -12,7 +13,7 @@ export type ProviderProbeOutcome = typeof PROVIDER_PROBE_OUTCOMES[number];
 export type ProviderProbeRejection = ProviderRejectionKind;
 /** `key`: `verified` — the endpoint answered a request that needs the key; `none` — no key was sent; `unverified` — a local server answered,
  * but it may not check keys at all. Nothing of the answer body is ever returned. */
-export type ProviderProbeResult = Readonly<{ outcome: ProviderProbeOutcome; httpStatus: number | null; key: 'verified' | 'none' | 'unverified'; workspaceRequired?: true }>;
+export type ProviderProbeResult = Readonly<{ outcome: ProviderProbeOutcome; httpStatus: number | null; key: 'verified' | 'none' | 'unverified'; workspaceRequired?: true; cause?: ProviderDiscoveryCause }>;
 export type ProviderProbeInput = Readonly<{ kind: string; endpoint: string | null; key: string | null }>;
 export type ProviderProbeFetch = (url: string, init: { method: 'GET'; headers: Record<string, string>; redirect: 'manual'; signal: AbortSignal }) => Promise<Response>;
 export type ProviderProbeOptions = Readonly<{ timeoutMs?: number; signal?: AbortSignal; fetch?: ProviderProbeFetch }>;
@@ -40,15 +41,15 @@ export function providerProbeRejection(status: number, bodyPrefix: string | null
   if (kind === 'rate-limit' && (bodyPrefix === null || !namesRateLimit(bodyPrefix, codes))) return 'limit-reached';
   return kind;
 }
-async function readPrefix(response: Response): Promise<string | null> {
+async function readPrefix(response: Response, signal: AbortSignal): Promise<string | null> {
   if (!response.body) return null;
   const reader = response.body.getReader(), chunks: Uint8Array[] = [];
   let bytes = 0;
   try {
     while (bytes < BODY_PREFIX_BYTES) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readProviderPart(reader, signal);
       if (done) break;
-      chunks.push(value); bytes += value.byteLength;
+      const part = value.subarray(0, BODY_PREFIX_BYTES - bytes); chunks.push(part); bytes += part.byteLength;
     }
   } catch { return null; } finally { void reader.cancel().catch(() => undefined); }
   return Buffer.concat(chunks).subarray(0, BODY_PREFIX_BYTES).toString('utf8');
@@ -85,14 +86,16 @@ export async function probeProviderConnection(input: ProviderProbeInput, options
   } catch {
     // A refused connection, a name that does not resolve, a TLS failure or the timeout: no detail (it could name the request).
     options.signal?.throwIfAborted();
-    return { outcome: 'unreachable', httpStatus: null, key: key === null ? 'none' : 'unverified' };
+    return { outcome: 'unreachable', httpStatus: null, key: key === null ? 'none' : 'unverified', cause: timeout.aborted ? 'timeout' : 'network' };
   }
   const status = response.status;
   if (status >= 200 && status < 300) {
     void response.body?.cancel().catch(() => undefined);
     return { outcome: 'ok', httpStatus: status, key: key === null ? 'none' : kind.key.required ? 'verified' : 'unverified' };
   }
-  const prefix = status === 429 || status === 400 ? await readPrefix(response) : (void response.body?.cancel().catch(() => undefined), null);
+  const prefix = status === 429 || status === 400 ? await readPrefix(response, signal) : (void response.body?.cancel().catch(() => undefined), null);
+  options.signal?.throwIfAborted();
+  if (timeout.aborted) return { outcome: 'unreachable', httpStatus: status, key: key === null ? 'none' : 'unverified', cause: 'timeout' };
   // Multi-workspace identity keys cannot list models without a workspace header. A free organization list establishes identity;
   // the operator still selects a workspace in /model before generation. Never infer this from an arbitrary 400.
   if (status === 400 && kind.connect?.workspaceList && key !== null && prefix) {
@@ -103,10 +106,11 @@ export async function probeProviderConnection(input: ProviderProbeInput, options
       try { const choices = await listKindProviderWorkspaces(kind, base, key, { ...options, signal });
         // The real status stays visible (HTTP 400); identity is established by the organization list, the workspace is chosen in /model.
         if (choices.length) return { outcome: 'ok', httpStatus: status, key: 'unverified', workspaceRequired: true };
-      } catch { options.signal?.throwIfAborted(); }
+      } catch (error) { options.signal?.throwIfAborted();
+        if (error instanceof ProviderModelListError) return { outcome: 'unexpected', httpStatus: error.status ?? null, key: 'unverified', cause: error.cause }; }
     }
   }
   const rejection = providerProbeRejection(status, prefix, kind.connect?.rejectionCodes);
-  if (rejection) return { outcome: rejection, httpStatus: status, key: key === null ? 'none' : 'unverified' };
-  return { outcome: status >= 500 ? 'unreachable' : 'unexpected', httpStatus: status, key: key === null ? 'none' : 'unverified' };
+  if (rejection) return { outcome: rejection, httpStatus: status, key: key === null ? 'none' : 'unverified', cause: rejection };
+  return { outcome: status >= 500 ? 'unreachable' : 'unexpected', httpStatus: status, key: key === null ? 'none' : 'unverified', cause: status >= 300 && status < 400 ? 'redirect' : 'http-status' };
 }

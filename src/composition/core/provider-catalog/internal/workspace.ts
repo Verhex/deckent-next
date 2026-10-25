@@ -1,7 +1,8 @@
+import { recordConfiguredProviderFailure } from './diagnostic.js';
 import { modelInvocationProfileSchema } from '#domain/index.js';
 import { ModelInvocationPolicyAuthorization, openInvocationWorkspaceSelection } from '#engine/index.js';
-import { listProviderWorkspaces, providerProfileWorkspaceOffer, PROVIDER_CONNECT_KINDS } from '#adapters/index.js';
-import type { ConfigLoadOptions } from '#platform/index.js';
+import { listProviderWorkspaces, ProviderModelListError, providerProfileWorkspaceOffer, PROVIDER_CONNECT_KINDS } from '#adapters/index.js';
+import { ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { projectCredentialResolver } from '#composition/core/secrets/index.js';
 import { snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -16,5 +17,7 @@ export async function openConfiguredProviderWorkspaces(root: string, scopeId: st
     authorize: async (profile, current) => { await new ModelInvocationPolicyAuthorization({ async load() { return current.document; } }).authorize('invoke', { scopeId, reference: profile.reference }, current.principal); },
     async credential(profile, current) { const name = (profile.adapter.definition['authentication'] as { credentialRef?: string } | undefined)?.credentialRef;
       return name ? projectCredentialResolver(current, scopeId, options).resolve(name) : undefined; },
-    discover: listProviderWorkspaces, offer: providerProfileWorkspaceOffer, snapshots: async () => [await snapshotConfiguredConfig(root, options, 'global'), await snapshotConfiguredConfig(root, options, 'project')],
+    async discover(profile, key) { try { return await listProviderWorkspaces(profile, key); }
+      catch (error) { if (error instanceof ProviderModelListError) { await recordConfiguredProviderFailure(root, 'workspace-discovery', error, options);
+        throw ErrorRegistry.createError(error.code, { params: { cause: error.cause, status: error.status ?? '' } }); } throw error; } }, offer: providerProfileWorkspaceOffer, snapshots: async () => [await snapshotConfiguredConfig(root, options, 'global'), await snapshotConfiguredConfig(root, options, 'project')],
   }); }

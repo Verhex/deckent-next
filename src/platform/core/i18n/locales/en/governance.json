@@ -906,7 +906,7 @@
   "models.budget.replayed": "(already recorded; nothing changed)",
   "error.PROVIDER_SPEND_BUDGET_ABSENT": "Scope {scope} has no spending budget yet. Create one: deckent models create-budget --scope {scope} --usd <amount> (or /model → Create budget).",
   "agent.spend.budgetAbsent": "This scope has no spending budget. /model → Create budget.",
-  "error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE": "The model list could not be read. Check the address and stored key, then try again. Nothing was connected.",
+  "error.MODEL_CONNECT_DISCOVERY_UNAVAILABLE": "The model list could not be read: {cause}.",
   "error.MODEL_CONNECT_DISCOVERY_INVALID": "The endpoint returned an invalid model list. It must list exact model IDs in /v1/models. Nothing was connected.",
   "error.MODEL_CONNECT_DISCOVERY_LIMIT": "The model list exceeds the allowed response size or model count. Use an endpoint with a smaller list; nothing was connected.",
   "error.LOCAL_RUNTIME_SOCKET_PATH_TOO_LONG": "Runtime socket path is too long: {path}. Use a short private runtime directory.",

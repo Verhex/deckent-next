@@ -11,6 +11,9 @@ import { configuredModelInvocationDeliverySurfaces } from '#composition/core/mod
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog } from '#composition/core/model-activation/index.js';
 import { discoverConfiguredConnectionModel, type ModelDiscoveryHost } from './discovery.js';
 import { headlessConnectPorts } from './headless.js';
+import { inspectConfiguredProviderSpendAccount } from '#composition/core/provider-spend/index.js';
+import { loadComposedConfig } from '#composition/core/root/index.js';
+import { providerSpendingConfiguredBudget } from '#adapters/index.js';
 import { modelConnectCommandSchema } from '#domain/index.js';
 /** Code-only host ports: secret names, service status and a validated registry overlay; never config/env. */
 export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
@@ -70,11 +73,20 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       async keyStored(name) { if (!host.listSecretNames) return null; try { return (await host.listSecretNames(projectRoot, options)).names.includes(name); } catch { return null; } },
       service: () => configServiceState(projectRoot, options, host.describeService),
     });
-    return await app.connect(input);
+    const result = await app.connect(input);
+    return result.status === 'connected' && result.tariff === 'published' ? Object.freeze({ ...result, budget: await connectBudget(projectRoot, result.scopeId, options) }) : result;
   } catch (error) {
     if (error instanceof ModelConnectError || error instanceof ProviderConnectError) throw ErrorRegistry.createError(error.code);
     throw error instanceof DeckentError ? error : queryFailure(error);
   }
+}
+/** İ-12 budget step: the priced-turn gate's own rule (`model-invocation/internal/native.ts` budgetFor — the scope's account, else a configured budget). */
+async function connectBudget(projectRoot: string, scopeId: string, options: ConfigLoadOptions): Promise<NonNullable<ModelConnectResult['budget']>> {
+  try {
+    const config = await loadComposedConfig(projectRoot, options), account = await inspectConfiguredProviderSpendAccount(projectRoot, { schemaVersion: 1, scopeId, current: true }, options);
+    return { state: account.checkpoint || providerSpendingConfiguredBudget(config, scopeId) ? 'present' : 'missing' };
+  }
+  catch (error) { return { state: 'unknown', code: error instanceof DeckentError ? error.code : 'QUERY_UNEXPECTED_FAILURE' }; }
 }
 /** Read-only cache preview; every resulting change goes through the governed config writer. */
 export async function planConfiguredProfileCache(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}): Promise<ProfileCachePlan> {

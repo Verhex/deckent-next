@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { modelInvocationProfileSchema, type ModelInvocationProfile, type ModelReference } from '#domain/index.js';
-import { ErrorRegistry } from '#platform/index.js';
+import { DeckentError, ErrorRegistry } from '#platform/index.js';
 import { planProfileChanges, type ProfileChange } from '#engine/core/model-activation/index.js';
 
 export type InvocationWorkspace = Readonly<{ id: string; name: string }>;
@@ -35,10 +35,11 @@ export async function openInvocationWorkspaceSelection<C extends WorkspaceSelect
   const list = async (id: string): Promise<readonly InvocationWorkspace[]> => {
     try {
       const { profile, current } = await fresh(id), key = await ports.credential(profile, current);
-      await fresh(id); if (!key) throw ErrorRegistry.createError('MODEL_INVOCATION_UNAVAILABLE');
+      await fresh(id); if (!key) throw ErrorRegistry.createError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', { params: { cause: 'no-credential' } });
       const choices = await ports.discover(profile, key); await fresh(id);
       discoveries.set(id, choices); return choices;
-    } catch { throw ErrorRegistry.createError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE'); }
+    } catch (error) { if (error instanceof DeckentError) throw error;
+      throw ErrorRegistry.createError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', { params: { cause: 'unexpected' } }); }
   };
   return { profiles: visible, list,
     async plan(id: string, workspaceId: string) {

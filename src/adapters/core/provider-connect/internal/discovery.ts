@@ -4,34 +4,19 @@ import { OPENAI_CHAT_COMPLETIONS_FAMILY, OPENAI_CHAT_COMPLETIONS_VERSION } from 
 import { PROVIDER_CONNECT_LIMITS, type ProviderConnectKind } from './registry.js';
 import { providerProbeBase, type ProviderProbeOptions } from './probe.js';
 
-export class ProviderModelListError extends Error {
-  constructor(readonly code: 'MODEL_CONNECT_DISCOVERY_UNAVAILABLE' | 'MODEL_CONNECT_DISCOVERY_INVALID' | 'MODEL_CONNECT_DISCOVERY_LIMIT') {
-    super(code); this.name = 'ProviderModelListError';
-  }
-}
+import { ProviderModelListError, readProviderPart, providerListHttpError } from './failure.js';
+export { ProviderModelListError } from './failure.js';
 /** A separate channel for each kind/address: equal API ids at two servers never overwrite each other's profiles. */
 export function providerDiscoveryChannel(kind: ProviderConnectKind, endpoint: string | null): string {
   return `${kind.id}-${createHash('sha256').update(providerProbeBase(kind, endpoint)).digest('hex').slice(0, 32)}`;
 }
-/** A stalled body cannot outlive the request deadline, including a host-injected transport that does not cancel its stream. */
-async function readPart(reader: ReadableStreamDefaultReader<Uint8Array>, signal: AbortSignal) {
-  signal.throwIfAborted();
-  let abort!: () => void;
-  try {
-    return await Promise.race([reader.read(), new Promise<never>((_resolve, reject) => {
-      abort = () => reject(signal.reason);
-      signal.addEventListener('abort', abort, { once: true });
-      if (signal.aborted) abort();
-    })]);
-  } finally { signal.removeEventListener('abort', abort); }
-}
 /** Same endpoint/auth/GET transport as the free probe; no redirects, retries, paid request, pagination or provider capability inference. */
 export async function discoverProviderModels(kind: ProviderConnectKind, endpoint: string | null, key: string | null,
   options: ProviderProbeOptions = {}): Promise<readonly string[]> {
-  if (!kind.available || kind.connect?.seed !== null || !kind.probe?.listsModels) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE');
+  if (!kind.available || kind.connect?.seed !== null || !kind.probe?.listsModels) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'not-listable');
   // One key rule (G2-7): a key never travels in cleartext; a plain-http loopback discovery, like its invocation, is anonymous.
   const base = providerProbeBase(kind, endpoint), secure = endpointMayCarryKey(base), credential = secure ? key : null;
-  if (secure && kind.key?.required && !credential) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE');
+  if (secure && kind.key?.required && !credential) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'no-credential');
   const headers: Record<string, string> = { accept: 'application/json', ...kind.probe.headers };
   if (credential) headers[kind.probe.auth.type === 'bearer' ? 'authorization' : kind.probe.auth.name] = kind.probe.auth.type === 'bearer' ? `Bearer ${credential}` : credential;
   const timeout = AbortSignal.timeout(options.timeoutMs ?? PROVIDER_CONNECT_LIMITS.timeoutMs);
@@ -41,14 +26,13 @@ export async function discoverProviderModels(kind: ProviderConnectKind, endpoint
     signal.throwIfAborted();
     const response = await (options.fetch ?? fetch)(`${base}${kind.probe.path}`, { method: 'GET', headers, redirect: 'manual', signal });
     if (response.status !== 200 || !response.body) {
-      void response.body?.cancel().catch(() => undefined);
-      throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE');
+      throw await providerListHttpError(response, signal, kind.connect?.rejectionCodes);
     }
     reader = response.body.getReader();
     const chunks: Uint8Array[] = []; let bytes = 0;
     for (;;) {
       signal.throwIfAborted();
-      const part = await readPart(reader, signal);
+      const part = await readProviderPart(reader, signal);
       if (part.done) break;
       if (part.value.byteLength > PROVIDER_CONNECT_LIMITS.modelListBytes - bytes) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_LIMIT');
       chunks.push(part.value); bytes += part.value.byteLength;
@@ -69,7 +53,7 @@ export async function discoverProviderModels(kind: ProviderConnectKind, endpoint
     return Object.freeze([...ids]);
   } catch (error) {
     options.signal?.throwIfAborted();
-    throw error instanceof ProviderModelListError ? error : new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE');
+    throw error instanceof ProviderModelListError ? error : new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', timeout.aborted ? 'timeout' : 'network');
   } finally { void reader?.cancel().catch(() => undefined); }
 }
 /** Only the selected exact id becomes a catalog fact. A list is evidence of availability, not tools, vision, context size or reasoning. */

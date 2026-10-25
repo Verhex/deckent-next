@@ -1,8 +1,10 @@
 import type { Readable } from 'node:stream';
-import type { Locale, OutputSink } from '#platform/index.js';
+import type { Locale, OutputSink, MessageKey, Params } from '#platform/index.js';
 
 /** What every CLI command gets from its host: project root, environment, output sinks, stdin, cancellation and the chosen locale. */
 export interface CliBaseContext {
+  /** Read-only help data, loaded only for a recognized command help request. */
+  helpParams?: (key: MessageKey) => Promise<Params>;
   root?: string; env?: NodeJS.ProcessEnv; stdout?: OutputSink; stderr?: OutputSink;
   stdin?: Readable & { isTTY?: boolean };
   signal?: AbortSignal;

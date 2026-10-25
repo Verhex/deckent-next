@@ -5,6 +5,7 @@ import { resolveCommandScope, scopeLister, scopeNotice } from '#surfaces/core/cl
 import { askModelsCard, modelsConfirmOptions, modelsInteractive, modelsSinks, reportModelsCancelled } from './io.js';
 import { modelConnectCommandSchema, type ModelConnectCommand, type ModelConnectResult } from '#domain/index.js';
 import type { ModelCommandContext } from './context.js';
+import { SCOPE_BUDGET_CHOICES } from './budget.js';
 
 export type ModelConnectHandler = (root: string, command: ModelConnectCommand, options: ConfigLoadOptions) => Promise<ModelConnectResult>;
 const FLAGS = ['--scope', '--connection', '--endpoint', '--model', '--reference', '--command-id', '--lang', '--executable', '--config-dir', '--delegate'] as const;
@@ -41,6 +42,8 @@ export function renderModelConnect(result: ModelConnectResult, locale: Locale): 
   if (result.notCarried.length) lines.push(t('models.connect.notCarried', { models: result.notCarried.map(item => `${item.reference.providerId}@${item.reference.providerVersion}/`
     + `${item.reference.modelId}@${item.reference.modelVersion} (${item.code})`).join(', ') }, locale));
   if (result.tariff === 'unmetered') lines.push(t('models.connect.unmetered', {}, locale));
+  if (result.budget?.state === 'missing') lines.push(t('models.connect.budgetMissing', { scope: result.scopeId, usd: SCOPE_BUDGET_CHOICES.defaultPresetUsd }, locale));
+  if (result.budget?.state === 'unknown') lines.push(t('models.connect.budgetUnknown', { scope: result.scopeId, code: result.budget.code ?? '-' }, locale));
   if (result.service === 'stale') lines.push(t('models.connect.restart', {}, locale));
   // S3-3: the CLI login it uses and who besides the person may spend it (the consent the person wrote).
   if (result.cli) lines.push(result.cli.owned ? t('headless.connect.loginOwned', { dir: result.cli.configDir }, locale) : t('headless.connect.login', { dir: result.cli.configDir }, locale), result.cli.delegate.length
@@ -54,7 +57,7 @@ export async function modelConnectCommand(argv: readonly string[], context: Mode
   if (choosing && modelsInteractive(context)) return connectByChoice(choosing, context);
   const parsed = parse(argv), env = context.env ?? process.env, locale = commandLocale(context, parsed.values.get('--lang'));
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
-  if (parsed.help) { emit(`${t('cli.help.modelsConnect', {}, locale)}\n${t('headless.help.connect', {}, locale)}`, sinks); return; }
+  if (parsed.help) { emit(`${t('cli.help.modelsConnect', { kinds: ((context as { providerConnect?: ConnectKinds }).providerConnect?.kinds ?? []).filter(kind => kind.available && kind.connectFamily).map(kind => kind.id).join(', ') || t('cli.help.modelsConnect.kindsFromProvider', {}, locale) }, locale)}\n${t('headless.help.connect', {}, locale)}`, sinks); return; }
   if (!context.connectModel) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
   const value = (flag: string) => parsed.values.get(flag), exact = value('--reference') ? REFERENCE.exec(value('--reference')!) : null;
   if (value('--reference') && !exact) throw ErrorRegistry.createError('CLI_USAGE');

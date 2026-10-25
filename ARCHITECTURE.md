@@ -828,7 +828,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   Turn closure/restart prose comes from EN/TR catalogs (old English restart receipts are localized on replay without rewriting evidence).
   Context counts stay numeric for admission and use locale-aware compact units for display; model windows come from the selected profile and
   provider count, taking the smaller known window. Local author proof and unperformed HTTP/TLS fixture gate: external `proof/MODEL-SWITCH-2026-10-09/`.
-- **`/provider` (PROVIDER-CONNECT):** kinds and endpoints are adapter data (`adapters/core/provider-connect`, registry v2; ChatGPT sign-in listed
+- **`/provider` (PROVIDER-CONNECT):** kinds and endpoints are adapter data (`adapters/core/provider-connect`, registry v3; ChatGPT sign-in listed
   unavailable). Connect: the address, where the kind takes one, is chosen from a list (owner 2026-10-08 D3: the configured `inference_serving`
   server, the registry's known local servers, the provider default; a typed "new address…" is the last row only, checked by the endpoint rule —
   https, plain http only to loopback — and previewed) → masked key (the one permitted typed value) under the custody note → one free
@@ -847,7 +847,7 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   (policy, approval card, audit; the user file is created when missing) and the window names the setting in effect (a project's own model wins).
 - **`models.connect` (D2):** one operation, one contract (`modelConnectCommandSchema` → `ModelConnectResult`) on CLI `deckent models connect`,
   MCP `connect_model`, SDK `connectModel` and the terminal (`/provider` → "Connect a model"). Engine `ModelConnectApplication` over ports,
-  composition unit `model-connect`: the provider-connect registry (v2) names each kind's adapter, chat path and packaged seed
+  composition unit `model-connect`: the provider-connect registry (v3; v2 overlays remain readable) names each kind's adapter, chat path and packaged seed
   (`assets/model-catalog/<seed>.json`, v3, exact vendor ids); a seedless kind uses endpoint discovery below. Steps, each on its owner's governed path: ledger catalog register when the
   channel/model is missing → declaration in `provider_catalog` on the layer that authors it (a new content-named revision) → this scope's
   activations still valid under the new revision are re-admitted (a catalog revision change otherwise breaks every activation) → the invocation
@@ -856,6 +856,9 @@ Core contracts and never requires editing Core. Core-memory law 10 records this 
   exact verified row of `lookupOpenAiCompatibleTariff(endpoint, nativeId)` (`published`); a remote model without one is refused before any
   catalog/config write (`MODEL_CONNECT_TARIFF_UNVERIFIED`; the adapter step runs first), only loopback keeps the zero tariff (`unmetered`), registry limits with the response limit narrowed to what the installation's result frames deliver with the registry's `deliveryHeadroomBytes` to spare, sized on the profile as written (P1 DELIVERY-FIT 2026-10-09: an exact fit broke on later governed growth such as the cache window) → chat activation →
   one `model-connect` audit subject. A config approval stops the run (`approval-pending`); the same command id continues. No key value is taken.
+- **alpha.56 U2 (S3/S6a/S7a):** discovery/probe failures carry closed cause codes + HTTP status, logged as `{op, code, cause, status}` only;
+  headless egress record v2 counts reasons per host. Registry `billing` orders no-spend paths first; a priced connection reports a read-only
+  budget step (`present|missing|unknown`, no account created; preset `defaultPresetUsd`, person confirms); connect help lists registry kinds.
 - **CONNECT-LOCALITY (W11, 2026-10-10; landed in alpha.24):** reconnecting keeps each authored profile's `contextWindowTokens`; a missing layer copy inherits the matching sibling profile, and a missing value falls back to the seed's `contextWindow`. The kept value participates in delivery sizing and idempotence. Provider endpoint validation, connection pricing and OpenAI-compatible legacy-zero quotes share `platform/core/validate`'s parsed-hostname predicate: only `127.0.0.1` and `[::1]` qualify; `localhost`, LAN and WSL addresses do not. HTTPS remote endpoints still require verified/declared tariffs; explicit operator tariff v2 remains supported. Author evidence/open limits: `proof/CONNECT-LOCALITY-2026-10-10/`; independent review, landing and live acceptance remain separate.
 - **Seedless provider discovery (PROVIDERS-CLAIMS, owner 2026-10-09):** when the provider-connect kind has no seed, `/provider` offers model
   connection before a list exists. Address selection precedes a read-only `GET /v1/models` through the existing probe transport/endpoint rules

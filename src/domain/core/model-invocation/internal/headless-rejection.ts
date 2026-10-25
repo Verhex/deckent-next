@@ -4,9 +4,21 @@ import { counterSchema } from '#domain/core/primitives/index.js';
 /** f5: a refused host name as asked (DNS grammar, lower case), never a port, path or payload. One call's gateway summary: tunnels, refusals and refused
  * names with counts (`other`: no valid name or past the gateway's `refusedHostsMax`). */
 export const HEADLESS_EGRESS_HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/u;
+export const headlessEgressReasonSchema = z.enum(['allowlist', 'dns', 'non-public', 'client-hello', 'byte-budget', 'gateway-closed', 'upstream', 'unknown']);
+export type HeadlessEgressReason = z.infer<typeof headlessEgressReasonSchema>;
+const reasonCounts = z.record(z.string().refine(key => headlessEgressReasonSchema.safeParse(key).success), counterSchema);
 export const headlessEgressSchema = z.object({ connected: counterSchema, refused: counterSchema, hosts: z.record(z.string().regex(HEADLESS_EGRESS_HOST), counterSchema),
-  other: counterSchema }).strict().refine(value => Object.values(value.hosts).reduce((sum, count) => sum + count, value.other) === value.refused).readonly();
+  other: counterSchema, reasons: z.record(z.string().regex(HEADLESS_EGRESS_HOST), reasonCounts).optional(), otherReasons: reasonCounts.optional() }).strict().refine(value => Object.values(value.hosts).reduce((sum, count) => sum + count, value.other) === value.refused)
+  .refine(value => value.reasons === undefined && value.otherReasons === undefined || value.reasons !== undefined && value.otherReasons !== undefined
+    && Object.keys(value.reasons).length === Object.keys(value.hosts).length
+    && Object.entries(value.hosts).every(([host, count]) => Object.values(value.reasons![host] ?? {}).reduce((sum, n) => sum + n!, 0) === count)
+    && Object.values(value.otherReasons).reduce((sum, n) => sum + n!, 0) === value.other).readonly();
 export type HeadlessEgress = z.infer<typeof headlessEgressSchema>;
+/** Legacy host counts carry no attribution; they are never labelled as allowlist failures. */
+export function headlessEgressReasons(value: HeadlessEgress): { reasons: Record<string, Record<string, number>>; otherReasons: Record<string, number> } {
+  return { reasons: value.reasons ?? Object.fromEntries(Object.entries(value.hosts).map(([host, count]) => [host, { unknown: count }])),
+    otherReasons: value.otherReasons ?? { unknown: value.other } };
+}
 /**
  * S3 headless step: the adapter-composed body of a rejected receipt (never CLI output, model text or stderr), so a consumer can name the cause:
  * `guard` (field), `model-mismatch`, `quota` (resetsAtMs), `credits-required`, `login-required`, `invalid-output` (subtype), `provider-error`

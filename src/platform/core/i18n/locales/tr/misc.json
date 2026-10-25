@@ -405,6 +405,8 @@
   "onboarding.ui.summary.mode": "Mod: {mode} (brain/worker katmanı: {strategy})",
   "onboarding.ui.summary.providers": "Sağlayıcılar — brain: {brain}, worker: {worker}, fallback: {fallback}",
   "onboarding.ui.summary.scope": "Kapsam: {scope} (kök: {root})",
+  "onboarding.budget.zero": "Bütçe: 0 USD — Deckent ücretli API çağrısı yapmaz. Abonelikler ve yerel sunucular bütçesiz çalışır.",
+  "onboarding.budget.setNow": "Ücretli bir API kullanacak mısınız? Bütçeyi şimdi belirleyin: önerilen {usd} USD — kabul edin ya da başka bir tutar seçin.",
   "output.details": "Ayrıntılar: {value}",
   "output.status": "{phase}: {completed}/{total}; aktif worker: {workers}",
   "output.unknown": "bilinmiyor",
