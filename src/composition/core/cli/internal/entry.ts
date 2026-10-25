@@ -32,6 +32,13 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
   try { return await runCli(argv, { ...base, loadHost: async () => (await import('./host.js')).createCliHost(base, serviceEntry) }); }
   finally { if (handlesSignals) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } }
 }
+/** A reader that closed the pipe (`deckent … | head`) is a SIGPIPE: 128 + 13, the code a shell reports for `cat`, `git` and `yes` there. */
+export const CLOSED_PIPE_EXIT = 141;
 if (isMainModule(import.meta)) {
+  // KUR-55: Node ignores SIGPIPE, so a closed reader surfaces as an unhandled EPIPE stack trace. The call stops quietly instead, before another
+  // write; `runtime serve` keeps running (its output is a log, never the reason to stop a service). Any other stream error still surfaces.
+  if (!(process.argv[2] === 'runtime' && process.argv[3] === 'serve')) for (const stream of [process.stdout, process.stderr]) {
+    stream.on('error', (error: NodeJS.ErrnoException) => { if (error.code !== 'EPIPE') throw error; process.exit(CLOSED_PIPE_EXIT); });
+  }
   void main().then(code => { if (process.argv[2] === 'runtime' && process.argv[3] === 'serve' && code !== 0) process.exit(code); else process.exitCode = code; });
 }

@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -80,6 +80,17 @@ it.each([['--version'], ['--help'], ['operation', '--help'], ['--help', '--all',
     expect(HOST_GRAPH.filter(path => loaded.has(pathToFileURL(resolve(dist, path)).href))).toEqual([]);
     expect(loaded.has(pathToFileURL(entry).href)).toBe(true);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+// KUR-55: `deckent … | head` closes the reader; the CLI ends quietly with the SIGPIPE code, never an EPIPE stack trace.
+it('a closed stdout reader ends the CLI quietly with 141', async () => {
+  const entry = resolve(dist, 'composition/core/cli/internal/entry.js');
+  await access(entry).catch(() => { throw new Error('BUILD_REQUIRED'); });
+  const child = spawn(process.execPath, [entry, '--help', '--all'], { stdio: ['ignore', 'pipe', 'pipe'], env: { PATH: process.env['PATH'] ?? '', HOME: tmpdir() } });
+  child.stdout.destroy();
+  let stderr = ''; child.stderr.setEncoding('utf8').on('data', chunk => { stderr += chunk; });
+  const code = await new Promise<number | null>(done => child.on('close', done));
+  expect({ code, stderr }).toEqual({ code: 141, stderr: '' });
 });
 
 // A lazy edge fails only when its command runs, so every `import()` target of the CLI start path must load from the build (the names are
