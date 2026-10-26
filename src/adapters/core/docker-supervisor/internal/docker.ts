@@ -205,7 +205,7 @@ export class DockerSupervisor implements ExecutionSupervisor {
       { source: o.connection.bootstrapPath, target: '/run/deckent-bootstrap.mjs', writable: false });
     const relayMounts = o.relay ? await dockerRelayMounts(o.relay, o.uid) : [];
     if (o.relay) expected.push({ source: o.relay.socketPath, target: DOCKER_RELAY_TARGETS.socket, writable: false }, { source: o.relay.bootstrapPath, target: DOCKER_RELAY_TARGETS.bootstrap, writable: false },
-      { source: o.relay.helperPath, target: DOCKER_RELAY_TARGETS.helper, writable: false });
+      { source: o.relay.helperPath, target: DOCKER_RELAY_TARGETS.helper, writable: false }, { source: o.relay.hardeningPath, target: DOCKER_RELAY_TARGETS.hardening, writable: false });
     // A relay worker runs the pinned bootstrap alone (it starts the app-server); the task argv never reaches its entrypoint.
     const argv = o.connection ? ['node', '/run/deckent-bootstrap.mjs', ...request.argv] : o.relay ? ['node', DOCKER_RELAY_TARGETS.bootstrap] : request.argv;
     try {

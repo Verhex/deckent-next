@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { attemptIdentitySchema } from '#domain/index.js';
 import type { OAuthAccessTokenLease } from '#engine/index.js';
 import { SIWC_WORKER_RELAY as R } from '#adapters/core/provider-siwc/index.js';
-import { listenForContainerPeer } from '#adapters/core/local-runtime-socket/index.js';
+import { listenForContainerPeer, localPeerNativePath } from '#adapters/core/local-runtime-socket/index.js';
 import { isPublicNativeAddress } from '#adapters/core/native-connection/index.js';
 import { containerInitPeer } from './proc.js';
 import { siwcWorkerRequestBody, secretScrubber, type SiwcRelayRefusal } from './request.js';
@@ -20,10 +20,12 @@ const text = z.string().min(1).max(256), generation = z.number().int().nonnegati
 /** Nonsecret binding of one relay capability (U9 rev 6 §11.3): app, person, installation/company/scope, connection, Attempt/fence, generations, model. */
 export const siwcWorkerBindingSchema = z.object({ schemaVersion: z.literal(1), connectionId: z.string().uuid(), installationId: text, companyId: text,
   person: z.object({ issuer: text, subject: text }).strict().readonly(), attempt: attemptIdentitySchema, model: text,
+  /** U6 pin of this Attempt: the worker image id and the Codex CLI version its build receipt recorded. */
+  imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/u), codexVersion: text,
   generations: z.object({ connection: generation, custody: generation, consent: generation }).strict().readonly() }).strict().readonly();
 export type SiwcWorkerBinding = z.infer<typeof siwcWorkerBindingSchema>;
 /** Container mount points of the relay channel and its pinned standalone programs (no credential path). */
-export const SIWC_WORKER_PATHS = Object.freeze({ socket: '/run/deckent-relay.sock', bootstrap: '/run/deckent-bootstrap.mjs', helper: '/run/deckent-siwc-helper.mjs' });
+export const SIWC_WORKER_PATHS = Object.freeze({ socket: '/run/deckent-relay.sock', bootstrap: '/run/deckent-bootstrap.mjs', helper: '/run/deckent-siwc-helper.mjs', hardening: '/run/deckent-hardening.node' });
 export type SiwcUpstream = (input: Readonly<{ body: string; headers: Readonly<Record<string, string>>; signal: AbortSignal }>) =>
   Promise<Readonly<{ status: number; contentType: string; body: AsyncIterable<Buffer> }>>;
 export type SiwcRelayRecord = Readonly<{ kind: 'peer-refused' | 'capability-issued' | 'capability-refused' | 'model-relayed' | 'model-refused' | 'approval' | 'revoked';
@@ -60,7 +62,9 @@ export async function openSiwcWorkerRelay(input: {
   const binding = siwcWorkerBindingSchema.parse(input.binding), L = R.limits, now = input.now ?? Date.now, upstream = input.upstream ?? httpsUpstream;
   if (!Number.isSafeInteger(input.deadlineMs) || input.deadlineMs <= 0 || !input.prompt) throw new Error('SIWC_WORKER_ISOLATION_UNAVAILABLE');
   const file = async (name: string) => { const path = fileURLToPath(new URL(`./${name}.js`, import.meta.url)); return { path, sha256: createHash('sha256').update(await readFile(path)).digest('hex') }; };
-  const [bootstrap, helper] = await Promise.all([file('bootstrap'), file('helper')]);
+  const hardeningPath = localPeerNativePath();
+  const [bootstrap, helper, hardening] = await Promise.all([file('bootstrap'), file('helper'),
+    readFile(hardeningPath).then(bytes => ({ path: hardeningPath, sha256: createHash('sha256').update(bytes).digest('hex') }))]);
   const directory = await mkdtemp(join(input.directory, 'siwc-relay-')); await chmod(directory, 0o700);
   const socketPath = join(directory, 'relay.sock');
   const policySha256 = createHash('sha256').update(JSON.stringify(R)).digest('hex'), bindingSha256 = createHash('sha256').update(JSON.stringify(binding)).digest('hex');
@@ -94,11 +98,12 @@ export async function openSiwcWorkerRelay(input: {
       check_for_update_on_startup: false, web_search: 'disabled' };
     const app = input.appServer ?? R.appServer;
     response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    response.end(JSON.stringify({ schemaVersion: 1, executable: app.executable, args: [...app.args, ...Object.entries(overrides).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`])],
-      limits: { requestMaxBytes: L.requestMaxBytes, controlLineBytes: L.controlLineBytes, connections: L.connections, idleMs: L.idleMs, helperTimeoutMs: L.helperTimeoutMs, drainMs: L.drainMs } }));
+    response.end(JSON.stringify({ schemaVersion: 1, executable: app.executable, native: R.appServer.native, args: [...app.args, ...R.appServer.control, ...Object.entries(overrides).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`])],
+      limits: { requestMaxBytes: L.requestMaxBytes, controlLineBytes: L.controlLineBytes, connections: L.connections, idleMs: L.idleMs, helperTimeoutMs: L.helperTimeoutMs, drainMs: L.drainMs, controlConnectMs: L.controlConnectMs, controlPollMs: L.controlPollMs } }));
   };
-  const issue = (response: ServerResponse) => {
-    if (issued || revoked || now() >= capabilityDeadline) { statistics.capabilityRefused++; record({ kind: 'capability-refused', reason: issued ? 'replay' : 'closed' }); response.writeHead(403).end(); return; }
+  const issue = async (response: ServerResponse) => {
+    const current = !issued && !revoked && now() < capabilityDeadline && await Promise.resolve(input.live()).catch(() => false);
+    if (!current || issued || revoked) { statistics.capabilityRefused++; record({ kind: 'capability-refused', reason: issued ? 'replay' : 'closed' }); response.writeHead(403).end(); return; }
     issued = true; capability = randomBytes(L.capabilityBytes).toString('base64url'); statistics.capabilityIssued++; record({ kind: 'capability-issued' });
     response.writeHead(200, { 'content-type': 'text/plain', 'cache-control': 'no-store' }); response.end(capability);
   };
@@ -155,7 +160,7 @@ export async function openSiwcWorkerRelay(input: {
   const server = createServer({ maxHeaderSize: L.headerBytes }, (request, response) => {
     const route = `${request.method} ${request.url}`;
     if (route === 'GET /launch' && !launched) { launched = true; launch(response); }
-    else if (route === 'POST /capability') { request.resume(); issue(response); }
+    else if (route === 'POST /capability') { request.resume(); void issue(response); }
     else if (route === 'POST /control') bridge(request, response);
     else if (route === 'POST /v1/responses') void relay(request, response);
     else { request.resume(); refuse(response, 404, 'endpoint'); }
@@ -184,12 +189,13 @@ export async function openSiwcWorkerRelay(input: {
   const timer = setTimeout(() => revoke('deadline'), input.deadlineMs); timer.unref();
   return Object.freeze({
     descriptor: Object.freeze({ schemaVersion: 1 as const, socketPath, bootstrapPath: bootstrap.path, bootstrapSha256: bootstrap.sha256, helperPath: helper.path,
-      helperSha256: helper.sha256, policySha256, bindingSha256 }),
+      helperSha256: helper.sha256, hardeningPath: hardening.path, hardeningSha256: hardening.sha256, policySha256, bindingSha256 }),
     /** The supervisor names the created container before it starts; nothing is served before (or for any other container). */
     bindContainer(id: string) { if (containerId === null && /^[a-f0-9]{64}$/u.test(id)) containerId = id; },
     /** Fence/consent/logout/MOVE/cancel/deadline: invalidate C first, abort upstream sends and streams, then ask the turn to interrupt. */
     revoke, close: async () => { clearTimeout(timer); await close(); },
-    outcome: turn.outcome,
+    /** `turn/completed` alone is never success: a completed turn also needs host-side evidence of a relayed model exchange. */
+    outcome: turn.outcome.then(outcome => outcome.status === 'completed' && statistics.relayed === 0 ? Object.freeze({ ...outcome, status: 'failed' as const, reason: 'protocol' as const }) : outcome),
     statistics: () => Object.freeze({ ...statistics, revoked, issued, peer: init ? Object.freeze({ ...init }) : null, containerId }),
   });
 }

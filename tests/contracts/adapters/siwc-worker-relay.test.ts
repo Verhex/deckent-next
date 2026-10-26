@@ -5,7 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { transform } from 'esbuild';
 import { DockerSupervisor } from '#adapters/core/docker-supervisor/index.js';
-import { openSiwcWorkerRelay, stopSiwcWorker, assertSiwcWorkerLaunchable, siwcWorkerResultError, type SiwcUpstream, type SiwcRelayRecord } from '#adapters/core/siwc-worker/index.js';
+import { openSiwcWorkerRelay, stopSiwcWorker, assertSiwcWorkerLaunchable, siwcWorkerResultError, type SiwcUpstream, type SiwcRelayRecord, type SiwcNativeApproval } from '#adapters/core/siwc-worker/index.js';
 import type { SandboxRequest } from '#engine/index.js';
 
 // Source integration: the relay hashes its own standalone programs; tests mount esbuild transpilations of the exact candidate sources.
@@ -21,13 +21,30 @@ afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await 
 // Synthetic app-server stdio peer: reads its provider config from `-c` overrides exactly as handed to the real binary, runs the auth helper,
 // sends Responses requests to the base URL, asks a command approval and (only when accepted) runs a tool child that attacks the boundary.
 const FAKE_APP_SERVER = String.raw`
-import { spawnSync } from 'node:child_process'; import { createInterface } from 'node:readline'; import { request } from 'node:http';
-import { writeFileSync, readFileSync, existsSync } from 'node:fs'; import { createHash } from 'node:crypto';
-const argv = process.argv.slice(2), mode = argv[0], config = {};
+import { spawn, spawnSync } from 'node:child_process'; import { createServer, request } from 'node:http';
+import { writeFileSync, readFileSync } from 'node:fs'; import { createHash } from 'node:crypto';
+const argv = process.argv.slice(2), mode = argv[0], config = {}, flag = name => argv[argv.indexOf(name) + 1];
 for (let i = 1; i < argv.length; i++) if (argv[i] === '-c') { const text = argv[++i], at = text.indexOf('='); config[text.slice(0, at)] = JSON.parse(text.slice(at + 1)); }
 const base = config['model_providers.deckent_relay.base_url'], helper = [config['model_providers.deckent_relay.auth.command'], config['model_providers.deckent_relay.auth.args']];
-const send = message => process.stdout.write(JSON.stringify(message) + '\n');
-const auth = () => { const run = spawnSync(helper[0], helper[1], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); return run.status === 0 ? run.stdout.trim() : null; };
+// Control: loopback WebSocket that accepts only the bearer whose SHA-256 is on argv (as --ws-auth capability-token --ws-token-sha256).
+const listen = new URL(flag('--listen')), tokenSha256 = flag('--ws-token-sha256'); let peer = null, rx = Buffer.alloc(0);
+const frame = text => { const data = Buffer.from(text), head = data.length < 126 ? Buffer.from([0x81, data.length]) : data.length < 65536 ? Buffer.from([0x81, 126, data.length >> 8, data.length & 255]) : null;
+  if (!head) throw new Error('frame'); return Buffer.concat([head, data]); };
+const send = message => peer?.write(frame(JSON.stringify(message)));
+const control = createServer((_req, res) => res.writeHead(404).end());
+control.on('upgrade', (req, socket) => {
+  const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1];
+  if (peer || !bearer || createHash('sha256').update(bearer).digest('hex') !== tokenSha256) { socket.end('HTTP/1.1 401 Unauthorized\r\n\r\n'); return; }
+  const accept = createHash('sha1').update(req.headers['sec-websocket-key'] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+  socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n'); peer = socket;
+  socket.on('data', part => { rx = Buffer.concat([rx, part]);
+    for (;;) { if (rx.length < 2) return; let len = rx[1] & 127, at = 2; if (len === 126) { len = rx.readUInt16BE(2); at = 4; } else if (len === 127) { len = Number(rx.readBigUInt64BE(2)); at = 10; }
+      if (rx.length < at + 4 + len) return; const mask = rx.subarray(at, at + 4), data = Buffer.from(rx.subarray(at + 4, at + 4 + len)).map((b, i) => b ^ mask[i % 4]), op = rx[0] & 15; rx = rx.subarray(at + 4 + len);
+      if (op === 8) { socket.end(); process.exit(0); } if (op === 1) void onLine(data.toString()); } });
+  socket.on('close', () => process.exit(0));
+});
+control.listen(Number(listen.port), '127.0.0.1');
+const auth = (command = helper) => { const run = spawnSync(command[0], command[1], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); return run.status === 0 && run.stdout.trim() ? run.stdout.trim() : null; };
 const post = (path, token, body) => new Promise(resolve => { const url = new URL(base + path), data = JSON.stringify(body);
   const call = request({ host: url.hostname, port: url.port, path: url.pathname, method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data), ...(token ? { authorization: 'Bearer ' + token } : {}) } },
     response => { let text = ''; response.on('data', part => { text += part; }); response.on('end', () => resolve({ status: response.statusCode, body: text })); });
@@ -35,35 +52,51 @@ const post = (path, token, body) => new Promise(resolve => { const url = new URL
 const body = (extra = {}) => ({ model: config.model, input: [{ role: 'user', content: 'hi' }], instructions: 'x', tools: [{ type: 'function', name: 'shell', parameters: {} }], store: false, stream: true, ...extra });
 const pending = new Map(); let next = 100, token = null;
 const ask = (method, params) => new Promise(resolve => { const id = next++; pending.set(id, resolve); send({ id, method, params }); });
-async function turn() {
-  const report = { mode }; token = auth(); report.capability = token !== null; report.cHash = token ? createHash('sha256').update(token).digest('hex') : null;
+const item = item => send({ method: 'item/started', params: { threadId: 'thr_1', turnId: 'turn_1', item } });
+async function turn(early) {
+  const report = { mode, early: early.error ? 'refused' : early.result?.decision ?? null };
+  // Wrong helper processes first: a grandchild (via sh) and a direct child with another cmdline get nothing and consume nothing.
+  report.grandchild = auth(['sh', ['-c', 'node ' + helper[1].join(' ') + '; exit $?']]) !== null;
+  report.otherCmdline = auth(['node', ['-e', "require('http').request({ host: '127.0.0.1', port: process.argv[1], method: 'POST', path: '/capability', headers: { 'content-length': '0' } }, r => { let b = ''; r.on('data', d => { b += d; }); r.on('end', () => { if (r.statusCode === 200) process.stdout.write(b); else process.exitCode = 1; }); }).end()", helper[1][1]]]) !== null;
+  token = auth(); report.capability = token !== null; report.cHash = token ? createHash('sha256').update(token).digest('hex') : null;
   if (mode === 'replay') token = readFileSync('/workspace/stolen.txt', 'utf8');
-  report.first = await post('/responses', token, body());
+  report.first = mode === 'nomodel' ? { status: 200, body: '' } : await post('/responses', token, body());
   if (mode === 'shapes') { report.shapes = {}; for (const [name, extra] of Object.entries({ tool: { tools: [{ type: 'web_search' }] }, model: { model: 'other-model' }, field: { background: true }, store: { store: true } }))
     report.shapes[name] = (await post('/responses', token, body(extra))).status; report.files = (await post('/files', token, body())).status; }
   if (mode === 'leak') writeFileSync('/workspace/leaked.txt', token ?? '');
   if (mode === 'rotate') { report.second = await post('/responses', token, body()); report.reauth = auth() !== null; }
   if (mode === 'hold') { writeFileSync('/workspace/app.json', JSON.stringify(report)); return; }
-  const approval = await ask('item/commandExecution/requestApproval', { threadId: 'thr_1', turnId: 'turn_1', itemId: 'item_1', cwd: '/workspace', command: 'node /workspace/tool.mjs' });
-  report.decision = approval.result?.decision ?? null;
-  if (report.decision === 'accept') report.tool = spawnSync('node', ['/workspace/tool.mjs', JSON.stringify({ helper: helper[1], base, parent: process.pid })], { encoding: 'utf8' }).status;
+  const command = 'node /workspace/tool.mjs';
+  item({ id: 'item_1', type: 'commandExecution', command, cwd: '/workspace' });
+  report.decision = (await ask('item/commandExecution/requestApproval', { threadId: 'thr_1', turnId: 'turn_1', itemId: 'item_1', cwd: '/workspace', command })).result?.decision ?? null;
+  item({ id: 'item_2', type: 'commandExecution', command: 'curl example.com', cwd: '/workspace' });
+  report.network = (await ask('item/commandExecution/requestApproval', { threadId: 'thr_1', turnId: 'turn_1', itemId: 'item_2', cwd: '/workspace', networkApprovalContext: { host: 'example.com', protocol: 'https' } })).result?.decision ?? null;
+  item({ id: 'item_3', type: 'fileChange', changes: [{ path: '/workspace/../etc/passwd', kind: 'add', diff: 'x' }] });
+  report.escape = (await ask('item/fileChange/requestApproval', { threadId: 'thr_1', turnId: 'turn_1', itemId: 'item_3' })).result?.decision ?? null;
+  item({ id: 'item_4', type: 'fileChange', changes: [{ path: 'src/a.txt', kind: 'add', diff: '+hello' }] });
+  report.file = (await ask('item/fileChange/requestApproval', { threadId: 'thr_1', turnId: 'turn_1', itemId: 'item_4' })).result?.decision ?? null;
+  // Asynchronous: the tool also knocks on this process's control listener, which must stay responsive.
+  if (report.decision === 'accept') report.tool = await new Promise(resolve => spawn('node', ['/workspace/tool.mjs', JSON.stringify({ helper: helper[1], base, parent: process.pid, ctl: listen.port })], { stdio: 'ignore' }).on('exit', resolve));
   writeFileSync('/workspace/app.json', JSON.stringify(report));
   const failed = report.first.status !== 200 || (report.second && report.second.status !== 200);
   send({ method: 'turn/completed', params: { threadId: 'thr_1', turn: { id: 'turn_1', status: failed ? 'failed' : 'completed', error: failed ? { message: 'x', codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 401 } } } : null } } });
 }
-createInterface({ input: process.stdin }).on('line', async line => { const message = JSON.parse(line);
+async function onLine(line) { const message = JSON.parse(line);
   if (message.id !== undefined && !message.method) { pending.get(message.id)?.(message); pending.delete(message.id); return; }
   if (message.method === 'initialize') send({ id: message.id, result: { userAgent: 'synthetic' } });
   else if (message.method === 'thread/start') send({ id: message.id, result: { thread: { id: 'thr_1' } } });
-  else if (message.method === 'turn/start') { send({ id: message.id, result: { turn: { id: 'turn_1', status: 'inProgress' } } }); void turn(); }
+  else if (message.method === 'turn/start') {
+    // An approval before the turn id is known is refused (never matched to "any turn").
+    const early = await ask('item/commandExecution/requestApproval', { threadId: 'thr_1', turnId: 'turn_1', itemId: 'item_0', cwd: '/workspace', command: 'true' });
+    send({ id: message.id, result: { turn: { id: 'turn_1', status: 'inProgress' } } }); void turn(early); }
   else if (message.method === 'turn/interrupt') { const after = await post('/responses', token, body()); writeFileSync('/workspace/after.json', JSON.stringify(after));
     send({ id: message.id, result: {} }); send({ method: 'turn/completed', params: { threadId: 'thr_1', turn: { id: 'turn_1', status: 'interrupted' } } }); }
-}).on('close', () => process.exit(0));
+}
 `;
 // Synthetic tool child (a native shell effect): tries to read ancestors' memory, re-run the auth helper, reach the host relay directly and the
 // model shim without the capability, then scans every readable environ/cmdline and worker file for later absence checks.
 const TOOL = String.raw`
-import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from 'node:fs'; import { spawnSync } from 'node:child_process'; import { request } from 'node:http';
+import { readFileSync, readdirSync, readlinkSync, statSync, writeFileSync, existsSync } from 'node:fs'; import { spawnSync } from 'node:child_process'; import { request } from 'node:http';
 const { helper, base, parent } = JSON.parse(process.argv[2]), out = { memory: {} };
 for (const pid of [1, parent]) { try { readFileSync('/proc/' + pid + '/mem'); out.memory[pid] = 'read'; } catch (error) { out.memory[pid] = error.code; } }
 const again = spawnSync('node', helper, { encoding: 'utf8' }); out.helper = { status: again.status, stdout: again.stdout };
@@ -77,6 +110,11 @@ out.relay = await call({ socketPath: '/run/deckent-relay.sock', method: 'POST', 
 const url = new URL(base + '/responses');
 out.shim = await call({ host: url.hostname, port: url.port, path: url.pathname, method: 'POST', headers: { 'content-length': '2', authorization: 'Bearer ' + 'x'.repeat(43) } }, '{}');
 out.hostRoot = existsSync(process.argv[3] ?? '/nonexistent-host-root');
+// The app-server control WebSocket without its bearer, and every reopenable pipe of pid 1 / the app-server (none may exist).
+out.control = await call({ host: '127.0.0.1', port: JSON.parse(process.argv[2]).ctl, path: '/', headers: { connection: 'Upgrade', upgrade: 'websocket', 'sec-websocket-version': '13', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==' } });
+out.init = {}; for (const file of ['fd', 'maps', 'environ']) { try { readdirSync('/proc/1/' + file); out.init[file] = 'open'; } catch (error) { try { readFileSync('/proc/1/' + file); out.init[file] = 'open'; } catch (inner) { out.init[file] = inner.code; } } }
+const pipes = pid => { try { return readdirSync('/proc/' + pid + '/fd').map(fd => { try { return readlinkSync('/proc/' + pid + '/fd/' + fd); } catch { return ''; } }).filter(link => link.startsWith('pipe:')); } catch { return []; } };
+const ownPipes = new Set(pipes(parent)); out.sharedPipes = pipes(1).filter(link => ownPipes.has(link));
 writeFileSync('/workspace/effect.txt', 'native effect'); writeFileSync('/workspace/tool.json', JSON.stringify(out));
 `;
 const capabilityIn = (text: string, cHash: string | null) => !!cHash && [...text.matchAll(/(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/gu)].some(match => hash(match[0]) === cHash);
@@ -92,16 +130,16 @@ async function harness(mode: string, options: { approve?: boolean; upstream?: Si
     const path = join(root, `${name}.mjs`); await writeFile(path, code, { mode: 0o600 }); artifacts[name] = { path, sha256: hash(code) };
   }
   const leases = options.leases ?? [`synthetic-access-A-${randomUUID()}`], upstreamSeen: { authorization: string; body: string }[] = [], records: SiwcRelayRecord[] = [];
-  let leaseCount = 0;
+  let leaseCount = 0, approveCalls = 0; const asked: SiwcNativeApproval[] = [];
   const upstream: SiwcUpstream = options.upstream ?? (async input => { upstreamSeen.push({ authorization: input.headers['authorization']!, body: input.body });
     // Reflects the upstream credential to prove the relay masks it before the worker sees the stream.
     return { status: 200, contentType: 'text/event-stream', body: (async function* () { yield Buffer.from(`data: {"type":"response.completed","echo":"${input.headers['authorization']}"}\n\n`); })() }; });
   const identity = { runId: 'run', taskId: 'task', attemptId: randomUUID(), scopeId: 'test', generation: 1, layoutRevision: 'layout' };
   const relay = await openSiwcWorkerRelay({ directory: root, prompt: 'Do the task', deadlineMs: 60000, version: 'test', upstream,
     binding: { schemaVersion: 1, connectionId: randomUUID(), installationId: 'inst', companyId: 'co', person: { issuer: 'local', subject: 'person' }, attempt: identity,
-      model: 'fixture-model', generations: { connection: 1, custody: 1, consent: 1 } },
+      model: 'fixture-model', imageId: imageId!, codexVersion: 'synthetic', generations: { connection: 1, custody: 1, consent: 1 } },
     lease: async () => ({ accessToken: leases[Math.min(leaseCount++, leases.length - 1)]!, expiresAtMs: Date.now() + 3_600_000 }),
-    approve: async () => options.approve ?? true, live: () => true, onRecord: record => records.push(record),
+    approve: async request => { approveCalls++; asked.push(request); return options.approve ?? true; }, live: () => true, onRecord: record => records.push(record),
     appServer: { executable: 'node', args: ['/workspace/fake-app-server.mjs', mode] } });
   cleanups.push(relay.close);
   const supervisor = new DockerSupervisor({ executable: '/usr/bin/docker', workspaceRoot: root, imageId: imageId!, uid: process.getuid!(), gid: process.getgid!(),
@@ -111,7 +149,7 @@ async function harness(mode: string, options: { approve?: boolean; upstream?: Si
   const request: SandboxRequest = { protocolVersion: 1, identity, workspace, argv: ['unused'] };
   cleanups.push(async () => { await supervisor.cancel(request); await supervisor.release(request); });
   const read = async (name: string) => readFile(join(workspace, name), 'utf8').catch(() => null);
-  return { root, workspace, relay, supervisor, request, leases, upstreamSeen, records, read };
+  return { root, workspace, relay, supervisor, request, leases, upstreamSeen, records, read, approveCalls: () => approveCalls, asked };
 }
 
 describe.skipIf(!imageId || process.platform !== 'linux')('SIWC worker relay with a synthetic app-server inside the pinned Docker image (U9-6/7)', () => {
@@ -119,11 +157,16 @@ describe.skipIf(!imageId || process.platform !== 'linux')('SIWC worker relay wit
     const h = await harness('normal');
     const result = await h.supervisor.execute(h.request);
     expect(result.result).toEqual({ kind: 'exited', exitCode: 0 });
-    expect(await h.relay.outcome).toMatchObject({ status: 'completed', approvals: { accepted: 1, declined: 0 } });
+    // The decision sees the exact command and file targets/diff; permission expansion, a path outside /workspace and an approval before the
+    // turn id is known never reach it.
+    expect(await h.relay.outcome).toMatchObject({ status: 'completed', approvals: { accepted: 2, declined: 2 }, refusedRequests: 1 }); expect(h.approveCalls()).toBe(2);
+    expect(h.asked).toEqual([expect.objectContaining({ kind: 'command', command: 'node /workspace/tool.mjs', cwd: '/workspace', changes: [] }),
+      expect.objectContaining({ kind: 'file-change', command: null, changes: [{ path: '/workspace/src/a.txt', kind: 'add', diff: '+hello' }] })]);
     const app = JSON.parse((await h.read('app.json'))!), tool = JSON.parse((await h.read('tool.json'))!), scan = (await h.read('scan.bin'))!;
-    expect(app).toMatchObject({ capability: true, first: { status: 200 }, decision: 'accept', tool: 0 });
+    expect(app).toMatchObject({ early: 'refused', grandchild: false, otherCmdline: false, capability: true, first: { status: 200 }, decision: 'accept', network: 'decline', escape: 'decline', file: 'accept', tool: 0 });
     expect(Object.values(tool.memory)).toEqual(['EACCES', 'EACCES']);
-    expect(tool).toMatchObject({ helper: { stdout: '' }, shim: 403, hostRoot: false }); expect(tool.helper.status).not.toBe(0); expect(tool.relay).not.toBe(200);
+    // The bootstrap (pid 1) is non-dumpable: its fd table, maps and environ cannot be opened; no pipe links it to the app-server.
+    expect(tool).toMatchObject({ helper: { stdout: '' }, shim: 403, hostRoot: false, control: 401, init: { fd: 'EACCES', maps: 'EACCES', environ: 'EACCES' }, sharedPipes: [] }); expect(tool.helper.status).not.toBe(0); expect(tool.relay).not.toBe(200);
     expect(await h.read('effect.txt')).toBe('native effect');
     const A = h.leases[0]!, everything = [scan, result.stdout, result.stderr, JSON.stringify(h.records), app.first.body].join('\n');
     // The scan really covers the app-server's argv/environ (positive control) yet holds neither secret.
@@ -168,12 +211,14 @@ describe.skipIf(!imageId || process.platform !== 'linux')('SIWC worker relay wit
     expect(h.relay.statistics()).toMatchObject({ capabilityIssued: 1, upstreamSends: 2 });
   }, 60000);
 
-  it('native-tools-stay-in-worker: a declined approval runs no tool and leaves no effect (U9-7a)', async () => {
-    const h = await harness('normal', { approve: false });
+  it('native-tools-stay-in-worker: a declined approval runs no tool and leaves no effect; a bare turn/completed is not success (U9-7a)', async () => {
+    // `nomodel`: the app-server claims completion without any relayed model exchange — host-side evidence is missing, so it is a failure.
+    const h = await harness('nomodel', { approve: false });
     await h.supervisor.execute(h.request);
     expect(JSON.parse((await h.read('app.json'))!)).toMatchObject({ decision: 'decline' });
     expect(await h.read('effect.txt')).toBeNull(); expect(await h.read('tool.json')).toBeNull();
-    expect(await h.relay.outcome).toMatchObject({ approvals: { accepted: 0, declined: 1 } });
+    expect(await h.relay.outcome).toMatchObject({ status: 'failed', reason: 'protocol', approvals: { accepted: 0, declined: 4 } });
+    expect(h.relay.statistics()).toMatchObject({ relayed: 0, upstreamSends: 0 });
   }, 60000);
 
   it('worker-relay-stop-proof: revoke first, later sends fail, the container is stopped and the private socket removed; unproven kill stays visible (U9-7b)', async () => {

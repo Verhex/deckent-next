@@ -12,7 +12,7 @@ export type { LocalPeerIdentity } from './internal/peer.js';
 export { LocalPeerShutdownAuthentication, verifyLocalPeerIdentity } from './internal/authentication.js';
 export { createLocalPeerSession } from './internal/authentication.js';
 export { acquireLedgerLock } from './internal/ledger-lock.js';
-export { listenForContainerPeer } from './internal/container-peer.js';
+export { listenForContainerPeer, localPeerNativePath } from './internal/container-peer.js';
 export type { ContainerPeer } from './internal/container-peer.js';
 
 export { runtimeSocketLocation, prepareRuntimeSocket } from './internal/location.js';

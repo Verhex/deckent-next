@@ -81,7 +81,7 @@ it('restores a recorded supervisor lazily: its profile is answered without the d
 it.skipIf(process.platform !== 'linux')('records a relay worker as v4 / isolation v2 and refuses every mismatched or downcast relay record', async () => {
   const os = userInfo(), A = 'synthetic-upstream-access-canary-A', C = 'synthetic-relay-capability-canary-C';
   const relay = { schemaVersion: 1, socketPath: '/run/deckent/r.sock', bootstrapPath: '/run/deckent/b.mjs', bootstrapSha256: 'b'.repeat(64), helperPath: '/run/deckent/h.mjs',
-    helperSha256: 'c'.repeat(64), policySha256: 'd'.repeat(64), bindingSha256: 'e'.repeat(64) };
+    helperSha256: 'c'.repeat(64), hardeningPath: '/run/deckent/n.node', hardeningSha256: 'f'.repeat(64), policySha256: 'd'.repeat(64), bindingSha256: 'e'.repeat(64) };
   const isolation = { schemaVersion: 2, network: 'none', egress: { kind: 'private-model-relay', provider: 'siwc', policySha256: 'd'.repeat(64), bindingSha256: 'e'.repeat(64) } };
   const options = { executable: '/usr/bin/docker', imageId: `sha256:${'a'.repeat(64)}`, workspaceRoot: '/tmp/deckent-profile', uid: os.uid, gid: os.gid,
     memoryBytes: 268435456, pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 };

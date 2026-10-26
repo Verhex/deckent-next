@@ -36,3 +36,5 @@ export function listenForContainerPeer(endpoint: string, maxConnections: number,
     close() { stopped = true; listener.close(); for (const socket of clients) socket.destroy(); try { listener.removeEndpoint(); } catch { /* the caller removes its private directory */ } },
   });
 }
+/** U9-6: the same audited native module, mounted read-only into a SIWC worker so its bootstrap can make itself non-dumpable. */
+export function localPeerNativePath(): string { return createRequire(import.meta.url).resolve('../native/build/Release/peer_credentials.node'); }
