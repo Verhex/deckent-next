@@ -337,6 +337,7 @@
   "cli.uninstall.reinstall": "To reinstall, use the original package manager and run deckent in your project folder. Retained project data is reused.",
   "cli.uninstall.blocker.backup-destination": "A verified backup and a destination outside the removal roots are required. Global data stays.",
   "cli.uninstall.blocker.authority-relocated": "{path} is not at its recorded location. Purge is stopped and nothing will be deleted. Run deckent uninstall without --purge to keep the data.",
+  "cli.uninstall.blocker.authority-in-project": "This installation keeps its data in the project folder {path}, and project .deckent folders are always kept, so --purge has nothing to remove. Nothing will be deleted. Run deckent uninstall without --purge.",
   "cli.uninstall.blocker.authority-unsafe": "{path} could not be verified as a private file of this user (link, owner, permissions or read failure). Purge is stopped and nothing will be deleted. Run deckent uninstall without --purge to keep the data.",
   "cli.uninstall.backupPassphrase": "Backup passphrase"
 }

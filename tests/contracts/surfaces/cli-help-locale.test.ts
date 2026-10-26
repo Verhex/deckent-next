@@ -120,6 +120,12 @@ it('an unknown command and --version follow the configured language', async () =
   expect(unknown.code).toBe(2); expect(unknown.errors + unknown.output).toContain(t('cli.unknownCommand', { name: 'deckent', version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}`, command: 'frobnicate' }, 'tr'));
   expect((await run(['--version'], 'tr')).output).toContain(t('cli.version', { name: 'deckent', version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}` }, 'tr').split('\n')[0]);
 });
+it('a leading --lang is the documented global option, not a command (R34)', async () => {
+  const stdin = { isTTY: false } as NodeJS.ReadStream, bare = await main(['--lang', 'en'], { root, env, stdin, stdout: { write: () => undefined }, stderr: { write: () => undefined } });
+  const unknown = await run(['--lang', 'en', 'frobnicate']);
+  expect(bare).toBe(0); expect(unknown.code).toBe(2);
+  expect(unknown.errors + unknown.output).toContain(t('cli.unknownCommand', { name: 'deckent', version: PACKAGE_VERSION, node: process.version, platform: `${process.platform}-${process.arch}`, command: 'frobnicate' }, 'en'));
+});
 it('run propose without its argument follows the configured language', async () => {
   await config('tr');
   const configured = await run(['run', 'propose'], 'tr'), flagged = await run(['run', 'propose', '--lang', 'tr']);

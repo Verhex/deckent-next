@@ -265,6 +265,32 @@ it('blocks the whole purge before any backup, hold or cache removal when an auth
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
 
+it('names an unmoved in-project installation as project data a purge keeps, and a data root outside the global home as relocated (R31)', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+  const root = await mkdtemp(join(tmpdir(), 'deckent-purge-in-project-'));
+  try {
+    const project = join(root, 'project'), data = join(root, 'global'), local = join(project, '.deckent'), elsewhere = join(root, 'elsewhere');
+    for (const path of [local, data, elsewhere]) await mkdir(path, { recursive: true, mode: 0o700 });
+    const actor = readLocalOsIdentity(), options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false };
+    const install = async (layoutRoot?: string) => {
+      await writeFile(join(local, 'config.json'), JSON.stringify({ ...(layoutRoot ? { layout: { root: layoutRoot } } : {}), terminal: { scopeId: 's' } }), { mode: 0o600 });
+      await writeFile(join(layoutRoot ?? local, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'operation', 'approval', 'backup'].map(kind => ({
+        id: `owner-${kind}`, effect: 'allow', actions: 'all', scopes: 'all', principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' } })) }), { mode: 0o600 });
+      const layout = resolveProductLayout({ projectRoot: project, ...(layoutRoot ? { root: layoutRoot } : {}) });
+      await new FileInstallationIdentityStore(layout).loadOrCreate(); await openLocalIntegrityAuthority(layout, getConfigFieldDefault('approvals').keyFile, true); clearConfigCache();
+    };
+    await install();
+    const kept = await previewConfiguredUninstall(project, true, options);
+    expect(kept.blockers).toContain(`authority-in-project:${local}`); expect(kept.blockers.some(value => value.startsWith('authority-relocated:'))).toBe(false);
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'in-project', planDigest: kept.planDigest }, { backupPassphrase: async () => 'unused', confirm: async () => true }, options))
+      .rejects.toMatchObject({ code: 'UNINSTALL_PURGE_PROJECT_DATA', params: { path: local } });
+    expect(await lstat(join(local, 'policy.json'))).toBeTruthy();
+    // Negative: a data root moved outside the global home is a genuine relocation and keeps the authority refusal.
+    await install(elsewhere);
+    expect((await previewConfiguredUninstall(project, true, options)).blockers).toContain(`authority-relocated:${elsewhere}`);
+  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});
+
 it('resumes an interrupted final tail only through a second card that lists the remaining members, verifies the final set with the passphrase and decides the delete permission again', async () => {
   if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
   const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');

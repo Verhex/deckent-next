@@ -46,7 +46,9 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   // The installation's authority files are one atomic set: a relocated, unsafe or foreign member keeps all of them and blocks the purge.
   let members: DataRemovalMember[] = [];
   const blockers: string[] = [];
-  if (purge && (!isGlobal || layout.root === projectData)) blockers.push(`authority-relocated:${layout.root}`);
+  // R31: an unmoved in-project installation is not relocated: its data is the project's .deckent, which a purge always keeps.
+  if (purge && layout.root === projectData) blockers.push(`authority-in-project:${layout.root}`);
+  else if (purge && !isGlobal) blockers.push(`authority-relocated:${layout.root}`);
   else if (purge) {
     for (const [name, file] of Object.entries(registry.purgeMembers) as [ProductResource, string][]) {
       const resourcePath = productResourcePath(layout, name), path = file ? join(resourcePath, file.replace('{keyFile}', config.approvals.keyFile)) : resourcePath;

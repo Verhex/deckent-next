@@ -1,12 +1,13 @@
 import { onboardingMessage } from './message.js';
 import { t, ErrorRegistry, type Locale } from '#platform/index.js';
+import { profileName } from '#surfaces/core/cli-identity/index.js';
 import type { CliCardIo } from '#surfaces/core/cli-human/index.js';
 import type { OnboardingPort, OnboardingPresentation } from './contract.js';
 import { askOnboardingQuestion, type OnboardingQuestion } from './question.js';
 export function guideQuestion(model: OnboardingPresentation, kind: 'budget' | 'permissions', locale: Locale): OnboardingQuestion {
   const { budget, permissions } = model.snapshot;
   return { title: kind === 'budget' ? t('onboarding.budget.question', {}, locale) : t('onboarding.permissions.title', {}, locale), step: model.completed + 1, total: model.total,
-    body: [kind === 'budget' ? budget.reason ? ErrorRegistry.createError(budget.reason, { locale }).message : t('onboarding.budget.zero', {}, locale) : onboardingMessage(permissions.reason, { profile: permissions.profile ?? '-', mode: onboardingMessage(`terminal.mode.stop.${permissions.mode ?? 'standart'}`, {}, locale), principal: permissions.principal ?? '-', scope: model.snapshot.scopeId }, locale)],
+    body: [kind === 'budget' ? budget.reason ? ErrorRegistry.createError(budget.reason, { locale }).message : t('onboarding.budget.zero', {}, locale) : onboardingMessage(permissions.reason, { profile: permissions.profile ? profileName(permissions.profile, locale) : '-', mode: onboardingMessage(`terminal.mode.stop.${permissions.mode ?? 'standart'}`, {}, locale), principal: permissions.principal ?? '-', scope: model.snapshot.scopeId }, locale)],
     choices: kind === 'budget' ? budget.currentUsd === null ? [] : budget.presetsUsd.map(usd => ({ id: String(usd), label: t('onboarding.budget.preset', { usd }, locale) }))
       : permissions.state === 'needs-confirmation' ? [{ id: 'apply', label: t('onboarding.session.continue', {}, locale) }] : [],
     ...(kind === 'budget' ? { initial: String(budget.presetUsd) } : {}) };
@@ -16,7 +17,7 @@ export async function guideScreen(model: OnboardingPresentation, kind: 'budget' 
   if (kind === 'permissions' && model.snapshot.permissions.state === 'needs-profile') {
     const profiles = model.snapshot.permissions.profiles ?? [];
     const selected = await askOnboardingQuestion({ title: t('onboarding.permissions.title', {}, io.locale), step: model.completed + 1, total: model.total,
-      body: [t('onboarding.permissions.chooseProfile', {}, io.locale)], choices: profiles.map((profile, index) => ({ id: String(index), label: `${profile.id}@${profile.version}` })) }, io);
+      body: [t('onboarding.permissions.chooseProfile', {}, io.locale)], choices: profiles.map((profile, index) => ({ id: String(index), label: profileName(profile.id, io.locale) })) }, io);
     if (selected.id === 'later' || selected.id === 'exit') return selected.id;
     const profile = profiles.find((_row, index) => String(index) === selected.id);
     if (!profile || !port.previewPermissions) return 'later';

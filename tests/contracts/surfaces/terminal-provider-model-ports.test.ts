@@ -93,6 +93,28 @@ describe('/provider port', () => {
     expect((await port.inspect()).kinds[0]!.detail).toBe('key DECKENT_ANTHROPIC_KEY stored · 0 model profile(s) use it');
   });
 
+  it('a keyless server whose models were pulled reads as connected: no "no model uses the key" line and no "not connected" row (FIX8c)', async () => {
+    const { root, options } = await project({});
+    const local = { ...connectHost('ok').kinds[1]!, pull: 'available' as const, connectFamily: 'openai-chat-completions' };
+    const pulled = { providerId: `local-openai-${'a'.repeat(32)}`, providerVersion: 1, modelId: 'fixture-small', modelVersion: 1 };
+    const port = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [local] },
+      connectModel: async () => ({ schemaVersion: 1, operation: 'models.connect', commandId: 'x', scopeId: 'scope', connection: 'local-openai', status: 'connected', reference: pulled,
+        models: [{ nativeId: 'fixture-small', state: 'connected', reference: pulled }], credentialRef: null, keyStored: null,
+        steps: { catalog: 'written', declaration: 'written', profile: 'written', activation: 'written', carried: 0 }, notCarried: [], carriedModels: [], tariff: 'unmetered', approval: null, service: 'current' }) as never,
+      inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference: pulled, label: 'fixture-small', nativeId: 'fixture-small', catalogRevision: 'c',
+        bindingDigest: 'd'.repeat(64), availability: { invocable: true, reason: null } }] }) as never }, options, 'en', errorText);
+    const outcome = await port.connect({ kind: 'local-openai', endpoint: 'http://127.0.0.1:18777', key: null });
+    expect(outcome.lines.map(line => line.text).join('\n')).not.toContain('No model uses');
+    expect(outcome.lines.at(-1)!.text).toBe(t('tui.provider.model.next', {}, 'en'));
+    expect((await port.inspect()).kinds[0]!.detail).toBe('1 model(s) connected');
+    // Negative: a key-required kind whose key is gone stays "not connected" even when a profile of its provider remains.
+    const keyed = { ...connectHost('ok').kinds[0]!, catalogProviderId: pulled.providerId };
+    const gone = providerPanelPort(root, 'scope', { ...secrets().host, providerConnect: { ...connectHost('ok'), kinds: [keyed] },
+      inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference: pulled, label: 'fixture-small', nativeId: 'fixture-small', catalogRevision: 'c',
+        bindingDigest: 'd'.repeat(64), availability: { invocable: true, reason: null } }] }) as never }, options, 'en', errorText);
+    expect((await gone.inspect()).kinds[0]!.detail).toBe('not connected');
+  });
+
   it('every refused check stores nothing and says why in the person\'s language', async () => {
     const { root, options } = await project({});
     for (const [outcome, status, text] of [['credential-rejected', 401, 'Anahtar reddedildi: geçersiz ya da süresi dolmuş.'], ['access-denied', 403, 'Anahtar geçerli ama bu API\'ye erişimi yok.'],

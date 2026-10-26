@@ -8,6 +8,7 @@ import { firstJobStages, firstJobSteps, firstJobTitle, onboardingNext } from './
 import type { RecoveryModeState, ProviderSpendAccountInspection } from '#engine/index.js';
 import type { RecoveryRolloutView } from '#domain/index.js';
 import { recoveryRolloutSummary, recoveryStateLines } from '#surfaces/core/recovery-text/index.js';
+import { profileName } from '#surfaces/core/cli-identity/index.js';
 
 /** The four groups of the owner-accepted doctor view (CLI review 2026-10-19 §doctor): Kurulum / Güvenlik / Çalışma / Araçlar. */
 export type DoctorGroup = 'setup' | 'security' | 'work' | 'tools';
@@ -87,7 +88,7 @@ function setupChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Doct
   else if (r.serviceConfig === 'current') rows.push(row('setup', 'setup.service', 'ok', t('doctor.check.service.current', {}, l)));
   else if (r.serviceConfig === 'stopped') rows.push(row('setup', 'setup.service', 'ok', t('doctor.check.service.stopped', {}, l)));
   else if (r.serviceConfig === 'unknown') rows.push(row('setup', 'setup.service', 'untested', t('doctor.check.service.unknown', {}, l)));
-  if (f.identityProfile) rows.push(f.identityProfile.state === 'selected' ? row('setup', 'setup.identity', 'ok', t('doctor.check.identity.ok', { profile: f.identityProfile.id }, l))
+  if (f.identityProfile) rows.push(f.identityProfile.state === 'selected' ? row('setup', 'setup.identity', 'ok', t('doctor.check.identity.ok', { profile: profileName(f.identityProfile.id, l) }, l))
     : row('setup', 'setup.identity', 'warning', t('doctor.check.identity.missing', {}, l), 'deckent config'));
   const admin = r.policyAdministration;
   if (admin) rows.push(admin.recoveryRequired ? row('setup', 'setup.policy', 'error', t('doctor.check.policy.recovery', {}, l), scoped('deckent policy status', f))

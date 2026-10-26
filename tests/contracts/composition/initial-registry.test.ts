@@ -124,7 +124,7 @@ it('U4E G2: the install controller previews and confirms full-auto through the s
   const observed = await wired.observeSetup(f.root, { ...f.options, person: true });
   const controller = createSetupController({ context, root: f.root, locale: 'en', observed, flags: { json: false, yes: false } });
   await controller.step('core:solo'); await controller.step('apply');
-  expect(controller.model().rows.join('\n')).toContain('Profile core:solo');
+  expect(controller.model().rows.join('\n')).toContain('Profile Solo');
   expect(controller.model().options.find(row => row.id === 'apply')?.label).toBe('Confirm the previewed permissions');
   await controller.step('apply');
   const applied = await observeSetupPermissions(f.root, 's', f.options);

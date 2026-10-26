@@ -893,6 +893,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   UNINSTALL_SCOPE_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_SCOPE_UNVERIFIED', p, l) }) },
   UNINSTALL_FINAL_TAIL_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_FINAL_TAIL_UNKNOWN', p, l) }) },
   UNINSTALL_AUTHORITY_UNVERIFIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_AUTHORITY_UNVERIFIED', p, l) }) },
+  UNINSTALL_PURGE_PROJECT_DATA: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_PURGE_PROJECT_DATA', p, l) }) },
   INSTALLATION_PUBLICATION_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PUBLICATION_INVALID', p, l) }) },
   INSTALLATION_PUBLICATION_CONFLICT: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PUBLICATION_CONFLICT', p, l) }) },
   INSTALLATION_PUBLICATION_CHANGED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_PUBLICATION_CHANGED', p, l) }) },

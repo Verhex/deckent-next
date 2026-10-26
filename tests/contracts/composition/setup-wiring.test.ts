@@ -84,7 +84,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init: unattended --y
     expect((JSON.parse(await readFile(join(f.root, '.deckent', 'config.json'), 'utf8')) as Record<string, unknown>)['identity']).toBeUndefined();
     expect((await stages()).find(stage => stage.id === 'core:profile')).toMatchObject({ state: 'done', reason: { code: 'setup.reason.profileConfigured', params: { profile: 'core:solo' } },
       operation: null, cli: null });
-    expect((await f.run(['doctor'])).stdout).toMatch(/ok\s+Identity profile: core:solo/u);
+    expect((await f.run(['doctor'])).stdout).toMatch(/ok\s+Identity profile: Solo/u);
   }, 180_000);
 
   it('an AI agent environment: the plan only without --yes, never a Docker install offer, nothing written to the folder', async () => {

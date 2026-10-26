@@ -486,6 +486,7 @@
   "cli.human.acceptance.independent": "checked by the system, not by the worker's claim",
   "cli.human.acceptance.checkUnknown": "what it checks is not known to this version",
   "error.CLI_SCOPE_REQUIRED": "{command} needs a scope: add --scope <id>. Valid scopes: {scopes}",
+  "error.CLI_SCOPE_REQUIRED.none": "{command} needs a scope: add --scope <id>. No scope is set up here yet; for a new installation choose a short name, for example --scope my-project.",
   "error.CLI_ID_AMBIGUOUS": "'{prefix}' matches {count} identifiers: {candidates} (+{more} more). Type more characters.",
   "error.CLI_ID_UNKNOWN": "No identifier starts with '{prefix}'.",
   "error.CLI_ID_TOO_SHORT": "'{prefix}' is too short: type at least {min} characters of the identifier, or all of it.",

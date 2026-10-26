@@ -17,7 +17,7 @@ type Choice = Readonly<{ id: string; label: string; answer?: unknown; action: 'a
 export const activeStage = (plan: SetupPlan, later: ReadonlySet<string>) =>
   plan.stages.find(stage => !later.has(stage.id) && (stage.state === 'needs-answer' || (stage.state === 'ready' && stage.operation !== null))) ?? null;
 
-/** The answers offered for one stage, at most `windowOptionRows`. Nothing is preselected (the window starts with no highlighted answer). */
+/** The answers offered for one stage, at most `windowOptionRows`; the window highlights `initialChoice` (owner 2026-10-26: Enter accepts it). */
 export function stageChoices(stage: SetupStage | null, observation: SetupObservation, locale: Locale, stageRegistry: SetupStageRegistry = new SetupStageRegistry(), profiles: IdentityProfileListing['profiles'] = new IdentityProfileRegistry().list()): readonly Choice[] {
   const later: Choice = { id: 'later', label: t('setup.window.later', {}, locale), action: 'later' };
   if (!stage) return [{ id: 'close', label: t('setup.window.close', {}, locale), action: 'close' }];
@@ -39,6 +39,9 @@ export function stageChoices(stage: SetupStage | null, observation: SetupObserva
   return [later];
 }
 
+/** The recommended answer: the one the stage's default names (the detected language, the preset profile, a yes/no default), else the first. */
+export const initialChoice = (stage: SetupStage | null, choices: readonly Choice[]) =>
+  Math.max(0, stage?.default == null ? 0 : choices.findIndex(choice => choice.answer !== undefined && JSON.stringify(choice.answer) === JSON.stringify(stage.default)));
 /** The stage an apply runs: its own operation, or for the model stage the `models connect` flow in the installation's scope. */
 const applied = (stage: SetupStage, scopeId: string | null): SetupStage | null => stage.operation ? stage
   : stage.id === 'core:model' && scopeId ? { ...stage, operation: { id: 'model.connect', version: 1, input: { scopeId } } } : null;
@@ -66,7 +69,10 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
       stage ? stageText(current, stage.reason.code, stage.reason.params, locale) : finished,
       stage?.question ? stageText(current, stage.question.key, stage.question.params, locale) : '',
       note || (stage && stageCommand(stage) ? `$ ${stageCommand(stage)}` : '')];
-    return { title: t('setup.window.title', {}, locale), rows, options: choices(stage).map(({ id, label }) => ({ id, label })),
+    // R05: the reason and the question wrap (not cut) inside a fixed row count each; the stage rows and the command keep one row.
+    const heights = rows.map((_row, index) => index === rows.length - 3 ? registry.windowTextRows.reason : index === rows.length - 2 ? registry.windowTextRows.question : 1);
+    const offered = choices(stage);
+    return { title: t('setup.window.title', {}, locale), rows, heights, options: offered.map(({ id, label }) => ({ id, label })), initial: initialChoice(stage, offered),
       optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
   };
   /** After an apply: the next state comes only from a fresh observation; a stage still open afterwards is put off (bounded, no loop). */

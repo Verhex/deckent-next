@@ -6,15 +6,20 @@ const observation = { schemaVersion: 2 as const, environment: { platform: 'linux
   profile: { available: [], selected: null }, policy: { state: 'current' as const }, sandbox: { realm: 'bubblewrap' as const, selfTest: 'ok' as const, usernsRestricted: false },
   model: { connections: 1 }, check: { state: 'ok' as const } };
 const snapshot: OnboardingSnapshot = { configBasis: { projectDigest: 'a'.repeat(64), globalDigest: 'b'.repeat(64) }, observation, plan: planSetup(observation, undefined, new SetupStageRegistry(), { phase: 'onboarding' }), answers: {}, deferred: [], modelUsable: true,
-  folder: 'orders', folderFacts: { kind: 'documents', readme: false, tests: false }, scopeId: 's',
+  folder: 'orders', folderFacts: { kind: 'documents', entries: ['orders.pdf'] }, scopeId: 's',
   hosts: [{ id: 'first', cli: 'absent', login: 'found' }, { id: 'second', cli: 'found', login: 'found' }],
   budget: { needed: true, presetUsd: 10, presetsUsd: [5, 10, 25], currentUsd: 0 }, permissions: { state: 'applied', reason: '' }, pending: [] };
 it('U4-4: bounded registry selection supplies three applicable choices, sealed extension and explicit submission only', () => {
   const registry = new FirstTaskRegistry(); registry.register([{ id: 'business', order: 1, kinds: ['documents'], requires: [], labelKey: 'onboarding.firstTask.topics.label', intentKey: 'onboarding.firstTask.topics.intent', effectKey: 'onboarding.firstTask.readOnly' }]);
   expect(registry.select(snapshot.folderFacts).map(row => row.id)).toEqual(['business', 'folder-summary', 'topics']);
   expect(() => registry.register([])).toThrow();
-  for (const kind of ['empty', 'unknown', 'documents'] as const) expect(new FirstTaskRegistry().select({ kind, readme: false, tests: false }).map(row => row.id)).toEqual(['folder-summary', 'topics', 'questions']);
-  expect(new FirstTaskRegistry().select({ kind: 'coding', readme: true, tests: true }).map(row => row.id)).toEqual(['project-summary', 'readme', 'tests']);
+  for (const kind of ['unknown', 'documents'] as const) expect(new FirstTaskRegistry().select({ kind, entries: [] }).map(row => row.id)).toEqual(['folder-summary', 'topics', 'questions']);
+  // OB3: the three follow the folder's own facts (registry patterns over its visible names), never one generic list.
+  const pick = (kind: 'coding' | 'empty', entries: readonly string[]) => new FirstTaskRegistry().select({ kind, entries }).map(row => row.id);
+  expect(pick('coding', ['README.md', 'tests', 'src'])).toEqual(['project-summary', 'readme', 'tests']);
+  expect(pick('coding', ['package.json', 'src'])).toEqual(['project-summary', 'build-run', 'readme-write']);
+  expect(pick('coding', [])).toEqual(['new-project', 'readme-write', 'plan']);
+  expect(pick('empty', [])).toEqual(['new-project', 'plan', 'draft']);
   const input = { text: 'Inspect orders', scopeId: 's', folder: 'orders', commandId: 'one' };
   expect(firstTaskIntent({ ...input, action: 'highlight' })).toBeNull(); expect(firstTaskIntent({ ...input, action: 'later' })).toBeNull();
   expect(firstTaskIntent({ ...input, action: 'submit' })).toEqual({ intent: 'Inspect orders', scopeId: 's', folder: 'orders', commandId: 'one' });
@@ -64,6 +69,25 @@ it('U4C: a relaunched ready card skips settled owners, refuses a refused write a
   const blocked = { ...snapshot, plan: { ...snapshot.plan, stages: [stage('execution:worker', true),
     { ...stage('execution:worker-settings', true), state: 'blocked' as const }, stage('work:kind', true), stage('work:pool', true)] } };
   expect(onboardingSteps(blocked).find(row => row.kind === 'ready')?.stages[0]?.state).toBe('blocked');
+});
+
+it('R13/R18: the image card follows an answered work choice, the step total is known up front, and a settled deferral is forgotten', async () => {
+  const stage = (id: string, state: SetupStage['state'], code = 'setup.work.kindDone'): SetupStage => ({ id, namespace: id.split(':')[0]!, title: 'setup.work.kindTitle', phase: 'onboarding', state,
+    reason: { code, params: {} }, operation: null, question: null, default: null, cli: null, autoEligible: false });
+  const before = { ...snapshot, budget: { ...snapshot.budget, needed: false }, folderFacts: { kind: 'coding' as const, entries: [] },
+    plan: { ...snapshot.plan, stages: [stage('work:kind', 'needs-answer'), stage('coding:first-commit', 'ready'), stage('execution:worker', 'skipped', 'setup.execution.noWorkKind')] } };
+  const after = { ...before, plan: { ...before.plan, stages: [stage('work:kind', 'done'), stage('coding:first-commit', 'ready'), stage('execution:worker', 'blocked', 'setup.execution.workerConsentRequired')] } };
+  expect(onboardingSteps(after).map(row => row.id)).toEqual(['execution:worker', 'coding:first-commit', 'onboarding:first-task']);
+  let current: OnboardingSnapshot = before; const settled: string[][] = [];
+  const port = { observe: async () => current, assertPerson: async () => {}, settle: async (ids: readonly string[]) => { settled.push([...ids]); } } as OnboardingPort;
+  const session = createOnboardingSession(port, before);
+  expect(session.model().total).toBe(4);
+  current = after; const answered = await session.finish(session.model().steps[0]!);
+  expect(answered.total).toBe(4); expect(answered.steps[0]?.id).toBe('execution:worker');
+  // Permissions applied and a usable model elsewhere: both deferrals leave the notice and the store; the open first commit stays deferred.
+  current = { ...after, deferred: ['permissions:start-mode', 'core:model', 'coding:first-commit'] };
+  expect(deferredOnboardingNotice(current, 'en')).not.toMatch(/model|permission/iu);
+  await session.refresh(); expect(settled).toEqual([['permissions:start-mode', 'core:model']]);
 });
 
 it('U4E G2: install permission recovery precedes an absent model; not-applicable profiles never get a permission success card', () => {

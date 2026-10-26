@@ -69,7 +69,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       }
     } finally { reader.close(); }
     return { configBasis, plan: planned, observation: observed.observation, answers: values, deferred: (await store.list(principal, folder)).map(row => row.stageId),
-      modelUsable, folder, folderFacts: { kind, readme: visible.some(name => /^readme(?:\.|$)/iu.test(name)), tests: visible.some(name => /^(test|tests|spec|specs)$/u.test(name)) }, scopeId,
+      modelUsable, folder, folderFacts: { kind, entries: visible }, scopeId,
       ready: { provider: typeof values['work:kind'] === 'string' ? values['work:kind'] : null, imageId: selectedImage, fallbackBefore: config.execution?.docker?.imageId ?? null, fallbackAfter: stages.find(row => row.id === 'execution:worker-settings')?.operation ? selectedImage : config.execution?.docker?.imageId ?? selectedImage },
       admittedProviders: (observed.observation.families?.['work'] as { providers?: readonly string[] } | undefined)?.providers ?? [],
       hosts: coding?.hosts ?? [], budget: { needed: binding?.billing === 'metered' && (currentUsd === 0 || currentUsd === null), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
@@ -92,7 +92,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
         provider: String(input['provider']), image: String(input['image']), kind: String(input['kind']) };
     },
     async defer(stageId: string, planDigest: string) { await assertPerson(); await prepareProductFile(context.layout, 'onboarding');
-      await store.defer({ principal, folder, stageId, planDigest, deferredAt: Date.now() }); },
+      await store.defer({ principal, folder, stageId, planDigest, deferredAt: Date.now() }); }, async settle(stageIds: readonly string[]) { await assertPerson(); await store.settle(principal, folder, stageIds); },
     async apply(stage: SetupStage, basis: Readonly<{ projectDigest: string | null; globalDigest: string }>) { await assertPerson(); return setup.applySetupStage(root, stage, { ...options, scopeId, expectedConfig: basis }); },
     async previewConsent(provider: string) { await assertPerson(); return previewOnboardingConsent(root, provider, options); },
     async consent(provider: string, digest: string, imageId?: string) {

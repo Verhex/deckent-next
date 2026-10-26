@@ -160,10 +160,13 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       }
       const models = new Map(await Promise.all(connect.kinds.map(async kind => [kind.id,
         await connectionModelRows(kind, connect, Boolean(host.connectModel), declared, locale)] as const)));
+      const reading = await host.inspectInvocableModels?.(root, scopeId, options);
       const kinds: ProviderPanelKind[] = await Promise.all(connect.kinds.map(async kind => {
         const keyName = kind.secretName, stored = keyName !== null && names !== null && names.includes(keyName), using = keyName ? named.filter(ref => ref === keyName).length : 0;
+        // A keyless server's models are this kind's own (its seed provider, or the kind id plus the address digest): "connected", never "not connected".
+        const linked = kind.keyRequired ? 0 : (reading?.models ?? []).filter(model => model.reference.providerId === kind.catalogProviderId || new RegExp(`^${kind.id}-[0-9a-f]{32}$`, 'u').test(model.reference.providerId)).length;
         const detail = !kind.available ? '' : keyName === null ? '-' : names === null ? t('tui.provider.state.unknown', { name: keyName }, locale)
-          : stored ? t('tui.provider.state.stored', { name: keyName, count: using }, locale) : t('tui.provider.state.notConnected', {}, locale);
+          : stored ? t('tui.provider.state.stored', { name: keyName, count: using }, locale) : linked ? t('tui.provider.state.models', { count: linked }, locale) : t('tui.provider.state.notConnected', {}, locale);
         let grantBlocked: string | null = null, grantRequired = false;
         if (stored && host.connectProviderSecret && secretGrant?.check) { try { await secretGrant.check(keyName!); } catch (error) {
           grantBlocked = errorText(error); grantRequired = (error as { code?: unknown } | null)?.code === 'SECRET_GRANT_REQUIRED';
@@ -186,7 +189,6 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
           legacy: true });
       }
       if (!host.setSecret) notes.push(t('tui.provider.note.noStore', {}, locale));
-      const reading = await host.inspectInvocableModels?.(root, scopeId, options);
       if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
       for (const model of reading?.models ?? []) notes.push(`${model.reference.providerId} / ${model.label}: ${modelInvocabilityText(model.availability, locale)}`);
       return { title: t('tui.panel.provider.title', {}, locale), kinds, notes, ...(reading ? { invocableModels: reading.models } : {}) };
@@ -239,13 +241,14 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
           keyLine = { label: t('tui.provider.field.key', {}, locale), text: `${t('tui.provider.key.notStored', {}, locale)} ${errorText(error)}`, tone: 'warning' };
         }
       }
-      const using = name ? (await refs().catch(() => [] as readonly string[])).filter(ref => ref === name).length : 0;
-      const next: PanelLine = kind.connectFamily === null ? { label: t('tui.provider.field.next', {}, locale), text: t('tui.provider.state.modelsNextSlice', {}, locale), tone: 'muted' }
-        : { label: t('tui.provider.field.next', {}, locale), text: probe.workspaceRequired ? t('tui.workspace.required', {}, locale) : using > 0 ? t('tui.provider.next.bound', { count: using }, locale)
-        : t('tui.provider.next.unbound', { name: name ?? '-', scope: scopeId }, locale), tone: 'muted' };
-      const ok = stored || request.key === null;
-      const lines = [check, ...where, keyLine, next];
+      const ok = stored || request.key === null, pulled = ok && Boolean(host.connectModel) && kind.pull === 'available' && Boolean(kind.connectFamily);
+      const lines: PanelLine[] = [check, ...where, keyLine];
       const workspaces = ok ? await pullModels(kind, request.endpoint, lines, probe.workspaceRequired === true) : undefined;
+      // After the pull: a pull reports its own models and next step, so "no model uses the key yet" never contradicts it (FIX8c).
+      const using = name ? (await refs().catch(() => [] as readonly string[])).filter(ref => ref === name).length : 0;
+      const next = kind.connectFamily === null ? t('tui.provider.state.modelsNextSlice', {}, locale) : probe.workspaceRequired ? t('tui.workspace.required', {}, locale)
+        : pulled ? null : using > 0 ? t('tui.provider.next.bound', { count: using }, locale) : t('tui.provider.next.unbound', { name: name ?? '-', scope: scopeId }, locale);
+      if (next) lines.splice(2 + where.length, 0, { label: t('tui.provider.field.next', {}, locale), text: next, tone: 'muted' });
       return { ...(workspaces ? { workspaces } : {}), stored, title: ok ? t('tui.provider.result.ok', { kind: label }, locale) : t('tui.provider.result.refused', { kind: label }, locale), lines,
         ...(stored ? { keyName: name } : {}) };
     },

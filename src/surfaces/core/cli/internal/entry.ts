@@ -64,6 +64,9 @@ function interactiveTerminal(context: CommandContext): boolean {
 }
 
 export async function main(argv: readonly string[] = process.argv.slice(2), context: CommandContext = {}): Promise<ExitCode> {
+  // R34: `--lang <locale>` is a global option (top help); before the command word it means the same as after it.
+  if (argv[0] === '--lang' && argv[1] !== undefined && !argv[1].startsWith('-')) argv = [...argv.slice(2), '--lang', argv[1]];
+  const words = argv.at(-2) === '--lang' ? argv.slice(0, -2) : argv;
   // L-KIT: the host resolved the call's locale once (config language included), so an error before a command reports its own locale
   // renders in the same language as its heading.
   let locale = context.locale ?? resolveLocale(undefined, context.env);
@@ -76,9 +79,9 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       return 0;
     }
     const terminalFlags = argv[0] === '--scope';
-    const interactive = terminalFlags || (argv.length === 0 && interactiveTerminal(context)) || (argv.length === 1 && argv[0] === '--full-access');
+    const interactive = terminalFlags || (words.length === 0 && interactiveTerminal(context)) || (words.length === 1 && words[0] === '--full-access');
     // `--version`, an unknown command and piped bare `deckent` need no host (COLDSTART): the host's operations load only for a command or the terminal.
-    if (!interactive && !CLI_COMMANDS.some(item => item.name === argv[0])) return emitDispatch(argv, locale, context);
+    if (!interactive && !CLI_COMMANDS.some(item => item.name === argv[0])) return emitDispatch(words, locale, context);
     if (context.loadHost) context = { ...context, ...(await context.loadHost()) };
     context.initialize?.();
     // ID-1C: the relocation stop precedes every installation-bound command. Commands that own their installation load/recovery and
@@ -111,7 +114,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
         await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }).catch(() => undefined));
       return (await command.run(argv, { ...context, locale, onLocale: value => { locale = value; context.onLocale?.(value); } })) ?? 0;
     }
-    return emitDispatch(argv, locale, context);
+    return emitDispatch(words, locale, context);
   } catch (error) {
     // Echo only registered command words, never an invalid argument or its potentially sensitive value.
     const path = CLI_COMMANDS.filter(item => item.path.every((part, index) => argv[index] === part)).sort((a, b) => b.path.length - a.path.length)[0]?.path;
