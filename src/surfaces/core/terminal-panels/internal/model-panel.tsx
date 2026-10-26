@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { PICKER_INITIAL, pickerView, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
-import { PickerWindow } from './picker-window.js';
+import { PickerWindow, useLoadingText } from './picker-window.js';
 import { ProviderPanel } from './provider-panel.js';
 import { BudgetWindow, budgetEntry } from './budget-panel.js';
 import { WorkspaceWindow } from './workspace-panel.js';
@@ -68,7 +68,8 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
     port.protocol?.inspect().then(value => { if (live) setProtocol(value); }, () => undefined);
     return () => { live = false; mounted.current = false; };
   }, [port]);
-  if (!view) return <PickerWindow title={[span(labels.loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
+  const loading = useLoadingText(labels, !view || preparing);
+  if (!view) return <PickerWindow title={[span(loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
     onClose={onClose} onResult={onClose} />;
   if (providerOpen && port.provider) return <ProviderPanel port={port.provider} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={() => { setProviderOpen(false); void port.inspect().then(setView, onError); }} />;
   if (budgetOpen && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={onClose} />;
@@ -123,7 +124,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
     onResult={result => { if (result.kind !== 'selected' || result.id !== 'apply') { setFix(null); return; }
       setPreparing(true); const selected = fix; setFix(null);
       port.fix!(selected.choice, selected.action).then(() => port.inspect()).then(setView, onError).finally(() => setPreparing(false)); }} />;
-  if (preparing) return <PickerWindow title={[span(labels.loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
+  if (preparing) return <PickerWindow title={[span(loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
     onClose={() => { mounted.current = false; onClose(); }} onResult={() => undefined} />;
   if (shadow) {
     const tree: PickerTree = { title: fillTemplate(words.shadowTitle, { model: shadow.projectModel }), items: [{ id: 'remove', label: words.shadowRemove },

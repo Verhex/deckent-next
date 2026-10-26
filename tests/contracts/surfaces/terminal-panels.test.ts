@@ -77,6 +77,13 @@ describe('/mode window', () => {
     await view.press(`${DOWN}${DOWN}${DOWN}${ENTER}`); // wraps to full-auto (standart → ask-edits → full-auto)
     expect(selected).toEqual(['full-auto']); expect(calls.closed).toBe(1);
   });
+  it('a load that lasts a second or more shows its live elapsed seconds (FIX8a R26)', async () => {
+    const view = mount(panel('mode', { mode: { inspect: () => new Promise<PermissionModeView>(() => undefined), current: () => 'standart', select: async () => undefined } }).element);
+    await settle(80);
+    expect(view.frame()).toContain('Loading…'); expect(view.frame()).not.toContain('Loading… ·');
+    await settle(1_100);
+    expect(view.frame()).toContain('Loading… · 1s');
+  });
   it('the tree: a v1 policy locks every stop; the company may leave full-auto out; the grant opens full access', () => {
     const labels = terminalPanelLabels('en').mode;
     expect(modePanelTree({ ...VIEW, supported: false }, null, labels).items.every(item => item.blocked)).toBe(true);

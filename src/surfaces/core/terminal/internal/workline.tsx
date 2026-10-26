@@ -299,11 +299,12 @@ export function WorklineApp(props: WorklineProps) {
   const pushLive = pushMode !== 'poll'; // A refused feed must not restart through fallback polling.
   const followWorkers = ledger?.followEvents ? undefined : ledger?.followWorkers, followRuns = ledger?.followEvents ? undefined : ledger?.followRuns;
   const failed = useCallback((error: unknown) => setWatchStatusLines([`${labels.watchFailed}: ${errorText(error)}`]), [errorText, labels.watchFailed]);
-  const slot = useWindowSlot();
+  const slot = useWindowSlot(), slotNow = useRef(slot); slotNow.current = slot;
+  // FIX8a R25/R26/R28: the mode port must not change with the window slot; its identity keys the mode refresh and the `/mode`/`/model` reads.
   const permissionMode = useMemo(() => props.permissionMode ? { ...props.permissionMode,
     ...(props.permissionMode.open ? { open: (target: Exclude<import('#domain/index.js').PermissionMode, 'standart'>) => props.permissionMode!.open!(target,
-      (question, signal) => askGrantWindow(slot, labels.work?.window.position ?? '{from}-{to}/{total}', question, signal)) } : {}) } : undefined,
-  [props.permissionMode, slot, labels.work?.window.position]);
+      (question, signal) => askGrantWindow(slotNow.current, labels.work?.window.position ?? '{from}-{to}/{total}', question, signal)) } : {}) } : undefined,
+  [props.permissionMode, labels.work?.window.position]);
   const mode = useWorklineMode(permissionMode, push, errorText, labels.work?.unavailable ?? labels.ledgerUnavailable, labels.mode, props.fullAccess === true, sessionId);
   const work = useWorkSurface({ panel, state, ledger, labels, push, errorText, pollMs, pushLive, watchingWorkers: watch.workers,
     context: { ...(props.projectRoot ? { project: props.projectRoot } : {}), ...(props.homeDirectory ? { home: props.homeDirectory } : {}), ...(mode.stop ? { mode: mode.stop } : {}) },

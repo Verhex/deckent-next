@@ -305,6 +305,8 @@ export interface PanelLabels {
   readonly picker: PickerLabels;
   readonly position: string;
   readonly loading: string;
+  /** `{seconds}` of a load that has lasted a second or more, shown after `loading`. */
+  readonly elapsed: string;
   readonly mode: ModePanelLabels;
   readonly config: ConfigPanelLabels;
   readonly mcp: McpPanelLabels;

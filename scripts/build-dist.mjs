@@ -91,6 +91,10 @@ export function ajvGuard({ metafile, shipped, embedded, hits }) {
   return out;
 }
 
+/** Third-party development builds (`*.development.js`, e.g. React's dev reconciler) that reached the bundle. */
+export const developmentInputs = metafile => Object.keys(metafile.inputs).map(input => input.replaceAll('\\', '/'))
+  .filter(input => /(?:^|\/)node_modules\/.*\.development\.[cm]?js$/u.test(input));
+
 const walk = (dir, out = []) => { for (const entry of readdirSync(dir, { withFileTypes: true })) { const path = join(dir, entry.name);
   if (entry.isDirectory()) walk(path, out); else out.push(path); } return out; };
 const sha256 = path => createHash('sha256').update(readFileSync(path)).digest('hex');
@@ -137,8 +141,9 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   } };
   const standalone = STANDALONE_ENTRIES.map(entry => join(dist, entry));
   for (const entry of standalone) if (!files.includes(entry)) throw new Error(`standalone entry ${relative(dist, entry)} missing from dist`);
+  // FIX8a R27: the package is a production build; React/scheduler/reconciler pick their builds by NODE_ENV, which a customer's shell rarely sets.
   const common = { absWorkingDir: root, outbase: dist, outdir: join(stage, 'dist'), bundle: true, format: 'esm', platform: 'node', target: 'node24',
-    legalComments: 'eof', external: OPTIONAL_EXTERNALS, metafile: true, logLevel: 'warning', plugins: [own, ajvStubPlugin(stubHits)] };
+    define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'eof', external: OPTIONAL_EXTERNALS, metafile: true, logLevel: 'warning', plugins: [own, ajvStubPlugin(stubHits)] };
   const split = await build({ ...common, entryPoints: files.filter(file => file.endsWith('.js') && !standalone.includes(file)), splitting: true,
     chunkNames: 'vendor/[name]-[hash]' });
   // Unsplit: one output file per entry, nothing shared with the split build. Same plugins, so a relative import stays external and is refused below.
@@ -175,6 +180,8 @@ export async function buildDist({ root = ROOT, out = join(ROOT, '.pack'), timest
   const embedded = embeddedInBundle(root, shipped, licenses);
   const ajvViolations = ajvGuard({ metafile: result.metafile, shipped, embedded, hits: stubHits });
   if (ajvViolations.length) throw new Error(`the package would ship the MCP SDK's ajv/fast-uri (FASTURI-OUT):\n  ${ajvViolations.join('\n  ')}`);
+  const development = developmentInputs(result.metafile);
+  if (development.length) throw new Error(`the package would ship development builds (React dev reconciler: unbounded performance entries):\n  ${development.join('\n  ')}`);
   const bom = cyclonedx({ pkg: manifest, identity, tools: [{ name: 'esbuild', version: esbuildVersion }, { name: 'deckent build-dist', version: '1' }],
     shipped, embedded, native, timestamp: timestamp ?? identity.builtAt });
   const locked = lockedLicenseTexts(root);

@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { bundledNativeComponents, bundledPackages, cyclonedx, embeddedInBundle, lockedLicenseTexts, npmPurl, packageDirOf, thirdPartyNotices } from '../../../scripts/dist-sbom.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
-import { ajvGuard, declarationImports, publishedManifest, STANDALONE_ENTRIES, standaloneImportProblems, stubAjvImport } from '../../../scripts/build-dist.mjs';
+import { ajvGuard, declarationImports, developmentInputs, publishedManifest, STANDALONE_ENTRIES, standaloneImportProblems, stubAjvImport } from '../../../scripts/build-dist.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
 import { sbomComponents } from '../../../scripts/deps-watch.mjs';
 // @ts-expect-error JavaScript build tooling has no declaration file.
@@ -139,6 +139,16 @@ describe('MCP SDK ajv provider stub and guard', () => {
       'bundle input node_modules/@modelcontextprotocol/server/dist/cfWorkerProvider-p3WaZPqB.mjs',
       'shipped package fast-uri@3.1.8', 'embedded fast-uri@3.1.0 in @modelcontextprotocol/client@2.2.0 (dist/ajvProvider-97rDpkRx.mjs)',
       'embedded @cfworker/json-schema@4.1.1 in @modelcontextprotocol/server@2.2.0 (dist/cfWorkerProvider-p3WaZPqB.mjs)']);
+  });
+});
+
+// FIX8a R27: the package is a production build; a third-party development build (React's dev reconciler writes a performance entry per
+// component render, without bound) fails the build.
+describe('production build guard', () => {
+  it('reports only third-party development builds, with Windows metafile separators', () => {
+    expect(developmentInputs({ inputs: { [String.raw`node_modules\react-reconciler\cjs\react-reconciler.development.js`]: {},
+      'node_modules/react/cjs/react.production.js': {}, 'node_modules/scheduler/cjs/scheduler.development.js': {}, 'dist/surfaces/core/x.development.js': {} } }))
+      .toEqual(['node_modules/react-reconciler/cjs/react-reconciler.development.js', 'node_modules/scheduler/cjs/scheduler.development.js']);
   });
 });
 

@@ -5,6 +5,7 @@ import { RenderGlyphsContext, resolveRenderGlyphs } from '#surfaces/core/termina
 import type { TerminalHandover } from './handoff.js';
 import { createClipboardWriter, type ClipboardResult } from './clipboard.js';
 import { mainScreenOutput, mouseFilteredInput, FOCUS_REPORTING_OFF, FOCUS_REPORTING_ON, MOUSE_REPORTING_OFF, MOUSE_REPORTING_ON, osc52Copy, type PointerSource, type WheelSource } from '#surfaces/core/terminal-window/index.js';
+import LIMITS from './host-limits.json' with { type: 'json' };
 
 /** The terminal bell: audible or a taskbar/tab flash by the terminal's own setting; the one signal every terminal and multiplexer passes through. */
 const ATTENTION_BELL = '\u0007';
@@ -79,8 +80,15 @@ export async function runTerminalHost(options: TerminalHostOptions): Promise<voi
   const stop = () => instance.unmount();
   signal?.addEventListener('abort', stop, { once: true });
   if (mouse) { reportingOn(); process.once('exit', reportingOff); }
+  // FIX8a R27: Node prints a process warning straight to stderr, over the view; it is held while the view is mounted and emitted after it
+  // (the first `heldWarningsMax` of registry `host-limits.json`; a flood is cut, never buffered without bound).
+  const warningListeners = process.listeners('warning'), held: Error[] = [];
+  const hold = (warning: Error) => { if (held.length < LIMITS.heldWarningsMax) held.push(warning); };
+  process.removeAllListeners('warning'); process.on('warning', hold);
   try { await instance.waitUntilExit(); }
   finally {
+    process.off('warning', hold); for (const listener of warningListeners) process.on('warning', listener);
+    for (const warning of held) process.emitWarning(warning);
     signal?.removeEventListener('abort', stop);
     if (mouse) { reportingOff(); process.off('exit', reportingOff); mouse.close(); }
     // The conversation goes to the main screen after the alternate screen is left, so it stays in the terminal's own scrollback.
