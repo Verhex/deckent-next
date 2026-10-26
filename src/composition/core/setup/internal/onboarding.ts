@@ -14,9 +14,8 @@ import { consentConfiguredWorkerImage } from '#composition/core/toolchains/index
 import { startConfiguredRunIntent, transitionConfiguredRunIntent } from '#composition/core/run-planner/index.js';
 import { snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { previewOnboardingConsent } from './consent-preview.js';
-import type { configuredSetup } from './wiring.js';
+import type { AddCodingProfile, configuredSetup } from './wiring.js';
 import { observeSetupPermissions, applySetupPermissions } from './permissions.js';
-import { addNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { applyConfiguredFirstCommit } from './first-commit.js';
 /** Trusted host binding. Canonical launch-folder and authenticated principal are derived here, never accepted as authority from UI answers. */
 export async function configuredOnboarding(host: object, setup: Pick<ReturnType<typeof configuredSetup>, 'observeSetup' | 'applySetupStage'>,
@@ -88,7 +87,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     async permissions(digest: string, profile?: Readonly<{ id: string; version: number }>) { await assertPerson(); await applySetupPermissions(root, scopeId, digest, options, undefined, profile); },
     async previewProfile(stage: SetupStage) {
       await assertPerson(); const input = stage.operation?.input ?? {};
-      const result = await addNativeCodingProfile(root, { provider: input['provider'], kind: input['kind'], image: input['image'], apply: false }, options);
+      const result = await (host as { addCodingProfile?: AddCodingProfile }).addCodingProfile!(root, { provider: input['provider'], kind: input['kind'], image: input['image'], apply: false }, options);
       return { digest: result.digest, expect: result.expect, profile: `${result.profile.id}@${result.profile.version}`,
         provider: String(input['provider']), image: String(input['image']), kind: String(input['kind']) };
     },

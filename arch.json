@@ -3669,7 +3669,6 @@
         "src/adapters/core/approval-store",
         "src/platform/core/clock",
         "src/composition/core/approvals",
-        "src/composition/core/native-coding",
         "src/engine/core/identity-profile",
         "src/adapters/core/contract"
       ],

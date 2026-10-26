@@ -37,6 +37,10 @@ Observe:
       [--scope <id>] [--json]
 
 Execute work:
+  hub         Manage signed Hub packages and sources.
+      sources list|add|remove | search | inspect | install | update |
+      uninstall | verify | export | refresh | cards | publish | yank | revoke
+      [--scope <id>] [--input <file|->]
   do          Plan an intent through Brain and existing approval gates
       --request <text> [--scope <id>]
   run         Create and manage Runs

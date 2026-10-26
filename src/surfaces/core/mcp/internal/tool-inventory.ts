@@ -24,6 +24,9 @@ export const MCP_UNGROUPED_WRITE_TOOLS = Object.freeze({
   // capability cell with `ids: all` offers them; each call needs the MCP actor's own active key and is verified at commit.
   define_agent: 'signed-catalog-action-scoped-grant', define_skill: 'signed-catalog-action-scoped-grant', import_skill: 'signed-catalog-action-scoped-grant',
   change_agent_standing: 'signed-catalog-action-scoped-grant', dismiss_agent_suggestion: 'signed-catalog-action-scoped-grant',
+  // H7 Hub writes: a person grants each tool by name; no delegation group gains Hub authority. Hub policy (hub scope grant) still decides each call.
+  hub_install: 'per-tool-person-hub-grant', hub_update: 'per-tool-person-hub-grant', hub_uninstall: 'per-tool-person-hub-grant', hub_refresh: 'per-tool-person-hub-grant',
+  hub_publish: 'per-tool-person-hub-grant', hub_yank: 'per-tool-person-hub-grant', hub_revoke: 'per-tool-person-hub-grant',
 } as const);
 
 export type McpWithheldTool = keyof typeof MCP_WITHHELD_TOOLS;

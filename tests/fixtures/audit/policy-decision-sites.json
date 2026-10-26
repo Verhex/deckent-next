@@ -26,6 +26,7 @@
     "src/engine/core/config/internal/policy.ts": { "sites": 2, "class": "unsealed", "note": "only allow sealed (config-change); require-approval opens a config-change approval" },
     "src/engine/core/decision/internal/authorization.ts": { "sites": 1, "class": "unsealed", "note": "decision port actions; inspect is a read-gate" },
     "src/engine/core/effect/internal/application.ts": { "sites": 1, "class": "partial", "kind": "authority-refusal", "note": "sealed only for policy.administer; other operations leave an effect-store refused record" },
+    "src/engine/core/hub-operations/internal/authorization.ts": { "sites": 1, "class": "unsealed", "note": "hub search/install/publish/yank/revoke grant; a refusal throws a typed policy error with no sealed audit record, an allow carries ruleId and revision into the client receipt" },
     "src/engine/core/identity-profile/internal/application.ts": { "sites": 1, "class": "read-gate", "note": "scope/inspect draft preview" },
     "src/engine/core/identity-profile/internal/distribution.ts": { "sites": 2, "class": "unsealed", "note": "pre-checks before administration.submit" },
     "src/engine/core/installation/internal/application.ts": { "sites": 2, "class": "unsure", "note": "checks an authored profile's policy (profile validation or gate)" },
