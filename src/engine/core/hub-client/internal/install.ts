@@ -10,7 +10,11 @@ export const hubItemCommandId = (commandId: string, kind: string, id: string) =>
 /** Exact dependency closure, children first. Cached dependencies are verified identically; no fetch port exists. */
 export async function installClientBundles(deps: HubClientDependencies, store: HubClientStore, source: HubSource, bundles: readonly HubBundle[], feed: HubRevocationFeed,
   command: Command, principal: VerifiedPrincipal, update: boolean): Promise<readonly HubInstall[]> {
-  const bundleId = (bundle: HubBundle) => `${bundle.envelope.signatures.find(s => s.role === 'hub')?.keyId}/${bundle.manifest.packageId}@${bundle.manifest.version}`;
+  // Keyed by the pinned root hub identity the bundle claims (its delegation's hubId when an online key attested), the identity dependencies name;
+  // the claim is checked when the bundle is verified against that hub's source.
+  const hubOf = (bundle: HubBundle) => { const keyId = bundle.envelope.signatures.find(s => s.role === 'hub')?.keyId;
+    return bundle.delegation && bundle.delegation.keyId === keyId ? bundle.delegation.hubId : keyId; };
+  const bundleId = (bundle: HubBundle) => `${hubOf(bundle)}/${bundle.manifest.packageId}@${bundle.manifest.version}`;
   const byId = new Map(bundles.map(bundle => [bundleId(bundle), bundle])), visiting = new Set<string>(), visited = new Set<string>();
   const ordered: { bundle: HubBundle; source: HubSource; feed: HubRevocationFeed; keys: Awaited<ReturnType<typeof verifyClientBundle>> }[] = [];
   if (byId.size !== bundles.length) throw new HubClientError('HUB_DEPENDENCY_REFUSED');

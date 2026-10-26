@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, open, readFile, readlink, realpath, rename, rm } from 'node:fs/promises';
+import { lstat, mkdtemp, open, readFile, readlink, realpath, rename, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { workerTreeDenyForms } from '#engine/index.js';
 import { ErrorRegistry, redactForRecord, callerEnvironment } from '#platform/index.js';
@@ -17,13 +18,16 @@ export const FIRST_COMMIT_OPERATION_ID = 'coding.first-commit@1' as const;
 export type FirstCommitFlag = 'secret-name' | 'secret-content' | 'size' | 'nested-repository';
 export type FirstCommitRow = Readonly<{ path: string; bytes: number; flag: FirstCommitFlag | null }>;
 /** `offered`: HEAD unborn and nothing staged. Flagged rows come first and are excluded unless named in `include`; `digest` binds the selection,
- * each selected file's mode and content digest and the message, so the apply commits exactly the bytes the card showed and scanned. Hooks never run (plumbing); `sign` mirrors the person's commit.gpgSign. */
+ * each selected file's mode and the digest of the form Git stores (after its own clean conversion) and the message, so the apply commits exactly
+ * the bytes the card showed and scanned. Hooks never run (plumbing); `sign` mirrors the person's commit.gpgSign. */
 export type FirstCommitPreview = Readonly<{ state: 'has-commits' }> | Readonly<{ state: 'staged' }> | Readonly<{ state: 'offered'; operation: typeof FIRST_COMMIT_OPERATION_ID;
   identity: boolean; sign: boolean; hooks: 'not-run'; total: number; selected: number; flagged: number; rows: readonly FirstCommitRow[]; more: number; digest: string }>;
 export type FirstCommitResult = Readonly<{ operation: typeof FIRST_COMMIT_OPERATION_ID; commit: string; tree: string; files: number; signed: boolean }>;
-export type FirstCommitGitResult = Readonly<{ code: number | null; stdout: string; stderr: string; overflow: boolean }>;
-/** One Git process in the person's environment; `index` is a GIT_INDEX_FILE. The port the focused test wraps to inject a ref race. */
-export type FirstCommitGit = (args: readonly string[], options?: Readonly<{ input?: string | Uint8Array; index?: string; timeoutMs?: number; outputBytes?: number }>) => Promise<FirstCommitGitResult>;
+/** `bytes`: stdout exactly as Git wrote it (blob content is not text). */
+export type FirstCommitGitResult = Readonly<{ code: number | null; stdout: string; stderr: string; overflow: boolean; bytes?: Buffer }>;
+/** One Git process in the person's environment; `index` is a GIT_INDEX_FILE, `objects` a private GIT_OBJECT_DIRECTORY (a read-only preview never
+ * writes the repository's objects). The port the focused test wraps to inject a ref race. */
+export type FirstCommitGit = (args: readonly string[], options?: Readonly<{ input?: string | Uint8Array; index?: string; objects?: string; timeoutMs?: number; outputBytes?: number }>) => Promise<FirstCommitGitResult>;
 type Request = Readonly<{ root: string; env: DetectEnvironment; message: string; include?: readonly string[]; signal?: AbortSignal; git?: FirstCommitGit; effectKey?: string }>;
 
 const { git: gitRegistry, limits: detectLimits, firstCommit: policy } = registry, limits = policy.limits;
@@ -44,12 +48,12 @@ export async function firstCommitGit(root: string, env: DetectEnvironment, signa
   const base = Object.fromEntries(Object.entries(callerEnvironment(env)).filter((entry): entry is [string, string] => entry[1] !== undefined && !policy.stripEnv.includes(entry[0])));
   let directory = root;
   const run: FirstCommitGit = (args, options = {}) => new Promise(done => {
-    const child = execFile(executable!, [...gitRegistry.prefix, ...args], { cwd: directory, encoding: 'utf8', timeout: options.timeoutMs ?? detectLimits.commandTimeoutMs,
+    const child = execFile(executable!, [...gitRegistry.prefix, ...args], { cwd: directory, encoding: 'buffer', timeout: options.timeoutMs ?? detectLimits.commandTimeoutMs,
       maxBuffer: options.outputBytes ?? detectLimits.outputBytes, ...(signal ? { signal } : {}),
-      env: { ...base, ...policy.env, ...(options.index ? { GIT_INDEX_FILE: options.index } : {}) } }, (error, stdout, stderr) => {
-      const failure = error as (Error & { code?: unknown; killed?: boolean }) | null;
-      done({ code: !failure ? 0 : typeof failure.code === 'number' && !failure.killed ? failure.code : null, stdout: String(stdout ?? ''), stderr: String(stderr ?? ''),
-        overflow: failure?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' });
+      env: { ...base, ...policy.env, ...(options.index ? { GIT_INDEX_FILE: options.index } : {}), ...(options.objects ? { GIT_OBJECT_DIRECTORY: options.objects } : {}) } }, (error, stdout, stderr) => {
+      const failure = error as (Error & { code?: unknown; killed?: boolean }) | null, bytes = Buffer.from(stdout ?? '');
+      done({ code: !failure ? 0 : typeof failure.code === 'number' && !failure.killed ? failure.code : null, stdout: bytes.toString('utf8'), stderr: Buffer.from(stderr ?? '').toString('utf8'),
+        overflow: failure?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER', bytes });
     });
     child.stdin?.on('error', () => undefined); child.stdin?.end(options.input ?? '');
   });
@@ -59,12 +63,13 @@ export async function firstCommitGit(root: string, env: DetectEnvironment, signa
 }
 
 type Candidate = Readonly<{ bytes: Buffer; executable: boolean; link: boolean }>;
-type Staged = Readonly<{ mode: '100644' | '100755' | '120000'; digest: string }>;
-/** The bytes Git stages for one candidate, read once and never through a link: a regular file's whole content (the size `lstat` saw, no more,
- * no less) or a symbolic link's target. Any other kind, or a file that changed size meanwhile, throws: the repository changed under the read. */
-async function readCandidate(root: string, path: string, expected?: number): Promise<Candidate> {
+type Staged = Readonly<{ mode: '100644' | '100755' | '120000'; digest: string; size: number }>;
+/** The bytes of one candidate, read once and never through a link: a regular file's whole content or a symbolic link's target, of exactly the
+ * size observed before (checked before anything is allocated, so a file grown past the budget is never read). Any other kind, or a file that
+ * changed size meanwhile, throws: the repository changed under the read. */
+async function readCandidate(root: string, path: string, expected: number): Promise<Candidate> {
   const full = join(root, path), info = await lstat(full), size = info.size;
-  if (expected !== undefined && size !== expected) throw new Error('changed');
+  if (size !== expected) throw new Error('changed');
   if (info.isSymbolicLink()) return { bytes: await readlink(full, { encoding: 'buffer' }), executable: false, link: true };
   if (!info.isFile()) throw new Error('kind');
   const handle = await open(full, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -83,15 +88,37 @@ const nameOrSize = (path: string, bytes: number): FirstCommitFlag | null =>
 const secretIn = (path: string, text: string) => shapes.some(shape => shape.test(text)) || isConfigFile(path) && configSecretHit(text);
 const digestOf = (staged: ReadonlyMap<string, Staged>, message: string) =>
   createHash('sha256').update(JSON.stringify([FIRST_COMMIT_OPERATION_ID, [...staged].map(([path, file]) => [path, file.mode, file.digest]), message])).digest('hex');
-const stagedOf = (file: Candidate, fileMode: boolean): Staged =>
-  ({ mode: file.link ? '120000' : file.executable && fileMode ? '100755' : '100644', digest: sha256(file.bytes) });
+const stagedOf = (file: Candidate, stored: Buffer, fileMode: boolean): Staged =>
+  ({ mode: file.link ? '120000' : file.executable && fileMode ? '100755' : '100644', digest: sha256(stored), size: file.bytes.length });
+/** Paths whose Git attributes ask for a clean conversion (filter, working-tree-encoding, ident); one read-only `check-attr` for all. */
+async function converting(git: FirstCommitGit, paths: readonly string[]): Promise<ReadonlySet<string>> {
+  if (!paths.length) return new Set();
+  const names = policy.conversionAttributes, fields = step('check-attr', await git(['check-attr', '-z', '--stdin', ...names],
+    { input: `${paths.join('\0')}\0`, outputBytes: paths.length * names.length * limits.attributeRowBytes })).split('\0'), found = new Set<string>();
+  // `-z` rows are path NUL attribute NUL value NUL.
+  for (let row = 0; row < fields.length - 1; row += ROW_FIELDS) if (!['unspecified', 'unset'].includes(fields[row + ROW_FIELDS - 1]!)) found.add(fields[row]!);
+  return found;
+}
+const ROW_FIELDS = ['path', 'attribute', 'value'].length;
+/** The form Git stores for a candidate (`git add`'s clean conversion: filter, working-tree-encoding, ident, line endings). Without such an
+ * attribute and without a CR byte Git keeps the bytes as they are; otherwise Git converts the bytes this read holds (`hash-object --path`) and
+ * the blob is read back. `objects` keeps a preview's blobs out of the repository; `blob` is the object id when it was written. */
+async function storedForm(git: FirstCommitGit, path: string, file: Candidate, converts: boolean, objects?: string): Promise<Readonly<{ bytes: Buffer; blob: string | null }>> {
+  if (file.link || !converts && !file.bytes.includes('\r')) return { bytes: file.bytes, blob: null };
+  const at = objects ? { objects } : {}, blob = step('hash-object', await git(['hash-object', '-w', '--stdin', `--path=${path}`], { input: file.bytes, ...at })).trim();
+  const read = await git(['cat-file', 'blob', blob], { outputBytes: limits.bytes, ...at });
+  if (read.overflow) refuse('SETUP_FIRST_COMMIT_TOO_LARGE', { observed: `>${limits.bytes}`, limit: limits.bytes });
+  step('cat-file', read);
+  return { bytes: read.bytes ?? Buffer.from(read.stdout), blob };
+}
 
-type Observed = Readonly<{ preview: FirstCommitPreview; selection: readonly string[]; message: string; root: string; fileMode: boolean; staged: ReadonlyMap<string, Staged> }>;
-async function observe(request: Request, git: FirstCommitGit): Promise<Observed> {
+type Observed = Readonly<{ preview: FirstCommitPreview; selection: readonly string[]; message: string; root: string; fileMode: boolean; staged: ReadonlyMap<string, Staged>;
+  converts: ReadonlySet<string> }>;
+async function observe(request: Request, git: FirstCommitGit, objects: string): Promise<Observed> {
   const message = request.message.trim();
   if (!message || message.length > limits.messageChars || message.includes('\0')) refuse('SETUP_ANSWER_INVALID');
   const head = await git(gitRegistry.headArgs);
-  const none = { selection: [], message, root: request.root, fileMode: true, staged: new Map<string, Staged>() };
+  const none = { selection: [], message, root: request.root, fileMode: true, staged: new Map<string, Staged>(), converts: new Set<string>() };
   if (head.code === 0) return { preview: { state: 'has-commits' }, ...none };
   if (head.code !== 1) step('head', head);
   if (step('index', await git(['ls-files', '--cached', '-z'])) !== '') return { preview: { state: 'staged' }, ...none };
@@ -102,6 +129,7 @@ async function observe(request: Request, git: FirstCommitGit): Promise<Observed>
   const root = step('root', await git(['rev-parse', '--show-toplevel'])).trim(), include = new Set(request.include ?? []), rows: FirstCommitRow[] = [];
   // Git's own rule for a new file's mode: the executable bit counts only while core.fileMode is on.
   const fileMode = (await git(['config', '--type=bool', '--default=true', '--get', 'core.fileMode'])).stdout.trim() !== 'false', staged = new Map<string, Staged>();
+  const converts = await converting(git, paths.filter(path => !path.endsWith('/')));
   let bytes = 0;
   for (const path of paths) {
     // `ls-files` names an untracked nested repository as `dir/`; staging it would record a gitlink without .gitmodules.
@@ -113,8 +141,10 @@ async function observe(request: Request, git: FirstCommitGit): Promise<Observed>
     if (early !== 'size' || selected) bytes += info.size;
     if (bytes > limits.bytes) refuse('SETUP_FIRST_COMMIT_TOO_LARGE', { observed: `>${limits.bytes}`, limit: limits.bytes });
     const file = early === null || selected ? await readCandidate(root, path, info.size).catch(() => refuse('SETUP_FIRST_COMMIT_CHANGED')) : null;
-    const flag = early ?? (file && !file.link && secretIn(path, file.bytes.toString('utf8')) ? 'secret-content' : null);
-    if (file && (flag === null || include.has(path))) staged.set(path, stagedOf(file, fileMode));
+    // The scan reads both the work-tree bytes and the form Git stores: an encoding or a clean filter can turn one into a secret.
+    const stored = file ? (await storedForm(git, path, file, converts.has(path), objects)).bytes : null;
+    const flag = early ?? (file && !file.link && (secretIn(path, file.bytes.toString('utf8')) || secretIn(path, stored!.toString('utf8'))) ? 'secret-content' : null);
+    if (file && (flag === null || include.has(path))) staged.set(path, stagedOf(file, stored!, fileMode));
     rows.push({ path, bytes: info.size, flag });
   }
   const selection = [...staged.keys()];
@@ -122,12 +152,18 @@ async function observe(request: Request, git: FirstCommitGit): Promise<Observed>
   const sign = (await git(['config', '--type=bool', '--default=false', '--get', 'commit.gpgSign'])).stdout.trim() === 'true';
   const flagged = rows.filter(row => row.flag !== null), shown = [...flagged, ...rows.filter(row => row.flag === null)].slice(0, limits.previewRows);
   return { preview: { state: 'offered', operation: FIRST_COMMIT_OPERATION_ID, identity, sign, hooks: 'not-run', total: rows.length, selected: selection.length,
-    flagged: flagged.length, rows: shown, more: rows.length - shown.length, digest: digestOf(staged, message) }, selection, message, root, fileMode, staged };
+    flagged: flagged.length, rows: shown, more: rows.length - shown.length, digest: digestOf(staged, message) }, selection, message, root, fileMode, staged, converts };
 }
 
+/** A private object directory for the stored-form reads of an observation, removed afterwards: observing never writes the repository. */
+async function scratchObjects<T>(work: (objects: string) => Promise<T>): Promise<T> {
+  const objects = await mkdtemp(join(tmpdir(), 'deckent-first-commit-objects-'));
+  try { return await work(objects); } finally { await rm(objects, { recursive: true, force: true }); }
+}
 /** Read-only preview of the first commit (U3U4U7 §3.8): offered only for an unborn HEAD with nothing staged; bounded, flagged files excluded. */
 export async function previewFirstCommit(request: Request): Promise<FirstCommitPreview> {
-  return (await observe(request, request.git ?? await firstCommitGit(request.root, request.env, request.signal))).preview;
+  const git = request.git ?? await firstCommitGit(request.root, request.env, request.signal);
+  return (await scratchObjects(objects => observe(request, git, objects))).preview;
 }
 
 /**
@@ -138,8 +174,8 @@ export async function previewFirstCommit(request: Request): Promise<FirstCommitP
  * recovery command. The person-only witness and the audit row belong to the composition owner that binds this operation (U4-1).
  */
 export async function applyFirstCommit(request: Request & Readonly<{ digest: string }>): Promise<FirstCommitResult> {
-  const git = request.git ?? await firstCommitGit(request.root, request.env, request.signal), seen = await observe(request, git);
-  const { preview, selection, message, root, fileMode, staged } = seen;
+  const git = request.git ?? await firstCommitGit(request.root, request.env, request.signal), seen = await scratchObjects(objects => observe(request, git, objects));
+  const { preview, selection, message, root, fileMode, staged, converts } = seen;
   if (preview.state !== 'offered' || preview.digest !== request.digest) return refuse('SETUP_FIRST_COMMIT_CHANGED');
   const sign = preview.sign;
   if (selection.length === 0) refuse('SETUP_ANSWER_INVALID');
@@ -148,13 +184,15 @@ export async function applyFirstCommit(request: Request & Readonly<{ digest: str
   const pathsFile = join(gitDir, recoveryNames.paths), receiptFile = join(gitDir, recoveryNames.receipt);
   let held = false, committed = false, refSent = false, pathsOwned = false, receiptOwned = false;
   try {
-    // Git stores the bytes this apply scanned, never a later read of the work tree: each file is read again, must equal the scanned digest and
-    // mode, and its blob is written from that buffer (clean filters still apply by path, as `update-index --add` would).
+    // Git stores exactly the form this apply scanned, never a later read of the work tree: each file is read again (its observed size first),
+    // its stored form must equal the scanned digest and mode, and the blob is that form — Git's own conversion of this buffer, or the buffer
+    // itself written without filters (an attribute added meanwhile cannot change it).
     const entries: string[] = [];
     for (const path of selection) {
-      const want = staged.get(path)!, file = await readCandidate(root, path).catch(() => refuse('SETUP_FIRST_COMMIT_CHANGED')), now = stagedOf(file, fileMode);
+      const want = staged.get(path)!, file = await readCandidate(root, path, want.size).catch(() => refuse('SETUP_FIRST_COMMIT_CHANGED'));
+      const stored = await storedForm(git, path, file, converts.has(path)), now = stagedOf(file, stored.bytes, fileMode);
       if (now.mode !== want.mode || now.digest !== want.digest) refuse('SETUP_FIRST_COMMIT_CHANGED');
-      const blob = step('hash-object', await git(['hash-object', '-w', '--stdin', ...file.link ? [] : [`--path=${path}`]], { input: file.bytes })).trim();
+      const blob = stored.blob ?? step('hash-object', await git(['hash-object', '-w', '--no-filters', '--stdin'], { input: stored.bytes })).trim();
       entries.push(`${want.mode} ${blob}\t${path}\0`);
     }
     step('update-index', await git(['update-index', '-z', '--index-info'], { input: entries.join(''), index: temporary }));

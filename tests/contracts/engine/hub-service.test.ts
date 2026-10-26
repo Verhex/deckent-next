@@ -334,6 +334,31 @@ it('a real H8 package and feed reach the H2 client only through root-signed key 
   client.time(200000); await expect(client.app.verify(query)).resolves.toMatchObject({ packageId: '@acme/invoice' });
 });
 
+it('a parent and its child from the same H8 hub install together: bundles are keyed by the pinned root, not the online signer (Astra A56 D2)', async c => {
+  const f = await fixture(c); f.time(300);
+  await f.publish('1.0.0', { name: 'child' }); await f.review('1.0.0', moderator1, f.mod1.context, 'child'); await f.review('1.0.0', moderator2, f.mod2.context, 'child');
+  const childRow = (await f.opened.store.get('@acme/child', '1.0.0'))!;
+  const dependencies = [{ packageId: '@acme/child', version: '1.0.0', manifestDigest: childRow.envelope.payloadDigest }];
+  // The profile's second package needs one moderator unless the review policy asks for two.
+  await f.publish('1.0.0', { dependencies }); if ((await f.review() as { approved: boolean }).approved === false) await f.review('1.0.0', moderator2, f.mod2.context);
+  const served = async (name: string, input: Parameters<typeof f.make>[1] = {}) => {
+    const row = await f.app.inspect(f.owner.context, `@acme/${name}`, '1.0.0');
+    return { ...f.make('1.0.0', { name, ...input }), envelope: row.envelope, delegation: (await f.app.packageDelegation(row.envelope))! } as HubBundle;
+  };
+  const parent = await served('invoice', { dependencies }), child = await served('child'), feed = await f.app.revocations(f.owner.context);
+  const evidence = new Map(await Promise.all(['invoice', 'child'].map(async name => [`@acme/${name}`, await f.app.evidence(f.owner.context, `@acme/${name}`, '1.0.0')] as const)));
+  const root = { hubId: rootKey.keyId, publicKey: rootKey.spki.toString('base64') };
+  const client = await clientFixture({ resolveTrust: async (_source, value, _principal, _store, nowMs) => {
+    const attestation = value.envelope.signatures.find(s => s.role === 'hub')!;
+    return verifyHubModerationEvidence(evidence.get(value.manifest.packageId)!, value, { hubId: root.hubId, rootPublicKey: root.publicKey,
+      attestationKey: delegatedHubKey(root, attestation.keyId, value.delegation, 'attestation', attestation.signedAtMs, { nowMs, stored: true }) });
+  } }); roots.push(client.root);
+  await client.app.addSource({ schemaVersion: 1, scopeId: 's', commandId: 'add-h8', hubId: root.hubId, publicKey: root.publicKey, expectedRevision: null,
+    endpoint: 'https://hub.example', label: 'H8', local: false, trustPolicy: 'hub-moderated' });
+  const result = await client.app.installFile({ schemaVersion: 1, scopeId: 's', commandId: 'parent-child', hubId: root.hubId, bundles: [encodeHubBundle(parent), encodeHubBundle(child)], feed, workClassMapping: {} });
+  expect(result.result.map(row => row.packageId).sort()).toEqual(['@acme/child', '@acme/invoice']);
+});
+
 it('cannot count a suspended moderator vote during final approval and allows an independent appeal review', async c => {
   const f = await fixture(c); f.time(300); await f.publish(); await f.review();
   await f.act('suspend', f.mod1.accountId, { commandId: 'suspend-mod', targetKind: 'account' }, moderator2, f.mod2.context);

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { HUB_LIMITS, HubError, canonicalHubJson, type HubEnvelope, type HubRevocationFeed, type HubPackageSignature } from '#domain/core/hub/index.js';
-import { buildHubPackage, buildHubSkillDocument, hubPackageSignatureMessage, hubRevocationFeedMessage,
+import { buildHubPackage, buildHubSkillDocument, delegatedHubKey, hubKeyDelegationMessage, hubPackageSignatureMessage, hubRevocationFeedMessage,
   skillContentV2Digest, skillSignatureV2Message, verifyHubPackage, verifyHubRevocationFeed, type HubPackageVerification, type HubVerificationKey } from '#engine/core/hub/index.js';
 import { ed25519Signer, sha256, type Ed25519Signer } from '#platform/core/integrity/index.js';
 import { skillSignatureMessage } from '#engine/core/agent-catalog/index.js';
@@ -141,4 +141,18 @@ it('refuses expired, future, over-age and unsigned heartbeats and oversized feed
   expect(() => verifyHubRevocationFeed({ ...feed(), signature: undefined }, context)).toThrow(HubError);
   const entries = Array.from({ length: HUB_LIMITS.feedPageMax + 1 }, () => ({ kind: 'key' as const, id: publisher.keyId, severity: 'revoke' as const, reason: 'compromised', atMs: 99 }));
   expect(() => verifyHubRevocationFeed(feed({ entries }), context)).toThrow(code('HUB_LIMIT_EXCEEDED'));
+});
+
+it('a delegated hub key counts for new content only while the trusted clock is inside its window (Astra A56 D3)', () => {
+  const root = signer('04'), pinned = { hubId: root.keyId, publicKey: root.spki.toString('base64') };
+  const body = { schemaVersion: 1 as const, hubId: root.keyId, keyId: hub.keyId, publicKey: hub.spki.toString('base64'), purposes: ['attestation' as const], notBefore: 2000, notAfter: 10000 };
+  const delegation = { ...body, signature: { keyId: root.keyId, algorithm: 'ed25519', value: root.sign(hubKeyDelegationMessage(body)).toString('base64') } };
+  const check = (atMs: number, nowMs: number, stored = false) => () => delegatedHubKey(pinned, hub.keyId, delegation, 'attestation', atMs, { nowMs, stored });
+  // Not started yet at the trusted now, although the signer put its own signedAtMs at notBefore (inside the clock skew): refused.
+  expect(check(2000, 1000)).toThrow(expect.objectContaining({ code: 'HUB_SIGNER_UNTRUSTED' }));
+  expect(check(2000, 1999)).toThrow(expect.objectContaining({ code: 'HUB_SIGNER_UNTRUSTED' }));
+  expect(check(2000, 2000)()).toMatchObject({ keyId: hub.keyId }); expect(check(9999, 9999)()).toMatchObject({ keyId: hub.keyId });
+  expect(check(9999, 10000)).toThrow(expect.objectContaining({ code: 'HUB_SIGNER_UNTRUSTED' }));
+  // Re-verifying stored content keeps its historical signing time.
+  expect(check(5000, 50000, true)()).toMatchObject({ keyId: hub.keyId });
 });

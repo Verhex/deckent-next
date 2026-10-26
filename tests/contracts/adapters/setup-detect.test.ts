@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readdir, rm, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, rm, readFile, stat, truncate, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -301,6 +301,45 @@ describe('I-S2 locale facts follow the L-KIT chain', () => {
   });
 });
 
+it.skipIf(process.platform === 'win32')('first commit (Astra A56 D1/S2): the scan and the card bind the form Git stores (encoding, clean filter), and a file grown past the budget is never read', async () => {
+  const env = { PATH: hostPath, HOME: '', GIT_CONFIG_NOSYSTEM: '1' }, marker = '-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n';
+  const sh = (root: string, ...args: string[]) => execFileSync('git', ['--no-optional-locks', ...args], { cwd: root, env: { ...env, HOME: root }, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+  const repo = async (filter: string) => {
+    const root = await temp('first-canonical'); git(root, 'init', '-q');
+    for (const [key, value] of [['user.name', 'Person'], ['user.email', 'person@example.test'], ['filter.up.clean', filter]]) sh(root, 'config', key, value);
+    await writeFile(join(root, '.gitattributes'), 'wide.txt working-tree-encoding=UTF-16\nlow.txt filter=up\nplain.txt working-tree-encoding=UTF-16\n');
+    // The raw bytes carry no marker: UTF-16 hides it from a UTF-8 read; lower case is no match until the clean filter upper-cases it.
+    await writeFile(join(root, 'wide.txt'), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(marker, 'utf16le')]));
+    await writeFile(join(root, 'low.txt'), marker.toLowerCase());
+    await writeFile(join(root, 'plain.txt'), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('hello\n', 'utf16le')]));
+    return { root, env: { ...env, HOME: root }, message: 'First commit' };
+  };
+  const first = await repo('tr a-z A-Z'), seen = await previewFirstCommit(first);
+  expect(seen).toMatchObject({ state: 'offered', selected: 2, rows: expect.arrayContaining([{ path: 'wide.txt', bytes: expect.any(Number), flag: 'secret-content' },
+    { path: 'low.txt', bytes: expect.any(Number), flag: 'secret-content' }]) });
+  await applyFirstCommit({ ...first, digest: seen.state === 'offered' ? seen.digest : '' });
+  expect(sh(first.root, 'ls-tree', '-r', '--name-only', 'HEAD')).toBe('.gitattributes\nplain.txt\n');
+  // The stored blob is Git's canonical (UTF-8) form, the same object `git add` would write; the work tree reads clean.
+  expect(sh(first.root, 'rev-parse', 'HEAD:plain.txt').trim()).toBe(sh(first.root, 'hash-object', 'plain.txt').trim());
+  expect(sh(first.root, 'status', '--porcelain', '--untracked-files=no')).toBe('');
+  // A filter change after the preview changes the stored form: the card no longer matches, nothing is committed.
+  const second = await repo('cat'); await rm(join(second.root, 'wide.txt')); const shown = await previewFirstCommit(second);
+  expect(shown).toMatchObject({ state: 'offered', selected: 3 });
+  sh(second.root, 'config', 'filter.up.clean', 'tr a-z A-Z');
+  await expect(applyFirstCommit({ ...second, digest: shown.state === 'offered' ? shown.digest : '' })).rejects.toMatchObject({ code: 'SETUP_FIRST_COMMIT_CHANGED' });
+  expect(() => sh(second.root, 'rev-parse', '--verify', '--quiet', 'HEAD^{commit}')).toThrow();
+  // S2: a file that grows past the byte budget after the scan is refused before it is allocated or read.
+  const grown = await repo('cat'), offer = await previewFirstCommit(grown), real = await firstCommitGit(grown.root, grown.env);
+  const allocated: number[] = [], alloc = Buffer.alloc.bind(Buffer);
+  const port: FirstCommitGit = async (args, options) => {
+    if (args[0] === 'rev-parse' && args[1] === '--absolute-git-dir') { await writeFile(join(grown.root, 'plain.txt'), ''); await truncate(join(grown.root, 'plain.txt'), 104_857_601); }
+    return real(args, options);
+  };
+  Buffer.alloc = ((size: number, ...rest: unknown[]) => { allocated.push(size); return (alloc as (...a: unknown[]) => Buffer)(size, ...rest); }) as typeof Buffer.alloc;
+  try { await expect(applyFirstCommit({ ...grown, git: port, digest: offer.state === 'offered' ? offer.digest : '' })).rejects.toMatchObject({ code: 'SETUP_FIRST_COMMIT_CHANGED' }); }
+  finally { Buffer.alloc = alloc; }
+  expect(Math.max(0, ...allocated)).toBeLessThan(104_857_601);
+});
 it.skipIf(process.platform === 'win32')('U4C: failed index swap retains private path custody; recovery preserves unrelated staging and refuses same-path overlap', async () => {
   const sh = (root: string, ...args: string[]) => execFileSync('git', ['--no-optional-locks', ...args], { cwd: root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' }, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
   const repo = async () => { const root = await temp('recovery'); git(root, 'init', '-q'); sh(root, 'config', 'user.name', 'Person'); sh(root, 'config', 'user.email', 'person@example.test');
