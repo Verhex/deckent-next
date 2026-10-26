@@ -234,5 +234,7 @@
   "cli.help.summary.recovery": "Lost-worker recovery: rollout progress and your blind review",
   "cli.help.recovery": "Usage: deckent recovery [--scope <id>] [--json]\n  Read-only: per measured lost-worker rule its shadow cases since the last false alarm, and how often the recovery model agreed with your blind choices. A model's choice of a case you have not answered is never shown.\ndeckent recovery review [--scope <id>]\n  On your terminal only: each case the model decided in shadow, without its choice. You say whether the worker really was lost and what you would have done; your answer is recorded, then the model's choice is shown. Answers measure agreement and change no work.\nStanding grants and rule promotions: deckent policy recovery.",
   "cli.help.action.recoveryReview": "Answer shadow-decided recovery cases blind (your terminal only)",
-  "cli.help.action.policyRecovery": "Lost-worker recovery grants and rule promotions (your card)"
+  "cli.help.action.policyRecovery": "Lost-worker recovery grants and rule promotions (your card)",
+  "cli.uninstall.help.summary": "Preview or uninstall one installation; keep data by default.",
+  "cli.uninstall.help": "deckent uninstall [--purge] [--dry-run] [--json]\n--dry-run and --json are preview-only and never apply. Removal needs a person in their own terminal, installation-wide policy and durable plan approval. --purge additionally requires complete verified backup coverage and the exact typed installation name. Unavailable installation metadata, resource owners or recovery block preview and apply. The package remains installed."
 }

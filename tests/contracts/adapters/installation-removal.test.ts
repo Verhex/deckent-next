@@ -60,3 +60,42 @@ it('removes a bounded owned disposable tree, refusing symlinks, protected overla
   const blocked = new InstallationCacheRemovalTarget('fixture', [{ ...resource, path: root }], [audit], { maxEntries: 10, maxDepth: 3 }, async work => work());
   await expect(blocked.observe(ref)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
 });
+
+it('never accepts a foreign target id or a symlink ancestor into the recorded disposable set', async () => {
+  if (process.platform === 'win32') { console.info('verify-not-run: POSIX no-follow ownership check'); return; }
+  const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-foreign-')); roots.push(root);
+  const foreign = join(root, 'foreign'), owned = join(root, 'owned');
+  await mkdir(foreign, { mode: 0o700 }); await mkdir(owned, { mode: 0o700 });
+  await writeFile(join(foreign, 'customer-record'), 'KEEP', { mode: 0o600 });
+  await symlink(foreign, join(owned, 'link'));
+  const target = new InstallationCacheRemovalTarget('installation', [{ resourceId: 'cache', path: join(owned, 'link/customer-record'), ownershipDigest: 'a'.repeat(64) }], [],
+    { maxEntries: 10, maxDepth: 3 }, work => work());
+  const command = { operation: { id: 'installation.remove-cache', version: 1 }, idempotencyKey: 'approved-card', expectedVersion: 'approved-version', input: null };
+  await expect(target.apply({ ...command, target: { kind: target.kind, id: foreign } })).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
+  await expect(target.apply({ ...command, target: { kind: target.kind, id: 'cache' } })).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
+  expect(await readFile(join(foreign, 'customer-record'), 'utf8')).toBe('KEEP');
+});
+
+it('keeps an authenticated recovery hold on unknown, rejects a different installation/person and releases only after settlement', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: private recovery and directory fsync require Linux'); return; }
+  const { UninstallRecovery } = await import('#adapters/core/installation-removal/index.js');
+  const { createUninstallPlan } = await import('#engine/core/installation/index.js');
+  const { createHmacIntegrity, uninstallHoldPath } = await import('#platform/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-recovery-')); roots.push(root);
+  const principal = { id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user' as const, scopeIds: ['company'] };
+  const integrity = createHmacIntegrity('fixture', new Uint8Array(32).fill(7));
+  const recovery = new UninstallRecovery(root, 'installation', principal, integrity, 65536);
+  const plan = createUninstallPlan({ schemaVersion: 1, purge: false }, { installation: { id: 'installation', root }, scopeSummary: ['company'], layoutRevision: 'l1',
+    policyRevision: 'p1', inventoryRevision: 'i1', resources: [], blockers: [], protectedPaths: [], deletionRoots: [root], backupDestination: null, packageRemoval: { command: null, shared: true } });
+  expect(await recovery.retained(plan.planDigest)).toBeNull();
+  await expect(lstat(join(root, 'uninstall-recovery'))).rejects.toMatchObject({ code: 'ENOENT' });
+  await recovery.admit(plan); expect(await recovery.retained(plan.planDigest)).toEqual(plan);
+  const outcome = { schemaVersion: 1 as const, planDigest: plan.planDigest, status: 'unknown' as const, items: [], recoveryLocation: root, backup: plan.backup, packageRemoval: plan.packageRemoval };
+  await recovery.finish(outcome); expect(await lstat(uninstallHoldPath(root))).toBeTruthy();
+  await expect(new UninstallRecovery(root, 'another-installation', principal, integrity, 65536).retained(plan.planDigest)).rejects.toMatchObject({ code: 'UNINSTALL_RECOVERY_INVALID' });
+  await expect(new UninstallRecovery(root, 'installation', { ...principal, subject: 'another-person' }, integrity, 65536).retained(plan.planDigest)).rejects.toMatchObject({ code: 'UNINSTALL_RECOVERY_INVALID' });
+  await recovery.finish({ ...outcome, status: 'completed' }); await expect(lstat(uninstallHoldPath(root))).rejects.toMatchObject({ code: 'ENOENT' });
+  const manifest = join(root, 'uninstall-recovery', `${plan.planDigest}.json`);
+  await writeFile(manifest, (await readFile(manifest, 'utf8')).replace('p1', 'p2'), { mode: 0o600 });
+  await expect(recovery.retained(plan.planDigest)).rejects.toMatchObject({ code: 'UNINSTALL_RECOVERY_INVALID' });
+});

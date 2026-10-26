@@ -1153,5 +1153,16 @@
   "tui.provider.kind.cursorCli": "Cursor subscription workers",
   "error.MODEL_CONNECT_NO_AVAILABLE": "No currently usable priced models were found. Unavailable candidates: {models}. Check the key, tariff or admitted worker CLI version.",
   "policy.mcp.completeBaseline": "Complete your missing founder permissions",
-  "policy.mcp.remaining": "{count} changes remain for the next card."
+  "policy.mcp.remaining": "{count} changes remain for the next card.",
+  "error.UNINSTALL_INVALID": "The uninstall request is invalid.",
+  "error.UNINSTALL_PLAN_CHANGED": "The installation changed. Review a fresh plan.",
+  "error.UNINSTALL_UNSUPPORTED": "Automatic removal is unavailable on this platform or the required resource owner is unavailable. Kept resources are listed in the preview.",
+  "error.UNINSTALL_BACKUP_COVERAGE": "The verified backup does not cover this purge. Nothing was deleted.",
+  "error.UNINSTALL_OWNERSHIP": "Exclusive ownership was not proven. The resource was kept.",
+  "error.UNINSTALL_PATH_UNSAFE": "The removal path is unsafe. The resource was kept.",
+  "error.UNINSTALL_PURGE_DENIED": "Purge is forbidden by installation/company policy or a retention hold. Contact the policy administrator responsible for {owner}.",
+  "error.UNINSTALL_LIFECYCLE_HOLD": "An unfinished uninstall blocks new work. Use deckent uninstall --dry-run to inspect, then resume from a personal terminal. Recovery anchor: {path}.",
+  "error.UNINSTALL_RECOVERY_INVALID": "Uninstall recovery evidence is missing, unsafe or does not match the current installation/person. Keep the resources and ask the installation administrator to reconcile it.",
+  "error.UNINSTALL_WORK_ACTIVE": "Uninstall is blocked by active or incompletely inspected work. Use the existing run inspection/cancellation/reconciliation commands before trying again.",
+  "error.UNINSTALL_MANAGED": "This installation is protected by administrator/company policy. Contact the administrator responsible for {owner}; uninstall cannot override this rule."
 }

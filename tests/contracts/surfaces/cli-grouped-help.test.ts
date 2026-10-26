@@ -271,7 +271,7 @@ it.each(['en', 'tr'] as const)('names the missing argument for every family with
   // C-RUN: bare `report` and `inventory` are handler-owned reads (default scope; off a terminal without one: CLI_SCOPE_REQUIRED, below).
   // C-DOCTOR: bare `workers` reads the default scope (no `--scope` required by the catalog).
   const runnable = new Set([...Object.keys(READ_DEFAULTS), 'terminal', 'init', 'models', 'identity', 'mcp', 'config', 'monitor', 'doctor', 'paths',
-    'coding', 'inference', 'operation', 'report', 'inventory', 'decide', 'memory', 'agents', 'backup', 'toolchains', 'recovery']);
+    'coding', 'inference', 'operation', 'report', 'inventory', 'decide', 'memory', 'agents', 'backup', 'toolchains', 'recovery', 'uninstall']);
   const catalog = MESSAGE_REGISTRY.catalogs[language];
   for (const spec of (CLI_CATALOG as readonly CliCommandSpec[]).filter(item => !runnable.has(item.name))) {
     let errors = '';

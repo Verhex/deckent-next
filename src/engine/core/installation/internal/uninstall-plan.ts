@@ -63,7 +63,7 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
       if (!isAbsolute(resource.locator) || path === parse(path).root || !inventory.deletionRoots.some(root => within(root, path) && root !== path)
         || inventory.protectedPaths.some(kept => within(path, kept) || within(kept, path))) { action = 'blocked'; reason = 'unsafe-path'; }
     }
-    if (entry.kind === 'service' && resource.present !== false && action === 'keep') { action = 'blocked'; reason = 'service-unresolved'; }
+    if (entry.kind === 'service' && resource.present !== false && action === 'keep') reason = 'service-unresolved';
     if (action === 'blocked' || action === 'manual' || (purge && resource.present !== false && action === 'keep' && resource.owner === installation.id)) blockers.push(`${resource.resourceId}:${reason}`);
     return { ...resource, action, reason, operation: { id: entry.operation, version: 1 },
       dependencies: resources.filter(item => entry.after.includes(item.contribution)).map(item => item.resourceId) };
@@ -80,7 +80,7 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
   for (let changed = true; changed;) {
     changed = false;
     for (const item of items.filter(item => item.action === 'remove')) {
-      if (items.some(dependency => item.dependencies.includes(dependency.resourceId) && (dependency.action === 'blocked' || dependency.action === 'manual'))) {
+      if (items.some(dependency => item.dependencies.includes(dependency.resourceId) && (dependency.action === 'blocked' || dependency.action === 'manual' || (dependency.contribution === 'service' && dependency.present !== false && dependency.action === 'keep')))) {
         Object.assign(item, { action: 'blocked', reason: 'dependency-unresolved' }); blockers.push(`${item.resourceId}:dependency-unresolved`); changed = true;
       }
     }

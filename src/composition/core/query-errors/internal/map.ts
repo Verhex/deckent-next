@@ -3,7 +3,7 @@ import { TargetQueueError, CandidateBindingError, DecisionDelegationError, Polic
 import { ProviderSpendError, ModelInvocationStoreError, NervousError, type ProviderSpendAccount } from '#engine/index.js';
 import { OpenAiChatHttpError, OpenRouterChatError, OpenRouterPricingError, NativeConnectionError } from '#adapters/index.js';
 import { ModelActivationStoreError, AgentTurnStoreError, WorkerModelAdmissionError } from '#engine/index.js';
-import { InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError, InstallationIdentityError, ProjectIdentityError } from '#engine/index.js';
+import { UninstallError, InstallationProfileError, InstallationEvidenceError, InstallationRecoveryError, InstallationPublicationError, InstallationIdentityError, ProjectIdentityError } from '#engine/index.js';
 import { InstallationProfileFileError, InstallationArtifactError, DockerImageProbeError,
   InstallationJournalError, InstallationLedgerError, InstallationFileError } from '#adapters/index.js';
 import { LocalRuntimeSocketError } from '#adapters/index.js';
@@ -53,6 +53,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   if (error instanceof AgentTurnStoreError) return registeredFailure(error.code);
   // E1: the bounded cause of an unavailable image probe (deadline|exit|signal|parse) travels as a param; Docker's text never does.
   if (error instanceof DockerImageProbeError && error.probeCause) return registeredFailure(error.code, { params: { cause: error.probeCause } });
+  if (error instanceof UninstallError) return registeredFailure(error.code);
   if (error instanceof InstallationProfileError || error instanceof InstallationProfileFileError || error instanceof InstallationEvidenceError
     || error instanceof InstallationArtifactError || error instanceof DockerImageProbeError || error instanceof InstallationRecoveryError
     || error instanceof InstallationPublicationError || error instanceof InstallationJournalError || error instanceof InstallationLedgerError

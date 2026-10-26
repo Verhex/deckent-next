@@ -3,7 +3,7 @@ const text = z.string().min(1).max(4096).refine(value => Array.from(value).every
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 export const uninstallPlanQuerySchema = z.object({ schemaVersion: z.literal(1), purge: z.boolean() }).strict();
 export const uninstallApplySchema = z.object({ schemaVersion: z.literal(1), commandId: text, planDigest: digest }).strict();
-export const uninstallInstallationSchema = z.object({ id: text, generation: text, name: text, root: text }).strict().readonly();
+export const uninstallInstallationSchema = z.object({ id: text, root: text }).strict().readonly();
 export const uninstallResourceSchema = z.object({
   resourceId: text, contribution: text, locator: text, version: text.nullable(), owner: text.nullable(),
   ownership: z.enum(['exclusive', 'shared', 'foreign', 'unknown']), ownershipEvidence: digest.nullable(),
@@ -33,6 +33,7 @@ export interface UninstallResult {
   readonly items: readonly { readonly resourceId: string; readonly state: 'claimed' | 'settled' | 'unknown' | 'refused' | null }[];
   readonly recoveryLocation: string | null; readonly backup: UninstallPlan['backup'];
   readonly packageRemoval: UninstallPlan['packageRemoval'];
+  readonly failureCode?: string;
 }
 export class UninstallError extends Error {
   constructor(readonly code: 'UNINSTALL_INVALID' | 'UNINSTALL_PLAN_CHANGED' | 'UNINSTALL_UNSUPPORTED' | 'UNINSTALL_BACKUP_COVERAGE'

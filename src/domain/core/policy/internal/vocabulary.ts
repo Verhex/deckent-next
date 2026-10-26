@@ -56,7 +56,7 @@ export const policyResources = Object.freeze({
   // `docker`). Installation-wide; the consumer offers it only to a person at a real terminal, never to the MCP actor or an agent.
   executionEnvironment: Object.freeze({ kind: 'execution-environment' as const, actions: Object.freeze(['install'] as const) }),
   // v13 (owner A48-D3b, C-DOCTOR C2): a doctor repair of the installation itself (e.g. making its folder private); the resource id is the repair id.
-  installation: Object.freeze({ kind: 'installation' as const, actions: Object.freeze(['repair'] as const) }),
+  installation: Object.freeze({ kind: 'installation' as const, actions: Object.freeze(['repair', 'inspect', 'uninstall', 'purge'] as const) }),
   // v13 (owner 2026-10-19, MON-NAMES): the monitor names refused and failed scopes (id and reason) to a viewer holding this; others see counts.
   monitor: Object.freeze({ kind: 'monitor' as const, actions: Object.freeze(['inspect-scope-diagnostics'] as const) }),
   // v13 (owner 2026-10-19, CA-1): reading every principal's standing approvals (`deckent policy grants --all`); a person's own need no action.
