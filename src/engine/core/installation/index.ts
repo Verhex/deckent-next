@@ -34,5 +34,5 @@ export { createUninstallPlan, assertUninstallPlanCurrent, uninstallRegistry, uni
 export type { UninstallInventory, UninstallContribution } from './internal/uninstall-plan.js';
 export { uninstallPlanQuerySchema, uninstallApplySchema, UninstallError } from './internal/uninstall-contract.js';
 export type { UninstallPlan, UninstallResult, UninstallResource, UninstallInstallation, UninstallItem } from './internal/uninstall-contract.js';
-export { UninstallApplication, authorizeUninstall } from './internal/uninstall-application.js';
+export { UninstallApplication, authorizeUninstall, approvedUninstallEffects } from './internal/uninstall-application.js';
 export type { UninstallApplicationPorts, UninstallAdmission, UninstallInteraction } from './internal/uninstall-application.js';

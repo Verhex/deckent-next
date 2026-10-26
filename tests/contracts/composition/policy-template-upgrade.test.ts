@@ -28,11 +28,11 @@ const upgradePolicyTemplateInstallation = (...args: Parameters<typeof upgradeIns
 const FIXTURE = resolve('tests/fixtures/mcp-stdio-server.mjs');
 const roots: string[] = [];
 afterEach(async () => { await closeModeRuntimes(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-/** The v13 delta (I-POL), the v14 delta (S4) and the v15 delta (S4B-1 + S7), which the plan adds last; rollback removes only the current (v17) delta
+/** The v13 delta (I-POL), the v14 delta (S4) and the v15 delta (S4B-1 + S7), which the plan adds last; rollback removes only the current (v18) delta
  * (earlier rules stay once added). A v4-era plan is longer than one policy change since v15: the same run again adds the rest. */
 const DELTA: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, MODIFIED = DELTA[0]!;
 const V13: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect',
-  'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory', ...FIRST_RUN_V15_RULE_IDS, ...FIRST_RUN_V16_RULE_IDS, ...DELTA];
+  'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all', 'first-run-mcp-observe-pool', 'first-run-memory-inspect', 'first-run-mcp-observe-memory', ...FIRST_RUN_V15_RULE_IDS, ...FIRST_RUN_V16_RULE_IDS, 'first-run-first-commit', ...DELTA];
 const echo = { name: 'echo', description: 'Echo the arguments', inputSchema: { type: 'object', properties: { text: { type: 'string' } } } };
 
 /** The first-run v4 grants of this test's scope and person: the v5 template without its MCP rules and without the proposal tool. */
@@ -40,7 +40,7 @@ function v4Grants() {
   const v5 = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, readToolNames: FIRST_RUN_READ_TOOL_NAMES, scratchToolNames: FIRST_RUN_SCRATCH_TOOL_NAMES,
     scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
     shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID, policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID,
-    firstCommitOperationId: 'coding.first-commit', executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS }).policy as
+    firstCommitOperationId: 'coding.first-commit', uninstallOperationIds: ['installation.remove-cache', 'installation.remove-data', 'installation.remove-image', 'installation.remove-service'], executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS }).policy as
     unknown as { grants: { id: string; resource: { kind: string; ids: unknown } }[] };
   return v5.grants.filter(grant => !grant.id.startsWith('first-run-mcp-observe-') && !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer', 'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', ...V13].includes(grant.id))
     .map(grant => grant.id === 'first-run-read-tools' ? { ...grant, resource: { ...grant.resource, ids: FIRST_RUN_READ_TOOL_NAMES } } : grant);
@@ -81,7 +81,7 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(0);
   });
 
-  it('(a) preview → apply on the previewed revision → a second run changes nothing; hand-added rules stay; audited and archived; trust then writes the grant and the model calls the tool without a card in full-auto; a deny keeps the v17 rollback inside I2', async () => {
+  it('(a) preview → apply on the previewed revision → a second run changes nothing; hand-added rules stay; audited and archived; trust then writes the grant and the model calls the tool without a card in full-auto; a deny keeps the v18 rollback inside I2', async () => {
     const { f, upgrade, grants } = await project('owner-role');
     const before = grants().map(grant => grant.id);
     const preview = await upgrade('preview');
@@ -122,7 +122,7 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     expect(grants().map(grant => grant.id).filter(id => id.startsWith('first-run-mcp') && !id.startsWith('first-run-mcp-observe-'))).toHaveLength(3);
   }, 180_000);
 
-  it('(c) rollback removes only the current (v17) delta rules, keeps older authority (the v11 rules too) and hand-added rules, and is idempotent', async () => {
+  it('(c) rollback removes only the current (v18) delta rules, keeps older authority (the v11 rules too) and hand-added rules, and is idempotent', async () => {
     const { upgrade, grants } = await project('owner-role');
     for (let run = 0; run < 2; run++) expect(await upgrade('apply')).toMatchObject({ status: 'upgraded' });
     const upgraded = grants();
@@ -183,7 +183,7 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     const v5 = firstRunPolicyTemplate({ scopeId: 'scope', principal: me[0]!, readToolNames: FIRST_RUN_READ_TOOL_NAMES, scratchToolNames: FIRST_RUN_SCRATCH_TOOL_NAMES,
       scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
       shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
-      policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, firstCommitOperationId: 'coding.first-commit', executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS }).policy;
+      policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, firstCommitOperationId: 'coding.first-commit', uninstallOperationIds: ['installation.remove-cache', 'installation.remove-data', 'installation.remove-image', 'installation.remove-service'], executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS }).policy;
     writeFileSync(join(f.data, 'policy.json'), JSON.stringify({ ...v5, grants: v5.grants.filter(rule => rule.id !== 'first-run-policy-administer')
       .map(rule => rule.id === MODIFIED ? { ...rule, effect: 'allow', actions: ['execute'], resource: { kind: 'operation', ids: ['policy.administer'] } } : rule) }), { mode: 0o600 });
     const before = bytes();
@@ -192,7 +192,7 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
     expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(0);
   }, 120_000);
 
-  it('(e, archived) preserves the customized sole v17 delta and only admin grant without writing; the writer refuses losing approval authority and a hand-staged headless state cannot roll back', async () => {
+  it('(e, archived) preserves the customized sole v18 delta and only admin grant without writing; the writer refuses losing approval authority and a hand-staged headless state cannot roll back', async () => {
     const { f, upgrade, grants, bytes } = await project('pure');
     // Installer upgrade supplies real provenance; a later archived customization is not an upgrade-owned rule.
     for (let run = 0; run < 2; run++) expect(await upgradePolicyTemplateInstallation(f.project, 'scope', true, undefined, { env: f.env })).toMatchObject({ status: 'upgraded' });
@@ -203,11 +203,11 @@ describe.skipIf(process.platform !== 'linux')('deckent policy upgrade --template
         ? { ...rule, effect: 'allow', actions: ['execute'], resource: { kind: 'operation', ids: ['policy.administer'] } } : rule) }, bindings: null, order: 'policy-first' }, result: null }), 'fixture-custom-admin');
     const before = grants(), auditCount = f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change').length;
     const customAdmin = before.find(rule => rule.id === MODIFIED);
-    expect(DELTA).toEqual(['first-run-first-commit']);
-    expect(await upgrade('rollback')).toMatchObject({ status: 'nothing-to-roll-back', conflicts: [MODIFIED] });
-    expect(grants()).toEqual(before);
+    expect(DELTA).toEqual(['first-run-uninstall', 'first-run-uninstall-operations']);
+    expect(await upgrade('rollback')).toMatchObject({ status: 'rolled-back', conflicts: [MODIFIED], reason: 'first-run-uninstall-operations' });
+    expect(grants()).toEqual(before.filter(rule => rule.id !== 'first-run-uninstall-operations'));
     expect(grants().find(rule => rule.id === MODIFIED)).toEqual(customAdmin);
-    expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(auditCount);
+    expect(f.audit().filter(entry => entry.event.subject['kind'] === 'authority-change')).toHaveLength(auditCount + 1);
     const kept = bytes();
     expect(await upgrade('rollback')).toMatchObject({ status: 'nothing-to-roll-back', conflicts: [MODIFIED] });
     expect(bytes()).toBe(kept);

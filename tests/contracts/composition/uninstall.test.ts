@@ -95,3 +95,54 @@ it('applies the confirmed real temp cache through the production broker and gene
     expect(effects.body.records).toHaveLength(1); expect(effects.body.records[0]).toMatchObject({ state: 'settled', intent: { approval: { approvalId: expect.any(String) } } });
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
+
+it('backs up and verifies the explicit global purge set, closes ledger owners before final deletion, keeps projects/shared secrets and replays via an external tombstone', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+  const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
+  const { verifyBackupSet, verifyBackupCoverage, FileTreeBackupOwner } = await import('#adapters/core/backup-store/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-purge-'));
+  try {
+    const project = join(root, 'project'), data = join(root, 'global');
+    for (const path of [join(project, '.deckent'), data]) await mkdir(path, { recursive: true, mode: 0o700 });
+    await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, terminal: { scopeId: 's' } }), { mode: 0o600 });
+    await writeFile(join(project, '.deckent/customer'), 'KEEP PROJECT', { mode: 0o600 });
+    await writeFile(join(data, 'secrets.json'), 'SHARED KEEP', { mode: 0o600 });
+    const actor = readLocalOsIdentity();
+    await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'operation', 'approval', 'backup'].map(kind => ({
+      id: `owner-${kind}`, effect: 'allow', actions: 'all', scopes: 'all', principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' },
+    })) }), { mode: 0o600 });
+    await writeFile(join(data, 'bindings.json'), JSON.stringify({ schemaVersion: 1, revision: 'b1', bindings: [] }), { mode: 0o600 });
+    const layout = resolveProductLayout({ projectRoot: project, root: data });
+    await new FileInstallationIdentityStore(layout).loadOrCreate();
+    const keyFile = getConfigFieldDefault('approvals').keyFile;
+    await openLocalIntegrityAuthority(layout, keyFile, true);
+    const ledger = productResourcePath(layout, 'ledger'); await mkdir(join(data, 'state'), { mode: 0o700 });
+    openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
+    const options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false }, phrase = 'temporary-only-test-passphrase';
+    const plan = await previewConfiguredUninstall(project, true, options);
+    expect(plan.blockers).toEqual([]);
+    expect(plan.items.find(item => item.resourceId === 'shared.secrets.json')).toMatchObject({ action: 'keep', ownership: 'shared' });
+    const cancelled = await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'cancel-purge', planDigest: plan.planDigest }, {
+      backupPassphrase: async () => phrase, confirm: async () => false,
+    }, options);
+    expect(cancelled.status).toBe('cancelled'); expect(await lstat(ledger)).toBeTruthy();
+    expect(await lstat(`${cancelled.backup.destination}.coverage.enc`)).toBeTruthy();
+    let cards = 0;
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'purge', planDigest: plan.planDigest }, {
+      backupPassphrase: async () => phrase, confirm: async shown => { cards++; expect(shown).toEqual(plan); expect((await readdir(plan.backup.destination!)).some(name => name.endsWith('.coverage.enc'))).toBe(true); return true; },
+    }, options);
+    expect(result.status).toBe('completed'); expect(cards).toBe(1); expect(result.backup.destination).not.toBe(cancelled.backup.destination);
+    await expect(lstat(ledger)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(lstat(join(data, 'approvals', keyFile))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(join(project, '.deckent/customer'), 'utf8')).toBe('KEEP PROJECT');
+    expect(await readFile(join(data, 'secrets.json'), 'utf8')).toBe('SHARED KEEP');
+    const finalSet = result.backup.destination!, verified = await verifyBackupSet(finalSet, phrase, getConfigFieldDefault('installation').packageMeasurement);
+    expect(verified.state.installationId).toBe(plan.installation.id); verified.close();
+    const input = JSON.parse(await readFile(`${finalSet}.coverage.json`, 'utf8'));
+    const owner = new FileTreeBackupOwner(input.manifest.resources.map((resource: { resourceId: string }) => ({ resourceId: resource.resourceId, path: productResourcePath(layout, resource.resourceId as 'ledger') })), getConfigFieldDefault('installation').packageMeasurement);
+    const covered = await verifyBackupCoverage(input, phrase, getConfigFieldDefault('installation').packageMeasurement, [owner]); covered.close();
+    const replay = await previewConfiguredUninstall(project, true, options);
+    expect(replay.items.every(item => item.action === 'keep')).toBe(true);
+    expect((await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'replay', planDigest: replay.planDigest }, { confirm: async () => { throw Error('unexpected prompt'); } }, options)).status).toBe('noop');
+  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});

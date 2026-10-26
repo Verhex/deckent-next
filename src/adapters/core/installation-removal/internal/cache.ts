@@ -9,10 +9,12 @@ const PRIVATE_PERMISSION_MASK = 0o077;
 const rejected = (): never => { throw new EffectTargetError('EFFECT_TARGET_REJECTED'); };
 /** Disposal is restricted to owner-registered paths. Directory removal is bounded, link-free and never recursive rm. */
 export class InstallationCacheRemovalTarget implements EffectTarget {
-  readonly kind = 'installation-cache';
+  readonly kind: string;
   constructor(private readonly binding: string, private readonly resources: readonly CacheRemovalResource[],
     private readonly protectedPaths: readonly string[], private readonly bounds: CacheRemovalBounds,
-    private readonly withCustody: <T>(work: () => Promise<T>) => Promise<T>) {
+    private readonly withCustody: <T>(work: () => Promise<T>) => Promise<T>,
+    private readonly operation = { kind: 'installation-cache', id: 'installation.remove-cache' }) {
+    this.kind = operation.kind;
     if (process.platform === 'win32' || !process.getuid) rejected();
     if (!Number.isSafeInteger(bounds.maxEntries) || bounds.maxEntries < 1 || !Number.isSafeInteger(bounds.maxDepth) || bounds.maxDepth < 0) rejected();
   }
@@ -46,7 +48,7 @@ export class InstallationCacheRemovalTarget implements EffectTarget {
   }
   async observe(target: { kind: string; id: string }) { return { version: (await this.scan(this.resource(target).path)).version }; }
   async apply(request: EffectApplyRequest) {
-    if (request.operation.id !== 'installation.remove-cache' || request.operation.version !== 1) rejected();
+    if (request.operation.id !== this.operation.id || request.operation.version !== 1) rejected();
     const resource = this.resource(request.target);
     return this.withCustody(async () => {
       const scan = await this.scan(resource.path);

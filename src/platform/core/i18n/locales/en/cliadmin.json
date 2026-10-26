@@ -331,7 +331,8 @@
   "cli.uninstall.reason.retained-overlap": "Overlaps a retained resource",
   "cli.uninstall.reason.dependency-unresolved": "A prerequisite is unresolved",
   "cli.uninstall.purge.confirm": "Yes, delete only the listed backed-up global data",
-  "cli.uninstall.retainedData": "Project .deckent/ folders are always kept. Global data is kept by default; use --purge to preview its backed-up removal.",
+  "cli.uninstall.retainedData": "Project .deckent/ folders are always kept. Global data is kept by default; use --purge to preview its backed-up removal. Unlisted or shared resources are also kept.",
   "cli.uninstall.reinstall": "To reinstall, use the original package manager and run deckent in your project folder. Retained project data is reused.",
-  "cli.uninstall.blocker.backup-destination": "Complete verified backup coverage and a destination outside the removal roots are required. Global data stays."
+  "cli.uninstall.blocker.backup-destination": "Complete verified backup coverage and a destination outside the removal roots are required. Global data stays.",
+  "cli.uninstall.backupPassphrase": "Backup passphrase"
 }

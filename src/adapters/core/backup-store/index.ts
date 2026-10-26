@@ -8,3 +8,5 @@ export { listBackupSets, lastBackupVerifications, type BackupSetEntry } from './
 
 export { createBackupCoverage, verifyBackupCoverage } from './internal/coverage.js';
 export type { BackupCoverageRequest } from './internal/coverage.js';
+export { FileTreeBackupOwner } from './internal/tree-owner.js';
+export type { BackupTreeResource } from './internal/tree-owner.js';

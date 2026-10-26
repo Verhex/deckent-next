@@ -862,6 +862,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   INSTALLATION_RECOVERY_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_RECOVERY_INVALID', p, l) }) },
   INSTALLATION_RECOVERY_CONSENT: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_RECOVERY_CONSENT', p, l) }) },
   INSTALLATION_RECOVERY_CHANGED: { category: 'config', render: (p, l) => ({ message: t('error.INSTALLATION_RECOVERY_CHANGED', p, l) }) },
+  UNINSTALL_NATIVE_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_NATIVE_UNSUPPORTED', p, l) }) },
   UNINSTALL_PURGE_DENIED: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_PURGE_DENIED', p, l) }) },
   UNINSTALL_LIFECYCLE_HOLD: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_LIFECYCLE_HOLD', p, l) }) },
   UNINSTALL_RECOVERY_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.UNINSTALL_RECOVERY_INVALID', p, l) }) },

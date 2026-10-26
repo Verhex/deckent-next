@@ -1308,7 +1308,8 @@
         "src/surfaces/core/project-instructions",
         "src/surfaces/core/setup",
         "src/surfaces/core/cli-kit",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/surfaces/core/cli-admin"
       ],
       "plan": "SURFACES"
     },
@@ -1474,7 +1475,8 @@
         "src/engine/core/nervous",
         "src/domain/core/effect",
         "src/engine/core/runtime",
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/engine/core/approval"
       ],
       "plan": "INSTALLATION"
     },
@@ -1522,9 +1524,7 @@
         "src/adapters/core/approval-store",
         "src/engine/core/effect",
         "src/domain/core/effect",
-        "src/domain/core/principal",
-        "src/adapters/core/worker-image",
-        "src/engine/core/toolchain-currency"
+        "src/domain/core/principal"
       ],
       "plan": "INSTALLATION"
     },
@@ -4355,7 +4355,17 @@
         "src/platform/core/integrity",
         "src/platform/core/config",
         "src/engine/core/installation",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/platform/core/host",
+        "src/adapters/core/backup-store",
+        "src/engine/core/backup",
+        "src/platform/core/common",
+        "src/adapters/core/installation-files",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/worker-image",
+        "src/engine/core/toolchain-currency",
+        "src/adapters/core/sqlite-ledger",
+        "src/platform/core/utils"
       ],
       "plan": "INSTALLATION"
     },

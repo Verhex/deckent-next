@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "recoveryDirectory": ".deckent-uninstall",
+  "durableResources": [
+    "brain",
+    "tasks",
+    "runs",
+    "audit",
+    "artifacts",
+    "integrations",
+    "crashes",
+    "terminalHistory",
+    "terminalSessions",
+    "fileEffects",
+    "approvalPreviews",
+    "instructionTrust",
+    "autonomyShadow",
+    "memoryPurges",
+    "brainWaits",
+    "onboarding",
+    "runtimeLog",
+    "ledger",
+    "bindings",
+    "policy",
+    "installationIdentity",
+    "approvals",
+    "signers"
+  ],
+  "sharedSecretFiles": [
+    "secrets.json",
+    "secrets.sealed.json",
+    "secrets.key"
+  ],
+  "coverageManifestSuffix": ".coverage.json",
+  "initialBackupPrefix": "initial-",
+  "finalBackupPrefix": "final-"
+}

@@ -72,7 +72,8 @@ export const FIRST_RUN_POLICY_TEMPLATE_ID = 'first-run-template';
  * `nervous-rule/promote` for every measured lost-worker rule at its seed version, all at `require-approval`. The readers need allow, so recovery
  * stays off after install and upgrade; only the card's `policy-recovery` change raises one cell to allow (I2 raise). Never the MCP actor or `all`. */
 /** v17 (alpha.56 U4E, owner G1 2026-10-26): one named-person execute grant; the adapter still requires its card and durable effect. */
-export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 17;
+/** v18 (alpha.56 U10C): named-person lifecycle and exact uninstall operation grants; the witness/card remain mandatory. */
+export const FIRST_RUN_POLICY_TEMPLATE_VERSION = 18;
 /** The hard-floor tool-call cells (write floor and configuration file, destructive and always-ask shell, every fetch, every MCP call): only the
  * terminal of the turn that asked may allow them. The same set is Core's default in the approval engine (a test keeps the two equal). */
 export const HARD_FLOOR_CARD_CELLS = Object.freeze(['edit-floor', 'edit-self-source', 'edit-authority', 'shell-destructive', 'shell-always-ask', 'fetch-listed', 'fetch-unlisted', 'mcp-call', 'mcp-floor'] as const);
@@ -100,7 +101,7 @@ export interface FirstRunPolicyTemplateInput {
   /** v16: the measured lost-worker rules at their seed version (engine data); absent, no promotion cell (fail closed). Unused by v4–v15. */
   readonly recoveryRules?: readonly RecoveryRuleVersion[];
   /** v17: onboarding-local operation identity supplied by the engine catalog; absent means no grant. */
-  readonly firstCommitOperationId?: string;
+  readonly firstCommitOperationId?: string; readonly uninstallOperationIds?: readonly string[];
 }
 type RecoveryRuleVersion = Readonly<{ id: string; version: number }>;
 export interface FirstRunPolicyTemplate {
@@ -122,7 +123,7 @@ export function firstRunServiceId(scopeId: string): string {
   const scope = identitySchema.parse(scopeId), suffix = '-runtime';
   return identitySchema.parse(`${scope.slice(0, IDENTITY_MAX_LENGTH - suffix.length)}${suffix}`);
 }
-function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17) {
+function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18) {
   const scopeId = identitySchema.parse(input.scopeId);
   const principal = { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const revision = `${FIRST_RUN_POLICY_TEMPLATE_ID}-v${version}`;
@@ -166,6 +167,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
       ...(version >= 15 ? v15Rules(principal, [scopeId]) : []),
       ...(version >= 16 ? v16Rules(principal, [scopeId], input.recoveryRules) : []),
       ...(version >= 17 ? v17Rules(principal, [scopeId], input.firstCommitOperationId) : []),
+      ...(version >= 18 ? v18Rules(principal, input.uninstallOperationIds) : []),
     ],
   });
   const bindings = bindingsFileSchema.parse({ schemaVersion: 1, revision: `${revision}-bindings`, bindings: [] });
@@ -174,7 +176,7 @@ function buildTemplate(input: FirstRunPolicyTemplateInput, version: 4 | 5 | 6 | 
 
 /** Why an installation's policy cannot take the current template upgrade in place: it already is current, it is not exactly the v4 template this
  * installation's (scope, person) would get (hand-edited, administered since, another person's, or another version), or it is unreadable. */
-export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16; readonly policy: PolicyFile }
+export type FirstRunTemplateUpgrade = { readonly status: 'upgrade'; readonly from: 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17; readonly policy: PolicyFile }
   | { readonly status: 'current' } | { readonly status: 'unavailable'; readonly reason: 'not-v4-template' | 'invalid' };
 /**
  * The first-run exact-template migration (v5 owner decision 2026-10-07): only a policy document that is exactly an older template of this (scope, person) — the
@@ -187,7 +189,7 @@ export function upgradeFirstRunPolicy(current: unknown, input: FirstRunPolicyTem
   const target = buildTemplate(input, FIRST_RUN_POLICY_TEMPLATE_VERSION).policy;
   if (canonicalJson(parsed.data) === canonicalJson(target)) return Object.freeze({ status: 'current' });
   // Exact older templates become the current one; edited policies take the explicit add-only plan.
-  for (const from of [16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4] as const) {
+  for (const from of [17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4] as const) {
     if (canonicalJson(parsed.data) === canonicalJson(buildTemplate(input, from).policy)) return Object.freeze({ status: 'upgrade', from, policy: target });
   }
   return Object.freeze({ status: 'unavailable', reason: 'not-v4-template' });
@@ -227,12 +229,12 @@ export const FIRST_RUN_UPGRADE_RULE_IDS = Object.freeze({ servers: 'first-run-mc
   agentCatalog: 'first-run-agent-catalog', observeAgentCatalog: 'first-run-mcp-observe-agent-catalog',
   memoryReview: 'first-run-memory-review', evaluatorMemory: 'first-run-memory-evaluator', evaluatorRuns: 'first-run-memory-evaluator-runs', evaluatorModel: 'first-run-memory-evaluator-model',
   memoryPurge: 'first-run-memory-purge', recoveryModel: 'first-run-recovery-model', signers: 'first-run-skill-signers', catalogImport: 'first-run-agent-catalog-import',
-  aggregatorCatalog: 'first-run-catalog-aggregator', aggregatorRuns: 'first-run-catalog-aggregator-runs', aggregatorMemory: 'first-run-catalog-aggregator-memory', firstCommit: 'first-run-first-commit' });
+  aggregatorCatalog: 'first-run-catalog-aggregator', aggregatorRuns: 'first-run-catalog-aggregator-runs', aggregatorMemory: 'first-run-catalog-aggregator-memory', firstCommit: 'first-run-first-commit', uninstall: 'first-run-uninstall', uninstallOperations: 'first-run-uninstall-operations' });
 /** v16 cells (alpha.56 D1): the card's recovery actions (the stop list and the continuation) and the promotable lost-worker rules, by rule id. */
 const RECOVERY_CARD_ACTIONS = Object.freeze([...RECOVERY_ACTIONS, RECOVERY_DECISION_ACTIONS[0]]);
 const recoveryActionRuleId = (action: string) => `first-run-recovery-action-${action}`, recoveryPromoteRuleId = (rule: string) => `first-run-recovery-promote-${rule}`;
-/** v17 alone is the current rollback delta; the v16 recovery cells remain installed. */
-export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze([FIRST_RUN_UPGRADE_RULE_IDS.firstCommit]);
+/** v18 alone is the current rollback delta; previous authority stays installed. */
+export const FIRST_RUN_CURRENT_UPGRADE_RULE_IDS = Object.freeze([FIRST_RUN_UPGRADE_RULE_IDS.uninstall, FIRST_RUN_UPGRADE_RULE_IDS.uninstallOperations]);
 /** v7 actions (K3): activation and its read; the model call and everything a terminal turn needs around it (inspect, content, cancel). */
 const MODEL_ACTIVATION_ACTIONS = ['activate', 'inspect'] as const;
 const MODEL_INVOCATION_ACTIONS = ['invoke', 'inspect', 'inspect-content', 'cancel-invocation'] as const;
@@ -250,7 +252,7 @@ type AdditionNames = { readonly proposeMcpToolName: string; readonly mcpCallOper
   /** v13: the execution-environment registry ids the install rule names. */
   readonly executionEnvironmentIds: readonly string[];
   /** v16: the measured lost-worker rules at their seed version (absent: no promotion cell). */
-  readonly recoveryRules?: readonly RecoveryRuleVersion[]; readonly firstCommitOperationId?: string; readonly scopeId?: string };
+  readonly recoveryRules?: readonly RecoveryRuleVersion[]; readonly firstCommitOperationId?: string; readonly uninstallOperationIds?: readonly string[]; readonly scopeId?: string };
 /** Whether a rule NAMES this person: a rule for `all` principals names nobody (security, lead 2026-10-07: never proof of an owner). */
 export const namesPerson = (grant: PolicyGrant, person: Person) => grant.principals !== 'all' && grant.principals.some(item => item.issuer === person.issuer && item.subject === person.subject);
 /**
@@ -300,7 +302,7 @@ function plannedAdditions(grants: readonly PolicyGrant[], person: Person, scopes
     // v15 (S4B-1 + S7, owner 2026-10-23): the memory distiller's D1–D4 and the agent catalog rules, added the same add-only way.
     ...v15Rules(person, scopes),
     // v16 (alpha.56 D1): the recovery cells at require-approval; a person already allowed on a cell keeps it (an allow rule covers it, nothing is added).
-    ...v16Rules(person, scopes, input.recoveryRules), ...v17Rules(person, firstCommitScopes, input.firstCommitOperationId)];
+    ...v16Rules(person, scopes, input.recoveryRules), ...v17Rules(person, firstCommitScopes, input.firstCommitOperationId), ...v18Rules(person, input.uninstallOperationIds)];
   const conflicts: string[] = [], rules: PolicyGrant[] = [];
   for (const want of wanted) {
     const same = grants.find(grant => grant.id === want.id);
@@ -491,15 +493,15 @@ function evaluatorRules(evaluator: Person, rule: (id: string, principal: Person,
     rule(ids.evaluatorModel, evaluator, vocabulary.modelInvocation.kind, ['invoke'])];
 }
 
-/** Latest add-only delta (v17) by content: a same-id customization (a cell the card raised to allow too) is preserved and reported, never deleted. */
-export function firstRunTemplateRollback(current: unknown, person: Person, scopeId: string | undefined, _recoveryRules?: readonly RecoveryRuleVersion[], firstCommitOperationId?: string): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[]; readonly missing?: readonly string[] } {
+/** Latest add-only delta (v18) by content: a same-id customization (a cell the card raised to allow too) is preserved and reported, never deleted. */
+export function firstRunTemplateRollback(current: unknown, person: Person, scopeId: string | undefined, _recoveryRules?: readonly RecoveryRuleVersion[], _firstCommitOperationId?: string, uninstallOperationIds?: readonly string[]): { readonly rules: readonly PolicyGrant[]; readonly conflicts: readonly string[]; readonly missing?: readonly string[] } {
   const policy = policyFileSchema.parse(current);
   if (policy.schemaVersion !== 2) return { rules: [], conflicts: [] };
   const read = policy.grants.find(rule => rule.id === 'first-run-read-tools');
   if (isMcpPrincipal(person)) return { rules: [], conflicts: [] };
   const scopes = scopeId ? [identitySchema.parse(scopeId)] : read && read.scopes !== 'all' && read.scopes.length === 1 && namesPerson(read, person) ? read.scopes : null;
   if (!scopes) return { rules: [], conflicts: [] };
-  const expected = v17Rules({ issuer: person.issuer, subject: person.subject }, scopes, firstCommitOperationId), rules: PolicyGrant[] = [], conflicts: string[] = [];
+  const expected = v18Rules({ issuer: person.issuer, subject: person.subject }, uninstallOperationIds), rules: PolicyGrant[] = [], conflicts: string[] = [];
   const missing: string[] = [];
   for (const want of expected) {
     const held = policy.grants.find(rule => rule.id === want.id);
@@ -509,4 +511,13 @@ export function firstRunTemplateRollback(current: unknown, person: Person, scope
   }
   // `missing`: expected delta rules not held (review 2672: a fresh install is the whole expected set, nothing removed).
   return { rules: Object.freeze(rules), conflicts: Object.freeze(conflicts), missing: Object.freeze(missing) };
+}
+
+/** Lifecycle grants name only the owner; policies can still deny either cell, and AI has a fixed authority floor. */
+function v18Rules(person: Person, operations: readonly string[] | undefined): readonly PolicyGrant[] {
+  if (isWorkloadPrincipalRef(person) || !operations?.length) return [];
+  return [policyGrantSchema.parse({ id: FIRST_RUN_UPGRADE_RULE_IDS.uninstall, effect: 'allow', actions: ['inspect', 'uninstall', 'purge'],
+    scopes: 'all', principals: [person], resource: { kind: 'installation', ids: 'all' } }),
+  policyGrantSchema.parse({ id: FIRST_RUN_UPGRADE_RULE_IDS.uninstallOperations, effect: 'allow', actions: ['execute'], scopes: 'all',
+    principals: [person], resource: { kind: 'operation', ids: [...new Set(operations.map(value => identitySchema.parse(value)))].sort() } })];
 }

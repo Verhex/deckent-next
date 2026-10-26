@@ -1,14 +1,19 @@
 import { createHash } from 'node:crypto';
 import { lstat } from 'node:fs/promises';
 import { dirname, join, relative, isAbsolute, sep } from 'node:path';
-import { InstallationCacheRemovalTarget, FileInstallationIdentityStore, readNewestWorkerReceipt } from '#adapters/index.js';
+import { InstallationCacheRemovalTarget } from './cache.js';
+import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
+import { readNewestWorkerReceipt, observeWorkerRemovalInventory } from '#adapters/core/worker-image/index.js';
 import { ErrorRegistry, productResourcePath, resolveGlobalConfigReadPath, DECKENT_DIR, PRODUCT_LAYOUT_REGISTRY, type ConfigLoadOptions, type ResolvedConfig, type ProductResource } from '#platform/index.js';
+import { extendUninstallInventory, assertNativeUninstallSupport } from './inventory.js';
+import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { affectedToolchainProfiles, type UninstallInventory, type UninstallResource } from '#engine/index.js';
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const inside = (root: string, path: string) => { const child = relative(root, path); return !child || child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child); };
 
 /** Layout/identity are the recorded owned set. A project identity never proves ownership of the person's shared global root. */
-export async function configuredUninstallInventory(config: ResolvedConfig, policyRevision: string, scopeIds: readonly string[], options: ConfigLoadOptions) {
+export async function observeUninstallInventory(config: ResolvedConfig, policyRevision: string, scopeIds: readonly string[], options: ConfigLoadOptions, purge = false) {
+  assertNativeUninstallSupport(options.platform ?? process.platform);
   const layout = config.productLayout, identity = await new FileInstallationIdentityStore(layout, config.configFile.writeLockTimeoutMs, undefined, config.installation).read();
   if (identity.status !== 'available') throw ErrorRegistry.createError('INSTALLATION_IDENTITY_UNAVAILABLE');
   const installationId = identity.value.installationId, globalRoot = dirname(await resolveGlobalConfigReadPath(options.env, options.platform));
@@ -26,7 +31,7 @@ export async function configuredUninstallInventory(config: ResolvedConfig, polic
   const resources: UninstallResource[] = [];
   for (const resource of Object.keys(layout.resources) as ProductResource[]) {
     const locator = productResourcePath(layout, resource), disposable = owned.find(item => item.resourceId === resource);
-    const info = await lstat(locator).catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; });
+    const info = await lstat(locator).catch(error => { if (['ENOENT', 'INTEGRITY_KEY_UNAVAILABLE'].includes((error as NodeJS.ErrnoException).code ?? '')) return null; throw error; });
     let version: string | null = info ? hash([info.dev, info.ino, info.mode, info.size, info.mtimeMs, info.ctimeMs]) : null;
     let capability = false, ownership: UninstallResource['ownership'] = 'unknown';
     if (disposable) {
@@ -52,5 +57,18 @@ export async function configuredUninstallInventory(config: ResolvedConfig, polic
   const inventory: UninstallInventory = { installation: { id: installationId, root: layout.root }, scopeSummary: scopeIds,
     layoutRevision: layout.revision, policyRevision, inventoryRevision: hash(resources), resources, blockers: [], protectedPaths,
     deletionRoots: [globalRoot], backupDestination: null, packageRemoval: { command: null, shared: true } };
-  return { inventory, target };
+  const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile).catch(error => { if (['ENOENT', 'INTEGRITY_KEY_UNAVAILABLE'].includes((error as NodeJS.ErrnoException).code ?? '')) return null; throw error; });
+  const extended = await extendUninstallInventory(config, inventory, purge, integrity, options.env ?? process.env);
+  const imagesObserved = config.execution?.docker ? await observeWorkerRemovalInventory({ home: join(productResourcePath(layout, 'workspaces'), 'toolchains'), installationId,
+    buildersRoot: join(globalRoot, PRODUCT_LAYOUT_REGISTRY.resources.workerImageBuilders), executable: config.execution.docker.executable,
+    timeoutMs: config.installation.imageProbe.timeoutMs, outputBytes: config.installation.imageProbe.outputBytes }) : { targets: [], resources: [] };
+  const finalResources = [...extended.inventory.resources];
+  for (const image of imagesObserved.resources) {
+    const index = finalResources.findIndex(item => item.resourceId === image.resource.resourceId);
+    const observed: UninstallResource = { resourceId: image.resource.resourceId, contribution: 'worker-image', locator: image.resource.imageId,
+      version: image.version, owner: image.exclusive ? installationId : null, ownership: image.exclusive ? 'exclusive' : 'unknown', ownershipEvidence: image.exclusive ? image.resource.receiptDigest : null,
+      present: image.present, protected: !image.exclusive, capability: image.exclusive, backup: 'missing' };
+    if (index >= 0) finalResources[index] = observed; else finalResources.push(observed);
+  }
+  return { ...extended, inventory: { ...extended.inventory, resources: finalResources, inventoryRevision: hash(finalResources) }, target, targets: [...extended.targets, ...imagesObserved.targets] };
 }

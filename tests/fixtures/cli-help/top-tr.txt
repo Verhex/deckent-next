@@ -83,6 +83,9 @@ Onaylar:
       [--scope <id>]
 
 Kurulum/Bakım:
+  uninstall   Bir kurulumu önizleyin veya kaldırın;
+              veri varsayılan olarak korunur.
+      [--purge] [--dry-run] [--json]
   audit       Audit geçmişini ve checkpoint kanıtını doğrula (eylemsiz: verify)
       verify | rebaseline
       [--scope <id>]

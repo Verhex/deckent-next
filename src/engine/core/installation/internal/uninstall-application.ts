@@ -1,7 +1,8 @@
-import { createHash } from 'node:crypto';
-import { evaluatePolicy, policySchema, principalGrants, isAiPrincipal, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
+import { createHash, randomUUID } from 'node:crypto';
+import { effectCommandSchema, evaluatePolicy, policySchema, principalGrants, isAiPrincipal, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { assertAuthorityWitness, type AuthorityWitness } from '#engine/core/runtime/index.js';
+import type { ApprovalApplication } from '#engine/core/approval/index.js';
 import type { EffectApplication } from '#engine/core/effect/index.js';
 import { uninstallApplySchema, UninstallError, type UninstallItem, type UninstallPlan, type UninstallResult } from './uninstall-contract.js';
 import { createUninstallPlan, uninstallRegistry, type UninstallInventory } from './uninstall-plan.js';
@@ -27,6 +28,7 @@ export function authorizeUninstall(input: unknown, principal: VerifiedPrincipal,
 /** Trusted, local interaction. Neither answers nor a witness are fields in UninstallApply. */
 export interface UninstallInteraction {
   confirm(plan: UninstallPlan): Promise<boolean>;
+  backupPassphrase?(): Promise<string>;
 }
 /** The existing owners must provide ALL of these under durable lifecycle custody before apply is available.
  * The admission retains its hold on partial/unknown outcomes and fences service startup/admissions after a crash.
@@ -38,7 +40,8 @@ export interface UninstallAdmission {
   /** Re-observe remaining targets, policy, live session, ownership and hold; settled steps use retained generic receipts. */
   revalidate(item: UninstallItem | null): Promise<void>;
   /** Existing backup owner: create AND verify exact encrypted coverage outside every removal root. */
-  prepareBackup(): Promise<void>;
+  prepareBackup(passphrase?: string): Promise<void>;
+  verifiedBackup?(): UninstallPlan['backup'];
   /** Persist the exact plan/step approvals through the existing operation broker and authenticated recovery companion. */
   approvePlan(): Promise<void>;
   /** Sealed final outcome, after the generic receipts; release hold only when the owners prove it safe. */
@@ -97,9 +100,10 @@ export class UninstallApplication {
     const admit = this.ports.withAdmission;
     if (plan.purge) await this.ports.authorize('purge', await this.ports.principal());
     if (!admit || plan.blockers.length) throw new UninstallError(plan.purge ? 'UNINSTALL_BACKUP_COVERAGE' : 'UNINSTALL_OWNERSHIP');
+    let admitted: UninstallAdmission | undefined;
     const states: { resourceId: string; state: UninstallResult['items'][number]['state'] }[] = plan.items.map(item => ({ resourceId: item.resourceId, state: null }));
     const result = (status: UninstallResult['status'], recoveryLocation: string | null, failureCode?: string): UninstallResult => ({ schemaVersion: 1,
-      planDigest: plan.planDigest, status, items: states.map(item => ({ ...item })), recoveryLocation, backup: plan.backup, packageRemoval: plan.packageRemoval,
+      planDigest: plan.planDigest, status, items: states.map(item => ({ ...item })), recoveryLocation, backup: admitted?.verifiedBackup?.() ?? plan.backup, packageRemoval: plan.packageRemoval,
       ...(failureCode ? { failureCode } : {}) });
     if (signal?.aborted) return result('cancelled', null);
     if (!plan.purge) {
@@ -108,6 +112,7 @@ export class UninstallApplication {
       if (signal?.aborted) return result('cancelled', null);
     }
     return admit(plan, command.commandId, async admission => {
+      admitted = admission;
       await admission.revalidate(null);
       const pending = plan.items.filter(item => item.action === 'remove'), registry = this.registry;
       const commands = new Map<string, EffectCommand>();
@@ -128,7 +133,7 @@ export class UninstallApplication {
       if (plan.purge) {
         if (signal?.aborted) { const cancelled = result('cancelled', admission.recoveryLocation); await admission.finish(cancelled); return cancelled; }
         await this.person(); await this.ports.authorize('purge', await this.ports.principal());
-        await admission.prepareBackup();
+        await admission.prepareBackup(await interaction.backupPassphrase?.());
         if (signal?.aborted || !await interaction.confirm(plan)) {
           const cancelled = result('cancelled', admission.recoveryLocation); await admission.finish(cancelled); return cancelled;
         }
@@ -169,4 +174,23 @@ export class UninstallApplication {
       const completed = result('completed', admission.recoveryLocation); await admission.finish(completed); return completed;
     });
   }
+}
+
+/** One witnessed plan supplies only its exact commands to the existing broker. Required approvals remain durable and separate. */
+export function approvedUninstallEffects(plan: UninstallPlan, scopeId: string, app: EffectApplication, decider: ApprovalApplication): UninstallAdmission['effects'] {
+  return { inspect: (scope, id) => app.inspect(scope, id), async execute(input) {
+    const command = effectCommandSchema.parse(input), item = plan.items.find(item => item.resourceId === command.target.id && item.action === 'remove');
+    const entry = uninstallRegistry().entries.find(entry => entry.id === item?.contribution);
+    if (!item || !entry || command.scopeId !== scopeId || command.operation.id !== item.operation.id || command.operation.version !== item.operation.version
+      || command.target.kind !== entry.targetKind || command.expectedVersion !== item.version
+      || JSON.stringify(command.input) !== JSON.stringify({ planDigest: plan.planDigest, resourceId: command.target.id })) throw new UninstallError('UNINSTALL_INVALID');
+    let outcome = await app.submit('execute', command);
+    if (outcome.status === 'approval-pending') {
+      await decider.decide({ schemaVersion: 1, commandId: randomUUID(), scopeId, approvalId: outcome.approval.approvalId,
+        expectedRevision: outcome.approval.revision, decision: 'allow', reason: plan.planDigest, channel: 'local-terminal-card' });
+      outcome = await app.submit('execute', command);
+    }
+    if (outcome.status !== 'settled') throw ErrorRegistry.createError('EFFECT_APPROVAL_REQUIRED');
+    return outcome;
+  } };
 }

@@ -59,9 +59,11 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
     else if (purge && !entry.disposable && resource.backup !== 'covered') { action = 'blocked'; reason = 'backup-coverage'; }
     else { action = 'remove'; reason = 'owned'; }
     if (action === 'remove' && entry.kind === 'path') {
-      const path = resolve(resource.locator);
-      if (!isAbsolute(resource.locator) || path === parse(path).root || !inventory.deletionRoots.some(root => within(root, path) && root !== path)
-        || inventory.protectedPaths.some(kept => within(path, kept) || within(kept, path))) { action = 'blocked'; reason = 'unsafe-path'; }
+      if ((resource.members ?? [resource.locator]).some(locator => {
+        const path = resolve(locator);
+        return !isAbsolute(locator) || path === parse(path).root || !inventory.deletionRoots.some(root => within(root, path) && root !== path)
+          || inventory.protectedPaths.some(kept => within(path, kept) || within(kept, path));
+      })) { action = 'blocked'; reason = 'unsafe-path'; }
     }
     if (entry.kind === 'service' && resource.present !== false && action === 'keep') reason = 'service-unresolved';
     if (action === 'blocked' || action === 'manual' || (purge && resource.present !== false && action === 'keep' && resource.owner === installation.id)) blockers.push(`${resource.resourceId}:${reason}`);
@@ -73,7 +75,7 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
     const entry = registry.entries.find(entry => entry.id === item.contribution)!;
     if (entry.kind === 'path' && items.some(kept => kept.action !== 'remove' && kept.present !== false
       && registry.entries.find(entry => entry.id === kept.contribution)!.kind === 'path'
-      && (within(item.locator, kept.locator) || within(kept.locator, item.locator)))) {
+      && (item.members ?? [item.locator]).some(path => (kept.members ?? [kept.locator]).some(other => within(path, other) || within(other, path))))) {
       Object.assign(item, { action: 'blocked', reason: 'retained-overlap' }); blockers.push(`${item.resourceId}:retained-overlap`);
     }
   }

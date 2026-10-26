@@ -1164,5 +1164,6 @@
   "error.UNINSTALL_LIFECYCLE_HOLD": "An unfinished uninstall blocks new work. Use deckent uninstall --dry-run to inspect, then resume from a personal terminal. Recovery anchor: {path}.",
   "error.UNINSTALL_RECOVERY_INVALID": "Uninstall recovery evidence is missing, unsafe or does not match the current installation/person. Keep the resources and ask the installation administrator to reconcile it.",
   "error.UNINSTALL_WORK_ACTIVE": "Uninstall is blocked by active or incompletely inspected work. Use the existing run inspection/cancellation/reconciliation commands before trying again.",
-  "error.UNINSTALL_MANAGED": "This installation is protected by administrator/company policy. Contact the administrator responsible for {owner}; uninstall cannot override this rule."
+  "error.UNINSTALL_MANAGED": "This installation is protected by administrator/company policy. Contact the administrator responsible for {owner}; uninstall cannot override this rule.",
+  "error.UNINSTALL_NATIVE_UNSUPPORTED": "Automatic native uninstall is unavailable on {platform}. Nothing was removed. For a launchd or Windows Service installation, ask its administrator to stop and unregister only the recorded service (launchctl bootout or sc.exe delete), then verify it is absent. Keep project .deckent folders and global data. Remove the CLI through the package manager that installed it; back up before any optional data removal."
 }

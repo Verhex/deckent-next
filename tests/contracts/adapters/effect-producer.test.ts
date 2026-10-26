@@ -101,3 +101,16 @@ it.skipIf(process.platform !== 'linux')('[requires Linux live OS session /proc i
   await expect(app({ kind: 'principal' }).execute(target2)).rejects.toMatchObject({ code: 'EFFECT_CONFLICT' });
   expect(applied).toBe(1);
 });
+
+it('retains lifecycle custody for an unsettled business effect even when its scope has no current installation grant', async () => {
+  const { hasUnsettledInstallationWork } = await import('#adapters/core/installation-removal/index.js');
+  const { store, path } = await ledger();
+  {
+    expect(hasUnsettledInstallationWork(path, options.busyTimeoutMs)).toBe(false);
+    const claimed = await store.claimEffect(intent('uninstall-blocker', { producer: { kind: 'principal' } }));
+    expect(hasUnsettledInstallationWork(path, options.busyTimeoutMs)).toBe(true);
+    const settled = settleEffect(claimed, { kind: 'idempotency-record', version: 'committed', observedAt: 3 });
+    await store.saveEffect(claimed, settled);
+    expect(hasUnsettledInstallationWork(path, options.busyTimeoutMs)).toBe(false);
+  }
+});

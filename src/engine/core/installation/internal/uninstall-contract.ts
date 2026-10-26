@@ -5,7 +5,7 @@ export const uninstallPlanQuerySchema = z.object({ schemaVersion: z.literal(1), 
 export const uninstallApplySchema = z.object({ schemaVersion: z.literal(1), commandId: text, planDigest: digest }).strict();
 export const uninstallInstallationSchema = z.object({ id: text, root: text }).strict().readonly();
 export const uninstallResourceSchema = z.object({
-  resourceId: text, contribution: text, locator: text, version: text.nullable(), owner: text.nullable(),
+  resourceId: text, contribution: text, locator: text, members: z.array(text).min(1).optional(), version: text.nullable(), owner: text.nullable(),
   ownership: z.enum(['exclusive', 'shared', 'foreign', 'unknown']), ownershipEvidence: digest.nullable(),
   present: z.boolean().nullable(), protected: z.boolean(), capability: z.boolean(),
   backup: z.enum(['covered', 'missing', 'protected-session', 'non-exportable']),
