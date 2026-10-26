@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, emit, getConfigFieldDefault, t, terminalSafeText, type Locale, type ExitCode } from '#platform/index.js';
-import type { UninstallPlan } from '#engine/index.js';
+import { uninstallAuthorityBlocker, type UninstallPlan } from '#engine/index.js';
 import { readHidden } from '#surfaces/core/cli-admin/index.js';
 import { askCliCard, cliMode } from '#surfaces/core/cli-human/index.js';
 import { commandLocale } from '#surfaces/core/cli-kit/index.js';
@@ -19,7 +19,9 @@ export function uninstallPlanLines(plan: UninstallPlan, locale: Locale): readonl
     for (const locator of item.members ?? [item.locator]) lines.push(`${label}: ${safe(locator)} · ${messages[`reason.${item.reason}`] ?? unknown}`);
   }
   for (const blocker of plan.blockers) {
-    lines.push(t('cli.uninstall.blocked', { reason: messages[`blocker.${blocker}`] ?? `${unknown} (${safe(blocker)})` }, locale));
+    const authority = /^authority-(relocated|unsafe):(.+)$/su.exec(blocker), path = safe(authority?.[2] ?? '');
+    lines.push(t('cli.uninstall.blocked', { reason: authority?.[1] === 'relocated' ? t('cli.uninstall.blocker.authority-relocated', { path }, locale)
+      : authority ? t('cli.uninstall.blocker.authority-unsafe', { path }, locale) : messages[`blocker.${blocker}`] ?? `${unknown} (${safe(blocker)})` }, locale));
   }
   lines.push(t('cli.uninstall.retainedData', {}, locale), t('cli.uninstall.reinstall', {}, locale));
   if (plan.backup.required) lines.push(t('cli.uninstall.backup', { path: safe(plan.backup.destination ?? unknown) }, locale));
@@ -42,7 +44,7 @@ export async function uninstallCommand(argv: readonly string[], context: Install
   const plan = await context.previewUninstall(root, seen.has('--purge'), options);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
   if (previewOnly) { emit(plan, { ...sinks, json, render: value => [...uninstallPlanLines(value, locale), t('cli.uninstall.previewOnly', {}, locale)].join('\n') }); return 0; }
-  if (plan.blockers.length) { emit(plan, { ...sinks, render: value => uninstallPlanLines(value, locale).join('\n') }); throw ErrorRegistry.createError(plan.purge ? 'UNINSTALL_BACKUP_COVERAGE' : 'UNINSTALL_OWNERSHIP'); }
+  if (plan.blockers.length) { emit(plan, { ...sinks, render: value => uninstallPlanLines(value, locale).join('\n') }); throw uninstallAuthorityBlocker(plan) ?? ErrorRegistry.createError(plan.purge ? 'UNINSTALL_BACKUP_COVERAGE' : 'UNINSTALL_OWNERSHIP'); }
   if (!context.applyUninstall) throw ErrorRegistry.createError('UNINSTALL_UNSUPPORTED');
   const signal = AbortSignal.timeout(getConfigFieldDefault('approvals').sessionTtlMs);
   const result = await context.applyUninstall(root, { schemaVersion: 1, commandId: randomUUID(), planDigest: plan.planDigest }, {

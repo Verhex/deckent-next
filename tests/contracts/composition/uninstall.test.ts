@@ -217,3 +217,41 @@ it('keeps purge closed before any backup or hold when a legal hold names a compa
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
   } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });
+
+it('blocks the whole purge before any backup, hold or cache removal when an authority file is unsafe or relocated, naming its exact path', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+  const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
+  const { uninstallRecoveryDirectory } = await import('#adapters/core/installation-removal/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-purge-unsafe-'));
+  try {
+    const project = join(root, 'project'), data = join(root, 'global');
+    for (const path of [join(project, '.deckent'), join(data, AREA), join(data, 'state')]) await mkdir(path, { recursive: true, mode: 0o700 });
+    const config = (resources: Record<string, string> = {}) => writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data, resources }, terminal: { scopeId: 's' } }), { mode: 0o600 });
+    await config(); await writeFile(join(data, AREA, 'cache'), 'DISPOSABLE', { mode: 0o600 });
+    const actor = readLocalOsIdentity();
+    await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'operation', 'approval', 'backup'].map(kind => ({
+      id: `owner-${kind}`, effect: 'allow', actions: 'all', scopes: 'all', principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' } })) }), { mode: 0o600 });
+    // A same-user bindings file readable by others is not a private member: the purge stops instead of silently keeping the authority set.
+    await writeFile(join(data, 'bindings.json'), JSON.stringify({ schemaVersion: 1, revision: 'b1', bindings: [] }), { mode: 0o644 });
+    const layout = resolveProductLayout({ projectRoot: project, root: data });
+    await new FileInstallationIdentityStore(layout).loadOrCreate();
+    await openLocalIntegrityAuthority(layout, getConfigFieldDefault('approvals').keyFile, true);
+    const ledger = productResourcePath(layout, 'ledger');
+    openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
+    const options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false };
+    const unsafe = await previewConfiguredUninstall(project, true, options);
+    expect(unsafe.blockers).toContain(`authority-unsafe:${join(data, 'bindings.json')}`);
+    expect(unsafe.items.some(item => item.resourceId === 'global-data')).toBe(false);
+    await expect(applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'unsafe', planDigest: unsafe.planDigest }, { backupPassphrase: async () => 'unused', confirm: async () => true }, options))
+      .rejects.toMatchObject({ code: 'UNINSTALL_AUTHORITY_UNVERIFIED', params: { path: join(data, 'bindings.json') } });
+    expect(await readFile(join(data, AREA, 'cache'), 'utf8')).toBe('DISPOSABLE');
+    await expect(lstat(uninstallRecoveryDirectory(data))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
+    // A relocated authority file is never followed to its configured spelling; the data-keeping uninstall stays available.
+    await chmod(join(data, 'bindings.json'), 0o600); await config({ bindings: 'moved/bindings.json' }); clearConfigCache();
+    const moved = await previewConfiguredUninstall(project, true, options);
+    expect(moved.blockers).toContain(`authority-relocated:${join(data, 'moved/bindings.json')}`);
+    expect((await previewConfiguredUninstall(project, false, options)).blockers).toEqual([]);
+    expect(await lstat(join(data, 'bindings.json'))).toBeTruthy(); expect(await lstat(ledger)).toBeTruthy();
+  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});

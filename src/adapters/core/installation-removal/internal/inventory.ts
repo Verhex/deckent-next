@@ -40,16 +40,19 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     targets.push(target);
   }
   const isGlobal = base.deletionRoots.includes(layout.root), projectData = join(config.projectRoot, PRODUCT_LAYOUT_REGISTRY.rootName);
-  // The installation's authority files are one atomic set: a relocated, unsafe or foreign member keeps all of them.
+  // The installation's authority files are one atomic set: a relocated, unsafe or foreign member keeps all of them and blocks the purge.
   let members: DataRemovalMember[] = [];
-  if (purge && isGlobal && layout.root !== projectData) {
-    try {
-      for (const [name, file] of Object.entries(registry.purgeMembers) as [ProductResource, string][]) {
-        const resourcePath = productResourcePath(layout, name), path = file ? join(resourcePath, file.replace('{keyFile}', config.approvals.keyFile)) : resourcePath;
-        if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, path) || inside(projectData, path)) throw new Error('relocated');
-        if (await memberStat(path)) members.push({ resourceId: name, path, directory: file ? resourcePath : null });
-      }
-    } catch { members = []; }
+  const blockers: string[] = [];
+  if (purge && (!isGlobal || layout.root === projectData)) blockers.push(`authority-relocated:${layout.root}`);
+  else if (purge) {
+    for (const [name, file] of Object.entries(registry.purgeMembers) as [ProductResource, string][]) {
+      const resourcePath = productResourcePath(layout, name), path = file ? join(resourcePath, file.replace('{keyFile}', config.approvals.keyFile)) : resourcePath;
+      // Verified absence is not unsafe; a relocated, unreadable or unsafe member blocks the whole purge with its exact path.
+      if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, path) || inside(projectData, path)) { blockers.push(`authority-relocated:${path}`); continue; }
+      try { if (await memberStat(path)) members.push({ resourceId: name, path, directory: file ? resourcePath : null }); }
+      catch { blockers.push(`authority-unsafe:${path}`); }
+    }
+    if (blockers.length) members = [];
   }
   const owners = new Set(members.map(member => member.resourceId)), retained = resources.filter(item => !owners.has(item.resourceId));
   // Anything else in a member's directory has no recorded owner here: kept and reported, never deleted with the directory.
@@ -75,7 +78,7 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
       present: true, protected: true, capability: false, backup: 'missing' });
   }
   // A missing/foreign key disables native record inspection; it never opens an unverified record or creates a key on preview.
-  const inventory: UninstallInventory = { ...base, resources: retained, protectedPaths,
+  const inventory: UninstallInventory = { ...base, resources: retained, protectedPaths, blockers: [...base.blockers, ...blockers],
     inventoryRevision: sha256(JSON.stringify(retained)), backupDestination: purge ? join(uninstallRecoveryDirectory(layout.root), 'backup') : null };
   return { inventory, targets, dataTarget: target, portable: members };
 }

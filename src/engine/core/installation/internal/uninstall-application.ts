@@ -5,7 +5,7 @@ import { assertAuthorityWitness, type AuthorityWitness } from '#engine/core/runt
 import type { ApprovalApplication } from '#engine/core/approval/index.js';
 import type { EffectApplication } from '#engine/core/effect/index.js';
 import { uninstallApplySchema, UninstallError, type UninstallItem, type UninstallPlan, type UninstallResult } from './uninstall-contract.js';
-import { createUninstallPlan, uninstallRegistry, type UninstallInventory } from './uninstall-plan.js';
+import { createUninstallPlan, uninstallRegistry, uninstallAuthorityBlocker, type UninstallInventory } from './uninstall-plan.js';
 import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
 
 /** Every scope the lifecycle decision covers: configured, every policy-named (deny/legal hold included) and every ledger-recorded scope. */
@@ -102,7 +102,7 @@ export class UninstallApplication {
     if (!plan || plan.planDigest !== command.planDigest) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
     const admit = this.ports.withAdmission;
     if (plan.purge) await this.ports.authorize('purge', await this.ports.principal());
-    if (!admit || plan.blockers.length) throw new UninstallError(plan.purge ? 'UNINSTALL_BACKUP_COVERAGE' : 'UNINSTALL_OWNERSHIP');
+    if (!admit || plan.blockers.length) throw uninstallAuthorityBlocker(plan) ?? new UninstallError(plan.purge ? 'UNINSTALL_BACKUP_COVERAGE' : 'UNINSTALL_OWNERSHIP');
     let admitted: UninstallAdmission | undefined;
     const states: { resourceId: string; state: UninstallResult['items'][number]['state'] }[] = plan.items.map(item => ({ resourceId: item.resourceId, state: null }));
     const result = (status: UninstallResult['status'], recoveryLocation: string | null, failureCode?: string): UninstallResult => ({ schemaVersion: 1,

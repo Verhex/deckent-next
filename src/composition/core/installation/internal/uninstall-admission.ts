@@ -25,7 +25,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
   try {
     // Fresh identity/layout/target observations after custody and before the first journal write.
     const current = await configuredUninstallInventory(config, plan.policyRevision, scopeIds, options, plan.purge);
-    if (current.inventory.installation.id !== plan.installation.id || current.inventory.layoutRevision !== plan.layoutRevision) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
+    if (current.inventory.installation.id !== plan.installation.id || current.inventory.layoutRevision !== plan.layoutRevision || current.inventory.blockers.length) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
     const integrity = await openLocalIntegrityAuthority(config.productLayout, config.approvals.keyFile);
     const recovery = new UninstallRecovery(config.productLayout.root, plan.installation.id, principal, integrity, config.installation.profileMaxBytes, uninstallRecoveryDirectory(config.productLayout.root));
     const clock = new SystemTrustedClock(), peer = localPrincipalPeer();
@@ -68,7 +68,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
           const document = await policy.load();
           const observed = await configuredUninstallInventory(fresh, plan.policyRevision, scopeIds, options, plan.purge);
           if (fresh.productLayout.revision !== plan.layoutRevision || (document as { revision: string }).revision !== plan.policyRevision
-            || observed.inventory.installation.id !== plan.installation.id) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
+            || observed.inventory.installation.id !== plan.installation.id || observed.inventory.blockers.length) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
           if (item && item.action === 'remove') {
             const record = await store.loadEffect(scopeId, commandKey(plan, item.resourceId));
             const target = observed.inventory.resources.find(value => value.resourceId === item.resourceId);

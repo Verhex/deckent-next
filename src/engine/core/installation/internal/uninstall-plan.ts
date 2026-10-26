@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { isAbsolute, relative, resolve, parse, sep } from 'node:path';
 import { z } from 'zod';
 import { operationDescriptorSchema, type OperationDescriptor } from '#domain/index.js';
+import { ErrorRegistry } from '#platform/index.js';
 import data from './uninstall-resources.json' with { type: 'json' };
 import { UninstallError, uninstallInstallationSchema, uninstallPlanQuerySchema, uninstallResourceSchema,
   type UninstallPlan, type UninstallResource, type UninstallItem, type UninstallInstallation } from './uninstall-contract.js';
@@ -94,6 +95,11 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
     registryDigest: registry.digest, items, blockers: [...new Set(blockers)].sort(),
     backup: { required: purge, destination: inventory.backupDestination }, packageRemoval: { ...inventory.packageRemoval }, canApply: false as const };
   return freeze(JSON.parse(JSON.stringify({ ...body, planDigest: hash(body) })) as UninstallPlan);
+}
+/** A relocated or unsafe authority member refuses the whole purge with its exact path, never a backup-coverage hint. */
+export function uninstallAuthorityBlocker(plan: Pick<UninstallPlan, 'blockers'>) {
+  const blocker = plan.blockers.find(value => /^authority-(relocated|unsafe):/u.test(value));
+  return blocker ? ErrorRegistry.createError('UNINSTALL_AUTHORITY_UNVERIFIED', { params: { path: blocker.slice(blocker.indexOf(':') + 1) } }) : null;
 }
 export function assertUninstallPlanCurrent(approved: UninstallPlan, current: UninstallPlan) {
   if (approved.planDigest !== current.planDigest) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
