@@ -89,6 +89,8 @@
   "setup.coding.firstCommit.locked": "Başka bir Git yazıcısı index.lock tutuyor. Bitmesini bekleyin; kilidini silmeyin.",
   "setup.coding.firstCommit.message": "İlk commit",
   "setup.coding.firstCommit.staged": "Sahnelenmiş değişiklikler var. git commit ile kendiniz commit edin; yeniden açıldığında ilk açılış akışı sonucu gözlemler.",
+  "setup.coding.firstCommit.empty": "Bu depoda henüz commit edilecek dosya yok. Dosyalarınızı ekleyin, sonra /setup ile ilk commit’e dönün.",
+  "setup.coding.firstCommit.skip": "Şimdilik atla (/setup ile dönün)",
   "setup.coding.firstCommit.summary": "{total} dosyadan {count} tanesi seçili; {more} ek satır gösterilmiyor. İşaretli dosyalar açıkça seçilmedikçe dışarıda kalır.",
   "setup.coding.firstCommit.sign": "Git imzalama ayarınız açık; terminalinizde imza sorulabilir. Başarısızlıkta commit oluşmaz.",
   "setup.coding.firstCommit.noSign": "Git ayarınız commit imzası istemiyor.",

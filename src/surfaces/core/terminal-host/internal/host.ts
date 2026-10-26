@@ -66,7 +66,7 @@ export async function runTerminalHost(options: TerminalHostOptions): Promise<voi
   const reportingOff = () => { try { out.write(`${fullscreen ? MOUSE_REPORTING_OFF : ''}${attention ? FOCUS_REPORTING_OFF : ''}`); } catch { /* the terminal is gone */ } };
   const reportingOn = () => { try { out.write(`${fullscreen ? MOUSE_REPORTING_ON : ''}${attention ? FOCUS_REPORTING_ON : ''}`); } catch { /* the terminal is gone */ } };
   // T4: Ink's own suspension hands back raw mode, bracketed paste and the alternate screen; mouse and focus reports are the host's to switch off and on.
-  const handover: TerminalHandover | undefined = mouse ? { release: reportingOff, reclaim: reportingOn } : undefined;
+  const handover: TerminalHandover | undefined = mouse ? { release: () => { reportingOff(); mouse.hold(true); }, reclaim: () => { mouse.hold(false); reportingOn(); } } : undefined;
   const view = createElement(RenderGlyphsContext.Provider, { value: resolveRenderGlyphs(ascii === true) },
     options.view({ fullscreen, transcriptExit, ...(handover ? { handover } : {}), ...(out.isTTY === true ? { clipboard: createClipboardWriter(out) } : {}),
       ...(mouse && attention ? { notify: () => { if (mouse.focus.state() !== 'unfocused') return; try { out.write(ATTENTION_BELL); } catch { /* the terminal is gone */ } } } : {}),

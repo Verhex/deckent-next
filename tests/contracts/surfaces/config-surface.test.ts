@@ -127,6 +127,11 @@ describe('restart-apply change against the running service (K6/#16)', () => {
     // The Docker resource ceiling (`execution.docker`) is a restart-apply section: raising it asks for a restart like any other.
     const docker = (memoryBytes: number) => ({ ...base, execution: { docker: { memoryBytes, cpus: 1, pids: 128 } } });
     expect(restartConfigDigest(docker(8_589_934_592))).not.toBe(restartConfigDigest(docker(1_073_741_824)));
+    // FIX9: /model's own default (read from the layer files each turn) and the terminal's presentation never make a running service stale.
+    registerProviderConfig(); // the `terminal` section is registered by the composed entry
+    const terminal = (extra: object) => ({ ...base, terminal: { scopeId: 's', ...extra } });
+    expect(restartConfigDigest(terminal({ defaultModel: { providerId: 'p', providerVersion: 1, modelId: 'm', modelVersion: 1 }, theme: 'dark' }))).toBe(restartConfigDigest(terminal({})));
+    expect(restartConfigDigest(terminal({ scopeId: 'other' }))).not.toBe(restartConfigDigest(terminal({})));
   });
 });
 

@@ -126,11 +126,11 @@ it('unsupported native platforms reject before listener or opener construction',
 });
 
 
-it.skipIf(process.platform !== 'linux')('keeps the listener open on launcher failure, presents only the safe URL, then cancels it', async () => {
+it.skipIf(process.platform !== 'linux')('always presents only the safe URL (also when the opener reports success, as on SSH), keeps the listener open, then cancels it', async () => {
   const fake = child(), fallback = vi.fn(); let redirect = '';
   mocked.spawn.mockImplementation((_command: string, args: string[]) => {
     redirect = new URL(args[0]!).searchParams.get('redirect_uri')!;
-    queueMicrotask(() => fake.emit('error', new Error('fixture-launcher-missing'))); return fake;
+    queueMicrotask(() => { fake.emit('exit', 0); fake.emit('error', new Error('fixture-launcher-missing')); }); return fake;
   });
   const pending = siwcBrowserAuthorization(make, abort.signal, { fallback });
   while (!fallback.mock.calls.length) await new Promise<void>(done => setImmediate(done));

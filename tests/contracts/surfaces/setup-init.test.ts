@@ -158,9 +158,16 @@ describe('I-S4 bare deckent init', () => {
     // A folder with no scope yet asks for a new name instead of "valid scopes: -".
     const message = await setupInitCommand(['init', '--yes'], harness({}).context).then(() => '', (error: Error) => error.message);
     expect(message).toContain('--scope my-project'); expect(message).not.toContain('Valid scopes');
-    // A configured scope is never taken silently for --yes.
+    // A configured scope alone is not taken for --yes; several installed scopes still need --scope.
     const configured = harness({ observation: () => ({ ...base, folder: { ...base.folder, configuredScope: 'live' } }) });
     expect(await failure(setupInitCommand(['init', '--yes'], configured.context))).toBe('CLI_SCOPE_REQUIRED');
+    const scopes = (values: readonly string[]) => ({ configChoiceSources: () => ({ list: async () => values.map(value => ({ value })) }) });
+    const several = harness();
+    expect(await failure(setupInitCommand(['init', '--yes'], { ...several.context, ...scopes(['live', 'test']) } as never))).toBe('CLI_SCOPE_REQUIRED');
+    // INIT-D5 amended (REALSURF2 2026-10-26): an installed folder with exactly one scope re-runs in it and says which.
+    const single = harness({ observation: () => ({ ...base, folder: { ...base.folder, installation: 'present', configuredScope: 'live' } }) });
+    expect(await failure(setupInitCommand(['init', '--yes'], { ...single.context, ...scopes(['live']) } as never))).not.toBe('CLI_SCOPE_REQUIRED');
+    expect(single.out()).toContain('live'); expect(single.observed()).toBeGreaterThan(0);
   });
 
   it('--yes applies only eligible stages through the apply port; until it is wired it says so, writes nothing and exits non-zero', async () => {
@@ -286,3 +293,19 @@ describe('I-S4 setup window controller (no Ink)', () => {
 
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+it('N3: a long reason wraps whole at 72 columns (no "…" cut); a one-row stage line still fits its row', async () => {
+  const { PassThrough, Writable } = await import('node:stream'), { mountSetupWindow } = await import('#surfaces/core/project-instructions/index.js');
+  let frame = '';
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 72, rows: 36 });
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  const reason = 'my-project scope for HOST/1000 starts with the Solo profile in full-auto. Usual work follows the company policy; protected settings, secrets and destructive operations keep their own approval rules. Switch the mode with Shift+Tab or /mode at any time; nothing else changes.';
+  const closed = mountSetupWindow({ title: 'Deckent setup', rows: ['> 7. Start permissions · ready to apply', '', reason, '', ''], heights: [1, 1, 3, 2, 1], options: [{ id: 'later', label: 'Not now' }],
+    optionRows: 2, initial: 0, hints: 'Esc close', position: '{from}-{to}/{total}', reveal: 0 }, async () => null, { stdin: stdin as never, stdout: stdout as never, env: { NO_COLOR: '1' } });
+  await new Promise(resolve => setTimeout(resolve, 150));
+  const text = frame.replace(/\u001b\[[0-9;?]*[A-Za-z]/gu, '').replace(/[│╭╮╰╯─]/gu, ' ').replace(/\s+/gu, ' '); // eslint-disable-line no-control-regex
+  expect(text).toContain(reason);
+  // A decision window counts keys only after its quiet arming period; then "Not now" closes it.
+  const { DECISION_ARM_DEFAULT } = await import('#surfaces/core/terminal-window/index.js');
+  await new Promise(resolve => setTimeout(resolve, DECISION_ARM_DEFAULT + 200)); stdin.write('\r');
+  await closed;
+});

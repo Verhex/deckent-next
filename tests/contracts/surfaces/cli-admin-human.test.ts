@@ -3,7 +3,7 @@ import { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { clearConfigCache, ErrorRegistry, inspectProductPaths, resolveGlobalConfigPaths } from '#platform/index.js';
+import { clearConfigCache, ErrorRegistry, inspectProductPaths, resolveGlobalConfigPaths, t } from '#platform/index.js';
 import { registerProviderConfig } from '#adapters/index.js';
 import { main } from '#surfaces/index.js';
 import { backupCommand, toolchainsCommand, type BackupSetsView } from '#surfaces/core/cli-admin/index.js';
@@ -327,6 +327,11 @@ it('runtime shutdown: any caller off a terminal names its reason (audited); a pe
   expect(noReason.err.text()).toContain('RUNTIME_SHUTDOWN_REASON_REQUIRED'); expect(calls).toEqual([]);
   expect(await main(['runtime', 'shutdown', '--reason', 'maintenance window'], io(f, runtimeHandlers(calls)).context)).toBe(0);
   expect(calls).toEqual(['maintenance window']);
+  // FIX9: the Workline's stop hint is itself a working command off a terminal (EN and TR).
+  for (const locale of ['en', 'tr'] as const) {
+    const hint = /`deckent (runtime shutdown --reason "([^"]+)")`/u.exec(t('terminal.service.stopHint', {}, locale))!;
+    calls.length = 0; expect(await main(['runtime', 'shutdown', '--reason', hint[2]!], io(f, runtimeHandlers(calls)).context)).toBe(0); expect(calls).toEqual([hint[2]]);
+  }
   card.interactive = true; card.answers = ['cancel']; calls.length = 0;
   expect(await main(['runtime', 'shutdown'], io(f, runtimeHandlers(calls)).context)).toBe(1);
   expect(card.asked[0]!.body![0]).toBe('Affected work now: 1 running, 2 being evaluated (scope live)'); expect(calls).toEqual([]);

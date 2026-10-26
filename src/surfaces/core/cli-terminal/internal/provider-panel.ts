@@ -6,6 +6,7 @@ import { buildInferenceServingPlan, readInferenceServingProfile } from '#engine/
 import type { PanelLine, ProviderConnectOutcome, ProviderConnectRequest, ProviderModelOutcome, ProviderModelRequest, ProviderPanelKind, ProviderPanelPort, ProviderSecretGrantPort } from '#surfaces/core/terminal-panels/index.js';
 import type { ProviderConnectKindView, ProviderConnectProbeView, TerminalLaunchContext } from './context.js';
 import { modelInvocabilityText } from '#surfaces/core/model-invocability/index.js';
+import { providerDisplayName } from './provider-label.js';
 
 /** The words of a kind: its catalog key comes with the adapter's data (an unknown key from newer data keeps the kind's id). */
 function kindLabel(kind: ProviderConnectKindView | undefined, id: string, locale: Locale): string {
@@ -190,7 +191,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       }
       if (!host.setSecret) notes.push(t('tui.provider.note.noStore', {}, locale));
       if (reading?.models.some(model => model.availability.reason?.code === 'PROVIDER_SPEND_UNAVAILABLE')) notes.push(t('tui.budget.missing', { scope: scopeId }, locale));
-      for (const model of reading?.models ?? []) notes.push(`${model.reference.providerId} / ${model.label}: ${modelInvocabilityText(model.availability, locale)}`);
+      for (const model of reading?.models ?? []) notes.push(`${providerDisplayName(model.reference.providerId, connect, locale)} / ${model.nativeId}: ${modelInvocabilityText(model.availability, locale)}`);
       return { title: t('tui.panel.provider.title', {}, locale), kinds, notes, ...(reading ? { invocableModels: reading.models } : {}) };
     },
     endpoint(kind, text) {

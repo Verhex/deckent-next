@@ -68,3 +68,20 @@ it.skipIf(process.platform !== 'linux').each(['tr', 'en'] as const)('U4-2 PTY %s
   // Screen buffers retain the actual layout for the lead's focus/footer review; no snapshot-only acceptance claim.
   expect(terminalBuffers(run.output, 80, 32)).toBeDefined();
 }, 180_000);
+it.skipIf(process.platform !== 'linux')('N1 PTY: keys typed in a /setup window opened from the Workline never reach the composer; Enter afterwards sends nothing', async () => {
+  const base = await mkdtemp(join(tmpdir(), 'onboarding-pty-')); roots.push(base);
+  const root = join(base, 'customer'), home = join(base, 'home'); await mkdir(root); await mkdir(home);
+  const env = { PATH: process.env['PATH'], HOME: home, DECKENT_GLOBAL_HOME: join(home, 'global'), TERM: 'xterm-256color', LANG: 'en_US.UTF-8', NO_COLOR: '1' };
+  await applyPolicyTemplateInstallation(root, 's', { env });
+  const configPath = join(root, '.deckent/config.json'), config = JSON.parse(await readFile(configPath, 'utf8'));
+  // Attention notices stay on (the default): the Workline then reads the TTY through the filtered input the leak went through.
+  config.language = 'en'; config.terminal = { ...config.terminal, scopeId: 's', autostartService: false, layout: 'inline' };
+  await writeFile(configPath, JSON.stringify(config));
+  const steps = [['Step 1/', '\u001b'], ['Step 2/', '\u001b'], ['Project instructions', '\u001b'], ['Ready!', '\u001b'], ['Enter send', '/setup\r'],
+    ['Step 1/', 'abc'], ['', '\u001b'], ['Step 2/', '\u001b'], ['Project instructions', '\u001b'], ['Ready!', '\u001b'], ['Enter send', '\r'], ['', '/exit\r']];
+  const result = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify(steps), root], { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
+  const run = JSON.parse(result.stdout) as { code: number; output: string };
+  expect(run.code).toBe(0);
+  // Everything after the reopened window closed is the Workline: the typed text is not in its composer and no turn was sent.
+  expect(run.output.slice(run.output.lastIndexOf('Ready!'))).not.toContain('abc');
+}, 180_000);

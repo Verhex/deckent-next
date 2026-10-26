@@ -16,7 +16,8 @@ function mask(value: unknown, pointer: string, secrets: ReadonlySet<string>): un
  * A `live` section never changes it, so a language change never asks for a restart. Resolved secret values are masked (their pointers come from
  * the loader's provenance), so the digest never fingerprints a credential; the cost is that a rotated secret value alone is not detected.
  * Members listed in `restart-exempt.json` are left out: every request re-reads them (the admission registry, which the service's own toolchain refresh
- * revises), so a change to them is already applied and never asks for a restart.
+ * revises; the user's `terminal.defaultModel`, read from the layer files on each turn) or the service never reads them (the terminal's own
+ * presentation), so a change to them is already applied and never asks for a restart (FIX9: /model's own default is not an error).
  * Service and observers compute it from the same loader, so equal digests mean the service started with the configuration seen now.
  */
 export function restartConfigDigest(effective: Readonly<Record<string, unknown>>): string {

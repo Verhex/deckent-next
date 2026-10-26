@@ -1,24 +1,25 @@
-import { ErrorRegistry, emit, getConfigFieldDefault, loadConfig, t } from '#platform/index.js';
+import { ErrorRegistry, EXIT_CODES, emit, getConfigFieldDefault, loadConfig, t, type ExitCode } from '#platform/index.js';
 import { cliMode, askCliCard, resolveCommandScope, scopeLister, type CliCardRequest } from '#surfaces/core/cli-human/index.js';
 import { commandLocale, type CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { SiwcHandler, SiwcRequest } from './port.js';
 type KeyInput = NodeJS.ReadableStream & { isTTY?: boolean; isRaw?: boolean; setRawMode?: (on: boolean) => unknown };
-/** The browser wait, like the terminal window: Esc or Ctrl+C aborts it (the adapter closes its loopback listener before any write) and ends in the typed
- * OAUTH_CONNECTION_CANCELLED (exit non-zero). An arrow key's escape sequence is not a lone Esc. */
-async function cancellable<T>(stdin: KeyInput, signal: AbortSignal, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+/** The browser wait, like the terminal window: Esc or Ctrl+C aborts it (the adapter closes its loopback listener before any write); the person's
+ * cancel is null (a plain cancellation line, exit non-zero), never an error. An arrow key's escape sequence is not a lone Esc. */
+async function cancellable<T>(stdin: KeyInput, signal: AbortSignal, run: (signal: AbortSignal) => Promise<T>): Promise<T | null> {
   const stop = new AbortController(), raw = Boolean(stdin.isTTY && stdin.setRawMode), wasRaw = stdin.isRaw === true;
   const onData = (chunk: Buffer | string) => { const text = chunk.toString(); if (text === '\u001b' || text.includes('\u0003')) stop.abort(); };
   const onSigint = () => stop.abort();
   if (raw) { stdin.setRawMode!(true); stdin.on('data', onData); stdin.resume(); }
   process.on('SIGINT', onSigint);
   try { return await run(AbortSignal.any([signal, stop.signal])); }
-  catch (error) { throw stop.signal.aborted ? ErrorRegistry.createError('OAUTH_CONNECTION_CANCELLED') : error; }
+  catch (error) { if (stop.signal.aborted) return null; throw error; }
   finally { process.off('SIGINT', onSigint); if (raw) { stdin.off('data', onData); stdin.setRawMode!(wasRaw); stdin.pause(); } }
 }
 /** Person TTY only. JSON/MCP/AI never receives an authorization URL or account label. */
-export async function siwcCliCommand(argv: readonly string[], context: CliBaseContext & Parameters<typeof scopeLister>[0], handler: SiwcHandler): Promise<void> {
+export async function siwcCliCommand(argv: readonly string[], context: CliBaseContext & Parameters<typeof scopeLister>[0], handler: SiwcHandler): Promise<void | ExitCode> {
   const locale = commandLocale(context);
   const sinks = { ...(context.stdout ? { stdout: context.stdout } : {}), ...(context.stderr ? { stderr: context.stderr } : {}) };
+  const cancelled = () => { emit(t('siwc.cancelled', {}, locale), { level: 'warning', ...sinks }); return EXIT_CODES.error; };
   if (argv.includes('--help') || argv.includes('-h')) { emit(t('siwc.help', {}, locale), sinks); return; }
   if (cliMode(context, argv.includes('--json')).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'models.login' } });
   const flags = new Map<string, string>();
@@ -48,6 +49,7 @@ export async function siwcCliCommand(argv: readonly string[], context: CliBaseCo
       options: [{ id: 'no', label: t('siwc.card.cancel', {}, locale) }, { id: 'yes', label: t('siwc.card.continue', {}, locale) }], initial: 'no' }) !== 'yes') return;
     const result = await cancellable(keys, signal, waiting => handler(root, { operation, scopeId, ...(connectionId ? { connectionId } : {}) }, { env },
       { signal: waiting, fallback: url => emit(`${t('siwc.browser.fallback', {}, locale)}\n${url}`, sinks) }));
+    if (!result) return cancelled();
     emit(result.remoteRevocation === 'unconfirmed' ? t('siwc.revoke.unconfirmed', {}, locale) : operation === 'logout' ? t('siwc.revoke.done', {}, locale) : t('siwc.welcome.body', {}, locale), sinks); return;
   }
   if (operation !== 'connect' && !(operation === 'login' && newAccount)) throw ErrorRegistry.createError('CLI_USAGE');
@@ -65,5 +67,6 @@ export async function siwcCliCommand(argv: readonly string[], context: CliBaseCo
   emit(t('siwc.browser.waiting', { seconds: 0 }, locale), sinks);
   const result = await cancellable(keys, signal, waiting => handler(root, { operation: 'connect', scopeId, ...(newAccount ? { newAccount: true } : {}), ...(connectionId ? { connectionId } : {}), delegate: background === 'yes' ? (explicitClasses ?? ['ai', 'system']) as ('ai' | 'system')[] : [], apiContinuation: target?.reference ?? null },
     { env }, { signal: waiting, fallback: url => emit(`${t('siwc.browser.fallback', {}, locale)}\n${url}`, sinks) }));
+  if (!result) return cancelled();
   emit(result.models?.status === 'approval-pending' ? t('siwc.card.approvalPending', {}, locale) : t('siwc.welcome.ready', {}, locale), sinks);
 }

@@ -54,7 +54,8 @@ export type PointerSource = Readonly<{ subscribe: (listener: PointerListener) =>
 
 /** The stdin Ink reads: the real TTY's bytes without mouse and focus reports; raw mode and ref/unref go to the real stream. Focus reports only
  * exist while the host switched mode 1004 on (`focus`); the full window also turns on mouse reporting. */
-export function mouseFilteredInput(real: NodeJS.ReadStream): Readonly<{ input: NodeJS.ReadStream; wheel: WheelSource; pointer: PointerSource; focus: FocusSource; close: () => void }> {
+export function mouseFilteredInput(real: NodeJS.ReadStream): Readonly<{ input: NodeJS.ReadStream; wheel: WheelSource; pointer: PointerSource; focus: FocusSource; close: () => void;
+  hold: (held: boolean) => void }> {
   const tracker = createFocusTracker();
   const listeners = new Set<WheelListener>(), pointers = new Set<PointerListener>(), out = new PassThrough();
   // Ink sets the encoding on this stream, not on the real TTY, which emits Buffers: one decoder for the whole stream keeps a multi-byte
@@ -79,5 +80,10 @@ export function mouseFilteredInput(real: NodeJS.ReadStream): Readonly<{ input: N
   Object.defineProperty(input, 'isRaw', { get: () => real.isRaw });
   return { input, focus: tracker.source, wheel: { subscribe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } },
     pointer: { subscribe: listener => { pointers.add(listener); return () => { pointers.delete(listener); }; } },
-    close: () => { real.off('data', onData); real.pause(); out.end(); } };
+    close: () => { real.off('data', onData); real.pause(); out.end(); },
+    // One input owner (FIX9): while another view owns the terminal (a /setup window, the external editor) its bytes never reach this stream —
+    // Node emits 'data' for that owner's reads too, so a kept listener would queue them for the composer to read on resume.
+    // Paused while held, so this process does not read the TTY under a child that inherits it (the external editor).
+    hold: held => { real.off('data', onData); if (held) { real.pause(); return; }
+      carry = ''; while (out.read() !== null) { /* drop what queued before the hand-over */ } real.on('data', onData); real.resume(); } };
 }

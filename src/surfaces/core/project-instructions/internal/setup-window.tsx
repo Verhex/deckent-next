@@ -10,12 +10,12 @@ import { WorklinePaletteProvider, resolveWorklinePalette } from '#surfaces/core/
  * row `i` fills exactly `heights[i]` display rows (default 1, R05). `initial` is the highlighted option (the recommended answer; Enter accepts it). */
 export type SetupWindowModel = Readonly<{ title: string; rows: readonly string[]; heights?: readonly number[]; options: readonly Readonly<{ id: string; label: string }>[];
   optionRows: number; initial: number; hints: string; position: string; reveal: number }>;
-/** A row in exactly `rows` display rows: wrapped by words, the last one cut with "…" when the text is longer, blank rows after a short one. */
+/** A text row in at least `rows` display rows: wrapped by words and never cut (FIX9: a narrower terminal shows the whole reason, the window scrolls),
+ * blank rows after a short one; a one-row line (a stage, the command) is cut with "…". */
 const fitRows = (text: string, rows: number, width: number): readonly string[] => {
   if (rows <= 1) return [truncateEnd(text, width, '…')];
-  const wrapped = wrapCells(text, width), kept = wrapped.slice(0, rows);
-  if (wrapped.length > rows) kept[rows - 1] = truncateEnd(wrapped.slice(rows - 1).join(' '), width, '…');
-  return [...kept, ...Array.from({ length: rows - kept.length }, () => '')];
+  const wrapped = wrapCells(text, width);
+  return [...wrapped, ...Array.from({ length: Math.max(0, rows - wrapped.length) }, () => '')];
 };
 /** The answer to one step: the next model, or null to close. A rejection closes the window and rejects `mountSetupWindow`. */
 export type SetupWindowStep = (id: string) => Promise<SetupWindowModel | null>;
@@ -30,7 +30,7 @@ function SetupWindow({ initial, step, failed }: Readonly<{ initial: SetupWindowM
     }, error => { failed(error); exit(); });
   };
   const padding = Math.max(0, model.optionRows - model.options.length), width = Math.max(8, (useWindowSize().columns || 80) - 4);
-  // A plain row is cut to the width and a text row fills exactly its rows, so a longer reason or command never makes the window taller.
+  // A plain row is cut to the width; a text row fills its rows and wraps further only when the terminal is too narrow for the whole text.
   const lines = model.rows.flatMap((row, index) => fitRows(row, model.heights?.[index] ?? 1, width));
   return <Window title={[span(model.title)]} body={lines.map(text => ({ spans: [span(text)], exact: true }))} reveal={model.reveal}
     hints={model.hints} position={model.position} footerRows={model.options.length + padding} decision

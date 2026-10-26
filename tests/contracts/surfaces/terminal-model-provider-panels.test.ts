@@ -804,3 +804,24 @@ it('a blocked model offers its governed repair, writes only after the card, and 
   await view.press(ENTER); await settle(80);
   expect(fixed).toEqual(['coder:activate']); expect(pins).toEqual([]);
 });
+
+it('R23: the ChatGPT window refusal names its own cause and fix (as the CLI and doctor do), and Enter or Esc closes the card', async () => {
+  const { loadSiwcWindow } = await import('#surfaces/core/siwc/index.js'), { default: SiwcWindow } = await loadSiwcWindow();
+  for (const key of [ENTER, ESC]) {
+    let closed = 0; const errors: unknown[] = [];
+    const port = { locale: 'en' as const, connection: 'chatgpt-login', execute: async (request: { operation: string }) => {
+      if (request.operation === 'prepare') return { apiTargets: [{ id: 'metered', reference: ref('metered') }] };
+      throw ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL', { params: { reason: 'unsafe-root', path: '/tmp', mode: '1777', folder: 'parent' } });
+    } };
+    const view = mount(createElement(SiwcWindow, { port: port as never, onClose: () => { closed++; }, onError: error => { errors.push(error); } }), 100, 40);
+    const keys = t('siwc.card.keys', {}, 'en');
+    await armed(view.frame, keys); await view.press(ENTER, 80);
+    // The API step: the person moves to the metered target, so the selection points past the refusal card's one choice.
+    await armed(view.frame, keys); await view.press(`${DOWN}${ENTER}`, 120);
+    expect(view.frame()).toContain('/tmp (mode 1777) can be changed by other users');
+    expect(view.frame()).not.toContain('Use your own local store');
+    expect((errors[0] as { message?: string }).message).toContain('/tmp (mode 1777)');
+    await armed(view.frame, keys); await view.press(key, 80);
+    expect(closed).toBe(1);
+  }
+});

@@ -78,6 +78,8 @@ it('R13/R18: the image card follows an answered work choice, the step total is k
     plan: { ...snapshot.plan, stages: [stage('work:kind', 'needs-answer'), stage('coding:first-commit', 'ready'), stage('execution:worker', 'skipped', 'setup.execution.noWorkKind')] } };
   const after = { ...before, plan: { ...before.plan, stages: [stage('work:kind', 'done'), stage('coding:first-commit', 'ready'), stage('execution:worker', 'blocked', 'setup.execution.workerConsentRequired')] } };
   expect(onboardingSteps(after).map(row => row.id)).toEqual(['execution:worker', 'coding:first-commit', 'onboarding:first-task']);
+  // FIX9: a deferred image card stays in the "Deferred" note while its work choice is open again (that answer lived in the closed session).
+  expect(deferredOnboardingNotice({ ...before, deferred: ['execution:worker'] }, 'en')).not.toBeNull();
   let current: OnboardingSnapshot = before; const settled: string[][] = [];
   const port = { observe: async () => current, assertPerson: async () => {}, settle: async (ids: readonly string[]) => { settled.push([...ids]); } } as OnboardingPort;
   const session = createOnboardingSession(port, before);
@@ -97,7 +99,7 @@ it('U4E G2: install permission recovery precedes an absent model; not-applicable
   expect(onboardingSteps({ ...missing, permissions: { state: 'not-applicable', reason: '' } }).some(step => step.kind === 'permissions')).toBe(false);
 });
 
-it('U6-S4: image consent immediately follows work choice, offers verified adoption first without a selection and preserves missing-only repair', async () => {
+it('U6-S4: image consent immediately follows work choice, offers verified adoption first (highlighted, owner 2026-10-26) and preserves missing-only repair', async () => {
   const { workerImageQuestion, workerImageProgress } = await import('#surfaces/core/terminal-onboarding/index.js');
   const { workerSetupStages } = await import('#engine/index.js');
   const id = `sha256:${'a'.repeat(64)}`, missing = `sha256:${'b'.repeat(64)}`;
@@ -108,7 +110,9 @@ it('U6-S4: image consent immediately follows work choice, offers verified adopti
   expect(onboardingSteps(current).map(row => row.id)).toEqual(['work:kind', 'execution:worker', 'execution:runtime', 'onboarding:first-task']);
   const question = workerImageQuestion({ providers: ['selected-cli'], sources: ['https://mirror.invalid/prefix'], proxy: 'http://proxy.invalid:8080', baseRef: 'base@sha256:pin',
     sizeGigabytes: 1, buildTimeoutMs: 20000, images: [{ imageId: missing, tag: 'worker:unknown', ready: false }, { imageId: id, tag: 'worker:r32-selected', ready: true }] }, 'en', missing);
-  expect(question.initial).toBeNull(); expect(question.choices.map(row => row.id)).toEqual([id, missing, 'consent', 'later']);
+  expect(question.initial).toBe(id); expect(question.choices.map(row => row.id)).toEqual([id, missing, 'consent', 'later']);
+  // No ready image: the recommended answer is the background build of the shown sources (still only on Enter).
+  expect(workerImageQuestion({ providers: [], sources: [], proxy: null, baseRef: 'base', sizeGigabytes: 1, buildTimeoutMs: 20000 }, 'en').initial).toBe('consent');
   expect(question.choices[1]).toMatchObject({ disabled: true });
   expect(question.body.join('\n')).toContain('https://mirror.invalid/prefix'); expect(question.body.join('\n')).toContain(missing);
   expect(question.body.join('\n')).toContain('No task starts');
@@ -125,4 +129,17 @@ it('U6-S4: image consent immediately follows work choice, offers verified adopti
   const progress = workerImageProgress({ ...acquisition, phase: 'acquiring', step: 'layer:selected-cli' }, 'tr', Date.parse('2026-10-26T00:00:03.000Z'));
   expect(progress.join('\n')).toContain('selected-cli'); expect(progress.join('\n')).toContain(acquisition.lastProgressAt);
   expect(workerImageProgress({ ...acquisition, phase: 'waiting-docker' }, 'tr').join('\n')).toContain('Docker bekleniyor');
+});
+it('FIX9: an empty repository explains that there is nothing to commit and Enter skips the first-commit card (no dead end)', async () => {
+  const { PassThrough, Writable } = await import('node:stream');
+  const { firstCommitScreen } = await import('../../../src/surfaces/core/terminal-onboarding/internal/first-commit.js');
+  let frame = '';
+  const stdout = Object.assign(new Writable({ write(chunk, _encoding, done) { frame += String(chunk); done(); } }), { isTTY: true, columns: 100, rows: 30 });
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode() { return stdin; }, ref() { return stdin; }, unref() { return stdin; } });
+  const port = { previewFirstCommit: async () => ({ state: 'ready', total: 0, selected: 0, more: 0, rows: [], identity: true, sign: false, digest: 'd' }),
+    firstCommit: async () => { throw new Error('must not commit'); }, firstCommitRecovery: async () => ({ state: 'none' }) } as unknown as OnboardingPort;
+  setTimeout(() => stdin.write('\r'), 300);
+  const result = await firstCommitScreen(port, { completed: 0, total: 3 } as never, { locale: 'en', env: { TERM: 'xterm-256color' }, stdin: stdin as never, stdout: stdout as never });
+  expect(result).toBe('later');
+  expect(frame).toContain('no files to commit yet'); expect(frame).toContain('Skip for now'); expect(frame).not.toMatch(/0 of 0|of 0 files/u);
 });
