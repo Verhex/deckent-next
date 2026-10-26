@@ -151,7 +151,8 @@ async function catalogByChoice(action: 'activate' | 'deactivate', picked: { scop
   const target = entry ? terminalSafeText(entry.modelId) : channelLabel(channel, locale), revision = (entry ? entry.activation : channel.activation)?.revision ?? 0;
   const answer = await askModelsCard(context, locale, { title: action === 'activate' ? t('climodels.models.card.activate', { model: target }, locale) : t('climodels.models.card.deactivate', { model: target }, locale),
     body: [t('climodels.models.card.whereCatalog', { scope: terminalSafeText(scope.scopeId), channel: channelLabel(channel, locale) }, locale),
-      t('climodels.models.card.now', { state: activation(entry ? entry.activation : channel.activation, locale) }, locale), t('climodels.models.card.system', {}, locale)],
+      t('climodels.models.card.now', { state: activation(entry ? entry.activation : channel.activation, locale) }, locale),
+      ...(!entry && action === 'activate' ? [t('climodels.models.card.channelCascade', { models: channel.models.filter(row => row.activation?.state === 'active' || !row.activation && row.model.lifecycle.state === 'active').map(row => terminalSafeText(row.modelId)).join(', ') }, locale)] : []), t('climodels.models.card.system', {}, locale)],
     options: modelsConfirmOptions(locale) });
   if (answer !== 'apply') return cancelled();
   const command = modelCatalogCommandSchema.parse({ schemaVersion: 1, commandId: `models-${randomUUID()}`, scopeId: scope.scopeId, action, channelId: channel.channelId,

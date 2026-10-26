@@ -19,6 +19,7 @@ export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandC
   /** S3-3 doctor line: the scope's subscription Brain logins from the profiles section and their last preflight records (read-soft, no spawn). */
   readHeadlessLogins?: (profiles: unknown, scopeId: string, options?: ConfigLoadOptions) => Promise<NonNullable<DoctorCheckFacts['headlessLogins']>>;
   inspectInstallationStartability?: (root: string, options: ConfigLoadOptions) => Promise<InstallationStartabilityView>;
+  inspectOwnerBaseline?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<{ readonly status: string; readonly missing: number; readonly digest: string }>;
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
   // Doctor-only, read-soft, network-free (SESSION-RESULT-LIMIT-2026-09-28): [] when unwired or nothing is unfit.
   assessModelInvocationDelivery?: (root: string, options: ConfigLoadOptions) => Promise<readonly ModelInvocationDeliveryFinding[]>;

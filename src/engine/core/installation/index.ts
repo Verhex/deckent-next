@@ -27,3 +27,5 @@ export { FIRST_RUN_TOOL_NAMES, FIRST_RUN_EDIT_SHELL_TOOL_NAMES, FIRST_RUN_READ_T
 export { setInstallerPermissionModes, type InstallerPermissionModesResult } from './internal/policy-modes.js';
 export type { FirstRunServiceIdentityPort, FirstRunServiceIdentityResult, InstalledPolicyTemplateUpgrade, FirstRunToolNames, PolicyTemplateDocumentWriter, PolicyTemplateUpgradeResult, PolicyTemplateInstallationPorts, PolicyTemplatePreview, PolicyTemplatePublishTarget, PolicyTemplateResource, PolicyTemplateSource,
   PreparedPolicyTemplateInstallation, PreparePolicyTemplateInput } from './internal/policy-template.js';
+
+export { setInstallerOwnerBaseline, ownerBaselineCells, describeOwnerBaseline, type InstallerOwnerBaselineResult } from './internal/owner-baseline.js';

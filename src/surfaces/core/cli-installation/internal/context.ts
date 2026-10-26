@@ -3,6 +3,7 @@ import type { InstallationIdentityChoice, InstallationIdentityResolution } from 
 import type { ConfigLoadOptions, Locale, OutputSink } from '#platform/index.js';
 import type { InstallationPreviewHandler, InstallationInspectionHandler, InstallationApplyHandler, InstallationResumeHandler,
   PolicyTemplatePreviewHandler, PolicyTemplateApplyHandler, PolicyTemplateUpgradeHandler } from './init.js';
+import type { OwnerBaselineHandler } from './owner-baseline.js';
 import type { PolicyModesHandler } from './policy-modes.js';
 
 /** Installation commands receive only their local bootstrap ports. */
@@ -23,6 +24,7 @@ export interface InstallationCommandContext {
   applyPolicyTemplateInstallation?: PolicyTemplateApplyHandler;
   upgradePolicyTemplateInstallation?: PolicyTemplateUpgradeHandler;
   /** PRE-9: `init policy --modes` (the installer's permission-mode change). */
+  openOwnerBaselineInstallation?: OwnerBaselineHandler;
   openPermissionModesInstallation?: PolicyModesHandler;
   installConfiguredExecutionPool?: (root: string, scopeId: string, apply: boolean) => Promise<InstallationPoolResult>;
 }

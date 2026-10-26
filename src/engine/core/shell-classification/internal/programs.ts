@@ -210,8 +210,12 @@ export const XARGS_PROGRAMS = new Set(['xargs', 'parallel', 'foreach-object', 'f
 export const TEE_PROGRAMS = new Set(['tee', 'tee-object', 'out-file', 'set-content', 'add-content', 'sc', 'ac']);
 /** PRE-8 v2 (law audit MAJOR 2): the product's own key-authority commands. A host-realm agent shell that names one always asks the person's card
  * (a pty wrapper such as `script` asks too, so a forged terminal witness never runs unasked); the command itself still requires the terminal witness. */
-export const PRODUCT_AUTHORITY_COMMANDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = Object.freeze({
-  deckent: Object.freeze({ secret: Object.freeze(['grant', 'revoke', 'set', 'delete', 'handover', 'store']) }) });
+export type ProductAuthorityCommand = Readonly<{ actions: readonly string[]; requiredFlags?: readonly string[]; bound?: boolean }>;
+export const PRODUCT_AUTHORITY_COMMANDS: Readonly<Record<string, Readonly<Record<string, ProductAuthorityCommand>>>> = Object.freeze({
+  deckent: Object.freeze({ secret: { actions: ['grant', 'revoke', 'set', 'delete', 'handover', 'store'] }, approval: { actions: ['decide'] },
+    'init policy': { actions: [''], requiredFlags: ['--apply', '--modes', '--owner-baseline'] },
+    init: { actions: ['', 'apply', 'resume'], requiredFlags: ['--yes'] },
+    run: { actions: ['resume', 'close'], bound: true }, task: { actions: ['accept', 'reject'], bound: true } }) });
 /** Programs that run their payload on a new pseudo-terminal (a forged terminal witness for the product's authority commands). */
 export const PTY_WRAPPER_PROGRAMS: ReadonlySet<string> = new Set(['script', 'unbuffer', 'expect']);
 /** Astra REVISE 2704 B: prefixes that run the next word as the program with the same argv and stdin (options and assignments before it). */

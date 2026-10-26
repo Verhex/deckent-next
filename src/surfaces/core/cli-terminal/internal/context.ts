@@ -49,6 +49,7 @@ export type ProviderConnectKindView = Readonly<{ id: string; labelKey: string; a
   catalogProviderId?: string | null;
   secretName: string | null; probePath: string | null; endpointChoices: readonly Readonly<{ id: string; labelKey: string; url: string }>[];
   /** T4-B: the protocol family a connected model must speak (null: no model can be connected to this kind); `seeded`: its models come from its catalog seed. */
+  pull?: 'available' | 'pick';
   connectFamily?: string | null; seeded?: boolean;
   /** Owner W5: remote models require a verified published price; the endpoint-selected model row shows the refusal. */
   priceRequired?: boolean;
@@ -64,6 +65,7 @@ export interface ProviderConnectHost {
   /** T4-B: the key's store name at an address (the generic row derives it from the host); the seed models of a seeded kind (exact ids, names). */
   /** Key names an earlier release stored that no row uses any more, and the row to store the key under instead (registry data). */
   readonly legacyKeys?: readonly Readonly<{ secretName: string; moveTo: string }>[];
+  workspaces?(root: string, scopeId: string, kind: string, endpoint: string | null, options: ConfigLoadOptions): Promise<readonly Readonly<{ id: string; name: string }>[]>;
   secretName?(kind: string, endpoint: string | null): string | null;
   seedModels?(kind: string): Promise<readonly Readonly<{ nativeId: string; displayName: string; priced?: boolean }>[]>;
   /** Seedless endpoint discovery after address selection; the same configured read used by models.connect. */
@@ -94,6 +96,9 @@ export type TerminalProfileProtocolPlan = Readonly<{ models: readonly Readonly<{
   writes: readonly Readonly<{ layer: 'global' | 'project'; value: Record<string, unknown>; expect: string | null }>[]; shared: readonly ModelReference[] }>;
 export interface TerminalLaunchContext extends MonitorCommandContext, Pick<ModelCommandContext, 'inspectModelCatalog' | 'inspectModelRoles' | 'inspectProviderSpendAccount' | 'inspectDeclaredModels'
   | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
+  openOwnerBaselineInstallation?: (root: string, scopeId: string, input: { readonly families: readonly string[]; readonly apply: boolean; readonly person?: { readonly issuer: string; readonly subject: string }; readonly expect?: string }) => Promise<import('#engine/index.js').InstallerOwnerBaselineResult>;
+  admitModelActivation?: import('#surfaces/core/cli-models/index.js').ModelActivationAdmissionHandler;
+
   deliveryQueue?: QueueSubmitClient;
   confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution>;
   /** TESLIM-KARTI-OZET: each delivery card's summary, read under the person's grants; absent = cards show no summary. */

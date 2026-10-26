@@ -92,7 +92,7 @@ function firstTariff<T extends Tariff>(shipped: T | null | undefined, listed: T 
  * sealed to that row; the shipped tables stay first for every model they list, so existing profiles keep their exact bytes.
  */
 export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ endpoint: string; credentialRef: string | null; nativeId: string;
-  maxOutputTokens: number; currency: string; existing?: JsonObject | null; catalog?: ConnectCatalogRow | null }>): ConnectionAdapter {
+  maxOutputTokens: number; currency: string; workspaceId?: string; existing?: JsonObject | null; catalog?: ConnectCatalogRow | null }>): ConnectionAdapter {
   const connect = kind.connect;
   // A CLI kind's adapter part is built by its own connect step (executable, login dir, uid, preflight), never here.
   if (!connect || connect.chatPath === null) throw new ProviderConnectError('MODEL_CONNECT_DEFINITION_INVALID');
@@ -116,7 +116,7 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
     if (!tariff || (!capability && !input.catalog)) throw new ProviderConnectError('MODEL_CONNECT_TARIFF_UNKNOWN');
     // CACHE-SLICE1: a new profile takes the registry's TTL; an existing one keeps its own value (an absent field stays absent, `none` stays `none`).
     const cache = input.existing ? input.existing['cache'] : connect.cacheDefault;
-    const workspaceId = input.existing?.['workspaceId'];
+    const workspaceId = input.workspaceId ?? input.existing?.['workspaceId'];
     const definition = { endpoint: input.endpoint, ...(workspaceId === undefined ? {} : { workspaceId }), ...(connect.tokenCountPath ? { tokenCountEndpoint: new URL(connect.tokenCountPath, input.endpoint).href } : {}),
       maxOutputTokens: capability ? Math.min(input.maxOutputTokens, capability.maxOutputTokens) : input.maxOutputTokens,
       authentication: { type: 'header', name: 'x-api-key', credentialRef: input.credentialRef }, tariff, ...(cache === undefined ? {} : { cache }) };
@@ -156,6 +156,7 @@ export function connectionAdapter(kind: ProviderConnectKind, input: Readonly<{ e
  * anything is written): Anthropic by its published tariff, the OpenAI chat adapter by an exact verified row, a loopback address always (zero tariff).
  */
 export function providerConnectModelPriced(kind: ProviderConnectKind, nativeId: string, address: string | null = kind.endpoint.default): boolean {
+  if (kind.connect?.catalogOnly) return true;
   const connect = kind.connect, base = address === null ? null : providerEndpoint(address);
   if (connect?.chatPath === null) return true; // a subscription CLI: quota only, no price to verify
   if (!connect || !base?.ok) return false;
@@ -167,5 +168,5 @@ export function providerConnectModelPriced(kind: ProviderConnectKind, nativeId: 
 /** The protocol family a model connected to this kind must speak (its adapter's), or null when the kind connects no model. */
 export function providerConnectFamily(kind: ProviderConnectKind): string | null {
   if (!kind.connect) return null;
-  return kind.connect.protocolFamily ?? kind.connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID ? anthropicMessagesProtocol.family : OPENAI_CHAT_COMPLETIONS_FAMILY;
+  return kind.connect.protocolFamily ?? (kind.connect.adapter === ANTHROPIC_MESSAGES_HTTP_ADAPTER_ID ? anthropicMessagesProtocol.family : OPENAI_CHAT_COMPLETIONS_FAMILY);
 }

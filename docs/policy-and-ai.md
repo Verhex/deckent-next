@@ -39,6 +39,7 @@ entries, descendants and whole-object parents such as `terminal`, `terminal.shel
 <!-- ai-floor:start -->
 | Non-delegable boundary | Source cells | Why |
 |---|---|---|
+| Provider spend reconciliation (settle, release, write-off) | `provider-spend-account/fixture-target/reconcile` | Owner Q-SPEND (b), 2026-10-26: no AI may reconcile held spend, even with an earlier grant. Normal call settlement remains available. |
 | Policy administration execute/compensate | `operation/policy.administer/execute`, `operation/policy.administer/compensate` | Grants, bindings, delegation, restrictions, duties and standing grants must not let an AI enlarge its own authority. |
 | Authority documents, authenticators and approval assurance: all mutations | `authority-document/fixture-record/write`, `authority-document/fixture-record/register`, `authority-document/fixture-record/activate`, `authority-document/fixture-record/remove`, `authority-document/fixture-record/future-mutation`, `authenticator/fixture-record/write`, `authenticator/fixture-record/register`, `authenticator/fixture-record/activate`, `authenticator/fixture-record/remove`, `authenticator/fixture-record/future-mutation`, `approval-assurance/fixture-record/write`, `approval-assurance/fixture-record/register`, `approval-assurance/fixture-record/activate`, `approval-assurance/fixture-record/remove`, `approval-assurance/fixture-record/future-mutation` | An actor cannot replace the identity or approval verifier that constrains it; inspect/list remain policy governed. |
 | Backup restore | `backup/fixture-backup/restore` | A restore can replace authority data. |
@@ -80,7 +81,8 @@ into an unconditional allow or lift the administrator's own restriction.
 | Answer a task question | Explicit `task-decision` / Task id / `answer`, plus attempt `evaluate`; the pending question, answer and revision are validated. |
 | Ordinary approval | Explicit `approval` / approval id / `decide`, with current policy, session, request digest, expiry, separation of duties and assurance. Protected/unknown-risk cards remain on the floor. |
 | Hold / resume an operator hold | Ordinary operator control uses `run/cancel` or `run/reserve`; resuming failure is a separate decision step. |
-| Admission, operations, pools, models, spending, work targets | Ordinary cells from `deckent policy vocabulary --json`. Not on the floor does not guarantee every transport exposes the action or that its application allows it. |
+| Reconcile held provider spend (settle, release, write-off) | `provider-spend-account/reconcile` is a code floor for every AI actor, including earlier v1 spend grants (owner Q-SPEND (b), 2026-10-26). A person uses the governed reconciliation path; normal call settlement continues internally. |
+| Admission, operations, pools, models, other spending actions, work targets | Ordinary cells from `deckent policy vocabulary --json`. Not on the floor does not guarantee every transport exposes the action or that its application allows it. |
 
 For decision steps, the allow must name the actor and action explicitly: `principals: "all"`
 or `actions: "all"` does not delegate a step. Resource ids/scopes can be selected; use the
@@ -267,3 +269,33 @@ Command sources: [policy grants/status/upgrade](../src/surfaces/core/cli-approva
 [card authority](../src/engine/core/approval/internal/application.ts).
 
 Delegation sources: [CLI](../src/surfaces/core/cli-approval/internal/policy-delegations.ts), [application](../src/engine/core/approval/internal/delegations.ts), [inventory](../src/domain/core/policy/internal/delegations.ts).
+
+## Managed founder baseline and earlier MCP grants
+
+The installation owner can preview missing founder cells with
+`deckent init policy --scope <scope> --owner-baseline mcp-delegable,decision-steps --preview`.
+`--apply` presents the exact cells on an attested person's terminal and binds the
+policy revision and registry-derived plan. Existing installations change only after
+that card. `--owner-baseline none --apply` removes this person's managed baseline
+rules; custom grants remain. Each batch contains at most one policy change's limit;
+`remaining` identifies further cells for the next card. Installation cells cover all
+scopes, including shared pools and the model catalog.
+
+The baseline never changes tool-call grants, permission modes or the evaluator.
+Operations enumerate the reachable registered catalog and exclude descriptors with
+`surface: authority`; later registrations require another card. Model-call content
+purging is outside the default models group, but a person can delegate it separately.
+Default spend/model MCP groups do not grant budget changes or model activation;
+a separate governed policy may delegate those actions. AI spend **reconciliation**
+(settle, release and write-off) is a code floor even under an old v1 spend grant.
+Normal settlement of a model call continues through its existing internal path.
+An Enterprise AI finance agent cannot be delegated reconciliation without a Core
+change; budget creation/revision remains a separate policy decision.
+
+Earlier wider MCP grants are shown as `wider-earlier`, including removed catalog
+and config cells. The person's card can narrow them to the current group or revoke
+them. Dynamic operation selections are content addressed and split into bounded
+rules; installing a new operation never silently extends the held grant. A custom
+rule with an unknown shape remains a conflict. Before rolling back to alpha.55,
+revoke narrowed model/spend/operation group rules on the newer version: the old
+reader can evaluate them but its group editor may report a conflict.

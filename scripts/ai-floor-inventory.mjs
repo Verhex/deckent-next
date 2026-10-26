@@ -1,6 +1,10 @@
 // Independent expected outcomes, transcribed from the owner-accepted floor, never from aiAuthorityFloor's answer.
 // Security/protocol fixtures only; this inventory grants no runtime authority.
 export const floorFamilies = [
+  { id: 'spend-reconcile', en: 'Provider spend reconciliation (settle, release, write-off)', tr: 'Sağlayıcı harcama uzlaştırması (settle, release, write-off)',
+    whyEn: 'Owner Q-SPEND (b), 2026-10-26: no AI may reconcile held spend, even with an earlier grant. Normal call settlement remains available.',
+    whyTr: 'Owner Q-SPEND (b), 2026-10-26: eski izin olsa da hiçbir AI bekleyen harcamayı uzlaştıramaz. Olağan çağrı hesaplaşması devam eder.',
+    routes: [['provider-spend-account', 'fixture-target', 'reconcile']] },
   { id: 'administration', en: 'Policy administration execute/compensate', tr: 'Politika yönetimi execute/compensate',
     whyEn: 'Grants, bindings, delegation, restrictions, duties and standing grants must not let an AI enlarge its own authority.',
     whyTr: 'Grant, rol bağı, devir, kısıtlama, görev ayrılığı ve kalıcı izin AI tarafından yetki genişletmeye dönüşmemeli.',

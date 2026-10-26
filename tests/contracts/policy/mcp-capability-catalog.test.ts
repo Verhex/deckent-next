@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/client';
 import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { describe, expect, it } from 'vitest';
 import { createMcpServer, MCP_UNGROUPED_WRITE_TOOLS, MCP_WITHHELD_TOOLS, type McpApplications } from '#surfaces/core/mcp/index.js';
-import { authorityDocuments, firstRunPolicyTemplate, installationOwnerPermissions, getPolicyVocabulary, resolvePolicyBindings, type VerifiedPrincipal } from '#domain/index.js';
+import { authorityDocuments, firstRunPolicyTemplate, installationOwnerPermissions, getPolicyVocabulary, resolvePolicyBindings, mcpCapabilityRules, mcpPrincipalRef, evaluatePolicy, type VerifiedPrincipal } from '#domain/index.js';
 import { McpCapabilities, McpCapabilityRegistry, mcpCapabilityRegistry } from '#engine/index.js';
 
 const actor: VerifiedPrincipal = { id: 'owner', issuer: 'host', subject: 'user', assurance: 'os-user', scopeIds: ['scope'] };
@@ -14,8 +14,8 @@ function policy() {
     { ...template.bindings, bindings: [{ id: 'owner', principals: [{ issuer: actor.issuer, subject: actor.subject }], roles: ['owner'], scopes: 'all' }] });
 }
 const refused = ['inspect_decision', 'renew_approval', 'create_run', 'reserve_run_tasks', 'request_run_cancellation', 'deliver_run_cancellation', 'reconcile_attempt', 'execute_task',
-  'evaluate_task', 'shutdown_runtime_service', 'admit_model_activation', 'apply_model_catalog', 'connect_model', 'apply_pool_capacity', 'inspect_pool_capacity', 'inspect_pool_hold',
-  'apply_pool_hold', 'manage_provider_spending', 'audit_provider_spending', 'invoke_model', 'purge_model_invocation_content', 'cancel_model_invocation', 'execute_operation', 'compensate_operation', 'inspect_operation'];
+  'evaluate_task', 'shutdown_runtime_service', 'admit_model_activation', 'apply_model_catalog', 'apply_pool_capacity', 'inspect_pool_capacity', 'inspect_pool_hold',
+  'apply_pool_hold', 'audit_provider_spending', 'invoke_model', 'cancel_model_invocation', 'execute_operation', 'compensate_operation', 'inspect_operation'];
 
 /** The advertised inventory of the real server with every application handler supplied (a handler for any name, plus one write catalog
  * operation), so a tool added to the server is covered without editing this test. */
@@ -76,7 +76,7 @@ describe('MCP capability catalog and governed preview contract', () => {
     const first = await app.run(request, actor, ''); expect(submits).toBe(0);
     expect((await app.run({ ...request, scopeId: 'other' }, { ...actor, scopeIds: ['scope', 'other'] }, '')).digest).not.toBe(first.digest);
     expect((await app.run({ ...request, action: 'revoke' }, actor, '')).digest).not.toBe(first.digest);
-    const registry = new McpCapabilityRegistry([{ ...mcpCapabilityRegistry.get('spend'), version: 2 }]);
+    const registry = new McpCapabilityRegistry([{ ...mcpCapabilityRegistry.get('spend'), version: 3 }]);
     expect((await new McpCapabilities(deps, registry).run(request, actor, '')).digest).not.toBe(first.digest);
     expect(await app.run({ ...request, mode: 'apply', expect: 'wrong' }, actor, '')).toMatchObject({ status: 'conflict' }); expect(submits).toBe(0);
     const applied = await app.run({ ...request, mode: 'apply', expect: first.digest }, actor, 'selected');
@@ -109,11 +109,30 @@ describe('MCP capability catalog and governed preview contract', () => {
   });
   it('company deny precedence and global cells remain visible, while the MCP actor cannot administer the catalog', async () => {
     const current = policy(); if (current.schemaVersion !== 2) throw Error('fixture');
-    const document = { ...current, restrictions: [{ id: 'deny-spending', principals: 'all' as const, scopes: ['scope'], actions: ['budget-revision'], resource: { kind: 'provider-spend-account', ids: 'all' as const } }] };
+    const document = { ...current, restrictions: [{ id: 'deny-spending', principals: 'all' as const, scopes: ['scope'], actions: ['inspect'], resource: { kind: 'provider-spend-account', ids: 'all' as const } }] };
     const app = new McpCapabilities({ policy: { async load() { return document; } }, administration: { submit: async () => { throw Error('unexpected'); } }, approve: async () => { throw Error('unexpected'); } });
     expect(await app.run({ scopeId: 'scope', groupId: 'spend', action: 'grant', mode: 'preview' }, actor, '')).toMatchObject({ missing: ['delegation'] });
     const pools = await app.run({ scopeId: 'scope', groupId: 'pools', action: 'grant', mode: 'preview' }, actor, '');
     expect(pools.rules.find(rule => rule.actions !== 'all' && rule.actions.includes('hold'))?.scopes).toBe('all');
     await expect(app.inspect('scope', { ...actor, issuer: 'host/mcp' })).rejects.toThrow('MCP_CAPABILITY_OWNER_REQUIRED');
   });
+});
+
+it('earlier spend/models/operation grants stay visible, narrowable and revocable; old spend grants cannot bypass reconcile floor', async () => {
+  let document = policy();
+  const deps = { policy: { load: async () => document }, administration: { submit: async () => { throw Error('preview only'); } }, approve: async () => { throw Error('preview only'); } };
+  const { mcpCapabilityNamespace } = await import('#engine/core/policy/index.js');
+  for (const groupId of ['spend', 'models', 'operations']) {
+    const group = mcpCapabilityRegistry.get(groupId), old = { ...group, cells: group.supersedes[0]!.cells };
+    const files = authorityDocuments(policy()), actorRef = mcpPrincipalRef(actor);
+    const held = mcpCapabilityRules(old, 'scope', actorRef, mcpCapabilityNamespace(group, 'scope', actorRef));
+    document = resolvePolicyBindings({ ...files.policy, grants: [...files.policy.grants, ...held] }, files.bindings);
+    const app = new McpCapabilities(deps, mcpCapabilityRegistry, null, [], ['erp.order.post']);
+    expect((await app.inspect('scope', actor)).groups.find(row => row.group.id === groupId)?.managed).toBe('wider-earlier');
+    expect((await app.run({ scopeId: 'scope', groupId, action: 'revoke', mode: 'preview' }, actor, '')).rules).toEqual(held);
+    const narrow = await app.run({ scopeId: 'scope', groupId, action: 'narrow', mode: 'preview' }, actor, '');
+    expect(narrow.status).toBe('preview'); expect(narrow.change?.changes.some(change => change.kind === 'grant.remove')).toBe(true);
+    if (groupId === 'models') expect(narrow.change?.changes.filter(change => change.kind === 'grant.remove')).toHaveLength(5);
+    if (groupId === 'spend') expect(evaluatePolicy(document, { principal: { ...actor, ...actorRef }, scopeId: 'scope', action: 'reconcile', resource: { kind: 'provider-spend-account', id: 'account' } })).toMatchObject({ decision: 'deny', reason: 'AI_NON_DELEGABLE' });
+  }
 });

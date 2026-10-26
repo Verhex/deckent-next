@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { PICKER_INITIAL, pickerView, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { PickerWindow } from './picker-window.js';
+import { ProviderPanel } from './provider-panel.js';
 import { BudgetWindow, budgetEntry } from './budget-panel.js';
 import { WorkspaceWindow } from './workspace-panel.js';
 import { CacheWindow, cacheEntry } from './cache-panel.js';
@@ -22,8 +23,9 @@ export function modelPanelTree(view: ModelPanelView, pinned: ModelPanelReference
   const node = (choice: ModelPanelChoice): PickerNode => {
     const marks = [...(same(pinned, choice.reference) ? [labels.pinnedMark] : []), ...(choice.configured ? [labels.configuredMark] : [])];
     const provider = choice.providerLabel ?? choice.group, label = `${choice.label} (${provider})`;
-    return { id: keyOf(choice.reference), label: marks.length ? `${label} · ${marks.join(' · ')}` : label, identity: { model: choice.label, provider }, detail: choice.detail,
-      keywords: [choice.reference.modelId, choice.reference.providerId, choice.group], ...(choice.blocked ? { blocked: { reason: choice.blocked } } : {}) };
+    const fixes = (choice.fixes ?? []).map(fix => ({ id: `:fix:${fix.id}:${keyOf(choice.reference)}`, label: fix.label, unscoped: true }));
+    return { ...(fixes.length ? { children: [...(choice.blocked ? [] : [{ id: keyOf(choice.reference), label }]), ...fixes] } : {}), id: keyOf(choice.reference), label: marks.length ? `${label} · ${marks.join(' · ')}` : label, identity: { model: choice.label, provider }, detail: choice.detail,
+      keywords: [choice.reference.modelId, choice.reference.providerId, choice.group], ...(choice.blocked && !fixes.length ? { blocked: { reason: choice.blocked } } : {}) };
   };
   const groups = [...new Set(view.choices.map(choice => choice.group))];
   const items: PickerNode[] = groups.length > 1
@@ -46,6 +48,8 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   const [state, setState] = useState<PickerState>(PICKER_INITIAL);
   const [shadow, setShadow] = useState<Readonly<{ choice: ModelPanelChoice; projectModel: string; first: readonly string[] }> | null>(null);
   // Stage 1: the scope budget row (create / change) and its window; a budget read failure only hides the row.
+  const [providerOpen, setProviderOpen] = useState(false);
+  const [fix, setFix] = useState<{ choice: ModelPanelChoice; action: 'activate' | 'deactivate' | 'reconcile' } | null>(null);
   const [budget, setBudget] = useState<BudgetPanelView | null>(null), [budgetOpen, setBudgetOpen] = useState(false);
   // CACHE-SLICE1: the cache migration row (existing profiles without a cache choice) and the model-switch question over a large context.
   const [cache, setCache] = useState<CachePanelView | null>(null), [cacheOpen, setCacheOpen] = useState(false);
@@ -66,6 +70,7 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
   }, [port]);
   if (!view) return <PickerWindow title={[span(labels.loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
     onClose={onClose} onResult={onClose} />;
+  if (providerOpen && port.provider) return <ProviderPanel port={port.provider} labels={labels} push={push} openApproval={openApproval} onError={onError} onClose={() => { setProviderOpen(false); void port.inspect().then(setView, onError); }} />;
   if (budgetOpen && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={onClose} />;
   if (cacheOpen && cache && port.cache) return <CacheWindow port={port.cache} view={cache} labels={labels} push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
   if (workspaceOpen && port.workspace && labels.workspace) return <WorkspaceWindow port={port.workspace} profiles={workspaces} labels={labels} push={push} openApproval={openApproval} onError={onError} onDone={onClose} />;
@@ -82,6 +87,14 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
     if (result.kind === 'selected' && result.id === CACHE) { setCacheOpen(true); return; }
     if (result.kind === 'selected' && result.id === WORKSPACE) { setWorkspaceOpen(true); return; }
     if (result.kind === 'selected' && result.id === PROTOCOL) { setProtocolOpen(true); return; }
+    if (result.kind === 'selected' && result.id.startsWith(':fix:')) {
+      const [, , action, ...parts] = result.id.split(':');
+      const choice = view.choices.find(choice => keyOf(choice.reference) === parts.join(':'));
+      if (action === 'provider') { setProviderOpen(true); return; }
+      if (action === 'budget') { setBudgetOpen(true); return; }
+      if (choice && port.fix && ['activate', 'deactivate', 'reconcile'].includes(action!)) setFix({ choice, action: action as 'activate' | 'deactivate' | 'reconcile' });
+      return;
+    }
     const choice = result.kind === 'selected' ? view.choices.find(item => keyOf(item.reference) === result.id && item.blocked === null) : undefined;
     if (!choice) { onClose(); return; }
     // Scope and context are one confirmation: a large history is continued or replaced only by the selected answer.
@@ -104,6 +117,12 @@ export function ModelPanel({ port, labels, push, openApproval, onError, onClose 
       if (outcome.status === 'approval-pending' && outcome.approvalId) openApproval(outcome.approvalId);
     }).catch(error => { if (mounted.current) { onError(error); onClose(); } }).finally(() => { preparingRef.current = false; if (mounted.current) setPreparing(false); });
   };
+  if (fix) return <PickerWindow pickerKey={`fix:${keyOf(fix.choice.reference)}:${fix.action}`} title={[span(fix.choice.label)]} bodyRows={BODY_ROWS} labels={labels.picker} listHints={words.hints} position={labels.position}
+    tree={{ title: fix.choice.label, items: [{ id: 'apply', label: view.fixApply ?? fix.choice.fixes?.find(row => row.id === fix.action)?.label ?? fix.action, unscoped: true },
+      { id: 'keep', label: view.fixKeep ?? words.shadowKeep, unscoped: true }] }} body={[{ spans: [span(fix.choice.detail)] }, { spans: [span(fix.choice.exact)] }]}
+    onResult={result => { if (result.kind !== 'selected' || result.id !== 'apply') { setFix(null); return; }
+      setPreparing(true); const selected = fix; setFix(null);
+      port.fix!(selected.choice, selected.action).then(() => port.inspect()).then(setView, onError).finally(() => setPreparing(false)); }} />;
   if (preparing) return <PickerWindow title={[span(labels.loading)]} bodyRows={BODY_ROWS} tree={null} labels={labels.picker} listHints={words.hints} position={labels.position}
     onClose={() => { mounted.current = false; onClose(); }} onResult={() => undefined} />;
   if (shadow) {

@@ -51,7 +51,7 @@ async function fixture(shape: 'template' | 'hand-built' | 'live-shape' | 'n1-sha
 }
 
 describe.skipIf(process.platform !== 'linux')('selection-only MCP capability administration (real policy, MCP and TTY)', () => {
-  it('grant → MCP budget revision works; revoke → refused again; exact digest/rules, audit, archive and owner rights survive', async () => {
+  it('grant → MCP budget revision remains refused; revoke → refused again; exact digest/rules, audit, archive and owner rights survive', async () => {
     const { f, body, read, preview, apply, audits } = await fixture();
     // Same configured producers as the service; real MCP transport and actor channel, without the sandbox-denied Unix listener.
     const owner = { manageProviderSpend: (command: Parameters<typeof manageConfiguredProviderSpend>[1]) => manageConfiguredProviderSpend(f.project, command, { env: f.env }),
@@ -71,7 +71,7 @@ describe.skipIf(process.platform !== 'linux')('selection-only MCP capability adm
       const applied = await apply(plan); expect(applied).toMatchObject({ status: 'applied', digest: plan.digest, change: plan.change, rules: plan.rules });
       await trace('TTY grant applied');
       expect((await read()).grants).toEqual([...body.grants, ...plan.rules]);
-      expect((await revise()).isError).not.toBe(true);
+      expect((await revise()).isError).toBe(true);
       expect(audits()).toHaveLength(1);
       expect(audits()[0].event.subject.counts).toMatchObject({ grantsAdded: plan.rules.length, grantsRemoved: 0 });
       expect(audits()[0].event.subject.inputDigest).toBe(createHash('sha256').update(encodeCommandProjection('effect-input', plan.change)).digest('hex'));

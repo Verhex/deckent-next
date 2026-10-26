@@ -116,3 +116,21 @@ it('retains closed discovery causes without leaking response or transport text',
   const failure = new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'credential-rejected', 401);
   expect(JSON.stringify(failure)).not.toContain(key);
 });
+
+it('seeded model discovery completes registry-paged lists with one bound, a selected workspace, and rejects repeated cursors', async () => {
+  const kind = providerConnectKind('anthropic-api')!, urls: string[] = [];
+  const fetch: ProviderProbeFetch = async (url, init) => {
+    urls.push(String(url)); expect(init?.headers).toMatchObject({ 'anthropic-workspace-id': 'wrkspc_fixture' });
+    return new Response(JSON.stringify(urls.length === 1 ? { data: [{ id: 'a' }], has_more: true, last_id: 'a' } : { data: [{ id: 'b' }], has_more: false, last_id: 'b' }));
+  };
+  expect(await discoverProviderModels(kind, null, key, { fetch, workspaceId: 'wrkspc_fixture' })).toEqual(['a', 'b']);
+  expect(urls).toEqual(['https://api.anthropic.com/v1/models?limit=128', 'https://api.anthropic.com/v1/models?limit=128&after_id=a']);
+  let calls = 0;
+  await expect(discoverProviderModels(kind, null, key, { fetch: async () => { calls++; return new Response(JSON.stringify({ data: [{ id: 'a' }], has_more: true, last_id: 'a' })); } }))
+    .rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_INVALID' });
+  expect(calls).toBe(2);
+  let echoed = 0;
+  await expect(discoverProviderModels(kind, null, key, { fetch: async () => { echoed++; return new Response(JSON.stringify({ data: [{ id: 'a' }], has_more: true, last_id: key })); } }))
+    .rejects.toMatchObject({ code: 'MODEL_CONNECT_DISCOVERY_INVALID' });
+  expect(echoed).toBe(1);
+});

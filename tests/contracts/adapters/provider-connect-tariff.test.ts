@@ -96,3 +96,13 @@ it('new Anthropic connections wire the same-origin token counter and the seed de
     expect(model.protocols[0]!.capabilities).toContainEqual({ id: 'token-count', version: 1, state: 'supported' });
   }
 });
+
+it('a freshly selected workspace preserves the new-profile cache default and a reconnect preserves the authored choice', () => {
+  const kind = providerConnectKind('anthropic-api')!;
+  const shaped = connectionAdapter(kind, { endpoint: 'https://api.anthropic.com/v1/messages', credentialRef: 'DECKENT_ANTHROPIC_KEY',
+    nativeId: 'claude-opus-5-5', maxOutputTokens: 64, currency: 'USD', workspaceId: 'wrkspc_fixture' });
+  expect(shaped.adapter.definition).toMatchObject({ workspaceId: 'wrkspc_fixture', cache: '5m' });
+  const kept = connectionAdapter(kind, { endpoint: 'https://api.anthropic.com/v1/messages', credentialRef: 'DECKENT_ANTHROPIC_KEY', nativeId: 'claude-opus-5-5',
+    maxOutputTokens: 64, currency: 'USD', workspaceId: 'wrkspc_next', existing: { ...shaped.adapter.definition, cache: 'none' } });
+  expect(kept.adapter.definition).toMatchObject({ workspaceId: 'wrkspc_next', cache: 'none' });
+});

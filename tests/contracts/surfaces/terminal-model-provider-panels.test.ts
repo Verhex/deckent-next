@@ -789,3 +789,15 @@ it('U1 a stored main key opens the existing first-use card without re-entry; onl
   expect(grants).toBe(1); expect(granted).toBe(true); expect(requests).toEqual([]); expect(calls.errors).toEqual([]);
   expect(view.all()).not.toContain(CANARY);
 });
+
+it('a blocked model offers its governed repair, writes only after the card, and never pins the model during repair', async () => {
+  const fixed: string[] = [];
+  const model: ModelPanelView = { ...MODELS, fixApply: 'Apply state change', fixKeep: 'Keep records', choices: [{ ...MODELS.choices[1]!, fixes: [{ id: 'activate', label: 'Turn on' }] }] };
+  const { port, pins } = modelPort(model);
+  const { element } = panel('model', { model: { ...port, fix: async (choice, action) => { fixed.push(`${choice.reference.modelId}:${action}`); } } });
+  const view = mount(element, 80, 35, true);
+  await settle(80); await view.press(ENTER); await view.press(ENTER);
+  expect(view.frame()).toContain('Apply state change'); expect(fixed).toEqual([]);
+  await view.press(ENTER); await settle(80);
+  expect(fixed).toEqual(['coder:activate']); expect(pins).toEqual([]);
+});

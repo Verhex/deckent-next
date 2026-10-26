@@ -14,6 +14,7 @@
     "src/domain/core/policy/internal/administration.ts": { "sites": 1, "class": "pure", "note": "admin capability probe; POLICY_LAST_ADMIN refusal sealed as authority-refusal (best-effort)" },
     "src/domain/core/policy/internal/decision-step.ts": { "sites": 1, "class": "pure", "note": "explicit decision grant probe for approval/runs callers" },
     "src/domain/core/policy/internal/mode.ts": { "sites": 2, "class": "pure", "note": "full-access / full-auto grant probes; full-access-turn sealed incl. deny" },
+    "src/domain/core/policy/internal/owner-baseline.ts": { "sites": 1, "class": "pure", "note": "owner-baseline before/after policy probes; no I/O; installation/owner-baseline conditionally publishes the plan with authority-change audit and archive" },
     "src/domain/core/policy/internal/permission-mode-grant.ts": { "sites": 3, "class": "pure", "note": "installer plan probes (installation/policy-modes.ts)" },
     "src/engine/core/agent-catalog/internal/authorization.ts": { "sites": 1, "class": "unsealed", "note": "agent-catalog define/import gate (S7); an allowed transition is sealed as agent-catalog, a refusal is not yet; inspect is a read-gate" },
     "src/engine/core/approval/internal/admission.ts": { "sites": 1, "class": "unsealed", "note": "task/execute admission; require-approval opens an approval request only" },

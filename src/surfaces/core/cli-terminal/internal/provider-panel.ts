@@ -1,3 +1,4 @@
+import { modelConnectLines } from '#surfaces/core/work-labels/index.js';
 import { randomUUID } from 'node:crypto';
 import { ErrorRegistry, loadConfig, MESSAGE_REGISTRY, t, type ConfigLoadOptions, type Locale } from '#platform/index.js';
 import type { ModelConnectCommand, ModelConnectResult, ModelReference } from '#domain/index.js';
@@ -55,27 +56,9 @@ function custodyText(backend: string, locale: Locale): string {
 }
 
 type Host = Pick<TerminalLaunchContext, 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'prepareMainSecret' | 'connectProviderSecret'>;
+const PULL = 'pull:available';
 const SEED = 'seed:', DECLARED = 'ref:', LEGACY = 'legacy:';
 const referenceKey = (reference: ModelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
-/** The connection's result as the window's rows: the model, what each governed step did, the key's name, spending and the service. */
-function modelLines(result: ModelConnectResult, label: string, locale: Locale): PanelLine[] {
-  const step = (state: string) => state === 'written' ? t('models.connect.step.written', {}, locale) : state === 'present' ? t('models.connect.step.present', {}, locale)
-    : t('models.connect.step.skipped', {}, locale);
-  return [{ label: t('tui.provider.model.field.model', {}, locale), text: label },
-    { label: t('tui.provider.model.field.steps', {}, locale), text: t('models.connect.steps', { catalog: step(result.steps.catalog), declaration: step(result.steps.declaration),
-      profile: step(result.steps.profile), activation: step(result.steps.activation), carried: result.steps.carried }, locale), tone: 'muted' },
-    { label: t('tui.provider.field.key', {}, locale), text: result.credentialRef === null ? t('models.connect.keyNone', {}, locale) : result.keyStored === false
-      ? t('models.connect.keyMissing', { name: result.credentialRef }, locale) : t('models.connect.key', { name: result.credentialRef }, locale),
-    tone: result.keyStored === false ? 'warning' : 'muted' },
-    // K5: which other models were carried to the new catalog revision, and which were not (with the typed reason); the system line stays a summary.
-    ...(result.carriedModels.length ? [{ label: t('tui.provider.model.field.carried', {}, locale), tone: 'muted' as const,
-      text: result.carriedModels.map(reference => reference.modelId).join(', ') }] : []),
-    ...(result.notCarried.length ? [{ label: t('tui.provider.model.field.notCarried', {}, locale), tone: 'warning' as const, text: t('models.connect.notCarried', {
-      models: result.notCarried.map(item => `${item.reference.modelId} (${item.code})`).join(', ') }, locale) }] : []),
-    ...(result.tariff === 'unmetered' ? [{ label: t('tui.provider.model.field.spend', {}, locale), text: t('models.connect.unmetered', {}, locale), tone: 'warning' as const }] : []),
-    ...(result.service === 'stale' ? [{ label: t('tui.provider.model.field.service', {}, locale), text: t('models.connect.restart', {}, locale), tone: 'warning' as const }] : []),
-    ...(result.status === 'connected' ? [{ label: t('tui.provider.field.next', {}, locale), text: t('tui.provider.model.next', {}, locale), tone: 'success' as const }] : [])];
-}
 /**
  * The terminal `/provider` window's port (T4 PROVIDER-CONNECT). It lists the kinds the host's adapter data names, the key name each is kept
  * under (names only: values are never read back) and how many of this scope's invocation profiles name that key. Connect runs the free check
@@ -89,6 +72,7 @@ type DeclaredConnectionModel = Readonly<{ id: string; label: string; detail: str
 async function connectionModelRows(kind: ProviderConnectKindView, connect: NonNullable<Host['providerConnect']>, enabled: boolean,
   declared: readonly DeclaredConnectionModel[], locale: Locale): Promise<ProviderPanelKind['models']> {
   if (!enabled || !kind.connectFamily) return [];
+  if (kind.pull === 'available') return [{ id: PULL, label: t('tui.provider.pull', {}, locale), detail: '' }];
   if (kind.seeded && connect.seedModels) return (await connect.seedModels(kind.id).catch(() => [])).map(model => ({ id: `${SEED}${model.nativeId}`,
     label: model.displayName, detail: model.nativeId, ...(model.priced === false ? { blocked: kind.id === 'zai-cn-api'
       ? t('tui.provider.model.currencyUnsupported', {}, locale) : t('tui.provider.model.priceUnverified', {}, locale) } : {}) }));
@@ -107,6 +91,20 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
   const connect = host.providerConnect; let backend = '-';
   const kindOf = (id: string): ProviderConnectKindView | undefined => connect.kinds.find(kind => kind.id === id);
   const refs = async () => credentialRefs(await loadConfig(root, options) as Record<string, unknown>, scopeId);
+  const pullModels = async (kind: ProviderConnectKindView, endpoint: string | null, lines: PanelLine[], workspaceRequired: boolean): Promise<readonly Readonly<{ id: string; name: string }>[] | undefined> => {
+    if (!host.connectModel || kind.pull !== 'available' || !kind.connectFamily) return;
+    try {
+      const workspaces = workspaceRequired && connect.workspaces ? await connect.workspaces(root, scopeId, kind.id, endpoint, options) : [];
+      if (workspaces.length > 1) return workspaces;
+      if (workspaceRequired && !workspaces.length) { lines.push({ label: '', text: t('tui.workspace.required', {}, locale), tone: 'warning' }); return; }
+      const result = await host.connectModel(root, { schemaVersion: 1, commandId: `provider-${randomUUID()}`, scopeId, connection: kind.id, endpoint,
+        model: { pull: 'available' }, ...(workspaces[0] ? { workspaceId: workspaces[0].id } : {}) }, options);
+      lines.push(...modelConnectLines(result, kindLabel(kind, kind.id, locale), locale).filter(row => row.text !== t('tui.provider.model.next', {}, locale)));
+      const reading = await host.inspectInvocableModels?.(root, scopeId, options);
+      const usable = reading?.models.find(row => row.availability.invocable && result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference)));
+      lines.push({ label: '', text: usable ? t('tui.provider.model.next', {}, locale) : t('tui.provider.pull.blocked', { reason: result.status === 'approval-pending' ? result.approval?.approvalId ?? '-' : result.budget?.state === 'missing' ? t('tui.budget.missing', { scope: scopeId }, locale) : t('tui.provider.unavailable', {}, locale) }, locale), tone: usable ? 'success' : 'warning' });
+    } catch (error) { lines.push({ label: '', text: errorText(error), tone: 'warning' }); }
+  };
   return {
     ...(secretGrant ? { secretGrant } : {}),
     ...(host.prepareMainSecret ? { async prepareKey(kind: string, endpoint: string | null) {
@@ -229,7 +227,8 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
               : errorText(ErrorRegistry.createError(failed.code, { params: { path: failed.path ?? '', name, project: root, scopeId, backend } })), tone: 'warning' });
             const title = !stored ? t('tui.provider.result.refused', { kind: label }, locale) : result.grant.state === 'granted'
               ? t('tui.provider.result.ok', { kind: label }, locale) : t('tui.provider.result.grantMissing', { kind: label }, locale);
-            return { stored, title, lines, ...(stored ? { keyName: name } : {}) };
+            const workspaces = stored && result.grant.state === 'granted' ? await pullModels(kind, request.endpoint, lines, probe.workspaceRequired === true) : undefined;
+            return { stored, title, lines, ...(workspaces ? { workspaces } : {}), ...(stored ? { keyName: name } : {}) };
           }
           const change = await host.setSecret!(root, { schemaVersion: 1, scopeId, name, value: request.key }, options);
           stored = true; backend = change.backend;
@@ -244,7 +243,9 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
         : { label: t('tui.provider.field.next', {}, locale), text: probe.workspaceRequired ? t('tui.workspace.required', {}, locale) : using > 0 ? t('tui.provider.next.bound', { count: using }, locale)
         : t('tui.provider.next.unbound', { name: name ?? '-', scope: scopeId }, locale), tone: 'muted' };
       const ok = stored || request.key === null;
-      return { stored, title: ok ? t('tui.provider.result.ok', { kind: label }, locale) : t('tui.provider.result.refused', { kind: label }, locale), lines: [check, ...where, keyLine, next],
+      const lines = [check, ...where, keyLine, next];
+      const workspaces = ok ? await pullModels(kind, request.endpoint, lines, probe.workspaceRequired === true) : undefined;
+      return { ...(workspaces ? { workspaces } : {}), stored, title: ok ? t('tui.provider.result.ok', { kind: label }, locale) : t('tui.provider.result.refused', { kind: label }, locale), lines,
         ...(stored ? { keyName: name } : {}) };
     },
     async disconnect(id) {
@@ -259,7 +260,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
     keyName(kind, endpoint) { return connect.secretName?.(kind, endpoint) ?? kindOf(kind)?.secretName ?? null; },
     ...(host.connectModel ? { async connectModel(request: ProviderModelRequest): Promise<ProviderModelOutcome> {
       const kind = kindOf(request.kind), label = kindLabel(kind, request.kind, locale);
-      const choice = request.model.startsWith(SEED) ? { nativeId: request.model.slice(SEED.length) } : (() => {
+      const choice = request.model === PULL ? { pull: 'available' as const } : request.model.startsWith(SEED) ? { nativeId: request.model.slice(SEED.length) } : (() => {
         const match = /^([^@/]+)@(\d+)\/([^@/]+)@(\d+)$/u.exec(request.model.slice(DECLARED.length));
         return match ? { reference: { providerId: match[1]!, providerVersion: Number(match[2]), modelId: match[3]!, modelVersion: Number(match[4]) } } : null;
       })();
@@ -271,7 +272,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       // A connection waiting for approval continues under the same command id (its config approval names it); anything else is a new command.
       const pendingKey = JSON.stringify([request.kind, request.endpoint, request.model]);
       const command: ModelConnectCommand = { schemaVersion: 1, commandId: pendingConnections.get(pendingKey) ?? randomUUID(), scopeId, connection: request.kind,
-        endpoint: request.endpoint, model: choice as ModelConnectCommand['model'] };
+        endpoint: request.endpoint, ...(request.workspaceId ? { workspaceId: request.workspaceId } : {}), model: choice as ModelConnectCommand['model'] };
       let result: ModelConnectResult;
       try { result = await host.connectModel!(root, command, options); } catch (error) {
         pendingConnections.delete(pendingKey);
@@ -281,10 +282,15 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
       }
       if (result.status === 'approval-pending') pendingConnections.set(pendingKey, command.commandId); else pendingConnections.delete(pendingKey);
       while (pendingConnections.size > PENDING_CONNECTIONS_KEPT) pendingConnections.delete(pendingConnections.keys().next().value!);
-      const lines = modelLines(result, `${label} · ${shown}`, locale);
+      const lines = modelConnectLines(result, `${label} · ${shown}`, locale);
+      const reading = result.status === 'connected' ? await host.inspectInvocableModels?.(root, scopeId, options) : null;
+      const candidates = reading?.models.filter(row => referenceKey(row.reference) === referenceKey(result.reference) || result.models?.some(model => model.reference && referenceKey(model.reference) === referenceKey(row.reference))) ?? [];
+      const usable = candidates.some(row => row.availability.invocable);
+      const unavailable = t('tui.provider.pull.blocked', { reason: candidates[0] ? modelInvocabilityText(candidates[0].availability, locale) : t('tui.provider.unavailable', {}, locale) }, locale);
+      if (result.status === 'connected') lines.push({ label: '', text: usable ? t('tui.provider.model.next', {}, locale) : unavailable, tone: usable ? 'success' : 'warning' });
       return result.status === 'connected'
         ? { connected: true, title: t('tui.provider.model.connected', { model: shown }, locale), lines, approvalId: null,
-          summary: result.notCarried.length ? t('tui.provider.model.summaryNotCarried', { model: shown, count: result.notCarried.length }, locale)
+          summary: !usable ? unavailable : result.notCarried.length ? t('tui.provider.model.summaryNotCarried', { model: shown, count: result.notCarried.length }, locale)
             : t('tui.provider.model.summary', { model: shown }, locale) }
         : { connected: false, title: t('tui.provider.model.pending', { model: shown }, locale), lines, summary: t('tui.provider.model.summaryPending', { model: shown }, locale),
           approvalId: result.approval?.approvalId ?? null };

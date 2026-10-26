@@ -10,21 +10,26 @@ export { ProviderModelListError } from './failure.js';
 export function providerDiscoveryChannel(kind: ProviderConnectKind, endpoint: string | null): string {
   return `${kind.id}-${createHash('sha256').update(providerProbeBase(kind, endpoint)).digest('hex').slice(0, 32)}`;
 }
-/** Same endpoint/auth/GET transport as the free probe; no redirects, retries, paid request, pagination or provider capability inference. */
+/** Same endpoint/auth/GET transport as the free probe; no redirects, retries, paid request or provider capability inference. */
 export async function discoverProviderModels(kind: ProviderConnectKind, endpoint: string | null, key: string | null,
-  options: ProviderProbeOptions = {}): Promise<readonly string[]> {
-  if (!kind.available || kind.connect?.seed !== null || !kind.probe?.listsModels) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'not-listable');
+  options: ProviderProbeOptions & { readonly workspaceId?: string } = {}): Promise<readonly string[]> {
+  if (!kind.available || !kind.probe?.listsModels) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'not-listable');
   // One key rule (G2-7): a key never travels in cleartext; a plain-http loopback discovery, like its invocation, is anonymous.
   const base = providerProbeBase(kind, endpoint), secure = endpointMayCarryKey(base), credential = secure ? key : null;
   if (secure && kind.key?.required && !credential) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', 'no-credential');
   const headers: Record<string, string> = { accept: 'application/json', ...kind.probe.headers };
   if (credential) headers[kind.probe.auth.type === 'bearer' ? 'authorization' : kind.probe.auth.name] = kind.probe.auth.type === 'bearer' ? `Bearer ${credential}` : credential;
+  if (options.workspaceId) headers['anthropic-workspace-id'] = options.workspaceId;
   const timeout = AbortSignal.timeout(options.timeoutMs ?? PROVIDER_CONNECT_LIMITS.timeoutMs);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
+    const ids = new Set<string>(), cursors = new Set<string>(); let cursor: string | null = null, total = 0, totalBytes = 0;
+    for (;;) {
+    const url = new URL(`${base}${kind.probe.path}`);
+    if (kind.probe.page) { url.searchParams.set(kind.probe.page.limitParam, String(Math.min(kind.probe.page.max, PROVIDER_CONNECT_LIMITS.modelListCount))); if (cursor) url.searchParams.set('after_id', cursor); }
     signal.throwIfAborted();
-    const response = await (options.fetch ?? fetch)(`${base}${kind.probe.path}`, { method: 'GET', headers, redirect: 'manual', signal });
+    const response = await (options.fetch ?? fetch)(url.href, { method: 'GET', headers, redirect: 'manual', signal });
     if (response.status !== 200 || !response.body) {
       throw await providerListHttpError(response, signal, kind.connect?.rejectionCodes);
     }
@@ -34,7 +39,7 @@ export async function discoverProviderModels(kind: ProviderConnectKind, endpoint
       signal.throwIfAborted();
       const part = await readProviderPart(reader, signal);
       if (part.done) break;
-      if (part.value.byteLength > PROVIDER_CONNECT_LIMITS.modelListBytes - bytes) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_LIMIT');
+      if (part.value.byteLength > PROVIDER_CONNECT_LIMITS.modelListBytes - totalBytes - bytes) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_LIMIT');
       chunks.push(part.value); bytes += part.value.byteLength;
     }
     signal.throwIfAborted();
@@ -43,14 +48,20 @@ export async function discoverProviderModels(kind: ProviderConnectKind, endpoint
     catch { throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_INVALID'); }
     const data = (body as { data?: unknown } | null)?.data;
     if (!Array.isArray(data)) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_INVALID');
-    if (data.length > PROVIDER_CONNECT_LIMITS.modelListCount) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_LIMIT');
-    const ids = new Set<string>();
+    total += data.length; totalBytes += bytes;
+    if (total > PROVIDER_CONNECT_LIMITS.modelListCount) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_LIMIT');
     for (const row of data) {
       const parsed = exactModelIdSchema.safeParse((row as { id?: unknown } | null)?.id);
       if (!parsed.success || credential && parsed.data.includes(credential)) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_INVALID');
       ids.add(parsed.data);
     }
-    return Object.freeze([...ids]);
+    void reader.cancel().catch(() => undefined); reader = undefined;
+    if (!kind.probe.page || (body as { has_more?: unknown }).has_more === false) return Object.freeze([...ids]);
+    const next = exactModelIdSchema.safeParse((body as { last_id?: unknown }).last_id);
+    if ((body as { has_more?: unknown }).has_more !== true || !next.success || credential && next.data.includes(credential) || cursors.has(next.data) || !data.length) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_INVALID');
+    if (total >= PROVIDER_CONNECT_LIMITS.modelListCount) throw new ProviderModelListError('MODEL_CONNECT_DISCOVERY_LIMIT');
+    cursors.add(next.data); cursor = next.data;
+    }
   } catch (error) {
     options.signal?.throwIfAborted();
     throw error instanceof ProviderModelListError ? error : new ProviderModelListError('MODEL_CONNECT_DISCOVERY_UNAVAILABLE', timeout.aborted ? 'timeout' : 'network');

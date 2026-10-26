@@ -1059,7 +1059,8 @@
         "src/platform/core/config",
         "src/surfaces/core/terminal-delivery",
         "src/surfaces/core/effect-confirmation",
-        "src/surfaces/core/delivery-summary"
+        "src/surfaces/core/delivery-summary",
+        "src/domain/core/model-activation"
       ],
       "plan": "SURFACES"
     },
@@ -1454,7 +1455,8 @@
         "src/domain/core/audit",
         "src/engine/core/audit",
         "src/domain/core/recovery",
-        "src/engine/core/nervous"
+        "src/engine/core/nervous",
+        "src/domain/core/effect"
       ],
       "plan": "INSTALLATION"
     },
@@ -1492,7 +1494,9 @@
         "src/composition/core/secrets",
         "src/composition/core/config",
         "src/domain/core/policy",
-        "src/platform/core/errors"
+        "src/platform/core/errors",
+        "src/composition/core/operations",
+        "src/engine/core/approval"
       ],
       "plan": "INSTALLATION"
     },
@@ -1654,7 +1658,10 @@
         "src/engine/core/provider-catalog",
         "src/platform/core/config",
         "src/engine/core/model-invocation",
-        "src/composition/core/model-invocation"
+        "src/composition/core/model-invocation",
+        "src/composition/core/provider-catalog",
+        "src/domain/core/provider-catalog",
+        "src/adapters/core/provider-connect"
       ],
       "plan": "PROVIDERS"
     },
@@ -2314,7 +2321,8 @@
         "src/composition/core/policy",
         "src/domain/core/policy",
         "src/composition/core/root",
-        "src/adapters/core/git-workspace"
+        "src/adapters/core/git-workspace",
+        "src/composition/core/operations"
       ],
       "plan": "SECURITY"
     },

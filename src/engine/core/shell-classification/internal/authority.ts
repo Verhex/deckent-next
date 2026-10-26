@@ -4,8 +4,15 @@ import { AWK_PROGRAMS, EVAL_PROGRAMS, INLINE_PROGRAM_FLAGS, INTERPRETER_PROGRAMS
 import { PACKAGE_PROGRAMS } from './mutation.js';
 
 /** The product's authority subcommands as they appear in any command text (the program may be `deckent`, a path to it, `node …/entry.js` or `npx`). */
-const AUTHORITY_TEXT: readonly RegExp[] = [/\bsecret\s+(?:grant|revoke|set|delete|handover|store)\b/u, /\bapproval\s+decide\b/u, /\binit\s+policy\b[^;&|\n]*?\s--(?:apply|modes)\b/u];
-const LAUNCHERS = new Set([...Object.keys(PRODUCT_AUTHORITY_COMMANDS), ...INTERPRETER_PROGRAMS, ...EVAL_PROGRAMS, ...PTY_WRAPPER_PROGRAMS, ...XARGS_PROGRAMS,
+const escapePattern = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const AUTHORITY_TEXT: readonly RegExp[] = Object.values(PRODUCT_AUTHORITY_COMMANDS).flatMap(groups => Object.entries(groups).map(([group, rule]) => {
+  const actions = rule.actions.filter(Boolean).map(escapePattern).join('|');
+  const words = `${group.split(' ').map(escapePattern).join('\\s+')}${actions ? rule.actions.includes('') ? `(?:\\s+(?:${actions}))?` : `\\s+(?:${actions})` : ''}`;
+  const flags = rule.requiredFlags ? `\\b[^;&|\\n]*?\\s(?:${rule.requiredFlags.map(escapePattern).join('|')})\\b` : '\\b';
+  const product = rule.bound ? `(?:^|[\\s;&|])(?:[^\\s;&|]*\\/)?(?:${PRODUCT_PROGRAM_NAMES.map(escapePattern).join('|')}|entry\\.[cm]?js)\\s+` : '\\b';
+  return new RegExp(`${product}${words}${flags}`, 'u');
+}));
+const LAUNCHERS = new Set([...PRODUCT_PROGRAM_NAMES, ...Object.keys(PRODUCT_AUTHORITY_COMMANDS), ...INTERPRETER_PROGRAMS, ...EVAL_PROGRAMS, ...PTY_WRAPPER_PROGRAMS, ...XARGS_PROGRAMS,
   ...PACKAGE_PROGRAMS, ...PRIVILEGE_PROGRAMS, ...TRANSPARENT_PROGRAMS]);
 /** A prefix that hands its stdin to a later program word (`… | command bash`, `env -u X bash < f`). */
 const HANDS_ON = new Set([...TRANSPARENT_PROGRAMS, ...PRIVILEGE_PROGRAMS, ...EVAL_PROGRAMS]);
@@ -34,7 +41,7 @@ export function classifyShellAuthority(command: string): boolean {
  */
 const normalised = (text: string) => text.toLowerCase().replace(/[^a-z0-9]/gu, '');
 const PRODUCT_MARKS: readonly string[] = Object.freeze([...PRODUCT_PROGRAM_NAMES.map(normalised),
-  ...Object.values(PRODUCT_AUTHORITY_COMMANDS).flatMap(groups => Object.entries(groups).flatMap(([group, actions]) => actions.map(action => normalised(`${group}${action}`)))),
+  ...Object.values(PRODUCT_AUTHORITY_COMMANDS).flatMap(groups => Object.entries(groups).flatMap(([group, rule]) => rule.actions.map(action => normalised(`${group}${action}`)))),
   normalised('approval decide'), normalised('init policy')]);
 const INLINE_INTERPRETER = (name: string) => (INTERPRETER_PROGRAMS.has(name) && !SHELL_PROGRAMS.has(name)) || AWK_PROGRAMS.has(name);
 /** The inline programs of an interpreter word at `at` (its flag's operand, an attached `-e…`, awk's first operand); none for a program file. */
@@ -110,7 +117,7 @@ function runsAuthority(command: string, depth: number): boolean {
     if (fed && (readsProgramFromStdin(programName(head.text), argv) || (HANDS_ON.has(programName(head.text)) && stdinInterpreterAfter(argv)))) return true;
     // `expect` runs Tcl, not a shell: its payload is never decoded here, so it always keeps the card.
     if (programName(head.text) === 'expect') return true;
-    if (names(rest.map(word => word.text).join(' '))) return true;
+    if (names(stage.words.map(word => word.text).join(' '))) return true;
     // `$` the scanner kept (`$'…'`), brace expansion or a glob: the shell would run another argv than the one decoded here.
     if (rest.some(word => !word.quoted && UNDECODED.test(word.text)) || rest.some(word => word.text.includes('$'))) return true;
     if (rest.some(word => !word.quoted && GLOB.test(word.text))) return true;

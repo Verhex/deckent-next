@@ -25,7 +25,8 @@ export const modelConnectCommandSchema = z.object({
   /** The address, only where the kind takes one (a chosen list row or a validated new address); null = the kind's own. */
   endpoint: z.string().min(1).max(2048).nullable().default(null),
   /** An exact API id from the kind's seed or freshly read endpoint list, or a previously declared exact catalog reference. */
-  model: z.union([z.object({ nativeId: exactModelIdSchema }).strict(), z.object({ reference: modelReferenceSchema }).strict()]),
+  model: z.union([z.object({ nativeId: exactModelIdSchema }).strict(), z.object({ reference: modelReferenceSchema }).strict(), z.object({ pull: z.literal('available') }).strict()]),
+  workspaceId: z.string().regex(/^wrkspc_[A-Za-z0-9]{1,120}$/u).optional(),
   /** S3-3, a CLI kind only (additive): the absolute executable and login directory (absent: the first in PATH; s3c the Brain's own login dir). */
   cli: z.object({ executable: absolutePath.optional(), configDir: absolutePath.optional() }).strict().readonly().optional(),
   /** S3-3 delegated-use consent (owner Q-H3), written only by the person: who besides them may spend the login. Absent keeps it; [] withdraws it. */
@@ -38,6 +39,7 @@ export type ModelConnectResult = Readonly<{
   schemaVersion: 1; operation: typeof MODEL_CONNECT_OPERATION_ID; commandId: string; scopeId: string; connection: string;
   status: 'connected' | 'approval-pending';
   reference: z.infer<typeof modelReferenceSchema>;
+  models?: readonly Readonly<{ nativeId: string; reference?: z.infer<typeof modelReferenceSchema>; state: 'connected' | 'unpriced' | 'notOnKey' | 'notInCatalog'; code?: string }>[];
   /** The secret NAME the profile reads (`credentialRef`), never a value; null = no key is sent (a keyless or plain-http local server). */
   credentialRef: string | null;
   /** Whether that name is in the secret store now (null: the store was not listed). */
