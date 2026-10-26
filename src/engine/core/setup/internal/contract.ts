@@ -60,7 +60,7 @@ export type SetupStage = Readonly<{ id: string; namespace: string; title: string
 export type SetupPlan = Readonly<{ schemaVersion: typeof SETUP_PLAN_SCHEMA_VERSION; registryDigest: string; stages: readonly SetupStage[]; planDigest: string }>;
 
 /** What a family evaluator sees: its own validated facts, its answer, the scope and the states of every earlier stage. */
-export type SetupStageContext = Readonly<{ facts: unknown; answer: unknown; scopeId: string | null; states: ReadonlyMap<string, SetupStageState> }>;
+export type SetupStageContext = Readonly<{ facts: unknown; answer: unknown; scopeId: string | null; states: ReadonlyMap<string, SetupStageState>; prior?: ReadonlyMap<string, unknown> }>;
 const stageId = z.string().regex(/^[a-z][a-z0-9-]{0,63}:[a-z][a-z0-9-]{0,63}$/);
 /** A family package: namespaced like identity-profile packages; Core is never shadowed. Stages carry pure evaluators, so the
  * package digest covers the descriptor data (namespace, source, ids, anchors, titles), not the function bodies. */

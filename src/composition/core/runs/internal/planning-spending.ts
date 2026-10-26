@@ -1,11 +1,14 @@
 import type { ConfigLoadOptions } from '#platform/index.js';
-import { classifyWorkSpending, modelInvocationBillingAxis, providerSpendHasZeroTariff, type RunProposalResult } from '#engine/index.js';
+import { classifyWorkSpending, modelInvocationBillingAxis, providerSpendHasZeroTariff, isRunIntentResult, type RunPlanningResult } from '#engine/index.js';
 import { inspectConfiguredModelInvocation } from '#composition/core/model-invocation/index.js';
 /** Optional observation under the invocation's own inspect policy; never changes proposal/admission authority. */
-export async function withPlanningSpending(root: string, result: RunProposalResult, options: ConfigLoadOptions): Promise<RunProposalResult> {
+export function withPlanningSpending(root: string, result: import('#engine/index.js').RunProposalResult, options: ConfigLoadOptions): Promise<import('#engine/index.js').RunProposalResult>;
+export function withPlanningSpending(root: string, result: RunPlanningResult, options: ConfigLoadOptions): Promise<RunPlanningResult>;
+export async function withPlanningSpending(root: string, result: RunPlanningResult, options: ConfigLoadOptions): Promise<RunPlanningResult> {
+  if (isRunIntentResult(result)) return result;
   const proposal = result.proposal.proposal;
   if (proposal.source.kind !== 'model') return result;
-  let planningSpending: NonNullable<RunProposalResult['planningSpending']> = { class: 'unknown', currency: null, amountMinorUnits: null, evidence: 'unknown' };
+  let planningSpending: NonNullable<import('#engine/index.js').RunProposalResult['planningSpending']> = { class: 'unknown', currency: null, amountMinorUnits: null, evidence: 'unknown' };
   try {
     const source = proposal.source.receipt;
     const view = await inspectConfiguredModelInvocation(root, { schemaVersion: 2, scopeId: proposal.scopeId, invocationId: source.invocationId, reference: source.reference }, options);

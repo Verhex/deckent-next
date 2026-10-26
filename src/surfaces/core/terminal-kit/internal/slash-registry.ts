@@ -53,6 +53,7 @@ export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
   { name: 'mcp', group: 'settings', descriptionKey: 'terminal.slash.mcp' },
   { name: 'policy', group: 'settings', descriptionKey: 'terminal.slash.policy' },
   // MONITOR: the monitor's text snapshot (Runs, blockers, workers, approvals, pools, installs); `deckent monitor` is the fullscreen view.
+  { name: 'setup', group: 'settings', descriptionKey: 'terminal.slash.setup' },
   { name: 'config', group: 'settings', descriptionKey: 'config.surface.slashDescription' },
   // T4 PROVIDER-CONNECT: connect a provider (masked key, free check, secret store) or disconnect it; a window only.
   { name: 'provider', group: 'settings', descriptionKey: 'terminal.slash.provider' },

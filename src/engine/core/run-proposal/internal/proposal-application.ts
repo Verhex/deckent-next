@@ -4,13 +4,15 @@ import { authenticate, type PrincipalVerifier } from '#engine/core/authenticatio
 import type { ProviderSpendCheckpoint } from '#engine/core/provider-spend/index.js';
 import { WorkerModelAdmissionError } from '#engine/core/model-activation/index.js';
 import { RunAdmissionApplication, RunCreationAuthority, systemOrderedGraph, type BoundRunAdmission, type RunAuthorization, type RunView } from '#engine/core/runs/index.js';
-import { parseRunProposal, runProposalDigest, runProposalQuerySchema, type RunProposalQuery, type RunProposalRecord, type RunProposalStore } from './proposal-contract.js';
+import { isRunIntent, proposalIdentity, parseRunProposal, runProposalDigest, runProposalQuerySchema, type RunProposalQuery, type RunProposalRecord, type RunProposalStore, type RunIntentRecord } from './proposal-contract.js';
+import { intentResult, type RunPlanningResult } from './intent-application.js';
 import { stableRunProposalBasis, unrecognisedRunProposalPermissions, validateRunProposal } from './proposal-validation.js';
 export interface RunProposalContext {
   readonly registry?: WorkClassRegistry | undefined;
   readonly clock: TrustedClock;
   loadBudget(scopeId: string, principal: VerifiedPrincipal): Promise<ProviderSpendCheckpoint | Readonly<{ checkpoint: ProviderSpendCheckpoint | null; source?: 'configured' }> | null>;
   classifySpending?(proposal: RunProposal): Promise<Readonly<{ semantics: 'metered' | 'not-metered'; digest: string }>>;
+  verifyIntent?(proposal: RunProposal, intent: RunIntentRecord): Promise<void>;
   verifySource(proposal: RunProposal, principal: VerifiedPrincipal): Promise<void>;
   /** S8-1b: the system's agent selection per work-input task now (the same selection admission re-derives); absent = no catalog. */
   selectAgents?(proposal: RunProposal): Promise<ReadonlyMap<string, Omit<RecordedTaskAgent, 'taskId'>>>;
@@ -67,11 +69,22 @@ export class RunProposalApplication {
         budgetCeiling: proposal.budgetCeiling, requiredPermissions: proposal.requiredPermissions, ...(proposal.delivery ? { delivery: { ...proposal.delivery, grantedBy: actor } } : {}), admission: null } };
     // One Run-create policy evaluation. Proposal does not create a second decision/approval owner.
     const evaluation = await this.authority.evaluate(command, principal);
-    let record = await this.store.loadProposal(proposal.scopeId, proposal.commandId);
+    const loaded = await this.store.loadProposal(proposal.scopeId, proposal.commandId);
+    const origin = loaded && isRunIntent(loaded) ? loaded : null;
+    if (origin) {
+      if (origin.status !== 'starting' || !this.context.verifyIntent) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
+      await this.context.verifyIntent(proposal, origin);
+    }
+    let record: RunProposalRecord | null = loaded && !isRunIntent(loaded) ? loaded : null;
+    const save = async (next: RunProposalRecord) => {
+      const stored = origin ? await this.store.transitionProposal(origin, next) : await this.store.recordProposal(next);
+      if (isRunIntent(stored)) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
+      return stored;
+    };
     if (record && record.digest !== digest) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
     if (record && ['rejected', 'parked'].includes(record.status)) return result(this.context.registry, record);
     if (!record) {
-      record = { schemaVersion: 1, proposal, digest, revision: 0, recordedAt: this.context.clock.sample().wallMs,
+      record = { schemaVersion: 2, kind: 'planned', origin, proposal, digest, revision: origin ? origin.revision + 1 : 0, recordedAt: origin?.recordedAt ?? this.context.clock.sample().wallMs,
         status: 'recorded', binding: command.proposal!, reason: null, approval: null, authority: null };
       try {
         await this.context.verifySource(proposal, principal);
@@ -80,10 +93,10 @@ export class RunProposalApplication {
       } catch (error) {
         const code = codeOf(error); if (!code || !ErrorRegistry.has(code)) throw error;
         this.authority.recordUnapplied(command, principal, evaluation);
-        return result(this.context.registry, await this.store.recordProposal({ ...record, status: 'rejected', reason: code }), null, error);
+        return result(this.context.registry, await save({ ...record, status: 'rejected', reason: code }), null, error);
       }
       // A failed receipt write stops before sealing/approval/Run admission.
-      record = await this.store.recordProposal(record);
+      record = await save(record);
     }
     const bound = { ...command, proposal: record.binding };
     try {
@@ -99,7 +112,7 @@ export class RunProposalApplication {
       }
       const admitted = await this.runs.admitEvaluated(bound, principal, evaluation);
       const completed = await this.store.loadProposal(proposal.scopeId, proposal.commandId);
-      if (!completed || completed.status !== 'accepted' || completed.digest !== digest
+      if (!completed || isRunIntent(completed) || completed.status !== 'accepted' || completed.digest !== digest
         || encodeCommandProjection('authority', completed.authority) !== encodeCommandProjection('authority', admitted.run.authority)) throw ErrorRegistry.createError('RUN_PROPOSAL_OUTCOME_UNKNOWN');
       return result(this.context.registry, completed, admitted.run);
     } catch (error) {
@@ -111,7 +124,9 @@ export class RunProposalApplication {
       const status = pending ? 'pending' : ['APPROVAL_EXPIRED', 'APPROVAL_STALE', 'APPROVAL_CONFLICT', 'RUN_PROPOSAL_BASIS_STALE'].includes(code) ? 'parked' : 'rejected';
       const next: RunProposalRecord = { ...record, revision: record.revision + 1, status, reason: code, authority: null,
         approval: pending ? { approvalId: String(pending.approvalId), expiresAt: Number(pending.expiresAt), decisionRecordId: String(pending.decisionRecordId) } : null };
-      return result(this.context.registry, await this.store.transitionProposal(record, next), null, pending ? undefined : error);
+      const stored = await this.store.transitionProposal(record, next);
+      if (isRunIntent(stored)) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
+      return result(this.context.registry, stored, null, pending ? undefined : error);
     }
   }
 }
@@ -119,13 +134,13 @@ export class RunProposalApplication {
 export class RunProposalInspectionApplication {
   constructor(private readonly store: Pick<RunProposalStore, 'loadProposal'>, private readonly verifier: PrincipalVerifier, private readonly inspection: RunAuthorization,
     private readonly registry?: WorkClassRegistry) {}
-  async inspect(input: RunProposalQuery, credential?: unknown): Promise<RunProposalResult | null> {
+  async inspect(input: RunProposalQuery, credential?: unknown): Promise<RunPlanningResult | null> {
     const query = runProposalQuerySchema.parse(input), principal = await authenticate(this.verifier, credential, query.scopeId);
     // authorize the scope before the command lookup, then the exact Run resource before disclosing its plan.
     await this.inspection.authorize('inspect', { scopeId: query.scopeId, runId: query.runId, schemaVersion: 1 }, principal);
     const record = await this.store.loadProposal(query.scopeId, query.commandId);
     if (!record) return null;
-    if (record.proposal.runId !== query.runId) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
-    return result(this.registry, record);
+    if (proposalIdentity(record).runId !== query.runId) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
+    return isRunIntent(record) ? intentResult(record) : result(this.registry, record);
   }
 }

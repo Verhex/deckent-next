@@ -2,7 +2,7 @@ import type { PermissionMode } from '#domain/index.js';
 import type { QueueSubmitClient, QueueQuery, QueueConsent, TargetBatchExecution } from '#engine/index.js';
 import type { ProjectInstructionPort } from '#engine/index.js';
 import type { BrainPlanCommand, BrainPlanObserver } from '#domain/index.js';
-import type { RunProposalResult } from '#engine/index.js';
+import type { RunPlanningResult } from '#engine/index.js';
 import type { McpPanelRun } from './mcp-panel.js';
 import type { TerminalSecretGrantHandlers } from './secret-grant-card.js';
 import type { ModelReference, ProjectIdentity } from '#domain/index.js';
@@ -98,7 +98,7 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   | 'inspectModelBinding' | 'inspectModelActivation' | 'connectModel' | 'manageProviderSpend'> {
   openOwnerBaselineInstallation?: (root: string, scopeId: string, input: { readonly families: readonly string[]; readonly apply: boolean; readonly person?: { readonly issuer: string; readonly subject: string }; readonly expect?: string }) => Promise<import('#engine/index.js').InstallerOwnerBaselineResult>;
   admitModelActivation?: import('#surfaces/core/cli-models/index.js').ModelActivationAdmissionHandler;
-
+  openOnboarding?: (root: string, scopeId: string, folder: string, options: ConfigLoadOptions) => Promise<import('#surfaces/core/terminal-onboarding/index.js').OnboardingPort>;
   deliveryQueue?: QueueSubmitClient;
   confirmDeliveryQueue?: (query: QueueQuery, ask: (view: Omit<QueueConsent, 'capability'>) => Promise<boolean>) => Promise<TargetBatchExecution>;
   /** TESLIM-KARTI-OZET: each delivery card's summary, read under the person's grants; absent = cards show no summary. */
@@ -107,7 +107,7 @@ export interface TerminalLaunchContext extends MonitorCommandContext, Pick<Model
   readAutonomyShadow?: AutonomyShadowReader;
 
   /** `observe` (f3, owner Q-H4): the caller shows planning progress (a quota wait); absent: a quota refusal is the typed refusal at once. */
-  readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal, observe?: BrainPlanObserver) => Promise<RunProposalResult>;
+  readonly planRun?: (root: string, command: BrainPlanCommand, options: ConfigLoadOptions, signal?: AbortSignal, observe?: BrainPlanObserver) => Promise<RunPlanningResult>;
   mcpCapabilities?: import('#surfaces/core/work-labels/index.js').McpCapabilityHandlers;
   delegations?: import('#surfaces/core/work-labels/index.js').DelegationHandlers;
   /** T4 `/provider`: the connect kinds and free check, and the secret store handlers (the key goes only to `setSecret`). */
@@ -181,6 +181,7 @@ export type RunCancellationRenderer = (data: Awaited<ReturnType<RunCancellationD
 
 /** The host commands the terminal uses; the CLI binds them to its own command context (this unit never imports the CLI). */
 export interface TerminalLaunchPorts {
+  readonly foregroundSetup?: (root: string, stage: import('#engine/index.js').SetupStage, scopeId: string, locale: Locale) => Promise<Readonly<{ status: string; code?: string }>>;
   /** `/doctor`: the host's kernel command (`doctor --lang <locale>`) over the launch context with the given sinks. */
   readonly runKernelCommand: (argv: readonly string[], overrides: { readonly root: string; readonly env: NodeJS.ProcessEnv; readonly stdout: OutputSink; readonly stderr: OutputSink }) => Promise<void>;
   /** `/mcp`: absent when the host wires no MCP command handler (the slash command is then not offered). */

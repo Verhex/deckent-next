@@ -104,7 +104,8 @@ export async function configureNativeTemplate(input: unknown, ports: NativeTempl
   return { ...result, status: 'applied', write };
 }
 
-const initializeSchema = requestSchema.omit({ image: true }).extend({ schemaVersion: z.literal(1), scopeId: identitySchema,
+const initializeSchema = requestSchema.extend({ schemaVersion: z.literal(1), scopeId: identitySchema,
+  expect: z.string().regex(/^[a-f0-9]{64}$/u).nullable().optional(),
   poolId: identitySchema, executionSlots: z.number().int().positive().safe(), inFlightSlots: z.number().int().positive().safe(),
   discovery: discoveryModeSchema.optional() }).strict();
 export type InitialRegistryRequest = z.infer<typeof initializeSchema>;
@@ -128,7 +129,7 @@ type DockerSettings = NonNullable<DeckentConfig['execution']>['docker'];
 function initialRegistry(request: InitialRegistryRequest, settings: DockerSettings, cliVersion: string, template: NativeTemplatePorts['template']) {
   const { executable, ...resources } = settings; void executable;
   let profile: ExecutionProfileDefinition;
-  try { profile = template(resources, { provider: request.provider, cliVersion,
+  try { profile = template({ ...resources, imageId: request.image ?? settings.imageId }, { provider: request.provider, cliVersion,
     ...(request.discovery ? { discovery: { schemaVersion: 1, mode: request.discovery } } : {}), permissionMode: 'unattended' }); }
   catch (error) { discoveryRefusal(error, request.provider, 'INITIAL_REGISTRY_CLI_UNAVAILABLE'); }
   const kind = { kind: request.kind, profile: { id: profile.id, version: profile.version } };
@@ -160,9 +161,10 @@ export async function initializeNativeRegistry(input: unknown, ports: NativeTemp
   // alpha.55.1 (Astra 2752): the witness before the snapshot and the discovery probe (a container), so a refused apply starts nothing.
   if (request.apply) await assertConfigPersonWitness('set', 'admission', ports.witness);
   const read = await ports.snapshot();
+  if (request.expect !== undefined && request.expect !== read.digest) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
   const current = currentRegistry(read, request, ports.template);
   if (current) return { schemaVersion: 1 as const, ...current, expect: read.digest, status: 'current' as const, write: null };
-  const settings = initialSource(read, request);
+  const settings = { ...initialSource(read, request), ...(request.image ? { imageId: request.image } : {}) };
   const cliVersion = await ports.detect(request.provider, settings);
   const { profile, kind, registry } = initialRegistry(request, settings, cliVersion, ports.template);
   const admission = { ...read.effective.admission, registry, poolId: request.poolId, executionSlots: request.executionSlots,
@@ -171,7 +173,7 @@ export async function initializeNativeRegistry(input: unknown, ports: NativeTemp
   if (!request.apply) return { ...result, status: 'preview' as const, write: null };
   const principal = await ports.principal(request.scopeId);
   const guard = (current: ConfigSnapshot) => {
-    if (JSON.stringify(initialSource(current, request)) !== JSON.stringify(settings)
+    if (JSON.stringify({ ...initialSource(current, request), ...(request.image ? { imageId: request.image } : {}) }) !== JSON.stringify(settings)
       || JSON.stringify(current.effective.admission) !== JSON.stringify(read.effective.admission)) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
   };
   await ports.beforeWrite?.();

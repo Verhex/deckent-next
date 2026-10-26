@@ -20,7 +20,8 @@ async function confirmed(io: CliCardIo, title: string, body: readonly string[], 
 async function declareWorkKind(context: SetupCommandContext, root: string, stage: SetupStage, scopeId: string, io: CliCardIo,
   result: (status: SetupApplyResult['status'], failure?: string) => SetupApplyResult): Promise<SetupApplyResult> {
   const input = stage.operation!.input, locale = io.locale, options = { env: io.env ?? process.env, heal: false };
-  const request = { schemaVersion: 1 as const, scopeId, provider: String(input['provider']), kind: String(input['kind']), poolId: String(input['poolId']),
+  if (typeof input['image'] !== 'string') return result('refused', 'CODING_TEMPLATE_IMAGE_REQUIRED');
+  const request = { schemaVersion: 1 as const, scopeId, image: input['image'], provider: String(input['provider']), kind: String(input['kind']), poolId: String(input['poolId']),
     executionSlots: Number(input['executionSlots']), inFlightSlots: Number(input['inFlightSlots']) };
   emit(t('setup.work.previewing', { provider: terminalSafeText(request.provider) }, locale), { stdout: process.stdout });
   const preview = await context.initializeNativeCodingRegistry!(root, { ...request, apply: false }, options);
@@ -30,7 +31,7 @@ async function declareWorkKind(context: SetupCommandContext, root: string, stage
   if (!await confirmed(io, t('setup.work.card.title', params, locale), [t('setup.work.card.body', params, locale), t('setup.work.card.write', {}, locale)], t('setup.work.card.yes', {}, locale))) {
     return result('declined');
   }
-  const applied = await context.initializeNativeCodingRegistry!(root, { ...request, apply: true }, options);
+  const applied = await context.initializeNativeCodingRegistry!(root, { ...request, expect: preview.expect, apply: true }, options);
   return applied.status === 'applied' || applied.status === 'current' ? result('applied') : result('refused', `INITIAL_REGISTRY_${applied.status.toUpperCase()}`);
 }
 
@@ -41,7 +42,7 @@ async function declareWorkKind(context: SetupCommandContext, root: string, stage
  * then its apply) and the human doctor (with its own fix cards). A "no" on a card is `declined`. The result never decides the next state; the
  * caller observes again. The model connection and the project-instruction bridges are onboarding (U3-1a): never a `deckent init` stage.
  */
-export async function runForegroundStage(context: SetupCommandContext, root: string, stage: SetupStage, scopeId: string | null, locale: Locale): Promise<SetupApplyResult> {
+export async function runForegroundStage(context: Omit<SetupCommandContext, 'inspectShellRealm'>, root: string, stage: SetupStage, scopeId: string | null, locale: Locale): Promise<SetupApplyResult> {
   const op = stage.operation!.id, env = context.env ?? process.env, io: CliCardIo = { locale, env, stdin: process.stdin, stdout: process.stdout };
   const result = (status: SetupApplyResult['status'], failure?: string): SetupApplyResult => ({ stage: stage.id, operation: op, status, ...(failure ? { code: failure } : {}) });
   const human = { ...context, env, stdin: process.stdin, stdout: process.stdout, stderr: process.stderr, locale };

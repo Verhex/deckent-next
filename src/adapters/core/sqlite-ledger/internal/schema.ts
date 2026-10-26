@@ -15,7 +15,7 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 72;
+export const CURRENT_LEDGER_VERSION = 73;
 // alpha.56 BP budget periods: each period-less spend checkpoint is archived once (append-only history) and gets its first local month boundary.
 // Older binaries refuse v72; rollback restores the pre-switch backup (the rewritten account records carry the period).
 export const PROVIDER_SPEND_PERIOD_LEDGER_VERSION = 72;
@@ -72,6 +72,8 @@ export const MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION = 55;
 // ONAY-GUVENCE D2: chained audit checkpoints (additive; lane v55, renumbered to v56 at the pre-beta wave integration).
 export const AUDIT_CHECKPOINT_LEDGER_VERSION = 56;
 export const RUN_PROPOSAL_LEDGER_VERSION = 53;
+// v2 intent/planned envelopes; no existing record changes. Down step requires restoring the v72 backup.
+export const RUN_INTENT_LEDGER_VERSION = 73;
 export const POOL_CAPACITY_LEDGER_VERSION = 47;
 // T3 L2 CONFIG-APPROVAL: the `config-change` approval subject (approvals CHECK widened, one current row per (scope, digest)).
 export const CONFIG_CHANGE_APPROVAL_LEDGER_VERSION = 48;
@@ -93,6 +95,7 @@ export const WORKER_EVENT_LOG_LEDGER_VERSION = 35;
 const append = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'AGENT_CATALOG_APPEND_ONLY'); END;`).join('');
 const memoryAppend = (table: string, ...ops: readonly ('UPDATE' | 'DELETE')[]) => ops.map(op => `CREATE TRIGGER ${table}_no_${op.toLowerCase()} BEFORE ${op} ON ${table} BEGIN SELECT RAISE(ABORT,'MEMORY_APPEND_ONLY'); END;`).join('');
 const migrations: Readonly<Record<number, string>> = Object.freeze({
+  [RUN_INTENT_LEDGER_VERSION]: 'PRAGMA user_version=73;',
   [HUB_CLIENT_LEDGER_VERSION]: `CREATE TABLE hub_sources(scope_id TEXT NOT NULL,hub_id TEXT NOT NULL,state TEXT NOT NULL CHECK(state IN('active','removed')),
     revision INTEGER NOT NULL CHECK(revision>0),record TEXT NOT NULL,PRIMARY KEY(scope_id,hub_id));
     CREATE TABLE hub_installs(scope_id TEXT NOT NULL,hub_id TEXT NOT NULL,package_id TEXT NOT NULL,version TEXT NOT NULL,

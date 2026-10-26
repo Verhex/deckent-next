@@ -30,9 +30,6 @@ import type { ProjectIdentity, PermissionMode, ModelReference, BrainPlanObserver
 import type { TerminalChatPlanView } from './terminal-chat.js';
 import { providerDisplayName } from './provider-label.js';
 
-type Action = 'status' | 'session' | 'workline' | 'snapshot' | 'chat-plan';
-interface Parsed { action: Action; json: boolean; help: boolean; fullAccess: boolean; trustDigest?: string; language?: string; scopeId?: string }
-const ACTIONS: readonly Action[] = ['status', 'session', 'workline', 'snapshot', 'chat-plan'];
 const DEFAULT_HISTORY_MESSAGES = 40;
 /** Refusals of the identity write admission that leave the interactive view usable (nothing was created; no authority is implied). */
 const ADMISSION_DEFERRED = {
@@ -43,34 +40,6 @@ const ADMISSION_DEFERRED = {
 } as const;
 const UNADMITTED_CUSTODY_LABEL = 'unadmitted';
 
-function parse(argv: readonly string[]): Parsed {
-  // Bare `deckent terminal` (options only) is the interactive terminal, the same as `deckent` with no arguments on a TTY.
-  const named = argv[1] !== undefined && !argv[1].startsWith('-');
-  const action = (named ? argv[1] : 'workline') as Action;
-  if (argv[0] !== 'terminal' || !ACTIONS.includes(action)) throw ErrorRegistry.createError('CLI_USAGE');
-  const parsed: Parsed = { action, json: false, help: false, fullAccess: false };
-  for (let index = named ? 2 : 1; index < argv.length; index++) {
-    const key = argv[index] === '-h' ? '--help' : argv[index]!;
-    if (key === '--help') parsed.help = true;
-    else if (key === '--full-access') parsed.fullAccess = true;
-    else if (key === '--trust-instructions' && parsed.trustDigest === undefined) {
-      const digest = argv[++index]; if (!digest || !/^[a-f0-9]{64}$/.test(digest)) throw ErrorRegistry.createError('CLI_USAGE'); parsed.trustDigest = digest;
-    }
-    else if (key === '--json') parsed.json = true;
-    else if (key === '--no-color') continue;
-    else if (key === '--lang' || key === '--scope') {
-      const value = argv[++index];
-      if (!value || value.startsWith('-') || (key === '--lang' ? parsed.language : parsed.scopeId) !== undefined) throw ErrorRegistry.createError('CLI_USAGE');
-      if (key === '--lang') parsed.language = value; else parsed.scopeId = value;
-    } else throw ErrorRegistry.createError('CLI_USAGE');
-  }
-  if (parsed.help && parsed.json) throw ErrorRegistry.createError('CLI_USAGE');
-  if (parsed.json && (parsed.action === 'session' || parsed.action === 'workline')) throw ErrorRegistry.createError('CLI_USAGE');
-  // Full access is a launch of the interactive terminal only (MODES-3); no other action runs agent tools.
-  if (parsed.fullAccess && parsed.action !== 'workline') throw ErrorRegistry.createError('CLI_USAGE');
-  if (parsed.trustDigest && parsed.action !== 'session') throw ErrorRegistry.createError('CLI_USAGE');
-  return parsed;
-}
 
 function ttyState(context: TerminalLaunchContext) {
   const stdin = context.stdin ?? process.stdin;
@@ -149,6 +118,7 @@ function slashWindowLabels(locale: Locale): SlashWindowLabels {
       all: t('terminal.window.unknown.all', {}, locale), allDetail: t('terminal.window.unknown.allDetail', {}, locale) } };
 }
 
+
 function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
   return {
     work: workSurfaceLabels(locale),
@@ -192,6 +162,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
       usage: t('terminal.scratch.usage', {}, locale) },
   };
 }
+
 
 /**
  * T3 L4: the `/config` and `/mcp` windows' ports and every panel's words (`/mode`'s port is the workline's own). Where the terminal cannot draw
@@ -280,7 +251,7 @@ async function runSession(locale: Locale, context: TerminalLaunchContext, turn: 
 }
 
 export async function terminalCommand(argv: readonly string[], context: TerminalLaunchContext, ports: TerminalLaunchPorts): Promise<void> {
-  const parsed = parse(argv);
+  const parsed = (await import('#surfaces/core/terminal-onboarding/index.js')).parseTerminalLaunch(argv);
   const root = context.root ?? process.cwd();
   const env = context.env ?? process.env;
   let locale = resolveLocale(parsed.language, env);
@@ -289,11 +260,11 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   if (parsed.help) { emit(t('cli.help.terminal', {}, locale), sinks); return; }
   const tty = ttyState(context);
   const options: ConfigLoadOptions = { env };
-  const config = await loadConfig(root, options) as Record<string, unknown> & { language?: string; inspection: { workers: { heartbeatMs: number } };
+  let config = await loadConfig(root, options) as Record<string, unknown> & { language?: string; inspection: { workers: { heartbeatMs: number } };
     approvals: { pageSize: number; sessionTtlMs: number } };
   locale = resolveLocale(parsed.language, env, config.language);
   context.onLocale?.(locale);
-  const chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
+  let chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
   if (parsed.action === 'chat-plan') {
     if (!chat) throw ErrorRegistry.createError('TERMINAL_CHAT_UNAVAILABLE');
     emit(chat, { ...sinks, json: true, render: value => formatValue(value) });
@@ -357,6 +328,29 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       if (runtimeConfigFreshness(service.configDigest, config) === 'stale') configLine = t('terminal.service.configStale', {}, locale); idleStops = service.idleStopMs != null;
       if (skew) skewLine = t('terminal.service.buildSkew', { service: skew.service ?? t('terminal.value.unknown', {}, locale), terminal: skew.terminal }, locale);
     } catch (error) { serviceLine = errorText(error, locale); serviceFailed = true; }
+  }
+  let onboarding: import('#surfaces/core/terminal-onboarding/index.js').OnboardingHandoff | undefined;
+  if (parsed.action === 'workline' && context.openOnboarding && (await import('#surfaces/core/cli-human/index.js')).cliMode(context).mode === 'interactive') {
+    const surface = await import('#surfaces/core/terminal-onboarding/index.js');
+    const port = await context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options);
+    const io = { locale, env, stdin: process.stdin, stdout: process.stdout, ...(context.signal ? { signal: context.signal } : {}) };
+    const run = async (revisit: boolean, signal?: AbortSignal) => {
+      const panels = panelProps(root, scopeId, context, ports, options, locale, env).panels;
+      return (await surface.loadOnboardingScreens()).runOnboardingSession(port, { locale,
+        provider: async () => {
+          if (!panels?.ports.provider) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+          await (await surface.loadOnboardingProvider()).runOnboardingProvider(panels.ports.provider, panels.labels,
+            context.providerConnect?.kinds.filter(row => row.billing === 'subscription').map(row => row.id) ?? [], io);
+        },
+        instructions: async () => { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['instructions'], { ...context, root, locale }); },
+        foreground: async stage => ports.foregroundSetup ? ports.foregroundSetup(root, stage, scopeId, locale) : { status: 'not-wired' },
+      }, { ...io, ...(signal ? { signal } : {}) }, revisit);
+    };
+    onboarding = { initial: await run(false), open: signal => run(true, signal) };
+    const deferred = surface.deferredOnboardingNotice(await port.observe({}), locale);
+    if (deferred) accessNotices.push({ level: 'info', text: deferred });
+    config = await loadConfig(root, { ...options, force: true }) as typeof config;
+    chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
   }
   const historyMessages = chat?.historyMessages ?? DEFAULT_HISTORY_MESSAGES;
   const instructionPort = context.openProjectInstructions ? await context.openProjectInstructions(root, options) : undefined;
@@ -443,7 +437,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   // K6 = A: a service that stops itself when idle counts this open terminal as a client only through this beat (clients connect per request).
   const beat = idleStops && context.describeRuntimeService ? setInterval(() => { void context.describeRuntimeService!(root, options).catch(() => undefined); }, RUNTIME_SERVICE_HEARTBEAT_MS).unref() : null;
   try { await runTerminalWorkline({
-    context: { installationId, projectId, scopeId },
+    context: { installationId, projectId, scopeId }, ...(onboarding ? { onboarding } : {}),
     knownSecrets: getConfigKnownSecrets(config),
     selfSource: await context.selfSourceProject?.(root) ?? false,
     labels: { ...worklineLabels(locale, [t('terminal.status.chat', { target: chatTarget(chat, locale) }, locale), ...(serviceLine ? [serviceLine] : [])].join(' · ')),
@@ -462,8 +456,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
     ...(context.planRun ? { doPlan: { planning: t('brain.planning', {}, locale), cancelHint: t('brain.cancelHint', {}, locale), requestHint: t('brain.requestHint', {}, locale),
       quotaWait: (progress: Extract<BrainPlanProgress, { kind: 'quota-wait' }>) => ({ untilText: clockText(progress.untilMs), hint: t('brainwait.cancelHint', {}, locale),
         body: t('brainwait.window', { time: clockText(progress.untilMs), attempt: progress.attempt, maxAttempts: progress.maxAttempts }, locale) }),
-      plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference, observe?: BrainPlanObserver) =>
-        context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(reference ? { reference } : {}) }, options, signal, observe),
+      plan: (intent: string, commandId: string, signal: AbortSignal, reference?: ModelReference, observe?: BrainPlanObserver, pending?: import('#engine/index.js').RunIntentRecord) =>
+        pending && context.openOnboarding ? context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options).then(port => port.start(pending, signal)) : context.planRun!(root, { schemaVersion: 1, commandId, scopeId, intent, ...(reference ? { reference } : {}) }, options, signal, observe),
       lines: (result: Parameters<typeof brainProposalLines>[0]) => brainProposalLines(result, locale) } } : {}),
     ...(context.inspectProviderSpendAccount && context.manageProviderSpend ? { spending: () => spendRecoveryView({ root, scopeId, options, locale, context }) } : {}),
     ...(inputHistory ? { inputHistory } : {}), ...(context.externalEditor ? { externalEditor: context.externalEditor } : {}),

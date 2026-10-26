@@ -31,7 +31,7 @@ export function planSetup(observation: SetupObservation, answers: SetupAnswers =
   const phases = new Map(order.map(entry => [typeof entry === 'string' ? entry : entry.id, phaseOf(entry)] as const));
   const foreign = options.phase === undefined ? undefined : Object.keys(values).find(stage => phases.get(stage) !== options.phase);
   if (foreign) throw ErrorRegistry.createError('SETUP_STAGE_NOT_IN_PHASE', { params: { stage: foreign } });
-  const states = new Map<string, SetupStageState>(), stages: SetupStage[] = [];
+  const states = new Map<string, SetupStageState>(), prior = new Map<string, unknown>(), stages: SetupStage[] = [];
   const unsupported = facts.environment.platform !== 'linux' && facts.environment.platform !== 'wsl';
   for (const entry of order) {
     const core = typeof entry === 'string', id = core ? entry : entry.id, namespace = core ? 'core' : entry.namespace;
@@ -47,7 +47,7 @@ export function planSetup(observation: SetupObservation, answers: SetupAnswers =
     if (core) ({ decision, autoEligible } = CORE_STAGE_EVALUATORS[entry]({ facts, answers: values, scopeId, states, phases,
       unattendedProfile: registry.unattendedProfile }));
     else {
-      try { decision = entry.evaluate(Object.freeze({ facts: familyFacts.get(namespace), answer: values[id], scopeId, states: new Map(states) })); }
+      try { decision = entry.evaluate(Object.freeze({ facts: familyFacts.get(namespace), answer: values[id], scopeId, states: new Map(states), prior: new Map(prior) })); }
       catch { throw ErrorRegistry.createError('SETUP_STAGE_INVALID', { params: { stage: id } }); }
     }
     const parsed = setupDecisionSchema.safeParse(decision);
@@ -57,6 +57,7 @@ export function planSetup(observation: SetupObservation, answers: SetupAnswers =
     // this planning hint grants no authority and never replaces the operation owner's witness and policy checks.
     const owned = (key: string) => core || key.startsWith(`${namespace}.`) || key.startsWith(`setup.${namespace}.`);
     if (!owned(value.reason.code) || value.question && !owned(value.question.key)) throw ErrorRegistry.createError('SETUP_STAGE_INVALID', { params: { stage: id } });
+    if (values[id] !== undefined && (value.state === 'done' || value.state === 'ready')) prior.set(id, values[id]);
     states.set(id, value.state);
     stages.push(freezeStage({ id, namespace, title, phase, state: value.state, reason: Object.freeze({ code: value.reason.code, params: Object.freeze(value.reason.params) }),
       operation: value.operation, question: value.question ? Object.freeze({ key: value.question.key, params: Object.freeze(value.question.params) }) : null,

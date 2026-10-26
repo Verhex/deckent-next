@@ -210,7 +210,8 @@
         "src/surfaces/core/approval-presentation",
         "src/surfaces/core/project-instructions",
         "src/surfaces/core/cli-human",
-        "src/surfaces/core/config-window"
+        "src/surfaces/core/config-window",
+        "src/surfaces/core/terminal-onboarding"
       ],
       "purpose": "Interactive terminal (TUI) renderer: layout, input and paste handling for the Deckent terminal.",
       "features": [
@@ -262,7 +263,8 @@
         "src/surfaces/core/approval-presentation",
         "src/surfaces/core/project-instructions",
         "src/surfaces/core/terminal-delivery",
-        "src/surfaces/core/cli-human"
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/terminal-onboarding"
       ],
       "purpose": "Component model for the ink TUI.",
       "features": [
@@ -302,7 +304,8 @@
         "src/composition",
         "src/surfaces/core/cli-terminal",
         "src/surfaces/core/mcp",
-        "src/surfaces/core/hub-mcp"
+        "src/surfaces/core/hub-mcp",
+        "src/adapters/core/terminal-history"
       ],
       "purpose": "Contract language: runtime schemas for domain records, config, ledger rows, provider wire shapes and MCP tool input.",
       "features": [

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 2,
   "planSchemaVersion": 2,
-  "planDigest": "aa2b5383ee8791e5226e10790e69092d621d260a90e00963e304bb699d805e8b",
-  "registryDigest": "8a32660e6a787c9b436946fe1c7019ef7f988265d1d6801046b9d42670817b1d",
+  "planDigest": "99b8243a344cf3ce7176cc03c4dcfc160db655a664743d9cfe5e95d05faba172",
+  "registryDigest": "cb68a59111d08b0bd05df02a9d98d7a4200d723d2e648529a59c4035d23574d2",
   "stages": [
     {
       "id": "core:language",

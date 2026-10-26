@@ -1,4 +1,4 @@
-Deckent setup plan 04a6ef264866
+Deckent setup plan acfec5ac8069
 1. Language · needs your answer · Detected language: Turkish.
    ? Continue in Turkish?
 2. Environment · done · The environment is supported (linux).

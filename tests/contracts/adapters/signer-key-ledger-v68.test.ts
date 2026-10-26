@@ -25,17 +25,17 @@ const insert = (db: DatabaseSync, key: string, state = 'active', revision = 1) =
   db.prepare("INSERT INTO skill_signer_keys(scope_id,key_id,state,revision,seq,record) VALUES('s',?,?,?,1,'{}')").run(key, state, revision);
 
 it('pins the step: v68 is signer keys (v72, the alpha.56 budget periods, is the current ledger)', () => {
-  expect(SIGNER_KEY_LEDGER_VERSION).toBe(68); expect(CURRENT_LEDGER_VERSION).toBe(72);
+  expect(SIGNER_KEY_LEDGER_VERSION).toBe(68); expect(CURRENT_LEDGER_VERSION).toBe(73);
 });
 it('backs up a v67 ledger and adds only the empty signer tables; an older build refuses the result', async () => {
   const f = await v67();
   expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-23T00:00:00Z'));
-  expect(upgrade).toMatchObject({ from: 67, to: 72 });
+  expect(upgrade).toMatchObject({ from: 67, to: 73 });
   const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true }), db = new DatabaseSync(f.path, { readOnly: true });
   try {
     expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(67); expect(tables(backup)).toEqual([]);
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(72); expect(tables(db)).toEqual(TABLES);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(73); expect(tables(db)).toEqual(TABLES);
     for (const table of TABLES) expect(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.['n']).toBe(0);
   } finally { backup.close(); db.close(); }
 });

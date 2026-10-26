@@ -8,7 +8,7 @@ import { ErrorRegistry, redactForRecord, sha256, type KnownSecretSnapshot } from
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
 import { modelInvocationRequestDigest, refuseInactiveModel, type ModelInvocationResult } from '#engine/core/model-invocation/index.js';
 import { composeModelRolePolicy, decideRoleModelInScope, roleModelPorts, type RoleModelSources } from '#engine/core/model-activation/index.js';
-import type { PlanningMemoryNote, RunProposalQuery, RunProposalResult } from '#engine/core/run-proposal/index.js';
+import { isRunIntentResult, type RunPlanningResult, type PlanningMemoryNote, type RunProposalQuery, type RunProposalResult } from '#engine/core/run-proposal/index.js';
 import { brainQuotaAttemptCommandId, brainQuotaWaitUntil, waitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
 export { brainQuotaAttemptCommandId, brainQuotaWaitUntil, type BrainQuotaWaitPolicy } from './internal/quota-wait.js';
 /** f3: the configured `brain_planner.quotaWait` bounds (registry defaults when unset). */
@@ -62,7 +62,7 @@ export interface BrainPreparation { readonly invocation: ModelInvocationCommand;
   /** f3 (owner Q-H4): the configured quota wait bounds; absent: a quota refusal is the typed refusal at once. */ readonly quotaWait?: BrainQuotaWaitPolicy }
 export interface BrainPlanPorts {
   readonly knownSecrets?: KnownSecretSnapshot | undefined;
-  inspect(query: RunProposalQuery): Promise<RunProposalResult | null>;
+  inspect(query: RunProposalQuery): Promise<RunPlanningResult | null>;
   prepare(command: BrainPlanCommand, principal: VerifiedPrincipal): Promise<BrainPreparation>;
   invoke(command: ModelInvocationCommand, signal?: AbortSignal): Promise<ModelInvocationResult>;
   text(result: ModelInvocationResult): string | null;
@@ -127,7 +127,10 @@ export class BrainPlanApplication {
     const proposer = { id: principal.id, issuer: principal.issuer, subject: principal.subject };
     assertActive(signal);
     const runId = brainRunId(command), kept = await this.ports.inspect({ schemaVersion: 1, scopeId: command.scopeId, runId, commandId: command.commandId });
-    if (kept) {
+    if (kept && isRunIntentResult(kept)) {
+      if (kept.intent.status !== 'starting' || encodeCommandProjection('intent-command', kept.intent.command) !== encodeCommandProjection('intent-command', command)
+        || encodeCommandProjection('actor', kept.intent.proposer) !== encodeCommandProjection('actor', proposer)) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
+    } else if (kept) {
       const source = kept.proposal.proposal.source;
       if (source.kind !== 'model' || source.contribution?.inputDigest !== brainInputDigest(command, this.ports.knownSecrets)
         || encodeCommandProjection('actor', kept.proposal.proposal.proposer) !== encodeCommandProjection('actor', proposer)) throw ErrorRegistry.createError('RUN_PROPOSAL_COMMAND_CONFLICT');
