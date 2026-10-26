@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
-import { resolveProductLayout } from '#platform/index.js';
+import { callerEnvironment, resolveProductLayout } from '#platform/index.js';
 
 const probe = vi.hoisted(() => ({ execute: vi.fn(), machine: undefined as string | Error | undefined }));
 vi.mock('node:child_process', async importOriginal => {
@@ -42,7 +42,7 @@ it.skipIf(process.platform === 'win32')('uses bounded macOS IOPlatformUUID captu
   expect(probe.execute).not.toHaveBeenCalled(); // Read of absence needs no OS subprocess.
   const identity = await store.loadOrCreate(), bytes = await readFile(f.path, 'utf8');
   expect(probe.execute).toHaveBeenCalledWith('/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'],
-    { timeout: 37, maxBuffer: 4096, encoding: 'utf8' });
+    { timeout: 37, maxBuffer: 4096, encoding: 'utf8', env: callerEnvironment(process.env) }); // FIX8a: the caller's NODE_ENV, never the entry's.
   // A platform machine binding keeps the v1 persisted shape (rollback-safe); strength and source are reported on reads.
   expect(JSON.parse(bytes).binding).toEqual({ schemaVersion: 1, machineDigest: createHmac('sha256', 'deckent.installation-binding.v1').update(uuid).digest('hex'),
     canonicalRoot: await realpath(join(f.root, '.deckent')), device: expect.stringMatching(/^\d+$/u), inode: expect.stringMatching(/^[1-9]\d*$/u) });
