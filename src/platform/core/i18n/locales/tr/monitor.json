@@ -250,6 +250,7 @@
   "monitor.config.name.cancellationRuntime": "Otomatik iptal kurtarma",
   "monitor.config.name.reconciliationRuntime": "Otomatik uzlaştırma",
   "monitor.config.name.approvals": "Onaylar ve canlı oturum",
+  "monitor.config.name.policy": "Politika seçenekleri",
   "monitor.config.name.audit": "Denetim kontrol noktaları",
   "monitor.config.name.enforce_principal_assurance": "Doğrulanmış aktör zorunlu",
   "monitor.config.name.layout": "Veri klasörleri",
