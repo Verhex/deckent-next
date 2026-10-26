@@ -3,20 +3,27 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, type TestContext } from 'vitest';
-import { HubModeratedApplication, HubServerError, hubKeyProofMessage, hubRosterMessage, hubModerationMessage, hubQueueId,
+import { HubModeratedApplication, HubServerError, hubKeyProofMessage, hubRosterMessage, hubModerationMessage, hubQueueId, verifyHubModerationEvidence,
   type HubModerationCommand, type HubServicePolicy, type HubServiceDependencies } from '#engine/core/hub-server/index.js';
 import { canonicalHubJson, type HubPackageSignature } from '#domain/core/hub/index.js';
-import { buildHubPackage, hubPackageSignatureMessage } from '#engine/core/hub/index.js';
+import { buildHubPackage, delegatedHubKey, hubKeyDelegationMessage, hubPackageSignatureMessage, hubRevocationFeedMessage } from '#engine/core/hub/index.js';
+import { encodeHubBundle, type HubBundle, type HubClientDependencies } from '#engine/core/hub-client/index.js';
 import { openHubStore, HUB_STORE_SCHEMA_VERSION } from '#adapters/core/hub-store/index.js';
 import { createHubServiceHttpHandler } from '#surfaces/core/hub-mcp/index.js';
 import { createHmacIntegrity, ed25519Signer, EMPTY_KNOWN_SECRETS, sha256, signatureMessage, verifyEd25519 } from '#platform/index.js';
-import { bundle, publisher, hub, otherPublisher } from '../../fixtures/hub-client.js';
+import { bundle, publisher, hub, otherPublisher, fixture as clientFixture } from '../../fixtures/hub-client.js';
 
 const roots: string[] = [], closers: (() => void)[] = [];
 afterEach(() => { for (const close of closers.splice(0).reverse()) close(); for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 const seed = (byte: string) => ed25519Signer(Buffer.from(`302e020100300506032b657004220420${byte.repeat(32)}`, 'hex'));
 const rootKey = seed('04'), moderator1 = seed('05'), moderator2 = seed('06'), moderator3 = seed('07'), feedKey = seed('08');
 const code = (code: string) => expect.objectContaining({ code });
+/** A root-signed `hub-key-delegation:1` (the H9 key ceremony's output); `by` signs it. */
+const delegate = (key: typeof hub, purposes: ('attestation' | 'feed')[], notBefore = 0, notAfter = 100000, by = rootKey) => {
+  const body = { schemaVersion: 1 as const, hubId: rootKey.keyId, keyId: key.keyId, publicKey: key.spki.toString('base64'), purposes, notBefore, notAfter };
+  return { ...body, signature: { keyId: by.keyId, algorithm: 'ed25519' as const, value: by.sign(hubKeyDelegationMessage(body)).toString('base64') } };
+};
+const delegations: Readonly<Record<string, unknown>> = { [hub.keyId]: delegate(hub, ['attestation']), [feedKey.keyId]: delegate(feedKey, ['feed']) };
 async function fixture(c: TestContext, extra: Partial<HubServicePolicy> = {}) {
   if (process.platform === 'win32') c.skip('verify-not-run: Hub POSIX custody; Windows refuses in hub-server contract');
   const root = mkdtempSync(join(tmpdir(), 'hub-service-')); roots.push(root);
@@ -38,7 +45,8 @@ async function fixture(c: TestContext, extra: Partial<HubServicePolicy> = {}) {
   const ports = { ...opened, hubId: rootKey.keyId, scopeId: 's', now: () => now, knownSecrets: () => EMPTY_KNOWN_SECRETS,
     authority: { require: () => { if (!allow) throw new HubServerError('HUB_SERVER_DENIED'); } },
     feedSigner: () => ({ signer: feedKey, key: { keyId: feedKey.keyId, publicKey: feedKey.spki.toString('base64'), role: 'hub' as const, active: true } }),
-    attestor: () => ({ signer: hub, key: { keyId: hub.keyId, publicKey: hub.spki.toString('base64'), role: 'hub' as const, active: true } }) };
+    attestor: () => ({ signer: hub, key: { keyId: hub.keyId, publicKey: hub.spki.toString('base64'), role: 'hub' as const, active: true } }),
+    delegation: (keyId: string) => delegations[keyId] ?? null };
   const app = new HubModeratedApplication(ports, deps), address = sha256('loopback fixture');
   const login = async (subject: string) => {
     const challenge = await app.accounts.begin('fixture', address), result = await app.accounts.login(challenge.id, { subject, challenge: challenge.id });
@@ -267,6 +275,44 @@ it('verifies signed profile/roster evidence offline and refuses a forged profile
   const entry = log[0] as { record: unknown; signature: { value: string; keyId: string } };
   expect(entry.signature.keyId).toBe(hub.keyId);
   expect(verifyEd25519(hub.spki, signatureMessage('hub-moderation-log:1', canonicalHubJson(entry.record)), Buffer.from(entry.signature.value, 'base64'))).toBe(true);
+});
+
+it('a real H8 package and feed reach the H2 client only through root-signed key delegations (Astra A56 C2)', async c => {
+  const f = await fixture(c); f.time(300); const b = f.make(); await f.publish(); await f.review(); await f.review('1.0.0', moderator2, f.mod2.context);
+  // The H8 server never signs with an online key the root has not delegated.
+  const undelegated = new HubModeratedApplication({ ...f.ports, delegation: () => null }, f.deps);
+  await expect(undelegated.profiles.create(f.owner.context, { schemaVersion: 1, handle: 'nodeleg', kind: 'person', displayName: 'No' })).rejects.toThrow(code('HUB_STORE_UNSAFE'));
+  const row = await f.app.inspect(f.owner.context, '@acme/invoice', '1.0.0'), evidence = await f.app.evidence(f.owner.context, '@acme/invoice', '1.0.0');
+  const served: HubBundle = { ...b, envelope: row.envelope, delegation: (await f.app.packageDelegation(row.envelope))! }, feed = await f.app.revocations(f.owner.context);
+  expect(feed).toMatchObject({ signature: { keyId: feedKey.keyId }, delegation: { keyId: feedKey.keyId, purposes: ['feed'] } });
+  // H2 client: the source pins only the root; the moderation resolver takes the attestation key from the root-verified delegation.
+  const root = { hubId: rootKey.keyId, publicKey: rootKey.spki.toString('base64') };
+  const resolveTrust: NonNullable<HubClientDependencies['resolveTrust']> = async (_source, value) => {
+    const attestation = value.envelope.signatures.find(s => s.role === 'hub')!;
+    return verifyHubModerationEvidence(evidence, value, { hubId: root.hubId, rootPublicKey: root.publicKey,
+      attestationKey: delegatedHubKey(root, attestation.keyId, value.delegation, 'attestation', attestation.signedAtMs) });
+  };
+  const client = await clientFixture({ resolveTrust }); roots.push(client.root);
+  await client.app.addSource({ schemaVersion: 1, scopeId: 's', commandId: 'add-h8', hubId: root.hubId, publicKey: root.publicKey, expectedRevision: null,
+    endpoint: 'https://hub.example', label: 'H8', local: false, trustPolicy: 'hub-moderated' });
+  const install = (commandId: string, value: HubBundle, feedValue: unknown = feed) => client.app.installFile({ schemaVersion: 1, scopeId: 's', commandId, hubId: root.hubId,
+    bundles: [encodeHubBundle(value)], feed: feedValue, workClassMapping: {} });
+  const { delegation: _served, ...bare } = served, { delegation: _feed, ...unsignedFeed } = feed, signedAt = row.envelope.signatures.find(s => s.role === 'hub')!.signedAtMs;
+  void _served; void _feed;
+  // No delegation, a feed-only delegation, a window that ended before the hub signature, or one the online key signed itself: never accepted.
+  for (const [id, value] of [['bare', bare], ['purpose', { ...served, delegation: delegate(hub, ['feed']) }], ['expired', { ...served, delegation: delegate(hub, ['attestation'], 0, signedAt) }],
+    ['self', { ...served, delegation: delegate(hub, ['attestation'], 0, 100000, hub) }]] as const) await expect(install(id, value as HubBundle)).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
+  await expect(install('feed-bare', served, unsignedFeed)).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
+  // The real server output installs, re-verifies from the stored bundle and exports with its delegation.
+  await expect(install('h8', served)).resolves.toMatchObject({ result: [expect.objectContaining({ packageId: '@acme/invoice', state: 'installed' })] });
+  const query = { schemaVersion: 1, scopeId: 's', hubId: root.hubId, packageId: '@acme/invoice', version: '1.0.0' };
+  await expect(client.app.verify(query)).resolves.toMatchObject({ packageId: '@acme/invoice' });
+  expect(JSON.parse(Buffer.from(await client.app.exportFile(query)).toString('utf8'))).toMatchObject({ delegation: { keyId: hub.keyId } });
+  // A feed whose own entries revoke its delegated signing key is refused.
+  const payload = { schemaVersion: 1 as const, hubId: root.hubId, sequence: feed.sequence + 1, issuedAtMs: 400, nextRefreshBy: 4000000,
+    entries: [{ kind: 'key' as const, id: feedKey.keyId, severity: 'revoke' as const, reason: 'compromised', atMs: 400 }], delegation: delegate(feedKey, ['feed']) };
+  const revoking = { ...payload, signature: { keyId: feedKey.keyId, algorithm: 'ed25519', value: feedKey.sign(hubRevocationFeedMessage(payload)).toString('base64') } };
+  await expect(client.app.applyRevocations({ schemaVersion: 1, scopeId: 's', commandId: 'revoke-feed-key', hubId: root.hubId, feed: revoking })).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
 });
 
 it('cannot count a suspended moderator vote during final approval and allows an independent appeal review', async c => {

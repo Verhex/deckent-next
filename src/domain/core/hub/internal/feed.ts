@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { HUB_LIMITS } from './registry.js';
 import { hubDigestSchema, hubSignatureValueSchema, hubText, hubTimeSchema } from './fields.js';
+import { hubKeyDelegationSchema } from './delegation.js';
 
 export const hubFeedSignatureSchema = z.object({ keyId: hubDigestSchema, algorithm: z.literal('ed25519'), value: hubSignatureValueSchema }).strict().readonly();
 export const hubRevocationEntrySchema = z.object({ kind: z.enum(['key', 'package-version', 'publisher']), id: hubText(256), severity: z.enum(['yank', 'revoke']),
@@ -19,5 +20,7 @@ export const hubRevocationFeedSchema = z.object({ schemaVersion: z.literal(1), h
   issuedAtMs: hubTimeSchema, nextRefreshBy: hubTimeSchema,
   entries: z.array(hubRevocationEntrySchema).max(HUB_LIMITS.feedPageMax).readonly(),
   catchup: hubRevocationCatchupSchema.optional(),
+  // Present when an online feed key (not the pinned root) signs: the root's delegation of that key, inside the signed payload.
+  delegation: hubKeyDelegationSchema.optional(),
   signature: hubFeedSignatureSchema }).strict().refine(row => row.nextRefreshBy > row.issuedAtMs && row.entries.every(e => e.atMs <= row.issuedAtMs)).readonly();
 export type HubRevocationFeed = z.infer<typeof hubRevocationFeedSchema>;

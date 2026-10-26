@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { hubRevocationFeedSchema, hubRevocationEntrySchema, HubError } from '#domain/index.js';
-import { AgentCatalogStoreError, hubInstallSchema, hubSourceSchema, hubRefreshResultSchema, verifyHubRevocationFeed, type CatalogUpstream } from '#engine/index.js';
+import { AgentCatalogStoreError, hubFeedKey, hubInstallSchema, hubSourceSchema, hubRefreshResultSchema, verifyHubRevocationFeed, type CatalogUpstream } from '#engine/index.js';
 
 /** Read-only overlay. Retained catalog bytes and standings never change; frozen Run pins remain readable. */
 export function catalogHubUpstream(db: DatabaseSync, open: (value: unknown) => unknown, scopeId: string, kind: 'agent' | 'skill', id: string, revision: number, nowMs: number, verifiedKeyIds?: readonly string[]): CatalogUpstream {
@@ -33,7 +33,7 @@ export function catalogHubUpstream(db: DatabaseSync, open: (value: unknown) => u
     if (source.scopeId !== scopeId || source.hubId !== install.hubId || feed.hubId !== source.hubId) throw new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT');
     if (source.state !== 'active' || feed.catchup?.complete === false) { status = 'withdrawn'; continue; }
     try {
-      verifyHubRevocationFeed(feed, { hubId: source.hubId, key: { keyId: source.hubId, publicKey: source.publicKey, role: 'hub', active: true }, nowMs, previous: null });
+      verifyHubRevocationFeed(feed, { hubId: source.hubId, key: hubFeedKey({ hubId: source.hubId, publicKey: source.publicKey }, feed), nowMs, previous: null });
     } catch (error) {
       if (error instanceof HubError && error.code === 'HUB_FEED_STALE') { status = 'withdrawn'; continue; }
       throw error;

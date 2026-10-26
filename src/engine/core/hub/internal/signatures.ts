@@ -1,4 +1,5 @@
-import { encodeCommandProjection, SIGNATURE_LABELS, HUB_LIMITS, HubError, canonicalHubJson, hubEnvelopeSchema, parseHubContract, type HubEnvelope, type HubPackage, type HubPackageSignature } from '#domain/index.js';
+import { encodeCommandProjection, SIGNATURE_LABELS, HUB_LIMITS, HubError, canonicalHubJson, hubEnvelopeSchema, hubKeyDelegationSchema, parseHubContract,
+  type HubEnvelope, type HubKeyDelegation, type HubPackage, type HubPackageSignature } from '#domain/index.js';
 import { ed25519KeyId, sha256, signatureMessage, verifyEd25519 } from '#platform/index.js';
 import { canonicalHubManifest, verifyHubPackageFiles, type HubPackageFile } from './package.js';
 import { hubSkillDocumentBody, skillContentV2Digest, skillSignatureV2Message } from './skill.js';
@@ -21,6 +22,26 @@ export function requireHubSignature(key: HubVerificationKey | undefined, keyId: 
   catch { throw new HubError('HUB_SIGNER_UNTRUSTED'); }
   const bytes = Buffer.from(value, 'base64');
   if (bytes.toString('base64') !== value || !verifyEd25519(spki, message, bytes)) throw new HubError('HUB_SIGNATURE_INVALID');
+}
+export const hubKeyDelegationMessage = (delegation: Omit<HubKeyDelegation, 'signature'>) =>
+  signatureMessage(SIGNATURE_LABELS.hubKeyDelegation, encodeCommandProjection(SIGNATURE_LABELS.hubKeyDelegation, delegation));
+/** The pinned hub identity: `hubId` is the fingerprint of the root key a person pinned (never served by the hub itself). */
+export interface HubRoot { readonly hubId: string; readonly publicKey: string }
+/**
+ * The key allowed to make a hub signature of `purpose` signed at `atMs` (S8 §9A trust chain): the pinned root itself, or an online key the root
+ * delegated for that purpose with `atMs` inside the delegation window. An undelegated, foreign-root, wrong-purpose or out-of-window key is
+ * HUB_SIGNER_UNTRUSTED. Revocation of the online key stays with the caller (its revocation feed and local revocations).
+ */
+export function delegatedHubKey(root: HubRoot, signerKeyId: string, input: unknown, purpose: 'attestation' | 'feed', atMs: number): HubVerificationKey {
+  const rootKey: HubVerificationKey = { keyId: root.hubId, publicKey: root.publicKey, role: 'hub', active: true };
+  if (signerKeyId === root.hubId) return rootKey;
+  const parsed = hubKeyDelegationSchema.safeParse(input);
+  if (!parsed.success) throw new HubError('HUB_SIGNER_UNTRUSTED');
+  const { signature, ...delegation } = parsed.data;
+  if (delegation.hubId !== root.hubId || delegation.keyId !== signerKeyId || !delegation.purposes.includes(purpose)
+    || !Number.isSafeInteger(atMs) || atMs < delegation.notBefore || atMs >= delegation.notAfter) throw new HubError('HUB_SIGNER_UNTRUSTED');
+  requireHubSignature(rootKey, signature.keyId, hubKeyDelegationMessage(delegation), signature.value);
+  return { keyId: delegation.keyId, publicKey: delegation.publicKey, role: 'hub', active: true };
 }
 /** Cryptographic verification only: install policy, source identity, moderator/profile/delegation evidence and freshness are owned by the calling application. */
 export function verifyHubPackage(manifest: HubPackage, input: unknown, files: readonly HubPackageFile[], keys: HubPackageVerification): HubEnvelope {

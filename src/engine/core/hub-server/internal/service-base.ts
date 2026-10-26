@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { canonicalHubJson, HUB_LIMITS } from '#domain/index.js';
 import { ed25519KeyId, sha256, signatureMessage } from '#platform/index.js';
+import { delegatedHubKey } from '#engine/core/hub/index.js';
 import { HubRevocationApplication } from './revocations.js';
 import { HubServerError, type HubServerContext, type HubServerTransaction, type HubServerPorts } from './ports.js';
 import { hubAccountSchema, hubProfileSchema, hubProfileFields, hubSessionSchema, hubServicePolicySchema, hubMembershipConsentSchema,
@@ -18,6 +19,11 @@ export class HubServiceBase extends HubRevocationApplication {
     const online = await super.signer(now, purpose);
     const other = await super.signer(now, purpose === 'feed' ? 'attestation' : 'feed');
     if (online.key.keyId === this.ports.hubId || other.key.keyId === this.ports.hubId || online.key.keyId === other.key.keyId) throw new HubServerError('HUB_STORE_UNSAFE');
+    // Never sign with an online key the root has not delegated for this purpose now: clients would refuse it (S8 §9A trust chain).
+    try {
+      const delegated = delegatedHubKey({ hubId: this.ports.hubId, publicKey: this.service.rootPublicKey }, online.key.keyId, await this.delegationOf(online.key.keyId), purpose, now);
+      if (delegated.publicKey !== online.key.publicKey) throw new HubServerError('HUB_STORE_UNSAFE');
+    } catch { throw new HubServerError('HUB_STORE_UNSAFE'); }
     return online;
   }
   async recordRevocations(tx: HubServerTransaction, entries: Parameters<HubServiceBase['signFeed']>[1]) {

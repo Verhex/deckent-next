@@ -4,7 +4,7 @@ import { HUB_LIMITS, HUB_TRUST_POLICIES, counterSchema, identitySchema, hubDiges
 import { artifactReceiptSchema, type ArtifactReceipt, type ArtifactStore } from '#capabilities/index.js';
 import type { AgentCatalogDependencies, AgentCatalogStore, CatalogUpstream } from '#engine/core/agent-catalog/index.js';
 import type { HubPackageVerification, HubPackageFile, HubVerificationKey } from '#engine/core/hub/index.js';
-import type { HubEnvelope, HubPackage } from '#domain/index.js';
+import type { HubEnvelope, HubKeyDelegation, HubPackage } from '#domain/index.js';
 
 export const hubSourceSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, hubId: hubDigestSchema, publicKey: z.string().min(1),
   endpoint: z.string().min(1).max(2048), local: z.boolean(), label: z.string().min(1).max(256),
@@ -12,7 +12,8 @@ export const hubSourceSchema = z.object({ schemaVersion: z.literal(1), scopeId: 
   state: z.enum(['active', 'removed']), addedBy: z.object({ issuer: identitySchema, subject: identitySchema }).strict() }).strict().readonly();
 export type HubSource = z.infer<typeof hubSourceSchema>;
 export type HubClientTrust = HubPackageVerification & { readonly publisherKind?: 'person' | 'ai' | 'system' };
-export interface HubBundle { readonly manifest: HubPackage; readonly envelope: HubEnvelope; readonly files: readonly HubPackageFile[] }
+/** `delegation`: the pinned root's delegation of the online key that made the hub signature; absent when the root itself signed. */
+export interface HubBundle { readonly manifest: HubPackage; readonly envelope: HubEnvelope; readonly files: readonly HubPackageFile[]; readonly delegation?: HubKeyDelegation }
 const item = z.object({ kind: z.enum(['agent', 'skill']), id: identitySchema, revision: counterSchema.positive(), digest: hubDigestSchema }).strict().readonly();
 export const hubInstallSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, hubId: hubDigestSchema,
   packageId: hubPackageIdSchema, version: hubVersionSchema, manifestDigest: hubDigestSchema, publisherKeyId: hubDigestSchema,

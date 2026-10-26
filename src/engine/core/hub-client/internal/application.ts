@@ -8,7 +8,7 @@ import { authenticate } from '#engine/core/authentication/index.js';
 import { HubClientError, hubClientCommandSchema, hubInstallCommandSchema, hubSourceSchema, type HubClientAction, type HubClientDependencies,
   type HubRefreshResult, type HubClientStore, type HubInstall, type HubReceipt, type HubSource } from './contract.js';
 import { decodeHubBundle, encodeHubBundle } from './bundle.js';
-import { acceptClientFeed, verifyClientBundle } from './verification.js';
+import { acceptClientFeed, clientFeedKey, verifyClientBundle } from './verification.js';
 import { installClientBundles, retireClientInstall, verifyInstalledClientBundle } from './install.js';
 const sourceCommand = hubClientCommandSchema.extend({ expectedRevision: z.number().int().positive().nullable(), publicKey: signerPublicKeySchema,
   endpoint: z.string().min(1).max(2048), local: z.boolean().default(false), label: z.string().min(1).max(256),
@@ -46,8 +46,7 @@ export class HubClientApplication {
     return this.write('refresh', command, credential, async (store, principal) => {
       const source = await this.source(store, command.scopeId, command.hubId);
       const previous = await store.feed(source.scopeId, source.hubId);
-      const feed = strict ? verifyHubRevocationFeed(command.feed, { hubId: source.hubId, key: { keyId: source.hubId, publicKey: source.publicKey, role: 'hub', active: true },
-        nowMs: this.deps.catalog.now(), previous })
+      const feed = strict ? verifyHubRevocationFeed(command.feed, { hubId: source.hubId, key: await clientFeedKey(store, source, command.feed), nowMs: this.deps.catalog.now(), previous })
         : await acceptClientFeed(store, source, command.feed, this.deps.catalog.now(), true);
       if (strict) { requireHubRevocationContinuation(feed, previous); await store.saveFeed(source.scopeId, feed); }
       return this.refreshState(store, source, feed, principal);
