@@ -31,8 +31,8 @@ export class HubRevocationApplication extends HubServerApplication {
     }
     throw new HubServerError('HUB_SERVER_DENIED');
   }
-  private async signFeed(store: HubServerTransaction, entries: HubRevocationFeed['entries'], catchup?: HubRevocationFeed['catchup']) {
-    const previous = await store.latestFeed(), now = this.clock(), { signer, key } = await this.signer(now);
+  protected async signFeed(store: HubServerTransaction, entries: HubRevocationFeed['entries'], catchup?: HubRevocationFeed['catchup']) {
+    const previous = await store.latestFeed(), now = this.clock(), { signer, key } = await this.signer(now, 'feed');
     if (previous && now < previous.issuedAtMs) throw new HubError('HUB_FEED_REPLAYED');
     const payload = { schemaVersion: 1 as const, hubId: this.ports.hubId, sequence: (previous?.sequence ?? 0) + 1,
       issuedAtMs: now, nextRefreshBy: now + HUB_REVOCATION_REFRESH_MS, entries, ...(catchup ? { catchup } : {}) };
@@ -73,7 +73,7 @@ export class HubRevocationApplication extends HubServerApplication {
       await this.authorize(context, 'read', 'revocations', '');
       const previous = await store.latestFeed();
       if (query.afterSequence > (previous?.sequence ?? 0)) throw new HubError('HUB_FEED_REPLAYED');
-      const cursor = query.continuation, clock = this.clock(), attestor = await this.signer(clock);
+      const cursor = query.continuation, clock = this.clock(), attestor = await this.signer(clock, 'feed');
       if (cursor) {
         const { signature, ...payload } = cursor;
         requireHubSignature(attestor.key, signature.keyId, hubRevocationCursorMessage(payload), signature.value);

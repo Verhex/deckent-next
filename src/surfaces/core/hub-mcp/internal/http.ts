@@ -1,10 +1,12 @@
+import { createHubServiceHttpHandler, type HubServiceHttpOptions } from './service-http.js';
 import { createMcpHandler, requireBearerAuth, type OAuthTokenVerifier, type AuthInfo } from '@modelcontextprotocol/server';
 import { HUB_LIMITS } from '#domain/index.js';
-import { HubClientError, hubActorSchema, type HubServerApplication, type HubServerContext } from '#engine/index.js';
+import { HubClientError, HubModeratedApplication, hubActorSchema, type HubServerApplication, type HubServerContext, type HubServerPeer } from '#engine/index.js';
 import { createHubSkillsServer } from './server.js';
 import type { HubMcpOptions } from './methods.js';
 
 export interface HubHttpAuth {
+  readonly service?: Pick<HubServiceHttpOptions, 'addressId' | 'publicContext' | 'locale'>;
   readonly endpoint: string;
   readonly authorizationServers: readonly string[];
   readonly scopes: readonly string[];
@@ -30,14 +32,15 @@ export function createHubHttpHandler(app: HubServerApplication, auth: HubHttpAut
     if (ctx.scopeId !== app.ports.scopeId || !hubActorSchema.safeParse(ctx.principal).success) throw new HubClientError('HUB_AUTHORITY_REFUSED');
     return createHubSkillsServer(app, () => ctx, options);
   }, { legacy: 'reject' });
-  const serve = async (request: Request): Promise<Response> => {
+  const service = app instanceof HubModeratedApplication && auth.service ? createHubServiceHttpHandler(app, { endpoint: endpoint.origin + '/', ...auth.service }) : null;
+  const serve = async (request: Request, peer?: HubServerPeer): Promise<Response> => {
       const url = new URL(request.url), origin = request.headers.get('origin');
       if (url.origin !== endpoint.origin || request.headers.has('host') && request.headers.get('host') !== endpoint.host
-        || origin !== null && !auth.allowedOrigins.includes(origin)) return new Response(null, { status: 403 });
+        || origin !== null && !auth.allowedOrigins.includes(origin) && !(service && url.pathname !== endpoint.pathname && origin === endpoint.origin)) return new Response(null, { status: 403 });
       if (url.search || url.hash) return new Response(null, { status: 400 });
       if (url.pathname === metadata.pathname && request.method === 'GET') return Response.json({ resource: endpoint.href, authorization_servers: [...auth.authorizationServers],
         scopes_supported: [...auth.scopes], bearer_methods_supported: ['header'] }, { headers: { 'cache-control': 'no-store' } });
-      if (url.pathname !== endpoint.pathname) return new Response(null, { status: 404 });
+      if (url.pathname !== endpoint.pathname) return service ? service.fetch(request, peer) : new Response(null, { status: 404 });
       if (request.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'POST' } });
       const verified = await gate(request);
       if (verified instanceof Response) return verified;
@@ -60,12 +63,12 @@ export function createHubHttpHandler(app: HubServerApplication, auth: HubHttpAut
       catch { return new Response(null, { status: 403 }); }
   };
   return {
-    async fetch(incoming: Request): Promise<Response> {
+    async fetch(incoming: Request, peer?: HubServerPeer): Promise<Response> {
       const signal = AbortSignal.any([incoming.signal, AbortSignal.timeout(HUB_LIMITS.fetchTimeoutMs)]);
       const request = new Request(incoming, { signal });
       let abort!: () => void;
       try {
-        return await Promise.race([serve(request), new Promise<Response>(resolve => {
+        return await Promise.race([serve(request, peer), new Promise<Response>(resolve => {
           abort = () => resolve(new Response(null, { status: 504 }));
           signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort();
         })]);

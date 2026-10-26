@@ -1,3 +1,4 @@
+import type { HubServiceTransaction } from './service-contract.js';
 import { z } from 'zod';
 import { identitySchema, type HubPackage, type HubEnvelope, type HubRevocationFeed } from '#domain/index.js';
 import { type ArtifactReceipt, type ArtifactStore } from '#capabilities/index.js';
@@ -6,7 +7,8 @@ import type { HubVerificationKey } from '#engine/core/hub/index.js';
 
 export const hubActorSchema = z.object({ id: identitySchema, kind: z.enum(['person', 'ai', 'system']) }).strict().readonly();
 export type HubActor = z.infer<typeof hubActorSchema>;
-export interface HubServerContext { readonly scopeId: string; readonly principal: HubActor }
+export interface HubServerPeer { readonly address: string }
+export interface HubServerContext { readonly scopeId: string; readonly principal: HubActor; readonly sessionId?: string }
 export type HubServerAction = 'publish' | 'review' | 'read' | 'register' | 'yank' | 'revoke' | 'operate' | 'feed';
 /** Trusted transport supplies identity; the installation's existing policy owner checks scope/action/resource/digest. No default grant. */
 export interface HubServerAuthority {
@@ -32,6 +34,7 @@ export interface HubReceiptEvent {
 export type HubAwaitable<T> = T | Promise<T>;
 export type HubServerSigner = Omit<Ed25519Signer, 'sign'> & { sign(message: Uint8Array): HubAwaitable<Uint8Array> };
 export interface HubServerTransaction {
+  readonly service?: HubServiceTransaction;
   key(keyId: string, role: HubRegisteredKey['role']): HubAwaitable<HubRegisteredKey | null>;
   putKey(key: HubRegisteredKey): HubAwaitable<void>;
   get(packageId: string, version: string): HubAwaitable<HubStoredVersion | null>;
@@ -56,10 +59,11 @@ export interface HubServerPorts {
   readonly hubId: string; readonly scopeId: string; readonly store: HubServerStore; readonly artifacts: ArtifactStore;
   readonly authority: HubServerAuthority; readonly knownSecrets: () => KnownSecretSnapshot; readonly now: () => number;
   /** Resolve an active, purpose-bound online key after delegation-window/revocation checks. H8/H9 own custody and root trust. */
+  readonly feedSigner?: (atMs: number) => HubAwaitable<{ readonly signer: HubServerSigner; readonly key: HubVerificationKey }>;
   readonly attestor: (atMs: number) => HubAwaitable<{ readonly signer: HubServerSigner; readonly key: HubVerificationKey }>;
 }
 export const HUB_SERVER_ERROR_CODES = ['HUB_SERVER_DENIED', 'HUB_VERSION_CONFLICT', 'HUB_DEPENDENCY_INVALID', 'HUB_SECRET_REFUSED',
-  'HUB_REVIEW_REFUSED', 'HUB_STORE_UNSAFE', 'HUB_STORE_CONFLICT', 'HUB_RESOURCE_UNKNOWN', 'HUB_STORE_UNSUPPORTED', 'HUB_STORE_OUTCOME_UNKNOWN'] as const;
+  'HUB_REVIEW_REFUSED', 'HUB_STORE_UNSAFE', 'HUB_STORE_CONFLICT', 'HUB_RESOURCE_UNKNOWN', 'HUB_STORE_UNSUPPORTED', 'HUB_STORE_OUTCOME_UNKNOWN', 'HUB_ACCOUNT_REFUSED', 'HUB_PROFILE_REFUSED', 'HUB_RATE_REFUSED'] as const;
 export class HubServerError extends Error {
   constructor(readonly code: typeof HUB_SERVER_ERROR_CODES[number]) { super(ErrorRegistry.get(code)!.message); this.name = 'HubServerError'; }
 }

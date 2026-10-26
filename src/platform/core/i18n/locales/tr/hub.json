@@ -79,5 +79,13 @@
   "hub.window.slash": "Hub kaynaklarını, paketleri ve güvenlik bildirimlerini inceleyin; kişi kartlarını uygulayın.",
   "hub.mcp.tool": "Hub işlemi {operation}. Kapsam politikası ve yazmalar için çağıranın kendi etkin imza yetkisi gerekir.",
   "error.HUB_CONNECTION_UNAVAILABLE": "Hub bağlantısı yapılandırılmadı. Ağ erişiminden önce registry eklenti kimliği ve kişinin kalıcı ilk kullanım kararı gerekir.",
-  "hub.window.nextCards": "Sonraki güvenlik bildirimleri"
+  "hub.window.nextCards": "Sonraki güvenlik bildirimleri",
+  "error.HUB_ACCOUNT_REFUSED": "Hub girişi veya yayın için etkin doğrulanmış hesap, geçiş anahtarı ve yapılandırılan en düşük hesap yaşı gerekir.",
+  "error.HUB_PROFILE_REFUSED": "Hub profili, kullanıcı adı veya anahtar sahiplik kanıtı geçersiz ya da etkin değil.",
+  "error.HUB_RATE_REFUSED": "Hub işlemi yapılandırılan hız veya sayfa sınırını aşıyor.",
+  "hub.page.title": "Deckent Hub Paketleri",
+  "hub.page.ai": "AI yayıncı",
+  "hub.page.profiles": "Yayıncı profilleri",
+  "hub.page.packages": "Paketler",
+  "hub.service.command": "Hub hesabını, profilini veya moderasyon kaydını yönet."
 }
