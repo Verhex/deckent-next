@@ -20,8 +20,9 @@ export function uninstallPlanLines(plan: UninstallPlan, locale: Locale): readonl
     if (item.manualCommand && item.action !== 'remove') lines.push(t('cli.uninstall.manualStep', { command: safe(item.manualCommand) }, locale));
   }
   for (const blocker of plan.blockers) {
-    const authority = /^authority-(relocated|unsafe):(.+)$/su.exec(blocker), path = safe(authority?.[2] ?? '');
+    const authority = /^authority-(relocated|unsafe|in-project):(.+)$/su.exec(blocker), path = safe(authority?.[2] ?? '');
     lines.push(t('cli.uninstall.blocked', { reason: authority?.[1] === 'relocated' ? t('cli.uninstall.blocker.authority-relocated', { path }, locale)
+      : authority?.[1] === 'in-project' ? t('cli.uninstall.blocker.authority-in-project', { path }, locale)
       : authority ? t('cli.uninstall.blocker.authority-unsafe', { path }, locale) : messages[`blocker.${blocker}`] ?? `${unknown} (${safe(blocker)})` }, locale));
   }
   lines.push(t('cli.uninstall.retainedData', {}, locale), t('cli.uninstall.reinstall', {}, locale));

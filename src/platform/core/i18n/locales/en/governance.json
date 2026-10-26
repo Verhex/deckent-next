@@ -1171,5 +1171,6 @@
   "error.UNINSTALL_SCOPE_UNVERIFIED": "Uninstall stays closed: the company scopes recorded in {path} could not be read, so retention and legal-hold rules cannot be checked for all affected data. Nothing was removed. Ask the administrator who manages this installation's policy to check the ledger, then try again.",
   "error.UNINSTALL_FINAL_TAIL_UNKNOWN": "An interrupted purge removed only part of the backed-up global data. Nothing more was deleted and the installation stays held. Restore it with deckent backup restore from {backup}, or ask the installation administrator to reconcile the recovery record in {path}.",
   "error.UNINSTALL_AUTHORITY_UNVERIFIED": "Purge stopped before anything was deleted: the installation authority file {path} was moved or could not be verified as a private file of this user. Ask the person who manages this installation to restore its recorded location and ownership, then preview again. To uninstall and keep the data instead, run deckent uninstall without --purge.",
+  "error.UNINSTALL_PURGE_PROJECT_DATA": "Purge has nothing to remove: this installation keeps its data in the project folder {path}, and project .deckent folders are always kept. Nothing was deleted. To uninstall, run deckent uninstall without --purge.",
   "cli.input.subject.hub": "Hub request"
 }

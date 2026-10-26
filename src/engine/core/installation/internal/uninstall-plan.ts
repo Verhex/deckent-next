@@ -96,10 +96,11 @@ export function createUninstallPlan(query: unknown, inventory: UninstallInventor
     backup: { required: purge, destination: inventory.backupDestination }, packageRemoval: { ...inventory.packageRemoval }, canApply: false as const };
   return freeze(JSON.parse(JSON.stringify({ ...body, planDigest: hash(body) })) as UninstallPlan);
 }
-/** A relocated or unsafe authority member refuses the whole purge with its exact path, never a backup-coverage hint. */
+/** A relocated or unsafe authority member, or in-project data a purge always keeps, refuses the whole purge with its exact path, never a backup-coverage hint. */
 export function uninstallAuthorityBlocker(plan: Pick<UninstallPlan, 'blockers'>) {
-  const blocker = plan.blockers.find(value => /^authority-(relocated|unsafe):/u.test(value));
-  return blocker ? ErrorRegistry.createError('UNINSTALL_AUTHORITY_UNVERIFIED', { params: { path: blocker.slice(blocker.indexOf(':') + 1) } }) : null;
+  const blocker = plan.blockers.find(value => /^authority-(relocated|unsafe|in-project):/u.test(value));
+  return blocker ? ErrorRegistry.createError(blocker.startsWith('authority-in-project:') ? 'UNINSTALL_PURGE_PROJECT_DATA' : 'UNINSTALL_AUTHORITY_UNVERIFIED',
+    { params: { path: blocker.slice(blocker.indexOf(':') + 1) } }) : null;
 }
 export function assertUninstallPlanCurrent(approved: UninstallPlan, current: UninstallPlan) {
   if (approved.planDigest !== current.planDigest) throw new UninstallError('UNINSTALL_PLAN_CHANGED');
