@@ -36,7 +36,9 @@
     "native",
     "assets",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/ai-install.md",
+    "docs/ai-install.tr.md"
   ],
   "scripts": {
     "worker:image": "node assets/worker-image/build.mjs",

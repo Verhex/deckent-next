@@ -4593,7 +4593,10 @@
       "docs/policy-and-ai.md",
       "docs/policy-and-ai.tr.md",
       "docs/reports/ai-floor-compliance.md",
-      ".deckent/worker-instructions.md"
+      ".deckent/worker-instructions.md",
+      "docs/ai-install.md",
+      "docs/ai-install.tr.md",
+      "site/llms.txt"
     ],
     "pointerFiles": {
       "CLAUDE.md": 70,

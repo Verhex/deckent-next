@@ -92,7 +92,7 @@ try {
   const publicDocs = readdirSync(join(ROOT, 'docs'), { withFileTypes: true }).filter(entry => entry.isFile() && entry.name.endsWith('.md')).map(entry => `docs/${entry.name}`);
   // Every root Markdown file except COMPLETED-PLAN.md (its history links name host folders outside the repository), docs/ recursively.
   const rootDocs = readdirSync(ROOT, { withFileTypes: true }).filter(entry => entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'COMPLETED-PLAN.md').map(entry => entry.name);
-  const linkScope = [...new Set([...rootDocs, ...architectureFiles('.deckent/docs/architecture'), ...architectureFiles('docs')])];
+  const linkScope = [...new Set([...rootDocs, ...architectureFiles('.deckent/docs/architecture'), ...architectureFiles('docs'), 'site/llms.txt'])];
   for (const name of linkScope.map(path => path.replaceAll('\\', '/'))) {
     for (const link of markdownLinks(read(name))) {
       const where = `${name}:${link.line}`, target = linkTarget(name, link.target);
@@ -114,7 +114,29 @@ try {
     const name = turkish.replace(/\.tr\.md$/u, '.md');
     if (existsSync(join(ROOT, name))) checkPair(name, turkish); else fail(turkish, `missing English pair ${name}`);
   }
+  const { CLI_CATALOG } = await import(new URL('../src/surfaces/core/cli-kit/internal/command-catalog.ts', import.meta.url));
+  for (const name of ['docs/ai-install.md', 'docs/ai-install.tr.md']) checkAiInstallCommands(name, CLI_CATALOG);
 } catch (error) { fail('input', error.message); }
+// Read the dispatch inventory itself, including inherited flags; never run a documented command to check it.
+function checkAiInstallCommands(name, catalog) {
+  const text = read(name);
+  const commands = [...text.matchAll(/`(deckent(?:[ \t]+[^`\n]*)?)`|^(deckent(?:[ \t]+[^\n]*)?)$/gmu)];
+  for (const match of commands) {
+    const command = match[1] ?? match[2], words = command.trim().split(/\s+/u).slice(1);
+    let choices = catalog, path = 'deckent', syntax = '';
+    while (words.length && !words[0].startsWith('-')) {
+      const word = words.shift(), item = choices.find(candidate => candidate.name === word && !candidate.planned);
+      if (!item) { fail(name, `unknown CLI command ${path} ${word}`); break; }
+      path += ` ${word}`;
+      syntax += ` ${item.args ?? ''} ${(item.requires ?? []).join(' ')}`;
+      choices = item.children ?? [];
+    }
+    const flags = new Set(syntax.match(/--[a-z][a-z0-9-]*/gu) ?? []);
+    for (const flag of command.match(/--[a-z][a-z0-9-]*/gu) ?? []) {
+      if (!flags.has(flag)) fail(name, `unknown CLI flag ${flag} for ${path}`);
+    }
+  }
+}
 // Fenced code blocks are not prose: yields [line number, text] for lines outside them.
 function proseLines(text) {
   let fence;

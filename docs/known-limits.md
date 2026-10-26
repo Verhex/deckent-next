@@ -9,6 +9,7 @@ seen working, not before. Each item gives **what** the limit is, **the impact** 
 **workaround**. [CHANGELOG.md](../CHANGELOG.md) lists the limits each release carried at the time.
 
 Deckent is a pre-release. Nothing here is a promise of a date.
+The alpha.56 items below describe candidate code and owner decisions; they do not claim a release or live/N1 acceptance.
 
 ## Platforms: tried and not tried
 
@@ -193,8 +194,12 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   access token (for Codex also the ID token) into the worker's container and checks that it has not expired; refresh tokens,
   API keys and the rest of the login file stay on the host. *Impact:* the worker's CLI can act as your subscription account
   until that token expires. *Workaround:* none; the token's own lifetime is the bound.
-- **Sign in with ChatGPT is not available yet.** `/provider` lists it as not available; a visible sign-in is worked on during the beta process. *Workaround:* an OpenAI API key, or a
-  Codex worker with its own login.
+- **Sign in with ChatGPT is candidate code, with worker activation held.** Alpha.56 adds person sign-in, consent and
+  connection custody. The Codex app-server runs inside the isolated worker; the host app-server route was rejected.
+  Worker activation stays on HOLD until real-binary N1 proof (`SIWC_APP_SERVER_AUTH_UNAVAILABLE`, reason `activation-hold`);
+  missing isolation is a typed refusal, never a host/token-file fallback. *Workaround:* use an already supported connection;
+  do not treat successful sign-in as proof that a Codex worker is available.
+
 - **No automatic fallback from a subscription to an API model.** Deckent never switches to a paid API by itself when a subscription
   window is used up. Since alpha.55 a worker Run parked on a subscription quota waits at most 5 hours
   (`runRuntime.quotaRecovery.maxWaitMs`) and then asks you on a card whether to keep waiting or to use the next candidate of its
@@ -452,12 +457,13 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   before-upgrade), so with daily the upgrade starts without a fresh set and the way back is the newest daily set, up to about a
   day old. *Workaround:* before an upgrade run `deckent backup create --scope <id> --set <absolute path>` yourself, or choose
   before-upgrade instead of daily.
-- **A lost worker can keep its slot; automatic recovery is built but not active yet.** A granted attempt can stay active and hold an
-  execution slot until custody is resolved. alpha.55 adds deterministic detection (Nervous) and a recovery decision that may continue the
-  task in a new attempt, but both start `off`, and even in `live` mode Nervous executes nothing until the owner promotes a measured rule:
-  every rule in the Core seed is still provisional, and recovery only decides cases whose stop step Nervous really ran.
-  `deckent run inspect` names the recovery mode the Run froze and what it means. *Workaround:* watch it with `deckent monitor`; the slot
-  is freed only by a typed manual decision or by evidence that the worker ended.
+- **A lost worker can keep its slot until custody is resolved.** Nervous and recovery start `off`; seed rules stay
+  provisional until a person promotes a measured rule and grants its recovery action. The alpha.56 candidate adds
+  `deckent policy recovery` and blind case review through `deckent recovery review`; its recovery shadow also consumes
+  sealed would-stop records without actually stopping a worker. Shadow decisions can call the configured model and spend
+  money; they apply no recovery effect. *Workaround:* inspect the Run's frozen mode and watch with `deckent monitor`;
+  release still needs the required fence and termination proof. N1 scenario/owner acceptance remains open.
+
 - **A worker has no network route of its own, and recovery relies on that.** Each worker container runs with no network; its one way
   out is the host gateway, which reaches only the hosts of the worker's model provider. Changes to outside systems (ERP, CRM, an HTTP
   target) are made by governed operations of a person or an approved agent. From alpha.56 each worker's dispatch record declares this,
@@ -465,15 +471,16 @@ Deckent is a pre-release. Nothing here is a promise of a date.
   a lost worker started before alpha.56 has no such record and goes to a person (`isolation-unproven`). This covers the network only:
   a unix socket inside a read-only folder bound into the worker is not checked. *Workaround:* do not bind folders that hold another
   service's socket. Letting workers act on outside systems themselves is not offered yet.
-- **Recovery is turned on only through your own recovery rules, with a few edges.** From template v16 (alpha.56) you hold each recovery
-  action and each Nervous rule promotion at require-approval, so recovery stays off until you turn a row on with
-  `deckent policy recovery`; it refuses (`RECOVERY_CELL_NOT_OWN`) when your rule comes from a role or a broader or shared rule, and also
-  when such a rule covers the same row beside your own, because turning yours on would leave the row off. The
-  upgrade to v16 runs through `deckent init policy --upgrade` only: `deckent policy upgrade --template current --apply` is refused for
-  it. `--rollback` keeps a row you turned on and reports it as a conflict (turn it off on the card first). A new Nervous rule or rule
-  version needs a new template version and a policy upgrade (open, under review). The card checks the measured exits against the
-  policy revision only, so a measurement sealed between its read and its write is not seen. Lost workers dispatched before the switch
-  to alpha.56 have no isolation record, so their cases go to a person and the shadow measurement starts over from the switch.
+- **Recovery is turned on only through your own exact policy cells.** Template v16 introduced the named person's
+  require-approval recovery-action and Nervous-promotion cells; current template v18 retains them, adds v17's first-commit
+  grant and v18's uninstall grants. The recovery card refuses `RECOVERY_CELL_NOT_OWN` for role-derived, broad/shared or
+  overlapping require-approval cells. Old installations change only through explicit upgrade; use the witnessed
+  `deckent init policy --upgrade` path when the managed `deckent policy upgrade` path cannot add authority the caller lacks.
+  Current rollback removes only the content-equal v18 delta, not historical v16 recovery grants; customized rows are kept
+  and reported. Adding a Nervous/recovery rule or version still needs a template version and policy upgrade: this remains
+  an OPEN owner issue, also after v17/v18. Measured-exit rechecks bind the policy revision, not later sealed measurements.
+  Lost workers dispatched before alpha.56 have no isolation record; they go to a person and shadow measurement restarts.
+
 - **The clean-machine rehearsal stopped at the model step.** A fresh clone on 2026-10-15/16 reached install, `doctor`, policy,
   registry and pool. The model connection, `/do`, a worker image build on an empty Docker daemon and the start-up
   toolchain refresh on a clean daemon were not exercised there. *Workaround:* follow the README first-job path and report what differs.
@@ -532,11 +539,10 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
   `deckent init policy --scope <id> --upgrade --person <issuer>/<subject> --preview`, then `--apply` (without `--person` it changes
   nothing and names the people of the scope). Turn a layer to shadow first, for example
   `deckent config set memoryAutomation.extraction.mode '"shadow"' --scope <id>`.
-- **The numbers are seed values, not measurements.** Nervous rules, recovery bounds (one automatic continuation per lost task, three
-  attempts per task), memory bounds and rollout thresholds and the agent-statistics thresholds are marked provisional until N1 measures
-  them. Every Nervous seed rule is provisional, and alpha.55 has no command to promote a rule or to grant `recovery-action/apply`, so
-  `live` runs nothing and automatic recovery cannot start yet. Recovery reads only stop steps Nervous really executed, so recovery
-  shadow produces no data while Nervous is in shadow. The promotion card is planned for alpha.56.
+- **The numbers are seed values, not measurements.** Nervous/recovery bounds, memory/retention defaults and agent
+  statistics thresholds remain provisional until measured on N1. Alpha.56 supplies the recovery promotion/grant cards and
+  would-stop shadow input; it does not certify the numeric exits, activate recovery or prove production safety.
+
 - **Memory fills from one work kind only.** The Core registry lets only the `small` WorkClass (provisional 90-day retention, no personal
   data) produce memory candidates; accepted work of other kinds adds nothing until its retention is declared.
 - **Automatic memory verification needs a second model maker.** The evaluator's model must come from a different maker than every
@@ -584,6 +590,27 @@ fakes (the subscription Brain also with real isolated calls by the lead), not ye
 - **The Auditor has no live reader or classifier yet.** Policy-turn records are sealed, but the follow-reader has no runtime operation
   (it waits for the next protocol step), and the Auditor's shadow classifier and the K-C sentinels are not built (they wait for the
   owner's detail).
+
+## Hub packages and uninstall
+
+- **Hub networking needs distribution wiring.** The alpha.56 candidate supplies signed packages, local source/trust cards,
+  cached offline verification and governed transport ports. Search, remote inspection and publication refuse
+  `HUB_CONNECTION_UNAVAILABLE` without the bound first-use, authentication and trust services. No public Hub/source is
+  enabled by default; public opening remains a separate owner gate. *Workaround:* use verified offline bundles and the
+  [signed Hub guide](architecture-overview.md#signed-hub-packages); installing a package grants no tools or policy.
+- **Skills with support files are refused by owner decision (2026-10-26, H6).** SKILL.md-only skills may be used; a skill
+  requiring additional files cannot run. *Impact:* package verification/install does not prove the skill is executable.
+  *Workaround:* use a SKILL.md-only alternative; reopening support-file execution needs a new owner decision.
+- **Uninstall keeps images and protected data.** `deckent uninstall --dry-run --json` previews; application needs the
+  person's real-terminal card. Ledger, audit/identity keys, secrets and project data stay by default. Images remain until a
+  complete usage-reference contract exists; the card provides the exact manual step. macOS/Windows service removal is manual.
+  *Workaround:* follow the plan's per-item instructions, then the package removal command it prints; see the
+  [AI installation guide](ai-install.md#uninstall).
+- **Purge is bounded by ownership, backup and delete authority.** `deckent uninstall --purge` removes only covered files
+  after a managed backup and person confirmation. Company retention and unready folders stay, with their paths shown.
+  Moved/unsafe authority files stop purge before it starts. A partial final purge resumes only after remaining bytes and
+  delete authority are re-verified; otherwise files stay and managed backup restore remains available. An unknown step
+  stays unknown. *Workaround:* choose the data-keeping uninstall or resolve the stated blocker; never delete by guessed paths.
 
 ## Desktop and other surfaces
 
