@@ -137,3 +137,11 @@ it('founder decision commands stay authority-bound on argv paths; ordinary npm t
     'deckent secret set key', 'node /tmp/entry.js approval decide a']) expect(classifyShellAuthority(command), command).toBe(true);
   for (const command of ['npm run close', 'npm run resume', 'npm run accept', 'echo deckent run close r']) expect(classifyShellAuthority(command), command).toBe(false);
 });
+
+it('alpha.56 FIX2: option words between the product program and its group/action do not hide a founder decision command', () => {
+  for (const command of ['deckent --lang en run resume r', 'deckent --json run close r', 'deckent --lang=tr task accept t', 'node /opt/app/entry.js --scope x run resume r',
+    'npx deckent run resume r', 'npx --yes deckent --json task reject t', 'npx -p deckent deckent run close r', 'deckent run --json resume r',
+    'deckent --scope s secret --json grant K']) expect(classifyShellAuthority(command), command).toBe(true);
+  for (const command of ['deckent --lang en run status r', 'deckent --json doctor', 'deckent models list --scope run', 'npx --yes deckent --lang en run list'])
+    expect(classifyShellAuthority(command), command).toBe(false);
+});

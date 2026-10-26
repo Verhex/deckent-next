@@ -21,6 +21,32 @@ const stdinInterpreterAfter = (args: readonly string[]) => args.some((arg, at) =
 const PTY_WORD = new RegExp(`(?:^|[\\s;&|(\`$"'])(?:${[...PTY_WRAPPER_PROGRAMS].join('|')})(?=[\\s"']|$)`, 'u');
 const programName = (word: string) => { const name = PROGRAM_ALIASES[word] ?? word; return (name.split('/').pop() ?? name).toLowerCase(); };
 const names = (text: string) => AUTHORITY_TEXT.some(pattern => pattern.test(text));
+/**
+ * alpha.56 FIX2 (commit-security review of U5-S3): the product's authority commands decided on the decoded argv, so option words between the program
+ * and its group/action (`deckent --lang en run resume`, `npx --yes deckent --json task reject`, `node …/entry.js --scope x run resume`) never hide one.
+ * Every product program word in the stage (a product name, or the product's `entry.js`) starts a reading; options (`-x`, `--opt`, `--opt=value`) may
+ * stand anywhere, and a word after a bare option is read both as its value and as a positional (fail closed: any reading that matches keeps the card).
+ * This widens the text patterns above and never replaces them (N3-U5-3: the PRE-8 floor is not narrowed).
+ */
+const isOption = (word: string) => word.length > 1 && word.startsWith('-');
+const PRODUCT_RULES = Object.values(PRODUCT_AUTHORITY_COMMANDS).flatMap(groups => Object.entries(groups).flatMap(([group, rule]) =>
+  rule.actions.map(action => ({ words: [...group.split(' '), ...(action ? [action] : [])], flags: rule.requiredFlags }))));
+function positionalsAt(args: readonly string[], expected: readonly string[], from: number): boolean {
+  if (expected.length === 0) return true;
+  for (let at = from; at < args.length; at++) {
+    if (isOption(args[at]!)) continue;
+    if (args[at] === expected[0] && positionalsAt(args, expected.slice(1), at + 1)) return true;
+    // Not the expected word: it may still be the value of a bare option before it, otherwise it is the positional that decides.
+    if (at === from || !isOption(args[at - 1]!) || args[at - 1]!.includes('=')) return false;
+  }
+  return false;
+}
+const productArgvRunsAuthority = (words: readonly string[]) => words.some((word, at) => {
+  if (!PRODUCT_PROGRAM_NAMES.includes(programName(word)) && !/^entry\.[cm]?js$/u.test(programName(word))) return false;
+  const args = words.slice(at + 1);
+  return PRODUCT_RULES.some(rule => positionalsAt(args, rule.words, 0)
+    && (!rule.flags || args.some(arg => rule.flags!.some(flag => arg === flag || arg.startsWith(`${flag}=`)))));
+});
 
 /**
  * Lead decision 2026-10-21 (PRE-8 finding, law audit MAJOR 2; owner rules "AI cannot approve", "the hard floor stays closed in full access"): whether a
@@ -117,7 +143,7 @@ function runsAuthority(command: string, depth: number): boolean {
     if (fed && (readsProgramFromStdin(programName(head.text), argv) || (HANDS_ON.has(programName(head.text)) && stdinInterpreterAfter(argv)))) return true;
     // `expect` runs Tcl, not a shell: its payload is never decoded here, so it always keeps the card.
     if (programName(head.text) === 'expect') return true;
-    if (names(stage.words.map(word => word.text).join(' '))) return true;
+    if (names(stage.words.map(word => word.text).join(' ')) || productArgvRunsAuthority(stage.words.map(word => word.text))) return true;
     // `$` the scanner kept (`$'…'`), brace expansion or a glob: the shell would run another argv than the one decoded here.
     if (rest.some(word => !word.quoted && UNDECODED.test(word.text)) || rest.some(word => word.text.includes('$'))) return true;
     if (rest.some(word => !word.quoted && GLOB.test(word.text))) return true;
