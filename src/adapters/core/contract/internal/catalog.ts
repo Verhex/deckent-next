@@ -13,7 +13,8 @@ function validate(value: unknown): void {
 export function registerProviderCatalogConfig(): void {
   registerConfigSection('provider_catalog', providerCatalogObjectSchema, {
     optional: true, secretReferences: 'forbid',
-    metadata: { descriptionKey: 'config.field.provider_catalog', tier: 'core', since: CONFIG_CONTRACT_SINCE, binding: { state: 'bound', consumers: ['src/composition/core/provider-catalog'] }, apply: 'restart' },
+    // Live: every invocation and binding read takes it through freshConfig(), so a model connection never needs a service restart (FIX8c).
+    metadata: { descriptionKey: 'config.field.provider_catalog', tier: 'core', since: CONFIG_CONTRACT_SINCE, binding: { state: 'bound', consumers: ['src/composition/core/provider-catalog'] }, apply: 'live' },
     validateLayers: (global, project) => { validate(global); validate(project); },
     validateValue: validate,
     // Effective validation also runs when the optional catalog is absent and on cache hits.

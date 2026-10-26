@@ -34,6 +34,13 @@ async function fixture() {
 const start = async (project: string, env: Record<string, string | undefined>, ports = {}, seen = observer) => { const service = await startConfiguredRuntimeService(project, seen, { env }, ports); services.push(service); return service; };
 const describeOf = (project: string, env: Record<string, string | undefined>) => createConfiguredRuntimeClient(project, { env }).describeService();
 
+it('a model connection (provider catalog, invocation profiles) never makes the running service stale: every request reads them fresh (FIX8c)', () => {
+  const base = { language: 'en', service: { maxConnections: 4 } };
+  expect(restartConfigDigest({ ...base, provider_catalog: { schemaVersion: 1, providers: [] }, provider_invocation_profiles: { schemaVersion: 1, profiles: [{ id: 'p' }] } }))
+    .toBe(restartConfigDigest(base));
+  expect(restartConfigDigest({ ...base, service: { maxConnections: 5 } })).not.toBe(restartConfigDigest(base));
+});
+
 it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] the descriptor names the configuration it started with and its origin: only a launch-marked service is idle-stoppable', async () => {
   const f = await fixture();
   const manual = await start(f.project, f.env); const d1 = await describeOf(f.project, f.env);
