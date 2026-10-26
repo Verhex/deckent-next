@@ -4,6 +4,7 @@
   "onboarding.session.later": "Esc · Sonra",
   "onboarding.session.blocked": "Bu adım bekliyor",
   "onboarding.session.waiting": "İşlemin sahibi tamamlandığını doğrulamadı. /setup ile yeniden açın.",
+  "onboarding.session.unavailable": "İlk kurulum ekranları gösterilemedi ({code}); çalışma satırı onlarsız açılıyor.",
   "onboarding.work.selected": "Kodlama işlerini {cli} yapsın mı?",
   "onboarding.work.change": "Değiştir",
   "onboarding.work.none": "Oturum açılmış bir kodlama CLI seçin",

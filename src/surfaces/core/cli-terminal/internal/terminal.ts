@@ -353,7 +353,8 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       if (deferred) accessNotices.push({ level: 'info', text: deferred });
     } catch (error) {
       if (context.signal?.aborted) throw error;
-      accessNotices.push({ level: 'warning', text: errorText(error, locale) });
+      const code = (error as { code?: unknown } | null)?.code;
+      accessNotices.push({ level: 'warning', text: t('onboarding.session.unavailable', { code: typeof code === 'string' ? code : '-' }, locale) });
     }
     config = await loadConfig(root, { ...options, force: true }) as typeof config;
     chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
