@@ -160,8 +160,9 @@ export class UninstallApplication {
             state.state = 'settled';
           }
           catch (error) {
-            // Never fabricate failure/settlement after a lost result: the generic store remains the only truth.
-            state.state = (await admission.effects.inspect(admission.scopeId, commands.get(item.resourceId)!.commandId))?.state ?? null;
+            // Never fabricate failure/settlement after a lost result: the generic store remains the only truth. A store that can no longer
+            // be read (the final tail already removed its policy or key) leaves the outcome unknown, never a policy error.
+            state.state = (await admission.effects.inspect(admission.scopeId, commands.get(item.resourceId)!.commandId).catch(() => ({ state: 'unknown' as const })))?.state ?? null;
             if (state.state === 'claimed' || state.state === 'unknown') {
               const unknown = result('unknown', admission.recoveryLocation, 'EFFECT_OUTCOME_UNKNOWN'); await admission.finish(unknown); return unknown;
             }

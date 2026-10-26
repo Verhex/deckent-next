@@ -286,13 +286,13 @@ it('resumes an interrupted final tail only through a second card that lists the 
     const members = [ledger, join(data, 'bindings.json'), join(data, 'policy.json'), join(data, 'installation-identity/identity.json'), join(data, 'approvals', keyFile)];
     const options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false }, phrase = 'temporary-only-test-passphrase';
     const plan = await previewConfiguredUninstall(project, true, options);
-    tail.left = 2; // two unlinks succeed, then the process "dies" inside the final tail
+    tail.left = 4; // the process "dies" inside the final tail after policy.json is gone: authority must come from the verified set
     let interrupted;
     try { interrupted = await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'crash', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options); }
     finally { tail.left = null; }
     expect(interrupted.status).toBe('unknown'); expect(await lstat(uninstallHoldPath(data))).toBeTruthy();
     const remaining: string[] = []; for (const path of members) if (await lstat(path).catch(() => null)) remaining.push(path);
-    expect(remaining.length).toBeGreaterThan(0); expect(remaining.length).toBeLessThan(members.length);
+    expect(remaining.length).toBeGreaterThan(0); expect(remaining).not.toContain(join(data, 'policy.json'));
     const second = await previewConfiguredUninstall(project, true, options);
     expect(second.items.filter(item => item.action === 'remove')).toEqual([expect.objectContaining({ resourceId: 'global-data', members: remaining, reason: 'resume' })]);
     const command = { schemaVersion: 1, commandId: 'resume', planDigest: second.planDigest };
