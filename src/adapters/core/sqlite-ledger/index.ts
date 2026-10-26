@@ -19,3 +19,4 @@ export { MODEL_INVOCATION_PLAN_USAGE_LEDGER_VERSION, AUDIT_CHECKPOINT_LEDGER_VER
 export { readEnvironmentProbeHolds, commitEnvironmentProbeSettlement, writeEnvironmentProbeCustody, releaseEnvironmentProbeCustody, type EnvironmentProbeHold } from './internal/environment-probes.js';
 
 export { HUB_CLIENT_LEDGER_VERSION } from './internal/schema.js';
+export { PROVIDER_SPEND_PERIOD_LEDGER_VERSION } from './internal/schema.js';

@@ -25,17 +25,17 @@ async function v66() {
 const insert = (db: DatabaseSync, standing: string, revision = 1) => db.prepare("INSERT INTO agent_standings(scope_id,agent_id,revision,work_class,standing,standing_revision,record) VALUES('s','a',1,'feature',?,?,'{}')").run(standing, revision);
 
 it('pins the step: v67 is agent standing (v70, the S8-3 suggestions, is current)', () => {
-  expect(AGENT_STANDING_LEDGER_VERSION).toBe(67); expect(CURRENT_LEDGER_VERSION).toBe(71);
+  expect(AGENT_STANDING_LEDGER_VERSION).toBe(67); expect(CURRENT_LEDGER_VERSION).toBe(72);
 });
 it('N25: backs up a v66 ledger with no agents and adds only the empty standing tables; an older build refuses the result', async () => {
   const f = await v66();
   expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-23T00:00:00Z'));
-  expect(upgrade).toMatchObject({ from: 66, to: 71 });
+  expect(upgrade).toMatchObject({ from: 66, to: 72 });
   const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true }), db = new DatabaseSync(f.path, { readOnly: true });
   try {
     expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(66); expect(tables(backup)).toEqual([]);
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(71); expect(tables(db)).toEqual(TABLES);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(72); expect(tables(db)).toEqual(TABLES);
     for (const table of TABLES) expect(db.prepare(`SELECT count(*) AS n FROM ${table}`).get()?.['n']).toBe(0);
   } finally { backup.close(); db.close(); }
 });

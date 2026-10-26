@@ -1,12 +1,14 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { createProviderSpendCheckpoint, parseProviderSpendCheckpoint, initializeProviderSpendPeriod } from '#engine/index.js';
+import { AttemptStoreError, createProviderSpendCheckpoint, parseProviderSpendCheckpoint, initializeProviderSpendPeriod } from '#engine/index.js';
 
 /** v72: no spend records or limits change. The first local month boundary is pinned at the explicit writer upgrade. */
 export function migrateProviderSpendPeriods(db: DatabaseSync, nowMs = Date.now()): void {
-  db.exec(`CREATE TABLE provider_spend_period_history(scope_id TEXT NOT NULL,checkpoint_revision INTEGER NOT NULL,record TEXT NOT NULL,
+  // A v71 ledger cannot hold the history table: a contradictory schema is refused, never adopted (append-only triggers stay ours).
+  try { db.exec(`CREATE TABLE provider_spend_period_history(scope_id TEXT NOT NULL,checkpoint_revision INTEGER NOT NULL,record TEXT NOT NULL,
     PRIMARY KEY(scope_id,checkpoint_revision));
     CREATE TRIGGER provider_spend_period_history_no_update BEFORE UPDATE ON provider_spend_period_history BEGIN SELECT RAISE(ABORT,'append-only'); END;
-    CREATE TRIGGER provider_spend_period_history_no_delete BEFORE DELETE ON provider_spend_period_history BEGIN SELECT RAISE(ABORT,'append-only'); END;`);
+    CREATE TRIGGER provider_spend_period_history_no_delete BEFORE DELETE ON provider_spend_period_history BEGIN SELECT RAISE(ABORT,'append-only'); END;`); }
+  catch { throw new AttemptStoreError('ATTEMPT_STORE_VERSION'); }
   const rows = db.prepare('SELECT scope_id,record,revision,reservation_count,digest FROM provider_spend_accounts').iterate();
   const archive = db.prepare('INSERT INTO provider_spend_period_history(scope_id,checkpoint_revision,record) VALUES(?,?,?)');
   const update = db.prepare('UPDATE provider_spend_accounts SET record=?,revision=?,digest=? WHERE scope_id=?');
