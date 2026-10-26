@@ -4,7 +4,7 @@ import { canonicalHubJson, HUB_LIMITS } from '#domain/index.js';
 import { ed25519KeyId, sha256, signatureMessage } from '#platform/index.js';
 import { HubRevocationApplication } from './revocations.js';
 import { HubServerError, type HubServerContext, type HubServerTransaction, type HubServerPorts } from './ports.js';
-import { hubAccountSchema, hubProfileSchema, hubSessionSchema, hubServicePolicySchema, hubMembershipConsentSchema,
+import { hubAccountSchema, hubProfileSchema, hubProfileFields, hubSessionSchema, hubServicePolicySchema, hubMembershipConsentSchema,
   type HubProfile, type HubServiceArea, type HubServiceDependencies, type HubServiceTransaction } from './service-contract.js';
 
 export class HubServiceBase extends HubRevocationApplication {
@@ -114,7 +114,7 @@ export class HubServiceBase extends HubRevocationApplication {
     return profile.members.some(m => m.accountId === accountId) && this.membershipConsent(tx, profile).members.some(m => m.accountId === accountId);
   }
   async saveProfile(tx: HubServerTransaction, profile: Omit<HubProfile, 'signature'>) {
-    const payload = hubProfileSchema.omit({ signature: true }).strip().parse(profile), { signer } = await this.signer(this.clock());
+    const payload = hubProfileFields.omit({ signature: true }).strip().parse(profile), { signer } = await this.signer(this.clock());
     const signature = { keyId: signer.keyId, value: Buffer.from(await signer.sign(signatureMessage('hub-profile:1', canonicalHubJson({ hubId: this.ports.hubId, ...payload })))).toString('base64') };
     const signed = hubProfileSchema.parse({ ...payload, signature });
     this.data(tx).put('profiles', profile.id, signed); return signed;
