@@ -5,7 +5,7 @@ import { pickerLabels } from './work-labels.js';
 /** Catalog words of the `/mode`, `/config`, `/mcp` (T3 L4), `/model` and `/provider` (T4) windows, EN and TR; the panels themselves never call the catalog. */
 export function terminalPanelLabels(locale: Locale): PanelLabels {
   return {
-    picker: pickerLabels(locale), position: t('terminal.window.position', {}, locale), loading: t('tui.panel.loading', {}, locale),
+    picker: pickerLabels(locale), position: t('terminal.window.position', {}, locale), loading: t('tui.panel.loading', {}, locale), elapsed: t('terminal.render.elapsed', {}, locale),
     mode: { title: t('tui.panel.mode.title', {}, locale), hints: t('tui.panel.mode.hints', {}, locale), current: t('tui.panel.current', {}, locale),
       stops: { standart: t('terminal.mode.stop.standart', {}, locale), 'ask-edits': t('terminal.mode.stop.ask-edits', {}, locale), 'full-auto': t('terminal.mode.stop.full-auto', {}, locale),
         'full-access': t('terminal.mode.stop.full-access', {}, locale) },

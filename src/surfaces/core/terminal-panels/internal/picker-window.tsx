@@ -1,9 +1,10 @@
 import { useState, type Key as ReactKey } from 'react';
-import { Box, Text, useWindowSize } from 'ink';
-import { span, useRenderGlyphs, wrapCells, type Span } from '#surfaces/core/terminal-render/index.js';
+import { Box, Text, useAnimation, useWindowSize } from 'ink';
+import { fillTemplate, span, useRenderGlyphs, wrapCells, type Span } from '#surfaces/core/terminal-render/index.js';
 import { ListPicker, LIST_PICKER_EMBEDDED_CHROME_ROWS, PICKER_INITIAL, embeddedPickerPageSize, pickerHints, pickerView, type PickerLabels, type PickerOutcome, type PickerResult,
   type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { Window, layoutWindowLines, useWindowReserve, WINDOW_RESERVED_ROWS, type WindowLine } from '#surfaces/core/terminal-window/index.js';
+import TIMING from './panel-timing.json' with { type: 'json' };
 
 /** The window's frame rows (two borders, the title row, one key-hint row) and its border and padding columns (terminal-window's frame). */
 const FRAME_ROWS = 4, FRAME_COLUMNS = 4, FALLBACK_ROWS = 24, FALLBACK_COLUMNS = 80;
@@ -21,6 +22,12 @@ export function pickerWindowGeometry(input: Readonly<{ terminalRows: number; res
   const footerRows = Math.max(pageSize + LIST_PICKER_EMBEDDED_CHROME_ROWS, available - input.bodyRows);
   const body = Math.max(input.minimumBody, available - footerRows - (input.hintRows - 1));
   return { pageSize, footerRows, body };
+}
+
+/** FIX8a R26: the Loading word; a load that lasts `loadingElapsedAfterMs` or more adds its live elapsed seconds (registry `panel-timing.json`). */
+export function useLoadingText(labels: Readonly<{ loading: string; elapsed: string }>, active: boolean): string {
+  const { time } = useAnimation({ interval: TIMING.loadingElapsedTickMs, isActive: active });
+  return active && time >= TIMING.loadingElapsedAfterMs ? `${labels.loading} · ${fillTemplate(labels.elapsed, { seconds: Math.floor(time / 1000) })}` : labels.loading;
 }
 
 /**
