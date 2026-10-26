@@ -4,7 +4,7 @@ import { canonicalHubJson, HUB_LIMITS } from '#domain/index.js';
 import { ed25519KeyId, sha256, signatureMessage } from '#platform/index.js';
 import { HubRevocationApplication } from './revocations.js';
 import { HubServerError, type HubServerContext, type HubServerTransaction, type HubServerPorts } from './ports.js';
-import { hubAccountSchema, hubProfileSchema, hubSessionSchema, hubServicePolicySchema,
+import { hubAccountSchema, hubProfileSchema, hubSessionSchema, hubServicePolicySchema, hubMembershipConsentSchema,
   type HubProfile, type HubServiceArea, type HubServiceDependencies, type HubServiceTransaction } from './service-contract.js';
 
 export class HubServiceBase extends HubRevocationApplication {
@@ -86,6 +86,33 @@ export class HubServiceBase extends HubRevocationApplication {
     return this.data(tx).audit({ actor, action, resource, reason, atMs: now }, this.service.integrity, signer, publicEntry);
   }
   profile(tx: HubServerTransaction, id: string): HubProfile { return hubProfileSchema.parse(this.data(tx).get('profiles', id)); }
+  membershipConsent(tx: HubServerTransaction, profile: HubProfile) {
+    const data = this.data(tx), existing = data.get('membership-consents', profile.id);
+    if (existing) {
+      const record = hubMembershipConsentSchema.parse(existing);
+      if (record.profileId !== profile.id) throw new HubServerError('HUB_STORE_UNSAFE');
+      return record;
+    }
+    // Legacy v1 profiles: only the authenticated creator's audit proves consent, never an owner's old member list.
+    let after = 0;
+    for (;;) {
+      const page = data.auditPage(after, HUB_LIMITS.searchPageMax, this.service.integrity);
+      for (const row of page) {
+        const entry = z.object({ record: z.object({ sequence: z.number().int().positive(), action: z.string(), resource: z.string(),
+          actor: z.string(), atMs: z.number().int().safe().nonnegative() }).passthrough() }).passthrough().parse(row).record;
+        after = entry.sequence;
+        if (entry.action === 'profile-create' && entry.resource === profile.id) {
+          const record = hubMembershipConsentSchema.parse({ schemaVersion: 1, profileId: profile.id, createdAtMs: entry.atMs,
+            members: profile.members.filter(m => m.accountId === entry.actor).map(m => ({ accountId: m.accountId, acceptedAtMs: entry.atMs })) });
+          data.put('membership-consents', profile.id, record); return record;
+        }
+      }
+      if (page.length < HUB_LIMITS.searchPageMax) throw new HubServerError('HUB_STORE_UNSAFE');
+    }
+  }
+  consented(tx: HubServerTransaction, profile: HubProfile, accountId: string) {
+    return profile.members.some(m => m.accountId === accountId) && this.membershipConsent(tx, profile).members.some(m => m.accountId === accountId);
+  }
   async saveProfile(tx: HubServerTransaction, profile: Omit<HubProfile, 'signature'>) {
     const payload = hubProfileSchema.omit({ signature: true }).strip().parse(profile), { signer } = await this.signer(this.clock());
     const signature = { keyId: signer.keyId, value: Buffer.from(await signer.sign(signatureMessage('hub-profile:1', canonicalHubJson({ hubId: this.ports.hubId, ...payload })))).toString('base64') };

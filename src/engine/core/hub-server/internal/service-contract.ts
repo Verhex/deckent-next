@@ -26,6 +26,11 @@ export const hubProfileSchema = z.object({ schemaVersion: z.literal(1), id, hand
   sequence: positive, recoveryReview: z.boolean(), signature: z.object({ keyId: digest, value: text }).strict(),
 }).strict();
 export type HubProfile = z.infer<typeof hubProfileSchema>;
+export const hubMembershipConsentSchema = z.object({ schemaVersion: z.literal(1), profileId: id, createdAtMs: time,
+  members: z.array(z.object({ accountId: id, acceptedAtMs: time }).strict()) }).strict();
+export const hubInvitationSchema = z.object({ schemaVersion: z.literal(1), id, profileId: id, inviterId: id, accountId: id,
+  role: hubProfileSchema.shape.members.element.shape.role, createdAtMs: time, expiresAtMs: positive,
+  state: z.enum(['pending', 'accepted', 'declined', 'expired', 'cancelled']), resolvedAtMs: time.nullable() }).strict();
 export const hubQueueSchema = z.object({ schemaVersion: z.literal(1), id, profileId: id, packageId: text, version: text, digest,
   state: z.enum(['received', 'scanned', 'pending-review', 'approved', 'rejected', 'changes-requested']),
   required: z.number().int().min(1).max(HUB_LIMITS.reviewerSignaturesMax), hidden: z.boolean(),
@@ -52,7 +57,7 @@ export const hubRecoverySchema = z.object({ id, profileId: id, accountId: id, lo
 export const hubSessionSchema = z.object({ id, accountId: id, expiresAtMs: time }).strict();
 export const hubChallengeSchema = z.object({ id, accountId: id.nullable(), purpose: z.enum(['login', 'key', 'domain']),
   binding: text, expiresAtMs: time }).strict();
-export type HubServiceArea = 'accounts' | 'personal' | 'profiles' | 'queue' | 'roster' | 'cases' | 'reports' | 'sessions' | 'challenges' | 'rates' | 'recoveries';
+export type HubServiceArea = 'accounts' | 'personal' | 'profiles' | 'queue' | 'roster' | 'cases' | 'reports' | 'sessions' | 'challenges' | 'rates' | 'recoveries' | 'invitations' | 'membership-consents';
 export interface HubServiceTransaction {
   get(area: HubServiceArea, id: string): unknown | null;
   put(area: HubServiceArea, id: string, value: unknown): void;

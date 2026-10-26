@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { canonicalHubJson, HUB_LIMITS } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
 import { HubServerError, type HubServerContext } from './ports.js';
-import { hubAccountSchema, hubChallengeSchema, hubPersonalSchema, hubSessionSchema } from './service-contract.js';
+import { hubInvitationSchema, hubAccountSchema, hubChallengeSchema, hubPersonalSchema, hubSessionSchema } from './service-contract.js';
 import type { HubServiceBase } from './service-base.js';
 
 export class HubAccounts {
@@ -71,6 +71,13 @@ export class HubAccounts {
         const expires = area === 'sessions' ? hubSessionSchema.parse(row.value).expiresAtMs : area === 'challenges' ? hubChallengeSchema.parse(row.value).expiresAtMs
           : z.object({ expiresAtMs: z.number() }).parse(row.value).expiresAtMs;
         if (expires <= now) data.remove(area, row.id);
+      }
+      for (const row of app.rows(data, 'invitations')) {
+        const invitation = hubInvitationSchema.parse(row.value);
+        if (invitation.state === 'pending' && invitation.expiresAtMs <= now) {
+          data.put('invitations', invitation.id, { ...invitation, state: 'expired', resolvedAtMs: now });
+          await app.log(tx, context.principal.id, 'profile-invitation-expired', invitation.id);
+        }
       }
       await app.log(tx, context.principal.id, 'retention', sha256(String(deleted))); return { deleted };
     }, signal);
