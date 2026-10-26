@@ -31,6 +31,7 @@ it.each(['en', 'tr'] as const)('shows the durable progression failure code and d
     env: { NO_COLOR: '1', TERM: 'dumb' }, stdout: { write(text: string) { out.push(text); } }, stderr: { write() {} },
     async inspectRun() { return { schemaVersion: 1, layout, run: { ...run, state } }; },
   } as never)).toBe(0);
-  expect(out.join('')).toContain('SUPERVISOR_OPTIONS_INVALID'); expect(out.join('')).toContain('progression-failed');
+  // alpha.56 F2 (9ab5bc472): the state and its reason are words in the person's language, not the raw enum.
+  expect(out.join('')).toContain('SUPERVISOR_OPTIONS_INVALID'); expect(out.join('')).toContain(locale === 'en' ? 'progression failed' : 'ilerleme başarısız');
   expect(out.join('')).toContain(locale === 'en' ? 'explicitly resume' : 'açıkça devam');
 });
