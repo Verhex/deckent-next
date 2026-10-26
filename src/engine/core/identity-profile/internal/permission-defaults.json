@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    { "profile": { "id": "core:solo", "version": 1 }, "openModes": ["full-auto"], "startMode": "full-auto", "ownerBaseline": { "families": [] } }
+  ]
+}

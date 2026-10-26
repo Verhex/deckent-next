@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { IdentityProfileApplication, IdentityProfileRegistry } from '#engine/index.js';
+import { IdentityProfileApplication, IdentityProfileRegistry, PermissionDefaultsRegistry } from '#engine/index.js';
 import { coreIdentityProfileData, identityProfileDefinitionSchema, encodeIdentityProfile, resolvePolicyBindings, type IdentityPreviewInput } from '#domain/index.js';
 import { sha256 } from '#platform/index.js';
+
+it('U4C: permission defaults are version-specific data, preserve profile digests and admit extensions only before seal', () => {
+  const before = new IdentityProfileRegistry().resolve({ id: 'core:solo', version: 1 }).digest;
+  const registry = new PermissionDefaultsRegistry();
+  const extension = { profile: { id: 'acme.erp:operator', version: 2 }, openModes: ['full-auto'], startMode: 'full-auto', ownerBaseline: { families: [] } };
+  registry.register([extension]); extension.startMode = 'standart';
+  expect(registry.resolve({ id: 'core:solo', version: 1 })).toMatchObject({ startMode: 'full-auto', openModes: ['full-auto'] });
+  expect(registry.resolve({ id: 'core:solo', version: 2 })).toBeNull();
+  expect(registry.resolve({ id: 'acme.erp:operator', version: 2 })?.startMode).toBe('full-auto');
+  expect(() => registry.register([])).toThrow();
+  expect(new IdentityProfileRegistry().resolve({ id: 'core:solo', version: 1 }).digest).toBe(before);
+});
 
 const actor = { id: 'operator', issuer: 'local', subject: '1', assurance: 'os-user' as const, scopeIds: ['s'] };
 const member = { id: 'member', label: 'Member', kind: 'human' as const, principal: { issuer: 'idp', subject: 'member' } };

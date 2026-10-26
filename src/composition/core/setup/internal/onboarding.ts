@@ -1,3 +1,4 @@
+import { previewFirstCommit, observeFirstCommitRecovery } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { opendir, realpath } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
@@ -14,6 +15,9 @@ import { startConfiguredRunIntent, transitionConfiguredRunIntent } from '#compos
 import { snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { previewOnboardingConsent } from './consent-preview.js';
 import type { configuredSetup } from './wiring.js';
+import { observeOnboardingPermissions, applyOnboardingPermissions } from './permissions.js';
+import { addNativeCodingProfile } from '#composition/core/native-coding/index.js';
+import { applyConfiguredFirstCommit } from './first-commit.js';
 /** Trusted host binding. Canonical launch-folder and authenticated principal are derived here, never accepted as authority from UI answers. */
 export async function configuredOnboarding(host: object, setup: Pick<ReturnType<typeof configuredSetup>, 'observeSetup' | 'applySetupStage'>,
   root: string, scopeId: string, launchFolder: string, options: ConfigLoadOptions) {
@@ -66,10 +70,25 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
     return { configBasis, plan: planned, observation: observed.observation, answers: values, deferred: (await store.list(principal, folder)).map(row => row.stageId),
       folder, folderFacts: { kind, readme: visible.some(name => /^readme(?:\.|$)/iu.test(name)), tests: visible.some(name => /^(test|tests|spec|specs)$/u.test(name)) }, scopeId,
       ready: { provider: typeof values['work:kind'] === 'string' ? values['work:kind'] : null, imageId: selectedImage, fallbackBefore: config.execution?.docker?.imageId ?? null, fallbackAfter: stages.find(row => row.id === 'execution:worker-settings')?.operation ? selectedImage : config.execution?.docker?.imageId ?? selectedImage },
+      admittedProviders: (observed.observation.families?.['work'] as { providers?: readonly string[] } | undefined)?.providers ?? [],
       hosts: coding?.hosts ?? [], budget: { needed: binding?.billing === 'metered' && (currentUsd === 0 || currentUsd === null), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
-        presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: { state: 'unavailable' as const, reason: 'onboarding.permissions.unavailable' }, pending };
+        presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: await observeOnboardingPermissions(root, scopeId, options), pending };
   };
   return { observe, assertPerson,
+    async previewFirstCommit(message: string, include: readonly string[] = []) {
+      await assertPerson(); return previewFirstCommit({ root: directory, env: options.env ?? process.env, message, include });
+    },
+    async firstCommit(input: Readonly<{ message: string; digest: string; include?: readonly string[] }>, signal?: AbortSignal) {
+      await assertPerson(); return applyConfiguredFirstCommit(root, directory, scopeId, input, options, signal);
+    },
+    async firstCommitRecovery() { await assertPerson(); return observeFirstCommitRecovery(directory, options.env ?? process.env); },
+    async permissions(digest: string) { await assertPerson(); await applyOnboardingPermissions(root, scopeId, digest, options); },
+    async previewProfile(stage: SetupStage) {
+      await assertPerson(); const input = stage.operation?.input ?? {};
+      const result = await addNativeCodingProfile(root, { provider: input['provider'], kind: input['kind'], image: input['image'], apply: false }, options);
+      return { digest: result.digest, expect: result.expect, profile: `${result.profile.id}@${result.profile.version}`,
+        provider: String(input['provider']), image: String(input['image']), kind: String(input['kind']) };
+    },
     async defer(stageId: string, planDigest: string) { await assertPerson(); await prepareProductFile(context.layout, 'onboarding');
       await store.defer({ principal, folder, stageId, planDigest, deferredAt: Date.now() }); },
     async apply(stage: SetupStage, basis: Readonly<{ projectDigest: string | null; globalDigest: string }>) { await assertPerson(); return setup.applySetupStage(root, stage, { ...options, scopeId, expectedConfig: basis }); },

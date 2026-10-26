@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, rm, readFile, stat, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,7 +7,7 @@ import { planSetup, SetupStageRegistry, type SetupObservation, type SetupStage }
 import { MESSAGE_REGISTRY } from '#platform/index.js';
 import { HOST_EXECUTION_PORTS, detectExecutionFacts, executionSetupFamily, parseExecutionRuntimes, type ExecutionDetectPorts,
   type ExecutionFacts } from '#adapters/core/setup-detect-execution/index.js';
-import { applyFirstCommit, codingSetupFamily, detectCodingFacts, firstCommitGit, previewFirstCommit, type CodingFacts, type FirstCommitGit } from '#adapters/core/setup-detect-coding/index.js';
+import { firstCommitTarget, observeFirstCommitRecovery, applyFirstCommit, codingSetupFamily, detectCodingFacts, firstCommitGit, previewFirstCommit, type CodingFacts, type FirstCommitGit } from '#adapters/core/setup-detect-coding/index.js';
 import { resolveCliLocale } from '#surfaces/core/cli-kit/index.js';
 import { observeSetup, setupMessage } from '#surfaces/core/setup/index.js';
 
@@ -157,12 +157,12 @@ describe.skipIf(posix)('I-S2 coding/git detection', () => {
   it('first commit (alpha.56 U4-1c): a failed commit-tree and a ref race leave the repository as it was; a flagged .env is committed only when ticked', async () => {
     const repo = async (identity: boolean) => {
       const root = await temp('first'); git(root, 'init', '-q');
-      const set = (key: string, value: string) => execFileSync('git', ['config', key, value], { cwd: root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' } });
+      const set = (key: string, value: string) => execFileSync('git', ['config', key, value], { cwd: root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
       if (identity) { set('user.name', 'Person'); set('user.email', 'person@example.test'); } else set('user.useConfigOnly', 'true');
       await writeFile(join(root, 'a.txt'), 'a\n'); await writeFile(join(root, '.env'), 'API_TOKEN=live-value-0123456789\n');
       return { root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' }, message: 'First commit' };
     };
-    const sh = (root: string, ...args: string[]) => execFileSync('git', ['--no-optional-locks', ...args], { cwd: root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' }, encoding: 'utf8' });
+    const sh = (root: string, ...args: string[]) => execFileSync('git', ['--no-optional-locks', ...args], { cwd: root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' }, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
     const status = (root: string) => sh(root, 'status', '--porcelain=v2', '--untracked-files=all');
     const leftovers = async (root: string) => (await readdir(join(root, '.git'))).filter(name => name === 'index' || name === 'index.lock' || name.startsWith('deckent-first-commit.'));
     // 1. No identity (user.useConfigOnly): the preview says so; the apply fails at commit-tree and writes nothing.
@@ -238,7 +238,7 @@ describe('I-S2 families in the setup plan', () => {
   it('a fresh dev machine: repository after the folder stage, the runtime after the sandbox stage, sign-ins after the model stage', () => {
     const plan = planSetup(observation({ execution: ready, coding: repo }), undefined, registry);
     expect(plan.stages.map(stage => stage.id)).toEqual(['core:language', 'core:environment', 'core:folder', 'coding:repository', 'core:profile', 'core:policy',
-      'core:sandbox', 'core:final-check', 'execution:runtime', 'execution:worker', 'execution:worker-settings', 'core:model', 'coding:hosts']);
+      'core:sandbox', 'core:final-check', 'core:model', 'coding:hosts', 'execution:runtime', 'execution:worker', 'execution:worker-settings', 'coding:first-commit']);
     expect(['coding:repository', 'execution:runtime', 'coding:hosts'].map(id => at(plan.stages, id).state)).toEqual(['done', 'done', 'done']);
     expect(plan.stages.filter(stage => stage.namespace !== 'core').every(stage => !stage.autoEligible && stage.operation === null)).toBe(true);
     for (const stage of plan.stages.filter(item => item.namespace !== 'core')) for (const locale of ['en', 'tr'] as const) {
@@ -272,4 +272,56 @@ describe('I-S2 locale facts follow the L-KIT chain', () => {
       expect(seen.language.system ?? 'en').toBe(resolveCliLocale({ env }));
     }
   });
+});
+
+it.skipIf(process.platform === 'win32')('U4C: failed index swap retains private path custody; recovery preserves unrelated staging and refuses same-path overlap', async () => {
+  const sh = (root: string, ...args: string[]) => execFileSync('git', ['--no-optional-locks', ...args], { cwd: root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' }, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+  const repo = async () => { const root = await temp('recovery'); git(root, 'init', '-q'); sh(root, 'config', 'user.name', 'Person'); sh(root, 'config', 'user.email', 'person@example.test');
+    await writeFile(join(root, 'a.txt'), 'first'); return { root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' }, message: 'First' }; };
+  for (const overlap of [false, true]) {
+    const request = await repo(), real = await firstCommitGit(request.root, request.env), preview = await previewFirstCommit(request);
+    const port: FirstCommitGit = async (args, options) => {
+      const result = await real(args, options);
+      if (args[0] === 'update-ref' && result.code === 0) {
+        await rm(join(request.root, '.git/index.lock')); const path = overlap ? 'a.txt' : 'other.txt'; await writeFile(join(request.root, path), 'concurrent'); sh(request.root, 'add', path);
+      }
+      return result;
+    };
+    await expect(applyFirstCommit({ ...request, git: port, digest: preview.state === 'offered' ? preview.digest : '' })).rejects.toMatchObject({ code: 'SETUP_FIRST_COMMIT_INDEX_PENDING' });
+    const seen = await observeFirstCommitRecovery(request.root, request.env);
+    expect(seen.state).toBe('pending'); if (seen.state !== 'pending') throw new Error('missing recovery');
+    expect((await stat(seen.pathsFile)).mode & 0o777).toBe(0o600); expect(await readFile(seen.pathsFile, 'utf8')).toBe('a.txt\0');
+    if (overlap) { expect(seen.overlap).toEqual(['a.txt']); expect(seen.command).toBeNull(); }
+    else {
+      const before = sh(request.root, 'diff', '--cached', '--', 'other.txt');
+      expect(seen.command).toContain('--pathspec-file-nul'); expect(seen.command).not.toContain('read-tree');
+      sh(request.root, '--literal-pathspecs', 'reset', '-q', seen.commit, `--pathspec-from-file=${seen.pathsFile}`, '--pathspec-file-nul');
+      expect(sh(request.root, 'diff', '--cached', '--', 'other.txt')).toBe(before);
+      expect(await observeFirstCommitRecovery(request.root, request.env)).toEqual({ state: 'settled' });
+    }
+  }
+});
+it.skipIf(process.platform === 'win32')('U4C: the first-commit target reconciles the same effect key from Git instead of making a second commit', async () => {
+  const root = await temp('effect'), env = { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' };
+  git(root, 'init', '-q'); execFileSync('git', ['config', 'user.name', 'Person'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] }); execFileSync('git', ['config', 'user.email', 'person@example.test'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  await writeFile(join(root, 'a.txt'), 'data'); const preview = await previewFirstCommit({ root, env, message: 'First' });
+  if (preview.state !== 'offered') throw new Error('not offered');
+  const input = { message: 'First', digest: preview.digest };
+  await mkdir(join(root, 'nested')); const target = await firstCommitTarget(join(root, 'nested'), env, input);
+  expect(await target.lookup({ kind: target.kind, id: 'HEAD' }, 'wire-key')).toEqual({ status: 'absent' });
+  const result = await target.apply({ target: { kind: target.kind, id: 'HEAD' }, operation: { id: 'coding.first-commit', version: 1 }, idempotencyKey: 'wire-key', expectedVersion: preview.digest, input });
+  expect(await target.lookup({ kind: target.kind, id: 'HEAD' }, 'wire-key')).toEqual({ status: 'applied', version: result.version });
+  expect(await target.lookup({ kind: target.kind, id: 'HEAD' }, 'different-key')).toBeNull();
+  expect(await previewFirstCommit({ root, env, message: 'First' })).toEqual({ state: 'has-commits' });
+});
+
+it('U4C: first-commit is onboarding only, skipped for business folders and resumes index recovery without creating another commit', () => {
+  const stage = codingSetupFamily().stages.find(row => row.id === 'coding:first-commit')!;
+  const decide = (facts: Partial<CodingFacts>) => stage.evaluate({ facts, answer: undefined, scopeId: 's', states: new Map() });
+  expect(stage.phase).toBe('onboarding');
+  expect(decide({ repository: 'present', commits: 'present', firstCommitRecovery: 'unknown' }).state).toBe('blocked');
+  expect(decide({ repository: 'none', commits: 'none' }).state).toBe('skipped');
+  expect(decide({ repository: 'present', commits: 'none' })).toMatchObject({ state: 'ready', operation: { id: 'coding.first-commit' } });
+  expect(decide({ repository: 'present', commits: 'present' }).state).toBe('done');
+  expect(decide({ repository: 'present', commits: 'present', firstCommitRecovery: 'pending' })).toMatchObject({ state: 'ready', operation: { id: 'coding.first-commit-recovery' } });
 });

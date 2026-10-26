@@ -6,6 +6,8 @@ import { createOnboardingSession, firstSignedInHost } from './session.js';
 import { askOnboardingQuestion, type QuestionAnswer } from './question.js';
 import { firstTaskScreen } from './first-task.js';
 import { guideScreen } from './guides.js';
+import { settleOnboardingReady } from './ready.js';
+import { firstCommitScreen } from './first-commit.js';
 /** The same session drives first open and /setup; no Workline/composer is mounted in this loop. */
 export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingUi, io: CliCardIo, revisit = false): Promise<FirstTaskIntent | null> {
   if (io.signal?.aborted) return null;
@@ -21,9 +23,16 @@ export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingU
       return typeof result === 'object' ? result : null;
     }
     if (step.kind === 'budget' || step.kind === 'permissions') {
-      const result = await guideScreen(model, step.kind, port, io);
-      if (result === 'exit') return null;
-      if (result === 'later') await session.defer(step); else await session.finish(step);
+      try {
+        const result = await guideScreen(model, step.kind, port, io);
+        if (result === 'exit') return null;
+        if (result === 'later') await session.defer(step); else await session.finish(step);
+      } catch (error) {
+        const feedback = await askOnboardingQuestion({ title: t('onboarding.session.blocked', {}, locale), step: model.completed + 1, total: model.total,
+          body: [error instanceof Error ? error.message : t('onboarding.session.waiting', {}, locale)], choices: [] }, io);
+        if (feedback.id === 'exit') return null;
+        await session.defer(step);
+      }
       continue;
     }
     const stage = step.stages[0], pending = step.pending;
@@ -40,8 +49,8 @@ export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingU
         : [{ id: 'continue', label: t('onboarding.session.continue', {}, locale) }] };
     let choice: QuestionAnswer;
     if (step.kind === 'work') {
-      const provider = firstSignedInHost(model.snapshot);
-      const rows = model.snapshot.hosts;
+      const rows = model.snapshot.hosts.filter(row => !model.snapshot.admittedProviders?.includes(row.id));
+      const provider = firstSignedInHost({ ...model.snapshot, hosts: rows });
       choice = await askOnboardingQuestion({ ...question, title: provider ? t('onboarding.work.selected', { cli: provider }, locale) : t('onboarding.work.none', {}, locale),
         choices: [...(provider ? [{ id: provider, label: t('onboarding.session.continue', {}, locale) }] : []), { id: 'change', label: t('onboarding.work.change', {}, locale) }] }, io);
       const changing = choice.id === 'change';
@@ -64,6 +73,11 @@ export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingU
     try {
       if (pending && choice.id === 'cancel') { await port.cancel(pending); await session.finish(step); continue; }
       if (pending) return { commandId: pending.command.commandId, scopeId: pending.command.scopeId, folder: model.snapshot.folder, intent: pending.command.intent, pending };
+      else if (stage?.id === 'coding:first-commit') {
+        const result = await firstCommitScreen(port, model, io, stage.operation?.id === 'coding.first-commit-recovery');
+        if (result === 'exit') return null;
+        if (result === 'later') { await session.defer(step); continue; }
+      }
       else if (stage?.id === 'core:model') await ui.provider();
       else if (stage?.id === 'instructions:bridges') await ui.instructions();
       else if (stage?.id === 'execution:worker') {
@@ -78,13 +92,10 @@ export async function runOnboardingSession(port: OnboardingPort, ui: OnboardingU
         if (consent.id !== 'consent') { await session.defer(step); continue; }
         await port.consent(provider, preview.digest);
       } else if (step.kind === 'ready') {
-        for (const id of ['execution:worker-settings', 'work:kind', 'work:pool']) {
-          const fresh = await session.refresh(), current = fresh.snapshot.plan.stages.find(row => row.id === id);
-          if (current?.state === 'done' && !current.operation) continue;
-          if (current?.state !== 'ready' || !current.operation) throw ErrorRegistry.createError('WORKER_SETUP_PENDING', { params: { phase: 'awaiting-confirmation' } });
-          const result = id === 'execution:worker-settings' ? await port.apply(current, fresh.snapshot.configBasis) : await ui.foreground(current);
-          if (result.status !== 'applied') { await session.defer(step); break; }
-        }
+        const settled = await settleOnboardingReady(port, ui, session.refresh, async preview =>
+          (await askOnboardingQuestion({ ...question, title: t('onboarding.profile.title', {}, locale),
+            body: [t('onboarding.profile.body', { profile: preview.profile, image: preview.image, provider: preview.provider, kind: preview.kind }, locale)], choices: [{ id: 'apply', label: t('onboarding.session.continue', {}, locale) }] }, io)).id === 'apply');
+        if (!settled) { await session.defer(step); continue; }
       } else if (stage?.operation) {
         const result = await ui.foreground(stage);
         if (result.status !== 'applied') { await session.defer(step); continue; }

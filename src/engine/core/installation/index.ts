@@ -1,5 +1,5 @@
 export { InstallationIdentityError } from './internal/installation-identity.js';
-export { configureNativeTemplate, initializeNativeRegistry } from './internal/native-template.js';
+export { configureNativeTemplate, initializeNativeRegistry, addNativeProfile } from './internal/native-template.js';
 export type { NativeTemplatePorts, CodingTemplateRequest, CodingTemplateResult, InitialRegistryRequest } from './internal/native-template.js';
 export { configuredInstallationPool, installExecutionPool } from './internal/pool.js';
 export type { InstallationPoolResult, InstallationPoolStore } from './internal/pool.js';

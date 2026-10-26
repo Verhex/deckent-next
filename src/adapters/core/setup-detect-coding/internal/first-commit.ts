@@ -1,14 +1,16 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, open, readFile, rename, rm } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { lstat, open, readFile, realpath, rename, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { workerTreeDenyForms } from '#engine/index.js';
 import { ErrorRegistry, redactForRecord } from '#platform/index.js';
 import { createGlobMatcher, CREDENTIAL_WORKSPACE_DENY } from '#adapters/core/workspace-read/index.js';
 import { configSecretHit, isConfigFile, WORKER_TREE_PATTERN_RULES } from '#adapters/core/worker-tree-gate/index.js';
 import { findExecutable, type DetectEnvironment } from '#adapters/core/setup-detect-execution/index.js';
 import registry from './coding.json' with { type: 'json' };
+import { inspectFirstCommitRecovery, recoveryNames } from './first-commit-recovery.js';
+import { sha256 } from '#platform/index.js';
 
 /** The typed operation id a setup stage or card names (U3U4U7 §3.8); the stage itself and its card belong to U3-1/U4-1. */
 export const FIRST_COMMIT_OPERATION_ID = 'coding.first-commit@1' as const;
@@ -22,7 +24,7 @@ export type FirstCommitResult = Readonly<{ operation: typeof FIRST_COMMIT_OPERAT
 export type FirstCommitGitResult = Readonly<{ code: number | null; stdout: string; stderr: string; overflow: boolean }>;
 /** One Git process in the person's environment; `index` is a GIT_INDEX_FILE. The port the focused test wraps to inject a ref race. */
 export type FirstCommitGit = (args: readonly string[], options?: Readonly<{ input?: string; index?: string; timeoutMs?: number; outputBytes?: number }>) => Promise<FirstCommitGitResult>;
-type Request = Readonly<{ root: string; env: DetectEnvironment; message: string; include?: readonly string[]; signal?: AbortSignal; git?: FirstCommitGit }>;
+type Request = Readonly<{ root: string; env: DetectEnvironment; message: string; include?: readonly string[]; signal?: AbortSignal; git?: FirstCommitGit; effectKey?: string }>;
 
 const { git: gitRegistry, limits: detectLimits, firstCommit: policy } = registry, limits = policy.limits;
 const denied = CREDENTIAL_WORKSPACE_DENY.map(pattern => createGlobMatcher(pattern.toLowerCase()));
@@ -40,8 +42,9 @@ export async function firstCommitGit(root: string, env: DetectEnvironment, signa
   const executable = await findExecutable(gitRegistry.executable, env, detectLimits.pathDirectories, signal ?? AbortSignal.timeout(detectLimits.totalTimeoutMs));
   if (!executable) refuse('SETUP_FIRST_COMMIT_FAILED', { step: 'git', detail: gitRegistry.executable });
   const base = Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined && !policy.stripEnv.includes(entry[0])));
-  return (args, options = {}) => new Promise(done => {
-    const child = execFile(executable!, [...gitRegistry.prefix, ...args], { cwd: root, encoding: 'utf8', timeout: options.timeoutMs ?? detectLimits.commandTimeoutMs,
+  let directory = root;
+  const run: FirstCommitGit = (args, options = {}) => new Promise(done => {
+    const child = execFile(executable!, [...gitRegistry.prefix, ...args], { cwd: directory, encoding: 'utf8', timeout: options.timeoutMs ?? detectLimits.commandTimeoutMs,
       maxBuffer: options.outputBytes ?? detectLimits.outputBytes, ...(signal ? { signal } : {}),
       env: { ...base, ...policy.env, ...(options.index ? { GIT_INDEX_FILE: options.index } : {}) } }, (error, stdout, stderr) => {
       const failure = error as (Error & { code?: unknown; killed?: boolean }) | null;
@@ -50,6 +53,9 @@ export async function firstCommitGit(root: string, env: DetectEnvironment, signa
     });
     child.stdin?.on('error', () => undefined); child.stdin?.end(options.input ?? '');
   });
+  const top = await run(['rev-parse', '--show-toplevel']);
+  directory = await realpath(step('root', top).trim());
+  return run;
 }
 
 /** Why a candidate is excluded by default: a known credential path, a known secret shape anywhere in its content (symlinks are never followed), or
@@ -81,7 +87,7 @@ async function observe(request: Request, git: FirstCommitGit): Promise<Readonly<
   if (listed.overflow) refuse('SETUP_FIRST_COMMIT_TOO_LARGE', { observed: `>${limits.files}`, limit: limits.files });
   const paths = step('list', listed).split('\0').filter(Boolean).sort();
   if (paths.length > limits.files) refuse('SETUP_FIRST_COMMIT_TOO_LARGE', { observed: paths.length, limit: limits.files });
-  const root = resolve(request.root), include = new Set(request.include ?? []), rows: FirstCommitRow[] = [];
+  const root = step('root', await git(['rev-parse', '--show-toplevel'])).trim(), include = new Set(request.include ?? []), rows: FirstCommitRow[] = [];
   let bytes = 0;
   for (const path of paths) {
     // `ls-files` names an untracked nested repository as `dir/`; `update-index --add` would record a gitlink without .gitmodules.
@@ -121,24 +127,47 @@ export async function applyFirstCommit(request: Request & Readonly<{ digest: str
   if (selection.length === 0) refuse('SETUP_ANSWER_INVALID');
   const gitDir = step('git-dir', await git(['rev-parse', '--absolute-git-dir'])).trim(), index = join(gitDir, 'index'), lock = `${index}.lock`;
   const temporary = join(gitDir, `deckent-first-commit.${randomBytes(8).toString('hex')}.index`);
-  let held = false;
+  const pathsFile = join(gitDir, recoveryNames.paths), receiptFile = join(gitDir, recoveryNames.receipt);
+  let held = false, committed = false, refSent = false, pathsOwned = false, receiptOwned = false;
   try {
     step('update-index', await git(['update-index', '--add', '-z', '--stdin'], { input: `${selection.join('\0')}\0`, index: temporary }));
     const tree = step('write-tree', await git(['write-tree'], { index: temporary })).trim();
-    const commit = step('commit-tree', await git(['commit-tree', tree, '-m', message, sign ? '-S' : '--no-gpg-sign'], { timeoutMs: limits.commitTimeoutMs })).trim();
+    const recordedMessage = request.effectKey ? `${message}\n\nDeckent-Effect: ${request.effectKey}` : message;
+    const commit = step('commit-tree', await git(['commit-tree', tree, '-m', recordedMessage, sign ? '-S' : '--no-gpg-sign'], { timeoutMs: limits.commitTimeoutMs })).trim();
     // Another Git process holds the lock: nothing is written yet, so this is a changed repository, not a pending index.
     const handle = await open(lock, 'wx').catch((error: NodeJS.ErrnoException) => error.code === 'EEXIST' ? refuse('SETUP_FIRST_COMMIT_CHANGED') : io('index-lock')(error));
     held = true;
     try { await handle.writeFile(await readFile(temporary)); await handle.sync(); } catch (error) { io('index-lock')(error as NodeJS.ErrnoException); } finally { await handle.close(); }
     if (step('index', await git(['ls-files', '--cached', '-z'])) !== '') refuse('SETUP_FIRST_COMMIT_CHANGED');
+    const recovery = await inspectFirstCommitRecovery(git, limits.files, limits.pathBytes);
+    if (recovery.state === 'prepared') { await rm(receiptFile); await rm(pathsFile); }
+    else if (recovery.state !== 'none') refuse('SETUP_FIRST_COMMIT_CHANGED');
+    // Retain private committed-path custody before HEAD can move. A crash never needs a whole-index reset.
+    const nul = `${selection.join('\0')}\0`, pathsHandle = await open(pathsFile, 'wx', 0o600);
+    pathsOwned = true;
+    try { await pathsHandle.writeFile(nul); await pathsHandle.sync(); } finally { await pathsHandle.close(); }
+    const receiptHandle = await open(receiptFile, 'wx', 0o600); receiptOwned = true;
+    try { await receiptHandle.writeFile(JSON.stringify({ schemaVersion: 1, commit, pathsDigest: sha256(nul) })); await receiptHandle.sync(); } finally { await receiptHandle.close(); }
+    refSent = true;
     const ref = await git(['update-ref', '-m', `commit (initial): ${message.split('\n')[0]}`, 'HEAD', commit, '0'.repeat(commit.length)]);
-    if (ref.code !== 0 && (await git(gitRegistry.headArgs)).code === 0) refuse('SETUP_FIRST_COMMIT_CHANGED');
-    step('update-ref', ref);
-    await rename(lock, index).catch(() => refuse('SETUP_FIRST_COMMIT_INDEX_PENDING', { command: policy.recoveryCommand }));
+    if (ref.code !== 0) {
+      const head = await git(gitRegistry.headArgs);
+      if (head.code === 0 && head.stdout.trim() !== commit) { refSent = false; refuse('SETUP_FIRST_COMMIT_CHANGED'); }
+      if (head.code === 1) refSent = false;
+      if (head.code === 0 && head.stdout.trim() === commit) committed = true;
+    }
+    if (!committed) step('update-ref', ref);
+    committed = true;
+    await rename(lock, index).catch(() => refuse('SETUP_FIRST_COMMIT_INDEX_PENDING', { command: pathsFile }));
     held = false;
+    await rm(receiptFile); receiptOwned = false; await rm(pathsFile); pathsOwned = false;
     return { operation: FIRST_COMMIT_OPERATION_ID, commit, tree, files: selection.length, signed: sign };
   } finally {
     if (held) await rm(lock, { force: true });
     await rm(temporary, { force: true });
+    if (!committed && !refSent) { if (receiptOwned) await rm(receiptFile, { force: true }); if (pathsOwned) await rm(pathsFile, { force: true }); }
   }
 }
+
+export const observeFirstCommitRecovery = async (root: string, env: DetectEnvironment, signal?: AbortSignal) =>
+  inspectFirstCommitRecovery(await firstCommitGit(root, env, signal), limits.files, limits.pathBytes);
