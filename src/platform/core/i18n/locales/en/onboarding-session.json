@@ -89,6 +89,8 @@
   "setup.coding.firstCommit.locked": "Another Git writer holds index.lock. Wait for it to finish; never delete its lock.",
   "setup.coding.firstCommit.message": "Initial commit",
   "setup.coding.firstCommit.staged": "Staged changes already exist. Commit them yourself with git commit; onboarding will observe the result on relaunch.",
+  "setup.coding.firstCommit.empty": "This repository has no files to commit yet. Add your files, then come back to the first commit with /setup.",
+  "setup.coding.firstCommit.skip": "Skip for now (back with /setup)",
   "setup.coding.firstCommit.summary": "Selected {count}/{total} files; {more} additional rows are not shown. Flagged files are excluded unless explicitly selected.",
   "setup.coding.firstCommit.sign": "Your Git signing setting is enabled; signing may ask on your terminal. Failure does not create a commit.",
   "setup.coding.firstCommit.noSign": "Your Git configuration does not request commit signing.",

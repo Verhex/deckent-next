@@ -40,8 +40,9 @@ export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): 
 }
 /** R18: a deferral whose step is no longer open (settled through /setup, /model or /mode) is not a deferral any more. */
 export const openDeferrals = (snapshot: OnboardingSnapshot): readonly string[] => {
-  const open = new Set(onboardingSteps({ ...snapshot, deferred: [] }).map(row => row.id));
-  return snapshot.deferred.filter(id => open.has(id));
+  const steps = onboardingSteps({ ...snapshot, deferred: [] }), open = new Set(steps.map(row => row.id));
+  // A deferred image card whose work choice is open again (that answer lives in the session) is still owed, not settled.
+  return snapshot.deferred.filter(id => open.has(id) || id === 'execution:worker' && awaitedImage(snapshot, steps) === 1);
 };
 /** The image card enters the plan only once the work kind is answered; a pending work card counts it from the start (stable "Adım N"). */
 const awaitedImage = (snapshot: OnboardingSnapshot, steps: readonly OnboardingStep[]) => Number(steps.some(row => row.kind === 'work')
