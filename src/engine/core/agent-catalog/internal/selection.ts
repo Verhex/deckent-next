@@ -4,7 +4,7 @@ import { AgentCatalogStoreError, type AgentCatalogStore } from './contract.js';
 import { skillContentV2Digest } from '#engine/core/hub/index.js';
 import { personaDigest, skillContentDigest, skillSetDigest } from './digests.js';
 
-type SelectionStore = Pick<AgentCatalogStore, 'eligibleAgents' | 'loadSkill'>;
+type SelectionStore = Pick<AgentCatalogStore, 'eligibleAgents' | 'loadSkill' | 'upstream'>;
 const corrupt = () => new AgentCatalogStoreError('AGENT_CATALOG_CORRUPT');
 
 export const agentPromptParts = (agent: AgentDefinition, skills: readonly ReadableSkillDefinition[]): AgentPromptParts => Object.freeze({
@@ -35,9 +35,16 @@ async function choose(store: SelectionStore, scopeId: string, workClass: string)
     || standing.agentId !== agent.agentId || standing.revision !== agent.revision || standing.workClass !== workClass || !agent.content.workClasses.includes(workClass)
     || (standing.standing !== 'active' && standing.standing !== 'candidate'))) throw corrupt();
   // At most one promoted agent per (scope, WorkClass) among current revisions: two is a corrupt catalog, never a silent choice between them.
-  const active = ordered.filter(row => row.standing.standing === 'active');
+  const allowed = [];
+  for (const row of ordered) {
+    const refs = [{ kind: 'agent' as const, id: row.agent.agentId, revision: row.agent.revision },
+      ...row.agent.content.skills.map(ref => ({ kind: 'skill' as const, id: ref.skillId, revision: ref.revision }))];
+    const upstream = await Promise.all(refs.map(ref => store.upstream?.(scopeId, ref.kind, ref.id, ref.revision) ?? 'clear'));
+    if (!upstream.some(state => state === 'withdrawn' || state === 'revoked')) allowed.push(row);
+  }
+  const active = allowed.filter(row => row.standing.standing === 'active');
   if (active.length > 1) throw corrupt();
-  const pick = active[0] ?? ordered[0];
+  const pick = active[0] ?? allowed[0];
   if (!pick) return null;
   const { agent, standing } = pick, parts = agentPromptParts(agent, await pinnedAgentSkills(store, agent));
   const seal = taskAgentSealSchema.parse({ schemaVersion: 1, agentId: agent.agentId, revision: agent.revision, workClass, personaDigest: agent.personaDigest,

@@ -1,3 +1,4 @@
+import { governedHubRevocationReader } from '#adapters/core/hub-http/index.js';
 import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import { afterEach, expect, it } from 'vitest';
@@ -53,4 +54,18 @@ it('rechecks source removal after the approval wait before token resolution or D
   } } });
   await expect(fetch('https://hub.invalid/mcp', { method: 'POST', body: '{}' })).rejects.toThrow();
   expect(f.counts()).toEqual({ dns: 0, tokens: 0 });
+});
+
+it('refresh uses the governed MCP fetch and preserves both approval gates before private-DNS refusal (H5/G41)', async () => {
+  const f = await setup(), current = (await f.app.listSources({ schemaVersion: 1, scopeId: 's' }))[0]!;
+  const reader = governedHubRevocationReader(f.deps, 'test.invalid/hub');
+  await expect(reader(current, 0, new AbortController().signal)).rejects.toThrow();
+  expect(f.counts()).toEqual({ dns: 0, tokens: 0 }); expect(f.records.size).toBe(0);
+  f.approve();
+  await expect(reader(current, 0, new AbortController().signal)).rejects.toThrow();
+  expect(f.counts()).toEqual({ dns: 1, tokens: 1 });
+  expect([...f.records.values()].every(row => row.state === 'refused')).toBe(true);
+  f.revokeConsent();
+  await expect(reader(current, 0, new AbortController().signal)).rejects.toThrow();
+  expect(f.counts()).toEqual({ dns: 1, tokens: 1 });
 });

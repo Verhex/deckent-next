@@ -16,6 +16,8 @@ export const hubLimitsSchema = z.object({ schemaVersion: z.literal(1), packageMa
   skillReadMaxBytes: positive, skillReadMaxFiles: positive }).strict().readonly();
 export type HubLimits = z.infer<typeof hubLimitsSchema>;
 export const HUB_LIMITS = hubLimitsSchema.parse(limitData);
+/** Unit conversion of the registry cadence, shared by publisher and client. */
+export const HUB_REVOCATION_REFRESH_MS = HUB_LIMITS.revocationRefreshMinutes * 60_000;
 export const hubTrustPoliciesSchema = z.object({ schemaVersion: z.literal(1), addedSourceDefault: id, moderatedSourceDefault: id,
   policies: z.array(z.object({ id, publisherPinned: z.boolean(), reviewers: z.enum(['none', 'high-risk', 'always']), moderation: z.boolean() }).strict().readonly())
     .min(1).refine(uniqueIds).readonly() }).strict().refine(row => [row.addedSourceDefault, row.moderatedSourceDefault].every(id => row.policies.some(p => p.id === id))).readonly();

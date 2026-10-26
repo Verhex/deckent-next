@@ -3867,7 +3867,8 @@
         "src/adapters/core/sqlite-ledger",
         "src/platform/core/integrity",
         "src/domain/core/hub",
-        "src/engine/core/hub"
+        "src/engine/core/hub",
+        "src/engine/core/hub-client"
       ],
       "plan": "LEARNING"
     },
@@ -4120,7 +4121,8 @@
         "src/engine/core/agent-catalog",
         "src/engine/core/authentication",
         "src/engine/core/hub",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/platform/core/i18n"
       ],
       "plan": "LEARNING"
     },
@@ -4598,6 +4600,14 @@
           80
         ],
         "reason": "NATIVE-BAGLAM active-work note v1 format bound: a /do or Run title is cut at eighty characters in the model note; a model-facing format invariant, not an operator policy (2026-10-14)."
+      },
+      {
+        "file": "src/domain/core/hub/internal/registry.ts",
+        "symbol": "HUB_REVOCATION_REFRESH_MS",
+        "values": [
+          60000
+        ],
+        "reason": "Exact minutes-to-milliseconds unit conversion only; the refresh cadence remains hub-limits registry data."
       }
     ],
     "allowlist": "scripts/hardcode-allowlist.json",

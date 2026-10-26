@@ -54,7 +54,7 @@ export type SkillListQuery = z.infer<typeof skillListQuerySchema>;
 export type SkillInspectQuery = z.infer<typeof skillInspectQuerySchema>;
 
 /** `signers`: the state of each key that signed a shown revision (an unknown key reads as revoked). */
-type Inspection<T> = { readonly schemaVersion: 1; readonly status: 'ok'; readonly item: T; readonly history: readonly T[]; readonly signers: Readonly<Record<string, 'active' | 'revoked'>> } | { readonly schemaVersion: 1; readonly status: 'not-found'; readonly id: string };
+type Inspection<T> = { readonly schemaVersion: 1; readonly status: 'ok'; readonly item: T; readonly history: readonly T[]; readonly upstream?: CatalogUpstream; readonly signers: Readonly<Record<string, 'active' | 'revoked'>> } | { readonly schemaVersion: 1; readonly status: 'not-found'; readonly id: string };
 /** S8-1a: an agent's inspection also names the current revision's standing per bound WorkClass (what the system may select it for). */
 export type AgentInspection = (Extract<Inspection<AgentDefinition>, { status: 'ok' }> & { readonly standings: readonly AgentStanding[] }) | Extract<Inspection<AgentDefinition>, { status: 'not-found' }>;
 export type SkillInspection = Inspection<ReadableSkillDefinition>;
@@ -84,7 +84,10 @@ export interface SignerChange { readonly previous: SignerKey | null; readonly ne
  * DB-neutral catalog port (Core SQLite; Enterprise may store it elsewhere). Values are domain JSON; no SQL or driver type crosses it. `revision`
  * absent reads the current row. Reads throw `AgentCatalogStoreError('AGENT_CATALOG_CORRUPT')` on any integrity failure, never a partial row.
  */
+export type CatalogUpstream = 'clear' | 'withdrawn' | 'revoked' | 'yanked';
 export interface AgentCatalogStore {
+  /** Orthogonal to standing: revoked/unavailable upstream rows cannot enter new selections. */
+  upstream?(scopeId: string, kind: 'agent' | 'skill', id: string, revision: number, nowMs?: number, verifiedKeyIds?: readonly string[]): Promise<CatalogUpstream>;
   loadAgent(scopeId: string, agentId: string, revision?: number): Promise<AgentDefinition | null>;
   agentHistory(scopeId: string, agentId: string, limit: number): Promise<readonly AgentDefinition[]>;
   /** Current agents of the scope, most recently changed first, at most `limit`. */

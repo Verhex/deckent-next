@@ -38,7 +38,7 @@ export class AgentCatalogApplication {
       const signers: Record<string, 'active' | 'revoked'> = {};
       for (const keyId of new Set([item, ...rows].flatMap(row => row.provenance.signed ? [row.provenance.signed.keyId] : [])))
         signers[keyId] = (await store.signer(scopeId, keyId))?.state ?? 'revoked';
-      return { schemaVersion: 1 as const, status: 'ok' as const, item, history: rows, signers, ...await extra(store, item) };
+      return { schemaVersion: 1 as const, status: 'ok' as const, item, history: rows, signers, ...(store.upstream ? { upstream: await store.upstream(scopeId, 'agentId' in item ? 'agent' : 'skill', id, item.revision, this.deps.now()) } : {}), ...await extra(store, item) };
     });
   }
   async listAgents(input: unknown, credential?: unknown): Promise<AgentListing> {

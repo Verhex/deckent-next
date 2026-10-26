@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { hubRevocationFeedSchema, HubError, HUB_LIMITS, type AuditEvent, type HubRevocationFeed } from '#domain/index.js';
 import type { HubVerificationKey } from '#engine/index.js';
 import { AuditApplication } from '#engine/index.js';
-import { HubClientError, hubInstallSchema, hubSourceSchema, type HubClientStore, type HubInstall, type HubReceipt, type HubSource } from '#engine/index.js';
+import { HubClientError, hubInstallSchema, hubSourceSchema, hubRefreshResultSchema, type HubClientStore, type HubInstall, type HubReceipt, type HubSource } from '#engine/index.js';
 import { SqliteAgentCatalogStore } from '#adapters/core/agent-catalog-store/index.js';
 import { SqliteAuditStore } from '#adapters/core/audit-store/index.js';
 import { openSqliteLedger, requireLedgerVersion, HUB_CLIENT_LEDGER_VERSION, type SqliteLedgerOptions } from '#adapters/core/sqlite-ledger/index.js';
@@ -61,6 +61,24 @@ class Store extends SqliteAgentCatalogStore implements HubClientStore {
       VALUES(?,?,?,?,?,?,(SELECT coalesce(max(seq),0)+1 FROM hub_installs WHERE scope_id=?),?) ON CONFLICT(scope_id,hub_id,package_id,version)
       DO UPDATE SET state=excluded.state,revision=excluded.revision,record=excluded.record`).run(next.scopeId, next.hubId, next.packageId, next.version, next.state, next.revision, next.scopeId, this.seal(next));
   }
+  async installations(scopeId: string, hubId: string) {
+    const rows = this.db.prepare("SELECT package_id,version FROM hub_installs WHERE scope_id=? AND hub_id=? ORDER BY seq").all(scopeId, hubId);
+    return Promise.all(rows.map(async row => (await this.install(scopeId, hubId, String(row.package_id), String(row.version)))!));
+  }
+  async refreshResult(scopeId: string, hubId: string) {
+    const row = this.db.prepare("SELECT record FROM hub_client_receipts WHERE scope_id=? AND json_extract(record,'$.value.result.kind')='revocations' AND json_extract(record,'$.value.result.hubId')=? ORDER BY rowid DESC LIMIT 1").get(scopeId, hubId);
+    if (!row) return null;
+    const receipt = this.open(row.record) as HubReceipt;
+    if (receipt.scopeId !== scopeId) throw corrupt();
+    return hubRefreshResultSchema.parse(receipt.result);
+  }
+  async revocationCards(scopeId: string, after: number, limit: number) {
+    return this.db.prepare("SELECT rowid,record FROM hub_client_receipts WHERE scope_id=? AND rowid>? AND json_extract(record,'$.value.result.kind')='revocations' ORDER BY rowid LIMIT ?").all(scopeId, after, limit).map(row => {
+      const receipt = this.open(row.record) as HubReceipt;
+      if (receipt.scopeId !== scopeId) throw corrupt();
+      return { after: Number(row.rowid), result: hubRefreshResultSchema.parse(receipt.result) };
+    });
+  }
   private retainedInstalls() {
     return this.db.prepare('SELECT scope_id,hub_id,package_id,version FROM hub_installs ORDER BY scope_id,seq').all();
   }
@@ -109,8 +127,8 @@ class Store extends SqliteAgentCatalogStore implements HubClientStore {
     if (!row) return null;
     const value = this.open(row['record']) as HubReceipt;
     if (value.scopeId !== scopeId || value.commandId !== commandId || !/^[a-f0-9]{64}$/.test(value.digest)) throw corrupt();
-    const result = Array.isArray(value.result) ? value.result.map(row => hubInstallSchema.parse(row)) : hubSourceSchema.parse(value.result);
-    if (Array.isArray(result) ? result.some(row => row.scopeId !== scopeId) : result.scopeId !== scopeId) throw corrupt();
+    const result = Array.isArray(value.result) ? value.result.map(row => hubInstallSchema.parse(row)) : 'kind' in value.result ? hubRefreshResultSchema.parse(value.result) : hubSourceSchema.parse(value.result);
+    if (Array.isArray(result) ? result.some(row => row.scopeId !== scopeId) : 'scopeId' in result && result.scopeId !== scopeId) throw corrupt();
     return { ...value, result };
   }
   async finish(receipt: HubReceipt, event: AuditEvent) {
