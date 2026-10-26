@@ -55,10 +55,14 @@ export class HubModeratedApplication extends HubServiceBase {
         const key = profile.keys.find(k => k.keyId === keyId && k.state === 'active' && k.principalId === context.principal.id && k.principalKind === context.principal.kind);
         if (profile.status !== 'active' || !key) throw new HubServerError('HUB_PROFILE_REFUSED');
         if (context.principal.kind === 'person') this.account(tx, context);
+        const consent = this.membershipConsent(tx, profile);
+        if (now - consent.createdAtMs < this.service.policy.minAccountAgeMs) throw new HubServerError('HUB_ACCOUNT_REFUSED');
         const accountable = key.memberAccountId ? [key.memberAccountId] : profile.members.filter(m => m.role === 'owner').map(m => m.accountId);
         if (!accountable.length || !accountable.some(id => {
           const account = hubAccountSchema.parse(data.get('accounts', id));
-          return account.status === 'active' && now - account.createdAtMs >= this.service.policy.minAccountAgeMs;
+          const membership = consent.members.find(m => m.accountId === id);
+          return this.consented(tx, profile, id) && membership && now - membership.acceptedAtMs >= this.service.policy.minAccountAgeMs
+            && account.status === 'active' && now - account.createdAtMs >= this.service.policy.minAccountAgeMs;
         })) throw new HubServerError('HUB_ACCOUNT_REFUSED');
         found = true;
       }
@@ -126,7 +130,7 @@ export class HubModeratedApplication extends HubServiceBase {
     const profile = this.profile(tx, queue.profileId), publisherId = row.envelope.signatures.find(s => s.role === 'publisher')!.keyId;
     const binding = profile.keys.find(key => key.keyId === publisherId && key.state === 'active');
     if (queue.state !== 'approved' || profile.status !== 'active' || !binding || listing && queue.hidden) return false;
-    if (binding.memberAccountId && hubAccountSchema.parse(this.data(tx).get('accounts', binding.memberAccountId)).status !== 'active') return false;
+    if (binding.memberAccountId && (!this.consented(tx, profile, binding.memberAccountId) || hubAccountSchema.parse(this.data(tx).get('accounts', binding.memberAccountId)).status !== 'active')) return false;
     const revoked = await tx.revocations([{ kind: 'package-version', id: `${queue.packageId}@${queue.version}` },
       { kind: 'publisher', id: `@${profile.handle}` }, ...row.envelope.signatures.map(s => ({ kind: 'key' as const, id: s.keyId }))]);
     return revoked.length === 0;

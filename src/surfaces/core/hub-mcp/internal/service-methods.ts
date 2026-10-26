@@ -10,6 +10,9 @@ export async function executeHubService(app: HubModeratedApplication, context: H
     case 'account.maintain': return app.accounts.maintain(context, signal);
     case 'profile.create': return app.profiles.create(context, input, signal);
     case 'profile.members': return app.profiles.members(context, string('profileId'), object.members, signal);
+    case 'profile.invite': return app.profiles.invite(context, string('profileId'), object.member, signal);
+    case 'profile.invitations': return app.profiles.invitations(context, z.string().optional().parse(object.after), z.number().optional().parse(object.limit), signal);
+    case 'profile.invitation.respond': return app.profiles.respond(context, string('invitationId'), z.enum(['accept', 'decline']).parse(object.decision), signal);
     case 'profile.key.challenge': return app.profiles.keyChallenge(context, string('profileId'), object.key, signal);
     case 'profile.key.add': return app.profiles.addKey(context, string('profileId'), string('challengeId'), string('signature'), signal);
     case 'profile.key.recover': return app.profiles.requestRecovery(context, string('profileId'), string('challengeId'), string('lostKeyId'), string('signature'), signal);

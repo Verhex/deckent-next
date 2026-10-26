@@ -128,7 +128,8 @@ it('requires two-person review for AI publications and refuses AI administration
   await f.publish('1.0.0', { publisher: otherPublisher, kind: 'ai' }, { scopeId: 's', principal: { id: 'agent', kind: 'ai' } });
   expect((await f.app.moderation.queue(f.mod1.context))[0]).toMatchObject({ required: 2 });
   await expect(f.app.profiles.create({ ...f.owner.context, principal: { kind: 'ai', id: f.owner.accountId } }, { schemaVersion: 1, handle: 'fake', kind: 'person', displayName: 'Fake' })).rejects.toThrow(code('HUB_SERVER_DENIED'));
-  await f.app.profiles.members(f.owner.context, f.profile.id, [{ accountId: f.owner.accountId, role: 'owner' }, { accountId: f.mod1.accountId, role: 'publisher' }]);
+  const invitation = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'publisher' });
+  await f.app.profiles.respond(f.mod1.context, invitation.id, 'accept');
   await expect(f.review()).rejects.toThrow(code('HUB_REVIEW_REFUSED'));
   await expect(f.app.register(f.admin.context, f.key())).rejects.toThrow(code('HUB_SERVER_DENIED'));
 });
@@ -304,4 +305,133 @@ it('bounds recovery keys under the same profile key limit as ordinary key enroll
   const proof = otherPublisher.sign(hubKeyProofMessage(rootKey.keyId, f.profile.id, challenge.id, k)).toString('base64');
   await expect(f.app.profiles.requestRecovery(f.owner.context, f.profile.id, challenge.id, publisher.keyId, proof)).rejects.toThrow(code('HUB_PROFILE_REFUSED'));
   await expect(f.app.profiles.addKey(f.owner.context, f.profile.id, challenge.id, proof)).rejects.toThrow(code('HUB_PROFILE_REFUSED'));
+});
+
+
+it('requires invitee consent through the authenticated service API before signing membership (H8B)', async c => {
+  const f = await fixture(c);
+  const handler = createHubServiceHttpHandler(f.app, { endpoint: 'https://hub.example/', addressId: () => f.address, publicContext: f.owner.context });
+  const request = (token: string, operation: string, input: unknown) => handler.fetch(new Request('https://hub.example/api/service', {
+    method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: canonicalHubJson({ operation, input }) }));
+  const members = [...f.profile.members, { accountId: f.mod1.accountId, role: 'publisher' }];
+  expect((await request(f.owner.token, 'profile.members', { profileId: f.profile.id, members })).status).toBe(403);
+  const before = await f.app.publicProfile(f.owner.context, 'acme');
+  const invitation = await (await request(f.owner.token, 'profile.invite', { profileId: f.profile.id, member: members[1] })).json() as { id: string };
+  expect(await f.app.publicProfile(f.owner.context, 'acme')).toEqual(before);
+  expect((await request(f.mod2.token, 'profile.invitation.respond', { invitationId: invitation.id, decision: 'accept' })).status).toBe(403);
+  expect((await request(f.owner.token, 'profile.invitation.respond', { invitationId: invitation.id, decision: 'accept' })).status).toBe(403);
+  await expect(f.app.profiles.respond({ ...f.owner.context, principal: f.mod1.context.principal }, invitation.id, 'accept')).rejects.toThrow(code('HUB_SERVER_DENIED'));
+  expect(await (await request(f.mod2.token, 'profile.invitations', {})).json()).toEqual([]);
+  expect(await (await request(f.mod1.token, 'profile.invitations', {})).json()).toMatchObject([{ id: invitation.id, state: 'pending' }]);
+  const response = await request(f.mod1.token, 'profile.invitation.respond', { invitationId: invitation.id, decision: 'accept' });
+  expect(response.status).toBe(200);
+  const { profile } = await response.json() as { profile: typeof f.profile };
+  expect(profile.members).toEqual(members); expect(profile.sequence).toBe(before.sequence + 1);
+  const { signature, ...payload } = profile;
+  expect(verifyEd25519(hub.spki, signatureMessage('hub-profile:1', canonicalHubJson({ hubId: rootKey.keyId, ...payload })), Buffer.from(signature.value, 'base64'))).toBe(true);
+  await expect(f.app.profiles.respond(f.mod1.context, invitation.id, 'accept')).rejects.toThrow(code('HUB_PROFILE_REFUSED'));
+  await expect(f.app.profiles.members(f.owner.context, f.profile.id, [f.profile.members[0]!, { accountId: f.mod1.accountId, role: 'owner' }])).rejects.toThrow(code('HUB_PROFILE_REFUSED'));
+  const reopened = openHubStore(f.options); closers.push(reopened.close);
+  const app = new HubModeratedApplication({ ...f.ports, store: reopened.store }, f.deps);
+  expect(await app.profiles.invitations(f.mod1.context)).toMatchObject([{ id: invitation.id, state: 'accepted' }]);
+  expect((await app.publicProfile(f.owner.context, 'acme')).members).toEqual(members);
+  const audit = canonicalHubJson(await f.app.accounts.audit(f.admin.context));
+  expect(audit).toContain('profile-invite'); expect(audit).toContain('profile-invitation-accepted');
+});
+
+it('does not let pending invitations sabotage moderation or newly accepted old accounts bypass age gates (H8B)', async c => {
+  const f = await fixture(c); f.time(300);
+  const young = await f.login('young-owner');
+  await f.app.profiles.members(f.owner.context, f.profile.id, f.profile.members);
+  // Existing accounts are old enough, but their new memberships have their own age.
+  const invitation = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'owner' });
+  await f.publish(); expect(await f.review()).toMatchObject({ approved: false });
+  await f.app.profiles.respond(f.mod1.context, invitation.id, 'accept');
+  await f.addKey(otherPublisher, f.mod1.context.principal);
+  await expect(f.publish('1.0.1', { publisher: otherPublisher }, f.mod1.context)).rejects.toThrow(code('HUB_ACCOUNT_REFUSED'));
+  await f.app.profiles.members(f.mod1.context, f.profile.id, [{ accountId: f.mod1.accountId, role: 'owner' }]);
+  const aiSigner = seed('09'), aiContext = { scopeId: 's', principal: { kind: 'ai' as const, id: 'agent' } };
+  const k = f.key(aiSigner, aiContext.principal);
+  const challenge = await f.app.profiles.keyChallenge(f.mod1.context, f.profile.id, k);
+  await f.app.profiles.addKey(f.mod1.context, f.profile.id, challenge.id, aiSigner.sign(hubKeyProofMessage(rootKey.keyId, f.profile.id, challenge.id, k)).toString('base64'));
+  await expect(f.publish('1.0.2', { publisher: aiSigner, kind: 'ai' }, aiContext)).rejects.toThrow(code('HUB_ACCOUNT_REFUSED'));
+  const fresh = await f.app.profiles.create(young.context, { schemaVersion: 1, handle: 'young', kind: 'organisation', displayName: 'Young' });
+  const older = await f.app.profiles.invite(young.context, fresh.id, { accountId: f.mod2.accountId, role: 'owner' });
+  await f.app.profiles.respond(f.mod2.context, older.id, 'accept');
+  const consent = await f.opened.store.transaction(async tx => tx.service!.get('membership-consents', fresh.id));
+  expect(consent).toMatchObject({ createdAtMs: 300, members: [{ accountId: young.accountId, acceptedAtMs: 300 }, { accountId: f.mod2.accountId, acceptedAtMs: 300 }] });
+  const freshSigner = seed('0a'), freshKey = { ...f.key(freshSigner, f.mod2.context.principal), publisherId: '@young' };
+  const freshChallenge = await f.app.profiles.keyChallenge(young.context, fresh.id, freshKey);
+  await f.app.profiles.addKey(young.context, fresh.id, freshChallenge.id,
+    freshSigner.sign(hubKeyProofMessage(rootKey.keyId, fresh.id, freshChallenge.id, freshKey)).toString('base64'));
+  const b = f.make('1.0.0', { publisher: freshSigner, agent: false }), manifest = { ...b.manifest, packageId: '@young/invoice' }, envelope = { ...b.envelope, payloadDigest: sha256(canonicalHubJson(manifest)) };
+  const signature = { role: 'publisher' as const, signedAtMs: 300 };
+  envelope.signatures = [{ ...signature, keyId: freshSigner.keyId, algorithm: 'ed25519', value: freshSigner.sign(hubPackageSignatureMessage(manifest, envelope, signature)).toString('base64') }];
+  await expect(f.app.publish(f.mod2.context, manifest, envelope, b.files)).rejects.toThrow(code('HUB_ACCOUNT_REFUSED'));
+
+  f.time(400); await f.publish('1.0.1', { publisher: otherPublisher }, f.mod1.context);
+  await f.publish('1.0.2', { publisher: aiSigner, kind: 'ai' }, aiContext);
+  await f.app.publish(f.mod2.context, manifest, envelope, b.files);
+});
+
+it('makes decline and policy expiry terminal, audited decisions without adding a member (H8B)', async c => {
+  const f = await fixture(c, { challengeTtlMs: 20 });
+  const declined = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'owner' });
+  expect(await f.app.profiles.respond(f.mod1.context, declined.id, 'decline')).toMatchObject({ invitation: { state: 'declined' }, profile: null });
+  await expect(f.app.profiles.respond(f.mod1.context, declined.id, 'accept')).rejects.toThrow(code('HUB_PROFILE_REFUSED'));
+  const expired = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'owner' });
+  f.time(120);
+  expect(await f.app.profiles.respond(f.mod1.context, expired.id, 'accept')).toMatchObject({ invitation: { state: 'expired' }, profile: null });
+  await expect(f.app.profiles.respond(f.mod1.context, expired.id, 'accept')).rejects.toThrow(code('HUB_PROFILE_REFUSED'));
+  const maintained = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod2.accountId, role: 'owner' });
+  f.time(140); await f.app.accounts.maintain(f.admin.context);
+  expect(await f.app.profiles.invitations(f.mod2.context)).toMatchObject([{ id: maintained.id, state: 'expired' }]);
+  expect((await f.app.publicProfile(f.owner.context, 'acme')).members).toEqual(f.profile.members);
+  const audit = canonicalHubJson(await f.app.accounts.audit(f.admin.context));
+  expect(audit).toContain('profile-invitation-declined'); expect(audit).toContain('profile-invitation-expired');
+});
+
+it('bounds invitation writes and acceptance capacity and rolls cancellation back (H8B)', async c => {
+  const f = await fixture(c, { maxMembers: 2 });
+  const first = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'publisher' });
+  await expect(f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'publisher' })).rejects.toThrow(code('HUB_PROFILE_REFUSED'));
+  const second = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod2.accountId, role: 'publisher' });
+  const abort = new AbortController(); abort.abort();
+  await expect(f.app.profiles.respond(f.mod1.context, first.id, 'accept', abort.signal)).rejects.toThrow();
+  expect((await f.app.publicProfile(f.owner.context, 'acme')).members).toEqual(f.profile.members);
+  await f.app.profiles.respond(f.mod1.context, first.id, 'accept');
+  await expect(f.app.profiles.respond(f.mod2.context, second.id, 'accept')).rejects.toThrow(code('HUB_PROFILE_REFUSED'));
+  await f.app.profiles.members(f.owner.context, f.profile.id, f.profile.members);
+  const limited = new HubModeratedApplication(f.ports, { ...f.deps, policy: { ...f.deps.policy, maxChallenges: 1 } });
+  await expect(limited.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod3.accountId, role: 'publisher' })).rejects.toThrow(code('HUB_RATE_REFUSED'));
+  f.time(5100); await expect(limited.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod3.accountId, role: 'publisher' })).resolves.toMatchObject({ state: 'pending' });
+});
+
+it('rechecks inviter ownership and account moderation when an invitation is accepted (H8B)', async c => {
+  const f = await fixture(c); f.time(300);
+  const owner = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'owner' });
+  await f.app.profiles.respond(f.mod1.context, owner.id, 'accept');
+  const pending = await f.app.profiles.invite(f.mod1.context, f.profile.id, { accountId: f.mod2.accountId, role: 'publisher' });
+  await f.app.profiles.members(f.owner.context, f.profile.id, f.profile.members);
+  await expect(f.app.profiles.respond(f.mod2.context, pending.id, 'accept')).rejects.toThrow(code('HUB_PROFILE_REFUSED'));
+  const suspended = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod3.accountId, role: 'publisher' });
+  await f.act('suspend', f.mod3.accountId, { targetKind: 'account' }, moderator2, f.mod2.context);
+  await expect(f.app.profiles.respond(f.mod3.context, suspended.id, 'accept')).rejects.toThrow(code('HUB_SERVER_DENIED'));
+});
+
+it('recovers only creator consent from verified legacy profile audit without changing the Hub SQL schema (H8B)', async c => {
+  const f = await fixture(c, { maxMembers: 2 }); f.time(300);
+  await f.opened.store.transaction(async tx => {
+    tx.service!.remove('membership-consents', f.profile.id);
+    await f.app.saveProfile(tx, { ...f.profile, members: [...f.profile.members, { accountId: f.mod1.accountId, role: 'owner' }] });
+  });
+  await expect(f.app.profiles.invite(f.mod1.context, f.profile.id, { accountId: f.mod2.accountId, role: 'publisher' })).rejects.toThrow(code('HUB_SERVER_DENIED'));
+  const invitation = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'owner' });
+  await f.app.profiles.respond(f.mod1.context, invitation.id, 'accept');
+  expect((await f.app.publicProfile(f.owner.context, 'acme')).members).toHaveLength(2);
+  await f.opened.store.transaction(async tx => tx.service!.remove('membership-consents', f.profile.id));
+  const db = new DatabaseSync(join(f.root, 'hub.sqlite'));
+  expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(HUB_STORE_SCHEMA_VERSION);
+  db.prepare("UPDATE hub_service_audit SET record=json_set(record,'$.actor','forged') WHERE json_extract(record,'$.action')='profile-create'").run(); db.close();
+  await expect(f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod2.accountId, role: 'publisher' })).rejects.toThrow(code('HUB_STORE_UNSAFE'));
 });
