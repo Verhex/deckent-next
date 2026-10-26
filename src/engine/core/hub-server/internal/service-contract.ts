@@ -18,18 +18,20 @@ export type HubServicePolicy = z.infer<typeof hubServicePolicySchema>;
 export const hubAccountSchema = z.object({ schemaVersion: z.literal(1), id, createdAtMs: time,
   status: z.enum(['active', 'suspended', 'banned', 'deleted']), deleteAfterMs: time.nullable() }).strict();
 export const hubPersonalSchema = z.object({ accountId: id, providerId: id, subject: text, email: text, displayName: text }).strict();
-export const hubProfileSchema = z.object({ schemaVersion: z.literal(1), id, handle: z.string().max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+export const hubProfileFields = z.object({ schemaVersion: z.literal(1), id, handle: z.string().max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   kind: z.enum(['person', 'organisation']), displayName: text, verifiedDomains: z.array(z.string().max(253)),
   members: z.array(z.object({ accountId: id, role: z.enum(['owner', 'maintainer', 'publisher']) }).strict()),
   keys: z.array(z.object({ keyId: digest, publicKey: text, principalId: id, principalKind: z.enum(['person', 'ai', 'system']), memberAccountId: id.nullable(),
     addedAtMs: time, state: z.enum(['active', 'revoked']) }).strict()), status: z.enum(['active', 'suspended', 'banned']),
   sequence: positive, recoveryReview: z.boolean(), signature: z.object({ keyId: digest, value: text }).strict(),
 }).strict();
+// Unique accountIds: a duplicate entry must never smuggle a higher role past owner checks; stored duplicates fail closed on read.
+export const hubProfileSchema = hubProfileFields.refine(p => new Set(p.members.map(m => m.accountId)).size === p.members.length, { path: ['members'], message: 'duplicate member' });
 export type HubProfile = z.infer<typeof hubProfileSchema>;
 export const hubMembershipConsentSchema = z.object({ schemaVersion: z.literal(1), profileId: id, createdAtMs: time,
   members: z.array(z.object({ accountId: id, acceptedAtMs: time }).strict()) }).strict();
 export const hubInvitationSchema = z.object({ schemaVersion: z.literal(1), id, profileId: id, inviterId: id, accountId: id,
-  role: hubProfileSchema.shape.members.element.shape.role, createdAtMs: time, expiresAtMs: positive,
+  role: hubProfileFields.shape.members.element.shape.role, createdAtMs: time, expiresAtMs: positive,
   state: z.enum(['pending', 'accepted', 'declined', 'expired', 'cancelled']), resolvedAtMs: time.nullable() }).strict();
 export const hubQueueSchema = z.object({ schemaVersion: z.literal(1), id, profileId: id, packageId: text, version: text, digest,
   state: z.enum(['received', 'scanned', 'pending-review', 'approved', 'rejected', 'changes-requested']),

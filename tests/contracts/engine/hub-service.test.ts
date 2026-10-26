@@ -421,6 +421,16 @@ it('never drops an unconsented legacy member or leaves their key active when an 
   expect(profile!.keys.find(k => k.keyId === legacy.keyId)?.state).toBe('active');
 });
 
+it('refuses to invite or accept an account that is already listed and rejects duplicate member ids (H8D)', async c => {
+  const f = await fixture(c); f.time(300);
+  await f.opened.store.transaction(async tx => {
+    await f.app.saveProfile(tx, { ...f.profile, members: [...f.profile.members, { accountId: f.mod1.accountId, role: 'publisher' }], sequence: f.profile.sequence + 1 });
+  });
+  await expect(f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'owner' })).rejects.toThrow(code('HUB_PROFILE_REFUSED'));
+  const duplicate = { ...f.profile, members: [...f.profile.members, { accountId: f.owner.accountId, role: 'publisher' as const }] };
+  await expect(f.opened.store.transaction(async tx => f.app.saveProfile(tx, duplicate))).rejects.toThrow();
+});
+
 it('rechecks inviter ownership and account moderation when an invitation is accepted (H8B)', async c => {
   const f = await fixture(c); f.time(300);
   const owner = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'owner' });
@@ -440,9 +450,8 @@ it('recovers only creator consent from verified legacy profile audit without cha
     await f.app.saveProfile(tx, { ...f.profile, members: [...f.profile.members, { accountId: f.mod1.accountId, role: 'owner' }] });
   });
   await expect(f.app.profiles.invite(f.mod1.context, f.profile.id, { accountId: f.mod2.accountId, role: 'publisher' })).rejects.toThrow(code('HUB_SERVER_DENIED'));
-  // Acceptance never drops the unconsented legacy member; the owner removes them through members().
-  const first = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'owner' });
-  await expect(f.app.profiles.respond(f.mod1.context, first.id, 'accept')).rejects.toThrow(code('HUB_PROFILE_REFUSED'));
+  // Invites never duplicate or drop the unconsented legacy member; the owner removes them through members().
+  await expect(f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'owner' })).rejects.toThrow(code('HUB_PROFILE_REFUSED'));
   await f.app.profiles.members(f.owner.context, f.profile.id, f.profile.members);
   const invitation = await f.app.profiles.invite(f.owner.context, f.profile.id, { accountId: f.mod1.accountId, role: 'owner' });
   await f.app.profiles.respond(f.mod1.context, invitation.id, 'accept');

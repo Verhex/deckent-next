@@ -3,7 +3,7 @@ import { canonicalHubJson, identitySchema, HUB_LIMITS } from '#domain/index.js';
 import { ed25519KeyId, signatureMessage } from '#platform/index.js';
 import { requireHubSignature } from '#engine/core/hub/index.js';
 import { HubServerError, hubRegisteredKeySchema, type HubServerContext, type HubServerTransaction } from './ports.js';
-import { hubInvitationSchema, hubChallengeSchema, hubRecoverySchema, hubProfileSchema, hubRosterSchema, type HubProfile } from './service-contract.js';
+import { hubInvitationSchema, hubChallengeSchema, hubRecoverySchema, hubProfileFields, hubRosterSchema, type HubProfile } from './service-contract.js';
 import type { HubServiceBase } from './service-base.js';
 
 export const hubKeyProofMessage = (hubId: string, profileId: string, challenge: string, key: unknown) =>
@@ -19,7 +19,7 @@ export class HubProfiles {
     if (profile.status !== 'active' || !this.app.consented(tx, profile, context.principal.id) || !profile.members.some(member => member.accountId === context.principal.id && member.role === 'owner')) throw new HubServerError('HUB_SERVER_DENIED');
   }
   async create(context: HubServerContext, input: unknown, signal?: AbortSignal) {
-    const app = this.app, command = hubProfileSchema.omit({ id: true, members: true, keys: true, status: true, sequence: true,
+    const app = this.app, command = hubProfileFields.omit({ id: true, members: true, keys: true, status: true, sequence: true,
       verifiedDomains: true, recoveryReview: true, signature: true }).strict().parse(input);
     return app.change(context, 'register', 'profile', command, async tx => {
       const policy = app.service.policy;
@@ -34,7 +34,7 @@ export class HubProfiles {
     }, signal);
   }
   async members(context: HubServerContext, profileId: string, input: unknown, signal?: AbortSignal) {
-    const app = this.app, members = hubProfileSchema.shape.members.max(app.service.policy.maxMembers).parse(input);
+    const app = this.app, members = hubProfileFields.shape.members.max(app.service.policy.maxMembers).parse(input);
     return app.change(context, 'register', profileId, { members }, async tx => {
       const profile = app.profile(tx, profileId); this.owner(tx, profile, context);
       if (!members.some(m => m.role === 'owner') || new Set(members.map(m => m.accountId)).size !== members.length) throw new HubServerError('HUB_PROFILE_REFUSED');
@@ -66,10 +66,10 @@ export class HubProfiles {
     }, signal);
   }
   async invite(context: HubServerContext, profileId: string, input: unknown, signal?: AbortSignal) {
-    const app = this.app, member = hubProfileSchema.shape.members.element.parse(input);
+    const app = this.app, member = hubProfileFields.shape.members.element.parse(input);
     return app.change(context, 'register', profileId, { operation: 'profile.invite', member }, async tx => {
       const profile = app.profile(tx, profileId); this.owner(tx, profile, context);
-      if (profile.members.filter(m => app.consented(tx, profile, m.accountId)).length >= app.service.policy.maxMembers || app.consented(tx, profile, member.accountId)) throw new HubServerError('HUB_PROFILE_REFUSED');
+      if (profile.members.filter(m => app.consented(tx, profile, m.accountId)).length >= app.service.policy.maxMembers || profile.members.some(m => m.accountId === member.accountId)) throw new HubServerError('HUB_PROFILE_REFUSED');
       const account = z.object({ status: z.literal('active') }).passthrough().safeParse(app.data(tx).get('accounts', member.accountId));
       if (!account.success) throw new HubServerError('HUB_ACCOUNT_REFUSED');
       app.limit(tx, context.principal.id, 'profile-membership', app.service.policy.maxChallenges, app.service.policy.challengeTtlMs);
@@ -115,7 +115,7 @@ export class HubProfiles {
         const current = app.profile(tx, invitation.profileId), consent = app.membershipConsent(tx, current);
         const inviter = data.get('accounts', invitation.inviterId) as { status?: unknown } | null;
         if (current.status !== 'active' || inviter?.status !== 'active' || !app.consented(tx, current, invitation.inviterId)
-          || !current.members.some(m => m.accountId === invitation.inviterId && m.role === 'owner') || app.consented(tx, current, invitation.accountId)
+          || !current.members.some(m => m.accountId === invitation.inviterId && m.role === 'owner') || current.members.some(m => m.accountId === invitation.accountId)
           || current.members.length >= app.service.policy.maxMembers) throw new HubServerError('HUB_PROFILE_REFUSED');
         // Never drop anyone here: removal (with key revocation) belongs to members() alone.
         const members = [...current.members, { accountId: invitation.accountId, role: invitation.role }];
