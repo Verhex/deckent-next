@@ -3,7 +3,8 @@ import type { ErrorDefinitions } from '../definition.js';
 /** Error codes owned by the `cli` family (i18n `locales/<locale>/cli.json`); texts live in that family. */
 export const cliErrors: ErrorDefinitions = Object.freeze({
   // L-KIT scope rule: a state change without `--scope` off a terminal; names the valid scopes, exit 2 (usage), nothing written.
-  CLI_SCOPE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_SCOPE_REQUIRED', p, l) }) },
+  // An empty list (a folder with no scope yet, `init --yes`) asks for a new name instead of listing "-".
+  CLI_SCOPE_REQUIRED: { category: 'usage', render: (p, l) => ({ message: p['scopes'] === '' ? t('error.CLI_SCOPE_REQUIRED.none', p, l) : t('error.CLI_SCOPE_REQUIRED', p, l) }) },
   // L-KIT short ids (git-like prefixes over the `/runs` query).
   CLI_ID_AMBIGUOUS: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_ID_AMBIGUOUS', p, l) }) },
   CLI_ID_TOO_SHORT: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_ID_TOO_SHORT', p, l) }) },

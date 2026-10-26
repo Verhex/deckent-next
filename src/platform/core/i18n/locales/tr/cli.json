@@ -486,6 +486,7 @@
   "cli.human.acceptance.independent": "işçi beyanı değil, sistem doğruladı",
   "cli.human.acceptance.checkUnknown": "neyi doğruladığı bu sürümde bilinmiyor",
   "error.CLI_SCOPE_REQUIRED": "{command} bir kapsam ister: --scope <kimlik> ekleyin. Geçerli kapsamlar: {scopes}",
+  "error.CLI_SCOPE_REQUIRED.none": "{command} bir kapsam ister: --scope <kimlik> ekleyin. Burada henüz kapsam yok; yeni bir kurulum için kısa bir ad seçin, örneğin --scope projem.",
   "error.CLI_ID_AMBIGUOUS": "'{prefix}' {count} kimlikle eşleşiyor: {candidates} (+{more} daha). Daha çok karakter yazın.",
   "error.CLI_ID_UNKNOWN": "'{prefix}' ile başlayan kimlik yok.",
   "error.CLI_ID_TOO_SHORT": "'{prefix}' çok kısa: kimliğin en az {min} karakterini ya da tamamını yazın.",

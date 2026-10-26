@@ -29,7 +29,7 @@ export async function resolveCommandScope(input: Readonly<{ command: string; loc
   if (input.interactive && input.pick && scopes.length === 0) throw ErrorRegistry.createError('TERMINAL_SCOPE_REQUIRED');
   if (!input.interactive || !input.pick || scopes.length === 0) {
     throw ErrorRegistry.createError('CLI_SCOPE_REQUIRED', { params: { command: terminalSafeText(input.command),
-      scopes: scopes.map(scope => terminalSafeText(scope)).join(', ') || '-' } });
+      scopes: scopes.map(scope => terminalSafeText(scope)).join(', ') } });
   }
   const { locale } = input;
   const chosen = await input.pick({ title: t('cli.human.scope.pickTitle', { command: input.command }, locale),

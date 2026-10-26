@@ -155,6 +155,9 @@ describe('I-S4 bare deckent init', () => {
       expect(await failure(setupInitCommand(['init', '--yes', '--json'], run.context))).toBe('CLI_SCOPE_REQUIRED');
       expect(run.observed()).toBe(0); expect(run.applied).toEqual([]); expect(run.out()).toBe('');
     }
+    // A folder with no scope yet asks for a new name instead of "valid scopes: -".
+    const message = await setupInitCommand(['init', '--yes'], harness({}).context).then(() => '', (error: Error) => error.message);
+    expect(message).toContain('--scope my-project'); expect(message).not.toContain('Valid scopes');
     // A configured scope is never taken silently for --yes.
     const configured = harness({ observation: () => ({ ...base, folder: { ...base.folder, configuredScope: 'live' } }) });
     expect(await failure(setupInitCommand(['init', '--yes'], configured.context))).toBe('CLI_SCOPE_REQUIRED');
