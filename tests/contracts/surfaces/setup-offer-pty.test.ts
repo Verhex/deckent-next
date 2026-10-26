@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -83,10 +83,12 @@ type Run = { status?: number | string; output: string; timeout?: string };
 
 async function fixture(repository = false) {
   const base = await mkdtemp(join(tmpdir(), 'deckent-i-s5-pty-')); roots.push(base);
-  const root = join(base, 'erp-demo'), home = join(base, 'home');
-  for (const dir of [root, home]) await mkdir(dir, { recursive: true });
+  const root = join(base, 'erp-demo'), home = join(base, 'home'), bin = join(base, 'bin');
+  for (const dir of [root, home, bin]) await mkdir(dir, { recursive: true });
+  // Only this node, never its install directory: coding CLIs installed globally there (claude, codex) are host state that adds the work-kind screen.
+  await symlink(process.execPath, join(bin, 'node'));
   // A person's terminal: no AI-agent or CI marker (the runner may itself run inside one), a real terminal type, no Deckent variables.
-  const env: NodeJS.ProcessEnv = { PATH: `${resolve(process.execPath, '..')}:/usr/local/bin:/usr/bin:/bin`, HOME: home, XDG_CONFIG_HOME: join(home, '.config'),
+  const env: NodeJS.ProcessEnv = { PATH: `${bin}:/usr/local/bin:/usr/bin:/bin`, HOME: home, XDG_CONFIG_HOME: join(home, '.config'),
     LANG: 'en_US.UTF-8', TERM: 'xterm-256color', NO_COLOR: '1' };
   // U7 recommends the nearest Git top: keep positive setup cases inside their own repository, never an ambient parent (such as /tmp).
   if (repository) await execute('git', ['init', '--quiet', root], { env, timeout: 10_000 });
@@ -149,8 +151,9 @@ describe.skipIf(process.platform !== 'linux')('I-S5 bare `deckent` in a folder w
     const run = await f.pty('yes-setup-terminal', [[CARD, 'y'], ['Continue in English?', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '1\r'],
       ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['Permissions: applied', '\u001b'],
       // U4: a first launch opens the sequential onboarding before the Workline; Esc ("Later") defers each screen. U4E G2: the window closed before
-      // the profile was saved, so the pending permission screen comes first (permissions, model, coding CLI, first commit, instructions).
-      ['Step 1/', '\u001b'], ['Step 2/', '\u001b'], ['Step 3/', '\u001b'], ['Step 4/', '\u001b'], ['Step 5/', '\u001b'], ['Ready!', '\u001b'], ['Deckent workline', '/exit\r']]);
+      // the profile was saved, so the pending permission screen comes first (permissions, model, first commit, instructions, then Ready!); with no
+      // coding CLI on PATH the folder is not a coding folder, so no work-kind screen.
+      ['Step 1/', '\u001b'], ['Step 2/', '\u001b'], ['Step 3/', '\u001b'], ['Step 4/', '\u001b'], ['Ready!', '\u001b'], ['Deckent workline', '/exit\r']]);
     const pid = /Runtime service started in the background \(pid (\d+)/u.exec(run.output)?.[1];
     if (pid) services.push({ pid: Number(pid), root: f.home });
     expect(run.timeout, run.output.slice(-3000)).toBeUndefined();
