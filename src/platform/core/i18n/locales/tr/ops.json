@@ -534,5 +534,9 @@
   "error.WORKER_IMAGE_PROVIDERS_READ_ONLY": "İşçi imajı sağlayıcıları onay kayıtlarından türetilir. Bir iş türü seçip onay kartını doğrulayın.",
   "error.WORKER_IMAGE_BUILDING": "Bu daemon için başka bir işçi imajı oluşturma işlemi sürüyor. Tamamlanmasını bekleyin veya kesilen işi inceleyin.",
   "error.WORKER_IMAGE_DOCKER_WAITING": "İşçi imajı edinme işlemi erişilebilir Docker daemon bekliyor.",
-  "error.WORKER_IMAGE_BUILD_INTERRUPTED": "İşçi imajı edinme işlemi kesildi. Yeni denemeyi onaylamadan önce saklanan kanıtı inceleyin."
+  "error.WORKER_IMAGE_BUILD_INTERRUPTED": "İşçi imajı edinme işlemi kesildi. Yeni denemeyi onaylamadan önce saklanan kanıtı inceleyin.",
+  "models.spending.period.monthly": "Aylık bütçe (kurulumun yerel takvim ayı). Sonraki sıfırlama: {date} ({zone}).",
+  "models.spending.period.legacy": "Önceki sınır bu sıfırlamaya kadar korunur; harcama geçmişi ve tutulan tutarlar saklanır.",
+  "models.spending.period.pending": "Önceki sınır: aylık geçiş kayıt yükseltmesini bekliyor; kullanım silinmedi.",
+  "models.spending.period.calendar": "Bütçe dönemi: {months} takvim ayı (kurulumun yerel saati). Sonraki sıfırlama: {date} ({zone})."
 }

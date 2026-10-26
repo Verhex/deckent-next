@@ -57,7 +57,7 @@ const cases: readonly (readonly [string, unknown, readonly ConfigIssue[]])[] = [
   ['section: unknown key', { terminal: { nope: 1 } }, one('terminal', 'unrecognized_keys')],
   ['section: bad enum in optional sub-object', { terminal: { shell: { schemaVersion: 1, realm: 'x' } } }, one('terminal.shell.realm', 'invalid_enum_value')],
   ['section: refine message on array element', { terminal: { fetch: { schemaVersion: 1, allowedHosts: ['127.0.0.1'] } } }, one('terminal.fetch.allowedHosts.0', 'custom')],
-  ['section: missing required fields', { provider_spending: {} }, [{ path: 'provider_spending.schemaVersion', reason: 'invalid_literal' }, { path: 'provider_spending.budgets', reason: 'invalid_type' }]],
+  ['section: missing required fields', { provider_spending: {} }, [{ path: 'provider_spending.schemaVersion', reason: 'invalid_union' }, { path: 'provider_spending.budgets', reason: 'invalid_type' }]],
 ];
 
 describe('config error shape (zod 4 issue-code guard)', () => {

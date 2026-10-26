@@ -17,8 +17,9 @@ it('v70 migration preserves exact existing v1 skill bytes; new reader reads both
     expect(oldReader(db, 64)).toBe(70);
     const before = db.prepare("SELECT record FROM skill_definitions WHERE skill_id='local'").get()!['record'];
     db.exec('BEGIN IMMEDIATE'); migrateLedger(db, 'allow'); db.exec('COMMIT');
-    expect(HUB_CLIENT_LEDGER_VERSION).toBe(71); expect(CURRENT_LEDGER_VERSION).toBe(71);
-    expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(71);
+    // Later migrations (v72 budget period, alpha.56 BP) stack on top; v71 is this slice's own step.
+    expect(HUB_CLIENT_LEDGER_VERSION).toBe(71); expect(CURRENT_LEDGER_VERSION).toBeGreaterThanOrEqual(71);
+    expect(db.prepare('PRAGMA user_version').get()!.user_version).toBe(CURRENT_LEDGER_VERSION);
     expect(db.prepare("SELECT record FROM skill_definitions WHERE skill_id='local'").get()!['record']).toBe(before);
     expect(() => oldReader(db, 64)).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   } finally { db.close(); }

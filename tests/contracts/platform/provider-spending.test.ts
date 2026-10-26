@@ -45,3 +45,12 @@ it('rejects duplicate scopes and secret references before resolution', async () 
   await expect(loadConfig(f.project, { env: f.env, secretResolver: async () => { resolutions++; return 'scope'; } })).rejects.toThrow();
   expect(resolutions).toBe(0);
 });
+
+it('accepts an explicit versioned Core month and refuses a different period or a child period change', async () => {
+  const f = await fixture(), monthly = { schemaVersion: 2, budgets: [budget('scope', { schemaVersion: 2, period: 'calendar-month-local' })] };
+  await writeFile(f.globalPath, JSON.stringify({ provider_spending: monthly }));
+  expect((await loadConfig(f.project, { env: f.env })).provider_spending).toEqual(monthly);
+  expect(() => validateProviderSpendingLayers(monthly, spending(budget()))).toThrow();
+  expect(() => validateProviderSpendingLayers(undefined, { ...monthly, budgets: [budget('scope', { schemaVersion: 2, period: 'rolling-30-days' })] })).toThrow();
+  expect(() => validateProviderSpendingLayers(undefined, spending(budget('scope', { schemaVersion: 2 })))).toThrow();
+});

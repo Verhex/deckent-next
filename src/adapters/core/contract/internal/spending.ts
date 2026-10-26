@@ -2,9 +2,9 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { parseProviderSpendBudget, providerSpendBudgetSchema } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, registerConfigSection } from '#platform/index.js';
-import { ProviderSpendError } from '#engine/index.js';
+import { ProviderSpendError, providerSpendPeriodRegistry } from '#engine/index.js';
 
-export const providerSpendingSchema = z.object({ schemaVersion: z.literal(1),
+export const providerSpendingSchema = z.object({ schemaVersion: z.union([z.literal(1), z.literal(2)]),
   budgets: z.array(providerSpendBudgetSchema).readonly() }).strict();
 
 function invalid(): never {
@@ -16,7 +16,7 @@ function validate(input: unknown) {
   const scopes = new Set<string>();
   for (const raw of parsed.data.budgets) {
     let budget;
-    try { budget = parseProviderSpendBudget(raw); } catch { return invalid(); }
+    try { budget = parseProviderSpendBudget(raw); if (budget.period) providerSpendPeriodRegistry.get(budget.period); } catch { return invalid(); }
     if (scopes.has(budget.scopeId)) invalid();
     scopes.add(budget.scopeId);
   }

@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
-import { createProviderSpendAccount, reserveProviderSpend, settleProviderSpend, providerSpendQuoteDigest, operatorTariffLocalSettlement,
+import { createProviderSpendAccount, initializeProviderSpendPeriod, reserveProviderSpend, settleProviderSpend, providerSpendQuoteDigest, operatorTariffLocalSettlement,
   providerSpendReservationDigest, parseProviderSpendMeasurement, ProviderSpendError, certifyProviderSpendNoCharge,
   type ModelInvocationAdmission, type ModelInvocationRecord, type ProviderSpendMeasurement } from '#engine/index.js';
 import { readSpendCheckpoint, writeSpendCheckpoint, decodeSpendReservation, spendOutcomeDigest } from './spend-checkpoint.js';
@@ -16,10 +16,10 @@ export function reserveInvocationSpend(db: DatabaseSync, admission: ModelInvocat
   }
   if (!admission.spending) { if (readSpendCheckpoint(db, admission.command.scopeId)?.account.frozen) throw new ProviderSpendError('PROVIDER_SPEND_FROZEN'); return; }
   const { budget, quote } = admission.spending;
-  const current = readSpendCheckpoint(db, admission.command.scopeId), account = current?.account ?? createProviderSpendAccount(budget);
+  const current = readSpendCheckpoint(db, admission.command.scopeId), account = current?.account ?? initializeProviderSpendPeriod(createProviderSpendAccount(budget), admission.claimedAtMs, budget.schemaVersion === 1);
   const next = reserveProviderSpend(account, budget, { schemaVersion: 1, scopeId: admission.command.scopeId,
     invocationId: admission.invocationId, budgetId: budget.budgetId, budgetRevision: budget.revision, currency: budget.currency,
-    quoteDigest: providerSpendQuoteDigest(quote), quote });
+    quoteDigest: providerSpendQuoteDigest(quote), quote }, admission.claimedAtMs);
   writeSpendCheckpoint(db, current, next.account, true);
   db.prepare('INSERT INTO model_invocation_spend_reservations(scope_id,invocation_id,record,digest) VALUES(?,?,?,?)')
     .run(budget.scopeId, admission.invocationId, JSON.stringify(next.reservation), providerSpendReservationDigest(next.reservation));
@@ -79,7 +79,7 @@ export function settleInvocationSpend(db: DatabaseSync, next: ModelInvocationRec
     ? { kind: 'rejected-no-charge', evidenceDigest }
     : outcome.state === 'not-sent'
     ? { kind: 'not-sent', evidenceDigest }
-    : { kind: 'hold', reason: outcome.state === 'unknown' || outcome.state === 'rejected' ? 'unknown' : 'missing-usage', evidenceDigest });
+    : { kind: 'hold', reason: outcome.state === 'unknown' || outcome.state === 'rejected' ? 'unknown' : 'missing-usage', evidenceDigest }, outcome.observedAtMs);
   writeSpendCheckpoint(db, checkpoint, result.account, false);
   const updated = db.prepare(`UPDATE model_invocation_spend_reservations SET record=?,digest=?
     WHERE scope_id=? AND invocation_id=? AND digest=?`).run(JSON.stringify(result.reservation), providerSpendReservationDigest(result.reservation),

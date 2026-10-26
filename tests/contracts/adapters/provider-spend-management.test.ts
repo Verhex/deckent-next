@@ -56,10 +56,10 @@ function checkpoint(path: string) {
   } finally { db.close(); }
 }
 const principal = { ...actor, scopeIds: ['scope'] };
-function application(path: string, allowed = true) {
+function application(path: string, allowed = true, nowMs = 50) {
   return new ProviderSpendManagementApplication({ async verify() { return principal; } },
     { async authorize() { if (!allowed) throw new Error('POLICY_DENIED'); return { revision: 'policy', ruleId: 'spend-management' }; } },
-    async () => openSqliteProviderSpendManagementStore(path, options), () => 50);
+    async () => openSqliteProviderSpendManagementStore(path, options), () => nowMs);
 }
 async function heldFixture(overrun = false) {
   const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid');
@@ -176,7 +176,7 @@ it('records a console correction over the budget, freezes new spending and still
   try { expect(await verifyProviderSpendIntegrity(reader, 'scope', 2)).toMatchObject({ settledExactMinorUnits: '25.1' }); } finally { reader.close(); }
 });
 
-it('governs one DeepSeek upper-bound reduction, retains original inspection evidence, and audits the corrected fold once', async () => {
+async function upperBoundFixture() {
   const base = await fixture(), store = await openSqliteModelInvocationStore(base.path, options, 'forbid'), f = admission(base, 'upper-bound');
   const tariff = lookupOpenAiCompatibleTariff('https://api.deepseek.com/chat/completions', 'deepseek-flash')!;
   f.quote.pricing = { ...f.quote.pricing, id: 'openai-compatible-published-tariff', definition: tariff as never, digest: providerSpendEvidenceDigest(tariff) };
@@ -187,6 +187,10 @@ it('governs one DeepSeek upper-bound reduction, retains original inspection evid
     source: { id: 'openai-compatible-usage-tariff', version: 1, modelId: 'deepseek-flash', tariffDigest: f.quote.pricing.digest, tier: 'upper-bound', cacheSplit: 'none',
       dimensions: [{ field: 'input', tokens: 100000, usdPerMillionTokens: '0.3' }] } };
   await store.recordResponse(claim, response, 5, measurement); store.close();
+  return { base, f };
+}
+it('governs one DeepSeek upper-bound reduction, retains original inspection evidence, and audits the corrected fold once', async () => {
+  const { base, f } = await upperBoundFixture();
   const original = checkpoint(base.path);
   expect(original.account).toMatchObject({ reservedMinorUnits: 0, settledExactMinorUnits: '3' });
   const f2 = { ...base, invocationId: f.input.invocationId }, command = { ...reconcile(f2, 'settle'), exactMinorUnits: '1.5' };
@@ -211,4 +215,21 @@ it('governs one DeepSeek upper-bound reduction, retains original inspection evid
   } finally { reader.close(); }
   const db = new DatabaseSync(base.path);
   try { expect(() => db.exec('DELETE FROM provider_spend_management')).toThrow('PROVIDER_SPEND_APPEND_ONLY'); } finally { db.close(); }
+});
+
+it('retains the archived month and carries holds without granting new capacity for an older upper-bound refund', async () => {
+  const { base, f } = await upperBoundFixture(), february = Date.parse('1970-02-01T00:00:00Z');
+  const store = await openSqliteModelInvocationStore(base.path, options, 'forbid'), next = admission(base, 'new-month');
+  await store.claim({ ...next.input, claimedAtMs: february }); store.close();
+  const before = checkpoint(base.path);
+  expect(before.account).toMatchObject({ settledExactMinorUnits: '3', reservedMinorUnits: 6, period: { settledBaselineExactMinorUnits: '3' } });
+  const command = { ...reconcile({ ...base, invocationId: f.input.invocationId }, 'settle'), exactMinorUnits: '1.5' };
+  const result = await application(base.path, true, february + 100).execute(command);
+  expect(result.receipt.after).toMatchObject({ settledExactMinorUnits: '1.5', reservedMinorUnits: 6, period: { settledBaselineExactMinorUnits: '1.5' } });
+  const reader = await openSqliteProviderSpendIntegrityReader(base.path, { busyTimeoutMs: 20 });
+  try { expect(await verifyProviderSpendIntegrity(reader, 'scope', 2)).toMatchObject({ settledExactMinorUnits: '1.5', reservedMinorUnits: 6 }); }
+  finally { reader.close(); }
+  const db = new DatabaseSync(base.path, { readOnly: true });
+  try { expect(db.prepare('SELECT COUNT(*) AS n FROM provider_spend_period_history').get()!.n).toBe(1); }
+  finally { db.close(); }
 });

@@ -23,3 +23,5 @@ export { migrateRunCreateApprovals } from './internal/migration-v52.js';
 export { migrateQuotaWaits } from './internal/migration-v54.js';
 export { migrateAuditCheckpoints } from './internal/migration-v56.js';
 export { migrateEffectProducerIndex, revertEffectProducerIndex } from './internal/migration-v63.js';
+
+export { migrateProviderSpendPeriods } from './internal/migration-v72.js';

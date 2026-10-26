@@ -107,7 +107,8 @@ export class HubServerApplication {
     if ((await store.publishesSince(publisherId, now - 60 * 60 * 1000)) >= HUB_LIMITS.publishesPerHour) throw new HubError('HUB_LIMIT_EXCEEDED');
     await requireHubDependencies(store, this.ports.hubId, manifest);
   }
-  async review(context: HubServerContext, packageId: string, version: string, input: unknown) {
+  async review(context: HubServerContext, packageId: string, version: string, input: unknown, signal?: AbortSignal) {
+    signal?.throwIfAborted();
     const signature = hubPackageSignatureSchema.parse(input);
     return this.ports.store.transaction(async store => {
       const row = await this.requireVersion(packageId, version, store);
@@ -124,9 +125,12 @@ export class HubServerApplication {
       const envelope = { ...row.envelope, signatures: [...row.envelope.signatures, signature] };
       if (envelope.signatures.filter(s => s.role === 'reviewer').length > HUB_LIMITS.reviewerSignaturesMax) throw new HubError('HUB_LIMIT_EXCEEDED');
       const { signer } = await this.signer(now);
+      signal?.throwIfAborted();
       await store.replaceEnvelope(packageId, version, row.revision, envelope);
       const receipt = await store.appendReceipt({ action: 'review', context, resource: `${packageId}@${version}`, digest: sha256(canonicalHubJson(envelope)), atMs: now }, signer);
+      signal?.throwIfAborted();
       await this.authorize(context, 'review', packageId, sha256(canonicalHubJson(row.envelope)));
+      signal?.throwIfAborted();
       return { envelope, receipt };
     });
   }
@@ -146,6 +150,15 @@ export class HubServerApplication {
     await this.authorize(context, 'read', 'skills', '');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > HUB_LIMITS.searchPageMax || after.length > HUB_LIMITS.packageMaxBytes) throw new HubError('HUB_LIMIT_EXCEEDED');
     return this.ports.store.skills(after, limit);
+  }
+  async search(context: HubServerContext, after = '', limit = HUB_LIMITS.searchPageMax) {
+    await this.authorize(context, 'read', 'packages', '');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > HUB_LIMITS.searchPageMax || after.length > HUB_LIMITS.packageMaxBytes) throw new HubError('HUB_LIMIT_EXCEEDED');
+    const refs = await this.ports.store.packages(after, limit);
+    return Promise.all(refs.map(async ref => {
+      const row = await this.inspect(context, ref.packageId, ref.version);
+      return { key: ref.key, manifest: row.manifest, envelope: row.envelope, revocationState: 'unknown' as const };
+    }));
   }
   async readFile(context: HubServerContext, packageId: string, version: string, path: string) {
     const row = await this.inspect(context, packageId, version), file = row.files.find(f => f.path === path);

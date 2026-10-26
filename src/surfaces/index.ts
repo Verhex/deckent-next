@@ -23,3 +23,5 @@ export { askCliCard, cliCardGate, type CliCardIo } from '#surfaces/core/cli-huma
 export function loadSetupSurface(): Promise<typeof import('#surfaces/core/setup/index.js')> { return import('#surfaces/core/setup/index.js'); }
 export const doctorVerdict = lazyFunction(() => import('#surfaces/core/cli-observe/index.js'), 'doctorVerdict');
 export type { KernelCommandContext } from '#surfaces/core/cli-observe/index.js';
+export type { HubHttpAuth, HubMcpOptions } from '#surfaces/core/hub-mcp/index.js';
+export function loadHubHttpSurface(): Promise<typeof import('#surfaces/core/hub-mcp/index.js')> { return import('#surfaces/core/hub-mcp/index.js'); }
