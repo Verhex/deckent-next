@@ -116,8 +116,9 @@ export class HubProfiles {
         const inviter = data.get('accounts', invitation.inviterId) as { status?: unknown } | null;
         if (current.status !== 'active' || inviter?.status !== 'active' || !app.consented(tx, current, invitation.inviterId)
           || !current.members.some(m => m.accountId === invitation.inviterId && m.role === 'owner') || app.consented(tx, current, invitation.accountId)
-          || current.members.filter(m => app.consented(tx, current, m.accountId)).length >= app.service.policy.maxMembers) throw new HubServerError('HUB_PROFILE_REFUSED');
-        const members = [...current.members.filter(m => app.consented(tx, current, m.accountId)), { accountId: invitation.accountId, role: invitation.role }];
+          || current.members.length >= app.service.policy.maxMembers) throw new HubServerError('HUB_PROFILE_REFUSED');
+        // Never drop anyone here: removal (with key revocation) belongs to members() alone.
+        const members = [...current.members, { accountId: invitation.accountId, role: invitation.role }];
         data.put('membership-consents', current.id, { ...consent, members: [...consent.members, { accountId: invitation.accountId, acceptedAtMs: now }] });
         profile = await app.saveProfile(tx, { ...current, members, sequence: current.sequence + 1 });
       }
