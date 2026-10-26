@@ -33,7 +33,7 @@ function worker(context: SetupStageContext): SetupDecision {
   if (!hasWorkerKind(context)) return { state: 'skipped', reason: reason('noWorkKind') };
   const facts = (context.facts as Facts | undefined)?.worker, acquisition = facts?.acquisition;
   const ready = acquisition?.images.find(image => image.provider === facts?.provider);
-  if (ready) return { state: 'done', reason: reason('workerBuilt', { image: short(ready.imageId), version: ready.imageVersion }) };
+  if (ready && !(facts?.configured === ready.imageId && facts.image !== 'present')) return { state: 'done', reason: reason('workerBuilt', { image: short(ready.imageId), version: ready.imageVersion }) };
   if (acquisition && acquisition.phase !== 'ready') return blocked('workerAcquisition', { phase: acquisition.phase, step: acquisition.step ?? '', code: acquisition.code ?? '' });
   // A present installation fallback is not consent or an image for a newly selected provider.
   if (facts?.providerPending) {

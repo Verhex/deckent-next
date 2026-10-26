@@ -4271,6 +4271,7 @@
       "dependencies": [
         "src/domain/core/run",
         "src/engine/core/setup",
+        "src/engine/core/worker-setup",
         "src/engine/core/run-proposal",
         "src/platform/core/i18n",
         "src/platform/core/errors",
