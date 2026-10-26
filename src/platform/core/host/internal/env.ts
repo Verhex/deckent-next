@@ -26,8 +26,10 @@ export function adoptProductionReact(env: NodeJS.ProcessEnv = process.env): void
   if (callerNodeEnv) return;
   callerNodeEnv = { value: env.NODE_ENV }; env.NODE_ENV ||= 'production';
 }
-/** The environment for a process Deckent starts from its own: the caller's NODE_ENV comes back (unset stays unset), never the production
- * mode chosen for this process's React — a worker's `npm ci` must not silently skip devDependencies. Other values pass unchanged. */
+/** The environment a process Deckent starts INHERITS from its own: the caller's NODE_ENV comes back (unset stays unset), never the production
+ * mode chosen for this process's React — a worker's `npm ci` must not silently skip devDependencies. Other values pass unchanged. Only for an
+ * inherited environment (process.env or a pass-through of it): an explicit child environment (ProcessCommand.env, an explicit runner profile)
+ * runs as given and never goes through here, because a value set on purpose cannot be told apart from the inherited one. */
 export function callerEnvironment<T extends Environment>(env: T): T {
   if (!callerNodeEnv || env.NODE_ENV !== process.env.NODE_ENV || env.NODE_ENV === callerNodeEnv.value) return env;
   const own: Record<string, string | undefined> = { ...env };
