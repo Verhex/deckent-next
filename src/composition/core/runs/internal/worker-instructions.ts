@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, openHostProjectInstructionReader, openLocalIntegrityAuthority, openSqliteAuditStore,
+import { attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, openHostProjectInstructionReader,
   openWorkerInstructionTrust, selectWorkTarget, workerInstructionFile, workerInstructionSelection, workTargetRefFileSource } from '#adapters/index.js';
-import { assertAuthorityWitness, AuditApplication, AuthorityDecisionRecords, decideWorkerInstructionTrust, workerInstructionBinding, workerInstructionBindingChange,
+import { assertAuthorityWitness, AuthorityDecisionRecords, decideWorkerInstructionTrust, workerInstructionBinding, workerInstructionBindingChange,
   workerInstructionStatus, type AuthorityWitness, type WorkerInstructionBinding, type WorkerInstructionTrustResult } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 /** The one answer to "which file, in which folder, at which ref" for admission, `coding instructions status` and the trust path (same place = same trust key). */
 function workerInstructionPlace(projectRoot: string, config: ResolvedConfig) {
   const selected = config.execution?.workerInstructions?.source, source = selected ?? 'worker-md', target = selectWorkTarget(config.execution);
@@ -53,9 +53,9 @@ export async function changeConfiguredWorkerInstructionTrust(projectRoot: string
   };
   const view = await verify(), result = { schemaVersion: 1 as const, action: input.action, target: shown.target, path: shown.path, digest: shown.digest };
   if ((view.status === 'ready') === (input.action === 'trust')) return { ...result, trusted: view.status === 'ready', changed: false, decisionEventId: null };
-  const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid'), clock = new SystemTrustedClock(), expected = { path: shown.path, dev: shown.fileDev, ino: shown.fileIno };
-  try {
-    const records = new AuthorityDecisionRecords(new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)));
+  const clock = new SystemTrustedClock(), expected = { path: shown.path, dev: shown.fileDev, ino: shown.fileIno };
+  return withScopeAudit(context, async audit => {
+    const records = new AuthorityDecisionRecords(audit);
     await verify(); // the decision below is sealed synchronously after this read: no other place is ever decided on
     const decisionEventId = await decideWorkerInstructionTrust({ principal: context.principal, scopeId: input.scopeId, action: input.action, commandId: randomUUID(), binding: shown },
       { policy: context.document, record: (subject, atMs) => records.record(subject, atMs), now: () => clock.sample().wallMs,
@@ -64,5 +64,5 @@ export async function changeConfiguredWorkerInstructionTrust(projectRoot: string
           catch (error) { throw error instanceof Error && error.message === 'changed' ? changed('place') : error; }
         } });
     return { ...result, trusted: input.action === 'trust', changed: true, decisionEventId };
-  } finally { store.close(); }
+  });
 }

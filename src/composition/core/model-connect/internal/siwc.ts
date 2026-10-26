@@ -15,22 +15,17 @@ export async function executeConfiguredSiwc(root: string, request: SubscriptionC
   const context = await loadConfiguredScopeContext(root, request.scopeId, options, request.operation === 'prepare' || request.operation === 'usage' ? 'read' : 'write');
   if (subscriptionActor(context.principal).principalClass !== 'person') throw ErrorRegistry.createError('HEADLESS_PERSON_REQUIRED');
   if (request.operation === 'prepare' || request.operation === 'usage') {
-    const section = context.config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined, apiTargets = [];
-    for (const value of section?.profiles ?? []) {
-      const profile = modelInvocationProfileSchema.parse(value);
-      if (profile.scopeId !== request.scopeId || modelInvocationBillingAxis(profile) !== 'metered' || profile.protocol.family !== OPENAI_CHAT_COMPLETIONS_FAMILY) continue;
-      try { await new ModelInvocationPolicyAuthorization({ load: async () => context.document }).authorize('inspect', profile, context.principal); }
-      catch { continue; }
-      apiTargets.push({ id: profile.id, reference: profile.reference });
+    const section = context.config['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined, apiTargets = [], references = [];
+    for (const value of section?.profiles ?? []) { // An unauthorized row is skipped without disclosure.
+      const profile = modelInvocationProfileSchema.parse(value), metered = modelInvocationBillingAxis(profile) === 'metered' && profile.protocol.family === OPENAI_CHAT_COMPLETIONS_FAMILY;
+      const usage = request.operation === 'usage' && profile.adapter.id === SIWC_INFERENCE.adapter.id && profile.adapter.definition['connectionId'] === request.connectionId;
+      if (profile.scopeId !== request.scopeId || !metered && !usage) continue;
+      try { await new ModelInvocationPolicyAuthorization({ load: async () => context.document }).authorize('inspect', profile, context.principal); } catch { continue; }
+      if (metered) apiTargets.push({ id: profile.id, reference: profile.reference });
+      if (usage) references.push(profile.reference);
     }
     if (request.operation === 'usage') {
       if (!request.connectionId) throw ErrorRegistry.createError('OAUTH_CONNECTION_INVALID');
-      const references = [];
-      for (const value of section?.profiles ?? []) {
-        const profile = modelInvocationProfileSchema.parse(value);
-        if (profile.scopeId !== request.scopeId || profile.adapter.id !== SIWC_INFERENCE.adapter.id || profile.adapter.definition['connectionId'] !== request.connectionId) continue;
-        try { await new ModelInvocationPolicyAuthorization({ load: async () => context.document }).authorize('inspect', profile, context.principal); references.push(profile.reference); } catch { /* No disclosure. */ }
-      }
       if (!references.length) throw ErrorRegistry.createError('OAUTH_CONNECTION_DENIED');
       const now = Date.now();
       return { usage: { ...await readSqliteSubscriptionUsageSummary(await context.path(), { scopeId: request.scopeId, connectionId: request.connectionId,

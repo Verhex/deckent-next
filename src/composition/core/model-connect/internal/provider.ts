@@ -1,9 +1,9 @@
-import { attestLocalInteractiveTerminal, installationSecretRoot, localPrincipalChannel, localPrincipalPeer, openConfiguredSecretStore, openLocalIntegrityAuthority, openSqliteAuditStore } from '#adapters/index.js';
-import { assertAuthorityWitness, AuditApplication, type AuthorityWitness } from '#engine/index.js';
+import { attestLocalInteractiveTerminal, installationSecretRoot, localPrincipalChannel, localPrincipalPeer, openConfiguredSecretStore } from '#adapters/index.js';
+import { assertAuthorityWitness, type AuthorityWitness } from '#engine/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { defaultSecretStore } from '#composition/core/installation/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
+import { loadConfiguredScopeContext, withScopeAudit } from '#composition/core/scoped-request/index.js';
 import { changeProjectSecretGrant } from '#composition/core/secrets/index.js';
 import { terminalSecretGrantOffer } from '#composition/core/terminal-chat/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
@@ -23,10 +23,7 @@ export async function prepareProviderSecret(projectRoot: string, scopeId: string
   try {
     await assertAuthorityWitness('secretSet', localPrincipalChannel() ?? (localPrincipalPeer() ? 'mcp' : undefined), authority);
     const selected = await defaultSecretStore(projectRoot, scopeId, options, async event => {
-      const context = await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write');
-      const store = await openSqliteAuditStore(await context.path(), context.config.storage.sqlite, 'forbid');
-      try { new AuditApplication(store, await openLocalIntegrityAuthority(context.layout, context.config.approvals.keyFile, true)).record(event); }
-      finally { store.close(); }
+      await withScopeAudit(await loadConfiguredScopeContext(projectRoot, scopeId, options, 'write'), audit => { audit.record(event); });
     });
     if (selected.status === 'not-set') return { state: 'refused', backend: null, code: selected.code ?? 'SECRET_STORE_UNAVAILABLE', ...(selected.path ? { path: selected.path } : {}) };
     const config = await loadComposedConfig(projectRoot, { ...options, force: true, heal: false, secretResolver: async () => undefined });

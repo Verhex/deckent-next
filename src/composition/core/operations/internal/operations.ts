@@ -68,11 +68,10 @@ export async function compensateConfiguredOperation(root: string, input: EffectC
   return submitConfiguredOperation(root, 'compensate', input, options, submit);
 }
 export async function inspectConfiguredOperation(root: string, query: { readonly scopeId: string; readonly commandId: string }, options: ConfigLoadOptions = {}) {
-  return withEffects(root, query.scopeId, options, 'read', async application => {
-    const record = await application.inspect(query.scopeId, query.commandId);
-    return Object.freeze({ schemaVersion: 1 as const, record });
-  });
+  return withEffects(root, query.scopeId, options, 'read', inspectRecord(query));
 }
+const inspectRecord = (query: { readonly scopeId: string; readonly commandId: string }) => async (application: EffectApplication) =>
+  Object.freeze({ schemaVersion: 1 as const, record: await application.inspect(query.scopeId, query.commandId) });
 /** Runtime service entries (C12 G4): the socket peer is the principal and the core never blocks — a required approval is the pending
  * outcome, resubmitted with the same command after a decision (no wait over the socket). Input is revalidated here before any I/O. */
 export async function submitPeerOperation(root: string, action: 'execute' | 'compensate', input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions = {}) {
@@ -82,10 +81,7 @@ export async function submitPeerOperation(root: string, action: 'execute' | 'com
 export async function inspectPeerOperation(root: string, input: unknown, peer: LocalPeerIdentity, options: ConfigLoadOptions = {}) {
   let query;
   try { query = runtimeOperationQuerySchema.parse(input); } catch (error) { throw queryFailure(error); }
-  return withEffects(root, query.scopeId, options, 'read', async application => {
-    const record = await application.inspect(query.scopeId, query.commandId);
-    return Object.freeze({ schemaVersion: 1 as const, record });
-  }, peer);
+  return withEffects(root, query.scopeId, options, 'read', inspectRecord(query), peer);
 }
 /** The catalog operations a surface can reach on this installation (the unified catalog restricted to configured target kinds; Core code
  * operations have no configurable target). Inspection data for tool hints only: it grants nothing, and each call resolves again. */
