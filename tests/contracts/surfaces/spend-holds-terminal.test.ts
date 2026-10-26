@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { openSqliteModelActivationStore, openSqliteModelInvocationStore, openSqliteProviderSpendAccountReader,
   openSqliteProviderSpendManagementStore, openSqliteProviderSpendIntegrityReader, upgradeExistingProductLedger } from '#adapters/index.js';
 import { encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, parseProviderSpendAccountQuery } from '#domain/index.js';
@@ -86,6 +86,8 @@ async function confirmView(f: Awaited<ReturnType<typeof fixture>>, locale: 'en' 
 }
 
 it.each(['en', 'tr'] as const)('shows exact settled vs held totals and releases only after a governed selection (%s)', async locale => {
+  // alpha.56 BP: the window reports the current period's use; read in the fixture's own (millisecond-timestamp) month so the exact charge counts.
+  vi.useFakeTimers({ now: 10, toFake: ['Date'] }); onTestFinished(() => { vi.useRealTimers(); });
   const f = await fixture(), before = await f.snapshot(), start = await spendRecoveryView(f.call(locale));
   expect(text(start)).toContain(locale === 'tr' ? '10,2451 USD' : '10.2451 USD');
   expect(text(start)).toContain(locale === 'tr' ? '8,50 USD' : '8.50 USD');

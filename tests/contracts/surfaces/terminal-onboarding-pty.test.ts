@@ -55,7 +55,8 @@ it.skipIf(process.platform !== 'linux').each(['tr', 'en'] as const)('U4-2 PTY %s
   // A fresh non-Git folder installed without a person (no saved profile, as after `init --yes`): U4E G2 puts the pending profile/permission
   // screen first, before the model step (Esc = later, nothing written), then model, project instructions (no DECKENT.md yet), then Ready.
   const instructions = locale === 'tr' ? 'Proje yönergeleri' : 'Project instructions', second = locale === 'tr' ? 'Adım 2/' : 'Step 2/';
-  const steps = [[permission, '\u001b'], [second, '\u001b'], [instructions, '\u001b'], [ready, '\u001b'], [hint, '/setup\r'], [permission, '\u001b'],
+  // Waits name the step counter: the Workline's deferred note also names the screen titles.
+  const steps = [[step, '\u001b'], [second, '\u001b'], [instructions, '\u001b'], [ready, '\u001b'], [hint, '/setup\r'], [step, '\u001b'],
     [second, '\u001b'], [instructions, '\u001b'], [ready, '\u001b'], [hint, '/exit\r']];
   const result = await execute('python3', ['-c', DRIVER, JSON.stringify([process.execPath, cli]), JSON.stringify(steps), root], { env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
   const run = JSON.parse(result.stdout) as { code: number; output: string };

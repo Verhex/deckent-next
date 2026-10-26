@@ -65,7 +65,8 @@ async function fixture(locale: Locale, settings: { fullAccess?: boolean; path?: 
     model: { nativeId: 'fake', protocols: [{ family: 'openai-chat-completions', version: 'v1', capabilities: [{ id: 'tool-calls', version: 1, state: 'supported' }] }] } } } as never);
   vi.spyOn(modelInvocation, 'measurePeerConfiguredModel').mockResolvedValue(null as never);
   let invocation = 0;
-  vi.spyOn(modelInvocation, 'invokePeerConfiguredModel').mockImplementation(async () => {
+  // U9C: the agent turn calls the feature entry (SIWC limit continuation); the fixture answers there.
+  vi.spyOn(modelInvocation, 'invokePeerConfiguredFeatureModel').mockImplementation(async () => {
     invocation++;
     const tool = invocation % 2 === 1;
     return { receipt: { outcome: { state: 'responded' } }, response: { native: { choices: [{ finish_reason: tool ? 'tool_calls' : 'stop', message: {

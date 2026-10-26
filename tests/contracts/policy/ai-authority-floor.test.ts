@@ -18,6 +18,9 @@ const FLOORED: readonly (readonly [string, string, string, string])[] = [
   // Owner 2026-10-19 (I-POL v13): host changes outside the sandbox stay a person's at a terminal.
   ['execution environment install (Docker group is root-equivalent)', 'execution-environment', 'docker', 'install'],
   ['installation repair (doctor fix of the installation itself)', 'installation', 'installation-directory-private', 'repair'],
+  // alpha.56 U10B: removing the installation or purging its data is a person's act at their own terminal.
+  ['installation uninstall', 'installation', 'installation', 'uninstall'],
+  ['installation purge', 'installation', 'installation', 'purge'],
   // Owner Q-SPEND (b), 2026-10-26: held-spend reconciliation stays a person's even under an older grant.
   ['provider spend reconciliation (settle, release, write-off)', 'provider-spend-account', 'ordinary-target', 'reconcile'],
   ['secret write', 'secret', 'OPENAI_API_KEY', 'set'],
