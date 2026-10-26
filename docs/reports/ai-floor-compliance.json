@@ -28,7 +28,7 @@
     "src/domain/core/policy/internal/delegations.ts": "c87943bb1eaf47eaff4d443f10474b6cb8e75bda196554f78fdc480ff7d19320",
     "src/domain/core/policy/internal/describe.ts": "0dbf15bf77d743ea6f800024c4af607a15623904198126201adda53c953f98df",
     "src/domain/core/policy/internal/evaluate.ts": "61b1172eabcab5da8a7a0935bc2d0bf523d5327a4c95e96b4a70ec7b191714f2",
-    "src/domain/core/policy/internal/first-run-template.ts": "07e170166e1b0107fccb3ff6e998deb6514a234c1142be5cd1de29600b4bf072",
+    "src/domain/core/policy/internal/first-run-template.ts": "06c7c6804930561ef4b682343903a97403ef5a2ce3c5eeed9c08c12f6d07ff77",
     "src/domain/core/policy/internal/mcp-capabilities.ts": "beaa2cc1d8e557cb258154e153549f381cbfd4fdd5bc2d5b3904604e6d0def11",
     "src/domain/core/policy/internal/mcp-grant.ts": "8fe3b4b7b8ce9a7b121070ef1eee2f5128652c52b28b94c99c51043041b5212a",
     "src/domain/core/policy/internal/mode.ts": "b1f9479911852c8b3842c6b2135156534e16a8e2016e3c7120c2b4f627f4c444",

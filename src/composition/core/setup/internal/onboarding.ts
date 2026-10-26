@@ -15,7 +15,7 @@ import { startConfiguredRunIntent, transitionConfiguredRunIntent } from '#compos
 import { snapshotConfiguredConfig } from '#composition/core/config/index.js';
 import { previewOnboardingConsent } from './consent-preview.js';
 import type { configuredSetup } from './wiring.js';
-import { observeOnboardingPermissions, applyOnboardingPermissions } from './permissions.js';
+import { observeSetupPermissions, applySetupPermissions } from './permissions.js';
 import { addNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { applyConfiguredFirstCommit } from './first-commit.js';
 /** Trusted host binding. Canonical launch-folder and authenticated principal are derived here, never accepted as authority from UI answers. */
@@ -74,7 +74,7 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       ready: { provider: typeof values['work:kind'] === 'string' ? values['work:kind'] : null, imageId: selectedImage, fallbackBefore: config.execution?.docker?.imageId ?? null, fallbackAfter: stages.find(row => row.id === 'execution:worker-settings')?.operation ? selectedImage : config.execution?.docker?.imageId ?? selectedImage },
       admittedProviders: (observed.observation.families?.['work'] as { providers?: readonly string[] } | undefined)?.providers ?? [],
       hosts: coding?.hosts ?? [], budget: { needed: binding?.billing === 'metered' && (currentUsd === 0 || currentUsd === null), presetUsd: SCOPE_BUDGET_CHOICES.defaultPresetUsd,
-        presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: await observeOnboardingPermissions(root, scopeId, options), pending };
+        presetsUsd: SCOPE_BUDGET_CHOICES.presetsUsd, currentUsd, ...(budgetReason ? { reason: budgetReason } : {}) }, permissions: await observeSetupPermissions(root, scopeId, options), pending };
   };
   return { observe, assertPerson,
     async previewFirstCommit(message: string, include: readonly string[] = []) {
@@ -84,7 +84,8 @@ export async function configuredOnboarding(host: object, setup: Pick<ReturnType<
       await assertPerson(); return applyConfiguredFirstCommit(root, directory, scopeId, input, options, signal);
     },
     async firstCommitRecovery() { await assertPerson(); return observeFirstCommitRecovery(directory, options.env ?? process.env); },
-    async permissions(digest: string) { await assertPerson(); await applyOnboardingPermissions(root, scopeId, digest, options); },
+    async previewPermissions(profile?: Readonly<{ id: string; version: number }>) { await assertPerson(); return observeSetupPermissions(root, scopeId, options, profile); },
+    async permissions(digest: string, profile?: Readonly<{ id: string; version: number }>) { await assertPerson(); await applySetupPermissions(root, scopeId, digest, options, undefined, profile); },
     async previewProfile(stage: SetupStage) {
       await assertPerson(); const input = stage.operation?.input ?? {};
       const result = await addNativeCodingProfile(root, { provider: input['provider'], kind: input['kind'], image: input['image'], apply: false }, options);

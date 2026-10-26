@@ -88,5 +88,9 @@
   "setup.coding.firstCommit.flag.secret-content": "possible secret content",
   "setup.coding.firstCommit.flag.size": "file size exceeds scan limit",
   "setup.coding.firstCommit.flag.nested-repository": "nested repository; cannot include",
-  "setup.coding.firstCommit.recoveryUnavailable": "First-commit recovery evidence cannot be read safely. Inspect the repository manually; no commit or reset is applied."
+  "setup.coding.firstCommit.recoveryUnavailable": "First-commit recovery evidence cannot be read safely. Inspect the repository manually; no commit or reset is applied.",
+  "onboarding.permissions.chooseProfile": "Choose a profile to preview its starting permissions. Nothing is written until the next confirmation.",
+  "onboarding.permissions.profileMissing": "Profile {profile} will be saved and start in {mode} for {principal} in scope {scope}. Protected settings, secrets and destructive actions keep their approval rules. Confirm to complete the pending installation permissions.",
+  "onboarding.permissions.preserved": "Your existing mode choice ({mode}) is preserved for {principal} in scope {scope}.",
+  "onboarding.permissions.profileWithoutDefaults": "Profile {profile} has no permission defaults. Confirm saves this profile and preserves the existing mode ({mode}) for {principal} in scope {scope}."
 }

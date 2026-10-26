@@ -20,6 +20,7 @@ export const activeStage = (plan: SetupPlan, later: ReadonlySet<string>) =>
 export function stageChoices(stage: SetupStage | null, observation: SetupObservation, locale: Locale, stageRegistry: SetupStageRegistry = new SetupStageRegistry()): readonly Choice[] {
   const later: Choice = { id: 'later', label: t('setup.window.later', {}, locale), action: 'later' };
   if (!stage) return [{ id: 'close', label: t('setup.window.close', {}, locale), action: 'close' }];
+  if (stage.id === 'permissions:start-mode' && stage.state === 'ready') return [{ id: 'apply', label: t('setup.permissions.confirm', {}, locale), action: 'apply' }, later];
   if (stage.state === 'ready') return [{ id: 'apply', label: (registry.readOnly.includes(stage.operation?.id ?? '') ? t('setup.window.run', {}, locale) : t('setup.window.apply', {}, locale)), action: 'apply' }, later];
   // A model is connected by `models connect` itself (its own connection and model picker), so the window offers to start it.
   if (stage.id === 'core:model') return [{ id: 'connect', label: t('setup.window.connect', {}, locale), action: 'apply' }, later];

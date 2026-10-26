@@ -23,6 +23,8 @@ export const FIRST_RUN_EDIT_SHELL_TOOL_NAMES = Object.freeze(['edit_file', 'writ
 export const FIRST_RUN_SCRATCH_WRITE_OPERATION_ID = 'workspace.scratch.write';
 export const FIRST_RUN_WRITE_OPERATION_ID = 'workspace.file.write';
 export const FIRST_RUN_SHELL_OPERATION_ID = 'host.shell.run';
+/** v17: catalog identity only; the descriptor stays local to the coding onboarding adapter. */
+export const FIRST_RUN_FIRST_COMMIT_OPERATION_ID = 'coding.first-commit';
 /** v13 (owner A48-D3a, INIT D2): the execution environments the installing person may install — the execution-environment registry seed
  * (`execution-environments.json`, one entry today), which I-D2's adapter registry pins by test. A new entry changes the template's install rule,
  * so it comes with a template bump, never with a wider (`all`) grant. */
@@ -35,7 +37,7 @@ export const FIRST_RUN_RECOVERY_RULES: readonly Readonly<{ id: string; version: 
 export const FIRST_RUN_TOOL_NAMES: FirstRunToolNames = Object.freeze({ readToolNames: FIRST_RUN_READ_TOOL_NAMES, scratchToolNames: FIRST_RUN_SCRATCH_TOOL_NAMES,
   scratchWriteOperationId: FIRST_RUN_SCRATCH_WRITE_OPERATION_ID, editShellToolNames: FIRST_RUN_EDIT_SHELL_TOOL_NAMES, writeOperationId: FIRST_RUN_WRITE_OPERATION_ID,
   shellOperationId: FIRST_RUN_SHELL_OPERATION_ID, proposeMcpToolName: FIRST_RUN_PROPOSE_MCP_TOOL_NAME, mcpCallOperationId: FIRST_RUN_MCP_CALL_OPERATION_ID,
-  policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, recoveryRules: FIRST_RUN_RECOVERY_RULES });
+  policyAdministerOperationId: FIRST_RUN_POLICY_ADMINISTER_OPERATION_ID, executionEnvironmentIds: FIRST_RUN_EXECUTION_ENVIRONMENT_IDS, recoveryRules: FIRST_RUN_RECOVERY_RULES, firstCommitOperationId: FIRST_RUN_FIRST_COMMIT_OPERATION_ID });
 export interface PolicyTemplateSource { load(): Promise<unknown> }
 /** Doctor's read-soft recognition: the application service the domain decision (`matchFirstRunPolicyTemplate`) is
  * invoked through (composition-purity), never called from composition directly. `source.load()` is the raw
@@ -120,7 +122,7 @@ export interface PreparePolicyTemplateInput {
   readonly firstSessionTargets?: readonly PolicyTemplatePublishTarget[];
 }
 export type FirstRunToolNames = Pick<FirstRunPolicyTemplateInput, 'readToolNames' | 'scratchToolNames' | 'scratchWriteOperationId' | 'editShellToolNames' | 'writeOperationId'
-  | 'shellOperationId' | 'proposeMcpToolName' | 'mcpCallOperationId' | 'policyAdministerOperationId' | 'executionEnvironmentIds' | 'recoveryRules'>;
+  | 'shellOperationId' | 'proposeMcpToolName' | 'mcpCallOperationId' | 'policyAdministerOperationId' | 'executionEnvironmentIds' | 'recoveryRules' | 'firstCommitOperationId'>;
 /**
  * Pure preparation (SCR-B, owner 2026-09-28 option B): no I/O, deterministic in `(scopeId, principal)`, so
  * `init policy --preview` and a later `init policy --apply` for the same scope always agree on exactly what
@@ -271,8 +273,8 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
   const person = named === null ? null : named.issuer.success && named.subject.success ? { issuer: named.issuer.data, subject: named.subject.data } : undefined;
   const principal = person ?? { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const template = { scopeId, principal, ...input.toolNames, ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
-  const names = { person: principal, proposeMcpToolName: input.toolNames.proposeMcpToolName, mcpCallOperationId: input.toolNames.mcpCallOperationId,
-    policyAdministerOperationId: input.toolNames.policyAdministerOperationId, executionEnvironmentIds: input.toolNames.executionEnvironmentIds,
+  const names = { person: principal, scopeId, proposeMcpToolName: input.toolNames.proposeMcpToolName, mcpCallOperationId: input.toolNames.mcpCallOperationId,
+    policyAdministerOperationId: input.toolNames.policyAdministerOperationId, ...(input.toolNames.firstCommitOperationId === undefined ? {} : { firstCommitOperationId: input.toolNames.firstCommitOperationId }), executionEnvironmentIds: input.toolNames.executionEnvironmentIds,
     ...(input.toolNames.recoveryRules === undefined ? {} : { recoveryRules: input.toolNames.recoveryRules }), ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
   const result = (status: PolicyTemplateUpgradeResult['status'], extra: Partial<PolicyTemplateUpgradeResult> = {}): PolicyTemplateUpgradeResult => Object.freeze({ schemaVersion: 1,
     status, reason: null, template: Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, to: FIRST_RUN_POLICY_TEMPLATE_VERSION }), scopeId, principal, person: person ?? null, basis: null,
