@@ -197,8 +197,12 @@ The alpha.56 items below describe candidate code and owner decisions; they do no
 - **Sign in with ChatGPT is candidate code, with worker activation held.** Alpha.56 adds person sign-in, consent and
   connection custody. The Codex app-server runs inside the isolated worker; the host app-server route was rejected.
   Worker activation stays on HOLD until real-binary N1 proof (`SIWC_APP_SERVER_AUTH_UNAVAILABLE`, reason `activation-hold`);
-  missing isolation is a typed refusal, never a host/token-file fallback. *Workaround:* use an already supported connection;
-  do not treat successful sign-in as proof that a Codex worker is available.
+  missing isolation is a typed refusal, never a host/token-file fallback. While held, no Run is assigned this route and a
+  Codex worker keeps its existing connection; a Run frozen on it closes `launch-refused` before any workspace or container.
+  OpenAI's documentation marks the Codex app-server command and its WebSocket transport as experimental; Deckent's boundary
+  proof for the pinned binary and transport is not vendor production support or a compliance approval of this combination,
+  and an unsupported combination stops with a typed refusal before any authenticated work. *Workaround:* use an already
+  supported connection; do not treat successful sign-in as proof that a Codex worker is available.
 
 - **No automatic fallback from a subscription to an API model.** Deckent never switches to a paid API by itself when a subscription
   window is used up. Since alpha.55 a worker Run parked on a subscription quota waits at most 5 hours

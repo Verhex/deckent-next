@@ -146,13 +146,6 @@
     "observedOn": "2026-10-26",
     "activation": "hold",
     "appServer": {
-      "executable": "codex",
-      "args": [
-        "app-server"
-      ],
-      "source": "https://learn.chatgpt.com/docs/developer-commands#codex-app-server",
-      "observedOn": "2026-10-26",
-      "support": "experimental",
       "control": [
         "--listen",
         "ws://127.0.0.1:{ctlPort}",

@@ -2,12 +2,18 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { dockerOutputFilesSchema } from './output-files.js';
 import { dockerReadOnlyMountsSchema } from './mounts.js';
-import { environmentRequirementsSchema, executionProfileDefinitionSchema, type ExecutionProfileDefinition } from '#domain/index.js';
+import { environmentRequirementsSchema, executionProfileDefinitionSchema, workspaceHiddenPathsSchema, type ExecutionProfileDefinition } from '#domain/index.js';
 import { DOCKER_EXECUTION_SETTINGS } from '#platform/index.js';
 import { nativeSubscriptionSchema } from '#adapters/core/native-connection/index.js';
+import { nativeCliAppServer } from '#adapters/core/native-cli-registry/index.js';
+
+const person = z.object({ issuer: z.string().min(1).max(256), subject: z.string().min(1).max(256) }).strict().readonly();
+/** U9-7 (v1): the worker's model traffic goes through the person's own Sign in with ChatGPT connection via the private host relay, never through a
+ * credential in the worker. Nonsecret only: the connection, the person whose plan it is and the frozen checkout shaping of the embedded app-server. */
+export const siwcWorkerProfileSchema = z.object({ schemaVersion: z.literal(1), connectionId: z.string().uuid(), owner: person, hiddenPaths: workspaceHiddenPathsSchema }).strict().readonly();
 
 const dockerTaskProfileParametersSchema = DOCKER_EXECUTION_SETTINGS.omit({ executable: true }).extend({
-  nativeSubscription: nativeSubscriptionSchema.optional(), billingAxis: z.literal('local').optional(),
+  nativeSubscription: nativeSubscriptionSchema.optional(), billingAxis: z.literal('local').optional(), siwcWorker: siwcWorkerProfileSchema.optional(),
   outputFiles: dockerOutputFilesSchema.optional(),
   readOnlyMounts: dockerReadOnlyMountsSchema.optional(),
   /** PRE-7: declared environment requirements (registry data), checked by Deckent before the worker starts. */
@@ -36,11 +42,15 @@ export function resolveDockerTaskProfile(input: ExecutionProfileDefinition) {
   const parsed = dockerTaskProfileParametersSchema.safeParse(profile.data.parameters);
   if (!parsed.success) throw new DockerTaskProfileError();
   // `billingAxis: 'local'` declares no provider connection (spending class only); a subscription binding opens one, so both are refused.
-  const { argv, nativeSubscription, readOnlyMounts, billingAxis, environment, ...options } = parsed.data;
+  const { argv, nativeSubscription, readOnlyMounts, billingAxis, environment, siwcWorker, ...options } = parsed.data;
   if ((billingAxis && nativeSubscription) || (nativeSubscription?.promptDelivery && nativeSubscription.promptDelivery.argvSha256
     !== createHash('sha256').update(JSON.stringify(argv)).digest('hex'))) throw new DockerTaskProfileError();
+  // A relay worker runs the pinned model through the embedded app-server of the one CLI that declares it, with the compiled prompt; its own
+  // checkout shaping replaces the CLI's (the app-server does not take the exec instruction flags).
+  if (siwcWorker && (nativeSubscription?.schemaVersion !== 2 || !nativeSubscription.model || !nativeSubscription.promptDelivery || !nativeSubscription.preflight || nativeSubscription.checkout
+    || nativeSubscription.provider !== nativeCliAppServer().id)) throw new DockerTaskProfileError();
   // Project-relative binds stay profile data; trusted composition resolves them to host paths (resolveDockerReadOnlyMounts).
-  return Object.freeze({ argv, nativeSubscription, readOnlyMounts, environment, options: Object.freeze(options) });
+  return Object.freeze({ argv, nativeSubscription, siwcWorker, readOnlyMounts, environment, options: Object.freeze(options) });
 }
 /** Effect reach of a frozen profile for automatic re-runs (delivery re-attempt, R3 stall retry): a profile this adapter resolves runs with
  * `--network none` and reaches only its workspace and the gateway's model tunnel; anything else is unknown and never re-run. */
@@ -53,5 +63,5 @@ export function dockerTaskSilenceDeadline(profile: ExecutionProfileDefinition): 
 }
 /** C2: a frozen profile's pinned checkout shaping (instruction-surface paths its worker checkout leaves out); null when it has none. */
 export function dockerTaskHiddenPaths(profile: ExecutionProfileDefinition): readonly string[] | null {
-  try { return resolveDockerTaskProfile(profile).nativeSubscription?.checkout?.hiddenPaths ?? null; } catch { return null; }
+  try { const resolved = resolveDockerTaskProfile(profile); return resolved.siwcWorker?.hiddenPaths ?? resolved.nativeSubscription?.checkout?.hiddenPaths ?? null; } catch { return null; }
 }

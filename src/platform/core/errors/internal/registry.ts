@@ -115,7 +115,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   SIWC_USAGE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('siwc.usageUnavailable', p, l) }) },
   SIWC_SERVICE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('siwc.serviceUnavailable', p, l) }) },
   SIWC_WORKER_ISOLATION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_WORKER_ISOLATION_UNAVAILABLE', p, l) }) },
-  SIWC_APP_SERVER_AUTH_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_APP_SERVER_AUTH_UNAVAILABLE', p, l) }) },
+  SIWC_APP_SERVER_AUTH_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: p['reason'] === 'activation-hold' ? t('siwc.worker.activationHold', p, l) : t('error.SIWC_APP_SERVER_AUTH_UNAVAILABLE', p, l) }) },
   SIWC_RELAY_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_RELAY_REFUSED', p, l) }) },
   SIWC_APP_SERVER_EFFECT_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_APP_SERVER_EFFECT_UNKNOWN', p, l) }) },
   SIWC_WORKER_CLEANUP_UNPROVEN: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_WORKER_CLEANUP_UNPROVEN', p, l) }) },

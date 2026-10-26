@@ -170,7 +170,8 @@
         "src/adapters/core/native-connection",
         "src/capabilities/core/artifacts",
         "src/engine/core/resource-observation",
-        "src/domain/core/attempt"
+        "src/domain/core/attempt",
+        "src/adapters/core/native-cli-registry"
       ],
       "plan": "ISOLATION"
     },
@@ -357,7 +358,9 @@
         "src/domain/core/run",
         "src/adapters/core/hub-cache",
         "src/adapters/core/hub-client-store",
-        "src/engine/core/hub-client"
+        "src/engine/core/hub-client",
+        "src/adapters/core/siwc-worker",
+        "src/composition/core/siwc"
       ],
       "plan": "EXECUTION"
     },
@@ -585,7 +588,9 @@
         "src/composition/core/terminal-chat",
         "src/composition/core/approvals",
         "src/domain/core/recovery",
-        "src/capabilities/core/run-planner"
+        "src/capabilities/core/run-planner",
+        "src/composition/core/siwc",
+        "src/adapters/core/siwc-worker"
       ],
       "plan": "EXECUTION"
     },
@@ -3377,7 +3382,8 @@
         "src/domain/core/provider-catalog",
         "src/adapters/core/provider-openai-chat",
         "src/adapters/core/provider-http-json",
-        "src/platform/core/config"
+        "src/platform/core/config",
+        "src/adapters/core/native-cli-registry"
       ],
       "plan": "PROVIDERS"
     },
@@ -4393,7 +4399,11 @@
         "src/composition/core/root",
         "src/engine/core/model-invocation",
         "src/engine/core/provider-spend",
-        "src/domain/core/principal"
+        "src/domain/core/principal",
+        "src/domain/core/attempt",
+        "src/adapters/core/siwc-worker",
+        "src/platform/core/common",
+        "src/platform/core/errors"
       ],
       "plan": "PROVIDERS"
     },
@@ -4419,7 +4429,12 @@
         "src/engine/core/oauth-connection",
         "src/adapters/core/provider-siwc",
         "src/adapters/core/local-runtime-socket",
-        "src/adapters/core/native-connection"
+        "src/adapters/core/native-connection",
+        "src/domain/core/run",
+        "src/domain/core/provider-catalog",
+        "src/domain/core/model-invocation",
+        "src/engine/core/supervisor",
+        "src/adapters/core/docker-supervisor"
       ],
       "plan": "PROVIDERS"
     }
