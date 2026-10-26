@@ -38,3 +38,19 @@ export function delegationPrincipalClass(actor: Readonly<{ issuer: string; assur
 export function delegationOwner(actor: Readonly<{ issuer: string; subject: string }>): Readonly<{ issuer: string; subject: string }> {
   return Object.freeze({ issuer: isWorkloadPrincipalRef(actor) ? actor.issuer.slice(0, actor.issuer.lastIndexOf('/')) : actor.issuer, subject: actor.subject });
 }
+
+/** Connected-app-only subscription use. Feature provenance is supplied by trusted composition, never the wire command. */
+export function subscriptionRawUseRefusal(input: Readonly<{ entry: 'raw' | 'feature'; principalClass: DelegationPrincipalClass; rawUse: unknown }>): 'SUBSCRIPTION_RAW_USE_REFUSED' | null {
+  return input.entry === 'raw' && input.principalClass !== 'person' && input.rawUse === 'person' ? 'SUBSCRIPTION_RAW_USE_REFUSED' : null;
+}
+
+/** One owner for revocable subscription feature consent; an absent choice preserves an existing person's choice. */
+export function subscriptionConsent(existing: { readonly [key: string]: unknown } | null | undefined, classes: readonly ('ai' | 'system')[] | undefined,
+  by: Readonly<{ issuer: string; subject: string }>, atMs: number): DelegatedUseConsent | null {
+  const kept = delegatedUseConsentSchema.safeParse(existing?.['delegatedUse']), current = kept.success ? kept.data : null;
+  if (classes === undefined) return current;
+  const wanted = [...new Set(classes)].sort();
+  if (!wanted.length) return null;
+  return current && current.consentedBy.issuer === by.issuer && current.consentedBy.subject === by.subject && JSON.stringify([...current.classes].sort()) === JSON.stringify(wanted)
+    ? current : { consentedBy: { issuer: by.issuer, subject: by.subject }, atMs, classes: wanted };
+}

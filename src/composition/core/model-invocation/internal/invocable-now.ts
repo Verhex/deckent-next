@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ModelBindingApplication, DeclaredModelsApplication, ModelInvocableNowApplication, inspectModelSwitch, type InvocableModel, type InvocableModels } from '#engine/index.js';
-import { effectiveTerminalOutputCap, WORKSPACE_READ_TOOL_SPECS, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY, type NativeJsonHttpAuthentication } from '#adapters/index.js';
+import { effectiveTerminalOutputCap, WORKSPACE_READ_TOOL_SPECS, OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY, SIWC_INFERENCE, type NativeJsonHttpAuthentication } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
 import { loadInvocationContext } from './context.js';
 import { application } from './invoke.js';
@@ -22,7 +22,7 @@ export async function inspectConfiguredInvocableModels(root: string, scopeId: st
       bindingDigest: binding.status === 'declared' ? binding.binding.digest : '' });
   }
   return new ModelInvocableNowApplication(async reference => {
-    const invocation = application(context, options, undefined, true);
+    const invocation = application(context, options, undefined, true, 'feature');
     await inspectModelSwitch(scopeId, reference, {
       commandId: randomUUID, families: [OPENAI_CHAT_COMPLETIONS_FAMILY, ANTHROPIC_MESSAGES_FAMILY], tools: WORKSPACE_READ_TOOL_SPECS,
       snapshot: async ref => ({ binding: await bindings.inspect(ref), outputTokens: effectiveTerminalOutputCap(await context.freshConfig(), scopeId, ref) }),
@@ -30,6 +30,8 @@ export async function inspectConfiguredInvocableModels(root: string, scopeId: st
       preview: command => invocation.preview(command, undefined, undefined, {
         surfaces: configuredModelInvocationDeliverySurfaces(config),
         async credentialPresent(profile) {
+          // SIWC has no named credential. Preview's native.admit below checks its owner/binding/renewable plan without renewing or exposing it.
+          if (profile.adapter.id === SIWC_INFERENCE.adapter.id) return true;
           const definition = profile.adapter.definition as { authentication?: NativeJsonHttpAuthentication; transport?: { authentication?: NativeJsonHttpAuthentication } };
           const authentication = definition.authentication ?? definition.transport?.authentication;
           if (!authentication) return false;

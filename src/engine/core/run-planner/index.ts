@@ -1,6 +1,6 @@
 import { modelInvocationBillingAxis } from '#engine/core/provider-spend/index.js';
 import { brainPlanCommandInputSchema, encodeCommandProjection, openAiChatUsageSchema, CORE_WORK_CLASSES, mergeWorkClassRegistries, getPolicyVocabulary, type ExecutionRegistry, type BrainPlanCommand, type ModelInvocationCommand,
-  type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, readHeadlessRejection,
+  parseModelInvocationCommand, type ModelReference, type RunProposal, type VerifiedPrincipal, encodeModelBindingDefinition, parseProviderCatalog, resolveModelBindingDefinition, readHeadlessRejection,
   type ModelInvocationResponseEvidence, type BrainPlanObserver, type BrainQuotaWaitStore } from '#domain/index.js';
 import { brainInputDigest, brainOutputDigest, parseBrainDraft, prepareBrainPrompt, brainPlannerConfigSchema, boundBrainContext, assertBrainLeavesAssignment,
   prepareBrainEvaluatorParameters, selectedBrainTemplate, brainWorkClassView, type BrainMemoryContext, type BrainRegistryContext } from '#capabilities/index.js';
@@ -69,6 +69,8 @@ export interface BrainPlanPorts {
   stoppedAtLength(result: ModelInvocationResult): boolean;
   propose(proposal: RunProposal): Promise<RunProposalResult>;
   /** S3-4: a rejected call's retained adapter body (base64) read under the caller's content right; null when not retained or not readable. */
+  readonly subscriptionAdapterIds?: ReadonlySet<string>;
+  continueBilling?(command: ModelInvocationCommand, result: ModelInvocationResult, notice: (reference: ModelReference) => void, signal?: AbortSignal): Promise<ModelInvocationCommand | null>;
   rejectionBody?(result: ModelInvocationResult): Promise<string | null>;
   /** The scope's remaining money after the planning call, when observable; null when no budget is readable. */
   remainingBudget?(scopeId: string): Promise<Readonly<{ currency: string; remainingMinorUnits: number }> | null>;
@@ -103,10 +105,13 @@ export const brainAssignsWorkers = (config: unknown) => selectedBrainTemplate(co
  * a stopped guard, an output the CLI itself refused); any other adapter, or another cause, keeps BRAIN_PROVIDER_REJECTED. Nothing is retried (a quota wait
  * starts a new derived attempt instead, see `plan`).
  */
-function brainRejection(evidence: Readonly<{ adapter: ModelInvocationResponseEvidence['adapter']; reason: string; httpStatus: number | null }>, data: string | null) {
-  const body = data === null ? null : readHeadlessRejection({ adapter: evidence.adapter, body: { data } }), create = (code: string, options?: Parameters<typeof ErrorRegistry.createError>[1]) => ErrorRegistry.createError(code, options);
+function brainRejection(evidence: Readonly<{ adapter: ModelInvocationResponseEvidence['adapter']; reason: string; httpStatus: number | null }>, data: string | null, adapterIds?: ReadonlySet<string>) {
+  const body = data === null ? null : readHeadlessRejection({ adapter: evidence.adapter, body: { data } }, adapterIds), create = (code: string, options?: Parameters<typeof ErrorRegistry.createError>[1]) => ErrorRegistry.createError(code, options);
   switch (body?.refusal) {
     case 'quota': return create('HEADLESS_QUOTA_EXHAUSTED', { params: typeof body.resetsAtMs === 'number' ? { resetsAtMs: body.resetsAtMs } : {} });
+    case 'usage-unavailable': return create('SIWC_USAGE_UNAVAILABLE');
+    case 'service-unavailable': return create('SIWC_SERVICE_UNAVAILABLE');
+    case 'plan-unavailable': return create('HEADLESS_PLAN_UNAVAILABLE');
     case 'credits-required': return create('HEADLESS_CREDITS_REQUIRED');
     case 'login-required': return create('HEADLESS_LOGIN_REQUIRED');
     case 'guard': case 'model-mismatch': return create('HEADLESS_GUARD_FAILED', { params: { field: body.field ?? body.refusal } });
@@ -154,10 +159,17 @@ export class BrainPlanApplication {
         || receipt.request.scopeId !== command.scopeId || encodeCommandProjection('actor', proposer)
           !== encodeCommandProjection('actor', { id: receipt.actor.id, issuer: receipt.actor.issuer, subject: receipt.actor.subject })) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
       if (receipt.outcome?.state !== 'rejected') break;
+      const continuation = observe ? await this.ports.continueBilling?.(invocation, result, reference => observe({ kind: 'billing-switch', reference }), signal) : null;
+      if (continuation) {
+        const next = parseModelInvocationCommand(continuation);
+        if (next.scopeId !== command.scopeId || next.commandId === invocation.commandId) throw ErrorRegistry.createError('RUN_PROPOSAL_SOURCE_INVALID');
+        // Validation must not replace the trusted port's command object: host-only admission capabilities are not wire fields.
+        invocation = continuation; continue;
+      }
       const data = await this.ports.rejectionBody?.(result).catch(() => null) ?? null;
-      const body = data === null ? null : readHeadlessRejection({ adapter: receipt.outcome.evidence.adapter, body: { data } });
+      const body = data === null ? null : readHeadlessRejection({ adapter: receipt.outcome.evidence.adapter, body: { data } }, this.ports.subscriptionAdapterIds);
       const untilMs = observe && prepared.quotaWait ? brainQuotaWaitUntil(body, receipt.outcome.observedAtMs, now(), attempt, prepared.quotaWait) : null;
-      if (untilMs === null || body?.refusal !== 'quota' || typeof body.resetsAtMs !== 'number') throw brainRejection(receipt.outcome.evidence, data);
+      if (untilMs === null || body?.refusal !== 'quota' || typeof body.resetsAtMs !== 'number') throw brainRejection(receipt.outcome.evidence, data, this.ports.subscriptionAdapterIds);
       const after = { commandId: invocation.commandId, invocationId: receipt.claim.invocationId };
       const waits = this.ports.quotaWaits;
       await waits?.begin({ schemaVersion: 1, scopeId: command.scopeId, commandId: command.commandId, attempt: attempt + 1, maxAttempts: prepared.quotaWait!.maxAttempts,

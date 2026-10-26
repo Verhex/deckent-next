@@ -176,12 +176,12 @@ describe('provider connection check', () => {
   });
 });
 
-it('reads v2 overlays as v3 and orders billing classes from registry data with a conservative missing class', () => {
+it('reads v2 overlays as v4 and orders billing classes from registry data with a conservative missing class', () => {
   const registry = JSON.parse(JSON.stringify(PROVIDER_CONNECT_REGISTRY)); registry.schemaVersion = 2;
   delete registry.billingOrder;
   for (const kind of registry.kinds) delete kind.billing;
   const legacy = parseProviderConnectRegistry(registry);
-  expect(legacy.schemaVersion).toBe(3); expect(legacy.kinds.every(kind => kind.billing === 'metered')).toBe(true);
+  expect(legacy.schemaVersion).toBe(4); expect(legacy.kinds.every(kind => kind.billing === 'metered')).toBe(true);
   const swapped = parseProviderConnectRegistry({ ...PROVIDER_CONNECT_REGISTRY, billingOrder: ['metered', 'local', 'subscription'] });
   expect(swapped.kinds[0]!.id).toBe('anthropic-api');
 });

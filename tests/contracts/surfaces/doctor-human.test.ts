@@ -358,3 +358,13 @@ it('parses every doctor next-step command from the generated warning rows throug
     expect(errors.join(''), command).not.toMatch(/CLI_USAGE|CLI_ARGUMENT_MISSING|CLI_CONFIG_VALUE_MISSING/u);
   }
 });
+
+
+it('shows scoped ChatGPT custody refusals without account labels, tokens or host paths', () => {
+  const reference = { providerId: 'fixture-subscription', providerVersion: 1, modelId: 'fixture-model', modelVersion: 1 };
+  const rows = doctorChecks(report, facts({ siwcConnections: [{ reference, connection: 'fixture-subscription', state: 'unavailable', planUse: false,
+    code: 'SIWC_STORE_NOT_PERSONAL', reason: 'profile-unresolved' }] }), 'tr').filter(row => row.id === 'work.chatgptConnection');
+  expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ state: 'warning', next: 'deckent models connect --connection fixture-subscription --scope live' });
+  expect(rows[0]!.text).toContain('kimlik profili');
+  expect(JSON.stringify(rows)).not.toContain('/home/');
+});

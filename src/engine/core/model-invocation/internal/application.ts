@@ -20,7 +20,7 @@ import { ModelInvocationStoreError, type ModelInvocationAdmission, type ModelInv
 import type { ProviderSpendMeasurement } from '#engine/core/provider-spend/index.js';
 import { observeModelInvocationSpending, observeModelInvocationPartialSpending } from './measurement.js';
 import { assertModelInvocableNow, refuseInactiveModel, type ModelInvocableNowChecks } from './invocable-now.js';
-import { assertSubscriptionDelegation } from './delegation.js';
+import { assertSubscriptionDelegation, assertSubscriptionRawUse } from './delegation.js';
 import type { ModelInvocationPurgeResult, ModelInvocationPurgeStore } from './port.js';
 
 export interface ModelInvocationAuthorizer {
@@ -130,7 +130,8 @@ export class ModelInvocationApplication {
     private readonly profiles: ModelInvocationProfileSource, private readonly natives: ModelInvocationNativeRegistry,
     private readonly openStore: () => Promise<ModelInvocationStore>, private readonly runtime: ModelInvocationRuntime,
     private readonly spending?: ModelInvocationSpendingAuthority,
-    private readonly refreshActivation?: (command: ModelActivationCommand) => Promise<unknown>) {}
+    private readonly refreshActivation?: (command: ModelActivationCommand) => Promise<unknown>,
+    private readonly entry: 'raw' | 'feature' = 'raw') {}
 
   /** Binding, activation and profile of a command as `invoke` admits them, and the native port that serves the profile. */
   private async admittedTarget(command: ReturnType<typeof parseModelInvocationCommand>, preview: boolean | 'invocable-now' = false, preparedNative?: ModelInvocationNativePort) {
@@ -171,6 +172,7 @@ export class ModelInvocationApplication {
     const principal = await authenticate(this.verifier, credential, command.scopeId);
     modelActivationAuthorizationSchema.parse(await this.authorization.authorize('invoke', { scopeId: command.scopeId, reference: command.reference }, principal));
     const { binding, activation, profile, native } = await this.admittedTarget(command, checks ? 'invocable-now' : true);
+    assertSubscriptionRawUse(principal, profile, this.entry);
     assertSubscriptionDelegation(principal, profile);
     if (checks) await assertModelInvocableNow(activation, profile, binding.definition, binding.catalogRevision, checks);
     await this.natives.admit?.(profile, signal);
@@ -204,6 +206,7 @@ export class ModelInvocationApplication {
     modelActivationAuthorizationSchema.parse(await this.authorization.authorize('invoke',
       { scopeId: command.scopeId, reference: command.reference }, principal));
     const { binding, profile, native } = await this.admittedTarget(command, true);
+    assertSubscriptionRawUse(principal, profile, this.entry);
     assertSubscriptionDelegation(principal, profile);
     if (!native.measure) return null;
     const prepared = await native.prepare(profile, binding.definition, command.nativeRequest, signal);
@@ -231,9 +234,11 @@ export class ModelInvocationApplication {
         if (!sameModelInvocationRequest(prior.receipt, command, requestDigest, actor)) {
           throw new ModelInvocationStoreError('MODEL_INVOCATION_COMMAND_CONFLICT');
         }
+        assertSubscriptionRawUse(principal, prior.receipt.profile, this.entry);
         return checkInvocationResultDelivery(publicResult(true, prior), delivery);
       }
       const { binding, activation, profile, native } = await this.admittedTarget(command);
+      assertSubscriptionRawUse(principal, profile, this.entry);
       assertSubscriptionDelegation(principal, profile);
       if (!this.spending && !(profile.schemaVersion === 2 && profile.billingAxis === 'subscription')) throw new ProviderSpendError('PROVIDER_SPEND_UNAVAILABLE');
       await this.natives.admit?.(profile, signal);

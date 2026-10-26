@@ -1,3 +1,4 @@
+import { personalCustodyEvidenceSchema, PersonalCustodyError, type PersonalCustodyEvidence } from '#engine/core/secret-store/index.js';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { AUDIT_EVENT_SCHEMA_VERSION, delegationOwner, type AuditEvent } from '#domain/index.js';
@@ -9,6 +10,7 @@ const NODE_SIGNED_INTEGER_CEILING = 2_147_483_647;
 
 /** Generic OAuth registration/session custody. Vendor grants never create Deckent principals, roles or effect authority. */
 export class OAuthConnectionApplication {
+  private evidence: PersonalCustodyEvidence | null = null;
   private pending = 0;
   private readonly owner: OAuthConnectionOwner;
   constructor(private readonly ports: OAuthConnectionPorts) {
@@ -31,6 +33,12 @@ export class OAuthConnectionApplication {
     });
   }
 
+  /** Revocation remains possible when personal proof is unavailable. Never reports an unverified plan as usable. */
+  async listForRevocation(): Promise<readonly Readonly<{ connectionId: string; state: OAuthConnectionRecord['state']; remoteRevocation: OAuthConnectionRecord['remoteRevocation'] }>[]> {
+    return this.exclusive(async () => Object.freeze((await this.records()).filter(record => isDeepStrictEqual(record.owner, this.owner))
+      .map(record => Object.freeze({ connectionId: record.connectionId, state: record.state, remoteRevocation: record.remoteRevocation }))), false);
+  }
+
   async connect(input: { connectionId?: string; planUse: boolean; enablePlanUse?: boolean }, signal?: AbortSignal): Promise<OAuthConnectionView> {
     const parsed = oauthConnectionConnectSchema.safeParse(input);
     if (!parsed.success) throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
@@ -41,10 +49,10 @@ export class OAuthConnectionApplication {
       const id = request.connectionId ?? randomUUID();
       const initial = await this.exclusive(async () => {
         await this.decision(this.name(id), 'set');
-        const record = request.connectionId ? await this.read(id) : null;
+        const record = request.connectionId ? await this.read(id, true) : null;
         if (!record && (await this.records()).length >= this.ports.protocol.maxConnections) throw new OAuthConnectionError('OAUTH_CONNECTION_UNAVAILABLE');
         const host = await this.host();
-        return { record, host };
+        return { record, host, evidence: this.evidence! };
       });
       const p = this.ports.protocol, state = randomBytes(32).toString('base64url'), nonce = randomBytes(32).toString('base64url');
       const verifier = randomBytes(64).toString('base64url'), challenge = createHash('sha256').update(verifier).digest('base64url');
@@ -68,13 +76,13 @@ export class OAuthConnectionApplication {
       const issued = callback.searchParams.get('client_id') ?? (initial.record ? client : null), code = callback.searchParams.get('code');
       if (!issued || issued === p.dynamicClientId || issued.length > 256 || !code || (initial.record && issued !== client))
         throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
-      const registration: OAuthConnectionRecord = initial.record ?? { schemaVersion: 1, connectionId: id, owner: this.owner,
+      const registration: OAuthConnectionRecord = initial.record ? { ...initial.record, schemaVersion: 2, custody: this.binding(initial.evidence) } : { schemaVersion: 2, custody: this.binding(initial.evidence), connectionId: id, owner: this.owner,
         clientId: issued, identity: null, generation: 0, planUseEnabled: false, state: 'registration', remoteRevocation: 'not-attempted', tokens: null };
       // Retain the issued registration before the one-use exchange. An interrupted exchange is never retried with the same code.
-      if (!initial.record) await this.exclusive(async () => {
+      if (!initial.record || initial.record.schemaVersion === 1 || !isDeepStrictEqual(initial.record.custody, registration.schemaVersion === 2 ? registration.custody : null)) await this.exclusive(async () => {
         this.checkSignal(bounded);
         const saved = await this.records();
-        if (saved.length >= p.maxConnections || saved.some(record => record.clientId === issued)) throw new OAuthConnectionError('OAUTH_CONNECTION_CHANGED');
+        if ((!initial.record && saved.length >= p.maxConnections) || saved.some(record => record.connectionId !== id && record.clientId === issued)) throw new OAuthConnectionError('OAUTH_CONNECTION_CHANGED');
         await this.write(registration);
       });
       const expectedGeneration = registration.generation;
@@ -97,12 +105,25 @@ export class OAuthConnectionApplication {
   }
 
   /** The verified caller acts for the same person in the same installation/company/project. No name/grant path. */
-  async lease(connectionId: string, callerInput: OAuthConnectionOwner, signal?: AbortSignal): Promise<OAuthAccessTokenLease> {
+  /** Local readiness without exposing a token or renewing it. An expired but renewable authorized plan is not falsely logged out. */
+  async inspectForLease(connectionId: string, caller: OAuthConnectionOwner): Promise<OAuthConnectionView> {
+    this.assertCaller(caller);
+    return this.exclusive(async () => {
+      const record = await this.read(connectionId); this.planRecord(record);
+      if (record.tokens!.expiresAtMs! - this.ports.now() <= this.ports.protocol.refreshMarginMs && !record.tokens!.refreshToken)
+        throw new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE');
+      return this.view(record);
+    });
+  }
+  private assertCaller(callerInput: OAuthConnectionOwner): void {
     const parsed = oauthConnectionOwnerSchema.safeParse(callerInput);
     if (!parsed.success) throw new OAuthConnectionError('OAUTH_CONNECTION_DENIED');
     const caller = parsed.data, person = delegationOwner(caller.principal);
     if (caller.installationId !== this.owner.installationId || caller.companyId !== this.owner.companyId || caller.scopeId !== this.owner.scopeId
       || !this.sameIdentity(person, this.owner.principal)) throw new OAuthConnectionError('OAUTH_CONNECTION_DENIED');
+  }
+  async lease(connectionId: string, callerInput: OAuthConnectionOwner, signal?: AbortSignal): Promise<OAuthAccessTokenLease> {
+    this.assertCaller(callerInput);
     return this.bounded(signal, bounded => this.connection(connectionId, bounded, async () => {
       let record = await this.exclusive(() => this.read(connectionId));
       this.planRecord(record);
@@ -198,6 +219,9 @@ export class OAuthConnectionApplication {
     if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u.test(id)) throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
     return `${this.ports.protocol.connectionSecretPrefix}${id.replaceAll('-', '').toUpperCase()}`;
   }
+  private binding(evidence: PersonalCustodyEvidence) {
+    return { bindingId: evidence.store.instanceBindingId, generation: evidence.store.generation };
+  }
   private async exclusive<T>(work: () => Promise<T>, personal = true): Promise<T> {
     try { return await this.ports.custody.exclusive(async () => {
       if (this.ports.store.descriptor.id !== this.ports.protocol.encryptedStoreId || !this.ports.store.descriptor.writable
@@ -207,22 +231,31 @@ export class OAuthConnectionApplication {
       if (await this.ports.custody.selected() !== this.ports.store.descriptor.id) throw new OAuthConnectionError('OAUTH_CONNECTION_CHANGED');
       if (personal) {
         if (!this.ports.custody.assertPersonal) throw new OAuthConnectionError('SIWC_STORE_NOT_PERSONAL');
-        try { await this.ports.custody.assertPersonal(this.ports.store.descriptor, this.owner); }
-        catch { throw new OAuthConnectionError('SIWC_STORE_NOT_PERSONAL'); }
+        try {
+          const evidence = personalCustodyEvidenceSchema.parse(await this.ports.custody.assertPersonal(this.ports.store.descriptor, this.owner));
+          if (!isDeepStrictEqual(evidence.owner, this.owner) || evidence.store.backendId !== this.ports.store.descriptor.id
+            || !evidence.host.keyIdentityDigest || evidence.observedAtMs > this.ports.now()) throw new PersonalCustodyError('binding-changed');
+          this.evidence = evidence;
+        } catch (error) { throw new OAuthConnectionError('SIWC_STORE_NOT_PERSONAL', error instanceof PersonalCustodyError ? error.reason : 'unbound-store'); }
       }
-      return work();
+      try { return await work(); } finally { this.evidence = null; }
     }); } catch (error) {
       if (error instanceof OAuthConnectionError) throw error;
       throw new OAuthConnectionError('OAUTH_CONNECTION_UNAVAILABLE');
     }
   }
-  private async read(id: string): Promise<OAuthConnectionRecord> {
+  private async read(id: string, reconnect = false): Promise<OAuthConnectionRecord> {
     await this.decision(this.name(id), 'set', false);
     try {
       const text = await this.ports.store.get(this.name(id));
       if (!text) throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
       const record = oauthConnectionRecordSchema.parse(JSON.parse(text));
       if (record.connectionId !== id || !isDeepStrictEqual(record.owner, this.owner)) throw new OAuthConnectionError('OAUTH_CONNECTION_DENIED');
+      if (this.evidence) {
+        if (record.schemaVersion === 1) {
+          if (!reconnect || record.tokens !== null || !['registration', 'disconnected'].includes(record.state)) throw new OAuthConnectionError('OAUTH_CONNECTION_REAUTHORIZE');
+        } else if (!isDeepStrictEqual(record.custody, this.binding(this.evidence)) && (!reconnect || record.tokens !== null || !['registration', 'disconnected'].includes(record.state))) throw new OAuthConnectionError('SIWC_STORE_NOT_PERSONAL');
+      }
       return record;
     } catch (error) {
       if (error instanceof OAuthConnectionError) throw error;
@@ -285,7 +318,8 @@ export class OAuthConnectionApplication {
   private view(record: OAuthConnectionRecord): OAuthConnectionView {
     const usable = record.state === 'connected' && record.tokens?.accessToken !== null && record.tokens !== null
       && record.tokens.expiresAtMs !== null && this.ports.now() < record.tokens.expiresAtMs;
-    const planUse = usable && record.planUseEnabled && record.tokens!.scopes.includes(this.ports.protocol.usagePermission);
+    const bound = record.schemaVersion === 2 && (this.evidence === null || isDeepStrictEqual(record.custody, this.binding(this.evidence)));
+    const planUse = usable && bound && record.planUseEnabled && record.tokens!.scopes.includes(this.ports.protocol.usagePermission);
     const state = record.state !== 'connected' ? record.state : record.tokens?.accessToken === null ? 'identity-only'
       : !usable ? 'expired' : !planUse ? 'identity-only' : 'connected';
     return Object.freeze({ schemaVersion: 1, connectionId: record.connectionId, generation: record.generation, email: record.identity?.email ?? null,

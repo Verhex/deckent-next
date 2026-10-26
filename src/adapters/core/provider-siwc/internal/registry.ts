@@ -10,7 +10,7 @@ const parsed = z.object({ schemaVersion: z.literal(3), source: url, observedOn: 
   limits: z.object({ loginWindowMs: positive, httpTimeoutMs: positive, responseMaxBytes: positive, jwtMaxBytes: positive, maxKeys: positive, callbackMaxBytes: positive, callbackMaxConnections: positive }).strict(),
   refreshMarginMs: positive, refreshLockWaitMs: positive,
   refreshPolicySource: z.object({ ...sourced, kind: z.literal('deckent-policy') }).strict(),
-  usageSummary: z.object({ ...sourced, days: positive }).strict(),
+  usageSummary: z.object({ ...sourced, days: positive, maxEntries: positive, timeoutMs: positive, manageUrl: url }).strict(),
   inference: z.object({ ...sourced, adapter: z.object({ id: z.string().min(1), version: positive }).strict(), endpoint: url, modelsEndpoint: url,
     modelsMaxEntries: positive, modelsMaxBytes: positive, modelFieldMaxChars: positive, visibility: z.string().min(1), namespace: z.object({ name: z.string().min(1), description: z.string() }).strict() }).strict(),
   requestRules: z.object({ ...sourced, allowedFields: z.array(z.string()).min(1), unverifiedFields: z.array(z.string()), forbiddenFields: z.array(z.string()).min(1),
@@ -31,3 +31,6 @@ export const SIWC_REQUEST_RULES = Object.freeze({ ...parsed.requestRules, allowe
 export const SIWC_USAGE_SUMMARY = Object.freeze(parsed.usageSummary);
 export const SIWC_USAGE_ERRORS = Object.freeze(parsed.usageErrors.codes);
 export const SIWC_REFRESH_LOCK_WAIT_MS = parsed.refreshLockWaitMs;
+
+const quotaRules = Object.values(parsed.usageErrors.codes).filter(rule => rule.refusal === 'quota');
+export const SIWC_USAGE_LIMIT_STATUS = positive.parse(quotaRules.length === 1 ? quotaRules[0]!.status : undefined);

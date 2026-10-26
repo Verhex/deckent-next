@@ -1,3 +1,4 @@
+import { SIWC_INFERENCE } from '#adapters/core/provider-siwc/index.js';
 import { ProviderModelListError, readProviderPart, type ProviderDiscoveryCause } from './failure.js';
 import { classifyProviderRejection, type ProviderRejectionKind } from '#engine/index.js'; import { endpointMayCarryKey } from '#domain/index.js';
 import { PROVIDER_CONNECT_LIMITS, providerConnectKind, providerEndpoint, type ProviderConnectKind } from './registry.js';
@@ -56,6 +57,7 @@ async function readPrefix(response: Response, signal: AbortSignal): Promise<stri
 }
 /** The base URL a kind is checked at: the registry's own, or the person's typed one where the kind lets them choose it. */
 export function providerProbeBase(kind: ProviderConnectKind, endpoint: string | null): string {
+  if (kind.connect?.adapter === SIWC_INFERENCE.adapter.id) return new URL(SIWC_INFERENCE.modelsEndpoint).origin;
   const typed = kind.endpoint.editable && endpoint !== null && endpoint.trim() !== '' ? endpoint : kind.endpoint.default;
   if (typed === null) throw new ProviderProbeError('PROVIDER_ENDPOINT_INVALID', 'url-invalid');
   const checked = providerEndpoint(typed);

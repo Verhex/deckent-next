@@ -4,7 +4,7 @@ import { openSqliteDecisionStore, readDecisionPolicy, openLocalIntegrityAuthorit
 import { SystemTrustedClock, type ConfigLoadOptions } from '#platform/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
-import { invokeConfiguredModel } from '#composition/core/model-invocation/index.js';
+import { invokeConfiguredFeatureModel } from '#composition/core/model-invocation/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { userInfo } from 'node:os';
 async function execute(projectRoot:string,action:DecisionAction|'list',input:unknown,options:ConfigLoadOptions,signal?:AbortSignal){
@@ -17,7 +17,7 @@ async function execute(projectRoot:string,action:DecisionAction|'list',input:unk
     // Queries never create an integrity key, a database or a migration. The service owns backed-up upgrades.
     const integrity=await openLocalIntegrityAuthority(context.layout,context.config.approvals.keyFile,mode==='write');
     return openSqliteDecisionStore(await context.path(),context.config.storage.sqlite,integrity,mode);
-   },invoke:async(command,_credential,abort)=>invokeConfiguredModel(projectRoot,command,{...options,heal:false},abort),now:()=>clock.sample().wallMs,eventId:randomUUID});
+   },invoke:async(command,_credential,abort)=>invokeConfiguredFeatureModel(projectRoot,command,{...options,heal:false},abort),now:()=>clock.sample().wallMs,eventId:randomUUID});
   if(action==='prepare')return await app.prepare(parsed);
   if(action==='ask')return await app.ask(parsed,undefined,signal);
   if(action==='record')return await app.decide(parsed);

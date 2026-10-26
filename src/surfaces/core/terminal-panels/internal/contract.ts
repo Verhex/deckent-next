@@ -236,6 +236,7 @@ export type ProviderModelRequest = Readonly<{ kind: string; endpoint: string | n
 /** Its typed result as labelled rows, the one system summary line it leaves, and the approval to answer when policy asked for one. */
 export type ProviderModelOutcome = Readonly<{ connected: boolean; title: string; lines: readonly PanelLine[]; summary: string; approvalId: string | null }>;
 export interface ProviderPanelPort {
+  readonly siwc?: import('#surfaces/core/siwc/index.js').SiwcWindowPort;
   inspect(): Promise<ProviderPanelView>;
   /** A typed address checked by the endpoint rule (https anywhere, plain http only on this machine): the base it becomes and the URL the free
    * check will call (the preview), or the localized reason it is refused. */

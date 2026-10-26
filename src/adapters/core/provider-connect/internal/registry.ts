@@ -8,7 +8,7 @@ import { openAiChatDialectSchema } from '#adapters/core/provider-openai-chat/ind
  * endpoints are versioned data here, not code (ARCHITECTURE literal rule); a kind with `available: false` is listed with its reason only.
  */
 /** The invocation adapters a connection can be bound to (adapter ids, not vendors): Anthropic Messages and OpenAI chat completions. */
-export const PROVIDER_CONNECT_ADAPTERS = ['anthropic-messages-http', 'openai-chat-http', 'native-cli-headless', 'native-cli-worker'] as const;
+export const PROVIDER_CONNECT_ADAPTERS = ['anthropic-messages-http', 'openai-chat-http', 'native-cli-headless', 'native-cli-worker', 'siwc-responses'] as const;
 /** İ-12: the order kinds are offered in — no-spend paths first (subscriptions, then local servers), then metered APIs; file order within a class. */
 const PROVIDER_CONNECT_BILLING = ['subscription', 'local', 'metered'] as const;
 const SECRET_NAME = /^[A-Z_][A-Z0-9_]{0,127}$/u;
@@ -51,6 +51,7 @@ const kindSchema = z.object({
     /** S3-3 (CLI kinds only): the CLI's event-stream family and a person-only connection (never an AI/MCP actor). S3-5: no preview switch — the
      * adapter connects only where its isolation realm is usable, on every installation alike. */
     catalogOnly: z.boolean().default(false), protocolFamily: z.string().min(1).max(64).optional(), personOnly: z.boolean().default(false),
+    rawUse: z.literal('person').optional(), preview: z.boolean().default(false),
     pull: z.enum(['available', 'pick']).default('available'),
     seed: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u).nullable(),
     /** Optional provider counter on the same endpoint origin; only Anthropic exposes this connection path here. */
@@ -74,7 +75,11 @@ const kindSchema = z.object({
       routes: z.array(providerMetadataRouteSchema).min(1)
         .refine(routes => new Set(routes.map(route => route.modelId)).size === routes.length).readonly() }).strict().optional() }).strict()
     .refine(connect => (connect.adapter === 'openai-chat-http') === (connect.dialect !== undefined))
-    .refine(connect => (['native-cli-headless', 'native-cli-worker'].includes(connect.adapter)) === (connect.chatPath === null) && (connect.chatPath === null) === (connect.protocolFamily !== undefined))
+    .refine(connect => ['native-cli-headless', 'native-cli-worker'].includes(connect.adapter)
+      ? connect.chatPath === null && connect.protocolFamily !== undefined
+      : connect.adapter === 'siwc-responses' ? connect.chatPath === null && connect.protocolFamily === undefined
+        && connect.personOnly && connect.rawUse === 'person' && connect.preview === true && connect.seed === null
+        : connect.chatPath !== null && connect.protocolFamily === undefined)
     .refine(connect => connect.catalogOnly === (connect.adapter === 'native-cli-worker'))
     .refine(connect => connect.tokenCountPath === undefined || connect.adapter === 'anthropic-messages-http')
     .refine(connect => connect.protocolRoutes === undefined || connect.adapter === 'openai-chat-http')
@@ -82,7 +87,7 @@ const kindSchema = z.object({
 }).strict().readonly();
 function positiveLimit() { return z.number().int().positive().safe(); }
 const positive = z.number().int().positive().safe();
-const registrySchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3)]).transform(() => 3 as const), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),
+const registrySchema = z.object({ schemaVersion: z.union([z.literal(2), z.literal(3), z.literal(4)]).transform(() => 4 as const), retrievedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u), note: z.string(),
   limits: z.object({ timeoutMs: positive, bodyPrefixBytes: positive,
     modelListBytes: positive.default(asset.limits.modelListBytes), modelListCount: positive.default(asset.limits.modelListCount) }).strict(),
   /** Key names an earlier release stored that no row uses any more (T4-A's shared OpenAI-compatible slot): `/provider` warns and offers removal. */
@@ -94,7 +99,7 @@ const registrySchema = z.object({ schemaVersion: z.union([z.literal(2), z.litera
   kinds: z.array(kindSchema).min(1).readonly() }).strict().readonly();
 export type ProviderConnectKind = z.infer<typeof kindSchema>;
 export type ProviderConnectRegistry = z.infer<typeof registrySchema>;
-export const PROVIDER_CONNECT_REGISTRY_VERSION = 3;
+export const PROVIDER_CONNECT_REGISTRY_VERSION = 4;
 const billingFirst = (input: ProviderConnectRegistry): ProviderConnectRegistry => Object.freeze({ ...input,
   kinds: Object.freeze([...input.kinds].sort((a, b) => input.billingOrder.indexOf(a.billing) - input.billingOrder.indexOf(b.billing))) });
 /** Parsed once at load: a malformed data file fails the import, never a later connect. */

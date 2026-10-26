@@ -5,3 +5,5 @@ export { loginConfiguredHeadless, readConfiguredHeadlessLogins, configuredHeadle
 export { connectProvider, prepareProviderSecret, type ProviderSecretResult, type ProviderCustodyResult, type ProviderSecretHost } from './internal/provider.js';
 
 export { listConfiguredConnectionWorkspaces } from './internal/discovery.js';
+export { executeConfiguredSiwc } from './internal/siwc.js';
+export { inspectConfiguredSiwcConnections } from './internal/siwc-inspection.js';

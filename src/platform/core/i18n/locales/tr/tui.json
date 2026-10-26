@@ -907,7 +907,6 @@
   "tui.provider.kind.openaiCompatible": "OpenAI uyumlu (başka adres)",
   "tui.provider.kind.openrouter": "OpenRouter",
   "tui.provider.kind.localOpenai": "Yerel sunucu (vLLM / OpenAI uyumlu)",
-  "tui.provider.kind.chatgptLogin": "ChatGPT ile giriş",
   "tui.provider.unavailable": "Henüz kullanılamıyor.",
   "tui.provider.state.stored": "anahtar {name} saklı · {count} model profili kullanıyor",
   "tui.provider.state.modelsNextSlice": "model bağlama bir sonraki dilimde gelecek",

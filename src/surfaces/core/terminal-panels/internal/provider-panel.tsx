@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { loadSiwcWindow } from '#surfaces/core/siwc/index.js';
+const SiwcWindow = lazy(loadSiwcWindow);
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { fillTemplate, span } from '#surfaces/core/terminal-render/index.js';
 import { PICKER_INITIAL, type PickerNode, type PickerResult, type PickerState, type PickerTree } from '#surfaces/core/terminal-picker/index.js';
 import { EntryWindow } from './entry.js';
@@ -37,7 +39,7 @@ type Step = { kind: 'workspace'; target: ProviderPanelKind; endpoint: string | n
   | { kind: 'preview'; target: ProviderPanelKind; text: string; base: string; check: string; forModel?: true } | { kind: 'key'; target: ProviderPanelKind; endpoint: string | null; grant?: boolean }
   | { kind: 'optional-key'; target: ProviderPanelKind; endpoint: string | null }
   | { kind: 'key-consent'; target: ProviderPanelKind; endpoint: string | null; grant: boolean; lines: readonly import('./contract.js').PanelLine[] }
-  | { kind: 'busy' } | { kind: 'result'; outcome: ProviderConnectOutcome } | { kind: 'confirm'; target: ProviderPanelKind }
+  | { kind: 'siwc' } | { kind: 'busy' } | { kind: 'result'; outcome: ProviderConnectOutcome } | { kind: 'confirm'; target: ProviderPanelKind }
   | { kind: 'model'; target: ProviderPanelKind; endpoint: string | null } | { kind: 'connected'; outcome: ProviderModelOutcome } | { kind: 'budget' } | { kind: 'cache' }
   | { kind: 'grant'; question: ReturnType<ProviderSecretGrantPort['question']>; answer: (yes: boolean) => void }>;
 /** The typed refusal that opens the first-use card: a main-vault key without a grant in this project (name and project only, never a value). */
@@ -106,6 +108,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
     granting(() => port.listModels!(target.id, endpoint), models => setStep({ kind: 'model', target: { ...target, models }, endpoint }));
   };
   const title = (text: string) => [span(text, { bold: true })];
+  if (step.kind === 'siwc' && port.siwc) return <Suspense fallback={null}><SiwcWindow port={port.siwc} onClose={back} onError={onError} /></Suspense>;
   if (!view || step.kind === 'busy') return <PickerWindow title={title(words.title)} body={[{ spans: [span(view ? words.checking : labels.loading)] }]} bodyRows={BODY_ROWS} tree={null}
     labels={labels.picker} listHints={words.hints} position={labels.position} onResult={() => undefined} />;
   if (step.kind === 'budget' && budget && port.budget) return <BudgetWindow port={port.budget} view={budget} labels={labels} push={push} onDone={back} />;
@@ -213,6 +216,7 @@ export function ProviderPanel({ port, labels, push, openApproval, onError, onClo
       setStep({ kind: 'busy' }); granting(() => port.secretGrant!.check!(target.keyName!), () => back()); return;
     }
     if (action === 'disconnect') { setStep({ kind: 'confirm', target }); return; }
+    if ((action === 'model' || action === 'connect') && port.siwc?.connection === target.id) { setStep({ kind: 'siwc' }); return; }
     if (action === 'model') {
       if (target.endpointEditable) setStep({ kind: 'endpoint', target, forModel: true }); else chooseModels(target, null);
       return;

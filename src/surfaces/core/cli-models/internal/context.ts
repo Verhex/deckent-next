@@ -16,6 +16,7 @@ export type InferenceMetricsReading =
 
 /** The host operations the model, spending and inference commands use; the CLI's full command context satisfies it. */
 export interface ModelCommandContext extends CliBaseContext {
+  siwc?: Readonly<{ connection: string; usageUrl?: string; execute: import('#surfaces/core/siwc/index.js').SiwcHandler }>;
   readInferenceMetrics?: (root: string, input: { readonly profileId?: string }, options: ConfigLoadOptions) => Promise<InferenceMetricsReading>;
   invokeModel?: ModelInvocationHandler;
   inspectModelInvocation?: ModelInvocationInspectionHandler;

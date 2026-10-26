@@ -187,6 +187,9 @@ const governedAuditSubjectSchema = z.discriminatedUnion('kind', [
    * T4-B `models.connect`: one connection of a model to a scope — the registry kind, the exact reference, the secret NAME the profile reads (never
    * a value) and what each governed step did (each step also wrote its own record: config change, catalog receipt, activation receipt).
    */
+  z.object({ kind: z.literal('subscription-api-continuation'), schemaVersion: z.literal(1), actor: auditPrincipalSchema, sourceInvocationId: identitySchema,
+    connectionId: z.string().uuid(), profileDigest: digest, reference: z.object({ providerId: identitySchema, providerVersion: counterSchema,
+      modelId: identitySchema, modelVersion: counterSchema }).strict(), commandId: identitySchema, phase: z.literal('intent') }).strict(),
   z.object({ kind: z.literal('model-connect'), commandId: identitySchema, connection: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/),
     reference: z.object({ providerId: identitySchema, providerVersion: counterSchema, modelId: identitySchema, modelVersion: counterSchema }).strict(),
     credentialRef: z.string().regex(/^[A-Z_][A-Z0-9_]{0,127}$/).nullable(),

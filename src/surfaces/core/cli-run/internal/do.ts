@@ -26,7 +26,7 @@ export async function doCommand(argv: readonly string[], context: RunCommandCont
   const command = brainPlanCommandSchema.parse({ schemaVersion: 1, commandId: values.get('--command-id') ?? randomUUID(), scopeId, intent });
   // f3 (owner Q-H4): a quota wait is shown on stderr (stdout keeps the one result, --json included); Ctrl+C cancels it through the signal.
   const stderr = context.stderr ?? process.stderr;
-  const observe = (progress: BrainPlanProgress) => { stderr.write(`${progress.kind === 'quota-wait'
+  const observe = (progress: BrainPlanProgress) => { stderr.write(`${progress.kind === 'billing-switch' ? t('siwc.switch.notice', { model: progress.reference.modelId }, locale) : progress.kind === 'quota-wait'
     ? t('brainwait.cli', { time: clockText(progress.untilMs), attempt: progress.attempt, maxAttempts: progress.maxAttempts }, locale)
     : t('brainwait.resumed', { attempt: progress.attempt }, locale)}\n`); };
   const result = await context.planRun(root, command, options, context.signal, observe);

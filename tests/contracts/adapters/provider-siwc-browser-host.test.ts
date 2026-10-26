@@ -124,3 +124,21 @@ it('unsupported native platforms reject before listener or opener construction',
   await expect(siwcBrowserAuthorization(make, abort.signal)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_PLATFORM_UNSUPPORTED' });
   expect(mocked.spawn).not.toHaveBeenCalled();
 });
+
+
+it.skipIf(process.platform !== 'linux')('keeps the listener open on launcher failure, presents only the safe URL, then cancels it', async () => {
+  const fake = child(), fallback = vi.fn(); let redirect = '';
+  mocked.spawn.mockImplementation((_command: string, args: string[]) => {
+    redirect = new URL(args[0]!).searchParams.get('redirect_uri')!;
+    queueMicrotask(() => fake.emit('error', new Error('fixture-launcher-missing'))); return fake;
+  });
+  const pending = siwcBrowserAuthorization(make, abort.signal, { fallback });
+  while (!fallback.mock.calls.length) await new Promise<void>(done => setImmediate(done));
+  expect(fallback).toHaveBeenCalledTimes(1);
+  const shown = new URL(fallback.mock.calls[0]![0]);
+  expect(shown.origin).toBe(new URL(SIWC_PROTOCOL.authorizationEndpoint).origin);
+  expect(shown.searchParams.has('code')).toBe(false); expect(shown.searchParams.has('id_token_hint')).toBe(false);
+  expect(await callbackStatus(`${redirect}?state=foreign&code=fixture-code`)).toBe(400);
+  abort.abort(); await expect(pending).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_CANCELLED' });
+  await expect(fetch(redirect)).rejects.toThrow();
+});

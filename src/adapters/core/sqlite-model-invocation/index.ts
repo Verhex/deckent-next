@@ -43,3 +43,4 @@ export async function openSqliteProviderSpendRecoveryStore(path: string, options
   const implementation = await import('./internal/spend-recovery.js');
   return implementation.openSqliteProviderSpendRecoveryStore(path, options);
 }
+export { readSqliteSubscriptionUsageSummary } from './internal/subscription-usage.js';

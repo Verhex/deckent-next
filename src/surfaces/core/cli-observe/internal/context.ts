@@ -17,6 +17,7 @@ export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandC
   // M2: the same read view as `deckent models roles` (catalog models with no tier/role row: "new model: role pending"); read-soft.
   inspectModelRoles?: (root: string, query: ModelRoleQuery, options: ConfigLoadOptions) => Promise<ModelRoleInspection>;
   /** S3-3 doctor line: the scope's subscription Brain logins from the profiles section and their last preflight records (read-soft, no spawn). */
+  inspectSiwcConnections?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly import('#domain/index.js').SubscriptionConnectionInspection[]>;
   readHeadlessLogins?: (profiles: unknown, scopeId: string, options?: ConfigLoadOptions) => Promise<NonNullable<DoctorCheckFacts['headlessLogins']>>;
   inspectInstallationStartability?: (root: string, options: ConfigLoadOptions) => Promise<InstallationStartabilityView>;
   inspectOwnerBaseline?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<{ readonly status: string; readonly missing: number; readonly digest: string }>;

@@ -11,6 +11,8 @@ export type { SecretStoreSelectionPort, SecretStoreSwitchPorts, SecretStoreSwitc
 export { missingSecretReferenceNames, inspectSecretEnvironmentGuard } from './internal/env-guard.js';
 export type { SecretEnvironmentGuard } from './internal/env-guard.js';
 export { RENEWABLE_SECRET_PREFIX } from './internal/port.js';
+export { personalCustodyEvidenceSchema, personalCustodyOwnerSchema, PersonalCustodyError } from './internal/personal.js';
+export type { PersonalCustodyEvidence, PersonalCustodyOwner, PersonalCustodyRefusal } from './internal/personal.js';
 export { assertPublicSecretName, assertSecretRelocation, assertSecretStorageProtection } from './internal/protection.js';
 export { createSecretHelperBackend } from './internal/helper.js';
 export type { SecretHelperOptions, SecretHelperReadPort } from './internal/helper.js';

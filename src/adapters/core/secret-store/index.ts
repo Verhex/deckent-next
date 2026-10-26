@@ -4,3 +4,7 @@ export { ENCRYPTED_FILE_SECRET_STORE_ID, ENCRYPTED_FILE_SECRET_STORE_KEY, ENCRYP
 export { createSecretHelperFactory, type SecretHelperOptions } from './internal/helper.js';
 export { admitProjectVault, directoryLocation, fileSecretGrantStoreFactory, handOverProjectVault, listProjectVaults, locationPresent, observeOwnerRoot, projectRepository, projectVaultDirectory,
   readProjectDeck, type ProjectRepository } from './internal/project-vault.js';
+
+export { personalStoreAssertion, rememberPersonalStoreInstance } from './internal/personal.js';
+export type { PersonalStoreContext } from './internal/personal.js';
+export { observePersonalStoreHost } from './internal/personal-host.js';

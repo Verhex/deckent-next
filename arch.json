@@ -317,7 +317,8 @@
         "src/surfaces/core/config-window",
         "src/surfaces/core/effect-confirmation",
         "src/composition/core/memory-rollout",
-        "src/composition/core/hub"
+        "src/composition/core/hub",
+        "src/adapters/core/provider-siwc"
       ],
       "plan": "SURFACES"
     },
@@ -1150,7 +1151,8 @@
         "src/domain/core/policy",
         "src/platform/core/redaction",
         "src/platform/core/config-fields",
-        "src/surfaces/core/config"
+        "src/surfaces/core/config",
+        "src/surfaces/core/siwc"
       ],
       "plan": "SURFACES"
     },
@@ -1270,7 +1272,8 @@
         "src/engine/core/provider-spend",
         "src/domain/core/provider-spend",
         "src/surfaces/core/cli-human",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/surfaces/core/siwc"
       ],
       "plan": "SURFACES"
     },
@@ -1286,7 +1289,8 @@
         "src/engine/core/recovery",
         "src/surfaces/core/recovery-text",
         "src/domain/core/recovery",
-        "src/surfaces/core/monitor-view"
+        "src/surfaces/core/monitor-view",
+        "src/platform/core/errors"
       ],
       "plan": "SURFACES"
     },
@@ -1710,7 +1714,13 @@
         "src/platform/core/errors",
         "src/platform/core/host",
         "src/platform/core/managed-files",
-        "src/composition/core/provider-spend"
+        "src/composition/core/provider-spend",
+        "src/composition/core/siwc",
+        "src/adapters/core/provider-siwc",
+        "src/domain/core/model-invocation",
+        "src/engine/core/oauth-connection",
+        "src/engine/core/provider-spend",
+        "src/adapters/core/sqlite-model-invocation"
       ],
       "plan": "PROVIDERS"
     },
@@ -1751,7 +1761,8 @@
         "src/engine/core/model-invocation",
         "src/engine/core/provider-spend",
         "src/engine/core/model-allocation",
-        "src/domain/core/provider-spend"
+        "src/domain/core/provider-spend",
+        "src/domain/core/provider-catalog"
       ],
       "plan": "PROVIDERS"
     },
@@ -1822,7 +1833,8 @@
         "src/adapters/core/provider-connect",
         "src/engine/core/workspaces",
         "src/platform/core/integrity",
-        "src/engine/core/runtime"
+        "src/engine/core/runtime",
+        "src/adapters/core/provider-siwc"
       ],
       "plan": "SURFACES"
     },
@@ -1859,7 +1871,17 @@
         "src/composition/core/secrets",
         "src/adapters/core/native-cli-headless",
         "src/adapters/core/shell-sandbox-bwrap",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/composition/core/siwc",
+        "src/adapters/core/provider-siwc",
+        "src/engine/core/audit",
+        "src/domain/core/audit",
+        "src/platform/core/i18n",
+        "src/domain/core/policy",
+        "src/adapters/core/audit-store",
+        "src/platform/core/integrity",
+        "src/platform/core/errors",
+        "src/engine/core/oauth-connection"
       ],
       "plan": "PROVIDERS"
     },
@@ -1914,7 +1936,8 @@
         "src/domain/core/provider-catalog",
         "src/domain/core/primitives",
         "src/adapters/core/provider-openai-chat",
-        "src/adapters/core/provider-anthropic-messages"
+        "src/adapters/core/provider-anthropic-messages",
+        "src/adapters/core/provider-siwc"
       ],
       "plan": "PROVIDERS"
     },
@@ -2639,7 +2662,9 @@
         "src/platform/core/errors",
         "src/platform/core/config",
         "src/platform/core/utils",
-        "src/platform/core/host"
+        "src/platform/core/host",
+        "src/domain/core/model-invocation",
+        "src/domain/core/principal"
       ],
       "plan": "SECURITY"
     },
@@ -3255,7 +3280,8 @@
         "src/adapters/core/run-proposal-store",
         "src/composition/core/policy",
         "src/engine/core/runtime",
-        "src/adapters/core/worker-image"
+        "src/adapters/core/worker-image",
+        "src/adapters/core/provider-siwc"
       ],
       "plan": "M5-D5 Brain ve Auditor"
     },
@@ -4323,6 +4349,50 @@
         "src/adapters/core/local-runtime-socket"
       ],
       "plan": "INSTALLATION"
+    },
+    "src/composition/core/siwc": {
+      "dependencies": [
+        "src/domain/core/model-invocation",
+        "src/domain/core/identity-profile",
+        "src/domain/core/model-activation",
+        "src/domain/core/primitives",
+        "src/engine/core/audit",
+        "src/engine/core/identity-profile",
+        "src/engine/core/oauth-connection",
+        "src/engine/core/secret-store",
+        "src/adapters/core/contract",
+        "src/adapters/core/local-keyring",
+        "src/adapters/core/audit-store",
+        "src/adapters/core/provider-siwc",
+        "src/adapters/core/local-principal",
+        "src/adapters/core/installation-files",
+        "src/adapters/core/provider-openai-chat",
+        "src/platform/core/host",
+        "src/platform/core/config",
+        "src/composition/core/scoped-request",
+        "src/engine/core/runtime",
+        "src/engine/core/model-activation",
+        "src/composition/core/root",
+        "src/engine/core/model-invocation",
+        "src/engine/core/provider-spend",
+        "src/domain/core/principal"
+      ],
+      "plan": "PROVIDERS"
+    },
+    "src/surfaces/core/siwc": {
+      "dependencies": [
+        "src/domain/core/model-activation",
+        "src/platform/core/config",
+        "src/platform/core/config-fields",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-human",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/terminal-window",
+        "src/platform/core/output"
+      ],
+      "plan": "SURFACES"
     }
   },
   "composition": {
