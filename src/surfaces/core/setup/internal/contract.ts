@@ -20,7 +20,7 @@ export type SetupApplyOptions = ConfigLoadOptions & Readonly<{ scopeId?: string;
 /** One stage's operation through its existing owner, after that owner's own preview (I-S3). */
 export type SetupApplyHandler = (root: string, stage: SetupStage, options: SetupApplyOptions) => Promise<SetupApplyResult>;
 /** `person`: a person on a real terminal answers this plan (the window); only then may a family offer a host install (I-D2). */
-export type SetupObserveOptions = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string }>;
+export type SetupObserveOptions = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string; answers?: Readonly<Record<string, unknown>> }>;
 /** Read-only observation and the stage registry for one root (I-S2/I-S3 detection). */
 export type SetupObserveHandler = (root: string, options: SetupObserveOptions) => Promise<Readonly<{ observation: SetupObservation; registry: SetupStageRegistry;
   /** I-S7: what the first job still needs after setup (configuration and pool ledger reads only); the `work` family's facts. */

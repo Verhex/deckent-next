@@ -1,4 +1,4 @@
-Deckent kurulum planı 04a6ef264866
+Deckent kurulum planı acfec5ac8069
 1. Dil · cevabınızı bekliyor · Algılanan dil: Türkçe.
    ? Türkçe ile devam edilsin mi?
 2. Ortam · tamam · Ortam destekleniyor (linux).

@@ -208,3 +208,17 @@ it('renders EN/TR through init registry and emits the real preview/apply contrac
 });
 
 });
+
+it.skipIf(process.platform === 'win32')('U4-1r: selected image B reaches discovery and both previews/applies despite configured fallback A', async () => {
+  const f = await setup(), image = `sha256:${'b'.repeat(64)}`, seen: string[] = [];
+  const dependencies = { ...person, detect: async (_provider: string, settings: typeof docker) => { seen.push(settings.imageId); return '2.1.285 (Claude Code)'; } };
+  const before = await readFile(f.path, 'utf8');
+  const preview = await initializeNativeCodingRegistry(f.root, { ...request, image }, f.options, dependencies);
+  expect(JSON.stringify(preview.profile)).toContain(image); expect(await readFile(f.path, 'utf8')).toBe(before);
+  await expect(initializeNativeCodingRegistry(f.root, { ...request, image, expect: 'c'.repeat(64), apply: true }, f.options, dependencies)).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+  expect(await readFile(f.path, 'utf8')).toBe(before);
+  const applied = await initializeNativeCodingRegistry(f.root, { ...request, image, expect: preview.expect!, apply: true }, f.options, dependencies);
+  expect(applied.registry).toEqual(preview.registry); expect(seen).toEqual([image, image]);
+  expect((await initializeNativeCodingRegistry(f.root, { ...request, image }, f.options, dependencies)).status).toBe('current');
+  await expect(initializeNativeCodingRegistry(f.root, { ...request, image: docker.imageId }, f.options, dependencies)).rejects.toMatchObject({ code: 'INITIAL_REGISTRY_EXISTS' });
+});

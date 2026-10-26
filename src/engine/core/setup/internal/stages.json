@@ -1,8 +1,10 @@
 {
-  "$comment": "alpha.56 U3-1a: the setup stage table (registry data, covered by registryDigest). `phases`: the phase of each known stage id; `deckent init` plans the install phase, the terminal and Desktop the onboarding phase. A family stage not listed takes its descriptor's phase, else its anchor's. Moving a stage between phases is data here, never a policy-template version. `unattendedProfile`: the identity profile a call without a person answers with (a pipe, CI, `--yes`), and the first choice offered to a person. This slice orders installation only; onboarding keeps anchor order until the shared prior/consent contract (U3-1b) lands.",
+  "$comment": "Setup phase and order registry; prior answers follow this order. No execution or authority is granted by a stage.",
   "schemaVersion": 1,
   "unattendedProfile": "core:solo",
-  "unattendedFamilyStages": ["permissions:start-mode"],
+  "unattendedFamilyStages": [
+    "permissions:start-mode"
+  ],
   "phases": {
     "core:environment": "install",
     "core:language": "install",
@@ -30,6 +32,14 @@
     "permissions:start-mode",
     "core:sandbox",
     "core:final-check",
-    "core:model"
+    "core:model",
+    "coding:hosts",
+    "work:kind",
+    "execution:runtime",
+    "execution:worker",
+    "execution:worker-settings",
+    "work:pool",
+    "coding:first-commit",
+    "instructions:bridges"
   ]
 }

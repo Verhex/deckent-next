@@ -35,7 +35,8 @@
     "signers": "signers",
     "brainWaits": "state/brain-waits",
     "headlessLogins": "headless/logins",
-    "workerImageBuilders": "state/worker-image-builders"
+    "workerImageBuilders": "state/worker-image-builders",
+    "onboarding": "state/onboarding.json"
   },
   "bootstrapResource": "config",
   "fixedResources": [

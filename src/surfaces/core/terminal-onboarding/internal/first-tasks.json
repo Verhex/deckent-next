@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "count": 3,
+  "entries": [
+    { "id": "project-summary", "order": 10, "kinds": ["coding"], "requires": [], "labelKey": "onboarding.firstTask.project.label", "intentKey": "onboarding.firstTask.project.intent", "effectKey": "onboarding.firstTask.readOnly" },
+    { "id": "readme", "order": 20, "kinds": ["coding"], "requires": ["readme"], "labelKey": "onboarding.firstTask.readme.label", "intentKey": "onboarding.firstTask.readme.intent", "effectKey": "onboarding.firstTask.mayWrite" },
+    { "id": "tests", "order": 30, "kinds": ["coding"], "requires": ["tests"], "labelKey": "onboarding.firstTask.tests.label", "intentKey": "onboarding.firstTask.tests.intent", "effectKey": "onboarding.firstTask.mayExecute" },
+    { "id": "folder-summary", "order": 100, "kinds": ["coding", "documents", "empty", "unknown"], "requires": [], "labelKey": "onboarding.firstTask.summary.label", "intentKey": "onboarding.firstTask.summary.intent", "effectKey": "onboarding.firstTask.readOnly" },
+    { "id": "topics", "order": 110, "kinds": ["coding", "documents", "empty", "unknown"], "requires": [], "labelKey": "onboarding.firstTask.topics.label", "intentKey": "onboarding.firstTask.topics.intent", "effectKey": "onboarding.firstTask.readOnly" },
+    { "id": "questions", "order": 120, "kinds": ["coding", "documents", "empty", "unknown"], "requires": [], "labelKey": "onboarding.firstTask.questions.label", "intentKey": "onboarding.firstTask.questions.intent", "effectKey": "onboarding.firstTask.readOnly" }
+  ]
+}

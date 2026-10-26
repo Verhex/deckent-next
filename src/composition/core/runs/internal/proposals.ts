@@ -1,3 +1,4 @@
+import { brainInputDigest } from '#capabilities/index.js';
 import { withPlanningSpending } from './planning-spending.js';
 import { userInfo } from 'node:os';
 import type { RunProposal } from '#domain/index.js';
@@ -22,6 +23,10 @@ export async function proposeConfiguredRun(projectRoot: string, input: RunPropos
           loadBudget: scopeId => readConfiguredRunBudget(projectRoot, scopeId, options), selectAgents: async value => agentSelectionSummary(await agents(value.graph, context.config.admission?.registry, value.scopeId)),
           classifySpending: value => classifyConfiguredRunSpending(projectRoot, value, options,
             async () => openSqliteModelCatalogReader(await context.path(), { busyTimeoutMs: context.config.storage.sqlite.busyTimeoutMs })),
+          async verifyIntent(value, intent) {
+            if (value.source.kind !== 'model' || value.source.contribution?.inputDigest !== brainInputDigest(intent.command, getConfigKnownSecrets(context.config)))
+              throw queryFailure({ code: 'RUN_PROPOSAL_COMMAND_CONFLICT' });
+          },
           async verifySource(value) {
             if (value.source.kind === 'human') return;
             const reference = value.source.receipt;

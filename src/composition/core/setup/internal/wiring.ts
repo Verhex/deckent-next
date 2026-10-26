@@ -2,15 +2,17 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { WORKER_IMAGE_ESTIMATED_GB, attestLocalInteractiveTerminal, codingSetupFamily, detectCodingFacts, detectExecutionFacts, dockerInstallOffer, executionSetupFamily, localPrincipalChannel,
   nativeProviderSpec, observeWorkerImage, workerImagePresence, workerImageSetupPorts, type ExecutionFacts } from '#adapters/index.js';
-import { WorkerImageSetupApplication, assertAuthorityWitness, type AuthorityWitness, type SetupStage } from '#engine/index.js';
-import { ErrorRegistry, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
+import { affectedToolchainProfiles, WorkerImageSetupApplication, assertAuthorityWitness, type AuthorityWitness, type SetupStage, hasWorkerKind } from '#engine/index.js';
+import { ErrorRegistry, sha256, loadConfig, prepareProductDirectory, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { cliCardGate, doctorVerdict, loadSetupSurface, type CliCardIo, type KernelCommandContext } from '#surfaces/index.js';
 import { applyPolicyTemplateInstallationWithSecretDefault, previewPolicyTemplateInstallation } from '#composition/core/installation/index.js';
 import { assertConfiguredConfigWitness, createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { inspectConfiguredShellRealm } from '#composition/core/agent-turn/index.js';
+import { inspectConfiguredWorkerImage } from '#composition/core/toolchains/index.js';
+import { configuredOnboarding } from './onboarding.js';
 import { installExecutionEnvironment } from './install.js';
 
-type Options = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string; scopeId?: string }>;
+type Options = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string; scopeId?: string; answers?: Readonly<Record<string, unknown>>; expectedConfig?: Readonly<{ projectDigest: string | null; globalDigest: string }> }>;
 const reachableDocker = (facts: ExecutionFacts) => facts.runtimes.find(row => row.support === 'supported' && row.daemon === 'reachable')?.path ?? null;
 const toolchainsHome = (config: Awaited<ReturnType<typeof loadConfig>>) => join(productResourcePath(config.productLayout, 'workspaces'), 'toolchains');
 type Status = 'applied' | 'refused' | 'not-wired';
@@ -34,10 +36,19 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
       detectCodingFacts({ root, env, workTargets: config?.execution?.workTargets?.targets.map(target => target.path) ?? [], ports: { credential } })]);
     // BR1: the worker image (configured, else this installation's newest receipt; a read-only `image inspect`) and the Git the settings would name.
     const worker = config && await observeWorkerImage({ home: toolchainsHome(config), executable: config.execution?.docker?.executable ?? reachableDocker(execution), configured: config.execution?.docker?.imageId ?? null, git: coding.gitPath });
-    const observed = await (await loadSetupSurface()).observeCoreSetup({ ...host, env }, root, options.language, { packages: [executionSetupFamily({ install: dockerInstallOffer(options.person === true),
-      person: options.person === true }), codingSetupFamily()], facts: { execution: { ...execution, ...(worker ? { worker } : {}) }, coding } });
+    const acquisition = config ? await inspectConfiguredWorkerImage(root, { env }) : null;
+    const pins = config ? affectedToolchainProfiles(config) : [];
+    const pending = config?.toolchains.image.consents.filter(record => record.providers.some(provider =>
+      !pins.some(pin => pin.provider === provider && acquisition?.images.some(image => image.provider === provider && image.imageId === pin.imageId)))).at(-1);
+    const provider = typeof options.answers?.['work:kind'] === 'string' ? options.answers['work:kind'] : pending?.providers[0];
+    const executionFamily = executionSetupFamily({ install: dockerInstallOffer(options.person === true), person: options.person === true });
+    const family = { ...executionFamily, stages: executionFamily.stages.map(stage => ({ ...stage, evaluate: (context: Parameters<typeof stage.evaluate>[0]) =>
+      hasWorkerKind(context) ? stage.evaluate(context) : { state: 'skipped' as const, reason: { code: 'setup.execution.noWorkKind', params: {} } } })) };
+    const observed = await (await loadSetupSurface()).observeCoreSetup({ ...host, env }, root, options.language, { packages: [family, codingSetupFamily()], facts: { execution: { ...execution, ...(worker ? { worker: { ...worker, ...(provider ? { provider } : {}), acquisition } } : {}) }, coding } });
     const installed = ['current', 'upgradable', 'hand-built'].includes(observed.observation.policy.state), firstJob = observed.firstJob && { ...observed.firstJob, execution: observed.firstJob.execution && worker?.image !== 'missing' };
-    return { ...observed, ...(firstJob ? { firstJob } : {}), observation: { ...observed.observation, check: { state: installed ? await verdict(env, root).catch(() => 'not-run' as const) : 'not-run' as const } } };
+    const families: Readonly<Record<string, unknown>> = { ...observed.observation.families, work: { ...observed.firstJob, ...(provider ? { pendingProvider: provider } : {}),
+      images: Object.fromEntries((acquisition?.images ?? []).map(image => [image.provider, image.imageId])) } };
+    return { ...observed, ...(firstJob ? { firstJob } : {}), observation: { ...observed.observation, families, check: { state: installed ? await verdict(env, root).catch(() => 'not-run' as const) : 'not-run' as const } } };
   };
   const applySetupStage = async (root: string, stage: SetupStage, options: Options) => {
     const op = stage.operation?.id ?? '-', input = stage.operation?.input ?? {}, scopeId = String(input['scopeId'] ?? options.scopeId ?? '');
@@ -45,7 +56,9 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
     // alpha.55.1: a person's choice of a protected root (`execution`, `identity.profile`) needs the same terminal witness as `config set`.
     const config = async (keyPath: string, value: unknown, layer: 'project' | 'global') => {
       await assertConfiguredConfigWitness('set', keyPath, witness);
-      return createConfiguredConfigApplication(root, options).set({ keyPath, value, layer, principal: await resolveConfiguredConfigPrincipal(root, scopeId, options), scopeId, commandId: randomUUID() });
+      return createConfiguredConfigApplication(root, options, current => {
+        if (options.expectedConfig && sha256(JSON.stringify(current.global)) !== options.expectedConfig.globalDigest) throw ErrorRegistry.createError('CONFIG_CONCURRENT_REVISION_HOLD');
+      }).set({ keyPath, value, layer, principal: await resolveConfiguredConfigPrincipal(root, scopeId, options), scopeId, commandId: randomUUID(), ...(options.expectedConfig ? { expect: options.expectedConfig.projectDigest } : {}) });
     };
     try {
       if (op === 'installation.policy-template') {
@@ -79,5 +92,7 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
       failedContextsKept: policy.failedContextsKept, env: Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === 'string')) });
     return new WorkerImageSetupApplication({ ...ports, confirm: (await loadSetupSurface()).workerImageConfirm(io, policy.buildTimeoutMs, WORKER_IMAGE_ESTIMATED_GB) }).prepare(request);
   };
-  return { observeSetup, applySetupStage, installExecutionEnvironment, inspectExecutionEnvironment, prepareWorkerImage, inspectWorkerImage: workerImagePresence };
+  const openOnboarding = (root: string, scopeId: string, folder: string, options: ConfigLoadOptions) =>
+    configuredOnboarding(host, { observeSetup, applySetupStage }, root, scopeId, folder, options);
+  return { openOnboarding, observeSetup, applySetupStage, installExecutionEnvironment, inspectExecutionEnvironment, prepareWorkerImage, inspectWorkerImage: workerImagePresence };
 }

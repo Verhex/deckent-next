@@ -20,3 +20,5 @@ export { readEnvironmentProbeHolds, commitEnvironmentProbeSettlement, writeEnvir
 
 export { HUB_CLIENT_LEDGER_VERSION } from './internal/schema.js';
 export { PROVIDER_SPEND_PERIOD_LEDGER_VERSION } from './internal/schema.js';
+
+export { RUN_INTENT_LEDGER_VERSION } from './internal/schema.js';

@@ -1,14 +1,15 @@
-import { planningSpendingLines } from '#surfaces/core/run-planning/index.js';
+import { runIntentLines, planningSpendingLines } from '#surfaces/core/run-planning/index.js';
 import { resolve } from 'node:path';
 import { currencyAmountText, t, emit, loadConfig, ErrorRegistry, type ConfigLoadOptions, type Locale } from '#platform/index.js';
-import { parseRunProposal, runProposalQuerySchema, type RunProposalQuery, type RunProposalResult } from '#engine/index.js';
+import { isRunIntentResult, parseRunProposal, runProposalQuerySchema, type RunProposalQuery, type RunProposalResult, type RunPlanningResult } from '#engine/index.js';
 import type { RunProposal } from '#domain/index.js';
 import { cliUsage, commandLocale } from '#surfaces/core/cli-kit/index.js';
 import { readGraphInput } from './graph-input.js';
 import type { RunCommandContext } from './context.js';
 export type RunProposalHandler = (root: string, command: RunProposal, options: ConfigLoadOptions) => Promise<RunProposalResult>;
-export type RunProposalInspectHandler = (root: string, query: RunProposalQuery, options: ConfigLoadOptions) => Promise<RunProposalResult | null>;
-export function renderRunProposal(data: RunProposalResult, locale: Locale): string {
+export type RunProposalInspectHandler = (root: string, query: RunProposalQuery, options: ConfigLoadOptions) => Promise<RunPlanningResult | null>;
+export function renderRunProposal(data: RunPlanningResult, locale: Locale): string {
+  if (isRunIntentResult(data)) return runIntentLines(data, locale).join('\n');
   const r = data.proposal;
   const states = { recorded: t('proposal.status.recorded', {}, locale), pending: t('proposal.status.pending', {}, locale), accepted: t('proposal.status.accepted', {}, locale), rejected: t('proposal.status.rejected', {}, locale), parked: t('proposal.status.parked', {}, locale) } as const;
   const nextParams = { scope: r.proposal.scopeId, run: r.proposal.runId, command: r.proposal.commandId };
@@ -38,7 +39,7 @@ export async function runProposalCommand(argv: readonly string[], context: RunCo
   }
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env };
   const locale = commandLocale(context, values.get('--lang'));
-  let data: RunProposalResult | null;
+  let data: RunPlanningResult | null;
   if (action === 'propose') {
     const source = values.get('--proposal'); if (!source) throw cliUsage('run', action, locale, '--proposal');
     if (!context.proposeRun) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');

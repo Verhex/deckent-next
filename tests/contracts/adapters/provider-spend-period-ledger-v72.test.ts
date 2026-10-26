@@ -31,18 +31,18 @@ async function v71() {
 }
 
 it('pins the step: v72 is the budget periods and the current ledger', () => {
-  expect(PROVIDER_SPEND_PERIOD_LEDGER_VERSION).toBe(72); expect(CURRENT_LEDGER_VERSION).toBe(72);
+  expect(PROVIDER_SPEND_PERIOD_LEDGER_VERSION).toBe(72); expect(CURRENT_LEDGER_VERSION).toBe(73);
 });
 it('backs up a v71 ledger before the upgrade; the backup keeps the period-less record; this build refuses the v71 ledger without the upgrade', async () => {
   const f = await v71();
   expect(() => openSqliteLedger(f.path, options, 'forbid')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' }));
   const upgrade = await upgradeExistingProductLedger(f.path, options, f.backups, new Date('2026-10-26T00:00:00Z'));
-  expect(upgrade).toMatchObject({ from: 71, to: 72 });
+  expect(upgrade).toMatchObject({ from: 71, to: 73 });
   const backup = new DatabaseSync(upgrade!.backupPath, { readOnly: true }), db = new DatabaseSync(f.path, { readOnly: true });
   try {
     expect(backup.prepare('PRAGMA user_version').get()?.user_version).toBe(71); expect(history(backup)).toBe(0);
     expect(account(backup)).toEqual({ record: JSON.stringify(f.before.account), revision: 1 });
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(72);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(73);
     expect(account(db).revision).toBe(2); expect(JSON.parse(account(db).record)).toMatchObject({ settledMinorUnits: 40, period: { legacyTransition: true } });
     expect(db.prepare('SELECT checkpoint_revision FROM provider_spend_period_history').all()).toEqual([{ checkpoint_revision: 1 }]);
   } finally { backup.close(); db.close(); }
@@ -57,6 +57,6 @@ it('the v72 → v71 down step is exact for a ledger without spend accounts; nega
     db.exec('BEGIN IMMEDIATE'); expect(() => migrateLedger(db, 'allow')).toThrow(expect.objectContaining({ code: 'ATTEMPT_STORE_VERSION' })); db.exec('ROLLBACK');
     expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(71);
     db.exec(DOWNGRADE_TO_V70_LEDGER_SQL); migrateLedger(db, 'allow');
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(72); expect(history(db)).toBe(1);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(73); expect(history(db)).toBe(1);
   } finally { db.close(); }
 });

@@ -116,7 +116,7 @@ describe('I-S1 setup planner', () => {
     const p1 = planSetup(observe(), answers({ 'core:folder': 's' }), a), p2 = planSetup(observe(), answers({ 'core:folder': 's' }), b);
     expect(a.digest).toBe(b.digest); expect(p1).toEqual(p2); expect(p1.planDigest).toBe(p2.planDigest);
     expect(p1.stages.map(stage => stage.id)).toEqual(['core:language', 'core:environment', 'core:folder', 'core:profile', 'core:policy', 'core:sandbox', 'core:final-check',
-      'execution:runtime', 'core:model', 'source:runtime']);
+      'core:model', 'source:runtime', 'execution:runtime']);
     expect(planSetup(observe(), answers({ 'core:folder': 't' }), a).planDigest).not.toBe(p1.planDigest);
     expect(new SetupStageRegistry().digest).not.toBe(a.digest);
   });
@@ -216,4 +216,18 @@ it('U3-1a: phase filters keep all prerequisite states, settle install warnings, 
   expect(mode(true).get('other:runtime')).toMatchObject({ phase: 'install', autoEligible: false });
   expect(mode().has('acme:runtime')).toBe(false);
   expect(byId(planSetup(done, undefined, table, { phase: 'onboarding' })).get('acme:runtime')!.phase).toBe('onboarding');
+});
+
+it('U3-1b: declared onboarding order passes only answered earlier stages to later families', () => {
+  const seen: unknown[] = [];
+  const work: SetupFamilyPackage = { namespace: 'work', source: 'test', facts: z.unknown(), stages: [
+    { id: 'work:kind', title: 'setup.work.kindTitle', after: 'core:model', evaluate: context => ({ state: typeof context.answer === 'string' ? 'done' : 'needs-answer', reason: { code: 'setup.work.kindDone' } }) }] };
+  const execution: SetupFamilyPackage = { namespace: 'execution', source: 'test', facts: z.unknown(), stages: [
+    { id: 'execution:worker', title: 'setup.execution.workerTitle', after: 'core:sandbox', evaluate: context => { seen.push(context.prior?.get('work:kind')); return { state: 'skipped', reason: { code: 'setup.execution.noWorkKind' } }; } }] };
+  const registry = new SetupStageRegistry([execution, work]);
+  const plan = planSetup(observe(), answers({ 'work:kind': 'chosen-cli' }), registry);
+  expect(plan.stages.findIndex(row => row.id === 'work:kind')).toBeLessThan(plan.stages.findIndex(row => row.id === 'execution:worker'));
+  expect(seen).toEqual(['chosen-cli']);
+  planSetup(observe(), answers({ 'work:kind': { unvalidated: true } }), registry);
+  expect(seen).toEqual(['chosen-cli', undefined]);
 });

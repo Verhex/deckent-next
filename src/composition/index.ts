@@ -40,7 +40,7 @@ export { executeConfiguredBackup } from '#composition/core/backup/index.js';
 
 export { listConfiguredMcpCapabilityScopes, inspectConfiguredMcpCapabilities, changeConfiguredMcpCapabilities } from '#composition/core/approvals/index.js';
 export { inspectConfiguredDecisionDelegations } from '#composition/core/approvals/index.js';
-export { planConfiguredRun, planRuntimeRun } from '#composition/core/run-planner/index.js';
+export { startConfiguredRunIntent, transitionConfiguredRunIntent, planConfiguredRun, planRuntimeRun } from '#composition/core/run-planner/index.js';
 
 export { releaseConfiguredQuota } from '#composition/core/runs/index.js';
 

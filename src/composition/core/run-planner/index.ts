@@ -1,6 +1,6 @@
 import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, type BrainPlanCommand, type BrainPlanObserver,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
-import { BrainPlanApplication, brainQuotaWaitPolicy, brainRunId, brainTakesMemory, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
+import { intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainRunId, brainTakesMemory, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
 import { FileBrainQuotaWaitStore, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
@@ -12,6 +12,8 @@ import { createConfiguredRuntimeClient } from '#composition/core/runtime-service
 import { queryFailure } from '#composition/core/query-errors/index.js';
 import { isToolchainRefreshInProgress } from '#composition/core/toolchains/index.js';
 import { prepareConfiguredPlanningMemory } from '#composition/core/memory/index.js';
+import { configuredWorkerSetupFact } from './internal/intent-facts.js';
+import { preflightConfiguredRunIntent, transitionConfiguredRunIntent } from './internal/intents.js';
 import { gateConfiguredBrainModel } from './internal/model-roles.js';
 export { inspectConfiguredRoleModels } from './internal/model-roles.js';
 /** SDK application contract. CLI/MCP/Terminal use the same application with the existing runtime invocation transport. `observe`: a caller that
@@ -31,11 +33,15 @@ export function planRuntimeRun(root: string, input: BrainPlanCommand, options: C
 }
 async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOptions,
   invoke: (command: ModelInvocationCommand, signal?: AbortSignal) => Promise<ModelInvocationResult>, signal?: AbortSignal,
-  propose?: (proposal: RunProposal) => ReturnType<typeof proposeConfiguredRun>, observe?: BrainPlanObserver) {
+  propose?: (proposal: RunProposal) => ReturnType<typeof proposeConfiguredRun>, observe?: BrainPlanObserver, starting = false) {
   try {
     const parsed = brainPlanCommandInputSchema.safeParse(input);
     if (!parsed.success) throw ErrorRegistry.createError('BRAIN_INPUT_INVALID');
     input = parsed.data;
+    if (!starting) {
+      const waiting = await preflightConfiguredRunIntent(root, input, options);
+      if (waiting) return waiting;
+    }
     await loadComposedConfig(root, options);
     const context = await loadConfiguredScopeContext(root, input.scopeId, options, 'write');
     const readBudget = (scopeId: string) => readConfiguredRunBudget(root, scopeId, options).then(value => providerSpendRemaining(value.checkpoint));
@@ -94,4 +100,18 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
       },
     }).plan(input, undefined, signal, observe);
   } catch (error) { throw queryFailure(error); }
+}
+
+export { transitionConfiguredRunIntent } from './internal/intents.js';
+/** Explicit person's start only; ordinary /do replay keeps the durable intent parked/released/starting. */
+export async function startConfiguredRunIntent(root: string, intent: import('#engine/index.js').RunIntentRecord, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
+  const query = { schemaVersion: 1 as const, scopeId: intent.command.scopeId, commandId: intent.command.commandId, runId: intent.runId };
+  const kept = await inspectConfiguredRunProposal(root, query, options);
+  if (kept && !('kind' in kept)) return plan(root, intent.command, options, (command, signal) => invokeConfiguredModel(root, command, options, signal), signal, undefined, undefined, true);
+  const start = intent.transitions.find(row => row.action === 'start');
+  const previous = start ? { ...intent, revision: intentStartExpectedRevision(start.revision) } : intent;
+  await transitionConfiguredRunIntent(root, previous, 'start', start?.commandId ?? `${intent.command.commandId}-start`, options);
+  const setup = await configuredWorkerSetupFact(root, intent.command.scopeId, options);
+  if (!setup?.ready) throw ErrorRegistry.createError('WORKER_SETUP_PENDING', { params: setup?.params ?? { phase: 'unavailable' } });
+  return plan(root, intent.command, options, (command, signal) => invokeConfiguredModel(root, command, options, signal), signal, undefined, undefined, true);
 }
