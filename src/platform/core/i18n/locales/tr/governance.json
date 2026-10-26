@@ -551,6 +551,8 @@
   "error.MODEL_CATALOG_OUTCOME_UNKNOWN": "Model kataloğu değişikliği kaydedilmiş de olabilir, kaydedilmemiş de. Sonucu öğrenmek için aynı komutu aynı komut kimliğiyle tekrarlayın.",
   "error.WORKER_MODEL_BINDING_MISMATCH": "Bir native işçi profilinin çalıştıracağı komut, sabitlenmiş katalog modeliyle eşleşmiyor (farklı, yeri değişmiş, yinelenmiş ya da satır içi model bayrağı, fazladan argüman veya başka bir çalıştırılabilir). Profili `deckent coding prepare` ile yeniden hazırlayın; elle değiştirilmiş işçi komutları reddedilir.",
   "error.MODEL_CATALOG_ALIAS_CONFLICT": "Katalog değişikliği, korunan modeller de sayılınca, aynı kanalda bir takma adı tam model kimliğine ya da başka bir takma ada eşitleyecekti. Hiçbir şey yazılmadı; çakışan takma adı yeniden adlandırıp ya da kaldırıp tekrar deneyin.",
+  "error.MODEL_CATALOG_MODEL_RETIRED": "{model} modeli {day} tarihinde emekliye ayrıldı; etkinleştirilemez. Kapatmak yine mümkün.",
+  "error.MODEL_CATALOG_MODEL_RETIRED.successor": "Aynı ailenin güncel modeli: {successor}.",
   "error.WORK_INPUT_REQUIRED": "Görevin türü bir kodlama şablonu kullanıyor; şablon görev olmadan asla çalışmaz: göreve tipli bir workInput verin (görev grafı şeması 3).",
   "error.WORK_INPUT_TEMPLATE_REQUIRED": "Görev bir workInput taşıyor, ancak türünün kayıtlı profili bir kodlama şablonu değil. Şablon türü kullanın ya da hazırlanmış profil için workInput'u kaldırın.",
   "error.WORK_INPUT_TURN_LIMIT_EXCEEDS_TEMPLATE": "İş girdisi şablonun izin verdiğinden daha yüksek bir tur sınırı istiyor. İş girdisi şablonun tur sınırını yalnızca düşürebilir; iş girdisindeki maxTurns değerini azaltın.",

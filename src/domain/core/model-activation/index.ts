@@ -7,7 +7,7 @@ export type { ModelActivationActor, ModelActivationAuthorization, ModelActivatio
 export { transitionModelActivation } from './internal/transition.js';
 export { modelActivationQuerySchema, parseModelActivationQuery } from './internal/query.js';
 export type { ModelActivationQuery } from './internal/query.js';
-export { MODEL_CATALOG_SCHEMA_VERSION, MODEL_CATALOG_TARGET_PREFIX, ModelCatalogError, modelCatalogTargetSchema, modelCatalogCommandSchema, modelCatalogQuerySchema,
+export { MODEL_CATALOG_SCHEMA_VERSION, MODEL_CATALOG_TARGET_PREFIX, ModelCatalogError, catalogModelRetired, retiredModelActivationRefusal, modelCatalogTargetSchema, modelCatalogCommandSchema, modelCatalogQuerySchema,
   modelCatalogChannelRecordSchema, modelCatalogModelRecordSchema, modelCatalogActivationRecordSchema, modelCatalogReceiptSchema,
   parseModelCatalogCommand, parseModelCatalogReceipt, parseModelCatalogChannelRecord, parseModelCatalogModelRecord,
   parseModelCatalogActivationRecord, encodeModelCatalogTarget, modelCatalogTargets, planModelCatalogRegistration,

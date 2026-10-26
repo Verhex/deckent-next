@@ -340,6 +340,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   MODEL_CATALOG_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CATALOG_OUTCOME_UNKNOWN', p, l) }) },
   WORKER_MODEL_BINDING_MISMATCH: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_MODEL_BINDING_MISMATCH', p, l) }) },
   MODEL_CATALOG_ALIAS_CONFLICT: { category: 'error', render: (p, l) => ({ message: t('error.MODEL_CATALOG_ALIAS_CONFLICT', p, l) }) },
+  MODEL_CATALOG_MODEL_RETIRED: { category: 'error', render: (p, l) => ({ message: [t('error.MODEL_CATALOG_MODEL_RETIRED', p, l), ...(p['successor'] ? [t('error.MODEL_CATALOG_MODEL_RETIRED.successor', p, l)] : [])].join(' ') }) },
   WORK_INPUT_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_REQUIRED', p, l) }) },
   WORK_INPUT_TEMPLATE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TEMPLATE_REQUIRED', p, l) }) },
   WORK_INPUT_TURN_LIMIT_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.WORK_INPUT_TURN_LIMIT_UNSUPPORTED', p, l) }) },

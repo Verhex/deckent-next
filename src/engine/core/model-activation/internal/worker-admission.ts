@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { workerEffortSchema, workerModelPinEvidenceShape, catalogPinModelEvidence, eligibleRoleModels, roleModelKey, type ModelCatalogModelRecord, type ModelRolePolicy } from '#domain/index.js';
+import { catalogModelRetired, workerEffortSchema, workerModelPinEvidenceShape, catalogPinModelEvidence, eligibleRoleModels, roleModelKey, type ModelCatalogModelRecord, type ModelRolePolicy } from '#domain/index.js';
 import { compareToolchainVersions, extractToolchainVersion } from '#engine/core/toolchain-currency/index.js';
 import type { ModelCatalogReader } from './catalog.js';
 
@@ -46,9 +46,8 @@ const subscriptionSchema = z.object({ schemaVersion: z.number(), provider: z.enu
   preflight: z.object({ cliVersion: z.string() }).passthrough().optional(), model: pinned.optional() }).passthrough();
 const taskSchema = z.object({ taskId: z.string(), profile: z.object({ parameters: z.object({ nativeSubscription: z.unknown().optional() }).passthrough() }).passthrough() }).passthrough();
 const today = (nowMs: number) => new Date(nowMs).toISOString().slice(0, 10);
-/** Retired by the catalog's lifecycle data: its state, or its recorded retirement day has come (worker admission and the activation cascade share it). */
-export const catalogModelRetired = (lifecycle: Pick<ModelCatalogModelRecord['model']['lifecycle'], 'state' | 'retiredOn'>, nowMs: number) =>
-  lifecycle.state === 'retired' || (lifecycle.retiredOn !== null && lifecycle.retiredOn <= today(nowMs));
+/** The UTC day a catalog lifecycle date is compared with (admission, the activation cascade and an explicit activation). */
+export const catalogDay = today;
 
 async function checkModel(reader: ModelCatalogReader, scopeId: string, taskId: string, provider: string, cliVersion: string | null,
   channelId: string, modelId: string, nowMs: number, warnings?: WorkerAdmissionWarning[]): Promise<ModelCatalogModelRecord> {
@@ -63,7 +62,7 @@ async function checkModel(reader: ModelCatalogReader, scopeId: string, taskId: s
   const entry: ModelCatalogModelRecord | undefined = models.find(candidate => candidate.modelId === modelId);
   if (!entry) return refuse('WORKER_MODEL_UNKNOWN');
   const { lifecycle } = entry.model;
-  if (catalogModelRetired(lifecycle, nowMs)) refuse('WORKER_MODEL_RETIRED');
+  if (catalogModelRetired(lifecycle, today(nowMs))) refuse('WORKER_MODEL_RETIRED');
   if (lifecycle.state !== 'active') refuse('WORKER_MODEL_NOT_CURRENT');
   if ((await reader.activation(scopeId, channelId, null))?.state !== 'active') refuse('WORKER_CHANNEL_NOT_ACTIVE');
   if ((await reader.activation(scopeId, channelId, modelId))?.state !== 'active') refuse('WORKER_MODEL_NOT_ACTIVE');

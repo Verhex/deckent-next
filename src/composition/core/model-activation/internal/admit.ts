@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { inspectConfiguredModelActivation } from './inspect.js';
 import { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 import { modelActivationCommandSchema, type ModelActivationCommand, type ModelReference } from '#domain/index.js';
-import { ModelActivationApplication, ModelActivationPolicyAuthorization, ModelBindingApplication,
+import { ModelActivationApplication, refuseRetiredModelActivation, ModelActivationPolicyAuthorization, ModelBindingApplication,
   assessModelInvocationProfileDeliveries } from '#engine/index.js';
 import { openSqliteModelActivationStore } from '#adapters/index.js';
 import type { ConfigLoadOptions } from '#platform/index.js';
@@ -36,6 +36,15 @@ export async function admitConfiguredChatActivation(projectRoot: string, input: 
 export async function admitConfiguredModelActivation(projectRoot: string, input: ModelActivationCommand, options: ConfigLoadOptions = {}) {
   try {
     const command = modelActivationCommandSchema.parse(input);
+    // A retired worker-catalog model is refused before the chat owner writes anything (no half-activated pair).
+    if (command.action === 'activate') {
+      const before = await inspectConfiguredModelCatalog(projectRoot, { schemaVersion: 1, scopeId: command.scopeId, channelId: command.reference.providerId }, options);
+      const channel = before.channels.find(row => row.access === 'allowed' && row.providerVersion === command.reference.providerVersion);
+      const nativeId = (await inspectDeclaredModels(projectRoot, options)).catalog?.providers.find(provider => provider.id === command.reference.providerId
+        && provider.version === command.reference.providerVersion)?.models.find(model => model.id === command.reference.modelId && model.version === command.reference.modelVersion)?.nativeId;
+      const model = channel?.access === 'allowed' ? channel.models.find(row => row.model.nativeId === nativeId) : undefined;
+      if (channel?.access === 'allowed' && model) refuseRetiredModelActivation(channel.models, model.modelId, Date.now());
+    }
     const result = await admitConfiguredChatActivation(projectRoot, command, options);
     if (result.replayed) {
       const latest = await inspectConfiguredModelActivation(projectRoot, { schemaVersion: 1, scopeId: command.scopeId, reference: command.reference }, options);
@@ -68,6 +77,7 @@ export async function activateConfiguredWorkerModel(root: string, scopeId: strin
   if (channel?.access !== 'allowed') throw queryFailure(Object.assign(Error('MODEL_CATALOG_NOT_FOUND'), { code: 'MODEL_CATALOG_NOT_FOUND' }));
   const model = channel.models.find(row => row.model.id === reference.modelId && row.model.version === reference.modelVersion);
   if (!model) throw queryFailure(Object.assign(Error('MODEL_CATALOG_NOT_FOUND'), { code: 'MODEL_CATALOG_NOT_FOUND' }));
+  try { refuseRetiredModelActivation(channel.models, model.modelId, Date.now()); } catch (error) { throw queryFailure(error); }
   let written = false;
   for (const [index, modelId] of [null, model.modelId].entries()) {
     const current = modelId === null ? channel.activation : model.activation;
