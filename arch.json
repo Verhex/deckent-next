@@ -2407,7 +2407,8 @@
         "src/engine/core/worker-setup",
         "src/adapters/core/npm-registry",
         "src/platform/core/utils",
-        "src/adapters/core/local-runtime-socket"
+        "src/adapters/core/local-runtime-socket",
+        "src/engine/core/effect"
       ],
       "plan": "PROVIDERS"
     },
@@ -4306,6 +4307,21 @@
         "src/platform/core/redaction"
       ],
       "plan": "LEARNING"
+    },
+    "src/adapters/core/installation-removal": {
+      "dependencies": [
+        "src/engine/core/effect"
+      ],
+      "plan": "INSTALLATION"
+    },
+    "src/adapters/core/file-effect-store": {
+      "dependencies": [
+        "src/domain/core/effect",
+        "src/engine/core/effect",
+        "src/platform/core/integrity",
+        "src/adapters/core/local-runtime-socket"
+      ],
+      "plan": "INSTALLATION"
     }
   },
   "composition": {

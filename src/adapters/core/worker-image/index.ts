@@ -7,3 +7,6 @@ export { resolveWorkerBuildPlan } from './internal/resolve.js';
 export type { WorkerResolution } from './internal/resolve.js';
 
 export { withWorkerBuilder, readWorkerHistory, type WorkerReservation } from './internal/custody.js';
+
+export { WorkerImageRemovalTarget, workerRemovalGuard } from './internal/removal.js';
+export type { WorkerRemovalResource, WorkerRemovalObservation, WorkerRemovalDriver } from './internal/removal.js';

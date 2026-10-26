@@ -30,3 +30,27 @@ export async function decryptKey(text: string, passphrase: string, aad: string):
     return Buffer.concat([decipher.update(Buffer.from(value.ciphertext, 'hex')), decipher.final()]);
   } catch { return refuse('BACKUP_PASSPHRASE_INVALID'); } finally { key.fill(0); }
 }
+
+/** Version 2 envelope for owner contributions: same KDF/AEAD owner, arbitrary bounded bytes, never plaintext state entries. */
+export async function encryptBackupContribution(material: Uint8Array, passphrase: string, aad: string): Promise<string> {
+  if (!passphrase || Buffer.byteLength(passphrase) > 65536) return refuse('BACKUP_PASSPHRASE_REQUIRED');
+  const salt = randomBytes(16), iv = randomBytes(12), key = await derive(passphrase, salt);
+  try {
+    const cipher = createCipheriv('aes-256-gcm', key, iv); cipher.setAAD(Buffer.from(aad));
+    const ciphertext = Buffer.concat([cipher.update(material), cipher.final()]);
+    return JSON.stringify({ schemaVersion: 2, kdf: 'scrypt', cipher: 'aes-256-gcm', salt: salt.toString('hex'), iv: iv.toString('hex'),
+      tag: cipher.getAuthTag().toString('hex'), ciphertext: ciphertext.toString('hex') });
+  } finally { key.fill(0); }
+}
+export async function decryptBackupContribution(text: string, passphrase: string, aad: string, maxBytes: number): Promise<Buffer> {
+  let value;
+  try {
+    value = envelope.extend({ schemaVersion: z.literal(2), ciphertext: z.string().max(maxBytes * 2).regex(/^(?:[0-9a-f]{2})*$/u) }).parse(JSON.parse(text));
+  } catch { return refuse('BACKUP_SET_INVALID'); }
+  const key = await derive(passphrase, Buffer.from(value.salt, 'hex'));
+  try {
+    const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(value.iv, 'hex'));
+    decipher.setAAD(Buffer.from(aad)); decipher.setAuthTag(Buffer.from(value.tag, 'hex'));
+    return Buffer.concat([decipher.update(Buffer.from(value.ciphertext, 'hex')), decipher.final()]);
+  } catch { return refuse('BACKUP_PASSPHRASE_INVALID'); } finally { key.fill(0); }
+}

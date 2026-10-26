@@ -126,6 +126,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   BACKUP_TARGET_IDENTITY_MISMATCH: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_TARGET_IDENTITY_MISMATCH', p, l) }) },
   BACKUP_RESTORE_INCOMPLETE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_RESTORE_INCOMPLETE', p, l) }) },
   BACKUP_RESTORE_HOLD: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_RESTORE_HOLD', p, l) }) },
+  BACKUP_COVERAGE_INCOMPLETE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_COVERAGE_INCOMPLETE', p, l) }) },
   BACKUP_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.BACKUP_INPUT_INVALID', p, l) }) },
   BACKUP_POLICY_DENIED: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_POLICY_DENIED', p, l) }) },
   BACKUP_PASSPHRASE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_PASSPHRASE_INVALID', p, l) }) },
