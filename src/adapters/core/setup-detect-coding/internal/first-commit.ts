@@ -101,15 +101,15 @@ async function converting(git: FirstCommitGit, paths: readonly string[]): Promis
 }
 const ROW_FIELDS = ['path', 'attribute', 'value'].length;
 /** The form Git stores for a candidate (`git add`'s clean conversion: filter, working-tree-encoding, ident, line endings). Without such an
- * attribute and without a CR byte Git keeps the bytes as they are; otherwise Git converts the bytes this read holds (`hash-object --path`) and
- * the blob is read back. `objects` keeps a preview's blobs out of the repository; `blob` is the object id when it was written. */
-async function storedForm(git: FirstCommitGit, path: string, file: Candidate, converts: boolean, objects?: string): Promise<Readonly<{ bytes: Buffer; blob: string | null }>> {
-  if (file.link || !converts && !file.bytes.includes('\r')) return { bytes: file.bytes, blob: null };
-  const at = objects ? { objects } : {}, blob = step('hash-object', await git(['hash-object', '-w', '--stdin', `--path=${path}`], { input: file.bytes, ...at })).trim();
-  const read = await git(['cat-file', 'blob', blob], { outputBytes: limits.bytes, ...at });
+ * attribute and without a CR byte Git keeps the bytes as they are; otherwise Git converts the bytes this read holds (`hash-object --path`) into
+ * the private `objects` directory, never the repository's, and the result is read back. Nothing here is accepted yet. */
+async function storedForm(git: FirstCommitGit, path: string, file: Candidate, converts: boolean, objects: string): Promise<Buffer> {
+  if (file.link || !converts && !file.bytes.includes('\r')) return file.bytes;
+  const blob = step('hash-object', await git(['hash-object', '-w', '--stdin', `--path=${path}`], { input: file.bytes, objects })).trim();
+  const read = await git(['cat-file', 'blob', blob], { outputBytes: limits.bytes, objects });
   if (read.overflow) refuse('SETUP_FIRST_COMMIT_TOO_LARGE', { observed: `>${limits.bytes}`, limit: limits.bytes });
   step('cat-file', read);
-  return { bytes: read.bytes ?? Buffer.from(read.stdout), blob };
+  return read.bytes ?? Buffer.from(read.stdout);
 }
 
 type Observed = Readonly<{ preview: FirstCommitPreview; selection: readonly string[]; message: string; root: string; fileMode: boolean; staged: ReadonlyMap<string, Staged>;
@@ -142,7 +142,7 @@ async function observe(request: Request, git: FirstCommitGit, objects: string): 
     if (bytes > limits.bytes) refuse('SETUP_FIRST_COMMIT_TOO_LARGE', { observed: `>${limits.bytes}`, limit: limits.bytes });
     const file = early === null || selected ? await readCandidate(root, path, info.size).catch(() => refuse('SETUP_FIRST_COMMIT_CHANGED')) : null;
     // The scan reads both the work-tree bytes and the form Git stores: an encoding or a clean filter can turn one into a secret.
-    const stored = file ? (await storedForm(git, path, file, converts.has(path), objects)).bytes : null;
+    const stored = file ? await storedForm(git, path, file, converts.has(path), objects) : null;
     const flag = early ?? (file && !file.link && (secretIn(path, file.bytes.toString('utf8')) || secretIn(path, stored!.toString('utf8'))) ? 'secret-content' : null);
     if (file && (flag === null || include.has(path))) staged.set(path, stagedOf(file, stored!, fileMode));
     rows.push({ path, bytes: info.size, flag });
@@ -185,16 +185,18 @@ export async function applyFirstCommit(request: Request & Readonly<{ digest: str
   let held = false, committed = false, refSent = false, pathsOwned = false, receiptOwned = false;
   try {
     // Git stores exactly the form this apply scanned, never a later read of the work tree: each file is read again (its observed size first),
-    // its stored form must equal the scanned digest and mode, and the blob is that form — Git's own conversion of this buffer, or the buffer
-    // itself written without filters (an attribute added meanwhile cannot change it).
-    const entries: string[] = [];
-    for (const path of selection) {
-      const want = staged.get(path)!, file = await readCandidate(root, path, want.size).catch(() => refuse('SETUP_FIRST_COMMIT_CHANGED'));
-      const stored = await storedForm(git, path, file, converts.has(path)), now = stagedOf(file, stored.bytes, fileMode);
-      if (now.mode !== want.mode || now.digest !== want.digest) refuse('SETUP_FIRST_COMMIT_CHANGED');
-      const blob = stored.blob ?? step('hash-object', await git(['hash-object', '-w', '--no-filters', '--stdin'], { input: stored.bytes })).trim();
-      entries.push(`${want.mode} ${blob}\t${path}\0`);
-    }
+    // its stored form is produced in a private object directory and must equal the scanned digest and mode; only then are those exact bytes
+    // written into the repository, without filters. A refused form never reaches the repository's objects.
+    const entries = await scratchObjects(async objects => {
+      const rows: string[] = [];
+      for (const path of selection) {
+        const want = staged.get(path)!, file = await readCandidate(root, path, want.size).catch(() => refuse('SETUP_FIRST_COMMIT_CHANGED'));
+        const stored = await storedForm(git, path, file, converts.has(path), objects), now = stagedOf(file, stored, fileMode);
+        if (now.mode !== want.mode || now.digest !== want.digest) refuse('SETUP_FIRST_COMMIT_CHANGED');
+        rows.push(`${want.mode} ${step('hash-object', await git(['hash-object', '-w', '--no-filters', '--stdin'], { input: stored })).trim()}\t${path}\0`);
+      }
+      return rows;
+    });
     step('update-index', await git(['update-index', '-z', '--index-info'], { input: entries.join(''), index: temporary }));
     const tree = step('write-tree', await git(['write-tree'], { index: temporary })).trim();
     const recordedMessage = request.effectKey ? `${message}\n\nDeckent-Effect: ${request.effectKey}` : message;
