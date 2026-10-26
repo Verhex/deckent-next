@@ -55,7 +55,7 @@ const codingConfig = () => {
 describe.skipIf(process.platform === 'win32')('C-SETUP coding', () => {
   it('bare coding lists the profiles task kinds run on, and says the configured image runs none of them (EN/TR, JSON)', async () => {
     const f = await project(codingConfig());
-    for (const [lang, word] of [['en', 'Configured worker image'], ['tr', 'Yapılandırılmış worker imajı']] as const) {
+    for (const [lang, word] of [['en', 'Configured worker image'], ['tr', 'Yapılandırılmış işçi imajı']] as const) {
       const text = await bare(codingCommand, f, ['coding', '--lang', lang]);
       expect(text).toContain('claude-coding'); expect(text).toContain('2.1.303'); expect(text).toContain('b'.repeat(12)); expect(text).toContain(word);
       expect(text).toContain(lang === 'en' ? 'No admitted CLI runs on the configured image' : 'Yapılandırılmış imajda kabul edilmiş bir CLI çalışmıyor');

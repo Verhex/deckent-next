@@ -140,7 +140,7 @@ describe.skipIf(process.platform !== 'linux')('policy-driven toolchain update', 
     lines.length = 0;
     await toolchainsCommand(['toolchains', 'update', '--lang', 'tr'], { root: f.project, env: f.options.env, stdout: { write: (text: string) => { lines.push(text); return true; } },
       updateToolchains: async () => ({ decision: 'built', plan: { next: { imageVersion: 'r5-20260924' } }, build: { imageId: 'sha256:' + 'b'.repeat(64), tag: 'deckent/worker:r5-20260924' }, proposalPath: '/p.json' }) });
-    expect(lines.join('')).toMatch(/Worker imajı r5-20260924 derlendi \(deckent\/worker:r5-20260924\)/); // C-ADMIN: human words, no raw JSON dump
+    expect(lines.join('')).toMatch(/İşçi imajı r5-20260924 derlendi \(deckent\/worker:r5-20260924\)/); // C-ADMIN: human words, no raw JSON dump
     expect(lines.join('')).not.toContain('{');
     await expect(toolchainsCommand(['toolchains', 'rebuild'], { root: f.project })).rejects.toMatchObject({ code: 'CLI_USAGE' });
     await expect(toolchainsCommand(['toolchains', 'update', '--force'], { root: f.project })).rejects.toMatchObject({ code: 'CLI_USAGE' });

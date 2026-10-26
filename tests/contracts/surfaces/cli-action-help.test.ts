@@ -63,7 +63,7 @@ it('keeps extra help flags strict', async () => {
 it.each(['en', 'tr'] as const)('distinguishes each qualified resume and its owning family in %s', async language => {
   const summaries = language === 'en' ? {
     init: 'Resume an interrupted installation', run: 'Resume a parked Run', pool: 'Allow new pool task reservations',
-  } : { init: 'Kesilen kurulumu sürdür', run: "Bekletilen Run'ı sürdür", pool: 'Havuzda yeni görev rezervasyonlarını aç' };
+  } : { init: 'Kesilen kurulumu sürdür', run: 'Bekletilen işi sürdür', pool: 'Havuzda yeni görev rezervasyonlarını aç' };
   for (const family of ['init', 'run', 'pool'] as const) {
     for (const alias of ['--help', '-h']) {
       let stdout = '', stderr = '', initialized = 0;

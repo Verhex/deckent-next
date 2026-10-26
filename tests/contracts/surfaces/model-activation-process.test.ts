@@ -130,7 +130,7 @@ it.skipIf(process.platform === 'win32')('requires POSIX managed storage; MANAGED
     { cwd: project, env, timeout: 10_000 })).stdout;
   // U2-S4: the state reads On/Off and the notice names what writes activation records (read-only views never reconcile them).
   expect(humanEn).toContain('saved activation state: On'); expect(humanEn).toContain('read-only views never reconcile them');
-  expect(humanTr).toContain('kayıtlı Açık aktivasyonu'); expect(humanTr).toContain('salt okunur görünümler bunları eşitlemez');
+  expect(humanTr).toContain('kayıtlı etkinlik durumu: Açık'); expect(humanTr).toContain('salt okunur görünümler bunları eşitlemez');
   await expect(execute(process.execPath, [cli, 'models', 'activation', '--scope', 'scope-a', '--provider', 'provider'],
     { cwd: project, env, timeout: 10_000 })).rejects.toMatchObject({ code: 2, stderr: expect.stringContaining('CLI_ARGUMENT_MISSING') });
   await expect(execute(process.execPath, [cli, 'models', 'activation', ...flags.slice(0, -1).map(value => value === 'scope-a' ? 'wrong-scope' : value)],

@@ -123,7 +123,7 @@ describe('person cards', () => {
     expect((await run(f, ['promote', 'auditor', '--work-class', 'feature', '--lang', 'tr'], calls)).code).not.toBe(0);
     expect(calls).toEqual([]);
     const body = card.asked[0]!.body.join('\n');
-    for (const phrase of ['auditor sürüm 1 · feature: aday → terfili', 'ilişki, nedensellik değil', 'zayıf bir süzgeç', 'Bu sürümü bir AI yazdı (local-os/mcp:uid:1)', 'Run kartı olmadan seçebilir'])
+    for (const phrase of ['auditor sürüm 1 · feature: aday → terfili', 'ilişki, nedensellik değil', 'zayıf bir süzgeç', 'Bu sürümü bir AI yazdı (local-os/mcp:uid:1)', 'iş kartı olmadan seçebilir'])
       expect(body, phrase).toContain(phrase);
     card.answers = ['apply'];
     const done = await run(f, ['promote', 'auditor', '--work-class', 'feature', '--lang', 'en'], calls);

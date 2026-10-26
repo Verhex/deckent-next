@@ -61,7 +61,7 @@ function poolHandlers(calls: unknown[]) {
 }
 
 it.each([['en', 'Pool admission · open', 'Now: 1 running, 2 being evaluated', 'Capacity: at most 4 jobs at the same time', 'scope: live (default)'],
-  ['tr', 'Havuz admission · açık', 'Şu an: 1 çalışan, 2 değerlendirmede', 'Kapasite: aynı anda en çok 4 iş', 'scope: live (varsayılan)']] as const)(
+  ['tr', 'Havuz admission · açık', 'Şu an: 1 çalışan, 2 değerlendirmede', 'Kapasite: aynı anda en çok 4 iş', 'Kapsam: live (varsayılan)']] as const)(
   'pool status (%s): the configured scope is named, the state is in human words and empty fields are left out', async (language, open, now, capacity, notice) => {
   const f = await project(undefined, language), calls: unknown[] = [], { out, context } = io(f, poolHandlers(calls));
   expect(await main(['pool'], context)).toBe(0);

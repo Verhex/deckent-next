@@ -114,14 +114,13 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     await admin.policy('all');
     const english = await admin.cli('list', '--scope', 's', '--lang', 'en');
     expect(english.stdout).toContain(`Channel ${SEED_CHANNEL} (native-cli, CLI claude)`); expect(english.stdout).toContain('active in this scope');
-    expect(english.stdout).toMatch(/claude-sonnet-5-5 · lifecycle active \(retire 2027-09-28\) · CLI ≥ 2\.1\.284/);
+    expect(english.stdout).toMatch(/claude-sonnet-5-5 · lifecycle available \(retire 2027-09-28\) · CLI ≥ 2\.1\.284/);
     const turkish = await admin.cli('list', '--scope', 'b', '--lang', 'tr');
     expect(turkish.stdout).toContain('bu kapsamda etkin değil'); expect(turkish.stdout).toContain('b kapsamının gördüğü model kataloğu');
     const json = JSON.parse((await admin.cli('list', '--scope', 's', '--json')).stdout);
     expect(json.channels[0]).toMatchObject({ channelId: SEED_CHANNEL, access: 'allowed', activation: { state: 'active', revision: 1 } });
-    expect(json.channels[0].models.find((model: { modelId: string }) => model.modelId === 'claude-sonnet-5-5')).toMatchObject({ activation: null, model: { minCliVersion: '2.1.284' } });
-    // Model activation, deactivation, a stale revision and an unknown model are typed; a replay returns the receipt.
-    expect((await admin.cli('activate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-sonnet-5-5', '--command-id', 'm1', '--expected-revision', '0')).code).toBe(0);
+    expect(json.channels[0].models.find((model: { modelId: string }) => model.modelId === 'claude-sonnet-5-5')).toMatchObject({ activation: { state: 'active', revision: 1 }, model: { minCliVersion: '2.1.284' } });
+    // U2-S4: the channel's activation turned on its never-touched, priced models (rev 1). Deactivation, a stale revision and an unknown model are typed; a replay returns the receipt.
     const stale = await admin.cli('deactivate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-sonnet-5-5', '--command-id', 'm2', '--expected-revision', '0');
     expect(stale.stderr).toContain('MODEL_CATALOG_REVISION_CONFLICT');
     expect((await admin.cli('activate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-sonnet-9-9', '--command-id', 'm3', '--expected-revision', '0')).stderr).toContain('MODEL_CATALOG_NOT_FOUND');

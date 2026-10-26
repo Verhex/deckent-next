@@ -82,7 +82,7 @@ describe('recommended workers show both the CPU and the memory limit', () => {
   it('prints both factors in the human doctor line when the report carries them', () => {
     const host = { cpuCores: 16, totalMemMB: 36_000, recommendedMaxWorkers: 15, workerBasis: { cpuBased: 15, memoryBased: 59, workerMemoryEstimateMB: 400 } };
     expect(renderDoctorReport({ ...base, host }, [], 'en')).toContain('Recommended workers: 15 (CPU allows 15, free memory allows 59 at 400 MB per worker)');
-    expect(renderDoctorReport({ ...base, host }, [], 'tr')).toContain('Önerilen worker: 15 (CPU 15 izin verir');
+    expect(renderDoctorReport({ ...base, host }, [], 'tr')).toContain('Önerilen işçi: 15 (CPU 15 izin verir');
     expect(renderDoctorReport({ ...base }, [], 'en')).toContain('Recommended workers: 1\n');
   });
 });

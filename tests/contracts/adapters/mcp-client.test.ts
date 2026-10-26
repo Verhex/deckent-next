@@ -528,7 +528,7 @@ describe('MCP client: the read-only project on the cards and in a failed answer 
       expect(await decideMcpTrust({ name: 'fx', scope: 'project', file: 'mcp.json', definitionDigest: 'a'.repeat(64), entry: { command: 'node', realm }, trust: null },
         context, async card => { cards.push(card); return null; })).toMatchObject({ decision: 'unanswered' });
     }
-    const [prefer, require, host] = cards.map(describeMcpTrustCard);
+    const [prefer, require, host] = cards.map(card => describeMcpTrustCard(card));
     for (const text of [prefer, require]) expect(text).toMatch(/the project is read-only, \.git included; a server that must write the project needs `realm: host`/u);
     expect(prefer).toContain('else on the host'); expect(require).toContain('sandbox required');
     expect(host).toContain('realm: host — host: runs on this machine as your user'); expect(host).not.toContain('read-only');

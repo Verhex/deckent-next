@@ -9,7 +9,7 @@ function harness(value: unknown) {
     async inspectRun() { return { schemaVersion: 1 as const, layout, run: value }; } };
   return { out, err, context: context as never };
 }
-it.each([['en', 'No recorded Run found: nope.'], ['tr', 'Kayıtlı Run bulunamadı: nope.']])('fails with RUN_NOT_FOUND for a missing Run (%s)', async (lang, message) => {
+it.each([['en', 'No recorded Run found: nope.'], ['tr', 'Kayıtlı iş bulunamadı: nope.']])('fails with RUN_NOT_FOUND for a missing Run (%s)', async (lang, message) => {
   const h = harness(null);
   expect(await main(['run', 'inspect', '--scope', 's', '--id', 'nope', '--lang', lang], h.context)).toBe(1);
   expect(h.out.join('')).toBe(''); expect(h.err.join('')).toContain(message);

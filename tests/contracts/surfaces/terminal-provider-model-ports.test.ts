@@ -78,7 +78,7 @@ describe('/provider port', () => {
     const port = providerPanelPort(root, 'scope', { ...store.host, providerConnect: connect }, options, 'en', errorText);
     const view = await port.inspect();
     expect(view.kinds.map(kind => [kind.label, kind.detail, kind.blocked])).toEqual([['Anthropic API', 'not connected', null],
-      ['Local server (vLLM / OpenAI-compatible)', 'not connected', null], ['ChatGPT sign-in', '', 'Not available yet.']]);
+      ['Local server (vLLM / OpenAI-compatible)', 'not connected', null], ['ChatGPT subscription (Sign in with ChatGPT)', '', 'Not available yet.']]);
     const outcome = await port.connect({ kind: 'anthropic-api', endpoint: null, key: CANARY });
     expect(connect.probes).toEqual([{ kind: 'anthropic-api', endpoint: null, key: CANARY }]);
     expect(store.sets).toEqual([{ schemaVersion: 1, scopeId: 'scope', name: 'DECKENT_ANTHROPIC_KEY', value: CANARY }]);

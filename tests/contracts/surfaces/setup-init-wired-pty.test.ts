@@ -201,7 +201,7 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
   it('a team profile is saved through the witnessed installation-wide writer (global layer); doctor reads it', async () => {
     await access(cli);
     const f = await fixture();
-    const run = await f.pty('team-profile', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '4\r'],
+    const run = await f.pty('team-profile', [process.execPath, cli, 'init'], [['> 1. Language', '1\r'], ['> 3. Folder', '1\r'], ['> 5. Who uses', '2\r'],
       ['> 6. Permissions', '1\r'], ['Apply now', '1\r'], ['> 1. Language · ready', '1\r'], ['> 5. Who uses this installation · ready', '1\r'],
       ['Who uses this installation: applied', '\u001b']]);
     expect(run.timeout, run.output?.slice(-3000)).toBeUndefined();

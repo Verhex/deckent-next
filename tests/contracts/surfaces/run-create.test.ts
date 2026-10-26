@@ -67,7 +67,7 @@ it('uses the configured graph limit and reports automatic progression without cl
   await runCommand([...command, file, '--lang', 'en'], f.context);
   expect(f.output.pop()).toContain('progresses new admissions automatically');
   await runCommand([...command, file, '--lang', 'tr'], f.context);
-  expect(f.output.pop()).toContain("başlatılan yeni Run'ları güncel policy ile otomatik ilerletir");
+  expect(f.output.pop()).toContain('başlatılan yeni işleri güncel policy ile otomatik ilerletir');
   expect(f.output).toEqual([]); expect(f.calls).toHaveLength(2);
 });
 
