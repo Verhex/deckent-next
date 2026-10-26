@@ -1,17 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { readBuildIdentity } from '../../../src/platform/core/host/index.js';
+import { isSourceCheckout, readBuildIdentity } from '../../../src/platform/core/host/index.js';
 import { dispatch } from '../../../src/surfaces/core/cli/index.js';
 
-vi.mock('../../../src/platform/core/host/internal/build-identity.js', () => ({ readBuildIdentity: vi.fn() }));
+vi.mock('../../../src/platform/core/host/internal/build-identity.js', () => ({ readBuildIdentity: vi.fn(), isSourceCheckout: vi.fn() }));
 const identity = { sourceTreeSha256: 'a'.repeat(64), sourceCommit: 'b'.repeat(40), sourceDirty: false };
-beforeEach(() => { vi.mocked(readBuildIdentity).mockReset(); });
+beforeEach(() => { vi.mocked(readBuildIdentity).mockReset(); vi.mocked(isSourceCheckout).mockReset().mockReturnValue(true); });
 
 describe('CLI existing build identity surface', () => {
-  it('--version prints sourceCommonDir when present', () => {
+  it('--version prints sourceCommonDir when present in a developer checkout', () => {
     vi.mocked(readBuildIdentity).mockReturnValue({ ...identity, sourceCommonDir: '/source/repo/.git' });
     const result = dispatch(['--version']);
     expect(result.code).toBe(0);
     expect(result.output).toContain('sourceCommonDir /source/repo/.git');
+  });
+  it('FIX9: an installed package (no developer checkout) never prints the developer source path', () => {
+    vi.mocked(readBuildIdentity).mockReturnValue({ ...identity, sourceCommonDir: '/home/dev/deckent-next/.git' }); vi.mocked(isSourceCheckout).mockReturnValue(false);
+    expect(dispatch(['--version']).output.split('\n')[1]).toBe('build aaaaaaaaaaaa · commit bbbbbbbbbbbb');
   });
   it('old identities keep their existing version line byte for byte', () => {
     vi.mocked(readBuildIdentity).mockReturnValue(identity);

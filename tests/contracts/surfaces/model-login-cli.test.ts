@@ -74,10 +74,14 @@ it('a stopped or unfinished sign-in says so and exits 1; another dir is named as
 it('help names the own dir, the account switch and the refusals', async () => {
   const f = await project(), out = capture();
   await modelsCommand(['models', 'login', '--help'], { root: f.root, env: f.env, stdout: out.sink } as never);
-  for (const word of ['deckent models login --connection claude-cli-subscription', 'never in a backup', 'switch account', '--sso', 'an AI tool, MCP, CI, a pipe or --json is refused'])
+  for (const word of ['deckent models login --connection claude-cli-subscription', 'deckent models login --connection chatgpt-login', 'always prints the sign-in link',
+    'never in a backup', 'switch account', '--sso', 'an AI tool, MCP, CI, a pipe or --json is refused'])
     expect(out.text()).toContain(word);
+  // FIX9: prose wraps at the width, never at a hard break in mid-sentence (a short row followed by its own continuation).
+  const rows = out.text().split('\n');
+  for (const [index, row] of rows.entries()) if (!/[.\]:]$/u.test(row) && /^[a-z(]/u.test(rows[index + 1] ?? '')) expect(row.length, row).toBeGreaterThan(55);
 });
-it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait is aborted, nothing returns, typed OAUTH_CONNECTION_CANCELLED (FIX8c)', async () => {
+it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait is aborted, a cancellation line (not an error), exit 1 (FIX8c, FIX9)', async () => {
   for (const key of ['\u001b', '\u0003']) {
     const f = await project(), stdin = tty(), seen: AbortSignal[] = [], sigint = process.listenerCount('SIGINT'); card.interactive = true; card.answers = ['yes'];
     // The fake browser wait settles only through its signal, as the adapter does (it closes its loopback listener on abort).
@@ -85,8 +89,10 @@ it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait i
       seen.push(presentation!.signal!); presentation!.signal!.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { code: 'OAUTH_CONNECTION_CANCELLED' })));
       setImmediate(() => stdin.write('\u001b[B')); setTimeout(() => stdin.write(key), 20);
     });
-    await expect(modelsCommand(['models', 'login', '--connection', 'chatgpt-login', '--scope', 'scope'], { root: f.root, env: f.env, stdin, stdout: capture().sink,
-      siwc: { connection: 'chatgpt-login', execute } } as never)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_CANCELLED' });
+    const out = capture();
+    expect(await modelsCommand(['models', 'login', '--connection', 'chatgpt-login', '--scope', 'scope'], { root: f.root, env: f.env, locale: 'en', stdin, stdout: out.sink, stderr: out.sink,
+      siwc: { connection: 'chatgpt-login', execute } } as never)).toBe(1);
+    expect(out.text()).toContain('ChatGPT sign-in cancelled.'); expect(out.text()).not.toMatch(/Error|OAUTH_CONNECTION_CANCELLED/u);
     expect(seen).toHaveLength(1); expect(seen[0]!.aborted).toBe(true); expect(process.listenerCount('SIGINT')).toBe(sigint);
   }
 });

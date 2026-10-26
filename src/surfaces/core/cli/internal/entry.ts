@@ -1,5 +1,5 @@
 import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract, lazyFunction } from '#surfaces/core/cli-kit/index.js';
-import { PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, DeckentError, ErrorRegistry, type ExitCode, type Locale } from '#platform/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, isSourceCheckout, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, DeckentError, ErrorRegistry, type ExitCode, type Locale } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
 
@@ -43,7 +43,7 @@ export function dispatch(argv: readonly string[], locale?: Locale): { readonly o
   if (command === '--version' || command === '-v') {
     const build = readBuildIdentity();
     const line = build ? '\n' + t('cli.version.build', { tree: build.sourceTreeSha256.slice(0, 12), commit: build.sourceCommit?.slice(0, 12) ?? '-',
-      dirty: build.sourceDirty ? t('cli.version.dirty', {}, l) : '', source: build.sourceCommonDir ? ` · sourceCommonDir ${build.sourceCommonDir}` : '' }, l) : '';
+      dirty: build.sourceDirty ? t('cli.version.dirty', {}, l) : '', source: build.sourceCommonDir && isSourceCheckout() ? ` · sourceCommonDir ${build.sourceCommonDir}` : '' }, l) : '';
     return { output: t('cli.version', common, l) + line, code: 0 };
   }
   return { output: t('cli.unknownCommand', { ...common, command }, l), code: 2 };
