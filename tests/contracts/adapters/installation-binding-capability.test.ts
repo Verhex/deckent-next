@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,6 +22,9 @@ vi.mock('node:fs/promises', async importOriginal => {
   } };
 });
 const roots: string[] = [], nativePlatform = process.platform;
+// The probe's calls carry the real environment: assertions read call counts, never the calls themselves, so a failure prints no env value.
+const calls = () => probe.execute.mock.calls.length;
+const envDigest = (env: NodeJS.ProcessEnv) => createHash('sha256').update(JSON.stringify(Object.entries(env).sort(([a], [b]) => a < b ? -1 : 1))).digest('hex');
 afterEach(async () => {
   Object.defineProperty(process, 'platform', { value: nativePlatform }); probe.machine = undefined; probe.execute.mockReset();
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })));
@@ -39,10 +42,14 @@ it.skipIf(process.platform === 'win32')('uses bounded macOS IOPlatformUUID captu
   probe.execute.mockResolvedValue({ stdout: `  "IOPlatformUUID" = "${uuid}"\n`, stderr: '' });
   const limits = { timeoutMs: 37, outputBytes: 4096 }, store = new FileInstallationIdentityStore(f.layout, undefined, undefined, { identityProbe: limits });
   expect(await store.read()).toMatchObject({ status: 'unavailable', reason: 'not-created' });
-  expect(probe.execute).not.toHaveBeenCalled(); // Read of absence needs no OS subprocess.
+  expect(calls()).toBe(0); // Read of absence needs no OS subprocess.
   const identity = await store.loadOrCreate(), bytes = await readFile(f.path, 'utf8');
-  expect(probe.execute).toHaveBeenCalledWith('/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'],
-    { timeout: 37, maxBuffer: 4096, encoding: 'utf8', env: callerEnvironment(process.env) }); // FIX8a: the caller's NODE_ENV, never the entry's.
+  expect(calls()).toBe(1);
+  const [file, args, { env, ...bounds }] = probe.execute.mock.calls[0]! as [string, string[], { env: NodeJS.ProcessEnv }];
+  expect([file, args, bounds]).toEqual(['/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'], { timeout: 37, maxBuffer: 4096, encoding: 'utf8' }]);
+  // FIX8a: exactly the caller's environment (its NODE_ENV, never the entry's), compared by names and digest only.
+  const caller = callerEnvironment(process.env);
+  expect(Object.keys(env).sort()).toEqual(Object.keys(caller).sort()); expect(envDigest(env)).toBe(envDigest(caller));
   // A platform machine binding keeps the v1 persisted shape (rollback-safe); strength and source are reported on reads.
   expect(JSON.parse(bytes).binding).toEqual({ schemaVersion: 1, machineDigest: createHmac('sha256', 'deckent.installation-binding.v1').update(uuid).digest('hex'),
     canonicalRoot: await realpath(join(f.root, '.deckent')), device: expect.stringMatching(/^\d+$/u), inode: expect.stringMatching(/^[1-9]\d*$/u) });
@@ -73,12 +80,12 @@ it.skipIf(process.platform === 'win32').each(['', '0'.repeat(32), 'invalid', new
   const store = new FileInstallationIdentityStore(f.layout), identity = await store.loadOrCreate();
   expect(await store.read()).toEqual(weakRead(identity));
   await expectWeakRecord(f.path, f.root, identity.installationId);
-  expect(probe.execute).not.toHaveBeenCalled();
+  expect(calls()).toBe(0);
 });
 
 it('Windows optional metadata read reports unsupported without invoking a machine probe (simulated host)', async () => {
   const f = await fixture('win32');
   expect(await new FileInstallationIdentityStore(f.layout).read()).toEqual({ status: 'unavailable', reason: 'unsupported', bindingCapability: 'unsupported' });
-  expect(probe.execute).not.toHaveBeenCalled();
+  expect(calls()).toBe(0);
   await expect(readFile(f.path)).rejects.toMatchObject({ code: 'ENOENT' });
 });

@@ -34,8 +34,9 @@ describe.skipIf(process.platform !== 'linux')('SIWC loopback/browser adapter hos
   it('starts the exact 127.0.0.1 listener before xdg-open, closes it after callback, and keeps credentials out of argv', async () => {
     let redirect = '', delivered!: Promise<Response>;
     const fake = child();
-    mocked.spawn.mockImplementation((command: string, args: string[], options: unknown) => {
-      expect(command).toBe('xdg-open'); expect(options).toMatchObject({ shell: false, stdio: 'ignore' });
+    mocked.spawn.mockImplementation((command: string, args: string[], options: { shell?: unknown; stdio?: unknown }) => {
+      // The options carry the caller's real environment (FIX8a): only the named fields are compared, so a failure prints no env value.
+      expect(command).toBe('xdg-open'); expect({ shell: options.shell, stdio: options.stdio }).toEqual({ shell: false, stdio: 'ignore' });
       const url = new URL(args[0]!); redirect = url.searchParams.get('redirect_uri')!;
       expect(new URL(redirect).hostname).toBe('127.0.0.1'); expect(new URL(redirect).pathname).toBe(SIWC_PROTOCOL.callbackPath);
       expect(url.searchParams.has('id_token_hint')).toBe(false); expect(url.searchParams.has('access_token')).toBe(false);
@@ -122,7 +123,7 @@ describe.skipIf(process.platform !== 'linux')('SIWC loopback/browser adapter hos
 it('unsupported native platforms reject before listener or opener construction', async () => {
   if (process.platform === 'linux') return;
   await expect(siwcBrowserAuthorization(make, abort.signal)).rejects.toMatchObject({ code: 'OAUTH_CONNECTION_PLATFORM_UNSUPPORTED' });
-  expect(mocked.spawn).not.toHaveBeenCalled();
+  expect(mocked.spawn.mock.calls.length).toBe(0); // a count, never the calls (their options would carry the environment)
 });
 
 
