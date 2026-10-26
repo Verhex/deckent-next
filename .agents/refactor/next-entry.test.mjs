@@ -21,16 +21,17 @@ test('Next host launchers pin both surfaces and SDK to Next without legacy data 
       assert.equal(run.status, 0, run.stderr);
       // The global root lives outside the checkout (a bundled bwrap copy inside the project is refused; live 2026-09-29).
       const seen = JSON.parse(run.stdout);
-      assert.deepEqual(seen, { cwd: root, global: join(homedir(), '.local/state/deckent-next-dev'), data: null, home: process.env.HOME ?? null, args: ['--probe'] });
+      // U7 (Q-U7 = A): the product starts in the caller's folder; the code stays pinned to this checkout.
+      assert.deepEqual(seen, { cwd: realpathSync(tmpdir()), global: join(homedir(), '.local/state/deckent-next-dev'), data: null, home: process.env.HOME ?? null, args: ['--probe'] });
       assert.equal(seen.global.startsWith(`${root}/`), false);
     }
     const run = spawnSync(process.execPath, [entry, 'node', '-e', probe], { encoding: 'utf8', env: { ...process.env, DECKENT_NEXT_INSTALL_ROOT: join(root, 'no-install') } });
-    assert.equal(run.status, 0); assert.equal(JSON.parse(run.stdout).cwd, root);
+    assert.equal(run.status, 0); assert.equal(JSON.parse(run.stdout).cwd, realpathSync(process.cwd()));
     assert.equal((await readFile(entry, 'utf8')).includes('deckent-dev/dist'), false);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-test('DEV-U2-0: with a staged `current` the launchers run that version by real path with the project as cwd; an invalid `current` is refused', async () => {
+test('DEV-U2-0: with a staged `current` the launchers run that version by real path in the caller folder; an invalid `current` is refused', async () => {
   const base = realpathSync(await mkdtemp(join(tmpdir(), 'next-entry-current-')));
   try {
     const root = join(base, 'checkout'), install = join(base, 'install'), id = '0123456789ab-ba9876543210', version = join(install, 'versions', id);
@@ -48,7 +49,7 @@ test('DEV-U2-0: with a staged `current` the launchers run that version by real p
     await symlink(`versions/${id}`, join(install, 'current'), 'dir');
     for (const surface of ['cli', 'mcp']) {
       const run = launch(surface); assert.equal(run.status, 0, run.stderr);
-      assert.deepEqual(JSON.parse(run.stdout), { cwd: root, script: join(version, `dist/composition/core/${surface}/internal/entry.js`), install: null });
+      assert.deepEqual(JSON.parse(run.stdout), { cwd: realpathSync(tmpdir()), script: join(version, `dist/composition/core/${surface}/internal/entry.js`), install: null });
     }
     // A `current` that does not name a staged version is refused, never silently replaced by the checkout.
     await rename(join(version, 'release.json'), join(version, 'release.moved'));
