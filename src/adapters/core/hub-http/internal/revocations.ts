@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { HUB_LIMITS, hubRevocationFeedSchema } from '#domain/index.js';
 import type { HubClientDependencies } from '#engine/index.js';
+import { DeckentJsonSchemaValidator } from '#platform/index.js';
 import { createGovernedHubFetch, type HubFetchDependencies } from './client.js';
 import { HubNetworkError } from './listener.js';
 
@@ -11,7 +12,7 @@ export function governedHubRevocationReader(deps: HubFetchDependencies, extensio
     if (source.scopeId !== deps.scopeId || source.hubId !== deps.hubId || !/^[a-z0-9.-]+\/[a-z0-9-]+$/.test(extensionId)) throw new HubNetworkError('HUB_NETWORK_INVALID');
     const { Client, StreamableHTTPClientTransport } = await import('@modelcontextprotocol/client');
     const governed = createGovernedHubFetch(deps), client = new Client({ name: 'deckent-hub-revocations', version: '1' },
-      { versionNegotiation: { mode: { pin: '2026-07-28' } }, capabilities: { extensions: { [extensionId]: {} } } });
+      { versionNegotiation: { mode: { pin: '2026-07-28' } }, capabilities: { extensions: { [extensionId]: {} } }, jsonSchemaValidator: new DeckentJsonSchemaValidator() });
     const transport = new StreamableHTTPClientTransport(new URL(source.endpoint), { fetch: (input, init) => {
       const request = new Request(input, init);
       return governed(new Request(request, { signal: AbortSignal.any([signal, request.signal]) }));
