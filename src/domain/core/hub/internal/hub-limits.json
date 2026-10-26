@@ -22,5 +22,6 @@
   "httpMaxBytes": 8388608,
   "httpMaxConcurrentRequests": 32,
   "networkInputMaxBytes": 4096,
-  "delegationMaxMs": 7776000000
+  "delegationMaxMs": 7776000000,
+  "clockSkewMs": 300000
 }

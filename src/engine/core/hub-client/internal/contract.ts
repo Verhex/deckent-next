@@ -32,7 +32,7 @@ export type HubRefreshResult = z.infer<typeof hubRefreshResultSchema>;
 export interface HubReceipt { readonly scopeId: string; readonly commandId: string; readonly digest: string; readonly result: HubSource | readonly HubInstall[] | HubRefreshResult }
 /** Same ledger and transaction as the catalog; no SQL crosses this port. A borrowed catalog's close is a no-op. */
 export interface HubClientStore extends AgentCatalogStore {
-  upstream(scopeId: string, kind: 'agent' | 'skill', id: string, revision: number, nowMs?: number, verifiedKeyIds?: readonly string[]): Promise<CatalogUpstream>;
+  upstream(scopeId: string, kind: 'agent' | 'skill', id: string, revision: number, nowMs?: number, verifiedKeyIds?: readonly string[], revokedKeyIds?: readonly string[]): Promise<CatalogUpstream>;
   atomic<T>(work: () => Promise<T>): Promise<T>;
   borrowCatalog(anchor?: { readonly scopeId: string; readonly key: HubVerificationKey }): AgentCatalogStore;
   sources(scopeId: string): Promise<readonly HubSource[]>;

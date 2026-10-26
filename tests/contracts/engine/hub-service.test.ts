@@ -23,7 +23,7 @@ const delegate = (key: typeof hub, purposes: ('attestation' | 'feed')[], notBefo
   const body = { schemaVersion: 1 as const, hubId: rootKey.keyId, keyId: key.keyId, publicKey: key.spki.toString('base64'), purposes, notBefore, notAfter };
   return { ...body, signature: { keyId: by.keyId, algorithm: 'ed25519' as const, value: by.sign(hubKeyDelegationMessage(body)).toString('base64') } };
 };
-const delegations: Readonly<Record<string, unknown>> = { [hub.keyId]: delegate(hub, ['attestation']), [feedKey.keyId]: delegate(feedKey, ['feed']) };
+const delegations: Readonly<Record<string, unknown>> = { [hub.keyId]: delegate(hub, ['attestation']), [feedKey.keyId]: delegate(feedKey, ['feed'], 0, 10_000_000) };
 async function fixture(c: TestContext, extra: Partial<HubServicePolicy> = {}) {
   if (process.platform === 'win32') c.skip('verify-not-run: Hub POSIX custody; Windows refuses in hub-server contract');
   const root = mkdtempSync(join(tmpdir(), 'hub-service-')); roots.push(root);
@@ -287,10 +287,11 @@ it('a real H8 package and feed reach the H2 client only through root-signed key 
   expect(feed).toMatchObject({ signature: { keyId: feedKey.keyId }, delegation: { keyId: feedKey.keyId, purposes: ['feed'] } });
   // H2 client: the source pins only the root; the moderation resolver takes the attestation key from the root-verified delegation.
   const root = { hubId: rootKey.keyId, publicKey: rootKey.spki.toString('base64') };
-  const resolveTrust: NonNullable<HubClientDependencies['resolveTrust']> = async (_source, value) => {
+  // (The client core applies the trusted-clock rule itself; the resolver only binds the evidence to the delegated key.)
+  const resolveTrust: NonNullable<HubClientDependencies['resolveTrust']> = async (_source, value, _principal, _store, nowMs) => {
     const attestation = value.envelope.signatures.find(s => s.role === 'hub')!;
     return verifyHubModerationEvidence(evidence, value, { hubId: root.hubId, rootPublicKey: root.publicKey,
-      attestationKey: delegatedHubKey(root, attestation.keyId, value.delegation, 'attestation', attestation.signedAtMs) });
+      attestationKey: delegatedHubKey(root, attestation.keyId, value.delegation, 'attestation', attestation.signedAtMs, { nowMs, stored: true }) });
   };
   const client = await clientFixture({ resolveTrust }); roots.push(client.root);
   await client.app.addSource({ schemaVersion: 1, scopeId: 's', commandId: 'add-h8', hubId: root.hubId, publicKey: root.publicKey, expectedRevision: null,
@@ -299,20 +300,38 @@ it('a real H8 package and feed reach the H2 client only through root-signed key 
     bundles: [encodeHubBundle(value)], feed: feedValue, workClassMapping: {} });
   const { delegation: _served, ...bare } = served, { delegation: _feed, ...unsignedFeed } = feed, signedAt = row.envelope.signatures.find(s => s.role === 'hub')!.signedAtMs;
   void _served; void _feed;
-  // No delegation, a feed-only delegation, a window that ended before the hub signature, or one the online key signed itself: never accepted.
+  // No delegation, a feed-only delegation, a window that ended before the hub signature, one the online key signed itself, or one that ended
+  // before the client's now although the self-asserted signedAtMs (300) lies inside it (backdating with an ended key): never accepted.
   for (const [id, value] of [['bare', bare], ['purpose', { ...served, delegation: delegate(hub, ['feed']) }], ['expired', { ...served, delegation: delegate(hub, ['attestation'], 0, signedAt) }],
-    ['self', { ...served, delegation: delegate(hub, ['attestation'], 0, 100000, hub) }]] as const) await expect(install(id, value as HubBundle)).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
+    ['self', { ...served, delegation: delegate(hub, ['attestation'], 0, 100000, hub) }], ['backdated', { ...served, delegation: delegate(hub, ['attestation'], 0, 500) }]] as const)
+    await expect(install(id, value as HubBundle)).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
   await expect(install('feed-bare', served, unsignedFeed)).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
   // The real server output installs, re-verifies from the stored bundle and exports with its delegation.
   await expect(install('h8', served)).resolves.toMatchObject({ result: [expect.objectContaining({ packageId: '@acme/invoice', state: 'installed' })] });
   const query = { schemaVersion: 1, scopeId: 's', hubId: root.hubId, packageId: '@acme/invoice', version: '1.0.0' };
   await expect(client.app.verify(query)).resolves.toMatchObject({ packageId: '@acme/invoice' });
   expect(JSON.parse(Buffer.from(await client.app.exportFile(query)).toString('utf8'))).toMatchObject({ delegation: { keyId: hub.keyId } });
-  // A feed whose own entries revoke its delegated signing key is refused.
-  const payload = { schemaVersion: 1 as const, hubId: root.hubId, sequence: feed.sequence + 1, issuedAtMs: 400, nextRefreshBy: 4000000,
-    entries: [{ kind: 'key' as const, id: feedKey.keyId, severity: 'revoke' as const, reason: 'compromised', atMs: 400 }], delegation: delegate(feedKey, ['feed']) };
-  const revoking = { ...payload, signature: { keyId: feedKey.keyId, algorithm: 'ed25519', value: feedKey.sign(hubRevocationFeedMessage(payload)).toString('base64') } };
-  await expect(client.app.applyRevocations({ schemaVersion: 1, scopeId: 's', commandId: 'revoke-feed-key', hubId: root.hubId, feed: revoking })).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
+  const signed = (by: typeof hub, sequence: number, entries: readonly object[] = [], delegation: unknown = by === rootKey ? undefined : delegate(by, ['feed'], 0, 10_000_000)) => {
+    const payload = { schemaVersion: 1 as const, hubId: root.hubId, sequence, issuedAtMs: 400, nextRefreshBy: 4000000, entries, ...(delegation ? { delegation } : {}) };
+    return { ...payload, signature: { keyId: by.keyId, algorithm: 'ed25519', value: by.sign(hubRevocationFeedMessage(payload as never)).toString('base64') } };
+  };
+  const apply = (commandId: string, value: unknown) => client.app.applyRevocations({ schemaVersion: 1, scopeId: 's', commandId, hubId: root.hubId, feed: value });
+  const revokeKey = { kind: 'key', id: feedKey.keyId, severity: 'revoke', reason: 'compromised', atMs: 400 };
+  // Feeds: a key revoked in the feed itself, or a feed delegation that ended before the client's now, are refused.
+  await expect(apply('revoke-feed-key', signed(feedKey, feed.sequence + 1, [revokeKey]))).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
+  await expect(apply('feed-ended', signed(feedKey, feed.sequence + 1, [], delegate(feedKey, ['feed'], 0, 500)))).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
+  // Revocation parity: the scope's local signer revocations withdraw the catalog overlay (stored feed signed by that key) and refuse its next feed.
+  const item = (await client.app.inspect({ ...query }))!.items[0]!, catalog = await client.catalog.openStore('read');
+  const overlay = (revoked?: string[]) => catalog.upstream!('s', item.kind, item.id, item.revision, 1000, undefined, revoked);
+  expect(await overlay()).toBe('clear'); expect(await overlay([feedKey.keyId])).toBe('withdrawn'); catalog.close();
+  Object.assign(client.catalog, { revocations: { list: async () => [{ scopeId: 's', keyId: feedKey.keyId, by: { issuer: 'os', subject: 'u' }, atMs: 900, commandId: 'r' }] } });
+  await expect(apply('local-revoked', signed(feedKey, feed.sequence + 1))).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
+  Object.assign(client.catalog, { revocations: undefined });
+  // … and so does an accepted hub entry (a root-signed yank of the feed key).
+  await apply('root-yank', signed(rootKey, feed.sequence + 1, [{ ...revokeKey, severity: 'yank' }]));
+  await expect(apply('entry-revoked', signed(feedKey, feed.sequence + 2))).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
+  // Stored content keeps its historical signing time: after the attestation delegation ended, re-verifying the installed bundle still passes.
+  client.time(200000); await expect(client.app.verify(query)).resolves.toMatchObject({ packageId: '@acme/invoice' });
 });
 
 it('cannot count a suspended moderator vote during final approval and allows an independent appeal review', async c => {

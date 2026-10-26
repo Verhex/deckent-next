@@ -21,7 +21,7 @@ export class HubServiceBase extends HubRevocationApplication {
     if (online.key.keyId === this.ports.hubId || other.key.keyId === this.ports.hubId || online.key.keyId === other.key.keyId) throw new HubServerError('HUB_STORE_UNSAFE');
     // Never sign with an online key the root has not delegated for this purpose now: clients would refuse it (S8 §9A trust chain).
     try {
-      const delegated = delegatedHubKey({ hubId: this.ports.hubId, publicKey: this.service.rootPublicKey }, online.key.keyId, await this.delegationOf(online.key.keyId), purpose, now);
+      const delegated = delegatedHubKey({ hubId: this.ports.hubId, publicKey: this.service.rootPublicKey }, online.key.keyId, await this.delegationOf(online.key.keyId), purpose, now, { nowMs: now });
       if (delegated.publicKey !== online.key.publicKey) throw new HubServerError('HUB_STORE_UNSAFE');
     } catch { throw new HubServerError('HUB_STORE_UNSAFE'); }
     return online;

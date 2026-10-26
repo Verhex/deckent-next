@@ -1,16 +1,20 @@
 import { isDeepStrictEqual } from 'node:util';
 import { HUB_TRUST_POLICIES, HubError, type HubRevocationFeed, type VerifiedPrincipal } from '#domain/index.js';
 import { ed25519KeyId } from '#platform/index.js';
-import { delegatedHubKey, hubFeedKey, verifyHubPackage, verifyHubRevocationFeed, requireHubRevocationContinuation, type HubVerificationKey } from '#engine/core/hub/index.js';
+import { delegatedHubKey, hubFeedKey, hubKeyRevoked, verifyHubPackage, verifyHubRevocationFeed, requireHubRevocationContinuation, type HubVerificationKey } from '#engine/core/hub/index.js';
 import { HubClientError, type HubBundle, type HubClientDependencies, type HubClientStore, type HubSource, type HubClientTrust } from './contract.js';
-/** Every trust resolver is a trusted composition port; publisher-pinned is resolved here from the current scope's signer rows. */
-export async function verifyClientBundle(deps: HubClientDependencies, store: HubClientStore, source: HubSource, bundle: HubBundle, principal: VerifiedPrincipal): Promise<HubClientTrust> {
+/** The scope's local signer revocations (S8-5 log), the second revocation source every client path checks beside the hub's entries. */
+export const localRevokedKeyIds = async (deps: HubClientDependencies, scopeId: string) =>
+  (deps.catalog.revocations ? await deps.catalog.revocations.list() : []).filter(row => row.scopeId === scopeId).map(row => row.keyId);
+/** Every trust resolver is a trusted composition port; publisher-pinned is resolved here from the current scope's signer rows.
+ * `stored`: re-verifying a bundle this installation verified and stored earlier (a historical hub signature time still counts). */
+export async function verifyClientBundle(deps: HubClientDependencies, store: HubClientStore, source: HubSource, bundle: HubBundle, principal: VerifiedPrincipal, stored = false): Promise<HubClientTrust> {
   const nowMs = deps.catalog.now(), publisherId = bundle.envelope.signatures.find(s => s.role === 'publisher')?.keyId;
   const policy = HUB_TRUST_POLICIES.policies.find(p => p.id === source.trustPolicy)!;
   // The pinned root, or the online attestation key it delegated at the hub signature's time; never a key the trust resolver names on its own.
   if (ed25519KeyId(Buffer.from(source.publicKey, 'base64')) !== source.hubId) throw new HubError('HUB_IDENTITY_MISMATCH');
   const attestation = bundle.envelope.signatures.find(s => s.role === 'hub'), root = { hubId: source.hubId, publicKey: source.publicKey };
-  const hub = attestation ? delegatedHubKey(root, attestation.keyId, bundle.delegation, 'attestation', attestation.signedAtMs)
+  const hub = attestation ? delegatedHubKey(root, attestation.keyId, bundle.delegation, 'attestation', attestation.signedAtMs, { nowMs, stored })
     : { keyId: source.hubId, publicKey: source.publicKey, role: 'hub' as const, active: true };
   let keys: HubClientTrust;
   if (policy.publisherPinned && policy.reviewers === 'none' && !policy.moderation) {
@@ -34,21 +38,25 @@ export async function verifyClientBundle(deps: HubClientDependencies, store: Hub
     if (resolved.publisher.keyId !== keys.publisher.keyId || resolved.publisher.publicKey !== keys.publisher.publicKey) throw new HubError('HUB_SIGNER_UNTRUSTED');
     keys = { ...keys, ...(resolved.publisherKind ? { publisherKind: resolved.publisherKind } : {}) };
   }
-  const revoked = deps.catalog.revocations ? await deps.catalog.revocations.list() : [];
-  if (revoked.some(row => row.scopeId === source.scopeId && [keys.publisher.keyId, keys.hub!.keyId, ...keys.reviewers.map(k => k.keyId)].includes(row.keyId))) throw new HubError('HUB_SIGNER_UNTRUSTED');
+  const local = await localRevokedKeyIds(deps, source.scopeId);
+  if ([keys.publisher.keyId, hub.keyId, ...keys.reviewers.map(k => k.keyId)].some(keyId => hubKeyRevoked(keyId, [], local))) throw new HubError('HUB_SIGNER_UNTRUSTED');
+  // A new bundle's delegated attestation key must not be named by this hub's accepted revocation entries either (installed content keeps the
+  // yank/revoke rule of requirePackageNotRevoked).
+  if (!stored && hub.keyId !== source.hubId && hubKeyRevoked(hub.keyId, await store.revocations(source.scopeId, source.hubId, [{ kind: 'key', id: hub.keyId }]), local))
+    throw new HubError('HUB_SIGNER_UNTRUSTED');
   verifyHubPackage(bundle.manifest, bundle.envelope, bundle.files, keys);
   return keys;
 }
-/** The pinned root or its delegated feed key, refused once this hub revoked that key (in an accepted feed or in this one). */
-export async function clientFeedKey(store: HubClientStore, source: HubSource, input: unknown): Promise<HubVerificationKey> {
-  const key = hubFeedKey({ hubId: source.hubId, publicKey: source.publicKey }, input), feed = input as HubRevocationFeed, target = { kind: 'key' as const, id: key.keyId };
-  if (key.keyId !== source.hubId && [...await store.revocations(source.scopeId, source.hubId, [target]), ...feed.entries]
-    .some(entry => entry.kind === 'key' && entry.id === key.keyId && entry.severity === 'revoke')) throw new HubError('HUB_SIGNER_UNTRUSTED');
+/** The pinned root or its feed key delegated now, refused once revoked by this hub (accepted entries or this feed) or locally for the scope. */
+export async function clientFeedKey(deps: HubClientDependencies, store: HubClientStore, source: HubSource, input: unknown): Promise<HubVerificationKey> {
+  const key = hubFeedKey({ hubId: source.hubId, publicKey: source.publicKey }, input, deps.catalog.now()), feed = input as HubRevocationFeed;
+  if (key.keyId !== source.hubId && hubKeyRevoked(key.keyId, [...await store.revocations(source.scopeId, source.hubId, [{ kind: 'key', id: key.keyId }]), ...feed.entries],
+    await localRevokedKeyIds(deps, source.scopeId))) throw new HubError('HUB_SIGNER_UNTRUSTED');
   return key;
 }
-export async function acceptClientFeed(store: HubClientStore, source: HubSource, input: unknown, nowMs: number, persist: boolean): Promise<HubRevocationFeed> {
-  const previous = await store.feed(source.scopeId, source.hubId), same = isDeepStrictEqual(previous, input);
-  const feed = verifyHubRevocationFeed(input, { hubId: source.hubId, key: await clientFeedKey(store, source, input), nowMs, previous: same ? null : previous });
+export async function acceptClientFeed(deps: HubClientDependencies, store: HubClientStore, source: HubSource, input: unknown, persist: boolean): Promise<HubRevocationFeed> {
+  const previous = await store.feed(source.scopeId, source.hubId), same = isDeepStrictEqual(previous, input), nowMs = deps.catalog.now();
+  const feed = verifyHubRevocationFeed(input, { hubId: source.hubId, key: await clientFeedKey(deps, store, source, input), nowMs, previous: same ? null : previous });
   if (!same) requireHubRevocationContinuation(feed, previous);
   if (persist && !same) await store.saveFeed(source.scopeId, feed);
   return feed;

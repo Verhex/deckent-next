@@ -27,22 +27,31 @@ export const hubKeyDelegationMessage = (delegation: Omit<HubKeyDelegation, 'sign
   signatureMessage(SIGNATURE_LABELS.hubKeyDelegation, encodeCommandProjection(SIGNATURE_LABELS.hubKeyDelegation, delegation));
 /** The pinned hub identity: `hubId` is the fingerprint of the root key a person pinned (never served by the hub itself). */
 export interface HubRoot { readonly hubId: string; readonly publicKey: string }
+/** The client's trusted clock. `stored`: re-verifying content this installation already verified and stored, the only case where a historical
+ * signing time (a delegation that has since ended) still counts; anything arriving now must be signed under a delegation valid now. */
+export interface HubTrustClock { readonly nowMs: number; readonly stored?: boolean }
 /**
  * The key allowed to make a hub signature of `purpose` signed at `atMs` (S8 §9A trust chain): the pinned root itself, or an online key the root
- * delegated for that purpose with `atMs` inside the delegation window. An undelegated, foreign-root, wrong-purpose or out-of-window key is
- * HUB_SIGNER_UNTRUSTED. Revocation of the online key stays with the caller (its revocation feed and local revocations).
+ * delegated for that purpose with `atMs` inside the delegation window. For content arriving now the window is also checked against the trusted
+ * clock (now before notAfter, `atMs` not past now beyond the registry clock skew), so a holder of an ended delegation cannot backdate a signature.
+ * An undelegated, foreign-root, wrong-purpose or out-of-window key is HUB_SIGNER_UNTRUSTED. Revocation stays with `hubKeyRevoked` at the caller.
  */
-export function delegatedHubKey(root: HubRoot, signerKeyId: string, input: unknown, purpose: 'attestation' | 'feed', atMs: number): HubVerificationKey {
+export function delegatedHubKey(root: HubRoot, signerKeyId: string, input: unknown, purpose: 'attestation' | 'feed', atMs: number, clock: HubTrustClock): HubVerificationKey {
   const rootKey: HubVerificationKey = { keyId: root.hubId, publicKey: root.publicKey, role: 'hub', active: true };
   if (signerKeyId === root.hubId) return rootKey;
   const parsed = hubKeyDelegationSchema.safeParse(input);
   if (!parsed.success) throw new HubError('HUB_SIGNER_UNTRUSTED');
   const { signature, ...delegation } = parsed.data;
   if (delegation.hubId !== root.hubId || delegation.keyId !== signerKeyId || !delegation.purposes.includes(purpose)
-    || !Number.isSafeInteger(atMs) || atMs < delegation.notBefore || atMs >= delegation.notAfter) throw new HubError('HUB_SIGNER_UNTRUSTED');
+    || !Number.isSafeInteger(atMs) || atMs < delegation.notBefore || atMs >= delegation.notAfter
+    || !clock.stored && (!Number.isSafeInteger(clock.nowMs) || clock.nowMs >= delegation.notAfter || atMs > clock.nowMs + HUB_LIMITS.clockSkewMs)) throw new HubError('HUB_SIGNER_UNTRUSTED');
   requireHubSignature(rootKey, signature.keyId, hubKeyDelegationMessage(delegation), signature.value);
   return { keyId: delegation.keyId, publicKey: delegation.publicKey, role: 'hub', active: true };
 }
+/** One rule for every client path (install, feed, catalog overlay): a delegated hub key is unusable once this hub's accepted revocation entries
+ * (yank or revoke) or the scope's local signer revocations name it. */
+export const hubKeyRevoked = (keyId: string, entries: readonly Readonly<{ kind: string; id: string }>[], localKeyIds: readonly string[]): boolean =>
+  localKeyIds.includes(keyId) || entries.some(entry => entry.kind === 'key' && entry.id === keyId);
 /** Cryptographic verification only: install policy, source identity, moderator/profile/delegation evidence and freshness are owned by the calling application. */
 export function verifyHubPackage(manifest: HubPackage, input: unknown, files: readonly HubPackageFile[], keys: HubPackageVerification): HubEnvelope {
   const canonical = canonicalHubManifest(manifest), envelope = parseHubContract(hubEnvelopeSchema, input, 'HUB_ENVELOPE_INVALID', 'HUB_ENVELOPE_SCHEMA_UNSUPPORTED');

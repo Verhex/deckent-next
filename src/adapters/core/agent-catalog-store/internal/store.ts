@@ -83,8 +83,8 @@ export class SqliteAgentCatalogStore implements AgentCatalogStore {
   }
   async standings(scopeId: string, agentId: string, revision: number) { return this.read(() => this.db.prepare(`SELECT ${STANDING} FROM agent_standings WHERE scope_id=? AND agent_id=?
     AND revision=? ORDER BY work_class LIMIT ?`).all(scopeId, agentId, revision, AGENT_CATALOG_LIMITS.workClassesPerAgentMax).map(row => this.standing(row, scopeId))); }
-  async upstream(scopeId: string, kind: 'agent' | 'skill', id: string, revision: number, nowMs = Date.now(), verifiedKeyIds?: readonly string[]) {
-    return this.read(() => catalogHubUpstream(this.db, value => this.open(value), scopeId, kind, id, revision, nowMs, verifiedKeyIds));
+  async upstream(scopeId: string, kind: 'agent' | 'skill', id: string, revision: number, nowMs = Date.now(), verifiedKeyIds?: readonly string[], revokedKeyIds?: readonly string[]) {
+    return this.read(() => catalogHubUpstream(this.db, value => this.open(value), scopeId, kind, id, revision, nowMs, verifiedKeyIds, revokedKeyIds));
   }
   async eligibleAgents(scopeId: string, workClass: string, limit: number) {
     return this.read(() => this.db.prepare(`SELECT ${STANDING.split(',').map(c => `s.${c}`).join(',')},d.revision AS d_revision,d.parent_id,d.record AS d_record FROM agent_standings s JOIN agent_definitions d

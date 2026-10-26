@@ -18,10 +18,11 @@ export function requireHubRevocationContinuation(feed: HubRevocationFeed, previo
       || page.throughPosition !== next.throughPosition || page.page !== next.page) throw new HubError('HUB_FEED_INVALID');
   } else if (page && (page.page !== 0 || page.afterSequence !== hubRevocationWatermark(previous))) throw new HubError('HUB_FEED_INVALID');
 }
-/** The key that may sign this feed of the pinned hub: its root, or the online key the feed's own root delegation names for `feed` at `issuedAtMs`. */
-export function hubFeedKey(root: HubRoot, input: unknown): HubVerificationKey {
+/** The key that may sign this feed of the pinned hub: its root, or the online key the feed's own root delegation names for `feed` at
+ * `issuedAtMs`, still delegated at `nowMs` (a feed is current data, never historical). */
+export function hubFeedKey(root: HubRoot, input: unknown, nowMs: number): HubVerificationKey {
   const feed = parseHubContract(hubRevocationFeedSchema, input, 'HUB_FEED_INVALID', 'HUB_FEED_SCHEMA_UNSUPPORTED');
-  return delegatedHubKey(root, feed.signature.keyId, feed.delegation, 'feed', feed.issuedAtMs);
+  return delegatedHubKey(root, feed.signature.keyId, feed.delegation, 'feed', feed.issuedAtMs, { nowMs });
 }
 /** Pinned source id is independent of a delegated online feed key. The caller resolves the key through `hubFeedKey` first. */
 export function verifyHubRevocationFeed(input: unknown, context: { readonly hubId: string; readonly key: HubVerificationKey; readonly nowMs: number;
