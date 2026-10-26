@@ -1,0 +1,4 @@
+{
+  "error.SECRET_SESSION_RESERVED": "Session credentials cannot be read, granted, set or deleted by name. Use models login or models logout.",
+  "error.SIWC_STORE_NOT_PERSONAL": "Personal local custody is unverified. Disconnect the connection; do not move its session records by changing stores."
+}

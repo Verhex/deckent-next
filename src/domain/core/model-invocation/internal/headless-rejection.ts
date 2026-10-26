@@ -28,9 +28,11 @@ const baseRejectionSchema = z.object({ schemaVersion: z.literal(1),
   refusal: z.enum(['guard', 'model-mismatch', 'quota', 'credits-required', 'login-required', 'invalid-output', 'provider-error', 'response-limit', 'resource-limit']),
   field: z.string().max(64).optional(), subtype: z.string().max(64).optional(), resetsAtMs: counterSchema.nullable().optional(), status: counterSchema.nullable().optional(),
   egress: headlessEgressSchema.optional() }).strict().readonly();
-/** v1 stays byte-compatible; an older reader rejects v2 as unknown instead of misclassifying a new refusal. */
+/** v1/v2 stay byte-compatible; older readers reject v3 instead of inventing quota or a reset time. */
 export const headlessRejectionBodySchema = z.discriminatedUnion('schemaVersion', [baseRejectionSchema.unwrap(),
-  baseRejectionSchema.unwrap().extend({ schemaVersion: z.literal(2), refusal: z.literal('plan-unavailable') }).strict()]).readonly();
+  baseRejectionSchema.unwrap().extend({ schemaVersion: z.literal(2), refusal: z.literal('plan-unavailable') }).strict(),
+  z.object({ schemaVersion: z.literal(3), refusal: z.enum(['usage-unavailable', 'service-unavailable']),
+    code: z.string().regex(/^[a-z][a-z0-9_]{0,127}$/u).optional(), status: counterSchema.max(599).min(400).nullable() }).strict()]).readonly();
 export type HeadlessRejectionBody = z.infer<typeof headlessRejectionBodySchema>;
 /** Legacy CLI readers keep their original evidence scope; composition explicitly supplies any additional subscription adapter ids. */
 export const NATIVE_CLI_HEADLESS_ADAPTER_ID = 'native-cli-headless';
@@ -43,6 +45,9 @@ export function readHeadlessRejection(evidence: Readonly<{ adapter: Readonly<{ i
 /** f5: the gateway summary in a headless call's stored content (rejected body or responded `native.headless`); null otherwise or when purged. */
 export function readHeadlessEgress(adapterId: string, content: Readonly<{ kind: string; data?: string; response?: unknown }> | null | undefined): HeadlessEgress | null {
   if (adapterId !== NATIVE_CLI_HEADLESS_ADAPTER_ID || !content) return null;
-  if (content.kind === 'response-body') return typeof content.data === 'string' ? readHeadlessRejection({ adapter: { id: adapterId }, body: { data: content.data } })?.egress ?? null : null;
+  if (content.kind === 'response-body') {
+    const body = typeof content.data === 'string' ? readHeadlessRejection({ adapter: { id: adapterId }, body: { data: content.data } }) : null;
+    return body && 'egress' in body ? body.egress ?? null : null;
+  }
   return headlessEgressSchema.safeParse((content.response as { native?: { headless?: { egress?: unknown } } } | undefined)?.native?.headless?.egress).data ?? null;
 }

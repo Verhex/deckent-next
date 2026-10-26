@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import * as http from '#adapters/core/provider-http-json/index.js';
-import { createSiwcResponsesPort, siwcResponsesBody, parseSiwcModels, SIWC_INFERENCE, SIWC_REQUEST_RULES } from '#adapters/core/provider-siwc/index.js';
+import { createSiwcResponsesPort, siwcResponsesBody, siwcRejection, parseSiwcModels, SIWC_INFERENCE, SIWC_REQUEST_RULES } from '#adapters/core/provider-siwc/index.js';
 import { headlessRejectionBodySchema, readHeadlessRejection } from '#domain/index.js';
 import { createModelInvocationResponseEvidence } from '#engine/index.js';
 import { responsesFixture, responsesFinal, responsesCreated, callItem, event } from '../support/openai-responses.js';
@@ -82,13 +82,20 @@ it('maps HTTP and streamed plan refusals to versioned machine-only evidence; unk
     const sent = transport(body, status);
     try { return await f.port.send(await f.port.prepare(f.profile, f.definition, f.request as never)); } finally { sent.mockRestore(); }
   };
-  for (const [code, status, expected] of [['subscription_sharing_usage_limit_exceeded', 429, 'quota'], ['subscription_sharing_usage_unavailable', 503, 'quota'],
+  for (const [code, status, expected] of [['subscription_sharing_usage_limit_exceeded', 429, 'quota'], ['subscription_sharing_usage_unavailable', 503, 'usage-unavailable'],
+    ['subscription_sharing_user_unavailable', 503, 'service-unavailable'],
     ['subscription_sharing_user_not_eligible', 403, 'plan-unavailable'], ['subscription_sharing_invalid_user', 401, 'login-required']] as const) {
     const result = await run(JSON.stringify({ error: { code, message: 'private-provider-prose' } }), status);
     expect(result).toMatchObject({ kind: 'rejected' }); if (!('kind' in result)) throw new Error('expected rejection');
     const body = readHeadlessRejection(result.evidence, ids)!;
-    expect(body).toMatchObject({ schemaVersion: expected === 'plan-unavailable' ? 2 : 1, refusal: expected });
-    if (expected === 'quota') expect(body.resetsAtMs).toBeNull();
+    expect(body).toMatchObject({ schemaVersion: expected === 'usage-unavailable' || expected === 'service-unavailable' ? 3 : expected === 'plan-unavailable' ? 2 : 1, refusal: expected });
+    if (body.refusal === 'quota') expect(body.resetsAtMs).toBeNull();
+    if (body.schemaVersion === 3) {
+      expect(body).toMatchObject({ code, status }); expect(body).not.toHaveProperty('resetsAtMs');
+      expect(legacyReader.safeParse(body).success).toBe(false);
+      const v2Reader = z.object({ schemaVersion: z.literal(2), refusal: z.literal('plan-unavailable'), status: z.number().nullable() }).strict();
+      expect(v2Reader.safeParse(body).success).toBe(false);
+    }
     if (expected === 'plan-unavailable') expect(legacyReader.safeParse(body).success).toBe(false);
     expect(headlessRejectionBodySchema.safeParse(body).success).toBe(true);
     expect(readHeadlessRejection(result.evidence)).toBeNull();
@@ -96,7 +103,8 @@ it('maps HTTP and streamed plan refusals to versioned machine-only evidence; unk
   }
   const failed = await run(responsesCreated() + event('response.failed', 1, { response: responsesFinal([], { status: 'failed', error: { code: 'subscription_sharing_usage_limit_exceeded' } }) }), 200);
   if (!('kind' in failed)) throw new Error('expected rejection');
-  expect(readHeadlessRejection(failed.evidence, ids)).toMatchObject({ refusal: 'quota', resetsAtMs: null });
+  // A stream machine code with no actual HTTP 429 is not a confirmed limit.
+  expect(readHeadlessRejection(failed.evidence, ids)).toBeNull();
   expect(await run(responsesCreated(), 200)).toMatchObject({ kind: 'rejected', evidence: { reason: 'interrupted', body: { complete: false } } });
   const unknown = await run(JSON.stringify({ error: { code: 'unknown' } }), 403);
   if (!('kind' in unknown)) throw new Error('expected rejection');
@@ -122,4 +130,35 @@ it('refuses expired leases and pre-cancellation before the real transport constr
   expect(await f.port.send(await f.port.prepare(f.profile, f.definition, f.request as never), AbortSignal.abort()))
     .toMatchObject({ kind: 'rejected', evidence: { reason: 'not-sent', httpStatus: null } });
   expect(f.lease).not.toHaveBeenCalled();
+});
+
+it('never turns transient, mismatched, unknown or stateless stream errors into quota evidence', async () => {
+  const limit = 'subscription_sharing_usage_limit_exceeded', usage = 'subscription_sharing_usage_unavailable';
+  const f = fixture(), ids = new Set([SIWC_INFERENCE.adapter.id]);
+  for (const [code, status] of [[limit, 503], [usage, 429], ['unlisted_private_code', 503], [null, 503]] as const) {
+    const sent = transport(JSON.stringify(code === null ? { detail: 'private-diagnostic' } : { error: { code, message: 'private-diagnostic' } }), status);
+    try {
+      const result = await f.port.send(await f.port.prepare(f.profile, f.definition, f.request as never));
+      if (!('kind' in result)) throw new Error('expected rejection');
+      const body = readHeadlessRejection(result.evidence, ids);
+      expect(body?.refusal).not.toBe('quota');
+      if (status === 503) {
+        expect(body).toMatchObject({ schemaVersion: 3, refusal: 'service-unavailable', status: 503 });
+        expect(body).not.toHaveProperty('resetsAtMs');
+        expect(JSON.stringify(body)).not.toContain('private');
+      } else expect(body).toBeNull();
+    } finally { sent.mockRestore(); }
+  }
+  for (const code of [limit, usage]) {
+    const sent = transport(responsesCreated() + event('response.failed', 1, { response: responsesFinal([], { status: 'failed', error: { code } }) }), 200);
+    try {
+      const result = await f.port.send(await f.port.prepare(f.profile, f.definition, f.request as never));
+      if (!('kind' in result)) throw new Error('expected rejection');
+      const body = readHeadlessRejection(result.evidence, ids);
+      expect(body?.refusal).not.toBe('quota');
+      if (code === usage) expect(body).toEqual({ schemaVersion: 3, refusal: 'usage-unavailable', code: usage, status: null });
+    } finally { sent.mockRestore(); }
+  }
+  expect(siwcRejection({ error: { code: '__proto__' } }, 429)).toBeNull();
+  expect(headlessRejectionBodySchema.safeParse({ schemaVersion: 3, refusal: 'usage-unavailable', status: 503, resetsAtMs: null }).success).toBe(false);
 });

@@ -4431,6 +4431,7 @@
       "termanswer",
       "quotaask",
       "headless",
+      "siwc",
       "recovery",
       "brainwait",
       "agentstats",

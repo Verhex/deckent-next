@@ -1,0 +1,4 @@
+{
+  "error.SECRET_SESSION_RESERVED": "Oturum bilgileri adla okunamaz, verilemez, yazılamaz veya silinemez. models login veya models logout kullanın.",
+  "error.SIWC_STORE_NOT_PERSONAL": "Kişisel yerel depo kontrolü doğrulanamadı. Bağlantıyı kesin; oturum kayıtlarını depo değiştirerek taşımayın."
+}

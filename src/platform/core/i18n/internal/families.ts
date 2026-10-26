@@ -91,7 +91,11 @@ import agentstatstr from '../locales/tr/agentstats.json' with { type: 'json' };
 import agentsevoen from '../locales/en/agentsevo.json' with { type: 'json' };
 import agentsevotr from '../locales/tr/agentsevo.json' with { type: 'json' };
 
+import siwcen from '../locales/en/siwc.json' with { type: 'json' };
+import siwctr from '../locales/tr/siwc.json' with { type: 'json' };
+
 export const families = [
+  { en: siwcen, tr: siwctr },
   { en: huben, tr: hubtr },
   { en: configen, tr: configtr },
   { en: clien, tr: clitr },

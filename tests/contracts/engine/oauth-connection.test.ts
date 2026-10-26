@@ -26,7 +26,7 @@ function fixture(overrides: Partial<OAuthConnectionPorts> = {}) {
     store: { descriptor: { id: SIWC_PROTOCOL.encryptedStoreId, writable: true, enumerable: true, encryptedAtRest: true },
       get: async name => values.get(name), set: async (name, value) => { values.set(name, value); }, delete: async name => values.delete(name),
       listNames: async () => [...values.keys()], inspect: async () => ({ status: 'ready', code: null }) },
-    custody: { selected: async () => SIWC_PROTOCOL.encryptedStoreId, exclusive: async work => {
+    custody: { assertPersonal: async () => { /* Synthetic trusted host evidence, not a real custody attestation. */ }, selected: async () => SIWC_PROTOCOL.encryptedStoreId, exclusive: async work => {
       const before = tail; let release!: () => void; tail = new Promise<void>(yes => { release = yes; });
       await before; try { return await work(); } finally { release(); }
     } },
@@ -359,4 +359,26 @@ describe('host-only OAuth access token leases', () => {
     expect(record(g, connected.connectionId).value).toMatchObject({ state: 'refresh-unknown' });
     expect(delayed).toHaveBeenCalledTimes(1);
   });
+});
+
+it('requires trusted personal custody before sign-in and each lease/refresh, preserves tokens on failure, and still permits logout', async () => {
+  const f = fixture(), attest = vi.fn(async () => {});
+  f.ports.custody.assertPersonal = attest;
+  const connected = await f.app.connect({ planUse: true });
+  expect(attest).toHaveBeenCalledWith(f.ports.store.descriptor, OWNER);
+  const saved = new Map(f.values), exchanges = f.forms.length;
+  delete f.ports.custody.assertPersonal;
+  await expect(f.app.lease(connected.connectionId, OWNER)).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL' });
+  await expect(f.app.refresh(connected.connectionId)).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL' });
+  expect(f.forms).toHaveLength(exchanges); expect(f.values).toEqual(saved);
+  // A failed proof must not leak backend diagnostics, or turn encryption/UID into a personal-control claim.
+  f.ports.custody.assertPersonal = async () => { throw new Error(SECRET); };
+  const failure = await f.app.connect({ planUse: true }).catch(error => error);
+  expect(failure).toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL' }); expect(String(failure)).not.toContain(SECRET);
+  expect(f.urls).toHaveLength(1); expect(f.values).toEqual(saved);
+  expect(await f.app.disconnect(connected.connectionId)).toMatchObject({ state: 'disconnected', remoteRevocation: 'confirmed' });
+  expect(record(f, connected.connectionId).value.tokens).toBeNull();
+  const noProof = fixture(); delete noProof.ports.custody.assertPersonal;
+  await expect(noProof.app.connect({ planUse: true })).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL' });
+  expect(noProof.values.size).toBe(0); expect(noProof.urls).toHaveLength(0);
 });
