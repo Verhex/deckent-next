@@ -30,7 +30,7 @@ const inside = (parent: string, path: string) => path === parent || path.startsW
 
 /**
  * U7 (İ-6): the project a command started in a subfolder belongs to — the one reader of the launch folder for product commands. Walks up from
- * the physical start (never through a link, never across a mount, never adopting the global state root) to the nearest folder whose data root
+ * the physical start (never through a link, never across a mount, never above $HOME, never adopting the global state root) to the nearest folder whose data root
  * holds the policy file, the product's own "installation exists" (J2d). The start itself keeps today's exact behavior; a folder found ABOVE it is
  * adopted only when its policy passes the managed-file checks, no Git work tree tracks its policy or configuration (a clone can carry them,
  * `git add -f`) and its installation identity already exists — read only, nothing is created. Anything else is a typed refusal, never a silent
@@ -41,8 +41,11 @@ export async function resolveProjectRoot(start: string, env: Environment, option
   const ports: ProjectRootPorts = { ...HOST_PORTS, ...options.ports };
   if (options.exact || productRootOverride(env) !== undefined) return { root: start, folder: '', found: false, gitTop: null };
   const physical = await ports.realpath(start), device = (await ports.lstat(physical))?.dev;
-  let globalRoot: string | null = null;
-  try { globalRoot = resolveGlobalScopePaths(normalizeGlobalScopePlatform(ports.platform, env), env).stateDir; globalRoot = await ports.realpath(globalRoot).catch(() => globalRoot); } catch { /* no home: nothing to exclude */ }
+  let globalRoot: string | null = null, home: string | null = null;
+  try {
+    const paths = resolveGlobalScopePaths(normalizeGlobalScopePlatform(ports.platform, env), env), real = (path: string) => ports.realpath(path).catch(() => path);
+    globalRoot = await real(paths.stateDir); home = paths.home === null ? null : await real(paths.home);
+  } catch { /* no home: nothing to exclude */ }
   let gitTop: string | null = null;
   for (let directory = physical; ; directory = dirname(directory)) {
     const entry = await ports.lstat(directory);
@@ -54,7 +57,8 @@ export async function resolveProjectRoot(start: string, env: Environment, option
     if (adopted) return adopted;
     gitTop ??= await ports.lstat(join(directory, '.git')) ? directory : null;
     // A folder that looks installed but has no identity yet is not an installation, and nothing above it is adopted in its place.
-    if (candidate || dirname(directory) === directory) break;
+    // $HOME is the discovery ceiling (like Git's): it is examined, nothing above it is.
+    if (candidate || directory === home || dirname(directory) === directory) break;
   }
   return { root: physical, folder: '', found: false, gitTop };
 }

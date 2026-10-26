@@ -13,7 +13,7 @@ export const hubLimitsSchema = z.object({ schemaVersion: z.literal(1), packageMa
   sourcesPerScopeMax: positive, revocationRefreshMinutes: positive, feedMaxAgeMs: positive, fetchTimeoutMs: positive,
   fetchRetries: z.number().int().safe().nonnegative(), publishesPerHour: positive, cacheMaxBytes: positive, skillFilesMaxBytes: positive,
   maxRedirects: z.number().int().safe().nonnegative(), httpMaxBytes: positive, networkInputMaxBytes: positive, httpMaxConcurrentRequests: positive,
-  skillReadMaxBytes: positive, skillReadMaxFiles: positive }).strict().readonly();
+  skillReadMaxBytes: positive, skillReadMaxFiles: positive, delegationMaxMs: positive, clockSkewMs: z.number().int().safe().nonnegative() }).strict().readonly();
 export type HubLimits = z.infer<typeof hubLimitsSchema>;
 export const HUB_LIMITS = hubLimitsSchema.parse(limitData);
 /** Unit conversion of the registry cadence, shared by publisher and client. */

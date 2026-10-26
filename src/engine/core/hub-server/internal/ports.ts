@@ -61,6 +61,8 @@ export interface HubServerPorts {
   /** Resolve an active, purpose-bound online key after delegation-window/revocation checks. H8/H9 own custody and root trust. */
   readonly feedSigner?: (atMs: number) => HubAwaitable<{ readonly signer: HubServerSigner; readonly key: HubVerificationKey }>;
   readonly attestor: (atMs: number) => HubAwaitable<{ readonly signer: HubServerSigner; readonly key: HubVerificationKey }>;
+  /** H9 custody: the root-signed `hub-key-delegation:1` of an online key, kept after rotation for what that key signed (public data; null = none). */
+  readonly delegation?: (keyId: string) => HubAwaitable<unknown>;
 }
 export const HUB_SERVER_ERROR_CODES = ['HUB_SERVER_DENIED', 'HUB_VERSION_CONFLICT', 'HUB_DEPENDENCY_INVALID', 'HUB_SECRET_REFUSED',
   'HUB_REVIEW_REFUSED', 'HUB_STORE_UNSAFE', 'HUB_STORE_CONFLICT', 'HUB_RESOURCE_UNKNOWN', 'HUB_STORE_UNSUPPORTED', 'HUB_STORE_OUTCOME_UNKNOWN', 'HUB_ACCOUNT_REFUSED', 'HUB_PROFILE_REFUSED', 'HUB_RATE_REFUSED'] as const;

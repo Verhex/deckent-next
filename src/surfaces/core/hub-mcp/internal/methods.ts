@@ -32,9 +32,9 @@ export function registerHubMethods(server: Server, app: HubServerApplication, co
       return { hubId: app.ports.hubId, packages: rows, ...(more ? { nextCursor: last.key } : {}) };
     } },
     'hub/packages/get': { schema: query, run: async (input, request) => {
-      const p = query.parse(input), ctx = context(request), row = await app.inspect(ctx, p.packageId, p.version);
+      const p = query.parse(input), ctx = context(request), row = await app.inspect(ctx, p.packageId, p.version), delegation = await app.packageDelegation(row.envelope);
       const files = await Promise.all(row.files.map(async file => ({ path: file.path, bytes: await app.readFile(ctx, p.packageId, p.version, file.path) })));
-      return { hubId: app.ports.hubId, ...(app instanceof HubModeratedApplication ? { evidence: await app.evidence(ctx, p.packageId, p.version) } : {}), revocationState: await app.revocationState(ctx, p.packageId, p.version), bundle: JSON.parse(Buffer.from(encodeHubBundle({ manifest: row.manifest, envelope: row.envelope, files })).toString('utf8')) as unknown };
+      return { hubId: app.ports.hubId, ...(app instanceof HubModeratedApplication ? { evidence: await app.evidence(ctx, p.packageId, p.version) } : {}), revocationState: await app.revocationState(ctx, p.packageId, p.version), bundle: JSON.parse(Buffer.from(encodeHubBundle({ manifest: row.manifest, envelope: row.envelope, files, ...(delegation ? { delegation } : {}) })).toString('utf8')) as unknown };
     } },
     'hub/agents/get': { schema: agent, run: async (input, request) => {
       const p = agent.parse(input), row = await app.inspect(context(request), p.packageId, p.version);

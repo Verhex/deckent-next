@@ -191,6 +191,33 @@ describe.skipIf(posix)('I-S2 coding/git detection', () => {
     await applyFirstCommit({ ...ticked, include: ['.env'], digest: withEnv.state === 'offered' ? withEnv.digest : '' });
     expect(sh(ticked.root, 'ls-tree', '-r', '--name-only', 'HEAD')).toBe('.env\na.txt\n'); expect(status(ticked.root)).toBe('');
   });
+  it.skipIf(process.platform === 'win32')('first commit (Astra A56 C1): history holds exactly the scanned bytes; a file changed after the preview or after the scan never lands', async () => {
+    const env = { PATH: hostPath, HOME: '', GIT_CONFIG_NOSYSTEM: '1' }, secret = '-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n';
+    const repo = async () => {
+      const root = await temp('first-bound'); git(root, 'init', '-q');
+      for (const [key, value] of [['user.name', 'Person'], ['user.email', 'person@example.test']]) execFileSync('git', ['config', key, value], { cwd: root, env: { ...env, HOME: root }, stdio: 'ignore' });
+      await writeFile(join(root, 'a.txt'), 'a\n'); await writeFile(join(root, 'run.sh'), Buffer.from([0x23, 0x21, 0xff, 0x00, 0x0a])); await chmod(join(root, 'run.sh'), 0o755);
+      execFileSync('ln', ['-s', 'a.txt', join(root, 'link')]);
+      return { root, env: { ...env, HOME: root }, message: 'First commit' };
+    };
+    const sh = (root: string, ...args: string[]) => execFileSync('git', ['--no-optional-locks', ...args], { cwd: root, env: { ...env, HOME: root }, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+    // Changed between the preview and the apply: the digest binds each selected file's content, so the apply refuses.
+    const changed = await repo(), shown = await previewFirstCommit(changed);
+    await writeFile(join(changed.root, 'a.txt'), 'b\n');
+    await expect(applyFirstCommit({ ...changed, digest: shown.state === 'offered' ? shown.digest : '' })).rejects.toMatchObject({ code: 'SETUP_FIRST_COMMIT_CHANGED' });
+    expect(() => sh(changed.root, 'rev-parse', '--verify', '--quiet', 'HEAD^{commit}')).toThrow();
+    // Changed after the apply's own scan, while Git stages: the commit carries the scanned bytes, not the new ones.
+    const raced = await repo(), real = await firstCommitGit(raced.root, raced.env), offer = await previewFirstCommit(raced);
+    const port: FirstCommitGit = async (args, options) => {
+      if (args[0] === 'hash-object' || args[0] === 'update-index') await writeFile(join(raced.root, 'a.txt'), secret);
+      return real(args, options);
+    };
+    await expect(applyFirstCommit({ ...raced, git: port, digest: offer.state === 'offered' ? offer.digest : '' })).resolves.toMatchObject({ files: 3 });
+    expect(sh(raced.root, 'show', 'HEAD:a.txt')).toBe('a\n');
+    expect(execFileSync('git', ['show', 'HEAD:run.sh'], { cwd: raced.root, env: { ...env, HOME: raced.root } })).toEqual(Buffer.from([0x23, 0x21, 0xff, 0x00, 0x0a]));
+    expect(sh(raced.root, 'ls-tree', 'HEAD').replace(/ [0-9a-f]{40,64}\t/gu, ' \t')).toBe('100644 blob \ta.txt\n120000 blob \tlink\n100755 blob \trun.sh\n');
+    expect(sh(raced.root, 'show', 'HEAD:link')).toBe('a.txt');
+  });
 
   it('coding-CLI sign-ins: presence by lstat only — an unreadable sign-in file is still "found", its content never leaves', async () => {
     const home = await temp('home'), moved = await temp('moved'), canary = 'CANARY-SECRET-is2';

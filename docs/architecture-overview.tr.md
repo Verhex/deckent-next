@@ -219,6 +219,9 @@ uygular; `hub verify` kurulu önbellek baytlarını çevrimdışı yeniden doğr
 `hub inspect` varsayılan olarak kurulu durumu okur; `location: "source"` kaynaktaki
 paketi ister. Bu biçimde kesin sürüm gerekir. `hub export`, `encoding: "base64"`
 ve `bundle` alanlarıyla hava boşluklu aktarıma uygun nesne döndürür; host dosyası yazmaz.
+Kaynak, hub'ın kök anahtarını sabitler. Hub'ın çevrimiçi anahtarlarından biriyle atılan
+hub imzası ya da iptal listesi, yalnız kökün o anahtarı o amaç için imzalı yetkilendirmesiyle,
+geçerlilik aralığı içinde ve iptal edilmemişse sayılır; bu yetkilendirme paketle ya da listeyle gelir.
 
 Kişi yazmaları etkileşimli terminal gerektirir; `--json`, pipe ve AI ortamları
 kartı onaylayamaz. SDK `executeHub(root, request, options)` sunar; `request`,

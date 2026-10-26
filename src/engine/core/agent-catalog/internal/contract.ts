@@ -87,7 +87,7 @@ export interface SignerChange { readonly previous: SignerKey | null; readonly ne
 export type CatalogUpstream = 'clear' | 'withdrawn' | 'revoked' | 'yanked';
 export interface AgentCatalogStore {
   /** Orthogonal to standing: revoked/unavailable upstream rows cannot enter new selections. */
-  upstream?(scopeId: string, kind: 'agent' | 'skill', id: string, revision: number, nowMs?: number, verifiedKeyIds?: readonly string[]): Promise<CatalogUpstream>;
+  upstream?(scopeId: string, kind: 'agent' | 'skill', id: string, revision: number, nowMs?: number, verifiedKeyIds?: readonly string[], revokedKeyIds?: readonly string[]): Promise<CatalogUpstream>;
   loadAgent(scopeId: string, agentId: string, revision?: number): Promise<AgentDefinition | null>;
   agentHistory(scopeId: string, agentId: string, limit: number): Promise<readonly AgentDefinition[]>;
   /** Current agents of the scope, most recently changed first, at most `limit`. */

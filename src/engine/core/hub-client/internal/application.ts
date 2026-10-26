@@ -8,7 +8,7 @@ import { authenticate } from '#engine/core/authentication/index.js';
 import { HubClientError, hubClientCommandSchema, hubInstallCommandSchema, hubSourceSchema, type HubClientAction, type HubClientDependencies,
   type HubRefreshResult, type HubClientStore, type HubInstall, type HubReceipt, type HubSource } from './contract.js';
 import { decodeHubBundle, encodeHubBundle } from './bundle.js';
-import { acceptClientFeed, verifyClientBundle } from './verification.js';
+import { acceptClientFeed, clientFeedKey, localRevokedKeyIds, verifyClientBundle } from './verification.js';
 import { installClientBundles, retireClientInstall, verifyInstalledClientBundle } from './install.js';
 const sourceCommand = hubClientCommandSchema.extend({ expectedRevision: z.number().int().positive().nullable(), publicKey: signerPublicKeySchema,
   endpoint: z.string().min(1).max(2048), local: z.boolean().default(false), label: z.string().min(1).max(256),
@@ -46,9 +46,8 @@ export class HubClientApplication {
     return this.write('refresh', command, credential, async (store, principal) => {
       const source = await this.source(store, command.scopeId, command.hubId);
       const previous = await store.feed(source.scopeId, source.hubId);
-      const feed = strict ? verifyHubRevocationFeed(command.feed, { hubId: source.hubId, key: { keyId: source.hubId, publicKey: source.publicKey, role: 'hub', active: true },
-        nowMs: this.deps.catalog.now(), previous })
-        : await acceptClientFeed(store, source, command.feed, this.deps.catalog.now(), true);
+      const feed = strict ? verifyHubRevocationFeed(command.feed, { hubId: source.hubId, key: await clientFeedKey(this.deps, store, source, command.feed), nowMs: this.deps.catalog.now(), previous })
+        : await acceptClientFeed(this.deps, store, source, command.feed, true);
       if (strict) { requireHubRevocationContinuation(feed, previous); await store.saveFeed(source.scopeId, feed); }
       return this.refreshState(store, source, feed, principal);
     });
@@ -91,18 +90,19 @@ export class HubClientApplication {
   }
   private async refreshState(store: HubClientStore, source: HubSource, feed: HubRevocationFeed | null, principal: VerifiedPrincipal): Promise<HubRefreshResult> {
     const previous = await store.refreshResult(source.scopeId, source.hubId), items: HubRefreshResult['items'] = [], packages: HubRefreshResult['packages'] = [];
+    const revoked = await localRevokedKeyIds(this.deps, source.scopeId);
     let verified = true;
     for (const installed of await store.installations(source.scopeId, source.hubId)) {
       let keyIds = installed.signerKeyIds;
       try { if (!keyIds) {
         const bundle = decodeHubBundle(await this.deps.artifacts.read(source.scopeId, installed.bundle));
         if (bundle.manifest.packageId !== installed.packageId || bundle.manifest.version !== installed.version || bundle.envelope.payloadDigest !== installed.manifestDigest) throw new HubClientError('HUB_STORE_CORRUPT');
-        await verifyClientBundle(this.deps, store, source, bundle, principal);
+        await verifyClientBundle(this.deps, store, source, bundle, principal, true);
         keyIds = bundle.envelope.signatures.map(row => row.keyId);
       } } catch { verified = false; }
       if (keyIds) packages.push({ packageId: installed.packageId, version: installed.version, signerKeyIds: [...keyIds] });
       for (const item of installed.items) items.push({ kind: item.kind, id: item.id, revision: item.revision,
-        upstream: await store.upstream(source.scopeId, item.kind, item.id, item.revision, this.deps.catalog.now(), keyIds) });
+        upstream: await store.upstream(source.scopeId, item.kind, item.id, item.revision, this.deps.catalog.now(), keyIds, revoked) });
       if (installed.state === 'installed' && items.slice(-installed.items.length).every(item => item.upstream === 'clear' || item.upstream === 'yanked')) {
         try { await verifyInstalledClientBundle(this.deps, store, source, installed, principal); }
         catch { verified = false; }
@@ -207,7 +207,7 @@ export class HubClientApplication {
     // Receipts cover exact bytes without putting base64 payloads or filesystem paths in audit subjects.
     const command = { ...parsed, bundles: parsed.bundles.map(bytes => sha256(bytes as Uint8Array)), feed, feeds };
     return this.write(update ? 'update' : 'install', command, credential, async (store, principal) => {
-      const source = await this.source(store, parsed.scopeId, parsed.hubId), verifiedFeed = await acceptClientFeed(store, source, feed, this.deps.catalog.now(), true);
+      const source = await this.source(store, parsed.scopeId, parsed.hubId), verifiedFeed = await acceptClientFeed(this.deps, store, source, feed, true);
       return installClientBundles(this.deps, store, source, bundles, verifiedFeed, { ...parsed, feeds }, principal, update);
     });
   }

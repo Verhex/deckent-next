@@ -27,7 +27,7 @@ export async function installClientBundles(deps: HubClientDependencies, store: H
       if (!depSource || depSource.state !== 'active') throw new HubClientError('HUB_DEPENDENCY_REFUSED');
       const rawFeed = hubId === nodeSource.hubId ? nodeFeed : command.feeds[hubId] ?? await store.feed(command.scopeId, hubId);
       if (!rawFeed) throw new HubError('HUB_FEED_STALE');
-      const depFeed = await acceptClientFeed(store, depSource, rawFeed, deps.catalog.now(), true);
+      const depFeed = await acceptClientFeed(deps, store, depSource, rawFeed, true);
       let child = byId.get(`${hubId}/${dependency.packageId}@${dependency.version}`);
       if (!child) {
         const installed = await store.install(command.scopeId, hubId, dependency.packageId, dependency.version);
@@ -123,7 +123,7 @@ export async function retireClientInstall(deps: HubClientDependencies, store: Hu
 export async function verifyInstalledClientBundle(deps: HubClientDependencies, store: HubClientStore, source: HubSource, installed: HubInstall, principal: VerifiedPrincipal, seen = new Set<string>(), depth = 0): Promise<HubBundle> {
   const bundle = decodeHubBundle(await deps.artifacts.read(installed.scopeId, installed.bundle));
   if (bundle.manifest.packageId !== installed.packageId || bundle.manifest.version !== installed.version || bundle.envelope.payloadDigest !== installed.manifestDigest) throw new HubClientError('HUB_STORE_CORRUPT');
-  await verifyClientBundle(deps, store, source, bundle, principal);
+  await verifyClientBundle(deps, store, source, bundle, principal, true);
   const identity = `${source.hubId}/${installed.packageId}@${installed.version}`;
   if (seen.has(identity) || depth > HUB_LIMITS.dependencyDepthMax || seen.size > HUB_LIMITS.dependenciesMax) throw new HubClientError('HUB_DEPENDENCY_REFUSED');
   seen.add(identity);
@@ -154,7 +154,7 @@ export async function verifyInstalledClientBundle(deps: HubClientDependencies, s
 
   const feed = await store.feed(installed.scopeId, source.hubId);
   if (!feed) throw new HubError('HUB_FEED_STALE');
-  await acceptClientFeed(store, source, feed, deps.catalog.now(), false);
+  await acceptClientFeed(deps, store, source, feed, false);
   // Yanked packages remain verifiable/useable; only a revocation invalidates an installed package.
   await requirePackageNotRevoked(store, source, bundle, feed, true);
   return bundle;

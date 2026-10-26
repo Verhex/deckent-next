@@ -32,10 +32,10 @@ export class HubRevocationApplication extends HubServerApplication {
     throw new HubServerError('HUB_SERVER_DENIED');
   }
   protected async signFeed(store: HubServerTransaction, entries: HubRevocationFeed['entries'], catchup?: HubRevocationFeed['catchup']) {
-    const previous = await store.latestFeed(), now = this.clock(), { signer, key } = await this.signer(now, 'feed');
+    const previous = await store.latestFeed(), now = this.clock(), { signer, key } = await this.signer(now, 'feed'), delegation = await this.delegationOf(key.keyId);
     if (previous && now < previous.issuedAtMs) throw new HubError('HUB_FEED_REPLAYED');
     const payload = { schemaVersion: 1 as const, hubId: this.ports.hubId, sequence: (previous?.sequence ?? 0) + 1,
-      issuedAtMs: now, nextRefreshBy: now + HUB_REVOCATION_REFRESH_MS, entries, ...(catchup ? { catchup } : {}) };
+      issuedAtMs: now, nextRefreshBy: now + HUB_REVOCATION_REFRESH_MS, entries, ...(catchup ? { catchup } : {}), ...(delegation ? { delegation } : {}) };
     const feed = { ...payload, signature: { keyId: signer.keyId, algorithm: 'ed25519' as const,
       value: Buffer.from(await signer.sign(hubRevocationFeedMessage(payload))).toString('base64') } };
     verifyHubRevocationFeed(feed, { hubId: this.ports.hubId, key, nowMs: now, previous });

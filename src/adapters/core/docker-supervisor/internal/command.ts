@@ -17,7 +17,7 @@ export class DockerCommandFailure extends Error {
 /** A pinned local endpoint must not inherit a conflicting context or TLS selector. */
 export function dockerCommandEnvironment(command: DockerCommand, env: Readonly<Record<string, string | undefined>>) {
   const result: Record<string, string> = {};
-  for (const [key, value] of Object.entries(callerEnvironment(env))) {
+  for (const [key, value] of Object.entries(env)) {
     if (value === undefined) continue;
     if (command.args[0] === '--host' && ['DOCKER_CONTEXT', 'DOCKER_HOST', 'DOCKER_TLS', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(key)) continue;
     result[key] = value;
@@ -29,7 +29,7 @@ export const runNodeDockerCommand: DockerCommandRunner = async (command, signal)
   const deadline = AbortSignal.timeout(command.timeoutMs), bound = signal ? AbortSignal.any([signal, deadline]) : deadline;
   try {
     return await exec(command.executable, [...command.args], { maxBuffer: command.outputBytes, encoding: 'utf8',
-      env: dockerCommandEnvironment(command, process.env), signal: bound });
+      env: dockerCommandEnvironment(command, callerEnvironment(process.env)), signal: bound });
   } catch (error) {
     const failure = error as { stdout?: unknown; stderr?: unknown; code?: unknown; killed?: unknown };
     const killed = !!failure.killed || typeof failure.code !== 'number', stop = killed && bound.aborted ? bound.reason === deadline.reason ? 'deadline' : 'signal' : null;

@@ -1,6 +1,6 @@
 import { canonicalHubJson, encodeCommandProjection, SIGNATURE_LABELS, HUB_LIMITS, HubError, hubRevocationFeedSchema, parseHubContract, type HubRevocationFeed, type HubRevocationCursor } from '#domain/index.js';
 import { signatureMessage } from '#platform/index.js';
-import { requireHubSignature, type HubVerificationKey } from './signatures.js';
+import { delegatedHubKey, requireHubSignature, type HubRoot, type HubVerificationKey } from './signatures.js';
 
 export const hubRevocationFeedMessage = (feed: Omit<HubRevocationFeed, 'signature'>) => signatureMessage(SIGNATURE_LABELS.revocationFeed,
   encodeCommandProjection(SIGNATURE_LABELS.revocationFeed, feed));
@@ -18,7 +18,13 @@ export function requireHubRevocationContinuation(feed: HubRevocationFeed, previo
       || page.throughPosition !== next.throughPosition || page.page !== next.page) throw new HubError('HUB_FEED_INVALID');
   } else if (page && (page.page !== 0 || page.afterSequence !== hubRevocationWatermark(previous))) throw new HubError('HUB_FEED_INVALID');
 }
-/** Pinned source id is independent of a delegated online feed key. The caller verifies that key's root delegation first. */
+/** The key that may sign this feed of the pinned hub: its root, or the online key the feed's own root delegation names for `feed` at
+ * `issuedAtMs`, still delegated at `nowMs` (a feed is current data, never historical). */
+export function hubFeedKey(root: HubRoot, input: unknown, nowMs: number): HubVerificationKey {
+  const feed = parseHubContract(hubRevocationFeedSchema, input, 'HUB_FEED_INVALID', 'HUB_FEED_SCHEMA_UNSUPPORTED');
+  return delegatedHubKey(root, feed.signature.keyId, feed.delegation, 'feed', feed.issuedAtMs, { nowMs });
+}
+/** Pinned source id is independent of a delegated online feed key. The caller resolves the key through `hubFeedKey` first. */
 export function verifyHubRevocationFeed(input: unknown, context: { readonly hubId: string; readonly key: HubVerificationKey; readonly nowMs: number;
   readonly previous: Pick<HubRevocationFeed, 'hubId' | 'sequence' | 'issuedAtMs'> | null }): HubRevocationFeed {
   const feed = parseHubContract(hubRevocationFeedSchema, input, 'HUB_FEED_INVALID', 'HUB_FEED_SCHEMA_UNSUPPORTED');

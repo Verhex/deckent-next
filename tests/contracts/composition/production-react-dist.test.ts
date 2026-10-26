@@ -47,4 +47,13 @@ console.log(process.env.NODE_ENV + ' ' + (await import('node:fs')).readFileSync(
       }
     } finally { await rm(root, { recursive: true, force: true }); }
   });
+
+  it('an explicit child environment runs as given (Astra A56 S1): ProcessCommand NODE_ENV=production reaches the child although the caller had none', async () => {
+    const script = `await import(${JSON.stringify(ENTRY)}); const { runNodeProcess } = await import(${JSON.stringify(url('dist/adapters/core/process-runner/index.js'))});
+const evidence = await runNodeProcess({ schemaVersion: 1, requestId: (await import('node:crypto')).randomUUID(), executable: process.execPath,
+  args: ['-e', "process.stdout.write(process.env.NODE_ENV ?? '<unset>')"], cwd: process.cwd(), env: { NODE_ENV: 'production' }, timeoutMs: 10000, outputBytes: 1024 });
+console.log(process.env.NODE_ENV + ' ' + Buffer.from(evidence.stdoutBase64, 'base64').toString('utf8'));`;
+    const { stdout } = await execute(process.execPath, ['--input-type=module', '-e', script], { env: withoutNodeEnv(), timeout: 60_000 });
+    expect(stdout.trim().split('\n').at(-1)).toBe('production production');
+  });
 });

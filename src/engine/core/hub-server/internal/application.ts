@@ -1,5 +1,5 @@
-import { HUB_LIMITS, HUB_REVIEW_LEVELS, HubError, canonicalHubJson, hubEnvelopeSchema, hubPackageSchema, hubPackageSignatureSchema, parseHubContract,
-  type HubEnvelope, type HubPackage, type HubPackageSignature } from '#domain/index.js';
+import { HUB_LIMITS, HUB_REVIEW_LEVELS, HubError, canonicalHubJson, hubEnvelopeSchema, hubKeyDelegationSchema, hubPackageSchema, hubPackageSignatureSchema, parseHubContract,
+  type HubEnvelope, type HubKeyDelegation, type HubPackage, type HubPackageSignature } from '#domain/index.js';
 import { ed25519KeyId, hasSecret, REDACTION_GATE_PATTERNS, sha256 } from '#platform/index.js';
 import { canonicalHubManifest, hubPackageSignatureMessage, requireHubSignature, verifyHubPackage, type HubPackageFile } from '#engine/core/hub/index.js';
 import { requireHubDependencies, newerHubVersion } from './dependencies.js';
@@ -31,6 +31,19 @@ export class HubServerApplication {
     if (!attestor.key.active || attestor.key.role !== 'hub' || attestor.key.keyId !== attestor.signer.keyId
       || ed25519KeyId(attestor.signer.spki) !== attestor.key.keyId || attestor.key.publicKey !== attestor.signer.spki.toString('base64')) throw new HubError('HUB_SIGNER_UNTRUSTED');
     return attestor;
+  }
+  /** The root's delegation of an online key this hub signs with (none for the root itself); clients need it to accept that key's signatures. */
+  async delegationOf(keyId: string): Promise<HubKeyDelegation | undefined> {
+    const input = keyId === this.ports.hubId ? null : await this.ports.delegation?.(keyId);
+    if (input === undefined || input === null) return undefined;
+    const delegation = hubKeyDelegationSchema.safeParse(input);
+    if (!delegation.success || delegation.data.hubId !== this.ports.hubId || delegation.data.keyId !== keyId) throw new HubError('HUB_SIGNER_UNTRUSTED');
+    return delegation.data;
+  }
+  /** The delegation a client needs for this package's hub signature, served with the package. */
+  async packageDelegation(envelope: HubEnvelope): Promise<HubKeyDelegation | undefined> {
+    const hub = envelope.signatures.find(signature => signature.role === 'hub');
+    return hub ? this.delegationOf(hub.keyId) : undefined;
   }
   async register(context: HubServerContext, input: unknown) {
     const key = hubRegisteredKeySchema.parse(input), digest = sha256(canonicalHubJson(key));

@@ -225,8 +225,7 @@
     },
     "src/adapters/core/process-runner": {
       "dependencies": [
-        "src/adapters/core/docker-supervisor",
-        "src/platform/core/host"
+        "src/adapters/core/docker-supervisor"
       ],
       "plan": "ISOLATION"
     },

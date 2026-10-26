@@ -3,5 +3,6 @@ export { hubPackageIdSchema, hubVersionSchema, hubDigestSchema, hubFilePathSchem
 export * from './internal/package.js';
 export * from './internal/envelope.js';
 export * from './internal/feed.js';
+export * from './internal/delegation.js';
 export * from './internal/skill.js';
 export * from './internal/validation.js';

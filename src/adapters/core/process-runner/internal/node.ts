@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process';
 import { processCommandSchema, validateProcessEvidence, ProcessRunnerError, type ProcessCommand, type ProcessEvidence } from './contract.js';
-import { callerEnvironment } from '#platform/index.js';
 /** A v2 stdout line consumer: complete lines in order (UTF-8, without the newline); `stop` ends the process group at once (reason `stopped`). */
 export type ProcessLineConsumer = (line: string) => 'stop' | void;
 /** Linux comparison profile: explicit environment, closed (v1) or bounded (v2) stdin, owned process group, raw bounded output.
@@ -19,7 +18,7 @@ export async function runNodeProcess(input: ProcessCommand, signal?: AbortSignal
   if (signal?.aborted) return validateProcessEvidence(command, evidence({ reason: 'cancelled' }));
   const result = await new Promise<ProcessEvidence>(resolve => {
     let child;
-    try { child = spawn(command.executable, [...command.args], { cwd: command.cwd, env: callerEnvironment({ ...command.env }), detached: true, shell: false, stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'] }); }
+    try { child = spawn(command.executable, [...command.args], { cwd: command.cwd, env: { ...command.env }, detached: true, shell: false, stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'] }); }
     catch { resolve(evidence({})); return; }
     const out = child.stdout!, err = child.stderr!;
     const stdout: Buffer[] = []; const stderr: Buffer[] = []; let outBytes = 0; let errBytes = 0; let pending = Buffer.alloc(0);

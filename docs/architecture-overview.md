@@ -212,6 +212,9 @@ and local WorkClass mapping. `hub refresh` applies a supplied signed feed;
 installed state; `location: "source"` requests the source's package. The latter
 requires an exact version. `hub export` returns an object with `encoding: "base64"`
 and `bundle`, suitable for air-gapped transfer. It does not write a host file.
+A source pins the hub's root key. A hub signature or feed made by one of the hub's
+online keys counts only with the root-signed delegation of that key for that purpose,
+inside its validity window and not revoked; the bundle or feed carries it.
 
 Person writes require an interactive terminal; `--json`, pipes and AI environments
 cannot approve their cards. The SDK exports `executeHub(root, request, options)`;
