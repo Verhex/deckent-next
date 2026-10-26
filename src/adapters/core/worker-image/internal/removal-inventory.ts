@@ -5,7 +5,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { WorkerImageRemovalTarget, workerRemovalGuard, type WorkerRemovalResource, type WorkerRemovalDriver } from './removal.js';
-import { nativeWorkerRemovalDriver, type WorkerReferenceOwner } from './removal-driver.js';
+import { nativeWorkerRemovalDriver, workerImageManualCommand, type WorkerReferenceOwner } from './removal-driver.js';
+import { workerLeaseReferences } from './references.js';
 import limits from './limits.json' with { type: 'json' };
 const PRIVATE_PERMISSION_MASK = 0o077;
 const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
@@ -21,42 +22,48 @@ async function read(path: string) {
     return bytes.subarray(0, result.bytesRead);
   } finally { await file.close(); }
 }
-/** No historical registry can be reconstructed from one installation's receipts. Unregistered/unknown reference custody always keeps images. */
-const unknownReferences: WorkerReferenceOwner = { inventory: async () => null, inspect: async () => null };
+/** Every image a retained receipt names: its exact manual removal step (bound to the receipt's pinned daemon) is always reported;
+ * daemon observation and a removal target exist only when the lease owner proves complete references for that daemon. */
 export async function observeWorkerRemovalInventory(input: { home: string; installationId: string; buildersRoot: string; executable: string;
   timeoutMs: number; outputBytes: number; references?: WorkerReferenceOwner }) {
-  const targets: WorkerImageRemovalTarget[] = [], resources = new Map<string, { resource: WorkerRemovalResource; version: string; present: boolean | null; exclusive: boolean }>();
+  type Observed = { resource: WorkerRemovalResource; version: string | null; present: boolean | null; exclusive: boolean; manualCommand: string | null };
+  const targets: WorkerImageRemovalTarget[] = [], resources = new Map<string, Observed>();
   const drivers = new Map<string, WorkerRemovalDriver>(), duplicate = new Set<string>();
-  // Without complete reference custody, even a daemon probe cannot authorize removal. Avoid scanning unrelated retained contexts.
-  if (!await (input.references ?? unknownReferences).inventory()) return { targets, resources: [] };
-  const directory = join(input.home, 'receipts'), info = await lstat(directory).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
-  if (!info) return { targets, resources: [...resources.values()] };
+  const directory = join(input.home, 'receipts'), info = await lstat(directory).catch(error => { if (error.code === 'ENOENT') return null; return false as const; });
+  if (!info) return { targets, resources: [] };
   if (!info.isDirectory() || info.uid !== process.getuid?.() || info.mode & PRIVATE_PERMISSION_MASK || await realpath(directory) !== directory) return { targets, resources: [] };
   const names = [];
   for await (const entry of await opendir(directory)) { if (names.length >= limits.receiptScan) throw new Error('WORKER_IMAGE_CONTEXT_UNSAFE'); names.push(entry.name); }
   for (const name of names.sort()) {
     if (!/^r[1-9][0-9]*-\d{8}\.json$/u.test(name)) continue;
     try {
-      const receipt = schema.parse(JSON.parse((await read(join(directory, name))).toString())), context = join(input.home, 'builds', receipt.imageVersion);
+      const receipt = schema.parse(JSON.parse((await read(join(directory, name))).toString())), receiptDigest = hash(JSON.stringify(receipt));
+      const bound = receipt.images.map(image => ({ resourceId: `image.${hash(JSON.stringify(image.imageId))}`, installationId: input.installationId,
+        imageId: image.imageId, daemonId: receipt.daemonId, recipeDigest: '', receiptDigest }));
+      for (const resource of bound) if (!resources.has(resource.resourceId)) resources.set(resource.resourceId, { resource, version: null, present: null, exclusive: false,
+        manualCommand: workerImageManualCommand(input.executable, receipt.endpoint, resource.imageId) });
+      // Without complete reference custody even a daemon probe cannot authorize removal; retained build contexts stay unread.
+      const references = input.references ?? workerLeaseReferences(input.buildersRoot, receipt.daemonId, receipt.endpoint);
+      if (!await references.inventory()) continue;
+      const context = join(input.home, 'builds', receipt.imageVersion);
       const recipeDigest = hash(await read(join(context, 'recipe.json'))), lineageDigest = hash(await read(join(context, 'lineage.json')));
       const driver = nativeWorkerRemovalDriver({ executable: input.executable, endpoint: receipt.endpoint, timeoutMs: input.timeoutMs, outputBytes: input.outputBytes,
-        receipt, recipeDigest, lineageDigest, ownedTags: receipt.images.flatMap(image => image.tag ? [image.tag] : []), referenceOwner: input.references ?? unknownReferences });
-      const bound = receipt.images.map(image => ({ resourceId: `image.${hash(JSON.stringify(image.imageId))}`, installationId: input.installationId,
-        imageId: image.imageId, daemonId: receipt.daemonId, recipeDigest, receiptDigest: hash(JSON.stringify(receipt)) }));
-      for (const resource of bound) {
+        receipt, recipeDigest, lineageDigest, ownedTags: receipt.images.flatMap(image => image.tag ? [image.tag] : []), referenceOwner: references });
+      for (const resource of bound.map(item => ({ ...item, recipeDigest }))) {
         const observed = await driver.inspect(resource);
-        if (resources.has(resource.resourceId)) duplicate.add(resource.resourceId);
-        resources.set(resource.resourceId, { resource, version: hash(JSON.stringify(observed)), present: observed.present, exclusive: !workerRemovalGuard(resource, observed) });
+        if (drivers.has(resource.resourceId)) duplicate.add(resource.resourceId);
+        resources.set(resource.resourceId, { resource, version: hash(JSON.stringify(observed)), present: observed.present, exclusive: !workerRemovalGuard(resource, observed),
+          manualCommand: resources.get(resource.resourceId)!.manualCommand });
         drivers.set(resource.resourceId, driver);
       }
     } catch { /* Unknown source, daemon, endpoint, lineage, bound or owner: leave the existing image inventory kept. */ }
   }
   // One kind resolves to one daemon owner; route multiple exact receipt/image resources through that same custody.
-  const entries = [...resources.values()], daemonId = entries[0]?.resource.daemonId;
-  if (daemonId && entries.every(item => item.resource.daemonId === daemonId)) {
+  const entries = [...resources.values()], observed = entries.filter(item => drivers.has(item.resource.resourceId)), daemonId = observed[0]?.resource.daemonId;
+  if (daemonId && observed.every(item => item.resource.daemonId === daemonId)) {
     const driver: WorkerRemovalDriver = { inspect: resource => drivers.get(resource.resourceId)!.inspect(resource),
-      remove: (imageId, options) => drivers.get(entries.find(item => item.resource.imageId === imageId)!.resource.resourceId)!.remove(imageId, options) };
-    targets.push(new WorkerImageRemovalTarget(entries.map(item => item.resource), driver, { root: input.buildersRoot,
+      remove: (imageId, options) => drivers.get(observed.find(item => item.resource.imageId === imageId)!.resource.resourceId)!.remove(imageId, options) };
+    targets.push(new WorkerImageRemovalTarget(observed.map(item => item.resource), driver, { root: input.buildersRoot,
       packageRoot: fileURLToPath(new URL('../../../../../', import.meta.url)), daemonId, instanceId: randomUUID(), budgetMs: input.timeoutMs, audit: async () => undefined }));
   }
   return { targets, resources: entries.map(item => ({ ...item, exclusive: item.exclusive && targets.length === 1 && !duplicate.has(item.resource.resourceId) })) };

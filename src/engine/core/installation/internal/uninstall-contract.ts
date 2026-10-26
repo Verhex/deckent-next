@@ -9,6 +9,8 @@ export const uninstallResourceSchema = z.object({
   ownership: z.enum(['exclusive', 'shared', 'foreign', 'unknown']), ownershipEvidence: digest.nullable(),
   present: z.boolean().nullable(), protected: z.boolean(), capability: z.boolean(),
   backup: z.enum(['covered', 'missing', 'protected-session', 'non-exportable']),
+  /** A kept resource's exact removal step for the person, produced by its owner; never run by uninstall. */
+  manualCommand: text.optional(),
 }).strict().readonly();
 export type UninstallResource = z.infer<typeof uninstallResourceSchema>;
 export type UninstallInstallation = z.infer<typeof uninstallInstallationSchema>;

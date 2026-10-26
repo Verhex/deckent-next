@@ -298,6 +298,7 @@
   "cli.uninstall.remove": "Kaldırılacak",
   "cli.uninstall.keep": "Korunacak",
   "cli.uninstall.manual": "Elle işlem gerekiyor",
+  "cli.uninstall.manualStep": "  Başka kurulumlar hâlâ kullanıyor olabileceği için korunuyor. Hiçbirinin kullanmadığını kontrol ettikten sonra kendiniz kaldırabilirsiniz: {command}",
   "cli.uninstall.unknown": "Bilinmiyor",
   "cli.uninstall.confirm": "Evet, kaldır",
   "cli.uninstall.cancel": "Hayır, vazgeç",
@@ -330,9 +331,12 @@
   "cli.uninstall.reason.service-unresolved": "Servis sahipliği veya etkinliği çözümlenmedi",
   "cli.uninstall.reason.retained-overlap": "Korunan kaynakla örtüşüyor",
   "cli.uninstall.reason.dependency-unresolved": "Önkoşul çözümlenmedi",
+  "cli.uninstall.reason.resume": "Yarıda kalan temizlemeden kaldı; yalnız yedek ve silme izni yeniden doğrulanınca silinir",
   "cli.uninstall.purge.confirm": "Evet, yalnız listelenen yedeklenmiş global veriyi sil",
   "cli.uninstall.retainedData": "Projelerin .deckent/ klasörleri her zaman korunur. Genel veriler varsayılan olarak korunur; yedekli silme önizlemesi için --purge kullanın. Listelenmeyen veya paylaşılan kaynaklar da korunur.",
   "cli.uninstall.reinstall": "Yeniden kurmak için önceki paket yöneticisini kullanın ve proje klasörünüzde deckent çalıştırın. Korunan proje verisi yeniden kullanılır.",
   "cli.uninstall.blocker.backup-destination": "Doğrulanmış bir yedek ve silme kökleri dışında bir yedek konumu gerekiyor. Global veri korunuyor.",
+  "cli.uninstall.blocker.authority-relocated": "{path} kayıtlı konumunda değil. Temizleme durdu, hiçbir şey silinmeyecek. Verileri korumak için deckent uninstall komutunu --purge olmadan çalıştırın.",
+  "cli.uninstall.blocker.authority-unsafe": "{path} bu kullanıcının özel dosyası olarak doğrulanamadı (bağlantı, sahip, izin ya da okuma hatası). Temizleme durdu, hiçbir şey silinmeyecek. Verileri korumak için deckent uninstall komutunu --purge olmadan çalıştırın.",
   "cli.uninstall.backupPassphrase": "Yedek parolası"
 }

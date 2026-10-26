@@ -7,6 +7,7 @@ import { ErrorRegistry, writeJsonAtomic } from '#platform/index.js';
 import { retainedWorkerHistory } from '../../../../../assets/worker-image/receipts.mjs';
 import { acquireLedgerLock } from '#adapters/core/local-runtime-socket/index.js';
 import { privateDirectory } from './build.js';
+import { writeWorkerLeases } from './references.js';
 import limits from './limits.json' with { type: 'json' };
 const refuse = (code: string): never => { throw ErrorRegistry.createError(code); };
 export type WorkerReservation = Readonly<{ version: string; floor: number; daemonId: string; expiresAt: string }>;
@@ -19,8 +20,9 @@ async function readRecord(path: string): Promise<unknown | null> {
   try { return JSON.parse(await file.readFile('utf8')) as unknown; } finally { await file.close(); }
 }
 /** Kernel lock is the concurrency fence; metadata/lease never authorizes stealing a still-held kernel lock. Death releases it automatically. */
+/** `lessee`: the installation whose retained receipts also record an image lease under this same custody. */
 export async function withWorkerBuilder<T>(input: { root: string; packageRoot: string; daemonId: string; instanceId: string; budgetMs: number; signal?: AbortSignal;
-  audit: (event: unknown) => Promise<void> }, run: (custody: { reserve(floor: number, at: string): Promise<WorkerReservation>; retain(receipt: unknown): Promise<void> }) => Promise<T>): Promise<T> {
+  audit: (event: unknown) => Promise<void>; lessee?: string }, run: (custody: { reserve(floor: number, at: string): Promise<WorkerReservation>; retain(receipt: unknown): Promise<void> }) => Promise<T>): Promise<T> {
   const directory = join(input.root, createHash('sha256').update(input.daemonId).digest('hex'));
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await privateDirectory(input.root); await privateDirectory(directory);
@@ -60,6 +62,7 @@ export async function withWorkerBuilder<T>(input: { root: string; packageRoot: s
       async retain(receipt) {
         const file = await open(join(receipts, `${randomUUID()}.json`), 'wx', 0o600);
         try { await file.writeFile(JSON.stringify(receipt) + '\n'); await file.sync(); } finally { await file.close(); }
+        if (input.lessee) await writeWorkerLeases(directory, input.lessee, receipt);
       },
     });
   } finally {

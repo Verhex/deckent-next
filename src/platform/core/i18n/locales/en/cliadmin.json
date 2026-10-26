@@ -298,6 +298,7 @@
   "cli.uninstall.remove": "Remove",
   "cli.uninstall.keep": "Keep",
   "cli.uninstall.manual": "Manual steps required",
+  "cli.uninstall.manualStep": "  Kept because other installations may still use it. After checking that none does, you can remove it yourself: {command}",
   "cli.uninstall.unknown": "Unknown",
   "cli.uninstall.confirm": "Yes, uninstall",
   "cli.uninstall.cancel": "No, cancel",
@@ -330,9 +331,12 @@
   "cli.uninstall.reason.service-unresolved": "Service ownership or activity is unresolved",
   "cli.uninstall.reason.retained-overlap": "Overlaps a retained resource",
   "cli.uninstall.reason.dependency-unresolved": "A prerequisite is unresolved",
+  "cli.uninstall.reason.resume": "Left by an interrupted purge; deleted only after the backup and the delete permission are verified again",
   "cli.uninstall.purge.confirm": "Yes, delete only the listed backed-up global data",
   "cli.uninstall.retainedData": "Project .deckent/ folders are always kept. Global data is kept by default; use --purge to preview its backed-up removal. Unlisted or shared resources are also kept.",
   "cli.uninstall.reinstall": "To reinstall, use the original package manager and run deckent in your project folder. Retained project data is reused.",
   "cli.uninstall.blocker.backup-destination": "A verified backup and a destination outside the removal roots are required. Global data stays.",
+  "cli.uninstall.blocker.authority-relocated": "{path} is not at its recorded location. Purge is stopped and nothing will be deleted. Run deckent uninstall without --purge to keep the data.",
+  "cli.uninstall.blocker.authority-unsafe": "{path} could not be verified as a private file of this user (link, owner, permissions or read failure). Purge is stopped and nothing will be deleted. Run deckent uninstall without --purge to keep the data.",
   "cli.uninstall.backupPassphrase": "Backup passphrase"
 }

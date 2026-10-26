@@ -23,6 +23,7 @@ export function uninstallMessages(locale: Locale): Readonly<Record<string, strin
     'reason.service-unresolved': t('cli.uninstall.reason.service-unresolved', {}, locale),
     'reason.retained-overlap': t('cli.uninstall.reason.retained-overlap', {}, locale),
     'reason.dependency-unresolved': t('cli.uninstall.reason.dependency-unresolved', {}, locale),
+    'reason.resume': t('cli.uninstall.reason.resume', {}, locale),
   };
 }
 

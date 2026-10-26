@@ -1,8 +1,8 @@
-import { lstat, readdir } from 'node:fs/promises';
+import { lstat, readdir, readFile } from 'node:fs/promises';
 import { dirname, join, relative, isAbsolute, sep } from 'node:path';
 import { z } from 'zod';
 import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, ErrorRegistry, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
-import type { UninstallInventory } from '#engine/index.js';
+import { verifyAuditRecord, type UninstallInventory } from '#engine/index.js';
 import { InstallationDataRemovalTarget, memberStat, type DataRemovalMember } from './data.js';
 import { NativeServiceRemovalDriver, nativeServiceExec, readNativeServiceRecord } from './native-service.js';
 import { InstallationServiceRemovalTarget } from './service.js';
@@ -10,8 +10,11 @@ import paths from './paths.json' with { type: 'json' };
 import { BACKUP_RESOURCES } from '#adapters/core/backup-store/index.js';
 // Purge members are exactly the files the standard backup set restores (`deckent backup restore`); every other resource is kept.
 const restorable = [...BACKUP_RESOURCES, 'ledger', 'approvals'] as readonly string[];
-export const removalRegistry = z.object({ schemaVersion: z.literal(2), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
+export const removalRegistry = z.object({ schemaVersion: z.literal(3), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
   purgeMembers: z.record(z.string()).refine(value => Object.keys(value).every(name => restorable.includes(name))),
+  // A tree joins only through its owner's signed per-file record (sealed with this installation's key) that the standard set restores.
+  treeMembers: z.record(z.object({ directory: z.string().regex(/^[a-z][a-z-]*$/u), proof: z.literal('sealed-audit-record') }).strict())
+    .refine(value => Object.keys(value).every(name => restorable.includes(name))),
   cacheMembers: z.record(z.array(z.string()).min(1)), sharedSecretFiles: z.array(z.string()) }).strict().parse(paths);
 const registry = removalRegistry;
 const inside = (root: string, path: string) => { const child = relative(root, path); return !child || child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child); };
@@ -40,23 +43,28 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     targets.push(target);
   }
   const isGlobal = base.deletionRoots.includes(layout.root), projectData = join(config.projectRoot, PRODUCT_LAYOUT_REGISTRY.rootName);
-  // The installation's authority files are one atomic set: a relocated, unsafe or foreign member keeps all of them.
+  // The installation's authority files are one atomic set: a relocated, unsafe or foreign member keeps all of them and blocks the purge.
   let members: DataRemovalMember[] = [];
-  if (purge && isGlobal && layout.root !== projectData) {
-    try {
-      for (const [name, file] of Object.entries(registry.purgeMembers) as [ProductResource, string][]) {
-        const resourcePath = productResourcePath(layout, name), path = file ? join(resourcePath, file.replace('{keyFile}', config.approvals.keyFile)) : resourcePath;
-        if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, path) || inside(projectData, path)) throw new Error('relocated');
-        if (await memberStat(path)) members.push({ resourceId: name, path, directory: file ? resourcePath : null });
-      }
-    } catch { members = []; }
+  const blockers: string[] = [];
+  if (purge && (!isGlobal || layout.root === projectData)) blockers.push(`authority-relocated:${layout.root}`);
+  else if (purge) {
+    for (const [name, file] of Object.entries(registry.purgeMembers) as [ProductResource, string][]) {
+      const resourcePath = productResourcePath(layout, name), path = file ? join(resourcePath, file.replace('{keyFile}', config.approvals.keyFile)) : resourcePath;
+      // Verified absence is not unsafe; a relocated, unreadable or unsafe member blocks the whole purge with its exact path.
+      if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, path) || inside(projectData, path)) { blockers.push(`authority-relocated:${path}`); continue; }
+      try { if (await memberStat(path)) members.push({ resourceId: name, path, directory: file ? resourcePath : null, archivePath: relative(resourcePath, path).split(sep).join('/') }); }
+      catch { blockers.push(`authority-unsafe:${path}`); }
+    }
+    if (blockers.length) members = [];
+    else if (integrity) members.push(...await treeMembers(layout, integrity, projectData, bounds));
   }
   const owners = new Set(members.map(member => member.resourceId)), retained = resources.filter(item => !owners.has(item.resourceId));
-  // Anything else in a member's directory has no recorded owner here: kept and reported, never deleted with the directory.
-  for (const directory of new Set(members.flatMap(member => member.directory ? [member.directory] : []))) {
+  // Anything else in a member's directory (or beside a member tree's owner directory) has no recorded owner here: kept and reported.
+  const trees = Object.entries(registry.treeMembers).filter(([name]) => owners.has(name)).map(([name]) => productResourcePath(layout, name as ProductResource));
+  for (const directory of new Set([...trees, ...members.flatMap(member => member.directory ? [member.directory] : [])])) {
     for (const name of (await readdir(directory)).slice(0, bounds.maxFiles).sort()) {
       const locator = join(directory, name);
-      if (!members.some(member => member.path === locator)) retained.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null,
+      if (!members.some(member => member.path === locator || member.directory === locator)) retained.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null,
         owner: null, ownership: 'unknown', ownershipEvidence: null, present: true, protected: false, capability: false, backup: 'missing' });
     }
   }
@@ -75,7 +83,28 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
       present: true, protected: true, capability: false, backup: 'missing' });
   }
   // A missing/foreign key disables native record inspection; it never opens an unverified record or creates a key on preview.
-  const inventory: UninstallInventory = { ...base, resources: retained, protectedPaths,
+  const inventory: UninstallInventory = { ...base, resources: retained, protectedPaths, blockers: [...base.blockers, ...blockers],
     inventoryRevision: sha256(JSON.stringify(retained)), backupDestination: purge ? join(uninstallRecoveryDirectory(layout.root), 'backup') : null };
   return { inventory, targets, dataTarget: target, portable: members };
+}
+/** Signed per-file records of a tree owner: a private regular file whose content verifies as a sealed audit record with this installation's
+ * key and names itself (eventId = file name). Unsigned, foreign-key, renamed or oversized files are never members; an unbounded tree has none. */
+async function treeMembers(layout: ResolvedConfig['productLayout'], integrity: IntegrityAuthority, projectData: string,
+  bounds: { readonly maxFiles: number; readonly maxFileBytes: number }): Promise<DataRemovalMember[]> {
+  const found: DataRemovalMember[] = [];
+  for (const [name, tree] of Object.entries(registry.treeMembers) as [ProductResource, { directory: string }][]) {
+    const resourcePath = productResourcePath(layout, name), directory = join(resourcePath, tree.directory);
+    if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, directory) || inside(projectData, directory)) continue;
+    const names = await readdir(directory).catch(() => null);
+    if (!names || names.length > bounds.maxFiles) continue;
+    for (const entry of names.sort()) {
+      const path = join(directory, entry);
+      try {
+        const info = await memberStat(path);
+        if (!info || info.size > bounds.maxFileBytes || verifyAuditRecord(JSON.parse(await readFile(path, 'utf8')), integrity).event.eventId !== entry) continue;
+        found.push({ resourceId: name, path, directory, archivePath: `${tree.directory}/${entry}` });
+      } catch { /* not this owner's signed record: kept and listed */ }
+    }
+  }
+  return found;
 }

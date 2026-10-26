@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { DockerCommandFailure, runNodeDockerCommand, type DockerCommandRunner } from '#adapters/core/docker-supervisor/index.js';
 import type { WorkerRemovalDriver, WorkerRemovalObservation, WorkerRemovalResource } from './removal.js';
+import limits from './limits.json' with { type: 'json' };
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const image = z.object({ Id: z.string(), RepoTags: z.array(z.string()).nullable(), RepoDigests: z.array(z.string()).nullable() }).passthrough();
 export interface WorkerReferenceOwner {
@@ -28,10 +29,23 @@ export interface NativeWorkerRemovalInput {
   readonly receipt: unknown; readonly recipeDigest: string | null; readonly lineageDigest: string | null;
   readonly ownedTags: readonly string[]; readonly referenceOwner: WorkerReferenceOwner;
 }
+// The builder's endpoint is an observed, pinned local Unix socket, never inherited DOCKER_CONTEXT or a remote daemon.
+function pinnedEndpoint(endpoint: string) {
+  if (!endpoint.startsWith('unix:///') || endpoint.length <= 'unix:///'.length || Array.from(endpoint).some(char => char.charCodeAt(0) < 32)) throw new Error('WORKER_DAEMON_CHANGED');
+  return endpoint;
+}
+/** The one image removal argv: pinned daemon, exact immutable ID, --no-prune, never force or prune. */
+export function workerImageRemovalArgs(endpoint: string, imageId: string): readonly string[] {
+  if (!/^sha256:[a-f0-9]{64}$/u.test(imageId)) throw new Error('WORKER_IMAGE_CONTEXT_UNSAFE');
+  return ['--host', pinnedEndpoint(endpoint), ...limits.removalCommand, imageId];
+}
+/** The same removal as a person's own shell step, bound to the daemon and image a receipt recorded. */
+export function workerImageManualCommand(executable: string, endpoint: string, imageId: string): string {
+  return [executable, ...workerImageRemovalArgs(endpoint, imageId)].map(word => /^[A-Za-z0-9_./:=@-]+$/u.test(word) ? word : `'${word.replace(/'/gu, `'\\''`)}'`).join(' ');
+}
 /** A pinned local daemon, exact immutable IDs, bounded native reads and --no-prune removal. No tag inference or force. */
 export function nativeWorkerRemovalDriver(input: NativeWorkerRemovalInput, runner: DockerCommandRunner = runNodeDockerCommand): WorkerRemovalDriver {
-  // The builder's endpoint is an observed, pinned local Unix socket, never inherited DOCKER_CONTEXT or a remote daemon.
-  if (!input.endpoint.startsWith('unix:///') || input.endpoint.length <= 'unix:///'.length || Array.from(input.endpoint).some(char => char.charCodeAt(0) < 32)) throw new Error('WORKER_DAEMON_CHANGED');
+  pinnedEndpoint(input.endpoint);
   const command = (args: readonly string[]) => runner({ executable: input.executable, args: ['--host', input.endpoint, ...args], timeoutMs: input.timeoutMs, outputBytes: input.outputBytes });
   return {
     async inspect(resource: WorkerRemovalResource) {
@@ -59,7 +73,7 @@ export function nativeWorkerRemovalDriver(input: NativeWorkerRemovalInput, runne
     },
     async remove(imageId, options) {
       if (!/^sha256:[a-f0-9]{64}$/u.test(imageId) || options.force !== false || options.noPrune !== true) throw new Error('WORKER_IMAGE_CONTEXT_UNSAFE');
-      try { await command(['image', 'rm', '--no-prune', '--', imageId]); }
+      try { await runner({ executable: input.executable, args: workerImageRemovalArgs(input.endpoint, imageId), timeoutMs: input.timeoutMs, outputBytes: input.outputBytes }); }
       catch (error) { if (error instanceof DockerCommandFailure) throw new Error('WORKER_IMAGE_REMOVAL_UNKNOWN', { cause: error }); throw error; }
     },
   };

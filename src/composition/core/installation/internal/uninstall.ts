@@ -4,7 +4,7 @@ import { UninstallRecovery, attestLocalInteractiveTerminal, localPrincipalChanne
 import { UninstallApplication, uninstallApplySchema, authorizeUninstall, uninstallAffectedScopes, type UninstallInteraction } from '#engine/index.js';
 import { ErrorRegistry, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
-import { uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview } from '#adapters/index.js';
+import { uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview, resumeUninstallFinalTail } from '#adapters/index.js';
 import { observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
 import { withUninstallAdmission } from './uninstall-admission.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -54,17 +54,25 @@ async function completed(root: string, options: ConfigLoadOptions, settle = fals
   return readUninstallTombstone(config.productLayout.root, { ...readLocalOsIdentity(), scopeIds: [] }, config.installation.profileMaxBytes, productResourcePath(config.productLayout, 'installationIdentity'), settle);
 }
 export async function previewConfiguredUninstall(root: string, purge: boolean, options: ConfigLoadOptions = {}) {
-  const previous = await completed(root, options); if (previous) return completedUninstallPreview(previous.plan);
+  const previous = await completed(root, options); if (previous) return completedUninstallPreview(previous.plan, previous.remaining);
   return (await configuredUninstall(root, options)).preview(purge);
 }
 export async function applyConfiguredUninstall(root: string, input: unknown, interaction: UninstallInteraction, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
   const previous = await completed(root, options);
   if (previous) {
-    const peer = localPrincipalPeer();
-    if (localPrincipalChannel() || !await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'uninstall' } });
-    const plan = completedUninstallPreview(previous.plan);
+    const witnessed = async () => { const peer = localPrincipalPeer();
+      if (localPrincipalChannel() || !await attestLocalInteractiveTerminal(peer?.pid, peer?.uid)) throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: 'uninstall' } }); };
+    await witnessed();
+    const plan = completedUninstallPreview(previous.plan, previous.remaining);
     const command = uninstallApplySchema.safeParse(input); if (!command.success) throw ErrorRegistry.createError('UNINSTALL_INVALID');
     if (command.data.planDigest !== plan.planDigest) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED');
+    // The second card resumes an interrupted tail; its answer grants no authority (decided again in the owner, under custody).
+    if (previous.remaining) {
+      if (!await interaction.confirm(plan)) return { ...previous.result, status: 'cancelled' as const, items: [], planDigest: plan.planDigest };
+      await witnessed();
+      const config = await loadComposedConfig(root, { ...options, heal: false, secretResolver: async () => undefined, uninstallHold: 'admit' });
+      return { ...await resumeUninstallFinalTail(config, { ...readLocalOsIdentity(), scopeIds: [] }, await interaction.backupPassphrase?.() ?? ''), planDigest: plan.planDigest };
+    }
     return { ...(await completed(root, options, true) ?? previous).result, status: 'noop' as const, planDigest: plan.planDigest };
   }
   return (await configuredUninstall(root, options)).apply(input, interaction, signal);

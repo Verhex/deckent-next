@@ -4,7 +4,7 @@ import { dirname, join, relative, isAbsolute, sep } from 'node:path';
 import { InstallationCacheRemovalTarget } from './cache.js';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
 import { readNewestWorkerReceipt, observeWorkerRemovalInventory } from '#adapters/core/worker-image/index.js';
-import { ErrorRegistry, productResourcePath, resolveGlobalConfigReadPath, DECKENT_DIR, PRODUCT_LAYOUT_REGISTRY, type ConfigLoadOptions, type ResolvedConfig, type ProductResource } from '#platform/index.js';
+import { ErrorRegistry, productResourcePath, resolveGlobalConfigReadPath, resolveGlobalScopePaths, normalizeGlobalScopePlatform, DECKENT_DIR, PRODUCT_LAYOUT_REGISTRY, type ConfigLoadOptions, type ResolvedConfig, type ProductResource } from '#platform/index.js';
 import { extendUninstallInventory, assertNativeUninstallSupport, removalRegistry } from './inventory.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { affectedToolchainProfiles, type UninstallInventory, type UninstallResource } from '#engine/index.js';
@@ -53,7 +53,7 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
     version: null, owner: null, ownership: 'shared', ownershipEvidence: null, present: null, protected: true, capability: false, backup: 'missing' });
   if (config.service.identity) resources.push({ resourceId: 'recorded-service', contribution: 'service', locator: config.service.identity.serviceId,
     version: null, owner: null, ownership: 'unknown', ownershipEvidence: null, present: null, protected: true, capability: false, backup: 'missing' });
-  // Real build-owner observations, never docker tag inference. No complete cross-installation reference producer exists in this revision.
+  // Real build-owner observations, never docker tag inference; only the lease owner's complete references can make one removable.
   const receipt = await readNewestWorkerReceipt(join(productResourcePath(layout, 'workspaces'), 'toolchains'));
   const images = new Set([...(receipt?.images ?? (receipt ? [{ imageId: receipt.imageId }] : [])).map(image => image.imageId),
     ...affectedToolchainProfiles(config).flatMap(profile => profile.imageId ? [profile.imageId] : [])]);
@@ -66,14 +66,16 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
   const integrity = await openLocalIntegrityAuthority(layout, config.approvals.keyFile).catch(error => { if (['ENOENT', 'INTEGRITY_KEY_UNAVAILABLE'].includes((error as NodeJS.ErrnoException).code ?? '')) return null; throw error; });
   const extended = await extendUninstallInventory(config, inventory, purge, integrity, options.env ?? process.env);
   const imagesObserved = config.execution?.docker ? await observeWorkerRemovalInventory({ home: join(productResourcePath(layout, 'workspaces'), 'toolchains'), installationId,
-    buildersRoot: join(globalRoot, PRODUCT_LAYOUT_REGISTRY.resources.workerImageBuilders), executable: config.execution.docker.executable,
+    // The builder's own custody root (toolchains builder): its lock fences lease writes against this removal.
+    buildersRoot: join(resolveGlobalScopePaths(normalizeGlobalScopePlatform(options.platform ?? process.platform, options.env ?? process.env), options.env ?? process.env, { ignoreProjectOverride: true }).stateDir,
+      PRODUCT_LAYOUT_REGISTRY.resources.workerImageBuilders), executable: config.execution.docker.executable,
     timeoutMs: config.installation.imageProbe.timeoutMs, outputBytes: config.installation.imageProbe.outputBytes }) : { targets: [], resources: [] };
   const finalResources = [...extended.inventory.resources];
   for (const image of imagesObserved.resources) {
     const index = finalResources.findIndex(item => item.resourceId === image.resource.resourceId);
     const observed: UninstallResource = { resourceId: image.resource.resourceId, contribution: 'worker-image', locator: image.resource.imageId,
       version: image.version, owner: image.exclusive ? installationId : null, ownership: image.exclusive ? 'exclusive' : 'unknown', ownershipEvidence: image.exclusive ? image.resource.receiptDigest : null,
-      present: image.present, protected: !image.exclusive, capability: image.exclusive, backup: 'missing' };
+      present: image.present, protected: !image.exclusive, capability: image.exclusive, backup: 'missing', ...(image.manualCommand ? { manualCommand: image.manualCommand } : {}) };
     if (index >= 0) finalResources[index] = observed; else finalResources.push(observed);
   }
   return { ...extended, inventory: { ...extended.inventory, resources: finalResources, inventoryRevision: hash(finalResources) }, target, targets: [...extended.targets, ...imagesObserved.targets] };
