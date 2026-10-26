@@ -34,5 +34,13 @@
   "error.HUB_STORE_CORRUPT": "Hub storage failed integrity validation. Preserve the evidence and inspect the ledger.",
   "error.HUB_STORE_UNAVAILABLE": "Hub storage is unavailable.",
   "error.HUB_OUTCOME_UNKNOWN": "The Hub commit result is unknown. Reconcile using the same command id.",
-  "error.HUB_FILE_UNSUPPORTED": "Secure Hub file import is unavailable on this platform."
+  "error.HUB_FILE_UNSUPPORTED": "Secure Hub file import is unavailable on this platform.",
+  "error.HUB_TLS_REQUIRED": "TLS certificate and key are required before binding a Hub outside loopback.",
+  "error.HUB_NETWORK_INVALID": "The Hub network configuration or request is invalid.",
+  "error.HUB_NETWORK_FAILED": "The Hub network request failed. Inspect its effect evidence before retrying.",
+  "error.HUB_FIRST_USE_REQUIRED": "Approve the person’s first-use Hub card before connecting.",
+  "hub.tool.publish": "Publish a signed package through the Hub authority.",
+  "hub.tool.review": "Submit an independent signed Hub review.",
+  "hub.tool.yank": "Withdraw a Hub version from new installation.",
+  "hub.tool.revoke": "Revoke a Hub version through its signed feed."
 }

@@ -4089,7 +4089,11 @@
         "src/platform/core/integrity",
         "src/platform/core/common",
         "src/platform/core/validate",
-        "src/engine/core/hub-server"
+        "src/engine/core/hub-server",
+        "src/engine/core/hub-client",
+        "src/platform/core/i18n",
+        "src/platform/core/errors",
+        "src/domain/core/primitives"
       ],
       "plan": "LEARNING"
     },
@@ -4136,7 +4140,25 @@
         "src/adapters/core/file-artifacts",
         "src/adapters/core/local-keyring",
         "src/platform/core/managed-files",
-        "src/composition/core/agent-catalog"
+        "src/composition/core/agent-catalog",
+        "src/adapters/core/hub-http",
+        "src/surfaces/core/hub-mcp",
+        "src/engine/core/hub-server",
+        "src/surfaces"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/adapters/core/hub-http": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/engine/core/effect",
+        "src/platform/core/errors",
+        "src/platform/core/integrity",
+        "src/adapters/core/native-connection",
+        "src/engine/core/hub-client",
+        "src/engine/core/authentication",
+        "src/domain/core/effect",
+        "src/platform/core/clock"
       ],
       "plan": "LEARNING"
     }

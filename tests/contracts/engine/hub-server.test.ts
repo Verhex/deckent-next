@@ -6,11 +6,12 @@ import { afterEach, expect, it, type TestContext } from 'vitest';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import { bundle as portableBundle } from '../../fixtures/hub-client.js';
 import { HUB_LIMITS, canonicalHubJson, type HubEnvelope, type HubPackageSignature } from '#domain/core/hub/index.js';
 import { buildHubPackage, buildHubSkillDocument, hubPackageSignatureMessage, skillContentV2Digest, skillSignatureV2Message } from '#engine/core/hub/index.js';
 import { HubServerApplication, HubServerError, requireHubDependencies, type HubServerContext, type HubServerStore, type HubStoredVersion } from '#engine/core/hub-server/index.js';
 import { openHubStore } from '#adapters/core/hub-store/index.js';
-import { createHubSkillsServer } from '#surfaces/core/hub-mcp/index.js';
+import { createHubSkillsServer, createHubHttpHandler } from '#surfaces/core/hub-mcp/index.js';
 import { EMPTY_KNOWN_SECRETS, ed25519Signer, sha256, signatureMessage, verifyEd25519 } from '#platform/index.js';
 
 const seed = (byte: string) => ed25519Signer(Buffer.from(`302e020100300506032b657004220420${byte.repeat(32)}`, 'hex'));
@@ -277,4 +278,47 @@ it('reports an unknown transaction outcome when storage closes before rollback c
   if (process.platform === 'win32') c.skip('verify-not-run: Windows storage refusal has its own active check');
   const opened = openHubStore({ root: root(), scopeId: context.scopeId, hubId: hub.keyId, busyTimeoutMs: 1000 });
   return expect(opened.store.transaction(async () => { opened.close(); throw new Error('injected storage loss'); })).rejects.toThrow(code('HUB_STORE_OUTCOME_UNKNOWN'));
+});
+
+
+it('authenticates each modern HTTP request, serves resource metadata and delegates Hub tools to the same signed application', async c => {
+  const f = await fixture(c), endpoint = 'https://hub.invalid/mcp', extensionId = 'test.invalid/hub';
+  let actor = context, tokenResource = endpoint, expiresAt = 4_000_000_000, scopes = ['hub'];
+  const handler = createHubHttpHandler(f.app, { endpoint, authorizationServers: ['https://auth.invalid'], scopes: ['hub'], allowedOrigins: ['https://console.invalid'],
+    verifier: { verifyAccessToken: async token => ({ token, clientId: 'test', resource: new URL(tokenResource), expiresAt, scopes }) }, context: () => actor }, { extensionId });
+  const client = new Client({ name: 'hub-network-test', version: '1' }, { versionNegotiation: { mode: { pin: '2026-07-28' } }, capabilities: { extensions: { [extensionId]: {} } } });
+  const transport = new StreamableHTTPClientTransport(new URL(endpoint), { fetch: async (input, init) => {
+    const request = new Request(input, init); request.headers.set('authorization', 'Bearer synthetic-test-token'); return handler.fetch(request);
+  } });
+  try {
+    const metadata = await handler.fetch(new Request('https://hub.invalid/.well-known/oauth-protected-resource/mcp'));
+    expect(await metadata.json()).toMatchObject({ resource: endpoint, authorization_servers: ['https://auth.invalid'], bearer_methods_supported: ['header'] });
+    expect((await handler.fetch(new Request(endpoint, { method: 'POST', body: '{}' }))).status).toBe(401);
+    expect((await handler.fetch(new Request(endpoint, { method: 'POST', headers: { origin: 'https://attacker.invalid' }, body: '{}' }))).status).toBe(403);
+    const authenticated = () => handler.fetch(new Request(endpoint, { method: 'POST', headers: { authorization: 'Bearer synthetic-test-token' }, body: '{}' }));
+    tokenResource = 'https://another.invalid/mcp'; expect((await authenticated()).status).toBe(401); tokenResource = endpoint;
+    expiresAt = 1; expect((await authenticated()).status).toBe(401); expiresAt = 4_000_000_000;
+    scopes = []; expect((await authenticated()).status).toBe(403); scopes = ['hub'];
+    await client.connect(transport);
+    expect(client.getNegotiatedProtocolVersion()).toBe('2026-07-28');
+    expect(client.getServerCapabilities()?.extensions?.[extensionId]).toEqual({});
+    const tools = await client.listTools();
+    expect(tools.tools.map(tool => tool.name)).toEqual(['hub_publish', 'hub_review']);
+    const b = bundle(), wireBundle = { manifest: b.manifest, envelope: b.envelope, files: b.files.map(file => ({ path: file.path, base64: Buffer.from(file.bytes).toString('base64') })) };
+    const published = await client.callTool({ name: 'hub_publish', arguments: { bundle: wireBundle } }, { toolDefinition: tools.tools.find(tool => tool.name === 'hub_publish')! });
+    expect(published.isError).not.toBe(true);
+    expect((await f.app.inspect(context, 'acme/invoice', '1.0.0')).envelope.signatures.map(sig => sig.role)).toEqual(['publisher', 'hub']);
+    const result = await client.request({ method: 'hub/packages/list', params: {} }, z.object({ value: z.object({ hubId: z.string(), packages: z.array(z.unknown()) }) }));
+    expect(result.value.hubId).toBe(hub.keyId); expect(result.value.packages).toHaveLength(1);
+    expect(result.value.packages[0]).toMatchObject({ revocationState: 'unknown', envelope: { signatures: expect.arrayContaining([expect.objectContaining({ role: 'publisher' }), expect.objectContaining({ role: 'hub' })]) } });
+    const fetched = await client.request({ method: 'hub/packages/get', params: { packageId: 'acme/invoice', version: '1.0.0' } }, z.object({ value: z.object({ bundle: z.object({ manifest: z.unknown(), files: z.array(z.unknown()) }) }) }));
+    expect(fetched.value.bundle.files).toHaveLength(2);
+    await expect(client.request({ method: 'hub/agents/get', params: { packageId: 'acme/invoice', version: '1.0.0', agentId: 'missing' } }, z.unknown())).rejects.toThrow();
+    const portable = portableBundle({ name: 'payable' });
+    await f.app.publish(context, portable.manifest, { ...portable.envelope, signatures: portable.envelope.signatures.filter(sig => sig.role === 'publisher') }, portable.files);
+    const agent = await client.request({ method: 'hub/agents/get', params: { packageId: 'acme/payable', version: '1.0.0', agentId: 'payable-agent' } }, z.object({ value: z.object({ agent: z.object({ agentId: z.string(), persona: z.string() }) }) }));
+    expect(agent.value.agent).toEqual({ agentId: 'payable-agent', persona: 'Review the business record.' });
+    actor = { ...context, scopeId: 'other' };
+    await expect(client.request({ method: 'hub/packages/list', params: {} }, z.unknown())).rejects.toThrow();
+  } finally { await client.close(); await handler.close(); }
 });

@@ -122,3 +122,4 @@ export { withWorkerBuilder, readWorkerHistory, type WorkerReservation } from '#a
 
 export * from '#adapters/core/hub-client-store/index.js';
 export * from '#adapters/core/hub-package-file/index.js';
+export * from '#adapters/core/hub-http/index.js';

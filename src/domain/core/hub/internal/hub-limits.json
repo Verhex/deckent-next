@@ -17,5 +17,9 @@
   "cacheMaxBytes": 1073741824,
   "skillFilesMaxBytes": 4194304,
   "skillReadMaxBytes": 16777216,
-  "skillReadMaxFiles": 512
+  "skillReadMaxFiles": 512,
+  "maxRedirects": 3,
+  "httpMaxBytes": 8388608,
+  "httpMaxConcurrentRequests": 32,
+  "networkInputMaxBytes": 4096
 }

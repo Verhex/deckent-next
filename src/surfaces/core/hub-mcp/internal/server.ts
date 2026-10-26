@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { HUB_LIMITS, canonicalHubJson, type HubSkillItem } from '#domain/index.js';
 import { HubServerError, type HubServerApplication, type HubServerContext, type HubSkillRef, type HubStoredVersion } from '#engine/index.js';
 import { sha256, PACKAGE_NAME, PACKAGE_VERSION, DeckentJsonSchemaValidator } from '#platform/index.js';
+import { registerHubMethods, type HubMcpOptions } from './methods.js';
 
 const extension = 'io.modelcontextprotocol/skills'; // Standard extension id, not a mutable Deckent domain.
 const cache = { resultType: 'complete' as const, ttlMs: 0, cacheScope: 'private' as const };
@@ -34,10 +35,10 @@ function skillEntry(row: HubStoredVersion, skill: HubSkillItem) {
 }
 /** Transport-free factory. H4 must host it through the SDK createMcpHandler/serveStdio entry for the modern era.
  * H4 supplies authenticated per-request context and owns network/auth/lifecycle policy. */
-export function createHubSkillsServer(app: HubServerApplication, context: (request: ServerContext) => HubServerContext) {
+export function createHubSkillsServer(app: HubServerApplication, context: (request: ServerContext) => HubServerContext, hub?: HubMcpOptions) {
   const server = new Server({ name: PACKAGE_NAME, version: PACKAGE_VERSION }, {
     supportedProtocolVersions: ['2026-07-28'],
-    capabilities: { resources: {}, extensions: { [extension]: {} } }, jsonSchemaValidator: new DeckentJsonSchemaValidator(),
+    capabilities: { resources: {}, ...(hub ? { tools: {} } : {}), extensions: { [extension]: {}, ...(hub ? { [hub.extensionId]: {} } : {}) } }, jsonSchemaValidator: new DeckentJsonSchemaValidator(),
   });
   const fail = (error: unknown): never => {
     if (error instanceof HubServerError && error.code === 'HUB_RESOURCE_UNKNOWN') throw new ProtocolError(-32602, error.message);
@@ -82,5 +83,6 @@ export function createHubSkillsServer(app: HubServerApplication, context: (reque
       return { ...cache, contents: [{ uri: request.params.uri, mimeType: file.mediaType, blob: Buffer.from(bytes).toString('base64') }] };
     } catch (error) { return fail(error); }
   });
+  if (hub) registerHubMethods(server, app, context, hub);
   return server;
 }

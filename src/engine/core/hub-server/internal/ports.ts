@@ -39,9 +39,10 @@ export interface HubServerTransaction {
   replaceEnvelope(packageId: string, version: string, expectedRevision: number, envelope: HubEnvelope): HubAwaitable<void>;
   publishesSince(publisherId: string, atMs: number): HubAwaitable<number>;
   skills(after: string, limit: number): HubAwaitable<readonly HubSkillRef[]>;
+  packages(after: string, limit: number): HubAwaitable<readonly { readonly key: string; readonly packageId: string; readonly version: string }[]>;
   appendReceipt(event: HubReceiptEvent, signer: HubServerSigner): Promise<HubServerReceipt>;
 }
-export interface HubServerStore extends Pick<HubServerTransaction, 'key' | 'get' | 'latest' | 'publishesSince' | 'skills'> {
+export interface HubServerStore extends Pick<HubServerTransaction, 'key' | 'get' | 'latest' | 'publishesSince' | 'skills' | 'packages'> {
   transaction<T>(work: (transaction: HubServerTransaction) => Promise<T>): Promise<T>;
 }
 export interface HubServerPorts {

@@ -354,7 +354,8 @@
       "owners": [
         "src/surfaces/core/mcp",
         "src/engine/core/config",
-        "src/capabilities/core/run-planner"
+        "src/capabilities/core/run-planner",
+        "src/surfaces/core/hub-mcp"
       ],
       "purpose": "Converts existing Zod schemas to JSON Schema (draft-07) for MCP tools/list, config descriptions and the governed Brain proposal prompt; no separately maintained proposal schema.",
       "features": [
