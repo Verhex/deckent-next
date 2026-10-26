@@ -244,6 +244,22 @@ export interface PolicyTemplateUpgradeResult {
   readonly wireRules: readonly string[];
 }
 const revisionOf = (value: unknown) => typeof (value as { revision?: unknown } | null)?.revision === 'string' ? (value as { revision: string }).revision : null;
+/** The add-only plan's names (the `--upgrade` path below and setup's anchored read share one construction). */
+const additionNames = (person: Person, scopeId: string, toolNames: FirstRunToolNames, serviceId?: string) => ({ person, scopeId,
+  proposeMcpToolName: toolNames.proposeMcpToolName, mcpCallOperationId: toolNames.mcpCallOperationId, policyAdministerOperationId: toolNames.policyAdministerOperationId,
+  ...(toolNames.firstCommitOperationId === undefined ? {} : { firstCommitOperationId: toolNames.firstCommitOperationId }), executionEnvironmentIds: toolNames.executionEnvironmentIds,
+  ...(toolNames.recoveryRules === undefined ? {} : { recoveryRules: toolNames.recoveryRules }), ...(serviceId === undefined ? {} : { serviceId }) });
+/** Setup's read of an installed first-run policy whose revision a governed edit rewrote (the U4E carrier's PRE-9 full-auto grant): the
+ * `first-run-read-tools` anchor naming this person keeps it installed, and the same add-only plan `--upgrade` applies decides current vs
+ * upgradable. Read-only and grants nothing; no anchor, another person or an unreadable document is `null` (setup: hand-built). */
+export async function inspectAnchoredFirstRunPolicy(source: PolicyTemplateSource, input: { readonly scopeId: string; readonly person: Person;
+  readonly toolNames: FirstRunToolNames }): Promise<'current' | 'upgradable' | null> {
+  try {
+    const additions = firstRunTemplateAdditions(await source.load(), additionNames({ issuer: identitySchema.parse(input.person.issuer),
+      subject: identitySchema.parse(input.person.subject) }, identitySchema.parse(input.scopeId), input.toolNames));
+    return additions.status === 'current' ? 'current' : additions.status === 'plan' ? 'upgradable' : null;
+  } catch { return null; }
+}
 /**
  * The first-run older-template → current migration (owner 2026-10-07; `deckent init policy --scope <id> --upgrade --preview|--apply [--expect <revision>]
  * [--person <issuer>/<subject>]`), under the template installation's authority: the local person the first-run rules name, who could install the
@@ -273,9 +289,7 @@ export async function upgradePolicyTemplate(writer: PolicyTemplateDocumentWriter
   const person = named === null ? null : named.issuer.success && named.subject.success ? { issuer: named.issuer.data, subject: named.subject.data } : undefined;
   const principal = person ?? { issuer: identitySchema.parse(input.principal.issuer), subject: identitySchema.parse(input.principal.subject) };
   const template = { scopeId, principal, ...input.toolNames, ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
-  const names = { person: principal, scopeId, proposeMcpToolName: input.toolNames.proposeMcpToolName, mcpCallOperationId: input.toolNames.mcpCallOperationId,
-    policyAdministerOperationId: input.toolNames.policyAdministerOperationId, ...(input.toolNames.firstCommitOperationId === undefined ? {} : { firstCommitOperationId: input.toolNames.firstCommitOperationId }), executionEnvironmentIds: input.toolNames.executionEnvironmentIds,
-    ...(input.toolNames.recoveryRules === undefined ? {} : { recoveryRules: input.toolNames.recoveryRules }), ...(input.serviceId === undefined ? {} : { serviceId: input.serviceId }) };
+  const names = additionNames(principal, scopeId, input.toolNames, input.serviceId);
   const result = (status: PolicyTemplateUpgradeResult['status'], extra: Partial<PolicyTemplateUpgradeResult> = {}): PolicyTemplateUpgradeResult => Object.freeze({ schemaVersion: 1,
     status, reason: null, template: Object.freeze({ id: FIRST_RUN_POLICY_TEMPLATE_ID, to: FIRST_RUN_POLICY_TEMPLATE_VERSION }), scopeId, principal, person: person ?? null, basis: null,
     exact: false, people: [], revision: null, rules: [], conflicts: [], wireRules: [], ...extra });
