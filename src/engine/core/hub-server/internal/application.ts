@@ -13,10 +13,9 @@ export class HubServerApplication {
     if (context.scopeId !== this.ports.scopeId || !hubActorSchema.safeParse(context.principal).success) throw new HubServerError('HUB_SERVER_DENIED');
     await this.ports.authority.require(context, action, resource, digest);
   }
-  protected async registered(keyId: string, role: HubRegisteredKey['role'], store: Pick<HubServerTransaction, 'key' | 'feedEntries'> = this.ports.store): Promise<HubRegisteredKey> {
+  protected async registered(keyId: string, role: HubRegisteredKey['role'], store: Pick<HubServerTransaction, 'key' | 'revocations'> = this.ports.store): Promise<HubRegisteredKey> {
     const key = await store.key(keyId, role);
-    if (!key?.active || (await store.feedEntries(0)).some(entry => entry.severity === 'revoke' && (entry.kind === 'key' && entry.id === keyId
-      || entry.kind === 'publisher' && entry.id === key.publisherId))) throw new HubError('HUB_SIGNER_UNTRUSTED');
+    if (!key?.active || (await store.revocations([{ kind: 'key', id: keyId }, ...key.publisherId ? [{ kind: 'publisher' as const, id: key.publisherId }] : []])).some(entry => entry.severity === 'revoke')) throw new HubError('HUB_SIGNER_UNTRUSTED');
     return key;
   }
   protected bound(context: HubServerContext, key: HubRegisteredKey) {
@@ -58,7 +57,7 @@ export class HubServerApplication {
     if (inputFiles.length + 2 > HUB_LIMITS.packageMaxFiles || inputFiles.reduce((n, f) => n + f.bytes.byteLength, 0) > HUB_LIMITS.packageMaxBytes) throw new HubError('HUB_LIMIT_EXCEEDED');
     const files = inputFiles.map(f => ({ path: f.path, bytes: Buffer.from(f.bytes) }));
     const envelope = parseHubContract(hubEnvelopeSchema, envelopeInput, 'HUB_ENVELOPE_INVALID', 'HUB_ENVELOPE_SCHEMA_UNSUPPORTED');
-    const verify = async (store: Pick<HubServerTransaction, 'key' | 'feedEntries'> = this.ports.store) => {
+    const verify = async (store: Pick<HubServerTransaction, 'key' | 'revocations'> = this.ports.store) => {
       const publisherSignature = (envelope as HubEnvelope)?.signatures?.find(s => s.role === 'publisher');
       const publisher = await this.registered(publisherSignature?.keyId ?? '', 'publisher', store);
       this.bound(context, publisher);
@@ -163,8 +162,8 @@ export class HubServerApplication {
   }
   async revocationState(context: HubServerContext, packageId: string, version: string) {
     const row = await this.inspect(context, packageId, version), keys = row.envelope.signatures.map(signature => signature.keyId);
-    const entries = (await this.ports.store.feedEntries(0)).filter(entry => entry.kind === 'key' ? keys.includes(entry.id)
-      : entry.kind === 'publisher' ? entry.id === packageId.split('/')[0] : entry.id === `${packageId}@${version}`);
+    const entries = await this.ports.store.revocations([...keys.map(id => ({ kind: 'key' as const, id })),
+      { kind: 'publisher', id: packageId.split('/')[0]! }, { kind: 'package-version', id: `${packageId}@${version}` }]);
     return entries.some(entry => entry.severity === 'revoke') ? 'revoked' : entries.length ? 'yanked' : 'clear';
   }
   async readFile(context: HubServerContext, packageId: string, version: string, path: string) {
