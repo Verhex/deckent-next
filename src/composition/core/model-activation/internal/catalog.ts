@@ -61,7 +61,7 @@ export async function applyConfiguredModelCatalog(root: string, input: unknown, 
   const child = (id: string, stage: string) => `catalog-state-${createHash('sha256').update(JSON.stringify([command.commandId, id, stage])).digest('hex')}`;
   if (command.action === 'activate' && command.modelId !== null && channel.activation?.state !== 'active') await applyConfiguredModelCatalogOnly(root, { schemaVersion: 1, commandId: child('channel', 'activate'), scopeId: command.scopeId, action: 'activate', channelId: channel.channelId, modelId: null, expectedRevision: channel.activation?.revision ?? 0 }, options);
   const priced = kind ? channel.models.filter(row => providerConnectModelPriced(kind, row.model.nativeId)).map(row => row.modelId) : [];
-  for (const { entry, enabled, activateWorker, reference } of planCatalogStateCascade(command, channel, declared, priced)) {
+  for (const { entry, enabled, activateWorker, reference } of planCatalogStateCascade(command, channel, declared, priced, Date.now())) {
     if (activateWorker) await applyConfiguredModelCatalogOnly(root, { schemaVersion: 1, commandId: child(entry.modelId, 'worker'), scopeId: command.scopeId,
       action: 'activate', channelId: channel.channelId, modelId: entry.modelId, expectedRevision: 0 }, options);
     if (!reference) continue;

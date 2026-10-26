@@ -123,7 +123,12 @@ it('channel activation selects never-touched priced models and retains explicit-
   const entry = (id: string, state: 'active' | 'inactive' | null) => ({ modelId: id, revision: 1, model: { id, version: 1, nativeId: id, lifecycle: { state: 'active' } }, activation: state ? { state, revision: 1 } : null });
   const channel = { channelId: 'provider', access: 'allowed', providerVersion: 1, models: [entry('open', 'active'), entry('off', 'inactive'), entry('new', null), entry('unpriced', null)] } as unknown as Extract<ModelCatalogChannelView, { access: 'allowed' }>;
   const command = { schemaVersion: 1 as const, commandId: 'channel', scopeId: 'scope', action: 'activate' as const, channelId: 'provider', modelId: null, expectedRevision: 0 };
-  const enabled = planCatalogStateCascade(command, channel, undefined, ['new']);
+  const now = Date.parse('2026-10-26T00:00:00Z');
+  const enabled = planCatalogStateCascade(command, channel, undefined, ['new'], now);
   expect(enabled.map(row => [row.entry.modelId, row.enabled, row.activateWorker])).toEqual([['open', true, false], ['new', true, true]]);
-  expect(planCatalogStateCascade({ ...command, action: 'deactivate' }, channel, undefined, []).every(row => !row.enabled && !row.activateWorker)).toBe(true);
+  expect(planCatalogStateCascade({ ...command, action: 'deactivate' }, channel, undefined, [], now).every(row => !row.enabled && !row.activateWorker)).toBe(true);
+  // A model whose recorded retirement day has come is never turned on by the cascade, fresh or already on (lifecycle data, no date in code).
+  const retired = (id: string, state: 'active' | null) => ({ ...entry(id, state), model: { id, version: 1, nativeId: id, lifecycle: { state: 'active', retiredOn: '2026-10-15' } } });
+  const old = { ...channel, models: [retired('gone-new', null), retired('gone-on', 'active')] } as unknown as typeof channel;
+  expect(planCatalogStateCascade(command, old, undefined, ['gone-new', 'gone-on'], now)).toEqual([]);
 });

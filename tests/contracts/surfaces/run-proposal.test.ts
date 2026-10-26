@@ -77,7 +77,7 @@ it('MCP wire submits and inspects the same contract, rejects forged fields and e
 it.each(['en', 'tr'] as const)('non-metered proposal and /do preview explicitly waive only money checks (%s)', async locale => {
   const value: RunProposalResult = { ...receipt, budgetSemantics: 'not-metered', proposal: { ...receipt.proposal, binding: { ...receipt.proposal.binding,
     admission: { ...receipt.proposal.binding.admission!, budgetSemantics: 'not-metered', budget: null } } } };
-  const expected = locale === 'tr' ? 'İşçiler: abonelik veya ek ücret gerektirmeyen model — API bütçesi uygulanmaz' : 'Workers: subscription/free model — budget check does not apply';
+  const expected = locale === 'tr' ? 'İşçiler: abonelik veya ek ücret gerektirmeyen model — API bütçesi uygulanmaz' : 'Workers: subscription or local model — no extra cost; budget check does not apply';
   const output: string[] = [];
   await runCommand(['run', 'inspect-proposal', '--scope', 's', '--id', 'r', '--command-id', 'propose', '--lang', locale], {
     inspectRunProposal: async () => value, stdout: { write(text: string) { output.push(text); } } });
