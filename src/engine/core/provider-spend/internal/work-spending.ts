@@ -1,7 +1,9 @@
 import { z } from 'zod';
+import { advanceProviderSpendPeriod, providerSpendPeriodUsedExact } from './period.js';
+import { ceilProviderSpendExactMinorUnits } from './exact.js';
 import { nativeCliIdSchema, type ModelInvocationBillingAxis, type ModelInvocationProfile, type ExecutionProfileDefinition } from '#domain/index.js';
 import { providerSpendEvidenceDigest } from './account.js';
-import { createProviderSpendAccount } from './account.js';
+import { createProviderSpendAccount, parseProviderSpendAccount, type ProviderSpendAccount } from './account.js';
 import { createProviderSpendCheckpoint } from './checkpoint.js';
 import type { ProviderSpendBudget } from '#domain/index.js';
 import { providerSpendLocalZeroTariffProfile } from './no-charge.js';
@@ -20,10 +22,13 @@ export function workSpendingBasis(profiles: readonly (ExecutionProfileDefinition
     digest: providerSpendEvidenceDigest({ schemaVersion: 1, profiles }) };
 }
 /** What a scope can still declare: limit minus reserved and settled money, exact integer arithmetic. An observation, never a reservation. */
-export function providerSpendRemaining(checkpoint: Readonly<{ account: Readonly<{ budget: ProviderSpendBudget; reservedMinorUnits: number; settledMinorUnits: number; frozen: boolean }> }> | null) {
-  const account = checkpoint?.account;
-  return account ? Object.freeze({ currency: account.budget.currency, limitMinorUnits: account.budget.limitMinorUnits, frozen: account.frozen,
-    remainingMinorUnits: Number(BigInt(account.budget.limitMinorUnits) - BigInt(account.reservedMinorUnits) - BigInt(account.settledMinorUnits)) }) : null;
+export function providerSpendRemaining(checkpoint: Readonly<{ account: Readonly<{ budget: ProviderSpendBudget; reservedMinorUnits: number; settledMinorUnits: number; frozen: boolean; schemaVersion?: ProviderSpendAccount['schemaVersion']; settledExactMinorUnits?: string; period?: ProviderSpendAccount['period'] }> }> | null) {
+  const raw = checkpoint?.account;
+  if (!raw) return null;
+  const periodic = raw.period ? advanceProviderSpendPeriod(parseProviderSpendAccount(raw), Date.now()) : null;
+  const account = periodic ?? raw, used = periodic ? ceilProviderSpendExactMinorUnits(providerSpendPeriodUsedExact(periodic)) : raw.settledMinorUnits;
+  return Object.freeze({ currency: account.budget.currency, limitMinorUnits: account.budget.limitMinorUnits, frozen: account.frozen,
+    remainingMinorUnits: Number(BigInt(account.budget.limitMinorUnits) - BigInt(account.reservedMinorUnits) - BigInt(used)) });
 }
 /** Initial account projection only; this creates neither a ledger account nor a reservation. */
 export function configuredProviderSpendCheckpoint(budget: ProviderSpendBudget) {

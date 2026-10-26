@@ -1,3 +1,8 @@
+import { spendPeriodLines } from '#surfaces/core/cli-models/index.js';
+import { registerProviderConfig } from '#adapters/index.js';
+import { terminalAdminPorts } from '#surfaces/core/terminal-admin/index.js';
+import { EMPTY_SESSION_USAGE } from '#surfaces/core/terminal-kit/index.js';
+import { runKernelCommand } from '#surfaces/core/cli/index.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -6,6 +11,7 @@ import { main } from '../../fixtures/cli-input.js';
 import { createProviderSpendAccount, createProviderSpendAuditReceipt, createProviderSpendCheckpoint, type ProviderSpendAccountInspection, type ProviderSpendAuditResult } from '#engine/index.js';
 import { clearConfigCache } from '#platform/index.js';
 
+registerProviderConfig();
 const roots: string[] = [];
 afterEach(async () => { clearConfigCache(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const query = { schemaVersion: 1 as const, scopeId: 'scope', budgetId: 'budget', budgetRevision: 1 };
@@ -97,4 +103,32 @@ it('routes reconcile and budget revision as strict commands, including JSON evid
     await writeFile(path, JSON.stringify({ ...command, actor: 'forged' }));
     expect(await main(['models', action, '--input', path], context)).toBe(2); expect(calls).toBe(2);
   }
+});
+
+it('shows the same local reset and legacy transition on spending, usage and doctor, including JSON', async () => {
+  const f = await fixture();
+  await writeFile(join(f.root, '.deckent/config.json'), JSON.stringify({ terminal: { scopeId: 'scope' } })); clearConfigCache();
+  const current = inspection(), state = { schemaVersion: 1 as const, kind: 'calendar-month-local', calendarMonths: 1, startedAtMs: Date.parse('2026-10-26T00:00:00Z'),
+    nextResetAtMs: Date.parse('2026-11-01T00:00:00Z'), timeZone: 'UTC', settledBaselineExactMinorUnits: '0', legacyTransition: true };
+  const result: ProviderSpendAccountInspection = { ...current, checkpoint: createProviderSpendCheckpoint({ ...current.checkpoint!.account, schemaVersion: 3, period: state }, 2, 1),
+    period: { schemaVersion: 1, asOfMs: state.startedAtMs, state, localTimeZone: 'UTC', usedExactMinorUnits: '0.02', remainingMinorUnits: 89 } };
+  const inspectProviderSpendAccount = async () => result;
+  let output = '';
+  const context = { ...f, inspectProviderSpendAccount, stdout: { write(value: string) { output += value; return true; } } };
+  expect(await main(['models', 'spending', '--scope', 'scope', '--lang', 'en'], context)).toBe(0);
+  expect(output).toContain('11/01/2026, 00:00:00 (UTC)'); expect(output).toContain('Previous cap retained');
+  const ports = terminalAdminPorts({ root: f.root, scopeId: 'scope', installationId: 'i', projectId: 'p', options: { env: f.env }, locale: 'en',
+    context: { inspectProviderSpendAccount }, status: async () => '', doctor: async () => undefined });
+  const usage = await ports.info.ports.usage!({ usage: EMPTY_SESSION_USAGE });
+  expect(JSON.stringify(usage.model)).toContain('11/01/2026, 00:00:00 (UTC)');
+  expect(JSON.stringify(usage.model)).toContain('Previous cap retained');
+  output = ''; await runKernelCommand(['doctor', '--lang', 'en'], context);
+  expect(output).toContain('11/01/2026, 00:00:00 (UTC)');
+  output = ''; await runKernelCommand(['doctor', '--lang', 'tr'], context);
+  expect(output).toContain('Sonraki sıfırlama: 01.11.2026 00:00:00 (UTC)');
+  output = ''; await runKernelCommand(['doctor', '--json'], context);
+  expect(JSON.parse(output).providerSpending.period.state.nextResetAtMs).toBe(Date.parse('2026-11-01T00:00:00Z'));
+  const quarter = { ...result, period: { ...result.period!, state: { ...state, kind: 'overlay.quarter-local', calendarMonths: 3 } } };
+  expect(spendPeriodLines(quarter, 'en')[0]).toContain('3 calendar months');
+  expect(spendPeriodLines(quarter, 'tr')[0]).toContain('3 takvim ayı');
 });

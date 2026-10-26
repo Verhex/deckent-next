@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import limits from './inspection-limits.json' with { type: 'json' };
+import periods from './periods.json' with { type: 'json' };
+export const PROVIDER_SPEND_PERIOD_REGISTRY = Object.freeze(periods);
 import { counterSchema, identitySchema, immutableJsonObjectSchema } from '#domain/core/primitives/index.js';
+export const providerSpendPeriodSchema = identitySchema;
 export const PROVIDER_SPEND_HOLD_PAGE_MAX = limits.maxHoldsPerPage;
 
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
@@ -10,8 +13,9 @@ const currencySchema = z.string().regex(/^[A-Z]{3}$/);
 const versionedPricingSchema = z.object({ id: identitySchema, version: counterSchema.positive(), digest: digestSchema,
   definition: immutableJsonObjectSchema }).strict().readonly();
 
-export const providerSpendBudgetSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema,
-  budgetId: identitySchema, revision: counterSchema.positive(), currency: currencySchema, limitMinorUnits: counterSchema }).strict().readonly();
+export const providerSpendBudgetSchema = z.object({ schemaVersion: z.union([z.literal(1), z.literal(2)]), scopeId: identitySchema,
+  budgetId: identitySchema, revision: counterSchema.positive(), currency: currencySchema, limitMinorUnits: counterSchema,
+  period: providerSpendPeriodSchema.optional() }).strict().refine(value => (value.schemaVersion === 2) === (value.period !== undefined)).readonly();
 
 /** Stage 1: the budget id a governed `budget-create` gets from the CLI and the terminal (one shared limit per scope across every API provider). */
 export const PROVIDER_SPEND_SCOPE_BUDGET_ID = 'scope-budget' as const;

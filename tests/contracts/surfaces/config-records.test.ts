@@ -35,7 +35,7 @@ describe('config record editors: actual config publication', () => {
     await f.port.open('provider_spending.budgets', 'project'); const draft = await f.port.draft(null);
     expect(draft.fields[1]).toMatchObject({ choices: [expect.objectContaining({ value: 5 }), expect.objectContaining({ value: 10 }), expect.objectContaining({ value: 25 }), expect.objectContaining({ value: 50 }), expect.objectContaining({ value: 100 })], stepper: { min: 1, max: 1000, step: 1 } });
     const add = await f.port.preview(null, { scopeId: 'test', usd: 25 }); expect(f.writes).toHaveLength(0); expect(add.after).toContain('2500');
-    await f.port.commit(add.token); expect((await f.document()).provider_spending.budgets).toEqual([{ schemaVersion: 1, budgetId: 'scope-budget', revision: 1, currency: 'USD', scopeId: 'test', limitMinorUnits: 2500 }]);
+    await f.port.commit(add.token); expect((await f.document()).provider_spending.budgets).toEqual([{ schemaVersion: 2, period: 'calendar-month-local', budgetId: 'scope-budget', revision: 1, currency: 'USD', scopeId: 'test', limitMinorUnits: 2500 }]);
     await f.port.open('provider_spending.budgets', 'project'); await f.port.draft('0'); const edit = await f.port.preview('0', { scopeId: 'test', usd: 26 }); await f.port.commit(edit.token);
     expect((await f.document()).provider_spending.budgets[0].limitMinorUnits).toBe(2600);
     await f.port.open('provider_spending.budgets', 'project'); const remove = await f.port.preview('0', null); await f.port.commit(remove.token);

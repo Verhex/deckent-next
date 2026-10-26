@@ -1,3 +1,4 @@
+import { scopeBudgetRevisionCommand } from '#surfaces/core/cli-models/index.js';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -20,7 +21,7 @@ async function fixture() {
 const actor = { id: 'actor', issuer: 'issuer', subject: 'subject', assurance: 'os-user' as const };
 /** A result as the governed store records it (the receipt's after state follows the command). */
 function recorded(command: ProviderSpendManagementCommand, before: ProviderSpendAccountInspection['checkpoint']): ProviderSpendManagementResult {
-  const after = command.kind === 'budget-create' ? createGovernedProviderSpendAccount(command) : command.kind === 'budget-revision'
+  const after = command.kind === 'budget-create' ? createGovernedProviderSpendAccount(command, 1) : command.kind === 'budget-revision'
     ? { ...before!.account, budget: command.budget, budgetRevisionDigest: providerSpendEvidenceDigest(command), budgetRevisionCommandId: command.commandId } : before!.account;
   const body = { schemaVersion: 1 as const, command, actor, authorization: { revision: 'p', ruleId: 'spend' }, recordedAtMs: 1, before, after };
   return { replayed: false, receipt: { ...body, digest: providerSpendEvidenceDigest(body) } as never };
@@ -59,4 +60,12 @@ it('refuses typed amounts outside whole dollars 1..1000, mixed forms and a revis
   expect(await main(['models', 'revise-budget', '--scope', 'scope', '--usd', '5'], { ...context, stderr: { write(value: string) { errors += value; } } })).not.toBe(0);
   expect(errors).toContain('deckent models create-budget --scope scope --usd <amount>');
   expect(sent).toEqual([]);
+});
+
+it('preserves the distribution period when only the amount is revised', () => {
+  const before = current(), checkpoint = before.checkpoint!;
+  const periodic = { ...before, checkpoint: { ...checkpoint, account: { ...checkpoint.account,
+    budget: { ...checkpoint.account.budget, schemaVersion: 2 as const, period: 'overlay.quarter-local' } } } };
+  const command = scopeBudgetRevisionCommand(periodic, 50, false, 'cli', 'same-period');
+  expect(command.kind === 'budget-revision' && command.budget.period).toBe('overlay.quarter-local');
 });

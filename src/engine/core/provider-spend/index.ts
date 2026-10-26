@@ -40,3 +40,7 @@ export type { ProviderSpendRecoveryStore, ProviderSpendRecoveryResult } from './
 
 export { modelInvocationBillingAxis } from './internal/work-spending.js';
 export { workerBillingAxis } from './internal/work-spending.js';
+
+export { initializeProviderSpendPeriod, advanceProviderSpendPeriod, providerSpendPeriodUsedExact } from './internal/period.js';
+
+export { ProviderSpendPeriodRegistry, providerSpendPeriodRegistry, registerProviderSpendPeriod } from './internal/period.js';

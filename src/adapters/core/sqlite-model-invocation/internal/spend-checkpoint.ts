@@ -34,6 +34,10 @@ export function writeSpendCheckpoint(db: DatabaseSync, previous: ProviderSpendCh
   const next = createProviderSpendCheckpoint(account, (previous?.revision ?? 0) + 1,
     (previous?.reservationCount ?? 0) + (newReservation ? 1 : 0));
   const record = JSON.stringify(next.account), scopeId = account.budget.scopeId;
+  if (previous?.account.period && account.period && previous.account.period.nextResetAtMs !== account.period.nextResetAtMs) {
+    db.prepare('INSERT INTO provider_spend_period_history(scope_id,checkpoint_revision,record) VALUES(?,?,?)')
+      .run(scopeId, previous.revision, JSON.stringify(previous));
+  }
   if (previous) {
     const result = db.prepare(`UPDATE provider_spend_accounts SET record=?,revision=?,reservation_count=?,digest=?
       WHERE scope_id=? AND revision=? AND digest=?`).run(record, next.revision, next.reservationCount, next.digest,

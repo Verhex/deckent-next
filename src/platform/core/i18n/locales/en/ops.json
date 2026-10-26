@@ -534,5 +534,9 @@
   "error.WORKER_IMAGE_PROVIDERS_READ_ONLY": "Worker image providers are derived from consent records. Select a work kind and confirm its consent card.",
   "error.WORKER_IMAGE_BUILDING": "Another worker image builder holds this daemon. Wait for it to finish or inspect the interrupted job.",
   "error.WORKER_IMAGE_DOCKER_WAITING": "Worker image acquisition is waiting for a reachable Docker daemon.",
-  "error.WORKER_IMAGE_BUILD_INTERRUPTED": "Worker image acquisition was interrupted. Inspect its retained evidence before confirming a new attempt."
+  "error.WORKER_IMAGE_BUILD_INTERRUPTED": "Worker image acquisition was interrupted. Inspect its retained evidence before confirming a new attempt.",
+  "models.spending.period.monthly": "Monthly budget (installation local calendar month). Next reset: {date} ({zone}).",
+  "models.spending.period.legacy": "Previous cap retained until this reset; spending history and outstanding holds are preserved.",
+  "models.spending.period.pending": "Previous cap: monthly transition awaits the ledger upgrade; no usage has been cleared.",
+  "models.spending.period.calendar": "Budget period: {months} calendar months (installation local time). Next reset: {date} ({zone})."
 }

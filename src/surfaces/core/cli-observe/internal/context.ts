@@ -1,6 +1,7 @@
 import type { ConfigLoadOptions } from '#platform/index.js';
 import type { ModelCatalogInspection, ModelInvocationDeliveryFinding, ModelRoleInspection, ModelRoleQuery, RecoveryModeState } from '#engine/index.js';
 import type { ModelCatalogQuery } from '#domain/index.js';
+import type { ProviderSpendAccountInspectionHandler } from '#surfaces/core/cli-models/index.js';
 import type { CliBaseContext } from '#surfaces/core/cli-kit/index.js';
 import type { DoctorCheckFacts, ExecutionEnvironmentDoctorView, InstallationBindingReport, InstallationStartabilityView, RecoveryFilesDoctorView, ShellRealmDoctorView } from '#surfaces/core/doctor/index.js';
 import type { AdminCommandContext } from '#surfaces/core/cli-admin/index.js';
@@ -9,6 +10,7 @@ import type { ApprovalCommandContext } from '#surfaces/core/cli-approval/index.j
 /** The host operations the kernel commands (doctor, paths, policy vocabulary) use; the CLI's full command context satisfies it. */
 export interface KernelCommandContext extends CliBaseContext, Pick<AdminCommandContext, 'verifyAudit' | 'inspectToolchainCurrency' | 'inspectSecretStore' | 'inspectSecretInventory' | 'describeRuntimeService'
   | 'inspectPoolCapacity' | 'inspectPoolHold' | 'listSecretNames' | 'updateToolchains' | 'inspectAdminPaths'>, Pick<ApprovalCommandContext, 'inspectPolicyAdministration'> {
+  inspectProviderSpendAccount?: ProviderSpendAccountInspectionHandler;
   // C-DOCTOR: the same read-only catalog listing as `deckent models list` (model retirement rows); read-soft, never a runtime-service view.
   inspectCatalogMonitor?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<readonly string[]>;
   inspectModelCatalog?: (root: string, query: ModelCatalogQuery, options: ConfigLoadOptions) => Promise<ModelCatalogInspection>;

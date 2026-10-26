@@ -1,3 +1,4 @@
+import { initializeProviderSpendPeriod, advanceProviderSpendPeriod, providerSpendPeriodAfterCorrection } from './period.js';
 import { isDeepStrictEqual } from 'node:util';
 import { parseProviderSpendManagementCommand, parseProviderSpendBudget, modelActivationActorSchema, modelActivationAuthorizationSchema,
   type ProviderSpendManagementCommand, type ModelInvocationActor, type ModelInvocationAuthorization, type VerifiedPrincipal, immutableJsonObjectSchema } from '#domain/index.js';
@@ -32,7 +33,7 @@ export function parseProviderSpendManagementReceipt(input: ProviderSpendManageme
   const { digest, ...body } = input;
   if (input.schemaVersion !== 1 || !Number.isSafeInteger(input.recordedAtMs) || input.recordedAtMs < 0) throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
   if (command.kind === 'budget-create') {
-    if (input.replacedUpperBoundExactMinorUnits !== undefined || input.before !== null || !isDeepStrictEqual(after, createGovernedProviderSpendAccount(command)) || providerSpendEvidenceDigest(body) !== digest
+    if (input.replacedUpperBoundExactMinorUnits !== undefined || input.before !== null || !isDeepStrictEqual(after, createGovernedProviderSpendAccount(command, input.recordedAtMs)) || providerSpendEvidenceDigest(body) !== digest
       || !isDeepStrictEqual(command, input.command) || !isDeepStrictEqual(actor, input.actor) || !isDeepStrictEqual(authorization, input.authorization)) {
       throw new ProviderSpendError('PROVIDER_SPEND_INVALID');
     }
@@ -48,7 +49,7 @@ export function parseProviderSpendManagementReceipt(input: ProviderSpendManageme
   if (command.expectedCheckpointDigest !== before.digest || command.scopeId !== before.account.budget.scopeId
     || command.budgetId !== before.account.budget.budgetId || command.budgetRevision !== before.account.budget.revision
     || after.budget.scopeId !== command.scopeId || after.budget.budgetId !== command.budgetId
-    || (command.kind === 'budget-revision' ? !isDeepStrictEqual(after, reviseProviderSpendBudget(before.account, command))
+    || (command.kind === 'budget-revision' ? !isDeepStrictEqual(after, reviseProviderSpendBudget(before.account, command, input.recordedAtMs))
       : !isDeepStrictEqual(after.budget, before.account.budget) || after.reservedMinorUnits > before.account.reservedMinorUnits
         || (replaced !== undefined && after.reservedMinorUnits !== before.account.reservedMinorUnits)
         || after.settledExactMinorUnits !== addProviderSpendExactMinorUnits(priorExact, command.exactMinorUnits)
@@ -59,8 +60,8 @@ export function parseProviderSpendManagementReceipt(input: ProviderSpendManageme
   return Object.freeze({ ...input, command, actor, authorization, before, after });
 }
 /** Held money has one governed exit. Only explicitly labelled (scheduled-tariff) upper-bound settlements may be lowered once, preserving original evidence. */
-export function reconcileProviderSpend(accountInput: unknown, reservationInput: unknown, command: Extract<ProviderSpendManagementCommand, { kind: 'reconcile' }>, receiptDigest: string) {
-  const account = parseProviderSpendAccount(accountInput), reservation = parseProviderSpendReservation(reservationInput), d = reservation.descriptor;
+export function reconcileProviderSpend(accountInput: unknown, reservationInput: unknown, command: Extract<ProviderSpendManagementCommand, { kind: 'reconcile' }>, receiptDigest: string, nowMs = Date.now(), settledAtMs?: number) {
+  const account = advanceProviderSpendPeriod(parseProviderSpendAccount(accountInput), nowMs), reservation = parseProviderSpendReservation(reservationInput), d = reservation.descriptor;
   const exact = canonicalProviderSpendExactMinorUnits(command.exactMinorUnits);
   const upperBound = isProviderSpendUpperBound(reservation);
   if ((!upperBound && reservation.disposition.state !== 'held') || reservation.reconciliation || command.invocationId !== d.invocationId
@@ -71,7 +72,7 @@ export function reconcileProviderSpend(accountInput: unknown, reservationInput: 
     || (command.resolution !== 'settle' && exact !== '0')
     || (command.resolution === 'write-off') !== (command.evidence.kind === 'write-off')) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
   const settled = addProviderSpendExactMinorUnits(upperBound ? subtractProviderSpendExactMinorUnits(account.settledExactMinorUnits, reservation.measurement!.exactMinorUnits) : account.settledExactMinorUnits, exact);
-  return Object.freeze({ account: parseProviderSpendAccount({ ...account, reservedMinorUnits: account.reservedMinorUnits - (upperBound ? 0 : d.quote.maxChargeMinorUnits),
+  return Object.freeze({ account: parseProviderSpendAccount({ ...account, ...(account.period ? { period: providerSpendPeriodAfterCorrection(account, settled, settledAtMs) } : {}), reservedMinorUnits: account.reservedMinorUnits - (upperBound ? 0 : d.quote.maxChargeMinorUnits),
     settledExactMinorUnits: settled, settledMinorUnits: ceilProviderSpendExactMinorUnits(settled),
     frozen: account.frozen || ceilProviderSpendExactMinorUnits(exact) > d.quote.maxChargeMinorUnits }),
     reservation: parseProviderSpendReservation({ ...reservation, schemaVersion: 3, reconciliation: { commandId: command.commandId,
@@ -82,13 +83,14 @@ export function reconcileProviderSpend(accountInput: unknown, reservationInput: 
  * Stage 1 `budget-create`: the scope's first account at revision 1, its budget traced to this governed command (the same two fields a revision
  * sets), so a checkpoint never holds an ungoverned limit. The budget must name the command's scope, id and revision 1.
  */
-export function createGovernedProviderSpendAccount(command: Extract<ProviderSpendManagementCommand, { kind: 'budget-create' }>): ProviderSpendAccount {
+export function createGovernedProviderSpendAccount(command: Extract<ProviderSpendManagementCommand, { kind: 'budget-create' }>, recordedAtMs?: number): ProviderSpendAccount {
   const budget = parseProviderSpendBudget(command.budget);
   if (budget.scopeId !== command.scopeId || budget.budgetId !== command.budgetId || budget.revision !== 1) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
-  return parseProviderSpendAccount({ ...createProviderSpendAccount(budget), budgetRevisionDigest: providerSpendEvidenceDigest(command), budgetRevisionCommandId: command.commandId });
+  const initial = createProviderSpendAccount(budget);
+  return parseProviderSpendAccount({ ...(budget.period && recordedAtMs !== undefined ? initializeProviderSpendPeriod(initial, recordedAtMs) : initial), budgetRevisionDigest: providerSpendEvidenceDigest(command), budgetRevisionCommandId: command.commandId });
 }
-export function reviseProviderSpendBudget(accountInput: unknown, command: Extract<ProviderSpendManagementCommand, { kind: 'budget-revision' }>) {
-  const account = parseProviderSpendAccount(accountInput), budget = parseProviderSpendBudget(command.budget);
+export function reviseProviderSpendBudget(accountInput: unknown, command: Extract<ProviderSpendManagementCommand, { kind: 'budget-revision' }>, nowMs = Date.now()) {
+  const account = advanceProviderSpendPeriod(parseProviderSpendAccount(accountInput), nowMs), budget = parseProviderSpendBudget(command.budget);
   if (budget.scopeId !== account.budget.scopeId || budget.budgetId !== account.budget.budgetId || budget.currency !== account.budget.currency
     || budget.revision !== account.budget.revision + 1) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
   return parseProviderSpendAccount({ ...account, budget, budgetRevisionDigest: providerSpendEvidenceDigest(command), budgetRevisionCommandId: command.commandId, ...(command.unfreeze ? { frozen: false, unfrozenAtBudgetRevision: budget.revision } : {}) });
