@@ -1,6 +1,7 @@
 import { modelTextPrefix, type ShellRealmRequest as HostShellRequest, type ShellRealmResult as HostShellResult } from '#domain/index.js';
 import { spawn } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
+import { callerEnvironment } from '#platform/index.js';
 
 /** Environment variables copied from the service into the command (Jev 52f9b6f9); everything else is left out. */
 export const HOST_SHELL_ENV_ALLOWLIST: readonly string[] = Object.freeze(['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'LC_CTYPE',
@@ -34,7 +35,8 @@ export type { ShellRealmRequest as HostShellRequest, ShellRealmResult as HostShe
 
 export function hostShellEnvironment(source: NodeJS.ProcessEnv, extra: readonly string[] = [], fixed: Readonly<Record<string, string>> = {}): Record<string, string> {
   const env: Record<string, string> = {};
-  for (const name of [...HOST_SHELL_ENV_ALLOWLIST, ...extra]) { const value = source[name]; if (typeof value === 'string') env[name] = value; }
+  const from = callerEnvironment(source);
+  for (const name of [...HOST_SHELL_ENV_ALLOWLIST, ...extra]) { const value = from[name]; if (typeof value === 'string') env[name] = value; }
   return { ...env, ...fixed, ...NON_INTERACTIVE };
 }
 

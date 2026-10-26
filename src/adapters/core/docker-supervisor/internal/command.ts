@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { callerEnvironment } from '#platform/index.js';
 export interface DockerCommand {
   readonly executable: string; readonly args: readonly string[]; readonly timeoutMs: number; readonly outputBytes: number;
 }
@@ -16,7 +17,7 @@ export class DockerCommandFailure extends Error {
 /** A pinned local endpoint must not inherit a conflicting context or TLS selector. */
 export function dockerCommandEnvironment(command: DockerCommand, env: Readonly<Record<string, string | undefined>>) {
   const result: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
+  for (const [key, value] of Object.entries(callerEnvironment(env))) {
     if (value === undefined) continue;
     if (command.args[0] === '--host' && ['DOCKER_CONTEXT', 'DOCKER_HOST', 'DOCKER_TLS', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'].includes(key)) continue;
     result[key] = value;
