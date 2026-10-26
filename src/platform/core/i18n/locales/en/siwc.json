@@ -45,5 +45,14 @@
   "siwc.doctor.connection": "ChatGPT plan connection for {model}: {state}",
   "siwc.doctor.disabled": "Plan use is disabled, expired or awaiting reconnect. Inspect the connection in /provider.",
   "siwc.card.otherAccount": "Connect a different account (new authorization)",
-  "siwc.account.signOutFirst": "Disconnect the current ChatGPT connection before authorizing a different account. Limits never rotate accounts."
+  "siwc.account.signOutFirst": "Disconnect the current ChatGPT connection before authorizing a different account. Limits never rotate accounts.",
+  "error.SIWC_WORKER_ISOLATION_UNAVAILABLE": "The isolated worker cannot prove its boundary ({check}). Nothing was sent and no effect ran; repair the worker setup (/setup image). There is no host fallback.",
+  "error.SIWC_APP_SERVER_AUTH_UNAVAILABLE": "The worker's embedded Codex cannot use the private model connection ({reason}). No ChatGPT token entered the worker; use /setup image or wait for activation.",
+  "error.SIWC_RELAY_REFUSED": "Model connection refused ({reason}). No request reached the plan; reconnect or restart the work.",
+  "error.SIWC_APP_SERVER_EFFECT_UNKNOWN": "The worker's last native effect is unknown. Its evidence is kept; reconcile it before restarting.",
+  "error.SIWC_WORKER_CLEANUP_UNPROVEN": "The worker's stop could not be verified. Relaunch is blocked until recovery proves it stopped.",
+  "siwc.worker.preparing": "Preparing isolated worker",
+  "siwc.worker.stopping": "Stopping worker",
+  "siwc.worker.cleanupUnproven": "Cleanup unverified",
+  "siwc.relay.refused": "Model connection refused"
 }

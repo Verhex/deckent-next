@@ -140,5 +140,69 @@
         "status": 401
       }
     }
+  },
+  "workerRelay": {
+    "source": "https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server",
+    "observedOn": "2026-10-26",
+    "activation": "hold",
+    "appServer": {
+      "executable": "codex",
+      "args": [
+        "app-server",
+        "--listen",
+        "stdio://"
+      ],
+      "source": "https://learn.chatgpt.com/docs/developer-commands#codex-app-server",
+      "observedOn": "2026-10-26",
+      "support": "experimental"
+    },
+    "approvalPolicy": "untrusted",
+    "sandbox": "danger-full-access",
+    "wireApi": "responses",
+    "requestFields": [
+      "model",
+      "input",
+      "instructions",
+      "tools",
+      "store",
+      "stream",
+      "reasoning",
+      "tool_choice",
+      "include",
+      "parallel_tool_calls",
+      "prompt_cache_key",
+      "text"
+    ],
+    "toolTypes": [
+      "function",
+      "custom",
+      "namespace"
+    ],
+    "methods": {
+      "client": [
+        "initialize",
+        "thread/start",
+        "turn/start",
+        "turn/interrupt"
+      ],
+      "approvals": [
+        "item/commandExecution/requestApproval",
+        "item/fileChange/requestApproval"
+      ]
+    },
+    "limits": {
+      "requestMaxBytes": 8388608,
+      "responseMaxBytes": 67108864,
+      "headerBytes": 16384,
+      "inFlight": 2,
+      "connections": 8,
+      "idleMs": 300000,
+      "capabilityMaxTtlMs": 7200000,
+      "helperTimeoutMs": 5000,
+      "drainMs": 5000,
+      "controlLineBytes": 4194304,
+      "controlLines": 100000,
+      "capabilityBytes": 32
+    }
   }
 }

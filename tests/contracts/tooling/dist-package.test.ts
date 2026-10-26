@@ -171,8 +171,8 @@ describe('bundled native executables in the SBOM and notices (BWRAP-SELECT)', ()
 });
 
 describe('standalone mounted entries (PACKAGED-WORKER-BOOTSTRAP)', () => {
-  it('names the native worker bootstrap the docker supervisor mounts alone', () => {
-    expect(STANDALONE_ENTRIES).toEqual(['adapters/core/native-connection/internal/worker.js']);
+  it('names the native worker bootstrap and the SIWC relay bootstrap/helper the docker supervisor mounts alone', () => {
+    expect(STANDALONE_ENTRIES).toEqual(['adapters/core/native-connection/internal/worker.js', 'adapters/core/siwc-worker/internal/bootstrap.js', 'adapters/core/siwc-worker/internal/helper.js']);
   });
 
   it('accepts only external node: builtins and refuses a shared chunk, a kept relative import and a bare package', () => {

@@ -8,4 +8,4 @@ export { createSiwcResponsesPort, siwcResponsesDefinitionSchema } from './intern
 export { createSiwcConnectionLock } from './internal/connection-lock.js';
 
 export { listSiwcModels } from './internal/models.js';
-export { SIWC_USAGE_LIMIT_STATUS } from './internal/registry.js';
+export { SIWC_USAGE_LIMIT_STATUS, SIWC_WORKER_RELAY } from './internal/registry.js';

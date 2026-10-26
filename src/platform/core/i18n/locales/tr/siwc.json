@@ -45,5 +45,14 @@
   "siwc.doctor.connection": "{model} için ChatGPT plan bağlantısı: {state}",
   "siwc.doctor.disabled": "Plan kullanımı kapalı, süresi dolmuş veya yeniden bağlantı bekliyor. /provider üzerinden denetleyin.",
   "siwc.card.otherAccount": "Başka bir hesap bağla (yeni yetkilendirme)",
-  "siwc.account.signOutFirst": "Başka bir hesap yetkilendirmeden önce mevcut ChatGPT bağlantısını kesin. Limitlerde hesap döndürülmez."
+  "siwc.account.signOutFirst": "Başka bir hesap yetkilendirmeden önce mevcut ChatGPT bağlantısını kesin. Limitlerde hesap döndürülmez.",
+  "error.SIWC_WORKER_ISOLATION_UNAVAILABLE": "Yalıtılmış işçi sınırını kanıtlayamıyor ({check}). Hiçbir istek gönderilmedi, hiçbir etki çalışmadı; işçi kurulumunu onarın (/setup image). Host'a geri düşme yoktur.",
+  "error.SIWC_APP_SERVER_AUTH_UNAVAILABLE": "İşçideki gömülü Codex özel model bağlantısını kullanamıyor ({reason}). İşçiye hiçbir ChatGPT token'ı girmedi; /setup image kullanın veya etkinleştirmeyi bekleyin.",
+  "error.SIWC_RELAY_REFUSED": "Model bağlantısı reddedildi ({reason}). Hiçbir istek plana ulaşmadı; yeniden bağlanın veya işi yeniden başlatın.",
+  "error.SIWC_APP_SERVER_EFFECT_UNKNOWN": "İşçinin son yerel etkisi bilinmiyor. Kanıtı saklandı; yeniden başlatmadan önce uzlaştırın.",
+  "error.SIWC_WORKER_CLEANUP_UNPROVEN": "İşçinin durduğu doğrulanamadı. Kurtarma durduğunu kanıtlayana kadar yeniden başlatma engellidir.",
+  "siwc.worker.preparing": "Yalıtılmış işçi hazırlanıyor",
+  "siwc.worker.stopping": "İşçi durduruluyor",
+  "siwc.worker.cleanupUnproven": "Temizlik doğrulanamadı",
+  "siwc.relay.refused": "Model bağlantısı reddedildi"
 }
