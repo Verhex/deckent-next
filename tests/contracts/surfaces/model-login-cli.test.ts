@@ -92,7 +92,7 @@ it('Esc or Ctrl+C while the ChatGPT browser sign-in waits cancels it: the wait i
     const out = capture();
     expect(await modelsCommand(['models', 'login', '--connection', 'chatgpt-login', '--scope', 'scope'], { root: f.root, env: f.env, locale: 'en', stdin, stdout: out.sink, stderr: out.sink,
       siwc: { connection: 'chatgpt-login', execute } } as never)).toBe(1);
-    expect(out.text()).toContain('ChatGPT sign-in cancelled.'); expect(out.text()).not.toMatch(/Error|OAUTH_CONNECTION_CANCELLED/u);
+    expect(out.text()).toContain('ChatGPT action cancelled.'); expect(out.text()).not.toMatch(/Error|OAUTH_CONNECTION_CANCELLED/u);
     expect(seen).toHaveLength(1); expect(seen[0]!.aborted).toBe(true); expect(process.listenerCount('SIGINT')).toBe(sigint);
   }
 });

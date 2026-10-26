@@ -363,7 +363,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   }
   const historyMessages = chat?.historyMessages ?? DEFAULT_HISTORY_MESSAGES;
   const modelName = chat?.status === 'ready' && chat.reference && context.inspectModelBinding ? await context.inspectModelBinding(root, chat.reference, options).then(binding => binding.status === 'declared' ? binding.definition.model.nativeId : null, () => null) : null;
-  const chatName = modelName && chat?.reference ? `${modelName} (${providerDisplayName(chat.reference.providerId, context.providerConnect, locale)})` : chatTarget(chat, locale); // FIX9: names as `deckent models` shows them; the exact reference stays in /model details
+  const chatName = modelName && chat?.reference ? `${modelName} · ${providerDisplayName(chat.reference.providerId, context.providerConnect, locale)}` : chatTarget(chat, locale); // FIX9: names as `deckent models` shows them; the exact reference stays in /model details
   const instructionPort = context.openProjectInstructions ? await context.openProjectInstructions(root, options) : undefined;
   const instructionLabels = projectInstructionLabels(locale);
   let lineSources: readonly string[] = [];
