@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createServer as createTlsServer, type ServerOptions as TlsOptions } from 'node:https';
-import { isIP } from 'node:net';
+import { isIP, type AddressInfo } from 'node:net';
 import { once } from 'node:events';
 import { HUB_LIMITS } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
@@ -76,7 +76,9 @@ export async function startHubHttpListener(options: HubListenerOptions) {
   server.maxConnections = HUB_LIMITS.httpMaxConcurrentRequests;
   try { server.listen(options.port, host); await once(server, 'listening'); }
   catch { server.close(); throw new HubNetworkError('HUB_NETWORK_FAILED'); }
-  return { address: server.address(), close: () => new Promise<void>((resolve, reject) => {
+  // Named type: an inferred one is spelled `import("net")` in the published declaration, a module the zero-dependency package cannot resolve.
+  const address: AddressInfo | string | null = server.address();
+  return { address, close: () => new Promise<void>((resolve, reject) => {
     server.close(error => { if (error) reject(error); else resolve(); }); server.closeAllConnections();
   }) };
 }

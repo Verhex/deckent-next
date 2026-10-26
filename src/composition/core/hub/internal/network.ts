@@ -1,7 +1,6 @@
 import type { HubServerApplication } from '#engine/index.js';
 import { HubNetworkError, startHubHttpListener, type HubListenerOptions } from '#adapters/index.js';
 import { loadHubHttpSurface, type HubHttpAuth, type HubMcpOptions } from '#surfaces/index.js';
-export { createGovernedHubFetch, type HubFetchDependencies, type HubFirstUseReceipt } from '#adapters/index.js';
 
 /** Called only by the separate hub process. H7/H9 load protected config/TLS files and bind the real IdP and H3 authority ports. */
 export async function startHubService(app: HubServerApplication, listener: Omit<HubListenerOptions, 'fetch'>, auth: HubHttpAuth, options: HubMcpOptions) {
