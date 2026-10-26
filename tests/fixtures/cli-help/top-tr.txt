@@ -19,7 +19,7 @@ Başlarken:
       [--json] [--yes --scope <id>] [--preview] [--profile <dosya>]
 
 İzleme:
-  report      Run maliyet ve kabul kanıtını incele
+  report      İş maliyet ve kabul kanıtını incele
       [--scope <id>] [--run <id>] [--verbose]
   monitor     Kurulumları ve işleri izle
       [--once|--json] [--scope <id>]
@@ -43,7 +43,7 @@ Başlarken:
       [--scope <id>] [--input <dosya|->]
   do          Brain ve mevcut onay kapılarıyla bir isteği planla
       --request <metin> [--scope <id>]
-  run         Run oluştur ve yönet
+  run         İş oluştur ve yönet
       list | create | propose | inspect-proposal | reserve | inspect | cancel |
       close | hold | resume
       [--scope <id>] [--id <id>]
@@ -133,7 +133,7 @@ Seçenekler:
   --json              stdout’ta makinece okunur tek sonuç; hatalar stderr’de
   --lang en|tr        çıktı dili
   --no-color          renksiz düz metin
-  --scope <id>        komutun çalıştığı scope (her komutun yardımına bakın)
+  --scope <id>        komutun çalıştığı kapsam (her komutun yardımına bakın)
   --full-access       terminali tam erişim kipinde aç
 
 Eylem verilmezse komut yukarıda adı geçen okumayı yapar, kendi işini yapar

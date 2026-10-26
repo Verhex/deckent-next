@@ -79,6 +79,19 @@ it('uses the default with missing config and creates no files', async () => {
   expect(await readdir(join(root, '.deckent'))).toEqual([]);
   expect(await readdir(globalRoot)).toEqual([]);
 });
+
+it('F5: invalid input names only registered command words and uses config language before parsing', async () => {
+  await config('tr');
+  for (const argv of [['doctor', 'private-value'], ['init', 'private-value'], ['do', '--request']]) {
+    let errors = '';
+    const code = await main(argv, { root, env, initialize() {}, stdout: { write() {} }, stderr: { write: text => { errors += text; } } });
+    expect(code).toBe(2);
+    expect(errors).toContain(`deckent ${argv[0]}`);
+    expect(errors).not.toContain('private-value');
+    expect(errors).not.toContain('Reuse the command');
+    expect(errors).toContain('için');
+  }
+});
 it('keeps environment locale available with invalid config', async () => {
   await writeFile(join(root, '.deckent', 'config.json'), '{broken');
   env['DECKENT_LANG'] = 'tr'; await help(['run', '--help'], 'tr');

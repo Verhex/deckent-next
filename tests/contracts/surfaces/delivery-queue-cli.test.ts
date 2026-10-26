@@ -149,8 +149,8 @@ describe('delivery queue list table (C-PRIO)', () => {
   for (const [language, expected] of [['en', [
     'Delivery queue · scope s · tickets: 5 (in flight first)',
     'Task         Target           State                    Next step                   Ticket',
-    'task-wait    refs/heads/main  Queued                   Wait for service            q-waitin',
-    'task-adopt   refs/heads/main  Adopted                  Inspect durable receipt     q-adopte',
+    'task-wait    refs/heads/main  Queued                   Wait for service            q-waiting',
+    'task-adopt   refs/heads/main  Adopted                  Inspect durable receipt     q-adopted',
     'task-verify  refs/heads/main  Verification failed      Create a new attempt        q-failed',
     'task-park    refs/heads/main  Parked                   Re-prepare on current base  q-parked',
     `    Reason: ${ErrorRegistry.createError('QUEUE_VERIFICATION_NOT_ADMITTED', { locale: 'en' }).message}`,
@@ -158,8 +158,8 @@ describe('delivery queue list table (C-PRIO)', () => {
   ['tr', [
     'Teslim kuyruğu · kapsam s · bilet: 5 (sürmekte olanlar önce)',
     'Görev        Hedef            Durum                  Sonraki adım                    Bilet',
-    'task-wait    refs/heads/main  Sırada                 Servisi bekle                   q-waitin',
-    'task-adopt   refs/heads/main  Benimsendi             Kalıcı makbuzu incele           q-adopte',
+    'task-wait    refs/heads/main  Sırada                 Servisi bekle                   q-waiting',
+    'task-adopt   refs/heads/main  Benimsendi             Kalıcı makbuzu incele           q-adopted',
     'task-verify  refs/heads/main  Doğrulama başarısız    Yeni deneme oluştur             q-failed',
     'task-park    refs/heads/main  Park edildi            Güncel tabanda yeniden hazırla  q-parked',
     `    Neden: ${ErrorRegistry.createError('QUEUE_VERIFICATION_NOT_ADMITTED', { locale: 'tr' }).message}`,

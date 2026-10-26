@@ -6,7 +6,7 @@ import * as cards from '#surfaces/core/cli-human/index.js';
 import { SetupStageRegistry, type SetupObservation, type SetupStage } from '#engine/index.js';
 import { MESSAGE_REGISTRY, clearConfigCache } from '#platform/index.js';
 import { PROJECT_INSTRUCTION_SETUP_FAMILY } from '#surfaces/core/project-instructions/index.js';
-import { createSetupController, setupInitCommand, parseSetupFlags, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
+import { createSetupController, setupInitCommand, parseSetupFlags, stageChoices, type SetupApplyResult, type SetupCommandContext } from '#surfaces/core/setup/index.js';
 import { offerTarget } from '#surfaces/core/cli-kit/index.js';
 
 // I-S4: bare `deckent init` renders the I-S1 plan as JSON, plain lines or the window, and applies only what INIT-D5 allows.
@@ -18,6 +18,14 @@ const base: SetupObservation = { schemaVersion: 2,
   families: { instructions: { file: 'missing', bridges: [{ id: 'claude-code', detected: true }, { id: 'agents-md', detected: false }] } } };
 const registry = new SetupStageRegistry([PROJECT_INSTRUCTION_SETUP_FAMILY]);
 const tty = { isTTY: true }, pipe = { isTTY: false };
+it('F5: profile choices use registry labels and presentation order, with the same id/version answers', () => {
+  const available = ['core:custom', 'core:enterprise', 'core:team', 'core:solo'].map(id => ({ id, version: 1 }));
+  const stage = { id: 'core:profile', state: 'needs-answer' } as SetupStage;
+  const choices = stageChoices(stage, { ...base, profile: { available } }, 'tr');
+  expect(choices.map(row => row.label)).toEqual(['Bireysel', 'Ekip', 'Kurumsal', 'Özel', 'Şimdi değil']);
+  expect(choices[1]!.answer).toEqual({ id: 'core:team', version: 1 });
+  expect(MESSAGE_REGISTRY.catalogs.tr['setup.question.profile']).toBe('Bu kurulumu kimler kullanacak?');
+});
 /** The operations `--yes` must never reach (INIT-D5): registry, pool, provider/model, upgrade, identity, Docker and the bridges write. */
 const NEVER_UNATTENDED = ['installation.policy-upgrade', 'model.connect', 'identity-profile.preview', 'project-instructions.initialize', 'shell-realm.inspect'];
 

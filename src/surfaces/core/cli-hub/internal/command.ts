@@ -64,7 +64,7 @@ export async function hubCommand(argv: readonly string[], context: HubCommandCon
   if (writing && cliMode(context, args.json).mode !== 'interactive') throw ErrorRegistry.createError('AUTHORITY_WITNESS_REQUIRED', { params: { operation: args.operation } });
   const root = context.root ?? process.cwd(), options = { env: context.env ?? process.env }, config = await loadConfig(root, options);
   const raw = args.input ? await readJsonInput(args.input === '-' ? '-' : resolve(root, args.input), config.cli.invocationInputMaxBytes,
-    { subject: 'hub.input', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin) : {};
+    { subject: 'cli.input.subject.hub', limit: 'CLI_INVOCATION_INPUT_LIMIT', invalid: 'CLI_INVOCATION_INPUT_INVALID', tty: 'CLI_INVOCATION_INPUT_TTY', unavailable: 'CLI_INVOCATION_INPUT_UNAVAILABLE' }, context.stdin) : {};
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw ErrorRegistry.createError('CLI_USAGE');
   const value = raw as Record<string, unknown>, configured = (config.terminal as { scopeId?: string } | undefined)?.scopeId;
   const ask = (request: Parameters<typeof askCliCard>[0]) => askCliCard(request, { ...context, locale, signal: AbortSignal.any([AbortSignal.timeout(config.approvals.sessionTtlMs), ...(context.signal ? [context.signal] : [])]) });

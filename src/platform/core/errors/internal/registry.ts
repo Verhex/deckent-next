@@ -15,6 +15,7 @@ function invocationInputSubject(p: Params, l: Locale): string {
     case 'cli.input.subject.spending': return t('cli.input.subject.spending', {}, l);
     case 'cli.input.subject.identity': return t('cli.input.subject.identity', {}, l);
     case 'cli.input.subject.agent': return t('cli.input.subject.agent', {}, l);
+    case 'cli.input.subject.hub': return t('cli.input.subject.hub', {}, l);
     default: return t('cli.input.subject.model', {}, l);
   }
 }

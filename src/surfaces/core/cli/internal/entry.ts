@@ -1,5 +1,5 @@
 import { registerCliCommands, renderTopHelp, cliHelpRequest, cliInstallationContract, lazyFunction } from '#surfaces/core/cli-kit/index.js';
-import { PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, type ExitCode, type Locale } from '#platform/index.js';
+import { PACKAGE_NAME, PACKAGE_VERSION, NODE_ENGINE_RANGE, assessNodeSupport, readBuildIdentity, t, emit, assertErrorRegistry, reportFatal, resolveLocale, loadConfigLanguage, DeckentError, ErrorRegistry, type ExitCode, type Locale } from '#platform/index.js';
 import { runKernelCommand, type CommandContext } from './kernel-commands.js';
 export type { ExitCode } from '#platform/index.js';
 
@@ -106,9 +106,17 @@ export async function main(argv: readonly string[] = process.argv.slice(2), cont
       if (node.status === 'unsupported') emit(t('doctor.nodeUnsupported.init', { version: node.version, floor: node.floor ?? NODE_ENGINE_RANGE }, locale), { level: 'warning', ...(context.stderr ? { stderr: context.stderr } : {}) });
     }
     const command = CLI_COMMANDS.find(item => item.path.length === 1 && item.name === argv[0]);
-    if (command) return (await command.run(argv, { ...context, onLocale: value => { locale = value; context.onLocale?.(value); } })) ?? 0;
+    if (command) {
+      locale = context.locale ?? resolveLocale(argv.includes('--lang') ? argv[argv.indexOf('--lang') + 1] : undefined, context.env,
+        await loadConfigLanguage(context.root, { ...(context.env ? { env: context.env } : {}) }).catch(() => undefined));
+      return (await command.run(argv, { ...context, locale, onLocale: value => { locale = value; context.onLocale?.(value); } })) ?? 0;
+    }
     return emitDispatch(argv, locale, context);
   } catch (error) {
-    return reportFatal(error, { ...context, argv, json: argv.includes('--json'), locale });
+    // Echo only registered command words, never an invalid argument or its potentially sensitive value.
+    const path = CLI_COMMANDS.filter(item => item.path.every((part, index) => argv[index] === part)).sort((a, b) => b.path.length - a.path.length)[0]?.path;
+    const diagnostic = error instanceof DeckentError && error.code === 'CLI_USAGE' && !error.params?.['command'] && path
+      ? ErrorRegistry.createError('CLI_USAGE', { locale, params: { ...error.params, command: `${PACKAGE_NAME} ${path.join(' ')}` } }) : error;
+    return reportFatal(diagnostic, { ...context, argv, json: argv.includes('--json'), locale });
   }
 }

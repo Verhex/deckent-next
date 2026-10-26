@@ -1,9 +1,15 @@
 import type { IdentityProfileListing, IdentityProfilePreview } from '#engine/index.js';
+import { coreIdentityProfileData } from '#domain/index.js';
 import { MESSAGE_REGISTRY, t, type Locale } from '#platform/index.js';
 // Catalog data chooses labels; extension labels are package data, never commands or authority.
 const safe = (value: string) => value.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, ' ');
 type ProfileEntry = IdentityProfileListing['profiles'][number];
 const catalog = (locale: Locale) => MESSAGE_REGISTRY.catalogs[locale] as Readonly<Record<string, string>>;
+/** Presentation order comes from the profile registry's authored order; extension profiles keep their relative order. */
+export function orderedProfiles<T>(entries: readonly T[], id: (entry: T) => string): T[] {
+  const order = new Map(coreIdentityProfileData.profiles.map((entry, index) => [entry.id, index]));
+  return [...entries].sort((a, b) => (order.get(id(a)) ?? order.size) - (order.get(id(b)) ?? order.size));
+}
 /** A profile's name in the person's language (package labels first, then the catalog label, else its key). */
 export const profileLabel = (entry: ProfileEntry, locale: Locale): string =>
   safe(entry.labels?.[locale] ?? catalog(locale)[entry.definition.labelKey] ?? entry.definition.labelKey);
@@ -18,7 +24,7 @@ export function profileMeaning(entry: ProfileEntry, locale: Locale): string {
 export function renderIdentityProfiles(value: IdentityProfileListing, locale: Locale, verbose = false) {
   if (verbose) return [t('identity.list', { version: value.registryVersion, digest: value.registryDigest }, locale),
     ...value.profiles.map(entry => t('identity.profileLine', { id: entry.definition.id, version: entry.definition.version, label: profileLabel(entry, locale), digest: entry.digest }, locale))].join('\n');
-  return [t('climodels.identity.profilesHeading', {}, locale), ...value.profiles.map(entry => `  ${profileLabel(entry, locale)} · ${profileMeaning(entry, locale)}`)].join('\n');
+  return [t('climodels.identity.profilesHeading', {}, locale), ...orderedProfiles(value.profiles, entry => entry.definition.id).map(entry => `  ${profileLabel(entry, locale)} · ${profileMeaning(entry, locale)}`)].join('\n');
 }
 export function renderIdentityPreview(value: IdentityProfilePreview, locale: Locale) {
   const draft = value.draft;

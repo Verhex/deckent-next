@@ -29,4 +29,6 @@ it('ISY-33: shared JSON input errors retain the calling surface subject for ever
   expect(memory.localize('tr').message).toBe('Hafıza girdisi okunamadı.');
   const limit = await readJsonInput('-', 1, { ...inputErrors, subject: 'cli.input.subject.approval' }, Readable.from(['{}'])).catch(error => error);
   expect(limit.localize('tr').message).toContain('Onay girdisi');
+  const hub = await readJsonInput('-', 1024, { ...inputErrors, subject: 'cli.input.subject.hub' }, Readable.from(['{'])).catch(error => error);
+  expect(hub.localize('tr').message).toBe('Hub isteği JSON verisi veya komut şeması geçersiz.');
 });

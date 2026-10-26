@@ -44,7 +44,7 @@
   "hub.tool.review": "Bağımsız, imzalı Hub incelemesini gönderin.",
   "hub.tool.yank": "Hub sürümünü yeni kurulumlara kapatın.",
   "hub.tool.revoke": "Hub sürümünü imzalı iptal listesi üzerinden iptal edin.",
-  "hub.revocation.withdrawn": "Hub içeriği veya imzalı beslemenin güncelliği doğrulanamadı. Bu kaynağın öğeleri yeni ajan seçiminden çekildi. Kaynağı inceleyip yenileyin; kabul edilmiş Run’ların sabit ajanı korunur.",
+  "hub.revocation.withdrawn": "Hub içeriği veya imzalı beslemenin güncelliği doğrulanamadı. Bu kaynağın öğeleri yeni ajan seçiminden çekildi. Kaynağı inceleyip yenileyin; kabul edilmiş işlerin sabit ajanı korunur.",
   "hub.revocation.restored": "Güncel ve doğrulanmış Hub beslemesi güncellik çekilmesini kaldırdı. Verdiğiniz terfi ve emeklilik kararları korunur.",
   "hub.revocation.revoked": "İmzalı Hub beslemesi kurulu içeriği iptal etti. İçerik yeni ajan seçiminden çıkarıldı. Yerine bir öğe seçmeden önce paketi inceleyin.",
   "hub.revocation.yanked": "Hub bu içeriği yeni kurulumlardan çekti. Mevcut kullanım sürer.",

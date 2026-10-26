@@ -1,5 +1,6 @@
 import { LOCALES, t, type Locale } from '#platform/index.js';
-import { WORK_KIND_STAGE_ID, WORK_PROVIDERS, type SetupObservation, type SetupPlan, type SetupStage, SetupStageRegistry } from '#engine/index.js';
+import { IdentityProfileRegistry, WORK_KIND_STAGE_ID, WORK_PROVIDERS, type IdentityProfileListing, type SetupObservation, type SetupPlan, type SetupStage, SetupStageRegistry } from '#engine/index.js';
+import { orderedProfiles, profileLabel } from '#surfaces/core/cli-identity/index.js';
 import type { SetupWindowModel } from '#surfaces/core/project-instructions/index.js';
 import { type FirstJobFacts } from '#surfaces/core/doctor/index.js';
 import { notWiredApply, type SetupApplyResult, type SetupCommandContext } from './contract.js';
@@ -17,7 +18,7 @@ export const activeStage = (plan: SetupPlan, later: ReadonlySet<string>) =>
   plan.stages.find(stage => !later.has(stage.id) && (stage.state === 'needs-answer' || (stage.state === 'ready' && stage.operation !== null))) ?? null;
 
 /** The answers offered for one stage, at most `windowOptionRows`. Nothing is preselected (the window starts with no highlighted answer). */
-export function stageChoices(stage: SetupStage | null, observation: SetupObservation, locale: Locale, stageRegistry: SetupStageRegistry = new SetupStageRegistry()): readonly Choice[] {
+export function stageChoices(stage: SetupStage | null, observation: SetupObservation, locale: Locale, stageRegistry: SetupStageRegistry = new SetupStageRegistry(), profiles: IdentityProfileListing['profiles'] = new IdentityProfileRegistry().list()): readonly Choice[] {
   const later: Choice = { id: 'later', label: t('setup.window.later', {}, locale), action: 'later' };
   if (!stage) return [{ id: 'close', label: t('setup.window.close', {}, locale), action: 'close' }];
   if (stage.id === 'permissions:start-mode' && stage.state === 'ready') return [{ id: 'apply', label: t('setup.permissions.confirm', {}, locale), action: 'apply' }, later];
@@ -28,9 +29,10 @@ export function stageChoices(stage: SetupStage | null, observation: SetupObserva
   if (stage.id === WORK_KIND_STAGE_ID) return [...WORK_PROVIDERS.slice(0, registry.windowOptionRows - 1).map((id): Choice => ({ id, label: id, answer: id, action: 'answer' })), later];
   if (stage.id === 'core:language') return [...LOCALES.map((code): Choice => ({ id: code, label: languageName(code, locale), answer: code, action: 'answer' })), later];
   // The stage registry default comes first; other registered profiles follow in registry order.
-  if (stage.id === 'core:profile') return [...[...observation.profile.available].sort((a, b) => Number(b.id === stageRegistry.unattendedProfile) - Number(a.id === stageRegistry.unattendedProfile))
+  if (stage.id === 'core:profile') return [...orderedProfiles(observation.profile.available, entry => entry.id).sort((a, b) => Number(b.id === stageRegistry.unattendedProfile) - Number(a.id === stageRegistry.unattendedProfile))
     .slice(0, registry.windowOptionRows - 1)
-    .map((entry): Choice => ({ id: entry.id, label: entry.id, answer: { id: entry.id, version: entry.version }, action: 'answer' })), later];
+    .map((entry): Choice => { const profile = profiles.find(row => row.definition.id === entry.id && row.definition.version === entry.version);
+      return { id: entry.id, label: profile ? profileLabel(profile, locale) : entry.id, answer: { id: entry.id, version: entry.version }, action: 'answer' }; }), later];
   const yes = (answer: unknown): Choice => ({ id: 'yes', label: t('setup.window.yes', {}, locale), answer, action: 'answer' });
   if (stage.id === 'core:folder') return typeof stage.default === 'string' && stage.default ? [yes(stage.default), later] : [later];
   if (typeof stage.default === 'boolean') return [yes(true), { id: 'no', label: t('setup.window.no', {}, locale), answer: false, action: 'answer' }, later];
@@ -54,6 +56,7 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
   let locale = input.locale, observed = input.observed, values = unattendedAnswers(observed.observation, flags, true, observed.registry), note = '', pending: SetupStage | null = null;
   const plan = () => planFor(observed, values);
   const scopeId = () => typeof values['core:folder'] === 'string' ? values['core:folder'] : observed.observation.folder.configuredScope ?? null;
+  const choices = (stage: SetupStage | null) => stageChoices(stage, observed.observation, locale, observed.registry, context.listIdentityProfiles?.([]).profiles);
   const model = (): SetupWindowModel => {
     const current = plan(), stage = activeStage(current, later), at = stage ? current.stages.indexOf(stage) : -1;
     const waiting = current.stages.filter(item => item.state !== 'done' && item.state !== 'skipped');
@@ -63,7 +66,7 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
       stage ? stageText(current, stage.reason.code, stage.reason.params, locale) : finished,
       stage?.question ? stageText(current, stage.question.key, stage.question.params, locale) : '',
       note || (stage && stageCommand(stage) ? `$ ${stageCommand(stage)}` : '')];
-    return { title: t('setup.window.title', {}, locale), rows, options: stageChoices(stage, observed.observation, locale, observed.registry).map(({ id, label }) => ({ id, label })),
+    return { title: t('setup.window.title', {}, locale), rows, options: choices(stage).map(({ id, label }) => ({ id, label })),
       optionRows: registry.windowOptionRows, hints: t('setup.window.hints', {}, locale), position: t('setup.window.position', {}, locale), reveal: Math.max(0, at) };
   };
   /** After an apply: the next state comes only from a fresh observation; a stage still open afterwards is put off (bounded, no loop). */
@@ -75,7 +78,7 @@ export function createSetupController(input: Readonly<{ context: SetupCommandCon
     if (result.status !== 'applied' || current.stages.find(item => item.id === stage.id)?.state !== 'done') later.add(stage.id);
   };
   const step = async (id: string): Promise<SetupWindowModel | null> => {
-    const stage = activeStage(plan(), later), picked = stageChoices(stage, observed.observation, locale, observed.registry).find(choice => choice.id === id);
+    const stage = activeStage(plan(), later), picked = choices(stage).find(choice => choice.id === id);
     if (!picked || picked.action === 'close' || !stage) return null;
     note = '';
     if (picked.action === 'later') later.add(stage.id);

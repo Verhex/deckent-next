@@ -10,7 +10,7 @@ export const catalogToday = (nowMs: number): string => new Date(nowMs).toISOStri
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS);
 /** The model's retirement day: the recorded day, else the announced one (after which admission treats it as retired). */
 const retireDay = (model: CatalogModel['model']): string | null => model.lifecycle.retiredOn ?? model.lifecycle.retireNotBefore ?? null;
-const retired = (model: CatalogModel['model'], today: string) => model.lifecycle.state === 'retired' || (retireDay(model) !== null && retireDay(model)! <= today);
+export const modelRetired = (model: CatalogModel['model'], today: string) => model.lifecycle.state === 'retired' || (retireDay(model) !== null && retireDay(model)! <= today);
 /** Worker admission needs both rows active: the channel's in this scope and the model's (engine worker admission). */
 const usable = (channel: AllowedChannel, entry: CatalogModel) => channel.activation?.state === 'active' && entry.activation?.state === 'active';
 
@@ -46,7 +46,7 @@ export function renderRetirementWarning(warning: ModelRetirementWarning, locale:
  */
 export function renderModelsTable(inspection: ModelCatalogInspection, input: Readonly<{ locale: Locale; nowMs: number; warnDays: number; verbose: boolean; style: CliTableStyle }>): string {
   const { locale } = input, today = catalogToday(input.nowMs);
-  const state = (channel: AllowedChannel, entry: CatalogModel) => entry.activationConflict ? t('tui.model.reconcile.title', {}, locale) : retired(entry.model, today) ? t('climodels.models.state.retired', { day: retireDay(entry.model) ?? '?' }, locale)
+  const state = (channel: AllowedChannel, entry: CatalogModel) => entry.activationConflict ? t('tui.model.reconcile.title', {}, locale) : modelRetired(entry.model, today) ? t('climodels.models.state.retired', { day: retireDay(entry.model) ?? '?' }, locale)
     : usable(channel, entry) ? t('climodels.models.state.active', {}, locale)
       : entry.activation?.state === 'active' ? t('climodels.models.state.channelOff', {}, locale) : t('climodels.models.state.inactive', {}, locale);
   const rows: unknown[][] = [];

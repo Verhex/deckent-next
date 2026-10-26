@@ -70,7 +70,7 @@ it('refuses a role change for an AI tool, a pipe and --json before any handler r
 it('a person gives a new model its tier and roles on one card; the writer gets the digest the card showed', async () => {
   for (const [lang, words] of [['en', ['Channel: anthropic-api', 'claude-next-1 (Claude Next 1)', 'Maker (catalog): anthropic', '4 in / 20 out per million tokens',
     'Now: no row; every role refuses this model', 'Proposed: tier frontier, roles brain, worker', 'Unlocks brain: plans work as the Brain', 'Unlocks worker', 'global']],
-  ['tr', ['Kanal: anthropic-api', 'Üretici (katalog): anthropic', 'milyon token başına 4 giriş / 20 çıkış', 'Şimdi: satır yok', 'Önerilen: kademe frontier, roller brain, worker',
+  ['tr', ['Kanal: anthropic-api', 'Üretici (katalog): anthropic', 'milyon token başına 4 giriş / 20 çıkış', 'Şimdi: satır yok', 'Önerilen: kademe üst düzey, roller brain, worker',
     'brain açılır: Brain olarak iş planlar']]] as const) {
     const f = await project(), calls: unknown[] = [], out = capture(); card.interactive = true; card.asked = []; card.answers = ['apply'];
     await modelsCommand([...SET, '--lang', lang], { root: f.root, env: f.env, stdin: tty(), stdout: out.sink, ...handlers(calls) } as never);
@@ -79,7 +79,7 @@ it('a person gives a new model its tier and roles on one card; the writer gets t
     const body = card.asked[0]!.body!.join('\n');
     for (const word of words) expect(body).toContain(word);
     expect(calls[1]).toEqual(['assign', expect.objectContaining({ scopeId: 'scope', channelId: 'anthropic-api', modelId: 'claude-next-1', tier: 'frontier', roles: ['brain', 'worker'], expect: DIGEST })]);
-    expect(out.text()).toContain(lang === 'en' ? 'now has tier frontier, roles brain, worker' : 'artık kademe frontier, roller brain, worker');
+    expect(out.text()).toContain(lang === 'en' ? 'now has tier frontier, roles brain, worker' : 'artık kademe üst düzey, roller brain, worker');
   }
 });
 
@@ -100,7 +100,7 @@ it('a cancelled card writes nothing and exits 1; a model outside the catalog is 
 it('show lists every catalog model with maker, tier, roles and the pending state in both languages; --json is the typed view', async () => {
   const f = await project(), calls: unknown[] = [];
   for (const [lang, words] of [['en', ['claude-next-1', 'new model: role pending', 'assigned', 'anthropic', 'New model: role pending (1)', 'brain (frontier)']],
-    ['tr', ['yeni model: rol bekliyor', 'atanmış', 'Yeni model: rol bekliyor (1)', 'worker (çalışan)']]] as const) {
+    ['tr', ['yeni model: rol bekliyor', 'atanmış', 'Yeni model: rol bekliyor (1)', 'worker (işçi)']]] as const) {
     const out = capture();
     await modelsCommand(['models', 'roles', '--scope', 'scope', '--lang', lang], { root: f.root, env: f.env, stdout: out.sink, ...handlers(calls) } as never);
     for (const word of words) expect(out.text()).toContain(word);

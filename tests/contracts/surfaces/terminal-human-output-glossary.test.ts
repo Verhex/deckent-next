@@ -21,4 +21,9 @@ describe('Turkish glossary in terminal and monitor catalogs', () => {
     expect(observed.length).toBeGreaterThan(500);
   });
   it('keeps the sweep non-trivial', () => { expect(swept.length).toBeGreaterThan(300); });
+  it('F5: uses the glossary throughout Turkish catalogs while retaining command, flag and field identifiers', () => {
+    const proseOnly = (text: string) => text.replace(/`[^`]*`|\{[^}]*\}|<[^>]*>|\/[a-z-]+|--[\w-]+(?:\s+[a-z]+(?:\|[a-z]+)*)?|\b[\w]+(?:[-_.:][\w]+)+/gu, ' ');
+    const offenders = Object.entries(catalog).filter(([, text]) => /\b(Run|Task|worker|scope|Koşu)\b/u.test(proseOnly(text))).map(([key]) => key);
+    expect(offenders).toEqual([]);
+  });
 });

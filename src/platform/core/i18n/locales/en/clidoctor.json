@@ -197,5 +197,9 @@
   "installation.fileUnsafe.mode": "unsafe permissions",
   "installation.fileUnsafe.links": "unexpected hard-link count",
   "installation.fileUnsafe.size": "file size outside the permitted bound",
-  "cli.paths.secretStoreKey": "Secret store encryption key"
+  "cli.paths.secretStoreKey": "Secret store encryption key",
+  "doctor.sandbox.host": "sandbox: host (no isolation)",
+  "doctor.sandbox.refused": "sandbox refused ({code})",
+  "doctor.sandbox.mcp": "sandbox-net (MCP default: network access, private HOME)",
+  "doctor.sandbox.selected": "sandbox: {realm}"
 }
