@@ -51,7 +51,7 @@ export interface HubClientStore extends AgentCatalogStore {
   hubReceipt(scopeId: string, commandId: string): Promise<HubReceipt | null>;
   finish(receipt: HubReceipt, event: AuditEvent): Promise<void>;
 }
-export type HubClientAction = 'inspect' | 'sources.add' | 'sources.remove' | 'install' | 'update' | 'uninstall' | 'export' | 'refresh';
+export type HubClientAction = 'inspect' | 'sources.add' | 'sources.remove' | 'install' | 'update' | 'uninstall' | 'export' | 'refresh' | 'search' | 'publish' | 'yank' | 'revoke';
 export interface HubClientDependencies {
   readonly catalog: AgentCatalogDependencies;
   readonly openStore: (access: 'read' | 'write') => Promise<HubClientStore>;

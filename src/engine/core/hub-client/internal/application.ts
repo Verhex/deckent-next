@@ -119,6 +119,15 @@ export class HubClientApplication {
       cards.push({ event: 'restored', hubId: source.hubId, sequence, atMs: now });
     return { schemaVersion: 1, kind: 'revocations', hubId: source.hubId, verified, sequence, packages, items, cards };
   }
+  /** Remote writes need the same active host signer and explicit grant before the governed network effect is admitted. */
+  async authorizeRemote(action: 'search' | 'publish' | 'yank' | 'revoke', scopeId: string, credential?: unknown): Promise<VerifiedPrincipal> {
+    const { principal } = await this.admit(action, scopeId, credential);
+    if (!isAiPrincipal(principal) || action === 'search') return principal;
+    const store = await this.deps.openStore('read');
+    try { if (!await canSignCatalogActions(this.deps.catalog, store, principal, scopeId)) throw new HubClientError('HUB_AUTHORITY_REFUSED'); }
+    finally { store.close(); }
+    return principal;
+  }
   async listSources(input: unknown, credential?: unknown): Promise<readonly HubSource[]> {
     const query = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema }).strict().parse(input);
     return this.read(query.scopeId, credential, store => store.sources(query.scopeId));

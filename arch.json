@@ -316,7 +316,8 @@
         "src/surfaces/core/cli-kit",
         "src/surfaces/core/config-window",
         "src/surfaces/core/effect-confirmation",
-        "src/composition/core/memory-rollout"
+        "src/composition/core/memory-rollout",
+        "src/composition/core/hub"
       ],
       "plan": "SURFACES"
     },
@@ -409,7 +410,8 @@
         "src/composition/core/audit",
         "src/platform/core/crash-reporting",
         "src/composition/core/memory",
-        "src/composition/core/agent-catalog"
+        "src/composition/core/agent-catalog",
+        "src/composition/core/hub"
       ],
       "plan": "SURFACES"
     },
@@ -1332,7 +1334,8 @@
         "src/surfaces/core/config",
         "src/surfaces/core/cli-memory",
         "src/surfaces/core/cli-agents",
-        "src/surfaces/core/setup"
+        "src/surfaces/core/setup",
+        "src/surfaces/core/cli-hub"
       ],
       "plan": "SURFACES"
     },
@@ -1386,7 +1389,9 @@
         "src/surfaces/core/delivery-summary",
         "src/engine/core/delivery-summary",
         "src/surfaces/core/cli-human",
-        "src/surfaces/core/terminal-onboarding"
+        "src/surfaces/core/terminal-onboarding",
+        "src/surfaces/core/cli-hub",
+        "src/surfaces/core/terminal-hub"
       ],
       "plan": "SURFACES"
     },
@@ -1423,7 +1428,8 @@
         "src/engine/core/run-proposal",
         "src/engine/core/memory",
         "src/engine/core/agent-catalog",
-        "src/engine/core/catalog-evolution"
+        "src/engine/core/catalog-evolution",
+        "src/engine/core/hub-operations"
       ],
       "plan": "SURFACES"
     },
@@ -4183,7 +4189,17 @@
         "src/adapters/core/hub-http",
         "src/surfaces/core/hub-mcp",
         "src/engine/core/hub-server",
-        "src/surfaces"
+        "src/surfaces",
+        "src/engine/core/hub-operations",
+        "src/engine/core/runtime",
+        "src/domain/core/hub",
+        "src/adapters/core/local-principal",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/platform/core/config",
+        "src/composition/core/scoped-request",
+        "src/composition/core/policy",
+        "src/composition/core/query-errors"
       ],
       "plan": "LEARNING"
     },
@@ -4208,7 +4224,8 @@
         "src/engine/core/hub-client",
         "src/engine/core/authentication",
         "src/domain/core/effect",
-        "src/platform/core/clock"
+        "src/platform/core/clock",
+        "src/engine/core/hub-operations"
       ],
       "plan": "LEARNING"
     },
@@ -4228,6 +4245,54 @@
         "src/surfaces/core/terminal-theme"
       ],
       "plan": "SURFACES"
+    },
+    "src/engine/core/hub-operations": {
+      "dependencies": [
+        "src/domain/core/hub",
+        "src/platform/core/errors",
+        "src/engine/core/hub-client",
+        "src/domain/core/policy",
+        "src/domain/core/principal",
+        "src/engine/core/policy",
+        "src/domain/core/primitives",
+        "src/domain/core/agent-catalog",
+        "src/platform/core/i18n",
+        "src/platform/core/redaction"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/surfaces/core/cli-hub": {
+      "dependencies": [
+        "src/engine/core/hub-operations",
+        "src/engine/core/hub-client",
+        "src/platform/core/errors",
+        "src/platform/core/output",
+        "src/platform/core/config",
+        "src/platform/core/i18n",
+        "src/platform/core/integrity",
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/approval-presentation",
+        "src/surfaces/core/terminal-render",
+        "src/surfaces/core/cli-human",
+        "src/engine/core/config",
+        "src/platform/core/redaction",
+        "src/surfaces/core/config"
+      ],
+      "plan": "LEARNING"
+    },
+    "src/surfaces/core/terminal-hub": {
+      "dependencies": [
+        "src/engine/core/hub-operations",
+        "src/platform/core/errors",
+        "src/platform/core/i18n",
+        "src/platform/core/config",
+        "src/surfaces/core/cli-kit",
+        "src/surfaces/core/cli-hub",
+        "src/surfaces/core/terminal-panels",
+        "src/surfaces/core/terminal-render",
+        "src/platform/core/redaction"
+      ],
+      "plan": "LEARNING"
     }
   },
   "composition": {

@@ -132,3 +132,6 @@ export { inspectConfiguredPolicyAdministration as inspectPolicyAdministration } 
 export type { PolicyAdministrationQuery, PolicyAdministrationStatus } from '#engine/index.js';
 
 export type { DelegationQuery, DecisionDelegationView } from '#domain/index.js';
+
+export { executeConfiguredHub as executeHub } from '#composition/index.js';
+export type { HubOperation, HubOperationName, HubOperationHandler } from '#engine/index.js';

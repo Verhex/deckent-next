@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { executeConfiguredHub } from '#composition/core/hub/index.js';
 import { planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelActivation, inspectConfiguredModelCatalog,
@@ -38,6 +39,7 @@ import { inspectMonitor } from '#composition/core/monitor/index.js';
     recordModelIngress: (notice, input) => recordConfiguredMcpIngress(root, notice, input),
     applyRunControl: command => applyConfiguredRunLifecycle(root, command),
     inspectDecision: query => inspectConfiguredDecision(root, query, { heal: false }),
+    executeHub: (request, signal) => executeConfiguredHub(root, request, { heal: false }, {}, signal),
     listAgents: query => listConfiguredAgents(root, query, { heal: false }), inspectAgent: query => inspectConfiguredAgent(root, query, { heal: false }),
     listSkills: query => listConfiguredSkills(root, query, { heal: false }), inspectSkill: query => inspectConfiguredSkill(root, query, { heal: false }), inspectAgentStats: query => inspectConfiguredAgentStats(root, query, { heal: false }),
     listAgentSuggestions: query => listConfiguredSuggestions(root, query, { heal: false }), inspectAgentSuggestion: query => inspectConfiguredSuggestion(root, query, { heal: false }),
