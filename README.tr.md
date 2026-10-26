@@ -513,8 +513,9 @@ anlatır.
   tavsiye verir; her teslim, dalı ilerletme ve geri alma sizin `y`'nizi bekler.
 - **Kodlama görevleri işçinin çıkış koduyla kabul edilir.** İçerik henüz bağımsız olarak doğrulanmıyor ve pencere bunu söyler.
 - **Abonelikler kısmi.** Claude Code işçisi kendi Claude girişinizle çalışır; Brain (`/do`'nun arkasındaki planlayıcı) da
-  Deckent'in bubblewrap korumalı alanının çalıştığı yerde (Linux ve WSL) Claude aboneliğinizi kullanabilir. Claude aboneliğiyle
-  terminalde sohbet ve ChatGPT ile giriş henüz yok (bkz. [Yol haritası](#yol-haritası)).
+  Deckent'in bubblewrap korumalı alanının çalıştığı yerde (Linux ve WSL) Claude aboneliğinizi kullanabilir. ChatGPT ile giriş,
+  Linux ve WSL'de size özel yerel depodan terminal sohbetine hizmet eder; bu plandaki Codex işçisi henüz etkin değil. Claude
+  aboneliğiyle terminalde sohbet henüz yok (bkz. [Yol haritası](#yol-haritası)).
 - **Platformlar.** Native Windows desteklenmiyor. macOS'ta yerel runtime servisi henüz çalışmıyor (soketi yalnız Linux'ta
   var); bu yüzden sohbet, işler ve yedekleme orada kullanılamaz. Teslim, dalı ilerletme, geri alma ve anahtar izni yalnız Linux'ta
   (WSL dahil) bulunan bir terminal tanığı ister, diğer sistemlerde reddedilir. arm64 paketlenmiyor. Docker işçisi host
