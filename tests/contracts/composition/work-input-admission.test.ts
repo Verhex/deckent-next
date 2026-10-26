@@ -435,7 +435,8 @@ describe.skipIf(process.platform === 'win32')('recovery bounds through the real 
       const f = await seeded(registry, undefined, { runRuntime: { recovery: { mode } } });
       await createRun(f.project, run(mode, 'coding', workInput()), f.options);
       expect((f.snapshotProfile(mode) as { recovery?: unknown }).recovery).toEqual({ schemaVersion: 1, registryRevision: 'core-2026-10-23', mode, maxLostContinuationsPerTask: 1,
-        maxRecoveryActionsPerRun: 4, maxAttemptsPerTask: 3, maxGateIntents: 64, settledFacts: { maxCount: 16, maxBytes: 16384 } });
+        maxRecoveryActionsPerRun: 4, maxAttemptsPerTask: 3, maxGateIntents: 64, settledFacts: { maxCount: 16, maxBytes: 16384 },
+        lowRiskTaskIds: [] }); // alpha.56 G6 (1a245432e): the low-risk task set is frozen too; a coding task is not low risk
     }
   });
 });
