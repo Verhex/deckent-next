@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "source": "https://developers.openai.com/siwc/token-sharing-open-source/sign-in",
   "observedOn": "2026-10-25",
   "issuer": "https://auth.openai.com",
@@ -114,12 +114,28 @@
   },
   "usageErrors": {
     "source": "https://developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery",
-    "observedOn": "2026-10-25",
+    "observedOn": "2026-10-26",
     "codes": {
-      "subscription_sharing_usage_limit_exceeded": "quota",
-      "subscription_sharing_usage_unavailable": "quota",
-      "subscription_sharing_user_not_eligible": "plan-unavailable",
-      "subscription_sharing_invalid_user": "login-required"
+      "subscription_sharing_usage_limit_exceeded": {
+        "refusal": "quota",
+        "status": 429
+      },
+      "subscription_sharing_usage_unavailable": {
+        "refusal": "usage-unavailable",
+        "status": 503
+      },
+      "subscription_sharing_user_unavailable": {
+        "refusal": "service-unavailable",
+        "status": 503
+      },
+      "subscription_sharing_user_not_eligible": {
+        "refusal": "plan-unavailable",
+        "status": 403
+      },
+      "subscription_sharing_invalid_user": {
+        "refusal": "login-required",
+        "status": 401
+      }
     }
   }
 }

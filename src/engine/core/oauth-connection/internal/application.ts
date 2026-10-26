@@ -164,13 +164,13 @@ export class OAuthConnectionApplication {
       throw new OAuthConnectionError(revoked ? 'OAUTH_CONNECTION_REAUTHORIZE' : 'OAUTH_CONNECTION_UNAVAILABLE');
     }
   }
-  private replace(id: string, generation: number, state: OAuthConnectionRecord['state'], next: OAuthConnectionRecord, signal?: AbortSignal) {
+  private replace(id: string, generation: number, state: OAuthConnectionRecord['state'], next: OAuthConnectionRecord, signal?: AbortSignal, personal = true) {
     return this.exclusive(async () => {
       if (signal) this.checkSignal(signal);
       const current = await this.read(id);
       if (current.generation !== generation || current.state !== state) throw new OAuthConnectionError('OAUTH_CONNECTION_CHANGED');
       await this.write(next); return next;
-    });
+    }, personal);
   }
 
   async disconnect(connectionId: string, signal?: AbortSignal): Promise<OAuthConnectionView> {
@@ -180,7 +180,7 @@ export class OAuthConnectionApplication {
         const current = await this.read(connectionId);
         if (current.state !== 'disconnected') await this.write({ ...current, state: 'disconnecting', generation: current.generation + 1 });
         return current;
-      });
+      }, false);
       if (record.state === 'disconnected') return this.view(record);
       let confirmed = false;
       if (record.tokens?.refreshToken) {
@@ -189,7 +189,7 @@ export class OAuthConnectionApplication {
         catch { /* Local stop is unconditional; unconfirmed remote revocation is retained explicitly. */ }
       }
       const saved = await this.replace(connectionId, record.generation + 1, 'disconnecting', { ...record, state: 'disconnected', tokens: null,
-        generation: record.generation + 2, remoteRevocation: confirmed ? 'confirmed' : 'unconfirmed' });
+        generation: record.generation + 2, remoteRevocation: confirmed ? 'confirmed' : 'unconfirmed' }, undefined, false);
       return this.view(saved);
     }));
   }
@@ -198,13 +198,18 @@ export class OAuthConnectionApplication {
     if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u.test(id)) throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
     return `${this.ports.protocol.connectionSecretPrefix}${id.replaceAll('-', '').toUpperCase()}`;
   }
-  private async exclusive<T>(work: () => Promise<T>): Promise<T> {
+  private async exclusive<T>(work: () => Promise<T>, personal = true): Promise<T> {
     try { return await this.ports.custody.exclusive(async () => {
       if (this.ports.store.descriptor.id !== this.ports.protocol.encryptedStoreId || !this.ports.store.descriptor.writable
         || this.ports.store.descriptor.encryptedAtRest !== true)
         throw new OAuthConnectionError('OAUTH_CONNECTION_STORE_REQUIRED');
       assertSecretStorageProtection(this.ports.protocol.connectionSecretPrefix, this.ports.store.descriptor);
       if (await this.ports.custody.selected() !== this.ports.store.descriptor.id) throw new OAuthConnectionError('OAUTH_CONNECTION_CHANGED');
+      if (personal) {
+        if (!this.ports.custody.assertPersonal) throw new OAuthConnectionError('SIWC_STORE_NOT_PERSONAL');
+        try { await this.ports.custody.assertPersonal(this.ports.store.descriptor, this.owner); }
+        catch { throw new OAuthConnectionError('SIWC_STORE_NOT_PERSONAL'); }
+      }
       return work();
     }); } catch (error) {
       if (error instanceof OAuthConnectionError) throw error;

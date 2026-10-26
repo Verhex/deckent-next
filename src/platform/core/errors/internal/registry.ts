@@ -110,6 +110,8 @@ const dockerImageProbeCause = (cause: unknown) => typeof cause === 'string' && O
 const DELEGATION_HINTS: Readonly<Record<string, (p: Params, l: Locale) => string>> = { owner: (p, l) => t('policy.hint.owner', p, l), other: (p, l) => t('policy.hint.other', p, l),
   unnamed: (p, l) => t('policy.hint.unnamed', p, l), deny: (p, l) => t('policy.hint.deny', p, l), approval: (p, l) => t('policy.hint.approval', p, l) };
 const coreDefinitions: ErrorDefinitions = Object.freeze({
+  SECRET_SESSION_RESERVED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_SESSION_RESERVED', p, l) }) },
+  SIWC_STORE_NOT_PERSONAL: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_STORE_NOT_PERSONAL', p, l) }) },
   SECRET_STORE_PROTECTION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_PROTECTION_REQUIRED', p, l) }) },
   OAUTH_CONNECTION_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED', p, l) }) },
   OAUTH_CONNECTION_PLATFORM_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_PLATFORM_UNSUPPORTED', p, l) }) },

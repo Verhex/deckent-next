@@ -49,12 +49,13 @@ describe('secret store switch', () => {
     expect(h.selection()).toBe(SEALED); expect(file.data.size).toBe(0); expect(sealed.data.get(name)).toBe('synthetic-renewable');
     expect(h.audits).toHaveLength(0); expect(h.log).toEqual(['enter', 'leave']);
   });
-  it('renewable sessions can use an encrypted Enterprise backend through the same port', async () => {
+  it('encryption alone cannot move a personal session into an Enterprise backend', async () => {
     const name = `${RENEWABLE_SECRET_PREFIX}FIXTURE`, enterprise = 'enterprise.secret-store.vault@1';
     const sealed = memoryStore(SEALED, { [name]: 'synthetic-renewable' }, { encryptedAtRest: true });
     const target = memoryStore(enterprise, {}, { encryptedAtRest: true }), h = harness(SEALED, { [SEALED]: sealed, [enterprise]: target });
-    expect(await h.application.switch(request(enterprise, true))).toMatchObject({ status: 'switched', to: enterprise });
-    expect(target.data.get(name)).toBe('synthetic-renewable'); expect(sealed.data.size).toBe(0);
+    expect(await code(h.application.switch(request(enterprise, true)))).toBe('SIWC_STORE_NOT_PERSONAL');
+    expect(h.selection()).toBe(SEALED); expect(target.data.size).toBe(0); expect(sealed.data.get(name)).toBe('synthetic-renewable');
+    expect(h.audits).toHaveLength(0); expect(h.log).toEqual(['enter', 'leave']);
   });
   it('a plaintext current selection containing a protected legacy copy cannot silently finish or erase custody', async () => {
     const name = `${RENEWABLE_SECRET_PREFIX}FIXTURE`, file = memoryStore(FILE, { [name]: 'synthetic-renewable' }), h = harness(FILE, { [FILE]: file });
@@ -65,7 +66,7 @@ describe('secret store switch', () => {
     const file = memoryStore(FILE), h = harness(FILE, { [FILE]: file });
     const write = new SecretStoreAdministration(file.store, async () => ({ policyRevision: 'p1', effect: 'allow', ruleId: null }), () => {}, () => 1,
       { exclusive: work => work(), selected: async () => FILE });
-    expect(await code(write.set({ principal: me, scopeId: 'installation', name: `${RENEWABLE_SECRET_PREFIX}FIXTURE` }, 'synthetic-renewable'))).toBe('SECRET_STORE_PROTECTION_REQUIRED');
+    expect(await code(write.set({ principal: me, scopeId: 'installation', name: `${RENEWABLE_SECRET_PREFIX}FIXTURE` }, 'synthetic-renewable'))).toBe('SECRET_SESSION_RESERVED');
     expect(file.data.size).toBe(0); expect(h.log).toHaveLength(0);
   });
 });
@@ -206,4 +207,25 @@ describe('ordinary secret store switch compatibility', () => {
     expect(await code(authorize({ ...request(SEALED), principal: { issuer: 'os', subject: 'other' } }))).toBe('SECRET_STORE_SWITCH_DENIED');
     expect(ErrorRegistry.has('SECRET_STORE_SWITCH_UNVERIFIED')).toBe(true);
   });
+});
+
+it('refuses same-target cleanup and interrupted MOVE before deleting even identical protected copies', async () => {
+  const name = `${RENEWABLE_SECRET_PREFIX}FIXTURE`, value = 'synthetic-renewable';
+  const target = memoryStore(SEALED, { [name]: value }, { encryptedAtRest: true }), source = memoryStore(FILE, { [name]: value });
+  const h = harness(SEALED, { [SEALED]: target, [FILE]: source });
+  expect(await code(h.application.switch(request(SEALED)))).toBe('SIWC_STORE_NOT_PERSONAL');
+  expect(target.data.get(name)).toBe(value); expect(source.data.get(name)).toBe(value); expect(h.audits).toHaveLength(0);
+  target.data.delete(name);
+  // Missing selected copy is not permission to erase the surviving interrupted-migration evidence.
+  expect(await code(h.application.switch(request(SEALED)))).toBe('SIWC_STORE_NOT_PERSONAL');
+  expect(source.data.get(name)).toBe(value); expect(h.selection()).toBe(SEALED); expect(h.audits).toHaveLength(0);
+});
+it('rejects generic session set and delete on an encrypted backend before authorization or storage mutation', async () => {
+  const name = `${RENEWABLE_SECRET_PREFIX}FIXTURE`, sealed = memoryStore(SEALED, { [name]: 'synthetic-renewable' });
+  let called = false;
+  const write = new SecretStoreAdministration(sealed.store, async () => { called = true; throw new Error('unexpected'); }, () => { called = true; }, () => 1,
+    { exclusive: work => work(), selected: async () => SEALED });
+  for (const work of [write.set({ principal: me, scopeId: 'installation', name }, 'replacement'), write.delete({ principal: me, scopeId: 'installation', name })])
+    expect(await code(work)).toBe('SECRET_SESSION_RESERVED');
+  expect(called).toBe(false); expect(sealed.data.get(name)).toBe('synthetic-renewable');
 });

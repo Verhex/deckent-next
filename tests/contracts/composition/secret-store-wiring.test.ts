@@ -129,3 +129,8 @@ it('every production credential read goes through the one configured resolver (n
 });
 
 });
+
+it('the installed generic resolver cannot read a renewable session by name from any selected store', async () => {
+  const name = 'DECKENT_CREDENTIAL_SESSION_FIXTURE';
+  await expect(configuredSecretResolver({}, { env: { [name]: CANARY } })(name)).rejects.toMatchObject({ code: 'SECRET_SESSION_RESERVED' });
+});
