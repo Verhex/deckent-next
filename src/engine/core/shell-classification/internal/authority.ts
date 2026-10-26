@@ -9,7 +9,7 @@ const AUTHORITY_TEXT: readonly RegExp[] = Object.values(PRODUCT_AUTHORITY_COMMAN
   const actions = rule.actions.filter(Boolean).map(escapePattern).join('|');
   const words = `${group.split(' ').map(escapePattern).join('\\s+')}${actions ? rule.actions.includes('') ? `(?:\\s+(?:${actions}))?` : `\\s+(?:${actions})` : ''}`;
   const flags = rule.requiredFlags ? `\\b[^;&|\\n]*?\\s(?:${rule.requiredFlags.map(escapePattern).join('|')})\\b` : '\\b';
-  const product = rule.bound ? `(?:^|[\\s;&|])(?:[^\\s;&|]*\\/)?(?:${PRODUCT_PROGRAM_NAMES.map(escapePattern).join('|')}|entry\\.[cm]?js)\\s+` : '\\b';
+  const product = rule.bound ? `(?:^|[\\s;&|])(?:[^\\s;&|]*\\/)?(?:${PRODUCT_PROGRAM_NAMES.map(escapePattern).join('|')}|entry\\.[cm]?js)(?:@[^\\s;&|/]*)?\\s+` : '\\b';
   return new RegExp(`${product}${words}${flags}`, 'u');
 }));
 const LAUNCHERS = new Set([...PRODUCT_PROGRAM_NAMES, ...Object.keys(PRODUCT_AUTHORITY_COMMANDS), ...INTERPRETER_PROGRAMS, ...EVAL_PROGRAMS, ...PTY_WRAPPER_PROGRAMS, ...XARGS_PROGRAMS,
@@ -21,6 +21,8 @@ const stdinInterpreterAfter = (args: readonly string[]) => args.some((arg, at) =
 const PTY_WORD = new RegExp(`(?:^|[\\s;&|(\`$"'])(?:${[...PTY_WRAPPER_PROGRAMS].join('|')})(?=[\\s"']|$)`, 'u');
 const programName = (word: string) => { const name = PROGRAM_ALIASES[word] ?? word; return (name.split('/').pop() ?? name).toLowerCase(); };
 const names = (text: string) => AUTHORITY_TEXT.some(pattern => pattern.test(text));
+/** alpha.56 FIX2b: the product program (a product name, its `entry.js`), also with a package runner's version/tag suffix (`npx deckent@latest`, `@scope/deckent@2`). */
+const isProductProgram = (word: string) => { const name = programName(word).replace(/(?<=.)@[^@]*$/u, ''); return PRODUCT_PROGRAM_NAMES.includes(name) || /^entry\.[cm]?js$/u.test(name); };
 /**
  * alpha.56 FIX2 (commit-security review of U5-S3): the product's authority commands decided on the decoded argv, so option words between the program
  * and its group/action (`deckent --lang en run resume`, `npx --yes deckent --json task reject`, `node …/entry.js --scope x run resume`) never hide one.
@@ -42,7 +44,7 @@ function positionalsAt(args: readonly string[], expected: readonly string[], fro
   return false;
 }
 const productArgvRunsAuthority = (words: readonly string[]) => words.some((word, at) => {
-  if (!PRODUCT_PROGRAM_NAMES.includes(programName(word)) && !/^entry\.[cm]?js$/u.test(programName(word))) return false;
+  if (!isProductProgram(word)) return false;
   const args = words.slice(at + 1);
   return PRODUCT_RULES.some(rule => positionalsAt(args, rule.words, 0)
     && (!rule.flags || args.some(arg => rule.flags!.some(flag => arg === flag || arg.startsWith(`${flag}=`)))));
@@ -115,7 +117,7 @@ function launchesProgram(command: string): boolean {
       for (let at = 0; at < raw.length; at++) { if (REDIRECTION.test(raw[at]!)) { if (BARE_REDIRECTION.test(raw[at]!)) at++; continue; } tokens.push(raw[at]!); }
       while (tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/u.test(tokens[0]!)) tokens.shift();
       const name = tokens.length ? programName(tokens[0]!.replace(/['"\\]/gu, '')) : '';
-      if (!LAUNCHERS.has(name)) continue;
+      if (!LAUNCHERS.has(name) && !isProductProgram(name)) continue;
       // Fail closed: any launcher at a command position keeps the card — except a redirection-only `exec` (it opens descriptors, runs nothing).
       if (name !== 'exec' || tokens.length > 1 || index > 0) return true;
     }
@@ -135,7 +137,8 @@ function runsAuthority(command: string, depth: number): boolean {
     const head = stage.words[0];
     if (!head) continue;
     if (inlineNamesProduct(stage.words.map(word => word.text))) return true;
-    if (!LAUNCHERS.has(programName(head.text))) continue;
+    // A stage headed by the product itself (a path, its entry script, a suffixed name) is decided like a launcher's (FIX2b, fail closed).
+    if (!LAUNCHERS.has(programName(head.text)) && !isProductProgram(head.text)) continue;
     const rest = stage.words.slice(1);
     // A shell fed by a pipe runs whatever the pipe carries: never decoded here, the card stays.
     // An input redirection (`<`, `0<`, a here-document) feeds the program the same way.

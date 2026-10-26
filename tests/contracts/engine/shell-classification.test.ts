@@ -142,6 +142,6 @@ it('alpha.56 FIX2: option words between the product program and its group/action
   for (const command of ['deckent --lang en run resume r', 'deckent --json run close r', 'deckent --lang=tr task accept t', 'node /opt/app/entry.js --scope x run resume r',
     'npx deckent run resume r', 'npx --yes deckent --json task reject t', 'npx -p deckent deckent run close r', 'deckent run --json resume r',
     'deckent --scope s secret --json grant K']) expect(classifyShellAuthority(command), command).toBe(true);
-  for (const command of ['deckent --lang en run status r', 'deckent --json doctor', 'deckent models list --scope run', 'npx --yes deckent --lang en run list'])
+  for (const command of ['deckent --lang en run status r', 'deckent --json doctor', 'deckent models list --scope run', 'npx --yes deckent --lang en run list', 'npx deckent@latest run list', './dist/entry.js --json doctor'])
     expect(classifyShellAuthority(command), command).toBe(false);
 });
