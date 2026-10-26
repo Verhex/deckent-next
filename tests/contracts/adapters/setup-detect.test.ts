@@ -339,6 +339,15 @@ it.skipIf(process.platform === 'win32')('first commit (Astra A56 D1/S2): the sca
   try { await expect(applyFirstCommit({ ...grown, git: port, digest: offer.state === 'offered' ? offer.digest : '' })).rejects.toMatchObject({ code: 'SETUP_FIRST_COMMIT_CHANGED' }); }
   finally { Buffer.alloc = alloc; }
   expect(Math.max(0, ...allocated)).toBeLessThan(104_857_601);
+  // D4: a clean filter that changes its output after the apply's own scan is refused, and the refused (secret) blob never reaches .git/objects.
+  const late = await repo('cat'); await rm(join(late.root, 'wide.txt')); const lateOffer = await previewFirstCommit(late), lateGit = await firstCommitGit(late.root, late.env);
+  const latePort: FirstCommitGit = async (args, options) => {
+    if (args[0] === 'rev-parse' && args[1] === '--absolute-git-dir') sh(late.root, 'config', 'filter.up.clean', 'tr a-z A-Z');
+    return lateGit(args, options);
+  };
+  await expect(applyFirstCommit({ ...late, git: latePort, digest: lateOffer.state === 'offered' ? lateOffer.digest : '' })).rejects.toMatchObject({ code: 'SETUP_FIRST_COMMIT_CHANGED' });
+  const secretBlob = execFileSync('git', ['hash-object', '--stdin'], { cwd: late.root, input: marker.toUpperCase(), encoding: 'utf8' }).trim();
+  expect(() => sh(late.root, 'cat-file', '-e', secretBlob)).toThrow();
 });
 it.skipIf(process.platform === 'win32')('U4C: failed index swap retains private path custody; recovery preserves unrelated staging and refuses same-path overlap', async () => {
   const sh = (root: string, ...args: string[]) => execFileSync('git', ['--no-optional-locks', ...args], { cwd: root, env: { PATH: hostPath, HOME: root, GIT_CONFIG_NOSYSTEM: '1' }, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
