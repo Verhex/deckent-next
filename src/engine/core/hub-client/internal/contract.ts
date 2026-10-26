@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { HUB_LIMITS, HUB_TRUST_POLICIES, counterSchema, identitySchema, hubDigestSchema, hubPackageIdSchema, hubVersionSchema,
   type AuditEvent, type HubRevocationFeed, type VerifiedPrincipal } from '#domain/index.js';
 import { artifactReceiptSchema, type ArtifactReceipt, type ArtifactStore } from '#capabilities/index.js';
-import type { AgentCatalogDependencies, AgentCatalogStore } from '#engine/core/agent-catalog/index.js';
+import type { AgentCatalogDependencies, AgentCatalogStore, CatalogUpstream } from '#engine/core/agent-catalog/index.js';
 import type { HubPackageVerification, HubPackageFile, HubVerificationKey } from '#engine/core/hub/index.js';
 import type { HubEnvelope, HubPackage } from '#domain/index.js';
 
@@ -16,13 +16,22 @@ export interface HubBundle { readonly manifest: HubPackage; readonly envelope: H
 const item = z.object({ kind: z.enum(['agent', 'skill']), id: identitySchema, revision: counterSchema.positive(), digest: hubDigestSchema }).strict().readonly();
 export const hubInstallSchema = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, hubId: hubDigestSchema,
   packageId: hubPackageIdSchema, version: hubVersionSchema, manifestDigest: hubDigestSchema, publisherKeyId: hubDigestSchema,
+  signerKeyIds: z.array(hubDigestSchema).max(HUB_LIMITS.reviewerSignaturesMax + 2).readonly().optional(),
   publisherKind: z.enum(['person', 'ai', 'system', 'unknown']), state: z.enum(['installed', 'retired']), revision: counterSchema.positive(),
   items: z.array(item).max(HUB_LIMITS.itemsMax).readonly(), bundle: artifactReceiptSchema, atMs: counterSchema,
   sourceRevision: counterSchema.positive() }).strict().readonly();
 export type HubInstall = z.infer<typeof hubInstallSchema>;
-export interface HubReceipt { readonly scopeId: string; readonly commandId: string; readonly digest: string; readonly result: HubSource | readonly HubInstall[] }
+export const hubRefreshResultSchema = z.object({ schemaVersion: z.literal(1), kind: z.literal('revocations'), hubId: hubDigestSchema, verified: z.boolean().default(true),
+  sequence: counterSchema, packages: z.array(z.object({ packageId: hubPackageIdSchema, version: hubVersionSchema,
+    signerKeyIds: z.array(hubDigestSchema).max(HUB_LIMITS.reviewerSignaturesMax + 2) }).strict()).default([]), items: z.array(z.object({ kind: z.enum(['agent', 'skill']), id: identitySchema, revision: counterSchema.positive(),
+    upstream: z.enum(['clear', 'withdrawn', 'revoked', 'yanked']) }).strict()),
+  cards: z.array(z.object({ event: z.enum(['withdrawn', 'restored', 'revoked', 'yanked']), hubId: hubDigestSchema, sequence: counterSchema,
+    atMs: counterSchema }).strict()) }).strict();
+export type HubRefreshResult = z.infer<typeof hubRefreshResultSchema>;
+export interface HubReceipt { readonly scopeId: string; readonly commandId: string; readonly digest: string; readonly result: HubSource | readonly HubInstall[] | HubRefreshResult }
 /** Same ledger and transaction as the catalog; no SQL crosses this port. A borrowed catalog's close is a no-op. */
 export interface HubClientStore extends AgentCatalogStore {
+  upstream(scopeId: string, kind: 'agent' | 'skill', id: string, revision: number, nowMs?: number, verifiedKeyIds?: readonly string[]): Promise<CatalogUpstream>;
   atomic<T>(work: () => Promise<T>): Promise<T>;
   borrowCatalog(anchor?: { readonly scopeId: string; readonly key: HubVerificationKey }): AgentCatalogStore;
   sources(scopeId: string): Promise<readonly HubSource[]>;
@@ -35,11 +44,14 @@ export interface HubClientStore extends AgentCatalogStore {
   skillBundle(scopeId: string, skillId: string, revision: number, digest: string): Promise<ArtifactReceipt | null>;
   feed(scopeId: string, hubId: string): Promise<HubRevocationFeed | null>;
   revocations(scopeId: string, hubId: string, targets: readonly Pick<HubRevocationFeed['entries'][number], 'kind' | 'id'>[]): Promise<HubRevocationFeed['entries']>;
+  installations(scopeId: string, hubId: string): Promise<readonly HubInstall[]>;
+  refreshResult(scopeId: string, hubId: string): Promise<HubRefreshResult | null>;
+  revocationCards(scopeId: string, after: number, limit: number): Promise<readonly { after: number; result: HubRefreshResult }[]>;
   saveFeed(scopeId: string, feed: HubRevocationFeed): Promise<void>;
   hubReceipt(scopeId: string, commandId: string): Promise<HubReceipt | null>;
   finish(receipt: HubReceipt, event: AuditEvent): Promise<void>;
 }
-export type HubClientAction = 'inspect' | 'sources.add' | 'sources.remove' | 'install' | 'update' | 'uninstall' | 'export';
+export type HubClientAction = 'inspect' | 'sources.add' | 'sources.remove' | 'install' | 'update' | 'uninstall' | 'export' | 'refresh';
 export interface HubClientDependencies {
   readonly catalog: AgentCatalogDependencies;
   readonly openStore: (access: 'read' | 'write') => Promise<HubClientStore>;
@@ -47,6 +59,8 @@ export interface HubClientDependencies {
   /** H7 binds the common policy/card path; absent grants never become authority. */
   readonly authorize: (action: HubClientAction, scopeId: string, principal: VerifiedPrincipal) => Promise<{ revision: string; ruleId: string }>;
   /** H8/H9 resolve signed profiles, moderator rosters and delegation for non-pinned policies. No resolver = refused. */
+  /** H4's governed transport (including first-use card) or an offline signed-file reader; never a raw fetch. */
+  readonly fetchRevocations?: (source: HubSource, afterSequence: number, signal: AbortSignal) => Promise<unknown>;
   readonly resolveTrust?: (source: HubSource, bundle: HubBundle, principal: VerifiedPrincipal, store: AgentCatalogStore, nowMs: number) => Promise<HubClientTrust>;
 }
 export class HubClientError extends Error {

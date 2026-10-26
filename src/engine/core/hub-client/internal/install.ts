@@ -103,7 +103,7 @@ export async function installClientBundles(deps: HubClientDependencies, store: H
       await store.saveInstall(prior, { ...prior, state: 'retired', revision: prior.revision + 1 });
     }
     const record: HubInstall = { schemaVersion: 1, scopeId: command.scopeId, hubId: source.hubId, packageId: manifest.packageId, version: manifest.version,
-      manifestDigest: bundle.envelope.payloadDigest, publisherKeyId: trust.publisher.keyId, publisherKind, state: 'installed', revision: 1, items: installedItems,
+      manifestDigest: bundle.envelope.payloadDigest, publisherKeyId: trust.publisher.keyId, signerKeyIds: bundle.envelope.signatures.map(s => s.keyId), publisherKind, state: 'installed', revision: 1, items: installedItems,
       bundle: await deps.artifacts.put(command.scopeId, encodeHubBundle(bundle)), atMs: deps.catalog.now(), sourceRevision: source.revision };
     await store.saveInstall(null, record); results.push(record);
   }

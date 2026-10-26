@@ -43,5 +43,9 @@
   "hub.tool.publish": "Publish a signed package through the Hub authority.",
   "hub.tool.review": "Submit an independent signed Hub review.",
   "hub.tool.yank": "Withdraw a Hub version from new installation.",
-  "hub.tool.revoke": "Revoke a Hub version through its signed feed."
+  "hub.tool.revoke": "Revoke a Hub version through its signed feed.",
+  "hub.revocation.withdrawn": "Hub content or signed-feed freshness could not be verified. Its installed items are withheld from new agent selection. Inspect the source and refresh; admitted Runs keep their frozen agent.",
+  "hub.revocation.restored": "A fresh verified Hub feed cleared the freshness withdrawal. Your standing changes remain in effect.",
+  "hub.revocation.revoked": "The signed Hub feed revoked installed content. It is excluded from new agent selection. Inspect the package before choosing a replacement.",
+  "hub.revocation.yanked": "The Hub withdrew this content from new installation. Existing use continues."
 }

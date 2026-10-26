@@ -8,8 +8,8 @@ import { createMcpHandler } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { bundle as portableBundle } from '../../fixtures/hub-client.js';
 import { HUB_LIMITS, canonicalHubJson, type HubEnvelope, type HubPackageSignature } from '#domain/core/hub/index.js';
-import { buildHubPackage, buildHubSkillDocument, hubPackageSignatureMessage, skillContentV2Digest, skillSignatureV2Message } from '#engine/core/hub/index.js';
-import { HubServerApplication, HubServerError, requireHubDependencies, type HubServerContext, type HubServerStore, type HubStoredVersion } from '#engine/core/hub-server/index.js';
+import { buildHubPackage, buildHubSkillDocument, hubPackageSignatureMessage, verifyHubRevocationFeed, skillContentV2Digest, skillSignatureV2Message } from '#engine/core/hub/index.js';
+import { HubServerApplication, HubRevocationApplication, hubRevocationRequestMessage, HubServerError, requireHubDependencies, type HubServerContext, type HubServerStore, type HubStoredVersion } from '#engine/core/hub-server/index.js';
 import { openHubStore } from '#adapters/core/hub-store/index.js';
 import { createHubSkillsServer, createHubHttpHandler } from '#surfaces/core/hub-mcp/index.js';
 import { EMPTY_KNOWN_SECRETS, ed25519Signer, sha256, signatureMessage, verifyEd25519 } from '#platform/index.js';
@@ -124,6 +124,7 @@ it('rechecks authority after artifact awaits and rolls back a failed receipt wit
   await expect(app.publish(context, b.manifest, b.envelope, b.files)).rejects.toThrow(code('HUB_SERVER_DENIED'));
   f.allow();
   const store: HubServerStore = { ...f.store,
+    feedEntries: f.store.feedEntries.bind(f.store), latestFeed: f.store.latestFeed.bind(f.store), revocationReceipt: f.store.revocationReceipt.bind(f.store),
     key: f.store.key.bind(f.store), get: f.store.get.bind(f.store), latest: f.store.latest.bind(f.store), publishesSince: f.store.publishesSince.bind(f.store), skills: f.store.skills.bind(f.store),
     transaction: work => f.store.transaction(tx => work(new Proxy(tx, { get(target, prop, receiver) {
       if (prop === 'appendReceipt') return async () => { throw new HubServerError('HUB_STORE_CONFLICT'); };
@@ -306,14 +307,14 @@ it('authenticates each modern HTTP request, serves resource metadata and delegat
     expect(client.getNegotiatedProtocolVersion()).toBe('2026-07-28');
     expect(client.getServerCapabilities()?.extensions?.[extensionId]).toEqual({});
     const tools = await client.listTools();
-    expect(tools.tools.map(tool => tool.name)).toEqual(['hub_publish', 'hub_review']);
+    expect(tools.tools.map(tool => tool.name)).toEqual(['hub_publish', 'hub_review', 'hub_yank', 'hub_revoke']);
     const b = bundle(), wireBundle = { manifest: b.manifest, envelope: b.envelope, files: b.files.map(file => ({ path: file.path, base64: Buffer.from(file.bytes).toString('base64') })) };
     const published = await client.callTool({ name: 'hub_publish', arguments: { bundle: wireBundle } }, { toolDefinition: tools.tools.find(tool => tool.name === 'hub_publish')! });
     expect(published.isError).not.toBe(true);
     expect((await f.app.inspect(context, 'acme/invoice', '1.0.0')).envelope.signatures.map(sig => sig.role)).toEqual(['publisher', 'hub']);
     const result = await client.request({ method: 'hub/packages/list', params: {} }, z.object({ value: z.object({ hubId: z.string(), packages: z.array(z.unknown()) }) }));
     expect(result.value.hubId).toBe(hub.keyId); expect(result.value.packages).toHaveLength(1);
-    expect(result.value.packages[0]).toMatchObject({ revocationState: 'unknown', envelope: { signatures: expect.arrayContaining([expect.objectContaining({ role: 'publisher' }), expect.objectContaining({ role: 'hub' })]) } });
+    expect(result.value.packages[0]).toMatchObject({ revocationState: 'clear', envelope: { signatures: expect.arrayContaining([expect.objectContaining({ role: 'publisher' }), expect.objectContaining({ role: 'hub' })]) } });
     const fetched = await client.request({ method: 'hub/packages/get', params: { packageId: 'acme/invoice', version: '1.0.0' } }, z.object({ value: z.object({ bundle: z.object({ manifest: z.unknown(), files: z.array(z.unknown()) }) }) }));
     expect(fetched.value.bundle.files).toHaveLength(2);
     await expect(client.request({ method: 'hub/agents/get', params: { packageId: 'acme/invoice', version: '1.0.0', agentId: 'missing' } }, z.unknown())).rejects.toThrow();
@@ -321,7 +322,57 @@ it('authenticates each modern HTTP request, serves resource metadata and delegat
     await f.app.publish(context, portable.manifest, { ...portable.envelope, signatures: portable.envelope.signatures.filter(sig => sig.role === 'publisher') }, portable.files);
     const agent = await client.request({ method: 'hub/agents/get', params: { packageId: 'acme/payable', version: '1.0.0', agentId: 'payable-agent' } }, z.object({ value: z.object({ agent: z.object({ agentId: z.string(), persona: z.string() }) }) }));
     expect(agent.value.agent).toEqual({ agentId: 'payable-agent', persona: 'Review the business record.' });
+    const withdrawal = { schemaVersion: 1 as const, commandId: 'wire-yank', authority: 'publisher' as const, kind: 'package-version' as const, id: 'acme/invoice@1.0.0', reason: 'superseded', keyId: publisher.keyId };
+    const signedWithdrawal = { ...withdrawal, signature: publisher.sign(hubRevocationRequestMessage(hub.keyId, context, 'yank', withdrawal)).toString('base64') };
+    await client.callTool({ name: 'hub_yank', arguments: { input: signedWithdrawal } }, { toolDefinition: tools.tools.find(tool => tool.name === 'hub_yank')! });
+    const wireFeed = await client.request({ method: 'hub/revocations/get', params: { input: { afterSequence: 0 } } }, z.object({ value: z.object({ sequence: z.number(), entries: z.array(z.object({ severity: z.string() })) }) }));
+    expect(wireFeed.value.entries).toEqual([expect.objectContaining({ severity: 'yank' })]);
+    expect(await f.app.revocationState(context, 'acme/invoice', '1.0.0')).toBe('yanked');
     actor = { ...context, scopeId: 'other' };
     await expect(client.request({ method: 'hub/packages/list', params: {} }, z.unknown())).rejects.toThrow();
   } finally { await client.close(); await handler.close(); }
+});
+
+it('signs append-only revocations, heartbeat/catch-up feeds and publisher-bound withdrawals with durable replay (H5 G3/G5/G10/G25)', async c => {
+  const f = await fixture(c); await publish(f);
+  const app = new HubRevocationApplication(f.ports);
+  const command = { schemaVersion: 1 as const, commandId: 'withdraw-1', authority: 'publisher' as const, kind: 'package-version' as const,
+    id: 'acme/invoice@1.0.0', reason: 'withdrawn-by-author', keyId: publisher.keyId };
+  const signed = { ...command, signature: publisher.sign(hubRevocationRequestMessage(hub.keyId, context, 'yank', command)).toString('base64') };
+  await expect(app.withdraw(context, 'yank', command)).rejects.toThrow(code('HUB_SERVER_DENIED'));
+  const result = await app.withdraw(context, 'yank', signed);
+  expect(result.feed.entries).toEqual([{ kind: 'package-version', id: 'acme/invoice@1.0.0', severity: 'yank', reason: 'withdrawn-by-author', atMs: 200 }]);
+  expect(await app.withdraw(context, 'yank', signed)).toMatchObject({ replayed: true, feed: result.feed });
+  await expect(app.withdraw(context, 'revoke', signed)).rejects.toThrow(code('HUB_SIGNATURE_INVALID'));
+  const aiContext = { ...context, principal: { id: 'ai', kind: 'ai' as const } };
+  await expect(app.withdraw(aiContext, 'revoke', { ...command, authority: 'operator' })).rejects.toThrow(code('HUB_SERVER_DENIED'));
+  await expect(app.withdraw({ ...context, scopeId: 'other' }, 'yank', signed)).rejects.toThrow(code('HUB_SERVER_DENIED'));
+  await expect(app.withdraw(reviewContext, 'yank', signed)).rejects.toThrow(code('HUB_SERVER_DENIED'));
+  f.deny(); await expect(app.withdraw(context, 'yank', signed)).rejects.toThrow(code('HUB_SERVER_DENIED')); f.allow();
+  expect(await f.app.revocationState(context, 'acme/invoice', '1.0.0')).toBe('yanked');
+  const catchup = await app.revocations(context, { afterSequence: 0 });
+  expect(catchup.sequence).toBe(2); expect(catchup.entries).toEqual(result.feed.entries);
+  f.ports.now = () => 201;
+  const heartbeat = await app.revocations(context, { afterSequence: catchup.sequence });
+  expect(heartbeat.entries).toEqual([]); expect(heartbeat.sequence).toBe(3); expect(heartbeat.issuedAtMs).toBe(201);
+  expect(verifyHubRevocationFeed(heartbeat, { hubId: hub.keyId, key: f.ports.attestor().key, nowMs: 201, previous: catchup })).toEqual(heartbeat);
+  expect(() => verifyHubRevocationFeed(catchup, { hubId: hub.keyId, key: f.ports.attestor().key, nowMs: 201, previous: heartbeat })).toThrow(code('HUB_FEED_REPLAYED'));
+  // Offline installations that missed both the event and the heartbeat still receive the original withdrawal.
+  const reopened = openHubStore(f.options); closers.push(reopened.close);
+  const again = await new HubRevocationApplication({ ...f.ports, store: reopened.store }).revocations(context, {});
+  expect(again.entries).toEqual(result.feed.entries); expect(again.sequence).toBe(4);
+  await app.withdraw(admin, 'revoke', { schemaVersion: 1, commandId: 'revoke-key', authority: 'operator', kind: 'key', id: publisher.keyId, reason: 'compromised' });
+  await expect(publish(f, bundle('1.0.1'))).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
+  expect(await f.app.revocationState(context, 'acme/invoice', '1.0.0')).toBe('revoked');
+});
+
+it('rolls back feed/receipt writes on cancellation and lost authority while signing (H5)', async c => {
+  const f = await fixture(c); await publish(f);
+  const command = { schemaVersion: 1, commandId: 'operator-revoke', authority: 'operator', kind: 'package-version', id: 'acme/invoice@1.0.0', reason: 'compromised' };
+  const app = new HubRevocationApplication({ ...f.ports, attestor: () => ({ key: f.ports.attestor().key, signer: { ...hub, sign: async message => { f.deny(); return hub.sign(message); } } }) });
+  await expect(app.withdraw(admin, 'revoke', command)).rejects.toThrow(code('HUB_SERVER_DENIED')); f.allow();
+  expect(await f.store.latestFeed()).toBeNull();
+  const controller = new AbortController(); controller.abort();
+  await expect(new HubRevocationApplication(f.ports).withdraw(admin, 'revoke', command, controller.signal)).rejects.toThrow();
+  expect(await f.store.revocationReceipt('operator-revoke')).toBeNull();
 });

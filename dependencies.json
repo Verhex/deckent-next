@@ -40,7 +40,8 @@
       "kind": "runtime",
       "reviewedVersion": "2.3.1",
       "owners": [
-        "src/adapters/core/mcp-client"
+        "src/adapters/core/mcp-client",
+        "src/adapters/core/hub-http"
       ],
       "purpose": "MCP client for the runtime service's external MCP tool servers (stdio launch, list/pin, call).",
       "features": [

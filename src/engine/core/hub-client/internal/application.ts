@@ -1,13 +1,14 @@
 import { z } from 'zod';
-import { AGENT_CATALOG_LIMITS, HUB_LIMITS, HUB_TRUST_POLICIES, HubError, requireBoundedHubJson, canonicalHubJson, identitySchema, isAiPrincipal, signerPublicKeySchema, hubRevocationFeedSchema,
+import { AGENT_CATALOG_LIMITS, HUB_LIMITS, HUB_REVOCATION_REFRESH_MS, HUB_TRUST_POLICIES, HubError, requireBoundedHubJson, canonicalHubJson, identitySchema, isAiPrincipal, signerPublicKeySchema, hubRevocationFeedSchema, type HubRevocationFeed,
   type VerifiedPrincipal } from '#domain/index.js';
-import { ed25519KeyId, sha256 } from '#platform/index.js';
+import { ed25519KeyId, sha256, t, type Locale } from '#platform/index.js';
+import { verifyHubRevocationFeed } from '#engine/core/hub/index.js';
 import { canSignCatalogActions } from '#engine/core/agent-catalog/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
 import { HubClientError, hubClientCommandSchema, hubInstallCommandSchema, hubSourceSchema, type HubClientAction, type HubClientDependencies,
-  type HubClientStore, type HubInstall, type HubReceipt, type HubSource } from './contract.js';
+  type HubRefreshResult, type HubClientStore, type HubInstall, type HubReceipt, type HubSource } from './contract.js';
 import { decodeHubBundle, encodeHubBundle } from './bundle.js';
-import { acceptClientFeed } from './verification.js';
+import { acceptClientFeed, verifyClientBundle } from './verification.js';
 import { installClientBundles, retireClientInstall, verifyInstalledClientBundle } from './install.js';
 const sourceCommand = hubClientCommandSchema.extend({ expectedRevision: z.number().int().positive().nullable(), publicKey: signerPublicKeySchema,
   endpoint: z.string().min(1).max(2048), local: z.boolean().default(false), label: z.string().min(1).max(256),
@@ -25,6 +26,86 @@ export class HubClientApplication {
   private async read<T>(scopeId: string, credential: unknown, work: (store: HubClientStore, principal: VerifiedPrincipal) => Promise<T>): Promise<T> {
     const { principal } = await this.admit('inspect', scopeId, credential), store = await this.deps.openStore('read');
     try { return await work(store, principal); } finally { store.close(); }
+  }
+  async revocationCards(input: unknown, credential?: unknown, locale?: Locale) {
+    const query = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema, after: z.number().int().safe().nonnegative().default(0),
+      limit: z.number().int().min(1).max(HUB_LIMITS.searchPageMax).default(HUB_LIMITS.searchPageMax) }).strict().parse(input);
+    const messages = { withdrawn: t('hub.revocation.withdrawn', {}, locale), restored: t('hub.revocation.restored', {}, locale),
+      revoked: t('hub.revocation.revoked', {}, locale), yanked: t('hub.revocation.yanked', {}, locale) };
+    return this.read(query.scopeId, credential, async (store, principal) => {
+      if (isAiPrincipal(principal)) throw new HubClientError('HUB_AUTHORITY_REFUSED');
+      return (await store.revocationCards(query.scopeId, query.after, query.limit)).map(row => ({ after: row.after,
+        items: row.result.items, cards: row.result.cards.map(card => ({ ...card, message: messages[card.event] })) }));
+    });
+  }
+  async applyRevocations(input: unknown, credential?: unknown) {
+    const command = hubClientCommandSchema.extend({ feed: hubRevocationFeedSchema }).strict().parse(input);
+    return this.applyFeed(command, credential, true);
+  }
+  private async applyFeed(command: { schemaVersion: 1; scopeId: string; commandId: string; hubId: string; feed: HubRevocationFeed }, credential: unknown, strict: boolean) {
+    return this.write('refresh', command, credential, async (store, principal) => {
+      const source = await this.source(store, command.scopeId, command.hubId);
+      const feed = strict ? verifyHubRevocationFeed(command.feed, { hubId: source.hubId, key: { keyId: source.hubId, publicKey: source.publicKey, role: 'hub', active: true },
+        nowMs: this.deps.catalog.now(), previous: await store.feed(source.scopeId, source.hubId) })
+        : await acceptClientFeed(store, source, command.feed, this.deps.catalog.now(), true);
+      if (strict) await store.saveFeed(source.scopeId, feed);
+      return this.refreshState(store, source, feed, principal);
+    });
+  }
+  /** Scheduled/offline tick: record withdrawal even when transport fails. No network path is created here. */
+  async refreshRevocations(input: unknown, credential?: unknown, signal: AbortSignal = new AbortController().signal) {
+    const command = hubClientCommandSchema.extend({ force: z.boolean().default(false) }).strict().parse(input);
+    await this.admit('refresh', command.scopeId, credential);
+    const state = await this.read(command.scopeId, credential, async store => ({ source: await this.source(store, command.scopeId, command.hubId), feed: await store.feed(command.scopeId, command.hubId) }));
+    const due = command.force || !state.feed || this.deps.catalog.now() >= state.feed.issuedAtMs + HUB_REVOCATION_REFRESH_MS
+      || this.deps.catalog.now() >= state.feed.nextRefreshBy || this.deps.catalog.now() - state.feed.issuedAtMs >= HUB_LIMITS.feedMaxAgeMs;
+    let received: unknown, failure: unknown;
+    if (due && this.deps.fetchRevocations) {
+      signal.throwIfAborted();
+      try { received = await this.deps.fetchRevocations(state.source, state.feed?.sequence ?? 0, AbortSignal.any([signal, AbortSignal.timeout(HUB_LIMITS.fetchTimeoutMs)])); }
+      catch (error) { failure = error; }
+      signal.throwIfAborted();
+    }
+    if (received !== undefined) {
+      try { return await this.applyRevocations({ schemaVersion: command.schemaVersion, scopeId: command.scopeId, hubId: command.hubId, commandId: command.commandId, feed: received }, credential); }
+      catch (error) { failure = error; }
+    }
+    const result = await this.write('refresh', command, credential, async (store, principal) => {
+      const source = await this.source(store, command.scopeId, command.hubId), feed = await store.feed(command.scopeId, command.hubId);
+      return this.refreshState(store, source, feed, principal);
+    });
+    if (failure) throw failure;
+    return result;
+  }
+  private async refreshState(store: HubClientStore, source: HubSource, feed: HubRevocationFeed | null, principal: VerifiedPrincipal): Promise<HubRefreshResult> {
+    const previous = await store.refreshResult(source.scopeId, source.hubId), items: HubRefreshResult['items'] = [], packages: HubRefreshResult['packages'] = [];
+    let verified = true;
+    for (const installed of await store.installations(source.scopeId, source.hubId)) {
+      let keyIds = installed.signerKeyIds;
+      try { if (!keyIds) {
+        const bundle = decodeHubBundle(await this.deps.artifacts.read(source.scopeId, installed.bundle));
+        if (bundle.manifest.packageId !== installed.packageId || bundle.manifest.version !== installed.version || bundle.envelope.payloadDigest !== installed.manifestDigest) throw new HubClientError('HUB_STORE_CORRUPT');
+        await verifyClientBundle(this.deps, store, source, bundle, principal);
+        keyIds = bundle.envelope.signatures.map(row => row.keyId);
+      } } catch { verified = false; }
+      if (keyIds) packages.push({ packageId: installed.packageId, version: installed.version, signerKeyIds: [...keyIds] });
+      for (const item of installed.items) items.push({ kind: item.kind, id: item.id, revision: item.revision,
+        upstream: await store.upstream(source.scopeId, item.kind, item.id, item.revision, this.deps.catalog.now(), keyIds) });
+      if (installed.state === 'installed' && items.slice(-installed.items.length).every(item => item.upstream === 'clear' || item.upstream === 'yanked')) {
+        try { await verifyInstalledClientBundle(this.deps, store, source, installed, principal); }
+        catch { verified = false; }
+      }
+    }
+    // A bad cache cannot roll back signed security knowledge or silently restore selection.
+    if (!verified) for (const item of items) if (item.upstream !== 'revoked') item.upstream = 'withdrawn';
+    const cards: HubRefreshResult['cards'] = [], now = this.deps.catalog.now(), sequence = feed?.sequence ?? 0;
+    for (const event of ['withdrawn', 'revoked', 'yanked'] as const) {
+      const affected = items.some(item => item.upstream === event && !previous?.items.some(old => old.kind === item.kind && old.id === item.id && old.revision === item.revision && old.upstream === event));
+      if (affected) cards.push({ event, hubId: source.hubId, sequence, atMs: now });
+    }
+    if (previous?.items.some(old => old.upstream === 'withdrawn' && items.some(item => item.kind === old.kind && item.id === old.id && item.revision === old.revision && item.upstream === 'clear')))
+      cards.push({ event: 'restored', hubId: source.hubId, sequence, atMs: now });
+    return { schemaVersion: 1, kind: 'revocations', hubId: source.hubId, verified, sequence, packages, items, cards };
   }
   async listSources(input: unknown, credential?: unknown): Promise<readonly HubSource[]> {
     const query = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema }).strict().parse(input);
@@ -92,6 +173,16 @@ export class HubClientApplication {
       return decodeHubBundle(bytes);
     });
     const feed = hubRevocationFeedSchema.parse(parsed.feed), feeds = Object.fromEntries(Object.entries(parsed.feeds).map(([id, value]) => [id, hubRevocationFeedSchema.parse(value)]));
+    // Revocation knowledge survives a later refused/failed install; catalog writes remain all-or-nothing.
+    const providedFeeds = new Map<string, HubRevocationFeed>([[parsed.hubId, feed], ...Object.entries(feeds).filter(([id]) => id !== parsed.hubId)]);
+    for (const [hubId, value] of providedFeeds) {
+      try { await this.applyFeed({ schemaVersion: 1, scopeId: parsed.scopeId, hubId, feed: value,
+        commandId: sha256(canonicalHubJson({ commandId: parsed.commandId, hubId, phase: 'revocations' })) }, credential, false); }
+      catch (error) {
+        if (hubId !== parsed.hubId && error instanceof HubClientError && error.code === 'HUB_SOURCE_NOT_FOUND') throw new HubClientError('HUB_DEPENDENCY_REFUSED');
+        throw error;
+      }
+    }
     // Receipts cover exact bytes without putting base64 payloads or filesystem paths in audit subjects.
     const command = { ...parsed, bundles: parsed.bundles.map(bytes => sha256(bytes as Uint8Array)), feed, feeds };
     return this.write(update ? 'update' : 'install', command, credential, async (store, principal) => {

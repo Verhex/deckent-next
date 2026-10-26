@@ -9,24 +9,25 @@ export class HubServerApplication {
   constructor(readonly ports: HubServerPorts) {
     if (!/^[a-f0-9]{64}$/.test(ports.hubId) || !ports.scopeId) throw new HubServerError('HUB_STORE_UNSAFE');
   }
-  private async authorize(context: HubServerContext, action: HubServerAction, resource: string, digest: string) {
+  protected async authorize(context: HubServerContext, action: HubServerAction, resource: string, digest: string) {
     if (context.scopeId !== this.ports.scopeId || !hubActorSchema.safeParse(context.principal).success) throw new HubServerError('HUB_SERVER_DENIED');
     await this.ports.authority.require(context, action, resource, digest);
   }
-  private async registered(keyId: string, role: HubRegisteredKey['role'], store: Pick<HubServerTransaction, 'key'> = this.ports.store): Promise<HubRegisteredKey> {
+  protected async registered(keyId: string, role: HubRegisteredKey['role'], store: Pick<HubServerTransaction, 'key' | 'feedEntries'> = this.ports.store): Promise<HubRegisteredKey> {
     const key = await store.key(keyId, role);
-    if (!key?.active) throw new HubError('HUB_SIGNER_UNTRUSTED');
+    if (!key?.active || (await store.feedEntries(0)).some(entry => entry.severity === 'revoke' && (entry.kind === 'key' && entry.id === keyId
+      || entry.kind === 'publisher' && entry.id === key.publisherId))) throw new HubError('HUB_SIGNER_UNTRUSTED');
     return key;
   }
-  private bound(context: HubServerContext, key: HubRegisteredKey) {
+  protected bound(context: HubServerContext, key: HubRegisteredKey) {
     if (key.principal.id !== context.principal.id || key.principal.kind !== context.principal.kind) throw new HubServerError('HUB_SERVER_DENIED');
   }
-  private clock() {
+  protected clock() {
     const now = this.ports.now();
     if (!Number.isSafeInteger(now) || now < 0) throw new HubServerError('HUB_STORE_UNSAFE');
     return now;
   }
-  private async signer(now: number) {
+  protected async signer(now: number) {
     const attestor = await this.ports.attestor(now);
     if (!attestor.key.active || attestor.key.role !== 'hub' || attestor.key.keyId !== attestor.signer.keyId
       || ed25519KeyId(attestor.signer.spki) !== attestor.key.keyId || attestor.key.publicKey !== attestor.signer.spki.toString('base64')) throw new HubError('HUB_SIGNER_UNTRUSTED');
@@ -57,7 +58,7 @@ export class HubServerApplication {
     if (inputFiles.length + 2 > HUB_LIMITS.packageMaxFiles || inputFiles.reduce((n, f) => n + f.bytes.byteLength, 0) > HUB_LIMITS.packageMaxBytes) throw new HubError('HUB_LIMIT_EXCEEDED');
     const files = inputFiles.map(f => ({ path: f.path, bytes: Buffer.from(f.bytes) }));
     const envelope = parseHubContract(hubEnvelopeSchema, envelopeInput, 'HUB_ENVELOPE_INVALID', 'HUB_ENVELOPE_SCHEMA_UNSUPPORTED');
-    const verify = async (store: Pick<HubServerTransaction, 'key'> = this.ports.store) => {
+    const verify = async (store: Pick<HubServerTransaction, 'key' | 'feedEntries'> = this.ports.store) => {
       const publisherSignature = (envelope as HubEnvelope)?.signatures?.find(s => s.role === 'publisher');
       const publisher = await this.registered(publisherSignature?.keyId ?? '', 'publisher', store);
       this.bound(context, publisher);
@@ -137,7 +138,7 @@ export class HubServerApplication {
   private async sign(manifest: HubStoredVersion['manifest'], envelope: HubEnvelope, signer: HubServerSigner, signature: Omit<HubPackageSignature, 'algorithm' | 'keyId' | 'value'>): Promise<HubPackageSignature> {
     return { ...signature, keyId: signer.keyId, algorithm: 'ed25519', value: Buffer.from(await signer.sign(hubPackageSignatureMessage(manifest, envelope, signature))).toString('base64') };
   }
-  private async requireVersion(packageId: string, version: string, store: Pick<HubServerTransaction, 'get'> = this.ports.store): Promise<HubStoredVersion> {
+  protected async requireVersion(packageId: string, version: string, store: Pick<HubServerTransaction, 'get'> = this.ports.store): Promise<HubStoredVersion> {
     const row = await store.get(packageId, version);
     if (!row) throw new HubServerError('HUB_RESOURCE_UNKNOWN');
     return row;
@@ -157,8 +158,14 @@ export class HubServerApplication {
     const refs = await this.ports.store.packages(after, limit);
     return Promise.all(refs.map(async ref => {
       const row = await this.inspect(context, ref.packageId, ref.version);
-      return { key: ref.key, manifest: row.manifest, envelope: row.envelope, revocationState: 'unknown' as const };
+      return { key: ref.key, manifest: row.manifest, envelope: row.envelope, revocationState: await this.revocationState(context, ref.packageId, ref.version) };
     }));
+  }
+  async revocationState(context: HubServerContext, packageId: string, version: string) {
+    const row = await this.inspect(context, packageId, version), keys = row.envelope.signatures.map(signature => signature.keyId);
+    const entries = (await this.ports.store.feedEntries(0)).filter(entry => entry.kind === 'key' ? keys.includes(entry.id)
+      : entry.kind === 'publisher' ? entry.id === packageId.split('/')[0] : entry.id === `${packageId}@${version}`);
+    return entries.some(entry => entry.severity === 'revoke') ? 'revoked' : entries.length ? 'yanked' : 'clear';
   }
   async readFile(context: HubServerContext, packageId: string, version: string, path: string) {
     const row = await this.inspect(context, packageId, version), file = row.files.find(f => f.path === path);

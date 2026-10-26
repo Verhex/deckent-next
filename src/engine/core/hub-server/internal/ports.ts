@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identitySchema, type HubPackage, type HubEnvelope } from '#domain/index.js';
+import { identitySchema, type HubPackage, type HubEnvelope, type HubRevocationFeed } from '#domain/index.js';
 import { type ArtifactReceipt, type ArtifactStore } from '#capabilities/index.js';
 import { ErrorRegistry, type KnownSecretSnapshot, type Ed25519Signer } from '#platform/index.js';
 import type { HubVerificationKey } from '#engine/core/hub/index.js';
@@ -7,7 +7,7 @@ import type { HubVerificationKey } from '#engine/core/hub/index.js';
 export const hubActorSchema = z.object({ id: identitySchema, kind: z.enum(['person', 'ai', 'system']) }).strict().readonly();
 export type HubActor = z.infer<typeof hubActorSchema>;
 export interface HubServerContext { readonly scopeId: string; readonly principal: HubActor }
-export type HubServerAction = 'publish' | 'review' | 'read' | 'register';
+export type HubServerAction = 'publish' | 'review' | 'read' | 'register' | 'yank' | 'revoke' | 'operate' | 'feed';
 /** Trusted transport supplies identity; the installation's existing policy owner checks scope/action/resource/digest. No default grant. */
 export interface HubServerAuthority {
   require(context: HubServerContext, action: HubServerAction, resource: string, digest: string): HubAwaitable<void>;
@@ -26,6 +26,7 @@ export interface HubServerReceipt {
 }
 export interface HubReceiptEvent {
   readonly action: HubServerAction; readonly context: HubServerContext; readonly resource: string; readonly digest: string; readonly atMs: number;
+  readonly feed?: HubRevocationFeed; readonly commandId?: string;
 }
 /** Store mutations occur through the transaction view; artifact writes finish before it. No installation ledger dependency. */
 export type HubAwaitable<T> = T | Promise<T>;
@@ -40,9 +41,12 @@ export interface HubServerTransaction {
   publishesSince(publisherId: string, atMs: number): HubAwaitable<number>;
   skills(after: string, limit: number): HubAwaitable<readonly HubSkillRef[]>;
   packages(after: string, limit: number): HubAwaitable<readonly { readonly key: string; readonly packageId: string; readonly version: string }[]>;
+  latestFeed(): HubAwaitable<HubRevocationFeed | null>;
+  feedEntries(afterSequence: number): HubAwaitable<HubRevocationFeed['entries']>;
+  revocationReceipt(commandId: string): HubAwaitable<{ digest: string; feed: HubRevocationFeed } | null>;
   appendReceipt(event: HubReceiptEvent, signer: HubServerSigner): Promise<HubServerReceipt>;
 }
-export interface HubServerStore extends Pick<HubServerTransaction, 'key' | 'get' | 'latest' | 'publishesSince' | 'skills' | 'packages'> {
+export interface HubServerStore extends Pick<HubServerTransaction, 'key' | 'get' | 'latest' | 'publishesSince' | 'skills' | 'packages' | 'latestFeed' | 'feedEntries' | 'revocationReceipt'> {
   transaction<T>(work: (transaction: HubServerTransaction) => Promise<T>): Promise<T>;
 }
 export interface HubServerPorts {

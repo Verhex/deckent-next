@@ -4,16 +4,16 @@ import { ed25519Signer, signatureMessage } from '#platform/index.js';
 import { SIGNATURE_LABELS, catalogActionBytes } from '#domain/index.js';
 import { SignerKeyApplication } from '#engine/core/agent-catalog/index.js';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { HUB_LIMITS, canonicalHubJson } from '#domain/index.js';
 import { classifyLaunchRefusal } from '#engine/core/runs/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { HubClientApplication, decodeHubBundle, encodeHubBundle, selectedHubSkillFiles } from '#engine/core/hub-client/index.js';
-import { AgentCatalogApplication, AgentStandingApplication, pinnedAgentSkills } from '#engine/core/agent-catalog/index.js';
+import { AgentCatalogApplication, AgentStandingApplication, selectTaskAgents, pinnedAgentSkills } from '#engine/core/agent-catalog/index.js';
 import { readHubPackageFile, writeHubPackageFile } from '#adapters/core/hub-package-file/index.js';
 import { ai, bundle, count, feed, fixture, hub, install, otherPublisher, personTrust, publisher, source } from '../../fixtures/hub-client.js';
 const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function setup(extra: Parameters<typeof fixture>[0] = {}) { const f = await fixture(extra); roots.push(f.root); await f.app.addSource(source); return f; }
 const code = (value: string) => expect.objectContaining({ code: value });
 const query = { schemaVersion: 1, scopeId: 's', hubId: hub.keyId, packageId: 'acme/invoice' };
@@ -103,11 +103,12 @@ it('requires a complete exact dependency closure and installs it children-first,
   expect(count(f.path, 'skill_definitions')).toBe(2); expect(count(f.path, 'hub_installs')).toBe(2);
 });
 
-it('rolls back all prior catalog writes, feed and receipt when the last item fails (G15/G21)', async () => {
+it('rolls back all catalog writes on the last-item failure, retaining independently verified revocations (G15/G21)', async () => {
   const f = await setup();
   await expect(f.app.installFile(install('crash', bundle({ hints: ['unknown'] })))).rejects.toThrow(code('HUB_DEPENDENCY_REFUSED'));
-  for (const table of ['skill_definitions', 'skill_definition_revisions', 'agent_definitions', 'hub_installs', 'hub_revocation_snapshots']) expect(count(f.path, table)).toBe(0);
-  expect(count(f.path, 'hub_client_receipts')).toBe(1); // source card only
+  for (const table of ['skill_definitions', 'skill_definition_revisions', 'agent_definitions', 'hub_installs']) expect(count(f.path, table)).toBe(0);
+  expect(count(f.path, 'hub_revocation_snapshots')).toBe(1); // verified security knowledge survives install failure
+  expect(count(f.path, 'hub_client_receipts')).toBe(2); // source + independently accepted feed
   await f.app.installFile(install('crash', bundle({ hints: ['unknown'] }), { workClassMapping: { unknown: 'invoice-review' } }));
   expect(count(f.path, 'skill_definition_revisions')).toBe(1);
 });
@@ -285,4 +286,142 @@ it('delivers only frozen selected v2 files, retaining an old Run pin through upd
     await expect(selectedHubSkillFiles(store, f.deps.artifacts, 'other', seal)).rejects.toThrow(code('HUB_STORE_CORRUPT'));
     await expect(selectedHubSkillFiles(store, { read: async () => Buffer.from('changed') }, 's', seal)).rejects.toThrow();
   } finally { store.close(); }
+});
+
+const refresh = (commandId: string, value = feed()) => ({ schemaVersion: 1, scopeId: 's', commandId, hubId: hub.keyId, feed: value });
+async function selection(f: Awaited<ReturnType<typeof setup>>) {
+  const store = await f.catalog.openStore('read');
+  try { return await selectTaskAgents({ schemaVersion: 4, revision: 1, tasks: [{ id: 't', kind: 'coding', workClass: 'invoice-review', dependencies: [],
+    acceptanceCriteria: ['exit'], workInput: { schemaVersion: 2, task: 'Review invoice.', scope: { paths: [] }, acceptance: 'Invoice reviewed.' } }], criterionDefinitions: [] },
+    { schemaVersion: 1, revision: 'test', classes: [{ id: 'invoice-review', defaultEffort: 'medium' }], bindings: [{ kind: 'coding', classId: 'invoice-review' }] }, 's', store); }
+  finally { store.close(); }
+}
+
+it('applies revocation durably, excludes agent/skill pins from selection, and preserves frozen content and standings (H5 G3)', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(1000);
+  const f = await setup(); await f.app.installFile(install());
+  const before = await selection(f); expect(before.get('t')?.seal.agentId).toBe('invoice-agent');
+  await new AgentCatalogApplication(f.catalog).defineAgent({ schemaVersion: 1, scopeId: 's', commandId: 'local-agent', agentId: 'local-person', expectedRevision: null,
+    content: { name: 'Local reviewer', persona: 'Review.', workClasses: ['invoice-review'], skills: before.get('t')!.seal.skills, parentAgentId: null } });
+  const revoked = feed({ sequence: 2, issuedAtMs: 1000, nextRefreshBy: 3000, entries: [{ kind: 'key', id: publisher.keyId, severity: 'revoke', reason: 'compromised', atMs: 900 }] });
+  const result = await f.app.applyRevocations(refresh('revoke', revoked));
+  expect(result.result).toMatchObject({ kind: 'revocations', items: expect.arrayContaining([expect.objectContaining({ kind: 'skill', upstream: 'revoked' }), expect.objectContaining({ kind: 'agent', upstream: 'revoked' })]), cards: [expect.objectContaining({ event: 'revoked' })] });
+  expect(await f.app.applyRevocations(refresh('revoke', revoked))).toMatchObject({ replayed: true });
+  expect((await selection(f)).size).toBe(0);
+  const store = await f.catalog.openStore('read');
+  try {
+    expect((await store.standings('s', 'invoice-agent', 1))[0]?.standing).toBe('candidate');
+    expect((await pinnedAgentSkills(store, (await store.loadAgent('s', 'invoice-agent', 1))!))[0]?.content.text).toBe(before.get('t')!.parts.skills[0]!.text);
+  } finally { store.close(); }
+  await f.app.applyRevocations(refresh('heartbeat', feed({ sequence: 3, issuedAtMs: 1000, nextRefreshBy: 3000 })));
+  expect((await selection(f)).size).toBe(0);
+  const reopened = new HubClientApplication(f.deps);
+  expect(await reopened.revocationCards({ schemaVersion: 1, scopeId: 's' }, undefined, 'tr')).toEqual(expect.arrayContaining([expect.objectContaining({ cards: [expect.objectContaining({ event: 'revoked', message: expect.stringContaining('iptal') })] })]));
+  await expect(reopened.verify(query)).rejects.toThrow(code('HUB_PACKAGE_REVOKED'));
+  await expect(reopened.applyRevocations({ ...refresh('cross', revoked), scopeId: 'other' })).rejects.toThrow(code('HUB_SOURCE_NOT_FOUND'));
+});
+
+it('withdraws on signed-time expiry even with transport failure, then restores freshness without undoing person retire (H5 G4/G26)', async () => {
+  const date = vi.spyOn(Date, 'now').mockReturnValue(1000);
+  const f = await setup(); await f.app.installFile(install());
+  expect((await selection(f)).size).toBe(1);
+  f.time(3000); date.mockReturnValue(3000);
+  expect((await selection(f)).size).toBe(0); // fail-closed before a background tick can run
+  const broken = new HubClientApplication({ ...f.deps, fetchRevocations: async () => { throw new Error('synthetic offline'); } });
+  // Use the refresh command shape: no caller-supplied feed; the signed cached time remains the authority.
+  const command = { schemaVersion: 1, scopeId: 's', commandId: 'offline-tick', hubId: hub.keyId, force: true };
+  await expect(broken.refreshRevocations(command)).rejects.toThrow('synthetic offline');
+  expect(await f.app.revocationCards({ schemaVersion: 1, scopeId: 's' })).toEqual(expect.arrayContaining([expect.objectContaining({ cards: [expect.objectContaining({ event: 'withdrawn' })] })]));
+  await f.app.applyRevocations(refresh('first-fresh', feed({ sequence: 2, issuedAtMs: 3000, nextRefreshBy: 5000 })));
+  expect((await selection(f)).size).toBe(1);
+  f.time(6000); date.mockReturnValue(6000);
+  await f.app.refreshRevocations({ ...command, commandId: 'second-withdrawal' });
+  const standing = new AgentStandingApplication(f.catalog);
+  await standing.change({ schemaVersion: 1, scopeId: 's', commandId: 'person-retire', action: 'retire', agentId: 'invoice-agent', revision: 1,
+    workClass: 'invoice-review', expectedStandingRevision: 1, suggestionId: null });
+  await f.app.applyRevocations(refresh('fresh', feed({ sequence: 3, issuedAtMs: 6000, nextRefreshBy: 8000 })));
+  expect((await selection(f)).size).toBe(0);
+  expect((await new AgentCatalogApplication(f.catalog).inspectAgent({ schemaVersion: 1, scopeId: 's', agentId: 'invoice-agent' }))).toMatchObject({ upstream: 'clear', standings: [expect.objectContaining({ standing: 'retired' })] });
+  expect(await f.app.revocationCards({ schemaVersion: 1, scopeId: 's' })).toEqual(expect.arrayContaining([expect.objectContaining({ cards: [expect.objectContaining({ event: 'restored' })] })]));
+});
+
+it('yank blocks new installs but keeps installed use; rejects replay/tamper and stale signed feeds without losing monotonic state (H5 G5/G25)', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(1000);
+  const f = await setup(); await f.app.installFile(install());
+  const yanked = feed({ sequence: 2, issuedAtMs: 1000, nextRefreshBy: 3000, entries: [{ kind: 'package-version', id: 'acme/invoice@1.0.0', severity: 'yank', reason: 'superseded', atMs: 900 }] });
+  await f.app.applyRevocations(refresh('yank', yanked));
+  expect((await selection(f)).size).toBe(1); await f.app.verify(query);
+  await expect(f.app.installFile(install('new-install', bundle(), { feed: yanked }))).rejects.toThrow(code('HUB_PACKAGE_REVOKED'));
+  await expect(f.app.applyRevocations(refresh('duplicate', yanked))).rejects.toThrow(code('HUB_FEED_REPLAYED'));
+  await expect(f.app.applyRevocations(refresh('tamper', { ...yanked, sequence: 3 }))).rejects.toThrow(code('HUB_SIGNATURE_INVALID'));
+  await expect(f.app.applyRevocations(refresh('older-time', feed({ sequence: 3, issuedAtMs: 99, nextRefreshBy: 3000 })))).rejects.toThrow(code('HUB_FEED_REPLAYED'));
+  f.time(3000);
+  await expect(f.app.applyRevocations(refresh('stale', feed({ sequence: 3, issuedAtMs: 1000, nextRefreshBy: 2000 })))).rejects.toThrow(code('HUB_FEED_STALE'));
+  const store = await f.deps.openStore('read'); try { expect((await store.feed('s', hub.keyId))?.sequence).toBe(2); } finally { store.close(); }
+  await f.app.refreshRevocations({ schemaVersion: 1, scopeId: 's', hubId: hub.keyId, commandId: 'yank-expired' });
+  await f.app.applyRevocations(refresh('fresh-yanked', feed({ sequence: 3, issuedAtMs: 3000, nextRefreshBy: 5000 })));
+  vi.spyOn(Date, 'now').mockReturnValue(3000);
+  expect((await selection(f)).size).toBe(0); // a freshness recovery never restores withdrawn, yanked content
+  f.as(ai); await expect(f.app.revocationCards({ schemaVersion: 1, scopeId: 's' })).rejects.toThrow(code('HUB_AUTHORITY_REFUSED'));
+});
+
+it('refreshes only when due or forced and applies the monotonic signed response through the shared client (H5)', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(1000);
+  let calls = 0;
+  const f = await setup({ fetchRevocations: async (current, after, signal) => { calls++; signal.throwIfAborted();
+    expect(current.hubId).toBe(hub.keyId); expect(after).toBe(1);
+    return feed({ sequence: 2, issuedAtMs: 1000, nextRefreshBy: 3000 }); } });
+  await f.app.installFile(install());
+  const command = { schemaVersion: 1, scopeId: 's', commandId: 'not-due', hubId: hub.keyId };
+  await f.app.refreshRevocations(command); expect(calls).toBe(0);
+  await f.app.refreshRevocations({ ...command, commandId: 'forced', force: true }); expect(calls).toBe(1);
+  const controller = new AbortController(); controller.abort();
+  await expect(f.app.refreshRevocations({ ...command, commandId: 'cancel', force: true }, undefined, controller.signal)).rejects.toThrow();
+  expect(calls).toBe(1);
+});
+
+it('reconstructs signer provenance for pre-H5 installs from verified cached bytes before clearing withdrawal', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(1000);
+  const f = await setup(), open = f.deps.openStore;
+  const app = new HubClientApplication({ ...f.deps, openStore: async access => {
+    const store = await open(access), save = store.saveInstall.bind(store);
+    store.saveInstall = (previous, next) => { const legacy = { ...next }; delete legacy.signerKeyIds; return save(previous, legacy); };
+    return store;
+  } });
+  await app.installFile(install());
+  expect((await selection(f)).size).toBe(0);
+  await f.app.applyRevocations(refresh('metadata', feed({ sequence: 2, issuedAtMs: 1000, nextRefreshBy: 3000 })));
+  expect((await selection(f)).size).toBe(1);
+  const store = await f.deps.openStore('read');
+  try { expect((await store.refreshResult('s', hub.keyId))?.packages[0]?.signerKeyIds).toEqual([publisher.keyId, hub.keyId]); } finally { store.close(); }
+});
+
+it('retains signed revocation and its person card when a subsequent package install is refused', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(1000);
+  const f = await setup(); await f.app.installFile(install());
+  const revoked = feed({ sequence: 2, issuedAtMs: 1000, nextRefreshBy: 3000, entries: [{ kind: 'package-version', id: 'acme/invoice@1.0.0', severity: 'revoke', reason: 'compromised', atMs: 900 }] });
+  await expect(f.app.installFile(install('failing', bundle({ name: 'order', hints: ['unknown'] }), { feed: revoked }))).rejects.toThrow(code('HUB_DEPENDENCY_REFUSED'));
+  const store = await f.deps.openStore('read');
+  try {
+    expect(await store.install('s', hub.keyId, 'acme/order')).toBeNull();
+    expect((await store.feed('s', hub.keyId))?.sequence).toBe(2);
+    expect((await store.refreshResult('s', hub.keyId))?.cards).toEqual([expect.objectContaining({ event: 'revoked' })]);
+  } finally { store.close(); }
+  expect((await selection(f)).size).toBe(0);
+});
+
+it('keeps a valid revocation when another cached package is corrupt, withholding restoration until offline verification succeeds', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(1000);
+  const f = await setup(); await f.app.installFile(install()); await f.app.installFile(install('order', bundle({ name: 'order' })));
+  const order = await f.app.inspect({ ...query, packageId: 'acme/order' });
+  const corrupt = new HubClientApplication({ ...f.deps, artifacts: { put: f.deps.artifacts.put.bind(f.deps.artifacts),
+    read: async (scope, receipt) => receipt.digest === order!.bundle.digest ? Buffer.from('corrupt') : f.deps.artifacts.read(scope, receipt) } });
+  const revoked = feed({ sequence: 2, issuedAtMs: 1000, nextRefreshBy: 3000, entries: [{ kind: 'package-version', id: 'acme/invoice@1.0.0', severity: 'revoke', reason: 'compromised', atMs: 900 }] });
+  await expect(corrupt.applyRevocations(refresh('corrupt-cache', revoked))).resolves.toMatchObject({ result: { verified: false } });
+  let store = await f.deps.openStore('read');
+  try { expect((await store.feed('s', hub.keyId))?.sequence).toBe(2); expect((await store.refreshResult('s', hub.keyId))?.items).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'invoice-agent', upstream: 'revoked' }), expect.objectContaining({ id: 'order-agent', upstream: 'withdrawn' })])); } finally { store.close(); }
+  expect((await selection(f)).size).toBe(0);
+  await f.app.applyRevocations(refresh('reverified', feed({ sequence: 3, issuedAtMs: 1000, nextRefreshBy: 3000 })));
+  expect((await selection(f)).get('t')?.seal.agentId).toBe('order-agent');
+  store = await f.deps.openStore('read'); try { expect((await store.refreshResult('s', hub.keyId))?.items.find(item => item.id === 'invoice-agent')?.upstream).toBe('revoked'); } finally { store.close(); }
 });

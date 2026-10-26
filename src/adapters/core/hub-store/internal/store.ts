@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { canonicalHubJson, hubEnvelopeSchema, hubPackageSchema } from '#domain/index.js';
+import { canonicalHubJson, hubEnvelopeSchema, hubPackageSchema, hubRevocationFeedSchema, HUB_LIMITS, HubError } from '#domain/index.js';
 import { artifactReceiptSchema } from '#capabilities/index.js';
 import { HubServerError, hubRegisteredKeySchema, type HubServerStore, type HubServerTransaction, type HubServerSigner, type HubStoredVersion, type HubRegisteredKey, type HubReceiptEvent } from '#engine/index.js';
 import { canonicalHubManifest, hubPackageFileManifest } from '#engine/index.js';
@@ -56,6 +56,28 @@ class SqliteHubTransaction implements HubServerTransaction {
     return this.db.prepare("SELECT package_id,version,package_id||'@'||version AS key FROM hub_versions WHERE package_id||'@'||version>? ORDER BY key LIMIT ?").all(after, limit)
       .map(row => ({ key: String(row.key), packageId: String(row.package_id), version: String(row.version) }));
   }
+  latestFeed() {
+    const row = this.db.prepare("SELECT record FROM hub_receipts WHERE json_type(record,'$.feed')='object' ORDER BY sequence DESC LIMIT 1").get();
+    return row ? hubRevocationFeedSchema.parse(JSON.parse(String(row.record)).feed) : null;
+  }
+  feedEntries(afterSequence: number) {
+    const entries = new Map<string, import('#domain/index.js').HubRevocationFeed['entries'][number]>();
+    for (const row of this.db.prepare("SELECT record FROM hub_receipts WHERE json_extract(record,'$.feed.sequence')>? AND json_extract(record,'$.action') IN ('yank','revoke') ORDER BY sequence").iterate(afterSequence)) {
+      const feed = hubRevocationFeedSchema.parse(JSON.parse(String(row.record)).feed);
+      for (const entry of feed.entries) {
+        const id = `${entry.kind}/${entry.id}`, previous = entries.get(id);
+        if (!previous || previous.severity !== 'revoke' && (entry.severity === 'revoke' || entry.atMs >= previous.atMs)) entries.set(id, entry);
+        if (entries.size > HUB_LIMITS.feedPageMax) throw new HubError('HUB_LIMIT_EXCEEDED');
+      }
+    }
+    return [...entries.values()];
+  }
+  revocationReceipt(commandId: string) {
+    const row = this.db.prepare("SELECT record FROM hub_receipts WHERE json_extract(record,'$.commandId')=? ORDER BY sequence DESC LIMIT 1").get(commandId);
+    if (!row) return null;
+    const event = JSON.parse(String(row.record));
+    return { digest: String(event.digest), feed: hubRevocationFeedSchema.parse(event.feed) };
+  }
   async appendReceipt(event: HubReceiptEvent, signer: HubServerSigner) {
     const last = this.db.prepare('SELECT sequence,digest FROM hub_receipts ORDER BY sequence DESC LIMIT 1').get();
     const sequence = Number(last?.sequence ?? 0) + 1, previous = last ? String(last.digest) : null;
@@ -87,6 +109,9 @@ export class SqliteHubStore implements HubServerStore {
       }
     });
   }
+  latestFeed() { return this.serial(() => this.view.latestFeed()); }
+  feedEntries(afterSequence: number) { return this.serial(() => this.view.feedEntries(afterSequence)); }
+  revocationReceipt(commandId: string) { return this.serial(() => this.view.revocationReceipt(commandId)); }
   key(keyId: string, role: HubRegisteredKey['role']) { return this.serial(() => this.view.key(keyId, role)); }
   get(packageId: string, version: string) { return this.serial(() => this.view.get(packageId, version)); }
   latest(packageId: string) { return this.serial(() => this.view.latest(packageId)); }
