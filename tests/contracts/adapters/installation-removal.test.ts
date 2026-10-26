@@ -40,22 +40,26 @@ it('observes stop and disable before removing only the owned service; foreign/Al
   }
 });
 
-it('removes a bounded owned disposable tree, refusing symlinks, protected overlap and version drift while retaining durable sentinels', async () => {
+it('removes only the owner-named members of a cache, keeping same-user strays and their parent while refusing symlinks, protected overlap and drift', async () => {
   if (process.platform === 'win32') {
     expect(() => new InstallationCacheRemovalTarget('fixture', [], [], { maxEntries: 10, maxDepth: 3 }, async work => work())).toThrow(expect.objectContaining({ code: 'EFFECT_TARGET_REJECTED' }));
     console.info('verify-not-run: cache removal POSIX ownership unavailable'); return;
   }
   const root = await mkdtemp(join(tmpdir(), 'deckent-uninstall-cache-')); roots.push(root);
-  const cache = join(root, 'cache'), audit = join(root, 'audit'); await mkdir(cache, { mode: 0o700 });
-  await writeFile(audit, 'retained', { mode: 0o600 }); await writeFile(join(cache, 'entry'), 'disposable', { mode: 0o600 });
-  const resource = { resourceId: 'cache', path: cache, ownershipDigest: 'a'.repeat(64) };
+  const cache = join(root, 'cache'), area = join(cache, 'a'.repeat(32)), audit = join(root, 'audit'); await mkdir(area, { mode: 0o700, recursive: true });
+  await writeFile(audit, 'retained', { mode: 0o600 }); await writeFile(join(area, 'entry'), 'disposable', { mode: 0o600 });
+  // M1: a private same-user file in the canonical tree is not the owner's member; placement and UID are no ownership.
+  await writeFile(join(cache, 'customer-record'), 'KEEP', { mode: 0o600 });
+  const resource = { resourceId: 'cache', path: cache, ownershipDigest: 'a'.repeat(64), members: ['^[0-9a-f]{32}$'] };
   const target = new InstallationCacheRemovalTarget('fixture', [resource], [audit], { maxEntries: 10, maxDepth: 3 }, async work => work());
   const ref = { kind: target.kind, id: 'cache' }, request = { target: ref, operation: { id: 'installation.remove-cache', version: 1 }, idempotencyKey: 'key', expectedVersion: (await target.observe(ref)).version, input: null };
-  await symlink(audit, join(cache, 'link'));
+  expect(await target.inspect(ref)).toMatchObject({ members: [area], unlisted: [join(cache, 'customer-record')] });
+  await symlink(audit, join(area, 'link'));
   await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
-  await rm(join(cache, 'link')); await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' });
+  await rm(join(area, 'link')); await expect(target.apply(request)).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' });
   request.expectedVersion = (await target.observe(ref)).version; await target.apply(request);
-  await expect(lstat(cache)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(audit, 'utf8')).toBe('retained');
+  await expect(lstat(area)).rejects.toMatchObject({ code: 'ENOENT' }); expect(await readFile(audit, 'utf8')).toBe('retained');
+  expect(await readFile(join(cache, 'customer-record'), 'utf8')).toBe('KEEP');
   expect(await target.lookup(ref, 'key')).toEqual({ status: 'applied', version: null });
   const blocked = new InstallationCacheRemovalTarget('fixture', [{ ...resource, path: root }], [audit], { maxEntries: 10, maxDepth: 3 }, async work => work());
   await expect(blocked.observe(ref)).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
@@ -68,7 +72,7 @@ it('never accepts a foreign target id or a symlink ancestor into the recorded di
   await mkdir(foreign, { mode: 0o700 }); await mkdir(owned, { mode: 0o700 });
   await writeFile(join(foreign, 'customer-record'), 'KEEP', { mode: 0o600 });
   await symlink(foreign, join(owned, 'link'));
-  const target = new InstallationCacheRemovalTarget('installation', [{ resourceId: 'cache', path: join(owned, 'link/customer-record'), ownershipDigest: 'a'.repeat(64) }], [],
+  const target = new InstallationCacheRemovalTarget('installation', [{ resourceId: 'cache', path: join(owned, 'link/customer-record'), ownershipDigest: 'a'.repeat(64), members: ['^.*$'] }], [],
     { maxEntries: 10, maxDepth: 3 }, work => work());
   const command = { operation: { id: 'installation.remove-cache', version: 1 }, idempotencyKey: 'approved-card', expectedVersion: 'approved-version', input: null };
   await expect(target.apply({ ...command, target: { kind: target.kind, id: foreign } })).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
@@ -144,23 +148,39 @@ it('refuses unsupported native managers with typed manual guidance rather than t
   expect(() => assertNativeUninstallSupport('linux')).not.toThrow();
 });
 
-it('deletes no data on failed final backup and preserves unknown after a partial purge without following the replacement link', async () => {
+it('deletes only exact members bound to the verified backup: a failed backup, a changed byte, a replacement link or a new member after verification is never deleted', async () => {
   if (process.platform !== 'linux') { console.info('verify-not-run: private native purge target'); return; }
   const { InstallationDataRemovalTarget } = await import('#adapters/core/installation-removal/index.js');
+  const { createHash } = await import('node:crypto');
   const root = await mkdtemp(join(tmpdir(), 'deckent-data-final-tail-')); roots.push(root);
-  const first = join(root, 'first'), second = join(root, 'second'), foreign = join(root, 'customer');
+  const directory = join(root, 'identity'), first = join(root, 'policy.json'), second = join(directory, 'identity.json'), foreign = join(root, 'customer'), set = join(root, 'set');
+  for (const path of [directory, set]) await mkdir(path, { mode: 0o700 });
   for (const path of [first, second, foreign]) await writeFile(path, 'KEEP UNTIL BACKED UP', { mode: 0o600 });
-  const target = new InstallationDataRemovalTarget('temporary', [
-    { resourceId: 'first', path: first, ownershipDigest: 'a'.repeat(64) }, { resourceId: 'second', path: second, ownershipDigest: 'b'.repeat(64) },
-  ], [foreign], { maxEntries: 10, maxDepth: 3 }), ref = { kind: target.kind, id: 'global-data' };
+  await writeFile(join(set, 'MANIFEST.sha256'), 'verified manifest', { mode: 0o600 });
+  const sha = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
+  const target = new InstallationDataRemovalTarget('temporary', [{ resourceId: 'policy', path: first, directory: null },
+    { resourceId: 'installationIdentity', path: second, directory }], [foreign]), ref = { kind: target.kind, id: 'global-data' };
+  const snapshot = async () => ({ set, manifestDigest: sha('verified manifest'), members: await Promise.all([first, second].map(async path => {
+    const info = await lstat(path); return { path, digest: sha(await readFile(path)), dev: info.dev, ino: info.ino, size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs }; })) });
   const command = { target: ref, operation: { id: 'installation.remove-data', version: 1 }, idempotencyKey: 'approved-purge-card', expectedVersion: (await target.observe(ref)).version, input: null };
   target.prepare(async () => { throw new Error('BACKUP_VERIFICATION_FAILED'); });
   await expect(target.apply(command)).rejects.toThrow('BACKUP_VERIFICATION_FAILED');
-  expect(await readFile(first, 'utf8')).toBe('KEEP UNTIL BACKED UP');
-  target.prepare(async () => { await rm(second); await symlink(foreign, second); });
-  await expect(target.apply(command)).rejects.toMatchObject({ code: 'EFFECT_TARGET_UNKNOWN' });
-  await expect(lstat(first)).rejects.toMatchObject({ code: 'ENOENT' });
-  expect(await readFile(foreign, 'utf8')).toBe('KEEP UNTIL BACKED UP');
+  // M4: bytes written after the backup was verified are never deleted with the older backup.
+  target.prepare(async () => { const bound = await snapshot(); await writeFile(second, 'NEWER BYTES'); return bound; });
+  await expect(target.apply(command)).rejects.toMatchObject({ code: 'EFFECT_TARGET_PRECONDITION' });
+  expect(await readFile(first, 'utf8')).toBe('KEEP UNTIL BACKED UP'); expect(await readFile(second, 'utf8')).toBe('NEWER BYTES');
+  const saved = await readFile(second);
+  target.prepare(async () => { const bound = await snapshot(); await rm(second); await symlink(foreign, second); return bound; });
+  await expect(target.apply({ ...command, expectedVersion: (await target.observe(ref)).version })).rejects.toMatchObject({ code: 'EFFECT_TARGET_REJECTED' });
+  expect(await readFile(first, 'utf8')).toBe('KEEP UNTIL BACKED UP'); expect(await readFile(foreign, 'utf8')).toBe('KEEP UNTIL BACKED UP');
+  await rm(second); await writeFile(second, saved, { mode: 0o600 });
+  // M1: a new private file in the owner's directory is no member; it stays with its directory.
+  await writeFile(join(directory, 'added'), 'NEW MEMBER', { mode: 0o600 });
+  target.prepare(snapshot);
+  await expect(target.apply({ ...command, expectedVersion: (await target.observe(ref)).version })).resolves.toEqual({ version: null });
+  for (const path of [first, second]) await expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
+  expect(await readFile(join(directory, 'added'), 'utf8')).toBe('NEW MEMBER'); expect(await readFile(foreign, 'utf8')).toBe('KEEP UNTIL BACKED UP');
+  expect(await target.lookup(ref, 'key')).toEqual({ status: 'applied', version: null });
 });
 
 it('keeps immutable tombstones across reinstall and never substitutes an old completed purge for a newly held partial one', async () => {

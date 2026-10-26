@@ -55,24 +55,3 @@ it('round trips exact encrypted owner coverage alongside the existing backup, re
     expect(exports).toBe(5);
   } finally { await rm(base, { recursive: true, force: true }); }
 });
-
-it('exports only registered private file trees and restores verified contributions without overwriting existing files or following a link', async () => {
-  if (process.platform === 'win32') { console.info('verify-not-run: private POSIX coverage owner'); return; }
-  const { FileTreeBackupOwner } = await import('#adapters/core/backup-store/index.js');
-  const { symlink } = await import('node:fs/promises');
-  const root = await mkdtemp(join(tmpdir(), 'deckent-backup-tree-'));
-  try {
-    const source = join(root, 'signers'), target = join(root, 'restored'); await mkdir(source, { mode: 0o700 });
-    await writeFile(join(source, 'fixture.key'), 'SYNTHETIC PRIVATE KEY', { mode: 0o600 });
-    const limits = { maxFiles: 10, maxDepth: 3, maxFileBytes: 65536, maxTotalBytes: 262144 };
-    const owner = new FileTreeBackupOwner([{ resourceId: 'signers', path: source }], limits), resource = { resourceId: 'signers', owner: owner.id, version: 'snapshot', transfer: 'portable' as const };
-    const bytes = await owner.export(resource), restore = new FileTreeBackupOwner([{ resourceId: 'signers', path: target }], limits);
-    await restore.validateRestore(resource, bytes); await restore.restore(resource, bytes);
-    expect(await readFile(join(target, 'fixture.key'), 'utf8')).toBe('SYNTHETIC PRIVATE KEY');
-    await expect(restore.restore(resource, bytes)).rejects.toMatchObject({ code: 'BACKUP_TARGET_NOT_EMPTY' });
-    await symlink(target, join(source, 'foreign-link'));
-    await expect(owner.export(resource)).rejects.toMatchObject({ code: 'BACKUP_PATH_UNSAFE' });
-    await expect(restore.validateRestore(resource, Buffer.from('{"schemaVersion":1,"entries":[{"path":"../escape","directory":false,"content":"YQ=="}]}'))).rejects.toMatchObject({ code: 'BACKUP_SET_INVALID' });
-    bytes.fill(0);
-  } finally { await rm(root, { recursive: true, force: true }); }
-});

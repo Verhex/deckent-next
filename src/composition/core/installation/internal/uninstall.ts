@@ -1,7 +1,7 @@
 import { userInfo } from 'node:os';
 import { policySchema } from '#domain/index.js';
 import { UninstallRecovery, attestLocalInteractiveTerminal, localPrincipalChannel, localPrincipalPeer, readLocalOsIdentity, readTerminalConfig, FileInstallationIdentityStore, openLocalIntegrityAuthority } from '#adapters/index.js';
-import { UninstallApplication, uninstallApplySchema, authorizeUninstall, installationOwnScopes, type UninstallInteraction } from '#engine/index.js';
+import { UninstallApplication, uninstallApplySchema, authorizeUninstall, uninstallAffectedScopes, type UninstallInteraction } from '#engine/index.js';
 import { ErrorRegistry, productResourcePath, type ConfigLoadOptions } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { uninstallRecoveryDirectory, readUninstallTombstone, completedUninstallPreview } from '#adapters/index.js';
@@ -16,7 +16,7 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
   if (!scopeId) throw ErrorRegistry.createError('CLI_SCOPE_REQUIRED');
   const source = createLayoutPolicySource(layout, userInfo().uid, config.inspection.policyMaxBytes);
 
-  const scopes = (document: unknown) => installationOwnScopes(document, [scopeId,
+  const scopes = (document: unknown) => uninstallAffectedScopes(document, [scopeId,
     ...(config.service.identity ? [config.service.identity.scopeId] : []), ...(config.cancellationRuntime?.scopeIds ?? []), ...(config.reconciliationRuntime?.scopeIds ?? [])]);
   return new UninstallApplication({
     channel: localPrincipalChannel(), witness: { attest: () => { const peer = localPrincipalPeer(); return attestLocalInteractiveTerminal(peer?.pid, peer?.uid); } },
@@ -49,9 +49,9 @@ async function configuredUninstall(root: string, options: ConfigLoadOptions) {
     },
   });
 }
-async function completed(root: string, options: ConfigLoadOptions) {
+async function completed(root: string, options: ConfigLoadOptions, settle = false) {
   const config = await loadComposedConfig(root, { ...options, heal: false, secretResolver: async () => undefined, uninstallHold: 'admit' });
-  return readUninstallTombstone(config.productLayout.root, { ...readLocalOsIdentity(), scopeIds: [] }, config.installation.profileMaxBytes, productResourcePath(config.productLayout, 'installationIdentity'));
+  return readUninstallTombstone(config.productLayout.root, { ...readLocalOsIdentity(), scopeIds: [] }, config.installation.profileMaxBytes, productResourcePath(config.productLayout, 'installationIdentity'), settle);
 }
 export async function previewConfiguredUninstall(root: string, purge: boolean, options: ConfigLoadOptions = {}) {
   const previous = await completed(root, options); if (previous) return completedUninstallPreview(previous.plan);
@@ -65,7 +65,7 @@ export async function applyConfiguredUninstall(root: string, input: unknown, int
     const plan = completedUninstallPreview(previous.plan);
     const command = uninstallApplySchema.safeParse(input); if (!command.success) throw ErrorRegistry.createError('UNINSTALL_INVALID');
     if (command.data.planDigest !== plan.planDigest) throw ErrorRegistry.createError('UNINSTALL_PLAN_CHANGED');
-    return { ...previous.result, status: 'noop' as const, planDigest: plan.planDigest };
+    return { ...(await completed(root, options, true) ?? previous).result, status: 'noop' as const, planDigest: plan.planDigest };
   }
   return (await configuredUninstall(root, options)).apply(input, interaction, signal);
 }

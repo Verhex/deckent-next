@@ -5,7 +5,7 @@ import { InstallationCacheRemovalTarget } from './cache.js';
 import { FileInstallationIdentityStore } from '#adapters/core/installation-files/index.js';
 import { readNewestWorkerReceipt, observeWorkerRemovalInventory } from '#adapters/core/worker-image/index.js';
 import { ErrorRegistry, productResourcePath, resolveGlobalConfigReadPath, DECKENT_DIR, PRODUCT_LAYOUT_REGISTRY, type ConfigLoadOptions, type ResolvedConfig, type ProductResource } from '#platform/index.js';
-import { extendUninstallInventory, assertNativeUninstallSupport } from './inventory.js';
+import { extendUninstallInventory, assertNativeUninstallSupport, removalRegistry } from './inventory.js';
 import { openLocalIntegrityAuthority } from '#adapters/core/local-keyring/index.js';
 import { affectedToolchainProfiles, type UninstallInventory, type UninstallResource } from '#engine/index.js';
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -24,8 +24,9 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
     && layout.resources[resource] === PRODUCT_LAYOUT_REGISTRY.resources[resource] && !inside(projectData, productResourcePath(layout, resource)));
   const protectedPaths = [...new Set([projectData, layout.bootstrapConfigPath, ...Object.keys(layout.resources)
     .filter(resource => !candidates.includes(resource as typeof candidates[number])).map(resource => productResourcePath(layout, resource as ProductResource))])];
-  const owned = candidates.map(resourceId => ({ resourceId, path: productResourcePath(layout, resourceId),
-    ownershipDigest: hash([installationId, layout.revision, resourceId]) }));
+  // Ownership evidence names the resource owner's membership rule; the fresh scan's member version is what a removal may delete.
+  const owned = candidates.map(resourceId => { const members = removalRegistry.cacheMembers[resourceId] ?? [];
+    return { resourceId, path: productResourcePath(layout, resourceId), ownershipDigest: hash([installationId, layout.revision, resourceId, members]), members }; });
   const target = new InstallationCacheRemovalTarget(hash([installationId, layout.root]), owned, protectedPaths,
     { maxEntries: bounds.maxFiles, maxDepth: bounds.maxDepth }, work => work());
   const resources: UninstallResource[] = [];
@@ -33,15 +34,20 @@ export async function observeUninstallInventory(config: ResolvedConfig, policyRe
     const locator = productResourcePath(layout, resource), disposable = owned.find(item => item.resourceId === resource);
     const info = await lstat(locator).catch(error => { if (['ENOENT', 'INTEGRITY_KEY_UNAVAILABLE'].includes((error as NodeJS.ErrnoException).code ?? '')) return null; throw error; });
     let version: string | null = info ? hash([info.dev, info.ino, info.mode, info.size, info.mtimeMs, info.ctimeMs]) : null;
-    let capability = false, ownership: UninstallResource['ownership'] = 'unknown';
+    let capability = false, ownership: UninstallResource['ownership'] = 'unknown', members: readonly string[] | null = null;
     if (disposable) {
-      try { version = (await target.observe({ kind: target.kind, id: resource })).version; capability = true; ownership = 'exclusive'; }
-      catch { /* A foreign owner, unsafe mode, symlink, overlap or scan bound means keep; never an empty tree. */ }
+      try {
+        const scan = await target.inspect({ kind: target.kind, id: resource });
+        ({ version, members } = scan); capability = true; ownership = 'exclusive';
+        // The owner's unnamed entries are kept and listed; only its named members are removed.
+        for (const locator of scan.unlisted) resources.push({ resourceId: `${resource}.unlisted.${hash(locator)}`, contribution: 'durable', locator, version: null,
+          owner: null, ownership: 'unknown', ownershipEvidence: null, present: true, protected: false, capability: false, backup: 'missing' });
+      } catch { /* A foreign owner, unsafe mode, symlink, overlap or scan bound means keep; never an empty tree. */ }
     }
-    resources.push({ resourceId: resource, contribution: disposable ? resource : 'durable', locator, version,
+    resources.push({ resourceId: resource, contribution: disposable ? resource : 'durable', locator, version, ...(members?.length ? { members: [...members] } : {}),
       owner: disposable && ownership === 'exclusive' ? installationId : null, ownership,
       ownershipEvidence: disposable && ownership === 'exclusive' ? disposable.ownershipDigest : null,
-      present: info !== null, protected: !disposable, capability, backup: 'missing' });
+      present: members ? members.length > 0 : info !== null, protected: !disposable, capability, backup: 'missing' });
   }
   if (globalRoot !== layout.root) resources.push({ resourceId: 'global-data', contribution: 'durable', locator: globalRoot,
     version: null, owner: null, ownership: 'shared', ownershipEvidence: null, present: null, protected: true, capability: false, backup: 'missing' });

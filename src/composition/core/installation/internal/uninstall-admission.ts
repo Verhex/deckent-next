@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto';
-import { UninstallRecovery, FileEffectStore, acquireLedgerLock, LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAuditStore, openSqliteInventoryReader,
+import { UninstallRecovery, FileEffectStore, acquireLedgerLock, LocalOsSessionAuthority, openLocalIntegrityAuthority, openSqliteApprovalStore, openSqliteAuditStore,
   localPrincipalPeer, attestLocalInteractiveTerminal } from '#adapters/index.js';
 import { ApprovalApplication, AuditApplication, EffectApplication, OperationApprovalBroker, OperationPolicyAuthorization, uninstallOperationDescriptors,
-  UninstallError, resolveAuditedApprovalAssurance, approvedUninstallEffects, type UninstallAdmission, type UninstallPlan } from '#engine/index.js';
+  UninstallError, resolveAuditedApprovalAssurance, approvedUninstallEffects, authorizeUninstall, type UninstallAdmission, type UninstallPlan } from '#engine/index.js';
 import { PRINCIPAL_EFFECT_PRODUCER, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry, prepareProductCompanionPath, inspectProductFile, SystemTrustedClock, type ConfigLoadOptions, type ResolvedConfig } from '#platform/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
 import { userInfo } from 'node:os';
-import { uninstallRecoveryDirectory, hasUnsettledInstallationWork, prepareUninstallBackup, writeUninstallTombstone } from '#adapters/index.js';
+import { uninstallRecoveryDirectory, quiescentInstallationScopes, prepareUninstallBackup, writeUninstallTombstone } from '#adapters/index.js';
 import { observeUninstallInventory as configuredUninstallInventory } from '#adapters/index.js';
 
 /** The runtime's existing exclusive ledger custody fences startup; a durable hold survives this process. No lock stealing or forced drain. */
@@ -33,14 +33,10 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
     sessions.requireInteractiveTerminal();
     const policy = createLayoutPolicySource(config.productLayout, userInfo().uid, config.inspection.policyMaxBytes);
     const path = await inspectProductFile(config.productLayout, 'ledger', ['-wal', '-shm', '-journal']);
-    const inventory = await openSqliteInventoryReader(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs });
-    try {
-      if (hasUnsettledInstallationWork(path, config.storage.sqlite.busyTimeoutMs)) throw ErrorRegistry.createError('UNINSTALL_WORK_ACTIVE');
-      for (const scopeId of scopeIds) {
-        const page = await inventory.listDispatches({ schemaVersion: 1, scopeId, after: null, limit: config.inspection.maxPageSize });
-        if (page.nextAfter || page.entries.some(entry => entry.terminal === null)) throw ErrorRegistry.createError('UNINSTALL_WORK_ACTIVE');
-      }
-    } finally { inventory.close(); }
+    // Every ledger-recorded and policy-named scope is quiescent and decided again under custody: a deny or legal hold is never skipped.
+    const affected = await quiescentInstallationScopes(path, { busyTimeoutMs: config.storage.sqlite.busyTimeoutMs, pageSize: config.inspection.maxPageSize, maxScopes: config.audit.maxRecords }, scopeIds);
+    const decided = await policy.load();
+    for (const action of plan.purge ? ['uninstall', 'purge'] as const : ['uninstall'] as const) authorizeUninstall(decided, { ...principal, scopeIds: affected }, plan.installation.id, affected, action);
     const recoveryLocation = await recovery.admit(plan);
     const store = new FileEffectStore(recoveryLocation, integrity, { maxBytes: config.installation.packageMeasurement.maxFileBytes, maxRecords: config.audit.maxRecords });
     await store.initialize();
@@ -63,7 +59,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
       const close = () => { if (!authorityClosed) { audit?.close(); audit = undefined; approvals.close(); authorityClosed = true; } };
       current.dataTarget.prepare(async () => {
         close();
-        const final = await prepareUninstallBackup(config, plan, scopeId, principal, await policy.load(), integrity, current.portable, passphrase, true, options); backup = { ...plan.backup, destination: final.set };
+        const final = await prepareUninstallBackup(config, plan, scopeId, principal, await policy.load(), integrity, current.portable, passphrase, true, options); backup = { ...plan.backup, destination: final.set }; return final.snapshot!;
       });
       return await work({ scopeId, recoveryLocation,
         effects: approvedUninstallEffects(plan, scopeId, app, decider),
@@ -90,8 +86,8 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
         async finish(result) { await writeUninstallTombstone(config.productLayout.root, principal, plan, result); await recovery.finish(result); passphrase = ''; },
       });
     } catch (error) {
-      const items = await Promise.all(plan.items.map(async item => ({ resourceId: item.resourceId,
-        state: (await store.loadEffect(scopeId, commandKey(plan, item.resourceId)))?.state ?? null })));
+      const items = []; // One store transaction at a time: its custody lock is exclusive even within this process.
+      for (const item of plan.items) items.push({ resourceId: item.resourceId, state: (await store.loadEffect(scopeId, commandKey(plan, item.resourceId)))?.state ?? null });
       if (items.every(item => item.state === null || item.state === 'refused')) await recovery.finish({ schemaVersion: 1, planDigest: plan.planDigest,
         status: 'cancelled', items, recoveryLocation, backup: plan.backup, packageRemoval: plan.packageRemoval });
       throw error;

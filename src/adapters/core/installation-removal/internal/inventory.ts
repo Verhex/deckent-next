@@ -1,14 +1,19 @@
-import { lstat } from 'node:fs/promises';
+import { lstat, readdir } from 'node:fs/promises';
 import { dirname, join, relative, isAbsolute, sep } from 'node:path';
 import { z } from 'zod';
 import { productResourcePath, PRODUCT_LAYOUT_REGISTRY, sha256, ErrorRegistry, type ResolvedConfig, type IntegrityAuthority, type ProductResource } from '#platform/index.js';
 import type { UninstallInventory } from '#engine/index.js';
-import type { CacheRemovalResource } from './cache.js';
-import { InstallationDataRemovalTarget } from './data.js';
+import { InstallationDataRemovalTarget, memberStat, type DataRemovalMember } from './data.js';
 import { NativeServiceRemovalDriver, nativeServiceExec, readNativeServiceRecord } from './native-service.js';
 import { InstallationServiceRemovalTarget } from './service.js';
 import paths from './paths.json' with { type: 'json' };
-const registry = z.object({ schemaVersion: z.literal(1), coverageManifestSuffix: z.string(), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(), durableResources: z.array(z.string()), sharedSecretFiles: z.array(z.string()) }).strict().parse(paths);
+import { BACKUP_RESOURCES } from '#adapters/core/backup-store/index.js';
+// Purge members are exactly the files the standard backup set restores (`deckent backup restore`); every other resource is kept.
+const restorable = [...BACKUP_RESOURCES, 'ledger', 'approvals'] as readonly string[];
+export const removalRegistry = z.object({ schemaVersion: z.literal(2), initialBackupPrefix: z.string(), finalBackupPrefix: z.string(), recoveryDirectory: z.string(),
+  purgeMembers: z.record(z.string()).refine(value => Object.keys(value).every(name => restorable.includes(name))),
+  cacheMembers: z.record(z.array(z.string()).min(1)), sharedSecretFiles: z.array(z.string()) }).strict().parse(paths);
+const registry = removalRegistry;
 const inside = (root: string, path: string) => { const child = relative(root, path); return !child || child !== '..' && !child.startsWith(`..${sep}`) && !isAbsolute(child); };
 export function assertNativeUninstallSupport(platform: string) {
   if (platform !== 'linux') throw ErrorRegistry.createError('UNINSTALL_NATIVE_UNSUPPORTED', { params: { platform } });
@@ -35,23 +40,33 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
     targets.push(target);
   }
   const isGlobal = base.deletionRoots.includes(layout.root), projectData = join(config.projectRoot, PRODUCT_LAYOUT_REGISTRY.rootName);
-  const portable: CacheRemovalResource[] = [];
+  // The installation's authority files are one atomic set: a relocated, unsafe or foreign member keeps all of them.
+  let members: DataRemovalMember[] = [];
   if (purge && isGlobal && layout.root !== projectData) {
-    for (const name of registry.durableResources as ProductResource[]) {
-      const path = productResourcePath(layout, name);
-      if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, path) || inside(projectData, path)) continue;
-      const info = await lstat(path).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
-      if (info) portable.push({ resourceId: name, path, ownershipDigest: sha256(JSON.stringify([installationId, layout.revision, name])) });
+    try {
+      for (const [name, file] of Object.entries(registry.purgeMembers) as [ProductResource, string][]) {
+        const resourcePath = productResourcePath(layout, name), path = file ? join(resourcePath, file.replace('{keyFile}', config.approvals.keyFile)) : resourcePath;
+        if (layout.resources[name] !== PRODUCT_LAYOUT_REGISTRY.resources[name] || !inside(layout.root, path) || inside(projectData, path)) throw new Error('relocated');
+        if (await memberStat(path)) members.push({ resourceId: name, path, directory: file ? resourcePath : null });
+      }
+    } catch { members = []; }
+  }
+  const owners = new Set(members.map(member => member.resourceId)), retained = resources.filter(item => !owners.has(item.resourceId));
+  // Anything else in a member's directory has no recorded owner here: kept and reported, never deleted with the directory.
+  for (const directory of new Set(members.flatMap(member => member.directory ? [member.directory] : []))) {
+    for (const name of (await readdir(directory)).slice(0, bounds.maxFiles).sort()) {
+      const locator = join(directory, name);
+      if (!members.some(member => member.path === locator)) retained.push({ resourceId: `unlisted.${sha256(locator)}`, contribution: 'durable', locator, version: null,
+        owner: null, ownership: 'unknown', ownershipEvidence: null, present: true, protected: false, capability: false, backup: 'missing' });
     }
   }
-  const selected = portable.filter(item => !portable.some(parent => parent !== item && inside(parent.path, item.path)));
-  const retained = resources.filter(item => !selected.some(root => inside(root.path, item.locator)));
-  const protectedPaths = base.protectedPaths.filter(path => !selected.some(root => inside(root.path, path)));
-  const target = new InstallationDataRemovalTarget(sha256(JSON.stringify([installationId, layout.root])), selected, protectedPaths, { maxEntries: bounds.maxFiles, maxDepth: bounds.maxDepth });
-  if (selected.length) {
-    const members = selected.map(item => item.path), version = (await target.observe({ kind: target.kind, id: 'global-data' })).version;
-    retained.push({ resourceId: 'global-data', contribution: 'durable', locator: layout.root, members, version, owner: installationId,
-      ownership: 'exclusive', ownershipEvidence: sha256(JSON.stringify(selected)), present: true, protected: false, capability: true, backup: 'covered' });
+  const memberResources = new Set(members.map(member => productResourcePath(layout, member.resourceId as ProductResource)));
+  const protectedPaths = base.protectedPaths.filter(path => !memberResources.has(path));
+  const target = new InstallationDataRemovalTarget(sha256(JSON.stringify([installationId, layout.root])), members, protectedPaths);
+  if (members.length) {
+    const version = (await target.observe({ kind: target.kind, id: 'global-data' })).version;
+    retained.push({ resourceId: 'global-data', contribution: 'durable', locator: layout.root, members: members.map(member => member.path), version, owner: installationId,
+      ownership: 'exclusive', ownershipEvidence: sha256(JSON.stringify(members)), present: true, protected: false, capability: true, backup: 'covered' });
     targets.push(target);
   }
   for (const name of registry.sharedSecretFiles) {
@@ -62,5 +77,5 @@ export async function extendUninstallInventory(config: ResolvedConfig, base: Uni
   // A missing/foreign key disables native record inspection; it never opens an unverified record or creates a key on preview.
   const inventory: UninstallInventory = { ...base, resources: retained, protectedPaths,
     inventoryRevision: sha256(JSON.stringify(retained)), backupDestination: purge ? join(uninstallRecoveryDirectory(layout.root), 'backup') : null };
-  return { inventory, targets, dataTarget: target, portable: selected };
+  return { inventory, targets, dataTarget: target, portable: members };
 }

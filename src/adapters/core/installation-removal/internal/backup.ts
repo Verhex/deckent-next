@@ -1,14 +1,38 @@
-import { randomUUID } from 'node:crypto';
-import paths from './paths.json' with { type: 'json' };
-import { join } from 'node:path';
-import { BackupApplication, policyBackupAuthorization, type UninstallPlan, type BackupCoverageManifest } from '#engine/index.js';
+import { createHash, randomUUID } from 'node:crypto';
+import { lstat, readFile } from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
+import { basename, join } from 'node:path';
+import { BackupApplication, EffectTargetError, policyBackupAuthorization, type UninstallPlan } from '#engine/index.js';
 import type { VerifiedPrincipal } from '#domain/index.js';
-import { FileBackupStorage, FileTreeBackupOwner, createBackupCoverage, verifyBackupCoverage, recordBackupAudit, readBackupConfig } from '#adapters/core/backup-store/index.js';
-import { productResourcePath, resolveGlobalConfigReadPath, type ResolvedConfig, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
-import type { CacheRemovalResource } from './cache.js';
-/** The existing backup application owns create/verify/audit; its encrypted coverage owner supplies every portable removal root. */
+import { FileBackupStorage, recordBackupAudit, readBackupConfig, verifyBackupSet, ledgerFingerprint, type VerifiedBackup } from '#adapters/core/backup-store/index.js';
+import { resolveGlobalConfigReadPath, sha256, type ResolvedConfig, type ConfigLoadOptions, type IntegrityAuthority } from '#platform/index.js';
+import { fileDigest, memberStat, type DataRemovalMember, type DataRemovalSnapshot } from './data.js';
+import { writeUninstallIntent } from './tombstone.js';
+import paths from './paths.json' with { type: 'json' };
+const unbound = (): never => { throw new EffectTargetError('EFFECT_TARGET_PRECONDITION'); };
+const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+/** Binds one member's current bytes to the verified set: the exact archived content, the ledger's table fingerprint or the sealed key. */
+async function bindMember(verified: VerifiedBackup, member: DataRemovalMember, busyTimeoutMs: number): Promise<DataRemovalSnapshot['members'][number] | null> {
+  if (!await memberStat(member.path)) return null;
+  if (member.resourceId === 'ledger') {
+    // Read-only readers leave empty SQLite sidecars; a checkpoint by the last connection removes them. Any left means another reader: keep.
+    const db = new DatabaseSync(member.path, { timeout: busyTimeoutMs }); try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } finally { db.close(); }
+    for (const suffix of ['-wal', '-shm', '-journal']) if (await lstat(member.path + suffix).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error; })) unbound();
+  }
+  const before = await memberStat(member.path);
+  if (!before) return unbound();
+  const current = await fileDigest(member.path), state = verified.state;
+  const backed = member.resourceId === 'ledger' ? ledgerFingerprint(member.path) === await readFile(join(verified.set, 'ledger.fingerprint.json'), 'utf8')
+    : member.resourceId === 'approvals' ? sha256((await readFile(member.path)).toString('hex')) === verified.integrity().keyId
+      : state.entries.some(entry => entry.resource === member.resourceId && entry.path === (member.directory ? basename(member.path) : '') && digest(Buffer.from(entry.content, 'base64')) === current);
+  const after = await memberStat(member.path);
+  if (!backed || !after || after.dev !== before.dev || after.ino !== before.ino || after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs) return unbound();
+  return { path: member.path, digest: current, dev: before.dev, ino: before.ino, size: before.size, mtimeMs: before.mtimeMs, ctimeMs: before.ctimeMs };
+}
+/** The existing backup application owns create/verify/audit of the standard set that `deckent backup restore` restores. The final set is
+ * re-verified, every member is bound to its exact verified content and a durable final-tail intent is written before any deletion. */
 export async function prepareUninstallBackup(config: ResolvedConfig, plan: UninstallPlan, scopeId: string, principal: VerifiedPrincipal,
-  policy: unknown, integrity: IntegrityAuthority, resources: readonly CacheRemovalResource[], passphrase: string, final: boolean, options: ConfigLoadOptions) {
+  policy: unknown, integrity: IntegrityAuthority, members: readonly DataRemovalMember[], passphrase: string, final: boolean, options: ConfigLoadOptions) {
   if (!plan.backup.destination) throw new Error('UNINSTALL_BACKUP_COVERAGE');
   const limits = config.installation.packageMeasurement, layout = config.productLayout;
   const set = join(plan.backup.destination, `${final ? paths.finalBackupPrefix : paths.initialBackupPrefix}${randomUUID()}`), globalPath = await resolveGlobalConfigReadPath(options.env, options.platform);
@@ -19,16 +43,14 @@ export async function prepareUninstallBackup(config: ResolvedConfig, plan: Unins
     { principal, installationId: plan.installation.id, integrity });
   await app.execute({ schemaVersion: 1, action: 'create', scopeId, set }, passphrase);
   await app.execute({ schemaVersion: 1, action: 'verify', scopeId, set }, passphrase);
-  const owner = new FileTreeBackupOwner(resources, limits);
-  const manifest: BackupCoverageManifest = { schemaVersion: 1, installationId: plan.installation.id, generation: plan.layoutRevision, planDigest: plan.planDigest,
-    resources: await Promise.all(resources.map(async resource => ({ resourceId: resource.resourceId, owner: owner.id,
-      version: await owner.version(resource.resourceId), transfer: 'portable' as const }))) };
-  const input = { set, companion: `${set}.coverage.enc`, manifest, deletionRoots: [layout.root] };
-  await createBackupCoverage(input, passphrase, limits, [owner], work => work());
-  const verified = await verifyBackupCoverage(input, passphrase, limits, [owner]);
-  verified.close();
-  // The public, non-secret manifest is retained for the existing restore owner, outside all deletion roots.
-  const { writeFile } = await import('node:fs/promises');
-  await writeFile(`${set}${paths.coverageManifestSuffix}`, JSON.stringify(input), { mode: 0o600, flag: 'wx' });
-  return { set, companion: input.companion, ledger: productResourcePath(layout, 'ledger') };
+  if (!final) return { set, snapshot: null };
+  const verified = await verifyBackupSet(set, passphrase, limits);
+  try {
+    if (verified.state.installationId !== plan.installation.id) unbound();
+    const bound = [];
+    for (const member of members) { const value = await bindMember(verified, member, config.storage.sqlite.busyTimeoutMs); if (value) bound.push(value); }
+    const snapshot: DataRemovalSnapshot = { set: verified.set, manifestDigest: digest(await readFile(join(verified.set, 'MANIFEST.sha256'))), members: bound };
+    await writeUninstallIntent(layout.root, principal, plan, snapshot);
+    return { set, snapshot };
+  } finally { verified.close(); }
 }

@@ -21,7 +21,7 @@ it('gates the exact uninstall behind the person and durable owners, resumes gene
   try {
     const cache = join(root, 'cache'), ledger = join(root, 'ledger');
     await mkdir(cache, { mode: 0o700 }); await writeFile(join(cache, 'disposable'), 'cache', { mode: 0o600 }); await writeFile(ledger, 'KEEP', { mode: 0o600 });
-    const cacheTarget = new InstallationCacheRemovalTarget('fixture', [{ resourceId: 'cache', path: cache, ownershipDigest: 'a'.repeat(64) }], [ledger],
+    const cacheTarget = new InstallationCacheRemovalTarget('fixture', [{ resourceId: 'cache', path: cache, ownershipDigest: 'a'.repeat(64), members: ['^disposable$'] }], [ledger],
       { maxEntries: 10, maxDepth: 2 }, work => work());
     const version = (await cacheTarget.observe({ kind: 'installation-cache', id: 'cache' })).version;
     let principal: VerifiedPrincipal = { id: 'person', issuer: 'fixture', subject: 'person', assurance: 'os-user', scopeIds: ['s'] };

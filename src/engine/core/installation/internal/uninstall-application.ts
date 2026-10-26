@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { effectCommandSchema, evaluatePolicy, policySchema, principalGrants, isAiPrincipal, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
+import { effectCommandSchema, evaluatePolicy, policySchema, policyNamedScopes, principalGrants, isAiPrincipal, type VerifiedPrincipal, type EffectCommand } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { assertAuthorityWitness, type AuthorityWitness } from '#engine/core/runtime/index.js';
 import type { ApprovalApplication } from '#engine/core/approval/index.js';
@@ -8,6 +8,9 @@ import { uninstallApplySchema, UninstallError, type UninstallItem, type Uninstal
 import { createUninstallPlan, uninstallRegistry, type UninstallInventory } from './uninstall-plan.js';
 import { PolicyAuthorizationError } from '#engine/core/policy/index.js';
 
+/** Every scope the lifecycle decision covers: configured, every policy-named (deny/legal hold included) and every ledger-recorded scope. */
+export const uninstallAffectedScopes = (policy: unknown, configured: readonly string[], recorded: readonly string[] = []): readonly string[] =>
+  Object.freeze([...new Set([...configured, ...policyNamedScopes(policy), ...recorded])]);
 /** An installation-wide lifecycle decision never inherits a project-only allow or overrides another scope's deny. */
 export function authorizeUninstall(input: unknown, principal: VerifiedPrincipal, installationId: string, scopeIds: readonly string[], action: 'inspect' | 'uninstall' | 'purge') {
   const document = policySchema.parse(input);
