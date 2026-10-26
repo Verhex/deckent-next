@@ -513,6 +513,7 @@
   "error.WORKER_IMAGE_INSTALLER_CHANGED": "Kurulum betiği planlamadan sonra değişti. Derlemeden önce yeni planı inceleyin.",
   "error.WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED": "İmaj kaynağı URL’lerindeki kimlik bilgileri reddedildi. Kimlik doğrulamalı aynalar için BuildKit sır bağlaması kullanın.",
   "error.WORKER_IMAGE_SOURCE_INSECURE": "İşçi registry ve kurulum betiği kaynakları HTTPS gerektirir. Kaynağın tam URL’sini inceleyin.",
+  "error.WORKER_IMAGE_BUILDKIT_REQUIRED": "Kimlik bilgili ayna derlemesi, sır bağlaması için Docker BuildKit’e (buildx eklentisi) ihtiyaç duyar. Docker buildx eklentisini kurun ya da kimlik bilgisi gerektirmeyen kaynaklar kullanın.",
   "error.WORKER_LINEAGE_INVALID": "Paketlenmiş işçi tarifinin soy kaydı geçersiz. Doğrulanmış bir Deckent paketi kullanın.",
   "models.connect.cause.no-credential": "saklı anahtar yok",
   "models.connect.cause.credential-rejected": "anahtar reddedildi",

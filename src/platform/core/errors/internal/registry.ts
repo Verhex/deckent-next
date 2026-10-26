@@ -926,6 +926,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   WORKER_IMAGE_INSTALLER_CHANGED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_INSTALLER_CHANGED', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_SOURCE_INSECURE: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_SOURCE_INSECURE', { detail: '', ...p }, l) }) },
+  WORKER_IMAGE_BUILDKIT_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_BUILDKIT_REQUIRED', { detail: '', ...p }, l) }) },
   WORKER_LINEAGE_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_LINEAGE_INVALID', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_CONSENT_MISSING: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_CONSENT_MISSING', { detail: '', ...p }, l) }) },
   WORKER_IMAGE_CONSENT_INVALID: { category: 'error', render: (p, l) => ({ message: t('error.WORKER_IMAGE_CONSENT_INVALID', { detail: '', ...p }, l) }) },

@@ -12,6 +12,7 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const packageRoot = process.cwd();
 
+
 it('v3 resolves at plan time from the install registry, isolates CLI cache inputs, guards lineage and refuses unknown or credentialed sources', async () => {
   const recipe = layeredWorkerRecipeSchema.parse((await readWorkerImageSources(packageRoot)).recipe);
   const endpoints: string[] = [];
@@ -141,6 +142,22 @@ esac
     }
     expect((await readFile(log, 'utf8')).split('\n').some(line => / (build|tag|rmi|run) /.test(line))).toBe(false);
     expect((await readdir(parent)).sort()).toEqual(['bin', 'builds', 'docker-calls.log']);
+    // IMGOPT: a Docker without buildx (Ubuntu docker.io) keeps the legacy builder for the background path; only the credentialed mirror
+    // path needs BuildKit's secret mount, and it is refused before any build call.
+    await writeFile(join(bin, 'docker'), `#!/bin/sh
+printf '%s\\n' "$*" >> '${log}'
+case "$*" in
+  'context inspect --format {{json .Endpoints.docker.Host}}') printf '%s\\n' '"unix:///fixture-daemon"' ;;
+  '--host unix:///fixture-daemon info --format {{.ID}}') printf '%s\\n' 'fixture-daemon-id' ;;
+  '--host unix:///fixture-daemon image inspect '*|'--host unix:///fixture-daemon buildx version') exit 1 ;;
+  '--host unix:///fixture-daemon image ls '*) exit 0 ;;
+  *) exit 99 ;;
+esac
+`, { mode: 0o700 });
+    const npmrc = join(parent, 'npmrc'), receipts = join(parent, 'receipts'); await writeFile(npmrc, '//registry.invalid/:_authToken=fixture\n', { mode: 0o600 }); await mkdir(receipts, { mode: 0o700 });
+    const legacy = builder([join(receipts, 'r4-20260930.json'), '--npmrc-secret', npmrc]);
+    expect(legacy.status).toBe(1); expect(legacy.stderr).toMatch(/^Error: WORKER_IMAGE_BUILDKIT_REQUIRED: [^\n]+\n$/);
+    expect((await readFile(log, 'utf8')).split('\n').some(line => / build /.test(line))).toBe(false);
   });
   it('copies the shipped builder into a private exclusive context with the edited Dockerfile and recipe, leaving package bytes untouched', async () => {
     const sources = await readWorkerImageSources(packageRoot);
