@@ -120,6 +120,8 @@ describe.skipIf(process.platform === 'win32')('model catalog operator surface (W
     const json = JSON.parse((await admin.cli('list', '--scope', 's', '--json')).stdout);
     expect(json.channels[0]).toMatchObject({ channelId: SEED_CHANNEL, access: 'allowed', activation: { state: 'active', revision: 1 } });
     expect(json.channels[0].models.find((model: { modelId: string }) => model.modelId === 'claude-sonnet-5-5')).toMatchObject({ activation: { state: 'active', revision: 1 }, model: { minCliVersion: '2.1.284' } });
+    // The seed's retired model (its recorded retirement day has passed) is never turned on by the channel.
+    expect(json.channels[0].models.find((model: { modelId: string }) => model.modelId === 'claude-haiku-4-5-20251001')).toMatchObject({ activation: null });
     // U2-S4: the channel's activation turned on its never-touched, priced models (rev 1). Deactivation, a stale revision and an unknown model are typed; a replay returns the receipt.
     const stale = await admin.cli('deactivate', '--scope', 's', '--channel', SEED_CHANNEL, '--model', 'claude-sonnet-5-5', '--command-id', 'm2', '--expected-revision', '0');
     expect(stale.stderr).toContain('MODEL_CATALOG_REVISION_CONFLICT');

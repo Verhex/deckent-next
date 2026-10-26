@@ -3,6 +3,7 @@ import { encodeModelCatalogTarget, ModelCatalogError, modelActivationActorSchema
   parseModelCatalogCommand, parseModelCatalogReceipt, type ProviderCatalog, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
   type ModelCatalogCommand, type ModelCatalogModelRecord, type ModelCatalogReceipt, type ModelCatalogTarget, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
+import { catalogModelRetired } from './worker-admission.js';
 
 /** Trusted admission after authentication and policy; the store re-validates it inside its transaction. */
 export interface ModelCatalogAdmission {
@@ -110,14 +111,15 @@ export class ModelCatalogInspectionApplication {
   }
 }
 
-/** Write-time channel cascade. Explicit inactive rows always win; catalog observation never calls this planner. */
+/** Write-time channel cascade. Explicit inactive rows always win; a retired model is never turned on by it (law 6 amendment: only current,
+ * priced models); catalog observation never calls this planner. */
 export function planCatalogStateCascade(command: Exclude<ModelCatalogCommand, { action: 'register' }>, channel: Extract<ModelCatalogChannelView, { access: 'allowed' }>,
-  declared: ProviderCatalog['providers'][number] | undefined, priced: readonly string[]) {
+  declared: ProviderCatalog['providers'][number] | undefined, priced: readonly string[], nowMs: number) {
   return channel.models.flatMap(entry => {
     if (command.modelId !== null && command.modelId !== entry.modelId) return [];
-    const named = command.modelId !== null;
-    const fresh = entry.activation === null && entry.model.lifecycle.state === 'active' && priced.includes(entry.modelId);
-    const enabled = command.action === 'activate' && (named || entry.activation?.state === 'active' || fresh);
+    const named = command.modelId !== null, current = entry.model.lifecycle.state === 'active' && !catalogModelRetired(entry.model.lifecycle, nowMs);
+    const fresh = entry.activation === null && current && priced.includes(entry.modelId);
+    const enabled = command.action === 'activate' && (named || (current && entry.activation?.state === 'active') || fresh);
     if (command.action === 'activate' && !enabled) return [];
     const model = declared?.models.find(model => model.nativeId === entry.modelId);
     return [{ entry, enabled, activateWorker: !named && fresh && enabled,
