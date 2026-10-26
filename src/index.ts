@@ -57,6 +57,8 @@ export { previewSuppliedInstallation as previewInstallation } from '#composition
 export { inspectSuppliedInstallation as inspectInstallation } from '#composition/index.js';
 export { applySuppliedInstallation as applyInstallation, resumeInstallation } from '#composition/index.js';
 export type { InstallationApplyChoices } from '#composition/index.js';
+export { previewConfiguredUninstall as previewUninstall, applyConfiguredUninstall as applyUninstall } from '#composition/index.js';
+export type { UninstallPlan, UninstallResult, UninstallInteraction } from '#engine/index.js';
 export { hashInstallationProfilePayload, encodeInstallationProfilePayload } from '#engine/index.js';
 export type { InstallationProfile, InstallationPreview, InstallationEvidencePreview } from '#engine/index.js';
 export { inspectDeclaredModels } from '#composition/index.js';

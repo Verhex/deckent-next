@@ -233,5 +233,7 @@
   "cli.help.summary.recovery": "Kaybolan işçi kurtarma: geçiş ilerlemesi ve kör incelemeniz",
   "cli.help.recovery": "Kullanım: deckent recovery [--scope <id>] [--json]\n  Yalnız okur: ölçülen her kayıp işçi kuralı için son yanlış alarmdan bu yana gölge vakaları ve kurtarma modelinin kör seçimlerinizle ne sıklıkla uyuştuğunu gösterir. Yanıtlamadığınız bir vakada modelin seçimi hiç gösterilmez.\ndeckent recovery review [--scope <id>]\n  Yalnız kendi terminalinizde: modelin gölgede karar verdiği her vaka, seçimi gizli. İşçinin gerçekten kaybolup kaybolmadığını ve ne yapardınız söylersiniz; yanıtınız kaydedilir, sonra modelin seçimi gösterilir. Yanıtlar uyum oranını ölçer, hiçbir işi değiştirmez.\nKalıcı izinler ve kuralı canlıya alma: deckent policy recovery.",
   "cli.help.action.recoveryReview": "Gölgede karar verilmiş kurtarma vakalarını kör yanıtla (yalnız terminalinizde)",
-  "cli.help.action.policyRecovery": "Kaybolan işçi kurtarma izinleri ve kuralı canlıya alma (sizin kartınız)"
+  "cli.help.action.policyRecovery": "Kaybolan işçi kurtarma izinleri ve kuralı canlıya alma (sizin kartınız)",
+  "cli.uninstall.help.summary": "Bir kurulumu önizleyin veya kaldırın; veri varsayılan olarak korunur.",
+  "cli.uninstall.help": "deckent uninstall [--purge] [--dry-run] [--json]\n--dry-run ve --json yalnız önizlemedir; uygulamaz. Kaldırma kişinin kendi terminalini, kurulum genelinde politikayı ve kalıcı plan onayını gerektirir. --purge ayrıca eksiksiz doğrulanmış yedek ve kurulum adının aynen yazılmasını gerektirir. Kurulum bilgisi, kaynak sahibi veya kurtarma sağlanamazsa önizleme ve uygulama kapalıdır. Paket kurulu kalır."
 }

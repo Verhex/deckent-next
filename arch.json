@@ -1302,7 +1302,9 @@
         "src/engine/core/project-instructions",
         "src/surfaces/core/cli-human",
         "src/surfaces/core/project-instructions",
-        "src/surfaces/core/setup"
+        "src/surfaces/core/setup",
+        "src/surfaces/core/cli-kit",
+        "src/platform/core/config-fields"
       ],
       "plan": "SURFACES"
     },
@@ -1466,7 +1468,9 @@
         "src/engine/core/audit",
         "src/domain/core/recovery",
         "src/engine/core/nervous",
-        "src/domain/core/effect"
+        "src/domain/core/effect",
+        "src/engine/core/runtime",
+        "src/engine/core/effect"
       ],
       "plan": "INSTALLATION"
     },
@@ -1506,7 +1510,17 @@
         "src/domain/core/policy",
         "src/platform/core/errors",
         "src/composition/core/operations",
-        "src/engine/core/approval"
+        "src/engine/core/approval",
+        "src/engine/core/policy",
+        "src/adapters/core/installation-removal",
+        "src/adapters/core/file-effect-store",
+        "src/adapters/core/local-runtime-socket",
+        "src/adapters/core/approval-store",
+        "src/engine/core/effect",
+        "src/domain/core/effect",
+        "src/domain/core/principal",
+        "src/adapters/core/worker-image",
+        "src/engine/core/toolchain-currency"
       ],
       "plan": "INSTALLATION"
     },
@@ -4311,7 +4325,12 @@
     },
     "src/adapters/core/installation-removal": {
       "dependencies": [
-        "src/engine/core/effect"
+        "src/engine/core/effect",
+        "src/platform/core/errors",
+        "src/platform/core/integrity",
+        "src/platform/core/config",
+        "src/engine/core/installation",
+        "src/domain/core/principal"
       ],
       "plan": "INSTALLATION"
     },

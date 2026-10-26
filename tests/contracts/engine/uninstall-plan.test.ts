@@ -6,7 +6,7 @@ it('pins one keep/purge inventory for every preview consumer and protects reloca
     resourceId, contribution, locator, version: 'v1', owner: 'installation', ownership: 'exclusive', ownershipEvidence: 'a'.repeat(64),
     present: true, protected: false, capability: true, backup: 'covered', ...extra,
   });
-  const inventory: UninstallInventory = { installation: { id: 'installation', generation: 'g1', name: 'Temporary', root: '/fixture/data' },
+  const inventory: UninstallInventory = { installation: { id: 'installation', root: '/fixture/data' },
     scopeSummary: ['company-b', 'company-a'], layoutRevision: 'l1', policyRevision: 'p1', inventoryRevision: 'i1',
     resources: [resource('scratch', 'scratch', '/fixture/data/scratch'), resource('ledger', 'durable', '/fixture/relocated/ledger.db'),
       resource('shared', 'worker-image', 'sha256:foreign', { ownership: 'shared' }),

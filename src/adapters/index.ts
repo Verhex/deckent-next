@@ -124,3 +124,6 @@ export * from '#adapters/core/hub-client-store/index.js';
 export * from '#adapters/core/hub-package-file/index.js';
 export * from '#adapters/core/hub-cache/index.js';
 export * from '#adapters/core/hub-http/index.js';
+
+export { InstallationCacheRemovalTarget, UninstallRecovery } from '#adapters/core/installation-removal/index.js';
+export { FileEffectStore } from '#adapters/core/file-effect-store/index.js';

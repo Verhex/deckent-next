@@ -46,6 +46,7 @@ export function aiAuthorityFloor(actor: { readonly issuer: string; readonly assu
   if (resource.kind === 'provider-spend-account' && action === 'reconcile') return true;
   if (resource.kind === 'backup' && action === 'restore') return true;
   if (resource.kind === 'execution-environment' && action === 'install' || resource.kind === 'installation' && action === 'repair') return true;
+  if (resource.kind === 'installation' && (action === 'uninstall' || action === 'purge')) return true;
   if (resource.kind === 'permission-mode' && action === 'set') return true;
   // S4 (law-audit fold 6, lead 2026-10-23): verified memory needs a human or an independent evaluation record, never the AI itself; retiring is the
   // same knowledge change. S4B-1 (A11): purging content is a person's act. S4B-3 (A5 amendment, verbatim): `memory`/`verify` stays refused for every

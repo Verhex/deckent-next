@@ -17,6 +17,7 @@ export const CLI_COMMANDS = registerCliCommands<CommandContext>({
   // C-DOCTOR: `terminal status|chat-plan|snapshot` get their human text and single errors first; the terminal itself is unchanged (K1–K8).
   terminal: async (argv, context) => (await observe()).terminalInfoCommand(argv, context, async () => (await import('./terminal.js')).terminalCommand(argv, context)),
   init: lazyFunction(() => import('#surfaces/core/cli-installation/index.js'), 'initCommand'), monitor: lazyFunction(() => import('#surfaces/core/monitor/index.js'), 'monitorCommand'),
+  uninstall: lazyFunction(() => import('#surfaces/core/cli-installation/index.js'), 'uninstallCommand'),
   workers: lazyFunction(observe, 'workersCommand'), run: runCommand, task: lazyFunction(() => import('#surfaces/core/cli-task/index.js'), 'taskCommand'),
   do: lazyFunction(cliRun, 'doCommand'),
   report: lazyFunction(cliRun, 'reportCommand'),

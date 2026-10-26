@@ -14,6 +14,7 @@ export type { ConfiguredCancellationRuntimeInput, ConfiguredCancellationRuntimeO
 export { createConfiguredRuntimeClient, startConfiguredRuntimeService } from '#composition/core/runtime-service/index.js';
 export { previewSuppliedInstallation, inspectSuppliedInstallation, applySuppliedInstallation, resumeInstallation } from '#composition/core/installation/index.js';
 export type { InstallationApplyChoices } from '#composition/core/installation/index.js';
+export { previewConfiguredUninstall, applyConfiguredUninstall } from '#composition/core/installation/index.js';
 export { inspectDeclaredModels } from '#composition/core/provider-catalog/index.js';
 export { inspectModelBinding } from '#composition/core/provider-catalog/index.js';
 export { admitConfiguredModelActivation, inspectConfiguredModelActivation, applyConfiguredModelCatalog, inspectConfiguredModelCatalog, assignConfiguredModelRole,

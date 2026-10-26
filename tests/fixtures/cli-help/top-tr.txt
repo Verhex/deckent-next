@@ -37,6 +37,9 @@ Başlarken:
       [--scope <id>] [--json]
 
 İş yürütme:
+  hub         İmzalı Hub paketlerini ve kaynaklarını yönetin.
+      sources list|add|remove | search | inspect | install | update |
+      uninstall | verify | export | refresh | cards | publish | yank | revoke
   do          Brain ve mevcut onay kapılarıyla bir isteği planla
       --request <metin> [--scope <id>]
   run         Run oluştur ve yönet
@@ -79,6 +82,9 @@ Onaylar:
       [--scope <id>]
 
 Kurulum/Bakım:
+  uninstall   Bir kurulumu önizleyin veya kaldırın;
+              veri varsayılan olarak korunur.
+      [--purge] [--dry-run] [--json]
   audit       Audit geçmişini ve checkpoint kanıtını doğrula (eylemsiz: verify)
       verify | rebaseline
       [--scope <id>]
