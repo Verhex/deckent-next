@@ -72,3 +72,33 @@ it('U4E G2: install permission recovery precedes an absent model; not-applicable
   expect(onboardingSteps(missing)[0]?.kind).toBe('permissions');
   expect(onboardingSteps({ ...missing, permissions: { state: 'not-applicable', reason: '' } }).some(step => step.kind === 'permissions')).toBe(false);
 });
+
+it('U6-S4: image consent immediately follows work choice, offers verified adoption first without a selection and preserves missing-only repair', async () => {
+  const { workerImageQuestion, workerImageProgress } = await import('#surfaces/core/terminal-onboarding/index.js');
+  const { workerSetupStages } = await import('#engine/index.js');
+  const id = `sha256:${'a'.repeat(64)}`, missing = `sha256:${'b'.repeat(64)}`;
+  const stage = (id: string): SetupStage => ({ id, namespace: id.split(':')[0]!, title: 'setup.work.kindTitle', phase: 'onboarding', state: 'blocked',
+    reason: { code: 'setup.execution.workerConsentRequired', params: {} }, operation: null, question: null, default: null, cli: null, autoEligible: false });
+  const current = { ...snapshot, budget: { ...snapshot.budget, needed: false }, folderFacts: { ...snapshot.folderFacts, kind: 'coding' as const },
+    plan: { ...snapshot.plan, stages: [stage('work:kind'), stage('execution:runtime'), stage('execution:worker')] } };
+  expect(onboardingSteps(current).map(row => row.id)).toEqual(['work:kind', 'execution:worker', 'execution:runtime', 'onboarding:first-task']);
+  const question = workerImageQuestion({ providers: ['selected-cli'], sources: ['https://mirror.invalid/prefix'], proxy: 'http://proxy.invalid:8080', baseRef: 'base@sha256:pin',
+    sizeGigabytes: 1, buildTimeoutMs: 20000, images: [{ imageId: missing, tag: 'worker:unknown', ready: false }, { imageId: id, tag: 'worker:r32-selected', ready: true }] }, 'en', missing);
+  expect(question.initial).toBeNull(); expect(question.choices.map(row => row.id)).toEqual([id, missing, 'consent', 'later']);
+  expect(question.choices[1]).toMatchObject({ disabled: true });
+  expect(question.body.join('\n')).toContain('https://mirror.invalid/prefix'); expect(question.body.join('\n')).toContain(missing);
+  expect(question.body.join('\n')).toContain('No task starts');
+  expect(workerImageQuestion({ providers: [], sources: [], proxy: null, baseRef: 'base', sizeGigabytes: 1, buildTimeoutMs: 20000, previousMs: 3000 }, 'en').body.join('\n')).toContain('Previous measured preparation');
+  const acquisition = { schemaVersion: 1 as const, revision: 1, instanceId: 'instance', consentId: 'consent', phase: 'ready' as const, step: null, startedAt: '2026-10-26T00:00:00.000Z',
+    lastProgressAt: '2026-10-26T00:00:02.000Z', expiresAt: '2026-10-26T00:01:00.000Z', daemonId: 'daemon', code: null, context: null,
+    images: [{ provider: 'selected-cli', consentId: 'consent', recipeDigest: 'a'.repeat(64), daemonId: 'daemon', imageId: id, imageVersion: 'r32-20261026', tagVersion: 'r32-selected-cli', receiptPath: '/tmp/receipt' }] };
+  const context = { scopeId: 's', answer: undefined, states: new Map([['work:kind', 'done'], ['execution:runtime', 'done'], ['execution:worker', 'done'], ['core:policy', 'done']] as const),
+    facts: { runtimes: [], worker: { configured: missing, image: 'missing', receipt: null, git: null, provider: 'selected-cli', acquisition } } };
+  const stages = workerSetupStages({ person: true, sizeGigabytes: 1 });
+  expect(stages[1]!.evaluate(context)).toMatchObject({ state: 'ready', operation: { input: { keyPath: 'execution.docker.imageId', value: id } } });
+  expect(stages[1]!.evaluate({ ...context, facts: { ...context.facts, worker: { ...context.facts.worker, image: 'unknown' } } })).toMatchObject({ state: 'blocked', reason: { code: 'setup.execution.workerUnknown' } });
+  expect(stages[0]!.evaluate({ ...context, facts: { ...context.facts, worker: { ...context.facts.worker, configured: id } } })).toMatchObject({ state: 'blocked', reason: { code: 'setup.execution.workerMissing' } });
+  const progress = workerImageProgress({ ...acquisition, phase: 'acquiring', step: 'layer:selected-cli' }, 'tr', Date.parse('2026-10-26T00:00:03.000Z'));
+  expect(progress.join('\n')).toContain('selected-cli'); expect(progress.join('\n')).toContain(acquisition.lastProgressAt);
+  expect(workerImageProgress({ ...acquisition, phase: 'waiting-docker' }, 'tr').join('\n')).toContain('Docker bekleniyor');
+});

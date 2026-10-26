@@ -199,3 +199,52 @@ it('canonical tags and retained adoption/failed/archive history keep one daemon 
   await symlink(join(home, 'adopted-1.json'), join(home, 'unsafe.json'));
   expect(() => retainedWorkerHistory(home, 'daemon', bounds)).toThrow('WORKER_HISTORY_IDS');
 });
+
+it('U6-S4 choices require shipped lineage, fresh no-network flags and stable daemon custody before ready adoption is offered', async () => {
+  const { inspectWorkerImageChoices, readWorkerImageSources } = await import('#adapters/core/worker-image/index.js');
+  const { createHash } = await import('node:crypto');
+  const { recipe, directory } = await readWorkerImageSources(process.cwd());
+  const lineage = JSON.parse(await readFile(join(directory, 'lineage.json'), 'utf8'));
+  const latest = lineage.recipes.find((row: { sha256: string }) => row.sha256 === createHash('sha256').update(JSON.stringify(recipe, null, 2) + '\n').digest('hex'));
+  const provider = latest.providers[0], image = `sha256:${'a'.repeat(64)}`, unknown = `sha256:${'b'.repeat(64)}`;
+  const home = await mkdtemp(join(tmpdir(), 'worker-choices-')); roots.push(home);
+  const calls: string[][] = []; let daemonReads = 0, changed = false, flags = true, probeOwner = '';
+  const runner: WorkerImageBuildRunner = async command => {
+    const args = [...command.args]; calls.push(args);
+    expect(command.env['TOKEN']).toBeUndefined(); expect(command.env['HTTPS_PROXY']).toBeUndefined();
+    let output: unknown = '';
+    if (args[0] === 'context') output = 'unix:///fixture';
+    else if (args.includes('info')) output = changed && ++daemonReads % 2 === 0 ? 'changed-daemon' : 'daemon';
+    else if (args.includes('ls')) output = [{ Repository: (recipe as { repository: string }).repository, Tag: 'unverified', ID: unknown }, { Repository: (recipe as { repository: string }).repository, Tag: `r32-${provider}`, ID: image }].map(row => JSON.stringify(row)).join('\n');
+    else if (args.includes('inspect')) output = [{ Id: args.at(-1), Config: { Labels: args.at(-1) === unknown ? {} : { 'dev.deckent.worker.provider': provider, 'dev.deckent.worker.recipe.sha256': latest.sha256, 'org.opencontainers.image.version': latest.version } } }];
+    else if (args.includes('ps')) { expect(args).toContain(`label=${probeOwner}`); output = flags ? '' : 'c'.repeat(64); }
+    else if (args.includes('rm')) { expect(args).toEqual(['--host', 'unix:///fixture', 'rm', '--force', 'c'.repeat(64)]); }
+    else if (args.includes('run')) {
+      probeOwner = args[args.indexOf('--label') + 1]!;
+      expect(args).toEqual(expect.arrayContaining(['--network=none', '--read-only', '--pull=never', '--cap-drop=ALL', '--security-opt=no-new-privileges']));
+      expect(args).toContain(provider); output = { providers: [{ id: provider, requiredFlagsPresent: flags }] };
+    }
+    const text = typeof output === 'string' && args[0] !== 'context' ? output : JSON.stringify(output);
+    return { schemaVersion: 1 as const, requestId: command.requestId, started: true, reason: 'exit' as const, exitCode: 0, signal: null,
+      stdoutBase64: Buffer.from(text).toString('base64'), stderrBase64: '', stdoutTruncated: false, stderrTruncated: false, durationMs: 1 };
+  };
+  const input = { packageRoot: process.cwd(), home, executable: '/fixture/docker', provider, env: { PATH: '/fixture', TOKEN: 'fixture-secret', HTTPS_PROXY: 'http://fixture' } };
+  expect(await inspectWorkerImageChoices({ ...input, executable: null }, runner)).toEqual([]); expect(calls).toEqual([]);
+  expect(await inspectWorkerImageChoices(input, runner)).toEqual([{ imageId: image, tag: `${(recipe as { repository: string }).repository}:r32-${provider}`, ready: true }, { imageId: unknown, tag: `${(recipe as { repository: string }).repository}:unverified`, ready: false }]);
+  expect(calls.filter(args => args.includes('run'))).toHaveLength(1);
+  flags = false; expect((await inspectWorkerImageChoices(input, runner))[1]?.ready).toBe(false);
+  expect(calls.some(args => args.includes('rm'))).toBe(true);
+  changed = true; daemonReads = 0;
+  await expect(inspectWorkerImageChoices(input, runner)).rejects.toMatchObject({ code: 'WORKER_DAEMON_CHANGED' });
+});
+
+it('worker receipt timing is optional telemetry: measured totals are exposed and invalid timing never invalidates a receipt', async () => {
+  const { readNewestWorkerReceipt } = await import('#adapters/core/worker-image/index.js');
+  const home = await mkdtemp(join(tmpdir(), 'worker-timing-')); roots.push(home); await mkdir(join(home, 'receipts'));
+  const receipt = { schemaVersion: 2, imageId: `sha256:${'a'.repeat(64)}`, imageVersion: 'r31-20261024', measuredAt: '2026-10-26T00:00:00.000Z' };
+  const path = join(home, 'receipts/adopted-1.json');
+  await writeFile(path, JSON.stringify({ ...receipt, timings: { totalMs: 1234 } }));
+  expect(await readNewestWorkerReceipt(home)).toMatchObject({ durationMs: 1234 });
+  await writeFile(path, JSON.stringify({ ...receipt, timings: { totalMs: -1 } }));
+  expect(await readNewestWorkerReceipt(home)).toEqual({ imageId: receipt.imageId, imageVersion: receipt.imageVersion });
+});

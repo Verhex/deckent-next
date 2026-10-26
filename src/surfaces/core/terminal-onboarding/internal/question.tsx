@@ -4,10 +4,10 @@ import { t, terminalSafeText, type Locale } from '#platform/index.js';
 import { cliCardGate, type CliCardIo } from '#surfaces/core/cli-human/index.js';
 import { truncateEnd, wrapCells } from '#surfaces/core/terminal-render/index.js';
 export type OnboardingQuestion = Readonly<{ title: string; body: readonly string[]; choices: readonly Readonly<{ id: string; label: string; disabled?: boolean }>[];
-  step: number; total: number; initial?: string; text?: boolean }>;
+  step: number; total: number; initial?: string | null; text?: boolean }>;
 export type QuestionAnswer = Readonly<{ id: string; text?: string }>;
 export function OnboardingQuestionView({ question, locale, finish }: { readonly question: OnboardingQuestion; readonly locale: Locale; readonly finish: (answer: QuestionAnswer) => void }) {
-  const initial = Math.max(0, question.choices.findIndex(row => row.id === question.initial));
+  const initial = question.initial === null ? -1 : Math.max(0, question.choices.findIndex(row => row.id === question.initial));
   const [at, select] = useState(initial), [text, setText] = useState(''), [bodyAt, scroll] = useState(0), done = useRef(false), { exit } = useApp();
   const size = useWindowSize(), width = Math.max(8, size.columns - 4), height = Math.max(1, Math.min(question.choices.length || 1, Math.floor(size.rows / 3)));
   const bodyHeight = Math.max(1, size.rows - height - 9), bodyLines = question.body.flatMap(line => wrapCells(terminalSafeText(line), width));

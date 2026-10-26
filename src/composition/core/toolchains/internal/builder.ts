@@ -8,7 +8,7 @@ import { writeArtifact } from './update.js';
 const counter = (value: string) => Number(/^r([0-9]+)/u.exec(value)?.[1] ?? 0);
 /** Refresh and acquisition enter this same daemon-only owner before counter reservation or any build context. */
 export async function configuredWorkerBuilder<T>(projectRoot: string, options: ConfigLoadOptions, input: { packageRoot: string; home: string;
-  binding: WorkerConsentBinding; refreshExisting?: boolean; plannedAt?: string; instanceId?: string; runner?: WorkerImageBuildRunner; signal?: AbortSignal },
+  binding: WorkerConsentBinding; imageId?: string; refreshExisting?: boolean; plannedAt?: string; instanceId?: string; runner?: WorkerImageBuildRunner; signal?: AbortSignal },
   run: (reservation: WorkerReservation, signal: AbortSignal, retain: (receipt: unknown) => Promise<void>) => Promise<T>): Promise<T> {
   const config = await loadConfig(projectRoot, { ...options, force: true, heal: false });
   const authorize = async (current: typeof config, binding: WorkerConsentBinding) => {
@@ -20,12 +20,12 @@ export async function configuredWorkerBuilder<T>(projectRoot: string, options: C
       const providers = new Set<string>();
       for (const profile of profiles) {
         const installed = profile.imageId ? (await readNewestWorkerReceipt(input.home, profile.imageId))?.images?.filter(image => image.imageId === profile.imageId).flatMap(image => image.providers) : null;
-        if (!installed?.includes(profile.provider)) { matchingWorkerConsent(current.toolchains.image.consents, binding); return; }
+        if (!installed?.includes(profile.provider)) { matchingWorkerConsent(current.toolchains.image.consents, binding, input.imageId); return; }
         installed.forEach(provider => providers.add(provider));
       }
       if (providers.size === binding.providers.length && binding.providers.every(provider => providers.has(provider))) return;
     }
-    matchingWorkerConsent(current.toolchains.image.consents, binding);
+    matchingWorkerConsent(current.toolchains.image.consents, binding, input.imageId);
   };
   await authorize(config, input.binding);
   const env = Object.fromEntries(Object.entries(options.env ?? process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'

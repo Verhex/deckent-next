@@ -26,6 +26,9 @@ export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): 
       if (snapshot.budget.needed) add({ id: 'onboarding:budget', stages: [], kind: 'budget' });
     }
   }
+  const image = steps.findIndex(row => row.id === 'execution:worker');
+  if (image >= 0) { const [step] = steps.splice(image, 1), work = steps.findIndex(row => row.kind === 'work'); const runtime = steps.findIndex(row => row.id === 'execution:runtime');
+    steps.splice(work >= 0 ? work + 1 : runtime >= 0 ? runtime : steps.length, 0, step!); }
   // A connected model's done stage is absent above; its dependent guide still has the same position before work.
   if (!steps.some(row => row.kind === 'budget') && snapshot.budget.needed && !deferred.has('onboarding:budget')) steps.splice(steps[0]?.kind === 'permissions' ? 1 : 0, 0, { id: 'onboarding:budget', stages: [], kind: 'budget' });
   for (const pending of snapshot.pending.filter(row => row.status !== 'cancelled')) add({ id: `parked:${pending.runId}`, kind: 'parked', stages: [], pending });

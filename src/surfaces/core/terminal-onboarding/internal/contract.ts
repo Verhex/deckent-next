@@ -21,8 +21,8 @@ export interface OnboardingPort {
   defer(stageId: string, planDigest: string): Promise<void>;
   apply(stage: SetupStage, basis: OnboardingConfigBasis): Promise<Readonly<{ status: string; code?: string }>>;
   previewConsent(provider: string): Promise<Readonly<{ digest: string; providers: readonly string[]; sources: readonly string[]; proxy: string | null;
-    baseRef: string; recipeDigest: string; sizeGigabytes: number; buildTimeoutMs: number }>>;
-  consent(provider: string, digest: string): Promise<void>;
+    baseRef: string; recipeDigest: string; sizeGigabytes: number; buildTimeoutMs: number; previousMs?: number | null; images?: readonly Readonly<{ imageId: string; tag: string; ready: boolean }>[] }>>;
+  consent(provider: string, digest: string, imageId?: string): Promise<void>;
   budget(usd: number): Promise<void>;
   /** U5 alone owns this operation; an absent carrier is unavailable, never an implicit grant. */
   previewPermissions?(profile?: Readonly<{ id: string; version: number }>): Promise<SetupPermissionPreview>;
