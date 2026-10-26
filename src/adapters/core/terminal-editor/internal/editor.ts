@@ -4,6 +4,7 @@ import { lstat, mkdtemp, open, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import LIMITS from './editor.json' with { type: 'json' };
+import { callerEnvironment } from '#platform/index.js';
 
 export const TERMINAL_EDITOR_LIMITS = Object.freeze({ maxBytes: LIMITS.maxBytes, directoryPrefix: LIMITS.directoryPrefix, fileName: LIMITS.fileName });
 /** Why the draft stayed as it was. Never carries the editor command, the file path or the text. */
@@ -33,7 +34,7 @@ const refused = (reason: ExternalEditorRefusal): ExternalEditorOutcome => Object
  * should get (a paused stream still re-arms a read) and draws nothing; SIGINT from a cooked-mode editor is queued for the caller's listener.
  */
 function runEditor(command: readonly string[], file: string, env: NodeJS.ProcessEnv): 'not-started' | 'aborted' | number {
-  const result = spawnSync(command[0]!, [...command.slice(1), file], { stdio: 'inherit', shell: false, env });
+  const result = spawnSync(command[0]!, [...command.slice(1), file], { stdio: 'inherit', shell: false, env: callerEnvironment(env) });
   return result.error ? 'not-started' : result.signal !== null || result.status === null ? 'aborted' : result.status;
 }
 

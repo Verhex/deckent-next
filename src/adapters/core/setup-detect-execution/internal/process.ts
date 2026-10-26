@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
 import { access, stat } from 'node:fs/promises';
 import { delimiter, isAbsolute, join } from 'node:path';
+import { callerEnvironment } from '#platform/index.js';
 
 export type DetectEnvironment = Readonly<Record<string, string | undefined>>;
 /** One bounded read-only command: `code` is null when it did not run to an exit (absent, timed out, output over the bound, aborted). */
@@ -10,7 +11,7 @@ export type DetectRunner = (executable: string, args: readonly string[], options
   outputBytes: number; signal: AbortSignal }>) => Promise<DetectProcessResult>;
 /** The detection process boundary: no shell, its own deadline and output bound, never throws (setup reports a probe; it does not fail on one). */
 export const runDetectCommand: DetectRunner = (executable, args, options) => new Promise(done => {
-  const env = Object.fromEntries(Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
+  const env = Object.fromEntries(Object.entries(callerEnvironment(options.env)).filter((entry): entry is [string, string] => entry[1] !== undefined));
   execFile(executable, [...args], { env, encoding: 'utf8', timeout: options.timeoutMs, maxBuffer: options.outputBytes, signal: options.signal,
     ...(options.cwd ? { cwd: options.cwd } : {}) }, (error, stdout, stderr) => {
     const failure = error as (Error & { code?: unknown; killed?: boolean }) | null;

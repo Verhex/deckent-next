@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { readBuildIdentity } from '#platform/index.js';
+import { readBuildIdentity, callerEnvironment } from '#platform/index.js';
 import { GIT_LISTING_MAX_BYTES, GIT_LISTING_TIMEOUT_MS } from '#adapters/core/host-shell/index.js';
 import { isAnyWriteFloored, isWriteApprovalFloored } from '#adapters/core/workspace-write/index.js';
 
@@ -15,7 +15,7 @@ const SOURCE_IDENTITY_GIT_LIMITS = Object.freeze({ timeout: GIT_LISTING_TIMEOUT_
 /** Git owns worktree/common-directory resolution. Ignore inherited Git overrides: identity belongs to this project. */
 export async function resolveSourceCommonDir(projectRoot: string): Promise<string | null> {
   try {
-    const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')));
+    const env = Object.fromEntries(Object.entries(callerEnvironment(process.env)).filter(([name]) => !name.startsWith('GIT_')));
     const { stdout } = await execute('git', ['rev-parse', '--git-common-dir'], { cwd: projectRoot, env, ...SOURCE_IDENTITY_GIT_LIMITS });
     const common = stdout.trim();
     return common ? await realpath(resolve(projectRoot, common)) : null;

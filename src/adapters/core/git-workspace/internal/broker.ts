@@ -9,6 +9,7 @@ import { workspaceHiddenPathsSchema, type AttemptIdentity, type WorkspaceHiddenP
 import { WorkspaceError, type WorkspaceBroker, type WorkspaceLease, type WorkspaceRequest } from '#engine/index.js';
 import format from './format.json' with { type: 'json' };
 import { fingerprintGitSource, gitSourceBaseSchema, gitSourcePreimageSchema, type GitSourceBase } from './source-base.js';
+import { callerEnvironment } from '#platform/index.js';
 const exec = promisify(execFile);
 const SOURCE_BASE_NAME = new RegExp(`^${format.sourceBase.replace('.', '\\.')}[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`);
 export type { GitWorkspaceOptions } from '#engine/index.js';
@@ -48,7 +49,7 @@ export class GitWorkspaceBroker implements WorkspaceBroker {
    * clone behavior, these read the caller's own repository and gain the same promisor-lazy-fetch backstop the
    * git-patch package's shared construction uses (`GIT_NO_LAZY_FETCH=1`; proof/GIT-NET-2026-09-29/review.md). */
   private async git(directory: string, args: string[], noLazyFetch = false) {
-    const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')));
+    const env = Object.fromEntries(Object.entries(callerEnvironment(process.env)).filter(([name]) => !name.startsWith('GIT_')));
     const config = join(directory, format.emptyConfig); const hooks = join(directory, format.hooks);
     try {
       return (await exec(this.options.gitExecutable, ['-c', `core.hooksPath=${hooks}`, '-c', 'core.fsmonitor=false', '-c', 'protocol.allow=never', '-c', 'protocol.file.allow=always', ...args],

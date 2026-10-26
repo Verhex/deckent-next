@@ -172,7 +172,8 @@
         "src/engine/core/resource-observation",
         "src/domain/core/attempt",
         "src/adapters/core/native-cli-registry",
-        "src/domain/core/provider-catalog"
+        "src/domain/core/provider-catalog",
+        "src/platform/core/host"
       ],
       "plan": "ISOLATION"
     },
@@ -196,7 +197,8 @@
         "src/domain/core/primitives",
         "src/domain/core/attempt",
         "src/engine/core/workspaces",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/platform/core/host"
       ],
       "plan": "ISOLATION"
     },
@@ -223,13 +225,15 @@
     },
     "src/adapters/core/process-runner": {
       "dependencies": [
-        "src/adapters/core/docker-supervisor"
+        "src/adapters/core/docker-supervisor",
+        "src/platform/core/host"
       ],
       "plan": "ISOLATION"
     },
     "src/adapters/core/process-supervisor": {
       "dependencies": [
-        "src/engine/core/supervisor"
+        "src/engine/core/supervisor",
+        "src/platform/core/host"
       ],
       "plan": "ISOLATION"
     },
@@ -2406,11 +2410,15 @@
       "plan": "SURFACES"
     },
     "src/adapters/core/terminal-editor": {
-      "dependencies": [],
+      "dependencies": [
+        "src/platform/core/host"
+      ],
       "plan": "SURFACES"
     },
     "src/adapters/core/runtime-launcher": {
-      "dependencies": [],
+      "dependencies": [
+        "src/platform/core/host"
+      ],
       "plan": "SURFACES"
     },
     "src/composition/core/inference-metrics": {
@@ -3387,7 +3395,8 @@
         "src/adapters/core/provider-openai-chat",
         "src/adapters/core/provider-http-json",
         "src/platform/core/config",
-        "src/adapters/core/native-cli-registry"
+        "src/adapters/core/native-cli-registry",
+        "src/platform/core/host"
       ],
       "plan": "PROVIDERS"
     },
@@ -3632,7 +3641,8 @@
     "src/adapters/core/setup-detect-execution": {
       "dependencies": [
         "src/engine/core/setup",
-        "src/engine/core/worker-setup"
+        "src/engine/core/worker-setup",
+        "src/platform/core/host"
       ],
       "plan": "INSTALLATION"
     },
@@ -3650,7 +3660,8 @@
         "src/adapters/core/workspace-read",
         "src/adapters/core/worker-tree-gate",
         "src/engine/core/effect",
-        "src/platform/core/integrity"
+        "src/platform/core/integrity",
+        "src/platform/core/host"
       ],
       "plan": "INSTALLATION"
     },
