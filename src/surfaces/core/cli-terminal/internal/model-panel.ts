@@ -12,7 +12,7 @@ const terminalConfigWrite = async (...args: Parameters<typeof import('#surfaces/
   (await import('#surfaces/core/config/index.js')).terminalConfigWrite(...args);
 
 type Host = Pick<TerminalLaunchContext, 'admitModelActivation' | 'inspectDeclaredModels' | 'inspectModelActivation' | 'inspectModelBinding' | 'inspectModelCatalog' | 'describeTerminalChatPlan'
-  | 'listSecretNames' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'inspectModelReadiness' | 'prepareModelSwitch' | 'providerConnect'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
+  | 'listSecretNames' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'inspectModelReadiness' | 'prepareModelSwitch' | 'providerConnect' | 'siwc'> & Pick<ConfigCommandContext, 'configApplication' | 'resolveConfigPrincipal' | 'describeRuntimeService'>;
 /** T4-B D1: the words of the setting that chose the model in effect (the `/model` window shows which layer wins). */
 function winnerNote(source: string | null | undefined, model: string, locale: Locale): string | null {
   switch (source) {
@@ -108,13 +108,15 @@ export function modelPanelSource(root: string, scopeId: string, host: Host, opti
         if (!state.invocable && state.reason.code.startsWith('PROVIDER_SPEND')) fixes.push({ id: 'budget', label: t('tui.model.fix.budget', {}, locale) });
         if (!state.invocable && !state.reason.code.startsWith('PROVIDER_SPEND') && host.providerConnect) fixes.push({ id: 'provider', label: t('tui.model.fix.provider', {}, locale) });
         const blocked = state.invocable ? null : modelInvocabilityText(state, locale);
+        const planKind = host.siwc && host.providerConnect?.kinds.find(kind => kind.id === host.siwc!.connection);
+        const personalPlan = planKind?.catalogProviderId === provider.id;
         if (!state.invocable && state.reason.code === 'PROVIDER_SPEND_EXHAUSTED') reservationBlocked.add(exact);
         const command = entry && !state.invocable && (state.reason.kind === 'not-carried' || state.reason.kind === 'stale-activation')
           ? t('tui.model.command.activate', { scope: scopeId, provider: provider.id, providerVersion: provider.version, model: model.id, modelVersion: model.version,
             revision: state.reason.activationRevision ?? 0, digest: entry.bindingDigest, catalog: entry.catalogRevision }, locale) : null;
-        return { reference, label: display.get(exact) ?? model.id, stateToken: JSON.stringify([chat?.activation?.revision ?? 0, ...(workerTokens.get(exact) ?? [null, null]), binding?.status === 'declared' ? binding.catalogRevision : null, binding?.status === 'declared' ? binding.binding.digest : null]), fixes, detail: `${(on ? t('tui.model.state.on', {}, locale) : t('tui.model.state.off', {}, locale))} · ${conflict ? t('tui.model.reconcile.title', {}, locale) : modelInvocabilityText(state, locale)}`,
+        return { reference, label: display.get(exact) ?? model.id, stateToken: JSON.stringify([chat?.activation?.revision ?? 0, ...(workerTokens.get(exact) ?? [null, null]), binding?.status === 'declared' ? binding.catalogRevision : null, binding?.status === 'declared' ? binding.binding.digest : null]), fixes, detail: `${(on ? t('tui.model.state.on', {}, locale) : t('tui.model.state.off', {}, locale))} · ${conflict ? t('tui.model.reconcile.title', {}, locale) : modelInvocabilityText(state, locale)}${personalPlan ? ` · ${t('siwc.preview', {}, locale)}${state.invocable ? ` · ${t('siwc.status.usingPlan', {}, locale)}` : ''}` : ''}`,
           providerLabel: providerDisplayName(provider.id, host.providerConnect, locale),
-          group: provider.id, blocked, exact: t('tui.model.exact', { reference: exact, native: model.nativeId }, locale), command,
+          group: provider.id, blocked, exact: t('tui.model.exact', { reference: exact, native: model.nativeId }, locale), command: personalPlan && host.siwc?.usageUrl ? [command, t('siwc.usage.manage', { url: host.siwc.usageUrl }, locale)].filter(Boolean).join('\n') : command,
           configured: plan?.reference ? sameReference(plan.reference, reference) : false };
       })));
       // A viable alternative passed all the same readiness checks in this snapshot; no price or cap guess.

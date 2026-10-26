@@ -265,12 +265,14 @@
         "src/surfaces/core/terminal-delivery",
         "src/surfaces/core/cli-human",
         "src/surfaces/core/terminal-onboarding",
-        "src/surfaces/core/terminal-hub"
+        "src/surfaces/core/terminal-hub",
+        "src/surfaces/core/siwc"
       ],
       "purpose": "Component model for the ink TUI.",
       "features": [
         "useState, useEffect, useLayoutEffect, useRef, useCallback, createContext, useContext, createElement",
-        "ReactElement, ReactNode types"
+        "ReactElement, ReactNode types",
+        "lazy, Suspense for deferred terminal windows"
       ],
       "criticality": "P1",
       "alternatives": [

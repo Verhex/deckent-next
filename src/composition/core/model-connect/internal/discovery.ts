@@ -1,3 +1,5 @@
+import { SIWC_INFERENCE, listSiwcModels } from '#adapters/index.js';
+import { withConfiguredSiwc } from '#composition/core/siwc/index.js';
 import { recordConfiguredProviderFailure } from '#composition/core/provider-catalog/index.js';
 import { ModelCatalogPolicyAuthorization, ModelConnectError } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, discoverProviderModels, discoveredProviderCatalog, providerDiscoveryChannel, providerConnectSecretName,
@@ -21,6 +23,14 @@ export async function listConfiguredConnectionModels(projectRoot: string, scopeI
       return (await loadConfiguredScopeContext(projectRoot, scopeId, options, 'read')).document;
     } }).authorize('inspect', scopeId, { channelId, modelId: null }, context.principal, 'scope');
     await authorize();
+    if (kind.connect.adapter === SIWC_INFERENCE.adapter.id) {
+      const rows = await withConfiguredSiwc(projectRoot, scopeId, options, 'inspect', async (app, caller) => {
+        const connections = (await app.list()).filter(row => row.planUse);
+        if (connections.length !== 1) throw ErrorRegistry.createError('OAUTH_CONNECTION_REAUTHORIZE');
+        return listSiwcModels(signal => app.lease(connections[0]!.connectionId, caller, signal), host.discoveryOptions?.signal);
+      });
+      await authorize(); return rows.map(row => ({ nativeId: row.slug, displayName: row.display_name, priced: true }));
+    }
     const secure = new URL(base).protocol === 'https:', name = providerConnectSecretName(kind, base);
     const key = secure && name ? await projectCredentialResolver(context, scopeId, options).resolve(name) ?? null : null;
     await authorize();

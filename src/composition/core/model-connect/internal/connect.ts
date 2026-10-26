@@ -1,6 +1,8 @@
+import { configuredSiwcConnect } from '#composition/core/siwc/index.js';
+import { SIWC_INFERENCE } from '#adapters/index.js';
 import type { ModelConnectResult } from '#domain/index.js';
 import { isDeepStrictEqual } from 'node:util';
-import { AuditApplication, ModelConnectApplication, ModelConnectError, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
+import { AuditApplication, OAuthConnectionError, ModelConnectApplication, ModelConnectError, ModelCatalogPolicyAuthorization, ModelActivationPolicyAuthorization, workerConnectionModelIds, assessModelInvocationProfileDeliveries, configServiceState, planProfileCache, type DescribeService, type ProfileCachePlan, planProfileChanges, type ProfileChangePlan } from '#engine/index.js';
 import { PROVIDER_CONNECT_REGISTRY, ProviderConnectError, connectionAdapter, openLocalIntegrityAuthority, openSqliteAuditStore, providerConnectSecretName, providerConnectModelPriced, providerDiscoveryChannel, discoveredProviderCatalog, providerEndpoint, providerProfileCacheOffer, readProviderConnectSeed, type ProviderConnectRegistry, providerProfileProtocolOffer, type ProviderProfileProtocolDetail } from '#adapters/index.js';
 import { DeckentError, ErrorRegistry, type ConfigLoadOptions } from '#platform/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal, snapshotConfiguredConfig } from '#composition/core/config/index.js';
@@ -16,7 +18,7 @@ import { loadComposedConfig } from '#composition/core/root/index.js';
 import { providerSpendingConfiguredBudget } from '#adapters/index.js';
 import { modelConnectCommandSchema } from '#domain/index.js';
 /** Code-only host ports: secret names, service status and a validated registry overlay; never config/env. */
-export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
+export type ModelConnectHost = ModelDiscoveryHost & Readonly<{ siwcPresentation?: import('#composition/core/siwc/index.js').SiwcBrowserPresentation; registry?: ProviderConnectRegistry; listSecretNames?: (root: string, options: ConfigLoadOptions) => Promise<Readonly<{ names: readonly string[] }>>; describeService?: DescribeService }>;
 /** Shared model-connect composition over existing config/catalog/activation/audit owners. Seedless discovery keeps credentials in its adapter. */
 export async function connectConfiguredModel(projectRoot: string, input: unknown, options: ConfigLoadOptions = {}, host: ModelConnectHost = {}): Promise<ModelConnectResult> {
   try {
@@ -32,6 +34,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       if (!rows.some(row => row.id === parsed.data.workspaceId)) throw new ModelConnectError('MODEL_CONNECT_MODEL_UNKNOWN');
       host = { ...host, discoveryOptions: { ...host.discoveryOptions, workspaceId: parsed.data.workspaceId } };
     }
+    const siwc = parsed.success && kindOf(parsed.data.connection)?.connect?.adapter === SIWC_INFERENCE.adapter.id ? configuredSiwcConnect(projectRoot, parsed.data, options, host.siwcPresentation) : null;
     const pulled = new Map<string, readonly string[]>();
     const app = new ModelConnectApplication({
       kind: id => { const kind = kindOf(id); return kind && { id: kind.id, available: kind.available, endpoint: kind.endpoint, keyRequired: kind.key?.required ?? false, connect: kind.connect }; },
@@ -39,6 +42,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       async available(id, base) {
         const kind = kindOf(id)!;
         if (kind.connect?.catalogOnly) return workerConnectionModelIds(await readProviderConnectSeed(kind.connect.seed!), effective as never);
+        if (kind.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc) { const ids = (await siwc.models()).map(row => row.slug); pulled.set(id, ids); return ids; }
         if (!kind.probe?.listsModels) return null;
         const ids = (await listConfiguredConnectionModels(projectRoot, String(scopeId), id, base, options, host)).map(row => row.nativeId);
         pulled.set(id, ids); return ids;
@@ -57,8 +61,11 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
       endpoint: text => { const checked = providerEndpoint(text); return checked.ok ? checked.base : null; },
       secretName: (id, base) => { const kind = kindOf(id); return kind ? providerConnectSecretName(kind, base) : null; },
       seed: readProviderConnectSeed,
-      discover: async (id, base, nativeId) => pulled.get(id)?.includes(nativeId) ? discoveredProviderCatalog(kindOf(id)!, base, nativeId) : discoverConfiguredConnectionModel(projectRoot, String(scopeId), id, base, nativeId, options, host),
-      adapter: (id, value) => kindOf(id)?.connect?.chatPath === null && cli ? cli.adapter(kindOf(id)!, value) : connectionAdapter(kindOf(id)!, { ...value, endpoint: value.endpoint ?? '' }),
+      discover: async (id, base, nativeId) => {
+        if (kindOf(id)?.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc && !pulled.has(id)) pulled.set(id, (await siwc.models()).map(row => row.slug));
+        return pulled.get(id)?.includes(nativeId) ? discoveredProviderCatalog(kindOf(id)!, base, nativeId) : discoverConfiguredConnectionModel(projectRoot, String(scopeId), id, base, nativeId, options, host);
+      },
+      adapter: (id, value) => kindOf(id)?.connect?.adapter === SIWC_INFERENCE.adapter.id && siwc ? siwc.adapter(value.existing) : kindOf(id)?.connect?.chatPath === null && cli ? cli.adapter(kindOf(id)!, value) : connectionAdapter(kindOf(id)!, { ...value, endpoint: value.endpoint ?? '' }),
       async workerActivate(reference, commandId) {
         return kindOf(parsed.success ? parsed.data.connection : '')?.connect?.catalogOnly
           ? activateConfiguredWorkerModel(projectRoot, String(scopeId), reference, commandId, options) : false;
@@ -108,6 +115,7 @@ export async function connectConfiguredModel(projectRoot: string, input: unknown
     const result = await app.connect(input);
     return result.status === 'connected' && result.tariff === 'published' ? Object.freeze({ ...result, budget: await connectBudget(projectRoot, result.scopeId, options) }) : result;
   } catch (error) {
+    if (error instanceof OAuthConnectionError) throw ErrorRegistry.createError(error.code, { params: error.reason ? { reason: error.reason } : {} });
     if (error instanceof ModelConnectError) throw ErrorRegistry.createError(error.code, { params: { models: (error.models ?? []).map(model => model.nativeId).join(', ') } });
     if (error instanceof ProviderConnectError) throw ErrorRegistry.createError(error.code);
     throw error instanceof DeckentError ? error : queryFailure(error);

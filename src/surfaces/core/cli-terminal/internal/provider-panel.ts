@@ -55,7 +55,7 @@ function custodyText(backend: string, locale: Locale): string {
   return t('tui.panel.provider.transparency', { backend }, locale);
 }
 
-type Host = Pick<TerminalLaunchContext, 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'prepareMainSecret' | 'connectProviderSecret'>;
+type Host = Pick<TerminalLaunchContext, 'siwc' | 'providerConnect' | 'listSecretNames' | 'setSecret' | 'deleteSecret' | 'connectModel' | 'inspectDeclaredModels' | 'inspectProviderSpendAccount' | 'inspectInvocableModels' | 'prepareMainSecret' | 'connectProviderSecret'>;
 const PULL = 'pull:available';
 const SEED = 'seed:', DECLARED = 'ref:', LEGACY = 'legacy:';
 const referenceKey = (reference: ModelReference) => `${reference.providerId}@${reference.providerVersion}/${reference.modelId}@${reference.modelVersion}`;
@@ -106,6 +106,7 @@ export function providerPanelPort(root: string, scopeId: string, host: Host & { 
     } catch (error) { lines.push({ label: '', text: errorText(error), tone: 'warning' }); }
   };
   return {
+    ...(host.siwc ? { siwc: { connection: host.siwc.connection, locale, execute: (request, presentation) => host.siwc!.execute(root, { ...request, scopeId }, options, presentation) } } : {}),
     ...(secretGrant ? { secretGrant } : {}),
     ...(host.prepareMainSecret ? { async prepareKey(kind: string, endpoint: string | null) {
       const custody = await host.prepareMainSecret!(root, scopeId, options);

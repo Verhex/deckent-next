@@ -1,3 +1,4 @@
+import { SIWC_INFERENCE, SIWC_USAGE_SUMMARY, providerDiscoveryChannel } from '#adapters/index.js';
 import { executeConfiguredHub } from '#composition/core/hub/index.js';
 import { planRuntimeRun } from '#composition/core/run-planner/index.js';
 import { inspectInstallationStartability, readAutonomyShadow, createConfiguredRuntimeClient, configuredTargetQueueTerminal, invokeRuntimeModel, runRuntimeChatTurn, cancelRuntimeChatTurn, findRuntimeWorkspaceFiles, attachRuntimeWorkspaceFile, inspectRuntimeModelInvocation, purgeRuntimeModelInvocationContent, cancelRuntimeModelInvocation, inspectRuntimeProviderSpendAccount, auditRuntimeProviderSpendAccount, manageRuntimeProviderSpend } from '#composition/core/runtime-service/index.js';
@@ -26,7 +27,7 @@ import { readConfiguredInferenceMetrics } from '#composition/core/inference-metr
 import { interactiveDeliveryHandlers, describeConfiguredDeliverySummaries, inspectConfiguredWorkspaceIntegration, checkConfiguredWorkspaceIntegration, prepareConfiguredWorkspaceIntegration, prepareConfiguredWorkspacePatch, previewConfiguredWorkspacePatch } from '#composition/core/workspace-patch/index.js';
 import { admitConfiguredModelActivation, applyConfiguredModelCatalog, assignConfiguredModelRole, inspectConfiguredModelActivation, inspectConfiguredModelCatalog,
   inspectConfiguredModelRoles } from '#composition/core/model-activation/index.js';
-import { connectProvider, prepareProviderSecret, connectConfiguredModel, listConfiguredConnectionWorkspaces, loginConfiguredHeadless, readConfiguredHeadlessLogins, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
+import { inspectConfiguredSiwcConnections, executeConfiguredSiwc, connectProvider, prepareProviderSecret, connectConfiguredModel, listConfiguredConnectionWorkspaces, loginConfiguredHeadless, readConfiguredHeadlessLogins, listConfiguredConnectionModels, planConfiguredProfileCache, planConfiguredProfileProtocol, inspectConfiguredModelReadiness, prepareConfiguredModelSwitch } from '#composition/core/model-connect/index.js';
 import { startConfiguredCliRuntimeService } from './runtime-host.js';
 import { releaseConfiguredQuota, applyConfiguredPoolCapacity, inspectConfiguredPoolCapacity, applyConfiguredRunLifecycle, applyConfiguredPoolHold, createConfiguredDeliveryRun, inspectConfiguredPoolHold,
   inspectConfiguredWorkerInstructions, changeConfiguredWorkerInstructionTrust, inspectConfiguredRecoveryMode, inspectConfiguredRecoveryRollout, inspectConfiguredRecoveryPolicy,
@@ -96,7 +97,7 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     setSecret: (projectRoot, input, options) => createConfiguredRuntimeClient(projectRoot, options).setSecret(input),
     /* T4 PROVIDER-CONNECT: the /provider kinds (adapter data) and the free check, run in this terminal process with the key the person typed; the key then goes only to `setSecret` above (runtime service, audited by name). No environment variable, file or worker sees it. */ providerConnect: { kinds: PROVIDER_CONNECT_KINDS.map(kind => ({ id: kind.id, labelKey: kind.labelKey, available: kind.available, endpointDefault: kind.endpoint.default,
       endpointEditable: kind.endpoint.editable, keyRequired: kind.key?.required ?? false, secretName: kind.key?.secretName ?? null, probePath: kind.probe?.path ?? null,
-      endpointChoices: kind.endpoint.choices, catalogProviderId: kind.connect?.seed ?? null, connectFamily: providerConnectFamily(kind), seeded: Boolean(kind.connect?.seed),
+      endpointChoices: kind.endpoint.choices, catalogProviderId: kind.connect?.seed ?? (kind.connect?.adapter === SIWC_INFERENCE.adapter.id ? providerDiscoveryChannel(kind, null) : null), connectFamily: providerConnectFamily(kind), seeded: Boolean(kind.connect?.seed),
       priceRequired: kind.connect?.priceRequired ?? false, billing: kind.billing, ...(kind.connect ? { pull: kind.connect.pull } : {}) })),
     endpoint: providerEndpoint, probe: async (input, signal) => { const result = await probeProviderConnection(input, signal ? { signal } : {});
       if (result.cause) await recordConfiguredProviderFailure(base.root, 'provider-probe', { code: 'PROVIDER_PROBE_REFUSED', cause: result.cause, status: result.httpStatus }); return result; },
@@ -149,6 +150,8 @@ export function createCliHost(base: CliHostBase, serviceEntry?: string): Paramet
     inspectModelInvocation: inspectRuntimeModelInvocation, purgeModelInvocationContent: purgeRuntimeModelInvocationContent,
     cancelModelInvocation: cancelRuntimeModelInvocation, inspectProviderSpendAccount: inspectRuntimeProviderSpendAccount, auditProviderSpendAccount: auditRuntimeProviderSpendAccount, manageProviderSpend: manageRuntimeProviderSpend,
     admitModelActivation: admitConfiguredModelActivation, inspectModelActivation: inspectConfiguredModelActivation, applyModelCatalog: applyConfiguredModelCatalog, inspectModelCatalog: inspectConfiguredModelCatalog,
+    siwc: { connection: PROVIDER_CONNECT_KINDS.find(row => row.connect?.adapter === SIWC_INFERENCE.adapter.id)!.id, usageUrl: SIWC_USAGE_SUMMARY.manageUrl, execute: executeConfiguredSiwc },
+    inspectSiwcConnections: inspectConfiguredSiwcConnections,
     inspectModelRoles: inspectConfiguredModelRoles, readHeadlessLogins: readConfiguredHeadlessLogins, loginHeadless: loginConfiguredHeadless, assignModelRole: (projectRoot, command, options) => assignConfiguredModelRole(projectRoot, command, options), // M2 typed role admission
     /* T4-B models.connect: the secret store is read for names only (the key's presence), the service describe for the restart state. */ planProfileCache: planConfiguredProfileCache, // CACHE-SLICE1: the governed 5-minute cache migration offered in `/model` and `/provider`.
     inspectModelReadiness: inspectConfiguredModelReadiness, prepareModelSwitch: prepareConfiguredModelSwitch, inspectInvocableModels: inspectConfiguredInvocableModels,

@@ -1,12 +1,12 @@
-import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, type BrainPlanCommand, type BrainPlanObserver,
+import { executionRegistrySchema, WORK_CLASS_WORKER_ROLE, NATIVE_CLI_HEADLESS_ADAPTER_ID, type BrainPlanCommand, type BrainPlanObserver,
   brainPlanCommandInputSchema, modelInvocationProfileSchema, type ModelInvocationCommand, type ModelInvocationCancellationCommand, type RunProposal } from '#domain/index.js';
 import { intentStartExpectedRevision, BrainPlanApplication, brainQuotaWaitPolicy, brainRunId, brainTakesMemory, prepareBrainRegistryPrompt, assertBrainContextFits, inspectAdmissibleWorkerModels, composeModelRolePolicy, brainAssignsWorkers, type ModelInvocationResult, modelInvocationRequestDigest, classifyWorkSpending, providerSpendRemaining } from '#engine/index.js';
 import { ErrorRegistry, getConfigKnownSecrets, prepareProductDirectory, type ConfigLoadOptions } from '#platform/index.js';
-import { FileBrainQuotaWaitStore, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
+import { SIWC_INFERENCE, FileBrainQuotaWaitStore, extractOpenAiChatTextFromInvocation, openAiChatStoppedAtLength, isNativeCodingTemplate, nativeCodingTemplateWorker, nativeCodingTemplateTurnLimit, openSqliteModelCatalogReader } from '#adapters/index.js';
 import { loadConfiguredScopeContext } from '#composition/core/scoped-request/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
 import { prepareTerminalChatCommand } from '#composition/core/terminal-chat/index.js';
-import { inspectConfiguredModelInvocation, invokeConfiguredModel, measureConfiguredModel } from '#composition/core/model-invocation/index.js';
+import { inspectConfiguredModelInvocation, invokeConfiguredFeatureModel, configuredContinuationPin, prepareConfiguredFeatureContinuation, measureConfiguredModel } from '#composition/core/model-invocation/index.js';
 import { inspectConfiguredRunProposal, proposeConfiguredRun, readConfiguredRunBudget } from '#composition/core/runs/index.js';
 import { createConfiguredRuntimeClient } from '#composition/core/runtime-service/index.js';
 import { queryFailure } from '#composition/core/query-errors/index.js';
@@ -19,11 +19,17 @@ export { inspectConfiguredRoleModels } from './internal/model-roles.js';
 /** SDK application contract. CLI/MCP/Terminal use the same application with the existing runtime invocation transport. `observe`: a caller that
  * shows planning progress (a quota wait, owner Q-H4) passes it; without it a quota refusal is the typed refusal at once. */
 export function planConfiguredRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, observe?: BrainPlanObserver) {
-  return plan(root, input, options, (command, signal) => invokeConfiguredModel(root, command, options, signal), signal, undefined, observe);
+  return plan(root, input, options, (command, signal) => invokeConfiguredFeatureModel(root, command, options, signal), signal, undefined, observe);
 }
 export function planRuntimeRun(root: string, input: BrainPlanCommand, options: ConfigLoadOptions = {}, signal?: AbortSignal, observe?: BrainPlanObserver) {
   const client = createConfiguredRuntimeClient(root, options);
   return plan(root, input, options, async (command, signal) => {
+    const configured = (await loadComposedConfig(root, options))['provider_invocation_profiles'] as { profiles?: unknown[] } | undefined;
+    const profile = configured?.profiles?.map(value => modelInvocationProfileSchema.parse(value)).find(row => row.scopeId === command.scopeId
+      && JSON.stringify(row.reference) === JSON.stringify(command.reference));
+    // The Brain is a connected feature, whereas the runtime's generic invokeModel is deliberately a raw operation.
+    // Keep the host-only continuation pin and the caller's verified identity on the direct application contract.
+    if (profile?.adapter.id === SIWC_INFERENCE.adapter.id || configuredContinuationPin(command)) return invokeConfiguredFeatureModel(root, command, options, signal);
     const cancel = () => { void client.cancelModelInvocation({ schemaVersion: 1, commandId: command.commandId + '-cancel', scopeId: command.scopeId,
       targetCommandId: command.commandId, reference: command.reference, expectedRequestDigest: modelInvocationRequestDigest(command) } satisfies ModelInvocationCancellationCommand).catch(() => undefined); };
     signal?.addEventListener('abort', cancel, { once: true });
@@ -46,7 +52,10 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
     const context = await loadConfiguredScopeContext(root, input.scopeId, options, 'write');
     const readBudget = (scopeId: string) => readConfiguredRunBudget(root, scopeId, options).then(value => providerSpendRemaining(value.checkpoint));
     return await new BrainPlanApplication({ verify: async () => context.principal }, {
+      subscriptionAdapterIds: new Set([NATIVE_CLI_HEADLESS_ADAPTER_ID, SIWC_INFERENCE.adapter.id]),
       knownSecrets: getConfigKnownSecrets(context.config), remainingBudget: scopeId => readBudget(scopeId).catch(() => null),
+      continueBilling: (command, result, notice, signal) => prepareConfiguredFeatureContinuation(root, command, result, options, notice,
+        async next => gateConfiguredBrainModel(await loadConfiguredScopeContext(root, next.scopeId, options, 'read'), next), signal),
       inspect: query => inspectConfiguredRunProposal(root, query, options), invoke,
       propose: propose ?? (proposal => proposeConfiguredRun(root, proposal, options)), text: extractOpenAiChatTextFromInvocation,
       stoppedAtLength: openAiChatStoppedAtLength,
@@ -91,7 +100,7 @@ async function plan(root: string, input: BrainPlanCommand, options: ConfigLoadOp
         const prepared = await prepareTerminalChatCommand({ projectRoot: root, scopeId: command.scopeId, messages: prompt.messages, options }, false, selected.command.reference, prompt.invocationSettings);
         assertBrainContextFits(prepared.command, context.config['brain_planner'], null, null); // complete byte guard before even the counter's HTTP effect
         await memory.seal(prompt.memory, prompt.contextDigest);
-        const measured = await measureConfiguredModel(root, prepared.command, options, signal);
+        const measured = await measureConfiguredModel(root, prepared.command, options, signal, 'feature');
         if (signal?.aborted) throw ErrorRegistry.createError('BRAIN_CANCELLED');
         assertBrainContextFits(prepared.command, context.config['brain_planner'], profile?.contextWindowTokens ?? null, measured);
         const note = memory.note();
@@ -107,11 +116,11 @@ export { transitionConfiguredRunIntent } from './internal/intents.js';
 export async function startConfiguredRunIntent(root: string, intent: import('#engine/index.js').RunIntentRecord, options: ConfigLoadOptions = {}, signal?: AbortSignal) {
   const query = { schemaVersion: 1 as const, scopeId: intent.command.scopeId, commandId: intent.command.commandId, runId: intent.runId };
   const kept = await inspectConfiguredRunProposal(root, query, options);
-  if (kept && !('kind' in kept)) return plan(root, intent.command, options, (command, signal) => invokeConfiguredModel(root, command, options, signal), signal, undefined, undefined, true);
+  if (kept && !('kind' in kept)) return plan(root, intent.command, options, (command, signal) => invokeConfiguredFeatureModel(root, command, options, signal), signal, undefined, undefined, true);
   const start = intent.transitions.find(row => row.action === 'start');
   const previous = start ? { ...intent, revision: intentStartExpectedRevision(start.revision) } : intent;
   await transitionConfiguredRunIntent(root, previous, 'start', start?.commandId ?? `${intent.command.commandId}-start`, options);
   const setup = await configuredWorkerSetupFact(root, intent.command.scopeId, options);
   if (!setup?.ready) throw ErrorRegistry.createError('WORKER_SETUP_PENDING', { params: setup?.params ?? { phase: 'unavailable' } });
-  return plan(root, intent.command, options, (command, signal) => invokeConfiguredModel(root, command, options, signal), signal, undefined, undefined, true);
+  return plan(root, intent.command, options, (command, signal) => invokeConfiguredFeatureModel(root, command, options, signal), signal, undefined, undefined, true);
 }

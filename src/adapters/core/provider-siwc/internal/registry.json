@@ -54,7 +54,10 @@
   "usageSummary": {
     "days": 30,
     "source": "https://developers.openai.com/siwc/ui-ux-guidelines",
-    "observedOn": "2026-10-25"
+    "observedOn": "2026-10-25",
+    "maxEntries": 100000,
+    "manageUrl": "https://chatgpt.com/settings/usage",
+    "timeoutMs": 5000
   },
   "inference": {
     "adapter": {

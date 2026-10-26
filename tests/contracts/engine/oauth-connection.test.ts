@@ -1,15 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdtemp, readFile, rm, lstat, writeFile, unlink } from 'node:fs/promises';
+import { tmpdir, userInfo, hostname } from 'node:os';
 import { join } from 'node:path';
-import { OAuthConnectionApplication, OAuthConnectionError, oauthConnectionRecordSchema, type OAuthConnectionPorts } from '#engine/index.js';
-import { SIWC_PROTOCOL, createEncryptedFileSecretStore } from '#adapters/index.js';
+import { OAuthConnectionApplication, OAuthConnectionError, oauthConnectionRecordSchema, type OAuthConnectionPorts, personalCustodyEvidenceSchema, PersonalCustodyError, IdentityProfileRegistry } from '#engine/index.js';
+import { SIWC_PROTOCOL, createEncryptedFileSecretStore, rememberPersonalStoreInstance, personalStoreAssertion } from '#adapters/index.js';
 import { auditEventSchema, recoveryPrincipalRef } from '#domain/index.js';
 
 const OWNER = { installationId: 'installation-fixture', companyId: 'company-fixture', scopeId: 'scope-fixture',
   principal: { issuer: 'os-fixture', subject: 'person-fixture' } };
 const SECRET = 'fixture-secret-canary-not-a-live-token';
 const TIME = 1_800_000_000_000;
+const evidence = (owner = OWNER) => personalCustodyEvidenceSchema.parse({ schemaVersion: 1, producer: 'local-os-store', owner,
+  os: { uid: 1000, assurance: 'os-user', peerPid: null, connectionWitness: null },
+  profile: { id: 'core:solo', version: 1, digest: 'a'.repeat(64) },
+  store: { backendId: SIWC_PROTOCOL.encryptedStoreId, instanceBindingId: 'a1000000-0000-4000-8000-000000000001', generation: 1, role: 'personal-main', selectionDigest: null },
+  host: { locationDigest: 'b'.repeat(64), keyIdentityDigest: 'c'.repeat(64), mountEvidenceDigest: 'd'.repeat(64), locality: 'local', control: 'os-account-exclusive' },
+  cleanup: { state: 'complete', revision: 1 }, observedAtMs: TIME });
 function fixture(overrides: Partial<OAuthConnectionPorts> = {}) {
   const values = new Map<string, string>(), audits: unknown[] = [], forms: URLSearchParams[] = [], urls: string[] = [];
   let tail = Promise.resolve();
@@ -26,7 +32,7 @@ function fixture(overrides: Partial<OAuthConnectionPorts> = {}) {
     store: { descriptor: { id: SIWC_PROTOCOL.encryptedStoreId, writable: true, enumerable: true, encryptedAtRest: true },
       get: async name => values.get(name), set: async (name, value) => { values.set(name, value); }, delete: async name => values.delete(name),
       listNames: async () => [...values.keys()], inspect: async () => ({ status: 'ready', code: null }) },
-    custody: { assertPersonal: async () => { /* Synthetic trusted host evidence, not a real custody attestation. */ }, selected: async () => SIWC_PROTOCOL.encryptedStoreId, exclusive: async work => {
+    custody: { assertPersonal: async (_descriptor, owner) => evidence(owner), selected: async () => SIWC_PROTOCOL.encryptedStoreId, exclusive: async work => {
       const before = tail; let release!: () => void; tail = new Promise<void>(yes => { release = yes; });
       await before; try { return await work(); } finally { release(); }
     } },
@@ -362,7 +368,7 @@ describe('host-only OAuth access token leases', () => {
 });
 
 it('requires trusted personal custody before sign-in and each lease/refresh, preserves tokens on failure, and still permits logout', async () => {
-  const f = fixture(), attest = vi.fn(async () => {});
+  const f = fixture(), attest = vi.fn(async () => evidence());
   f.ports.custody.assertPersonal = attest;
   const connected = await f.app.connect({ planUse: true });
   expect(attest).toHaveBeenCalledWith(f.ports.store.descriptor, OWNER);
@@ -381,4 +387,73 @@ it('requires trusted personal custody before sign-in and each lease/refresh, pre
   const noProof = fixture(); delete noProof.ports.custody.assertPersonal;
   await expect(noProof.app.connect({ planUse: true })).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL' });
   expect(noProof.values.size).toBe(0); expect(noProof.urls).toHaveLength(0);
+});
+
+
+it('leases only a current binding for the verified person and actual store; ordinary API keys survive first binding', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'deckent-custody-')), os = userInfo();
+  const owner = { ...OWNER, principal: { issuer: hostname(), subject: String(os.uid) } };
+  const store = createEncryptedFileSecretStore({ root, platform: process.platform });
+  try {
+    let reads = 0, witness = true, hostFailure: 'remote-store' | 'unknown-locality' | null = null;
+    const opened = { ...store, get: async (name: string) => { reads++; return store.get(name); } };
+    rememberPersonalStoreInstance(opened, { root, platform: process.platform, env: {} });
+    const profileRegistry = new IdentityProfileRegistry();
+    let profileId = 'core:solo';
+    let actor = { id: 'person-fixture', ...owner.principal, assurance: 'os-user' as const, scopeIds: [owner.scopeId] };
+    const proof = personalStoreAssertion(root, {
+      snapshot: async () => { const profile = profileRegistry.resolve({ id: profileId, version: 1 });
+        return { owner, actor, profile: { id: profileId, version: 1, digest: profile.digest }, locationDigest: 'b'.repeat(64) }; },
+      witness: async () => witness,
+    }, async () => ({ store: store.descriptor.id, digest: null }), async () => {
+      if (hostFailure) throw new PersonalCustodyError(hostFailure);
+      const key = await lstat(join(root, 'secrets.key')).catch(() => null);
+      return { locationDigest: 'a'.repeat(64), keyIdentityDigest: key ? String(key.ino).padStart(64, '0') : null,
+        mountEvidenceDigest: 'c'.repeat(64), pairPresent: key !== null };
+    });
+    // Only the host-observation seam is synthetic; the absent key/envelope and binding use the real registered writer.
+    rememberPersonalStoreInstance(store, { root, platform: process.platform, env: {} });
+    witness = false;
+    await expect(proof(store.descriptor, owner)).rejects.toMatchObject({ reason: 'unbound-store' });
+    witness = true; actor = { ...actor, issuer: `${owner.principal.issuer}/mcp` };
+    await expect(proof(store.descriptor, owner)).rejects.toMatchObject({ reason: 'unbound-store' });
+    actor = { ...actor, ...owner.principal };
+    await proof(store.descriptor, owner);
+    expect(await lstat(join(root, 'secrets.key'))).toMatchObject({ size: 32 });
+    await unlink(join(root, 'personal-store-binding.v1.json')); // no OAuth record exists; ordinary API keys may precede first binding
+    await store.set('NORMAL_API_KEY', SECRET);
+    rememberPersonalStoreInstance(opened, { root, platform: process.platform, env: {} });
+    const f = fixture({ owner, store: opened, now: Date.now });
+    f.ports.custody.assertPersonal = proof;
+    const connected = await f.app.connect({ planUse: true });
+    expect(await store.get('NORMAL_API_KEY')).toBe(SECRET);
+    const baselineReads = reads;
+    const saved = JSON.parse((await store.get(`${SIWC_PROTOCOL.connectionSecretPrefix}${connected.connectionId.replaceAll('-', '').toUpperCase()}`))!);
+    expect(saved).toMatchObject({ schemaVersion: 2, custody: { generation: 1 } });
+    for (profileId of ['core:solo', 'core:team', 'core:enterprise']) {
+      expect(await f.app.lease(connected.connectionId, owner)).toMatchObject({ accessToken: SECRET });
+    }
+    expect(reads).toBeGreaterThan(baselineReads);
+    witness = false; // A service may use an existing authorized binding, never mint it.
+    const before = reads, exchanges = f.forms.length;
+    for (hostFailure of ['remote-store', 'unknown-locality']) {
+      await expect(f.app.lease(connected.connectionId, owner)).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL' });
+    }
+    hostFailure = null;
+    await expect(proof({ ...store.descriptor }, owner)).rejects.toMatchObject({ reason: 'shared-store' });
+    rememberPersonalStoreInstance(opened, { root, platform: process.platform, env: {}, vault: { key: 'project', installationId: owner.installationId, projectId: 'project' } });
+    await expect(f.app.lease(connected.connectionId, owner)).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL' });
+    rememberPersonalStoreInstance(opened, { root, platform: process.platform, env: {} });
+    actor = { ...actor, subject: String(os.uid + 1) };
+    await expect(f.app.lease(connected.connectionId, owner)).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL' });
+    actor = { ...actor, ...owner.principal };
+    expect(reads).toBe(before); expect(f.forms).toHaveLength(exchanges);
+    const path = join(root, 'personal-store-binding.v1.json'), binding = JSON.parse(await readFile(path, 'utf8'));
+    await writeFile(path, JSON.stringify({ ...binding, cleanup: { state: 'pending', revision: 2 } }), { mode: 0o600 });
+    await expect(f.app.lease(connected.connectionId, owner)).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL' });
+    expect(reads).toBe(before);
+    await writeFile(path, JSON.stringify({ ...binding, generation: 2 }, null, 2) + '\n', { mode: 0o600 });
+    await expect(f.app.lease(connected.connectionId, owner)).rejects.toMatchObject({ code: 'SIWC_STORE_NOT_PERSONAL' });
+    expect(f.forms).toHaveLength(exchanges);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });

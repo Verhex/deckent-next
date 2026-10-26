@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "bindingFile": "personal-store-binding.v1.json",
+  "metadataMaxBytes": 16384,
+  "hostMaxBytes": 1048576,
+  "deviceMaxDepth": 16,
+  "filesystemTypes": {
+    "ext4": 61267,
+    "xfs": 1481003842,
+    "btrfs": 2435016766
+  },
+  "localDevicePaths": [
+    "/ata",
+    "/nvme",
+    "/VMBUS:"
+  ],
+  "remoteDevicePatterns": [
+    "/session",
+    "/iscsi",
+    "/rbd",
+    "/nbd",
+    "/fabrics"
+  ],
+  "source": "https://man7.org/linux/man-pages/man5/proc_pid_mountinfo.5.html",
+  "observedOn": "2026-10-26",
+  "probeTimeoutMs": 5000
+}

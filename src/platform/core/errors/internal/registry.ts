@@ -110,8 +110,13 @@ const dockerImageProbeCause = (cause: unknown) => typeof cause === 'string' && O
 const DELEGATION_HINTS: Readonly<Record<string, (p: Params, l: Locale) => string>> = { owner: (p, l) => t('policy.hint.owner', p, l), other: (p, l) => t('policy.hint.other', p, l),
   unnamed: (p, l) => t('policy.hint.unnamed', p, l), deny: (p, l) => t('policy.hint.deny', p, l), approval: (p, l) => t('policy.hint.approval', p, l) };
 const coreDefinitions: ErrorDefinitions = Object.freeze({
+  SIWC_ACCOUNT_STILL_CONNECTED: { category: 'error', render: (p, l) => ({ message: t('siwc.account.signOutFirst', p, l) }) },
+  SIWC_USAGE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('siwc.usageUnavailable', p, l) }) },
+  SIWC_SERVICE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('siwc.serviceUnavailable', p, l) }) },
+  HEADLESS_PLAN_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('siwc.notEligible', p, l) }) },
+  SUBSCRIPTION_RAW_USE_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.SUBSCRIPTION_RAW_USE_REFUSED', p, l) }) },
   SECRET_SESSION_RESERVED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_SESSION_RESERVED', p, l) }) },
-  SIWC_STORE_NOT_PERSONAL: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_STORE_NOT_PERSONAL', p, l) }) },
+  SIWC_STORE_NOT_PERSONAL: { category: 'error', render: (p, l) => ({ message: p['reason'] === 'profile-unresolved' ? t('siwc.custody.profileRequired', p, l) : p['reason'] === 'cleanup-pending' ? t('siwc.custody.cleanupPending', p, l) : p['reason'] === 'non-person-owner' ? t('siwc.custody.nonPersonOwner', p, l) : t('error.SIWC_STORE_NOT_PERSONAL', p, l) }) },
   SECRET_STORE_PROTECTION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_PROTECTION_REQUIRED', p, l) }) },
   OAUTH_CONNECTION_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED', p, l) }) },
   OAUTH_CONNECTION_PLATFORM_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_PLATFORM_UNSUPPORTED', p, l) }) },

@@ -907,7 +907,6 @@
   "tui.provider.kind.openaiCompatible": "OpenAI-compatible (other address)",
   "tui.provider.kind.openrouter": "OpenRouter",
   "tui.provider.kind.localOpenai": "Local server (vLLM / OpenAI-compatible)",
-  "tui.provider.kind.chatgptLogin": "ChatGPT sign-in",
   "tui.provider.unavailable": "Not available yet.",
   "tui.provider.state.stored": "key {name} stored · {count} model profile(s) use it",
   "tui.provider.state.modelsNextSlice": "model binding comes in the next slice",

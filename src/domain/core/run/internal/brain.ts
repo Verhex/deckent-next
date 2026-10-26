@@ -16,6 +16,7 @@ export type BrainAttemptLink = Readonly<{ commandId: string; invocationId: strin
 /** Planning progress a surface shows while one plan command runs: a quota wait (until when, the next attempt, after which refused call), then
  * planning again. Progress only: it carries no authority and changes nothing. */
 export type BrainPlanProgress = Readonly<{ kind: 'quota-wait'; attempt: number; maxAttempts: number; resetsAtMs: number; untilMs: number; after: BrainAttemptLink }>
+  | Readonly<{ kind: 'billing-switch'; reference: z.infer<typeof modelReferenceSchema> }>
   | Readonly<{ kind: 'planning'; attempt: number }>;
 export type BrainPlanObserver = (progress: BrainPlanProgress) => void;
 /**

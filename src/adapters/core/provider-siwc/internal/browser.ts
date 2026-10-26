@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { OAuthConnectionError } from '#engine/index.js';
 import { SIWC_PROTOCOL, SIWC_LIMITS } from './registry.js';
 /** Linux/WSL local browser path. No token hints, callback data, browser stdout/stderr or URL in public errors. */
-export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) => string, signal: AbortSignal): Promise<{ callback: string; redirectUri: string }> {
+export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) => string, signal: AbortSignal, presentation: Readonly<{ fallback?: (url: string) => void }> = {}): Promise<{ callback: string; redirectUri: string }> {
   if (process.platform !== 'linux') throw new OAuthConnectionError('OAUTH_CONNECTION_PLATFORM_UNSUPPORTED');
   if (!process.stdin.isTTY || !process.stdout.isTTY) throw new OAuthConnectionError('OAUTH_CONNECTION_INTERACTIVE_REQUIRED');
   let redirectUri = '', expectedState = '';
@@ -42,8 +42,10 @@ export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) =>
       || parsed.pathname !== new URL(SIWC_PROTOCOL.authorizationEndpoint).pathname
       || !expectedState || ['id_token_hint', 'access_token', 'refresh_token', 'code'].some(key => parsed.searchParams.has(key))) throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
     const browser = spawn('xdg-open', [url], { stdio: 'ignore', shell: false });
-    browser.once('error', () => reject(new OAuthConnectionError('OAUTH_CONNECTION_UNAVAILABLE')));
-    browser.once('exit', code => { if (code !== 0) reject(new OAuthConnectionError('OAUTH_CONNECTION_UNAVAILABLE')); });
+    let shown = false;
+    const fallback = () => { if (!shown) { shown = true; presentation.fallback?.(url); } };
+    browser.once('error', fallback);
+    browser.once('exit', code => { if (code !== 0) fallback(); });
     const stopBrowser = () => { browser.kill(); };
     signal.addEventListener('abort', stopBrowser, { once: true });
     try { return await result; } finally { signal.removeEventListener('abort', stopBrowser); browser.kill(); }

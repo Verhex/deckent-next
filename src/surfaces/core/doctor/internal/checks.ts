@@ -1,4 +1,4 @@
-import { MESSAGE_REGISTRY, t, terminalSafeText, type Locale } from '#platform/index.js';
+import { ErrorRegistry, MESSAGE_REGISTRY, t, terminalSafeText, type Locale } from '#platform/index.js';
 import type { DoctorRenderInput } from './report.js';
 import { describeDiagnostics } from '#surfaces/core/monitor-view/index.js';
 import { renderAuditReason, renderAuditStatus } from './audit.js';
@@ -34,6 +34,7 @@ export interface DoctorCheckFacts {
   readonly pendingRoleModels?: readonly Readonly<{ modelId: string; channelId: string }>[] | null;
   /** S3-3: each subscription Brain connection of the scope (from its profile and last preflight record; no spawn): login kind, plan, directory,
    * channel state and consent; `state: unknown` when no check ran yet. Absent or null when not read. */
+  readonly siwcConnections?: readonly import('#domain/index.js').SubscriptionConnectionInspection[] | null;
   readonly headlessLogins?: readonly Readonly<{ state: 'open' | 'closed' | 'unknown'; authMethod: string | null; subscriptionType: string | null; configDir: string;
     /** s3c: the Brain's own login dir (true), another one sealed before (false: the doctor suggests the move), or not read. */
     owned?: boolean; consent: readonly string[]; isolation?: Readonly<{ launcher: string; version: string }> | 'unavailable' | null;
@@ -171,6 +172,12 @@ function workChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): Docto
     scoped(`deckent models roles set --channel ${model.channelId} --model ${model.modelId} --tier <tier> --roles <roles>`, f)));
   if (pending.length > shown.length) rows.push(row('work', 'work.modelRoles', 'warning', t('doctor.check.roles.more', { count: pending.length - shown.length }, l), scoped('deckent models roles', f)));
   // S3-3 doctor line "Brain girişi: hesap türü, dizin": which login the subscription Brain uses and whether its channel is open.
+  for (const connection of f.siwcConnections ?? []) {
+    const state = connection.code ? ErrorRegistry.get(connection.code, l, { reason: connection.reason ?? '' })?.message ?? connection.code
+      : connection.planUse ? t('siwc.status.usingPlan', {}, l) : t('siwc.doctor.disabled', {}, l);
+    rows.push(row('work', 'work.chatgptConnection', connection.planUse ? 'ok' : 'warning',
+      t('siwc.doctor.connection', { model: terminalSafeText(connection.reference.modelId), state }, l), scoped(`deckent models connect --connection ${connection.connection}`, f)));
+  }
   for (const login of f.headlessLogins ?? []) {
     const dir = terminalSafeText(login.configDir), consent = login.consent.length ? login.consent.join(', ') : t('doctor.headless.none', {}, l);
     // S3-5: the realm the last passing check ran in, or that the realm itself closed the channel.

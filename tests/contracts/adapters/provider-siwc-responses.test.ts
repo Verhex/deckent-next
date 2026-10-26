@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import * as http from '#adapters/core/provider-http-json/index.js';
-import { createSiwcResponsesPort, siwcResponsesBody, siwcRejection, parseSiwcModels, SIWC_INFERENCE, SIWC_REQUEST_RULES } from '#adapters/core/provider-siwc/index.js';
+import { createSiwcResponsesPort, siwcResponsesBody, siwcRejection, parseSiwcModels, SIWC_INFERENCE, SIWC_REQUEST_RULES, siwcResponsesDefinitionSchema } from '#adapters/core/provider-siwc/index.js';
 import { headlessRejectionBodySchema, readHeadlessRejection } from '#domain/index.js';
 import { createModelInvocationResponseEvidence } from '#engine/index.js';
 import { responsesFixture, responsesFinal, responsesCreated, callItem, event } from '../support/openai-responses.js';
@@ -161,4 +161,13 @@ it('never turns transient, mismatched, unknown or stateless stream errors into q
   }
   expect(siwcRejection({ error: { code: '__proto__' } }, 429)).toBeNull();
   expect(headlessRejectionBodySchema.safeParse({ schemaVersion: 3, refusal: 'usage-unavailable', status: 503, resetsAtMs: null }).success).toBe(false);
+});
+
+
+it('versions exact revocable API continuation without changing the null-only v1 contract', () => {
+  const definition = fixture().profile.adapter.definition, reference = { providerId: 'api', providerVersion: 1, modelId: 'exact-model', modelVersion: 1 };
+  expect(siwcResponsesDefinitionSchema.safeParse({ ...definition, apiContinuation: { reference, profileDigest: 'a'.repeat(64) } }).success).toBe(false);
+  expect(siwcResponsesDefinitionSchema.parse({ ...definition, schemaVersion: 2, apiContinuation: { reference, profileDigest: 'a'.repeat(64) } })).toMatchObject({ schemaVersion: 2, apiContinuation: { reference, profileDigest: 'a'.repeat(64) } });
+  expect(siwcResponsesDefinitionSchema.safeParse({ ...definition, schemaVersion: 2, apiContinuation: { model: 'derived-model' } }).success).toBe(false);
+  expect(siwcResponsesDefinitionSchema.safeParse({ ...definition, schemaVersion: 3 }).success).toBe(false);
 });

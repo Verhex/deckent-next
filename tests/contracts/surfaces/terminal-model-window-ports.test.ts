@@ -116,3 +116,20 @@ it('a model repair binds the displayed catalog digest and refuses a changed bind
   await source.fix!((await source.inspect()).choices[0]!, 'activate');
   expect(admitted).toEqual([expect.objectContaining({ action: 'activate', catalogRevision: 'catalog-2', expectedBinding: { encodingVersion: 1, algorithm: 'sha256', digest } })]);
 });
+
+it('shows preview, plan billing and the registry management URL only for the selected SIWC channel', async () => {
+  let invocable = true;
+  const reference = ref('chat'), usageUrl = 'https://example.test/plan-settings';
+  const source = modelPanelSource('/fixture', 'scope', {
+    siwc: { connection: 'chatgpt-fixture', usageUrl, execute: async () => ({}) },
+    providerConnect: { kinds: [{ id: 'chatgpt-fixture', catalogProviderId: reference.providerId, labelKey: 'tui.provider.kind.chatgptLogin' }] } as never,
+    inspectDeclaredModels: async () => ({ schemaVersion: 1, status: 'declared', availability: 'not-observed', catalog: { schemaVersion: 1, revision: 'catalog',
+      providers: [{ id: reference.providerId, version: 1, models: [{ id: 'chat', version: 1, nativeId: 'chat', protocols: [{ family: 'chat', version: 'v1', capabilities: [] }] }] }] } }),
+    inspectInvocableModels: async () => ({ schemaVersion: 1, scopeId: 'scope', models: [{ reference, label: 'chat', nativeId: 'chat', catalogRevision: 'catalog',
+      bindingDigest: 'a'.repeat(64), availability: invocable ? { invocable: true, reason: null } : { invocable: false, reason: { kind: 'no-credential', code: 'MODEL_INVOCATION_CREDENTIAL_UNAVAILABLE' } } }] }),
+  }, {}, 'tr');
+  const shown = (await source.inspect()).choices[0]!;
+  expect(shown.detail).toContain('önizleme'); expect(shown.detail).toContain('ChatGPT planı kullanılıyor'); expect(shown.command).toContain(usageUrl);
+  invocable = false;
+  expect((await source.inspect()).choices[0]!.detail).not.toContain('ChatGPT planı kullanılıyor');
+});

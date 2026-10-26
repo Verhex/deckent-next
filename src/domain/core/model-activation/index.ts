@@ -16,3 +16,4 @@ export type { ModelCatalogErrorCode, ModelCatalogCommand, ModelCatalogTarget, Mo
   ModelCatalogActivationRecord, ModelCatalogReceipt, ModelCatalogChange, ModelCatalogQuery } from './internal/catalog.js';
 export { MODEL_CONNECT_OPERATION_ID, MODEL_CONNECT_SCHEMA_VERSION, modelConnectCommandSchema } from './internal/connect.js';
 export type { ModelConnectCommand, ModelConnectResult, ModelConnectStepState } from './internal/connect.js';
+export type { SubscriptionConnectionRequest, SubscriptionConnectionResult, SubscriptionConnectionInspection } from './internal/connect.js';

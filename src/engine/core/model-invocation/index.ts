@@ -44,3 +44,5 @@ export type { InvocableModel, InvocableModels, ModelInvocability, ModelInvocabil
 export { modelInvocabilityText, reservationAmountText } from './internal/words.js';
 
 export { createModelInvocationPlanUsage, verifyModelInvocationPlanUsage, modelInvocationPlanUsageDigest } from './internal/plan-usage.js';
+export type { SubscriptionUsageSummary } from './internal/inspection.js';
+export { subscriptionActor, prepareSubscriptionConsent, readSubscriptionRejection } from './internal/delegation.js';
