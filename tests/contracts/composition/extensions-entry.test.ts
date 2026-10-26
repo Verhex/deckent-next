@@ -50,7 +50,7 @@ it('registers a non-Core secret backend before the composition root seals, and r
   expect(() => extensions.registerEnvironmentProbeKind('overlay.late', reachable)).toThrow(expect.objectContaining({ code: 'REGISTRY_SEALED' }));
   expect(providerSpendNoChargeRegistry.find('https://llm.erp.example/v1/chat/completions', 429)).toMatchObject({ vendor: 'overlay.erp-llm' });
   expect(mcpCapabilityRegistry.get(capability.id)).toEqual({ schemaVersion: 2, id: capability.id, version: 1, labelKey: capability.labelKey,
-    noteKey: capability.noteKey, availability: 'default', cells: capability.cells });
+    noteKey: capability.noteKey, availability: 'default', cells: capability.cells, supersedes: [] });
   // The registered backend resolves through the same selection path as Core's own backends.
   expect(openConfiguredSecretStore({ secrets: { store: id } }, {}).descriptor.id).toBe(id);
   expect(() => extensions.registerApprovalAssuranceProducer({ ...producer, manifest: { ...producer.manifest, id: 'overlay.late-assurance' } })).toThrow(expect.objectContaining({ code: 'REGISTRY_SEALED' }));
