@@ -7,7 +7,7 @@ export type { ModelActivationAuthorizer, ModelActivationInvocationDelivery, Mode
   ModelActivationDeliveryTarget } from './internal/application.js';
 export { ModelActivationInspectionApplication } from './internal/inspection.js';
 export type { ModelActivationInspection, ModelActivationReader } from './internal/inspection.js';
-export { ModelCatalogApplication, ModelCatalogInspectionApplication, sameModelCatalogRequest, modelCatalogTargetId, planCatalogStateCascade } from './internal/catalog.js';
+export { ModelCatalogApplication, ModelCatalogInspectionApplication, sameModelCatalogRequest, modelCatalogTargetId, planCatalogStateCascade, refuseRetiredModelActivation } from './internal/catalog.js';
 export type { ModelCatalogAdmission, ModelCatalogResult, ModelCatalogStore, ModelCatalogReader, ModelCatalogAuthorizer, ModelCatalogInspection, ModelCatalogChannelView } from './internal/catalog.js';
 export { admitWorkerModels, inspectAdmissibleWorkerModels, workerRoleKeys, WorkerModelAdmissionError } from './internal/worker-admission.js';
 export type { WorkerPlanningTemplate } from './internal/worker-admission.js';

@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
-import { encodeModelCatalogTarget, ModelCatalogError, modelActivationActorSchema, modelActivationAuthorizationSchema, modelCatalogQuerySchema, modelCatalogTargets,
+import { catalogModelRetired, retiredModelActivationRefusal, encodeModelCatalogTarget, ModelCatalogError, modelActivationActorSchema, modelActivationAuthorizationSchema, modelCatalogQuerySchema, modelCatalogTargets,
   parseModelCatalogCommand, parseModelCatalogReceipt, type ProviderCatalog, type ModelActivationAuthorization, type ModelCatalogActivationRecord, type ModelCatalogChannelRecord,
   type ModelCatalogCommand, type ModelCatalogModelRecord, type ModelCatalogReceipt, type ModelCatalogTarget, type VerifiedPrincipal } from '#domain/index.js';
 import { authenticate, type PrincipalVerifier } from '#engine/core/authentication/index.js';
-import { catalogModelRetired } from './worker-admission.js';
+import { catalogDay } from './worker-admission.js';
 
 /** Trusted admission after authentication and policy; the store re-validates it inside its transaction. */
 export interface ModelCatalogAdmission {
@@ -111,13 +111,19 @@ export class ModelCatalogInspectionApplication {
   }
 }
 
+/** A person's explicit activation of a retired model is refused with its retirement day and a recorded successor; deactivation stays allowed. */
+export function refuseRetiredModelActivation(models: Parameters<typeof retiredModelActivationRefusal>[0], modelId: string, nowMs: number): void {
+  const refusal = retiredModelActivationRefusal(models, modelId, catalogDay(nowMs));
+  if (refusal) throw refusal;
+}
+
 /** Write-time channel cascade. Explicit inactive rows always win; a retired model is never turned on by it (law 6 amendment: only current,
  * priced models); catalog observation never calls this planner. */
 export function planCatalogStateCascade(command: Exclude<ModelCatalogCommand, { action: 'register' }>, channel: Extract<ModelCatalogChannelView, { access: 'allowed' }>,
   declared: ProviderCatalog['providers'][number] | undefined, priced: readonly string[], nowMs: number) {
   return channel.models.flatMap(entry => {
     if (command.modelId !== null && command.modelId !== entry.modelId) return [];
-    const named = command.modelId !== null, current = entry.model.lifecycle.state === 'active' && !catalogModelRetired(entry.model.lifecycle, nowMs);
+    const named = command.modelId !== null, current = entry.model.lifecycle.state === 'active' && !catalogModelRetired(entry.model.lifecycle, catalogDay(nowMs));
     const fresh = entry.activation === null && current && priced.includes(entry.modelId);
     const enabled = command.action === 'activate' && (named || (current && entry.activation?.state === 'active') || fresh);
     if (command.action === 'activate' && !enabled) return [];

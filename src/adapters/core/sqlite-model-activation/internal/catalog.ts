@@ -3,7 +3,7 @@ import { ModelCatalogError, identitySchema, parseModelCatalogActivationRecord, p
   parseModelCatalogReceipt, planModelCatalogRegistration, transitionModelCatalogActivation, exactModelIdSchema,
   type ModelCatalogActivationRecord, type ModelCatalogChannelRecord, type ModelCatalogChange, type ModelCatalogModelRecord,
   type ModelCatalogReceipt } from '#domain/index.js';
-import { sameModelCatalogRequest, type ModelCatalogAdmission, type ModelCatalogReader, type ModelCatalogResult,
+import { refuseRetiredModelActivation, sameModelCatalogRequest, type ModelCatalogAdmission, type ModelCatalogReader, type ModelCatalogResult,
   type ModelCatalogStore } from '#engine/index.js';
 import { sqliteFailure } from '#adapters/core/sqlite-ledger/index.js';
 
@@ -98,9 +98,10 @@ export class SqliteModelCatalogStore extends CatalogRows implements ModelCatalog
       } else {
         // Hierarchy: an activation row exists only for a registered channel and, for a model row, a registered model of that channel.
         if (!this.channelRow(command.channelId)) throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
-        if (command.modelId !== null && !this.modelRows(command.channelId).some(entry => entry.modelId === command.modelId)) {
-          throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
-        }
+        const models = command.modelId === null ? [] : this.modelRows(command.channelId);
+        if (command.modelId !== null && !models.some(entry => entry.modelId === command.modelId)) throw new ModelCatalogError('MODEL_CATALOG_NOT_FOUND');
+        // A retired model is never turned on, read inside this transaction against the lifecycle the catalog holds now.
+        if (command.action === 'activate' && command.modelId !== null) refuseRetiredModelActivation(models, command.modelId, admission.admittedAtMs);
         const current = this.activationRow(command.scopeId, command.channelId, command.modelId);
         const record = transitionModelCatalogActivation(current, command);
         const written = this.db.prepare(`INSERT INTO model_catalog_activations(scope_id,channel_id,model_id,revision,state,record) VALUES(?,?,?,?,?,?)

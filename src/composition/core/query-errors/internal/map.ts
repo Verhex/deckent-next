@@ -45,6 +45,7 @@ export function queryFailure(error: unknown, inspectedAccount?: ProviderSpendAcc
   if (error instanceof ModelActivationStoreError && error.deliveryFinding) return registeredFailure(error.code, { params: {
     profile: error.deliveryFinding.profileId, surface: error.deliveryFinding.surface,
     required: error.deliveryFinding.requiredBytes, available: error.deliveryFinding.availableBytes } });
+  if (error instanceof ModelCatalogError && error.params) return registeredFailure(error.code, { params: error.params });
   if (error instanceof ModelInvocationError || error instanceof OpenAiChatHttpError
     || error instanceof ModelActivationError || error instanceof ModelActivationStoreError || error instanceof ModelCatalogError || error instanceof ModelRoleError) return registeredFailure(error.code);
   if (error instanceof WorkerModelAdmissionError) { const d = error.detail; return registeredFailure(error.code, { params: { taskId: d.taskId,

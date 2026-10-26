@@ -15,9 +15,9 @@ export const MODEL_CATALOG_SCHEMA_VERSION = 1;
 export const MODEL_CATALOG_TARGET_PREFIX = 'deckent.model-catalog-target.v1\n';
 export type ModelCatalogErrorCode = 'MODEL_CATALOG_INVALID' | 'MODEL_CATALOG_REVISION_CONFLICT' | 'MODEL_CATALOG_NOT_FOUND'
   | 'MODEL_CATALOG_NOT_ACTIVE' | 'MODEL_CATALOG_COMMAND_CONFLICT' | 'MODEL_CATALOG_CORRUPT' | 'MODEL_CATALOG_UNAVAILABLE'
-  | 'MODEL_CATALOG_OUTCOME_UNKNOWN' | 'MODEL_CATALOG_ALIAS_CONFLICT';
+  | 'MODEL_CATALOG_OUTCOME_UNKNOWN' | 'MODEL_CATALOG_ALIAS_CONFLICT' | 'MODEL_CATALOG_MODEL_RETIRED';
 export class ModelCatalogError extends Error {
-  constructor(readonly code: ModelCatalogErrorCode) { super(code); this.name = 'ModelCatalogError'; }
+  constructor(readonly code: ModelCatalogErrorCode, readonly params?: Readonly<Record<string, string>>) { super(code); this.name = 'ModelCatalogError'; }
 }
 const catalogDocumentSchema = z.unknown().transform((input, context): ProviderCatalogDocument => {
   try { return parseProviderCatalogDocument(input); }
@@ -59,6 +59,24 @@ export type ModelCatalogCommand = Readonly<z.infer<typeof modelCatalogCommandSch
 export type ModelCatalogTarget = Readonly<z.infer<typeof modelCatalogTargetSchema>>;
 export type ModelCatalogChannelRecord = Readonly<z.infer<typeof modelCatalogChannelRecordSchema>>;
 export type ModelCatalogModelRecord = Readonly<z.infer<typeof modelCatalogModelRecordSchema>>;
+/** Retired by the catalog's lifecycle data: its state, or its recorded retirement day has come (worker admission, the activation cascade
+ * and an explicit activation share it). */
+export const catalogModelRetired = (lifecycle: Pick<ModelCatalogModelRecord['model']['lifecycle'], 'state' | 'retiredOn'>, today: string) =>
+  lifecycle.state === 'retired' || (lifecycle.retiredOn !== null && lifecycle.retiredOn <= today);
+/**
+ * An explicit activation of a retired model is refused (lead 2026-10-26); deactivation stays allowed. The refusal names the retirement day
+ * from the lifecycle data and a current successor the catalog records: the model's own replacement, else a current model of its family.
+ */
+export function retiredModelActivationRefusal(models: readonly Pick<ModelCatalogModelRecord, 'modelId' | 'model'>[], modelId: string, today: string): ModelCatalogError | null {
+  const entry = models.find(row => row.modelId === modelId);
+  if (!entry || !catalogModelRetired(entry.model.lifecycle, today)) return null;
+  const current = (row: Pick<ModelCatalogModelRecord, 'model'>) => row.model.lifecycle.state === 'active' && !catalogModelRetired(row.model.lifecycle, today);
+  const family = (row: Pick<ModelCatalogModelRecord, 'model'>) => 'family' in row.model ? row.model.family : undefined;
+  const successor = models.find(row => row.modelId === entry.model.lifecycle.replacementModelId && current(row))
+    ?? (family(entry) === undefined ? undefined : models.find(row => row.modelId !== modelId && family(row) === family(entry) && current(row)));
+  const day = entry.model.lifecycle.retiredOn ?? entry.model.lifecycle.retireNotBefore ?? '-';
+  return new ModelCatalogError('MODEL_CATALOG_MODEL_RETIRED', { model: modelId, day, ...(successor ? { successor: successor.modelId } : {}) });
+}
 export type ModelCatalogActivationRecord = Readonly<z.infer<typeof modelCatalogActivationRecordSchema>>;
 export type ModelCatalogReceipt = Readonly<z.infer<typeof modelCatalogReceiptSchema>>;
 export type ModelCatalogChange = z.infer<typeof changeSchema>;
