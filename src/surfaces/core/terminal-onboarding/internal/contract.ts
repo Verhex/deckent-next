@@ -7,7 +7,7 @@ export type OnboardingConfigBasis = Readonly<{ projectDigest: string | null; glo
 export type OnboardingCommitPreview = Readonly<{ state: 'has-commits' }> | Readonly<{ state: 'staged' }> | Readonly<{ state: 'offered'; identity: boolean; sign: boolean; hooks: 'not-run';
   total: number; selected: number; flagged: number; rows: readonly Readonly<{ path: string; bytes: number; flag: string | null }>[]; more: number; digest: string }>;
 export type OnboardingSnapshot = Readonly<{ configBasis: OnboardingConfigBasis; plan: SetupPlan; observation: SetupObservation; answers: Readonly<Record<string, unknown>>;
-  deferred: readonly string[]; folder: string; folderFacts: FolderFacts; scopeId: string;
+  deferred: readonly string[]; modelUsable: boolean; folder: string; folderFacts: FolderFacts; scopeId: string;
   hosts: readonly Readonly<{ id: string; cli: string; login: string }>[];
   admittedProviders?: readonly string[];
   budget: Readonly<{ needed: boolean; presetUsd: number; presetsUsd: readonly number[]; currentUsd: number | null; reason?: string }>;

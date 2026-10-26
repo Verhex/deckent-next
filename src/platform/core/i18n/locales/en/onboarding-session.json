@@ -4,6 +4,7 @@
   "onboarding.session.later": "Esc · Later",
   "onboarding.session.blocked": "This step is waiting",
   "onboarding.session.waiting": "The operation owner has not confirmed completion. Reopen with /setup.",
+  "onboarding.session.unavailable": "First-run setup screens could not be shown ({code}); the workline opens without them.",
   "onboarding.work.selected": "Use {cli} for coding work?",
   "onboarding.work.change": "Change",
   "onboarding.work.none": "Choose a signed-in coding CLI",

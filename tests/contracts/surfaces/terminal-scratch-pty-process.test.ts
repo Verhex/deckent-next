@@ -13,6 +13,7 @@ import { ModelBindingApplication } from '#engine/core/provider-catalog/index.js'
 import { clearConfigCache, prepareProductFile, resolveProductLayout } from '#platform/index.js';
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
+import { settleOnboarding } from '../../fixtures/onboarding-settled.js';
 
 // SCR-A at the real boundary: compiled CLI in a real pseudo-terminal, a real runtime service process (protocol v16), a real policy file.
 // Ask mode (no permission-mode entry): the agent writes to its scratch area without a card (policy allows the scratch tools and
@@ -161,6 +162,7 @@ async function scratchProject() {
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 } }), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
+  await settleOnboarding(resolveProductLayout({ projectRoot, root: data }));
   const principal = { ...readLocalOsIdentity(), scopeIds: ['scope'] };
   const me = { issuer: principal.issuer, subject: principal.subject };
   await new ModelActivationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'seed', ruleId: 'seed' }; } },

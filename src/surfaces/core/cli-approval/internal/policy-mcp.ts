@@ -7,7 +7,7 @@ import { mcpTable, toggleMcp } from './policy-toggle.js';
 
 /**
  * `deckent policy mcp` without an action: on a person's terminal the groups with on/off → pick → preview card → apply (the same governed change as
- * `grant|revoke --apply --expect`); anywhere else the read-only `list`. `list|grant|revoke` keep their explicit flags unchanged.
+ * `grant|revoke|narrow --apply --expect`); anywhere else the read-only `list`. `list|grant|revoke|narrow` keep their explicit flags.
  */
 export async function policyMcpCommand(argv: readonly string[], context: ApprovalCommandContext): Promise<void> {
   const bare = argv[2] === undefined || argv[2].startsWith('-'), action = bare ? 'list' : argv[2];

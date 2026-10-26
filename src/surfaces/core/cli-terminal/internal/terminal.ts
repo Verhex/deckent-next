@@ -334,23 +334,30 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   let onboarding: import('#surfaces/core/terminal-onboarding/index.js').OnboardingHandoff | undefined;
   if (parsed.action === 'workline' && context.openOnboarding && (await import('#surfaces/core/cli-human/index.js')).cliMode(context).mode === 'interactive') {
     const surface = await import('#surfaces/core/terminal-onboarding/index.js');
-    const port = await context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options);
-    const io = { locale, env, stdin: process.stdin, stdout: process.stdout, ...(context.signal ? { signal: context.signal } : {}) };
-    const run = async (revisit: boolean, signal?: AbortSignal) => {
-      const panels = panelProps(root, scopeId, context, ports, options, locale, env, config).panels;
-      return (await surface.loadOnboardingScreens()).runOnboardingSession(port, { locale,
-        provider: async () => {
-          if (!panels?.ports.provider) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
-          await (await surface.loadOnboardingProvider()).runOnboardingProvider(panels.ports.provider, panels.labels,
-            context.providerConnect?.kinds.filter(row => row.billing === 'subscription').map(row => row.id) ?? [], io);
-        },
-        instructions: async () => { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['instructions'], { ...context, root, locale }); },
-        foreground: async stage => ports.foregroundSetup ? ports.foregroundSetup(root, stage, scopeId, locale) : { status: 'not-wired' },
-      }, { ...io, ...(signal ? { signal } : {}) }, revisit);
-    };
-    onboarding = { initial: await run(false), open: signal => run(true, signal) };
-    const deferred = surface.deferredOnboardingNotice(await port.observe({}), locale);
-    if (deferred) accessNotices.push({ level: 'info', text: deferred });
+    // Onboarding is presentation: an unreadable observation never keeps the Workline closed; every action there keeps its own owner's checks.
+    try {
+      const port = await context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options);
+      const io = { locale, env, stdin: process.stdin, stdout: process.stdout, ...(context.signal ? { signal: context.signal } : {}) };
+      const run = async (revisit: boolean, signal?: AbortSignal) => {
+        const panels = panelProps(root, scopeId, context, ports, options, locale, env, config).panels;
+        return (await surface.loadOnboardingScreens()).runOnboardingSession(port, { locale,
+          provider: async () => {
+            if (!panels?.ports.provider) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
+            await (await surface.loadOnboardingProvider()).runOnboardingProvider(panels.ports.provider, panels.labels,
+              context.providerConnect?.kinds.filter(row => row.billing === 'subscription').map(row => row.id) ?? [], io);
+          },
+          instructions: async () => { await (await import('#surfaces/core/project-instructions/index.js')).instructionInitCommand(['instructions'], { ...context, root, locale }); },
+          foreground: async stage => ports.foregroundSetup ? ports.foregroundSetup(root, stage, scopeId, locale) : { status: 'not-wired' },
+        }, { ...io, ...(signal ? { signal } : {}) }, revisit);
+      };
+      onboarding = { initial: await run(false), open: signal => run(true, signal) };
+      const deferred = surface.deferredOnboardingNotice(await port.observe({}), locale);
+      if (deferred) accessNotices.push({ level: 'info', text: deferred });
+    } catch (error) {
+      if (context.signal?.aborted) throw error;
+      const code = (error as { code?: unknown } | null)?.code;
+      accessNotices.push({ level: 'warning', text: t('onboarding.session.unavailable', { code: typeof code === 'string' ? code : '-' }, locale) });
+    }
     config = await loadConfig(root, { ...options, force: true }) as typeof config;
     chat = context.describeTerminalChatPlan ? await context.describeTerminalChatPlan(root, options) : null;
   }

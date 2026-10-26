@@ -6,7 +6,7 @@ const readyIds = new Set(presentation.workerReady.members.filter(id => id !== 'w
 /** Projection over the same setup plan: grouping is presentation only; owners still settle every individual operation. */
 export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): readonly OnboardingStep[] {
   const steps: OnboardingStep[] = [], deferred = new Set(revisit ? [] : snapshot.deferred);
-  const add = (step: OnboardingStep) => { if (!deferred.has(step.id) || step.id === 'core:model' && snapshot.observation.model.connections === 0) steps.push(step); };
+  const add = (step: OnboardingStep) => { if (!deferred.has(step.id) || step.id === 'core:model' && !snapshot.modelUsable) steps.push(step); };
   for (const stage of snapshot.plan.stages) {
     if (stage.id === 'work:kind' && snapshot.folderFacts.kind !== 'coding' && !snapshot.answers['work:kind'] && stage.state !== 'done') continue;
     if (stage.phase !== 'onboarding' || readyIds.has(stage.id) || stage.state === 'skipped'

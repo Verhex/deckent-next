@@ -39,8 +39,8 @@ describe('/help grouped', () => {
   it('lists every registry command exactly once, each on a single line', () => {
     for (const locale of ['en', 'tr'] as const) {
       const rows = slashHelpText(terminalComposerLabels(locale).slash).split('\n').filter(line => line.startsWith('  /'));
-      expect(rows).toHaveLength(35); // alpha.54 T1 adds /copy, T5 adds /rename; Brain adds /do; MCP-GRANT-WINDOW adds /policy; TESLIM-PENCERESI adds /deliver; alpha.55 f2 adds /roles.
-      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(35);
+      expect(rows).toHaveLength(37); // alpha.54 T1 adds /copy, T5 adds /rename; Brain adds /do; MCP-GRANT-WINDOW adds /policy; TESLIM-PENCERESI adds /deliver; alpha.55 f2 adds /roles; alpha.56 U4-2 adds /setup, H7 adds /hub.
+      expect(new Set(rows.map(row => row.trim().split(' ')[0])).size).toBe(37);
     }
   });
 });

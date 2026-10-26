@@ -15,6 +15,7 @@ import { clearConfigCache, prepareProductFile, resolveProductLayout, withConfigW
 import { fixtureBudget } from '../../fixtures/priced-provider.js';
 import { measureTestShellHost } from '../../fixtures/shell-host.js';
 import { terminalScreen } from '../../fixtures/terminal-screen.js';
+import { settleOnboarding } from '../../fixtures/onboarding-settled.js';
 
 // T-L4 slice 4c (MODES-3: v17, three modes) at the real boundary: compiled CLI in a real pseudo-terminal, a real runtime service process,
 // the company policy (v2) and the person's bindings as real layout files. `/mode` shows the mode, `/mode full-auto` changes it through the
@@ -162,6 +163,7 @@ async function modeProject(policy: 'v2' | 'v1' | 'no-set-grant' = 'v2',
     cancellation: { maxConcurrentDeliveries: 1, recoveryPageSize: 1, maxAttempts: 1, retryDelayMs: 10, claimTtlMs: 100 },
     cancellationRuntime: { scopeIds: ['scope'], pollIntervalMs: 1000, failureBackoffMs: 1000 } }), { mode: 0o600 });
   const ledger = await prepareProductFile(resolveProductLayout({ projectRoot, root: data }), 'ledger', ['-wal', '-shm', '-journal']);
+  await settleOnboarding(resolveProductLayout({ projectRoot, root: data }));
   const principal = { ...readLocalOsIdentity(), scopeIds: ['scope'] };
   const me = { issuer: principal.issuer, subject: principal.subject };
   await new ModelActivationApplication({ async verify() { return principal; } }, { async authorize() { return { revision: 'seed', ruleId: 'seed' }; } },
