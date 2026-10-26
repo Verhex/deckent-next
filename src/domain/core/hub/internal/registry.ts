@@ -12,6 +12,7 @@ export const hubLimitsSchema = z.object({ schemaVersion: z.literal(1), packageMa
   dependencyDepthMax: positive, dependenciesMax: positive, reviewerSignaturesMax: positive, searchPageMax: positive, feedPageMax: positive,
   sourcesPerScopeMax: positive, revocationRefreshMinutes: positive, feedMaxAgeMs: positive, fetchTimeoutMs: positive,
   fetchRetries: z.number().int().safe().nonnegative(), publishesPerHour: positive, cacheMaxBytes: positive, skillFilesMaxBytes: positive,
+  maxRedirects: z.number().int().safe().nonnegative(), httpMaxBytes: positive, networkInputMaxBytes: positive, httpMaxConcurrentRequests: positive,
   skillReadMaxBytes: positive, skillReadMaxFiles: positive }).strict().readonly();
 export type HubLimits = z.infer<typeof hubLimitsSchema>;
 export const HUB_LIMITS = hubLimitsSchema.parse(limitData);

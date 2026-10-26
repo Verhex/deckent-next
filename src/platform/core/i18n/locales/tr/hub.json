@@ -35,5 +35,13 @@
   "error.HUB_STORE_UNAVAILABLE": "Hub deposuna erişilemiyor.",
   "error.HUB_OUTCOME_UNKNOWN": "Hub kayıt işleminin sonucu bilinmiyor. Aynı komut kimliğiyle uzlaştırın.",
   "error.HUB_FILE_UNSUPPORTED": "Bu platformda güvenli Hub dosyası içe aktarma kullanılamıyor.",
-  "error.HUB_SKILL_FILES_UNAVAILABLE": "Bu çalışan yalıtım alanında destek dosyası teslimi kullanılamıyor. Yeni bir koşum kabul etmeden önce salt okunur ve noexec dosya bağlamalarını uygulayan bir yalıtım alanı gerekir."
+  "error.HUB_SKILL_FILES_UNAVAILABLE": "Bu çalışan yalıtım alanında destek dosyası teslimi kullanılamıyor. Yeni bir koşum kabul etmeden önce salt okunur ve noexec dosya bağlamalarını uygulayan bir yalıtım alanı gerekir.",
+  "error.HUB_TLS_REQUIRED": "Hub yerel döngü dışında dinlemeden önce TLS sertifikası ve anahtarı gerekir.",
+  "error.HUB_NETWORK_INVALID": "Hub ağ yapılandırması veya isteği geçersiz.",
+  "error.HUB_NETWORK_FAILED": "Hub ağ isteği başarısız oldu. Yeniden denemeden önce etki kanıtını inceleyin.",
+  "error.HUB_FIRST_USE_REQUIRED": "Bağlanmadan önce kişinin ilk kullanım Hub kartını onaylayın.",
+  "hub.tool.publish": "İmzalı paketi Hub yetki denetimiyle yayınlayın.",
+  "hub.tool.review": "Bağımsız, imzalı Hub incelemesini gönderin.",
+  "hub.tool.yank": "Hub sürümünü yeni kurulumlara kapatın.",
+  "hub.tool.revoke": "Hub sürümünü imzalı iptal listesi üzerinden iptal edin."
 }

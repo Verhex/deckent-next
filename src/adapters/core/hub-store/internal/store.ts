@@ -52,6 +52,10 @@ class SqliteHubTransaction implements HubServerTransaction {
     return this.db.prepare('SELECT key,package_id,version,skill_id FROM hub_skills WHERE key>? ORDER BY key LIMIT ?').all(after, limit)
       .map(row => ({ key: String(row.key), packageId: String(row.package_id), version: String(row.version), skillId: String(row.skill_id) }));
   }
+  packages(after: string, limit: number) {
+    return this.db.prepare("SELECT package_id,version,package_id||'@'||version AS key FROM hub_versions WHERE package_id||'@'||version>? ORDER BY key LIMIT ?").all(after, limit)
+      .map(row => ({ key: String(row.key), packageId: String(row.package_id), version: String(row.version) }));
+  }
   async appendReceipt(event: HubReceiptEvent, signer: HubServerSigner) {
     const last = this.db.prepare('SELECT sequence,digest FROM hub_receipts ORDER BY sequence DESC LIMIT 1').get();
     const sequence = Number(last?.sequence ?? 0) + 1, previous = last ? String(last.digest) : null;
@@ -88,4 +92,5 @@ export class SqliteHubStore implements HubServerStore {
   latest(packageId: string) { return this.serial(() => this.view.latest(packageId)); }
   publishesSince(publisherId: string, atMs: number) { return this.serial(() => this.view.publishesSince(publisherId, atMs)); }
   skills(after: string, limit: number) { return this.serial(() => this.view.skills(after, limit)); }
+  packages(after: string, limit: number) { return this.serial(() => this.view.packages(after, limit)); }
 }
