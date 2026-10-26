@@ -256,7 +256,7 @@ const observation = (families: Record<string, unknown>): SetupObservation => ({ 
   model: { connections: 0 }, check: { state: 'not-run' }, families });
 const ready: ExecutionFacts = { schemaVersion: 1, runtimes: [{ id: 'docker', label: 'Docker', support: 'supported', cli: 'found', path: '/usr/bin/docker', version: '29.1.3',
   daemon: 'reachable', serverVersion: '29.1.3', kind: 'engine', endpoint: 'system', group: null }] };
-const repo: CodingFacts = { schemaVersion: 1, git: 'found', gitVersion: '2.43.0', repository: 'present', commits: 'present', productSource: false,
+const repo: CodingFacts = { schemaVersion: 1, git: 'found', gitPath: '/usr/bin/git', gitVersion: '2.43.0', repository: 'present', commits: 'present', productSource: false,
   workTargets: { configured: 0, present: 0 }, hosts: [{ id: 'codex', cli: 'found', login: 'found' }] };
 
 describe('I-S2 families in the setup plan', () => {
