@@ -96,7 +96,8 @@ describe.skipIf(process.platform !== 'linux')('MCP permissions on the real Workl
       expect(value.timeout, value.output.slice(-3000)).toBeUndefined();
       const text = stripVTControlCharacters(value.output).replace(/\r/gu, '');
       expect(text).not.toMatch(/ERR:|TypeError|Error:/u);
-      expect(text).toContain('provider-spend-account'); expect(text).toContain('budget-revision');
+      // U2-S6b: `spend` v2 previews only inspect and audit; budget revision and reconcile stay with the person (U1U2 §3, Q-SPEND).
+      expect(text).toContain('provider-spend-account'); expect(text).toContain('inspect, audit'); expect(text).not.toMatch(/\b(?:budget-revision|reconcile)\b/u);
       expect(text).toContain('> ' + w.group);
       const lines = text.split('\n'), borders: string[] = [];
       for (let index = 1; index < lines.length; index++) {
