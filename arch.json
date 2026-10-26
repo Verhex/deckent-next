@@ -4405,6 +4405,17 @@
         "src/platform/core/output"
       ],
       "plan": "SURFACES"
+    },
+    "src/adapters/core/siwc-worker": {
+      "dependencies": [
+        "src/platform/core/errors",
+        "src/domain/core/attempt",
+        "src/engine/core/oauth-connection",
+        "src/adapters/core/provider-siwc",
+        "src/adapters/core/local-runtime-socket",
+        "src/adapters/core/native-connection"
+      ],
+      "plan": "PROVIDERS"
     }
   },
   "composition": {

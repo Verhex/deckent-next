@@ -2296,7 +2296,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/attempt/index.ts`: `a2234fa31bde2aa77747a7ffe545103827e75935bcf3762be241cdd0928873a9`
 - `src/domain/core/attempt/internal/contract.ts`: `00d46777aaf15f0c8228fbf3e671d475c493ea7e409139bddc20689d07f4009a`
 - `src/domain/core/attempt/internal/dispatch-loss.ts`: `d5bf342eba664f6d2055abaf0c1756366c13d5fc32410f84afacfb233b0ab51f`
-- `src/domain/core/attempt/internal/isolation.ts`: `11812568f0f5844ec4603154426231681437306bdfc53284ab905f4e3618570c`
+- `src/domain/core/attempt/internal/isolation.ts`: `3caf7160c7c6f63998298caeafade4f52dd68dfd4876384f1c6be177ae6f5477`
 - `src/domain/core/attempt/internal/reduce.ts`: `c658466002047df6178eabff46ae069c9dbee9d075a4fa95181ba191a754d98c`
 - `src/domain/core/audit/index.ts`: `b9a555c83888810bac4f2a75c7c06397ee878cc50175645a91656a61a67ef436`
 - `src/domain/core/audit/internal/authority-decision.ts`: `88449bd08c715a38ec119cddc348b2e3d7efd8fc644a29551193488ad8d4cc2b`

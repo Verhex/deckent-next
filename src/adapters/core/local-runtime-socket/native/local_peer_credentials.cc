@@ -11,6 +11,7 @@
 #include <poll.h>
 #include <signal.h>
 #include <sys/syscall.h>
+#include <sys/prctl.h>
 #include <time.h>
 #include <string>
 #include <unistd.h>
@@ -398,7 +399,16 @@ napi_value lock_file(napi_env env, napi_callback_info info) {
   return result;
 }
 }
+// U9-6 (SIWC worker bootstrap): this process becomes non-dumpable, so a same-uid process (a tool child) can no longer open its
+// /proc/<pid>/{fd,mem,maps,environ} at all, not only attach to it. True only when the kernel reports the cleared flag.
+static napi_value set_non_dumpable(napi_env env, napi_callback_info) {
+  napi_value result;
+  napi_get_boolean(env, prctl(PR_SET_DUMPABLE, 0, 0, 0, 0) == 0 && prctl(PR_GET_DUMPABLE, 0, 0, 0, 0) == 0, &result);
+  return result;
+}
 NAPI_MODULE_INIT() {
+  napi_property_descriptor dumpable = {"setNonDumpable", nullptr, set_non_dumpable, nullptr, nullptr, nullptr, napi_default, nullptr};
+  napi_define_properties(env, exports, 1, &dumpable);
   napi_property_descriptor witness = {"isConnectionActive", nullptr, connection_active, nullptr, nullptr, nullptr, napi_default, nullptr};
   napi_define_properties(env, exports, 1, &witness);
   napi_property_descriptor method = {"createListener", nullptr, create_listener, nullptr, nullptr, nullptr, napi_default, nullptr};

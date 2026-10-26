@@ -33,9 +33,10 @@ export const OPTIONAL_EXTERNALS = ['react-devtools-core', 'bufferutil', 'utf-8-v
  * ws, …); a module-scope `require` from createRequire makes the shim use Node's real require. Added only to outputs that define the shim. */
 const REQUIRE_SHIM = 'Dynamic require of "';
 const REQUIRE_BANNER = "import { createRequire as __deckentCreateRequire } from 'node:module'; const require = __deckentCreateRequire(import.meta.url);";
-/** dist-relative files the docker supervisor bind-mounts by themselves (native-connection gateway → /run/deckent-bootstrap.mjs): nothing next to
+/** dist-relative files the docker supervisor bind-mounts by themselves (native-connection gateway → /run/deckent-bootstrap.mjs; SIWC relay bootstrap + auth helper): nothing next to
  * them exists in the container, so each must be one file importing only node: builtins. */
-export const STANDALONE_ENTRIES = Object.freeze(['adapters/core/native-connection/internal/worker.js']);
+export const STANDALONE_ENTRIES = Object.freeze(['adapters/core/native-connection/internal/worker.js',
+  'adapters/core/siwc-worker/internal/bootstrap.js', 'adapters/core/siwc-worker/internal/helper.js']);
 /** Imports of a standalone output (from the esbuild metafile) that the container cannot resolve: anything but an external node: builtin. */
 export function standaloneImportProblems(output, label) {
   return (output?.imports ?? []).filter(item => !(item.external && item.path.startsWith('node:'))).map(item => `${label} imports ${item.path} (${item.kind})`);

@@ -140,5 +140,97 @@
         "status": 401
       }
     }
+  },
+  "workerRelay": {
+    "source": "https://developers.openai.com/siwc/token-sharing-open-source/codex-app-server",
+    "observedOn": "2026-10-26",
+    "activation": "hold",
+    "appServer": {
+      "executable": "codex",
+      "args": [
+        "app-server"
+      ],
+      "source": "https://learn.chatgpt.com/docs/developer-commands#codex-app-server",
+      "observedOn": "2026-10-26",
+      "support": "experimental",
+      "control": [
+        "--listen",
+        "ws://127.0.0.1:{ctlPort}",
+        "--ws-auth",
+        "capability-token",
+        "--ws-token-sha256",
+        "{ctlTokenSha256}"
+      ],
+      "controlSource": "https://learn.chatgpt.com/docs/app-server",
+      "native": {
+        "note": "npm launcher resolution (bin/codex.js): the bootstrap starts the vendored native binary itself so the app-server is its direct child",
+        "vendorRoots": {
+          "x64": "node_modules/@openai/codex-linux-x64/vendor",
+          "arm64": "node_modules/@openai/codex-linux-arm64/vendor"
+        },
+        "fallbackVendorRoot": "vendor",
+        "triples": {
+          "x64": "x86_64-unknown-linux-musl",
+          "arm64": "aarch64-unknown-linux-musl"
+        },
+        "binary": "bin/codex",
+        "pathDir": "codex-path",
+        "managedEnv": "CODEX_MANAGED_BY_NPM"
+      }
+    },
+    "approvalPolicy": "untrusted",
+    "sandbox": "danger-full-access",
+    "wireApi": "responses",
+    "requestFields": [
+      "model",
+      "input",
+      "instructions",
+      "tools",
+      "store",
+      "stream",
+      "reasoning",
+      "tool_choice",
+      "include",
+      "parallel_tool_calls",
+      "prompt_cache_key",
+      "text"
+    ],
+    "toolTypes": [
+      "function",
+      "custom",
+      "namespace"
+    ],
+    "methods": {
+      "client": [
+        "initialize",
+        "thread/start",
+        "turn/start",
+        "turn/interrupt"
+      ],
+      "approvals": [
+        "item/commandExecution/requestApproval",
+        "item/fileChange/requestApproval"
+      ]
+    },
+    "limits": {
+      "requestMaxBytes": 8388608,
+      "responseMaxBytes": 67108864,
+      "headerBytes": 16384,
+      "inFlight": 2,
+      "connections": 8,
+      "idleMs": 300000,
+      "capabilityMaxTtlMs": 7200000,
+      "helperTimeoutMs": 5000,
+      "drainMs": 5000,
+      "controlLineBytes": 4194304,
+      "controlLines": 100000,
+      "capabilityBytes": 32,
+      "approvalCommandBytes": 65536,
+      "approvalDiffBytes": 1048576,
+      "approvalChanges": 256,
+      "controlConnectMs": 30000,
+      "approvalItems": 4096,
+      "controlPollMs": 50
+    }
   }
 }
