@@ -252,7 +252,7 @@
   "error.SETUP_WORKER_DOCKER_UNAVAILABLE": "Docker is not reachable right now; no worker image was built or checked. Start Docker, then run deckent init again.",
   "error.SETUP_FIRST_COMMIT_CHANGED": "The repository changed after the first-commit preview (a commit, staged changes, another Git process or a different file list); nothing was written. Open the first-commit card again to see the current state.",
   "error.SETUP_FIRST_COMMIT_TOO_LARGE": "The first commit would cover more than the card handles ({observed}, limit {limit}); nothing was written. Make the first commit with Git yourself: git add <paths>, then git commit.",
-  "error.SETUP_FIRST_COMMIT_INDEX_PENDING": "The first commit was made, but Git's index could not be updated, so the committed files show as staged deletions. Run {command} to bring the index in line with the commit.",
+  "error.SETUP_FIRST_COMMIT_INDEX_PENDING": "HEAD was committed but the index was not settled. Retained committed-path file: {command}. Reopen /setup for bounded recovery; do not reset the whole index.",
   "error.SETUP_FIRST_COMMIT_FAILED": "The first commit stopped at Git's {step} step ({detail}); nothing was written, HEAD and the index are unchanged. Fix the cause (for a missing identity: git config user.name and git config user.email), then open the first-commit card again.",
   "setup.execution.settingsTitle": "Execution settings",
   "setup.execution.workerBuilt": "Worker image {version} ({image}) is built and on this Docker; the execution settings come next.",

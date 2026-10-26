@@ -4,11 +4,14 @@ import type { Locale } from '#platform/index.js';
 export type FolderFacts = Readonly<{ kind: 'coding' | 'documents' | 'empty' | 'unknown'; readme: boolean; tests: boolean }>;
 export type FirstTaskIntent = Readonly<{ commandId: string; scopeId: string; folder: string; intent: string; pending?: RunIntentRecord }>;
 export type OnboardingConfigBasis = Readonly<{ projectDigest: string | null; globalDigest: string }>;
+export type OnboardingCommitPreview = Readonly<{ state: 'has-commits' }> | Readonly<{ state: 'staged' }> | Readonly<{ state: 'offered'; identity: boolean; sign: boolean; hooks: 'not-run';
+  total: number; selected: number; flagged: number; rows: readonly Readonly<{ path: string; bytes: number; flag: string | null }>[]; more: number; digest: string }>;
 export type OnboardingSnapshot = Readonly<{ configBasis: OnboardingConfigBasis; plan: SetupPlan; observation: SetupObservation; answers: Readonly<Record<string, unknown>>;
   deferred: readonly string[]; folder: string; folderFacts: FolderFacts; scopeId: string;
   hosts: readonly Readonly<{ id: string; cli: string; login: string }>[];
+  admittedProviders?: readonly string[];
   budget: Readonly<{ needed: boolean; presetUsd: number; presetsUsd: readonly number[]; currentUsd: number | null; reason?: string }>;
-  permissions: Readonly<{ state: 'applied' | 'needed' | 'unavailable'; reason: string }>;
+  permissions: Readonly<{ state: 'applied' | 'needed' | 'unavailable'; reason: string; digest?: string; mode?: string; profile?: string; principal?: string }>;
   ready?: Readonly<{ provider: string | null; imageId: string | null; fallbackBefore: string | null; fallbackAfter: string | null }>;
   pending: readonly RunIntentRecord[] }>;
 export interface OnboardingPort {
@@ -21,7 +24,12 @@ export interface OnboardingPort {
   consent(provider: string, digest: string): Promise<void>;
   budget(usd: number): Promise<void>;
   /** U5 alone owns this operation; an absent carrier is unavailable, never an implicit grant. */
-  permissions?(): Promise<void>;
+  permissions?(digest: string): Promise<void>;
+  previewProfile?(stage: SetupStage): Promise<Readonly<{ digest: string; expect: string | null; profile: string; provider: string; image: string; kind: string }>>;
+  previewFirstCommit?(message: string, include?: readonly string[]): Promise<OnboardingCommitPreview>;
+  firstCommit?(input: Readonly<{ message: string; digest: string; include?: readonly string[] }>, signal?: AbortSignal): Promise<Readonly<{ status: string }>>;
+  firstCommitRecovery?(): Promise<Readonly<{ state: 'none' | 'settled' | 'prepared' }> | Readonly<{ state: 'pending'; paths: readonly string[]; pathsFile: string;
+    locked: boolean; overlap: readonly string[]; command: string | null }>>;
   reconcile(intent: RunIntentRecord): Promise<RunIntentRecord>;
   start(intent: RunIntentRecord, signal?: AbortSignal): Promise<RunPlanningResult>;
   cancel(intent: RunIntentRecord): Promise<void>;

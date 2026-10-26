@@ -2,3 +2,4 @@
 // I-S3: bare `deckent init`'s observation and apply port (each stage through its existing owner), registered once in the CLI entry.
 export { installExecutionEnvironment, type ExecutionInstallDeps, type ExecutionInstallStatus } from './internal/install.js';
 export { configuredSetup } from './internal/wiring.js';
+export { observeOnboardingPermissions, applyOnboardingPermissions } from './internal/permissions.js';

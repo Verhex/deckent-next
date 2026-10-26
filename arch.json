@@ -3606,7 +3606,9 @@
         "src/adapters/core/agent-workspace-floor",
         "src/adapters/core/setup-detect-execution",
         "src/adapters/core/workspace-read",
-        "src/adapters/core/worker-tree-gate"
+        "src/adapters/core/worker-tree-gate",
+        "src/engine/core/effect",
+        "src/platform/core/integrity"
       ],
       "plan": "INSTALLATION"
     },
@@ -3657,7 +3659,18 @@
         "src/composition/core/toolchains",
         "src/composition/core/run-planner",
         "src/platform/core/integrity",
-        "src/engine/core/toolchain-currency"
+        "src/engine/core/toolchain-currency",
+        "src/domain/core/effect",
+        "src/domain/core/run",
+        "src/engine/core/effect",
+        "src/engine/core/approval",
+        "src/adapters/core/attempt-store",
+        "src/adapters/core/approval-store",
+        "src/platform/core/clock",
+        "src/composition/core/approvals",
+        "src/composition/core/native-coding",
+        "src/engine/core/identity-profile",
+        "src/adapters/core/contract"
       ],
       "plan": "INSTALLATION"
     },

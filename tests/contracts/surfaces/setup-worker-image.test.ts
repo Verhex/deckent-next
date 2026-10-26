@@ -38,10 +38,10 @@ const stages = (facts: Partial<ExecutionFacts> | null, values: Record<string, un
 };
 
 describe('BR1 setup stages: worker image, then the execution settings (pure plan)', () => {
-  it('order: the runtime, the worker image, the execution settings, then the model; family stages are never --yes-eligible', () => {
+  it('onboarding order: model before runtime, worker image and execution settings; family stages are never --yes-eligible', () => {
     const { plan } = stages({ worker: worker() });
     const ids = plan.stages.map(stage => stage.id);
-    expect(ids.slice(ids.indexOf('execution:runtime'))).toEqual(['execution:runtime', 'execution:worker', 'execution:worker-settings', 'core:model']);
+    expect(ids.slice(ids.indexOf('core:model'))).toEqual(['core:model', 'execution:runtime', 'execution:worker', 'execution:worker-settings']);
     expect(plan.stages.filter(stage => stage.namespace === 'execution').every(stage => !stage.autoEligible)).toBe(true);
   });
 
@@ -289,9 +289,9 @@ describe('BR1 1b: the first work kind and the pool as setup stages (no all-flags
     const calls: unknown[] = [];
     const context = { env: {}, initializeNativeCodingRegistry: async (_root: string, input: unknown) => { calls.push(input); return { status: 'current' }; },
       installConfiguredExecutionPool: async (_root: string, _scope: string, apply: boolean) => { calls.push(apply); return { status: 'conflict', configured: null }; } } as unknown as SetupCommandContext;
-    const input = { scopeId: 'erp-demo', provider: nativeCliIds[0], kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1 };
+    const input = { scopeId: 'erp-demo', provider: nativeCliIds[0], image: IMAGE, kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1 };
     expect(await runForegroundStage(context, '/x', stage('work.registry', input), 'erp-demo', 'en')).toMatchObject({ status: 'applied' });
-    expect(calls[0]).toEqual({ schemaVersion: 1, scopeId: 'erp-demo', provider: nativeCliIds[0], kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1, apply: false });
+    expect(calls[0]).toEqual({ schemaVersion: 1, scopeId: 'erp-demo', provider: nativeCliIds[0], image: IMAGE, kind: 'coding', poolId: 'workers', executionSlots: 1, inFlightSlots: 1, apply: false });
     expect(await runForegroundStage(context, '/x', stage('work.pool', { scopeId: 'erp-demo' }), 'erp-demo', 'en')).toMatchObject({ status: 'refused', code: 'POOL_CONFLICT' });
     const failing = { env: {}, initializeNativeCodingRegistry: async () => { throw Object.assign(new Error('x'), { code: 'INITIAL_REGISTRY_CLI_UNAVAILABLE' }); } } as unknown as SetupCommandContext;
     expect(await runForegroundStage(failing, '/x', stage('work.registry', input), 'erp-demo', 'en')).toMatchObject({ status: 'refused', code: 'INITIAL_REGISTRY_CLI_UNAVAILABLE' });
@@ -303,4 +303,17 @@ describe('BR1 1b: the first work kind and the pool as setup stages (no all-flags
       expect(await setup.applySetupStage(root, stage(operation, input), { env: {} })).toMatchObject({ status: 'refused', code: 'TERMINAL_TTY_REQUIRED' });
     expect(await readdir(root)).toEqual([]);
   });
+});
+
+it('U4C: a second provider keeps the registry and fallback, asks its own consent and emits profile-add only with its explicit image', () => {
+  const kind = WORK_SETUP_FAMILY.stages[0]!.evaluate;
+  const context = { scopeId: 'erp-demo', states: new Map(), prior: new Map(), answer: nativeCliIds[1],
+    facts: { registry: true, execution: true, pool: true, providers: [nativeCliIds[0]], kinds: ['coding'], images: { [nativeCliIds[1]!]: OTHER } } };
+  expect(kind({ ...context, answer: undefined }).state).toBe('done');
+  expect(kind({ ...context, answer: undefined }).operation).toBeUndefined();
+  expect(kind(context)).toMatchObject({ state: 'ready', operation: { id: 'work.profile-add', input: { provider: nativeCliIds[1], image: OTHER, kind: `${nativeCliIds[1]}-coding` } } });
+  const stage = executionSetupFamily().stages.find(row => row.id === 'execution:worker')!;
+  const decision = stage.evaluate({ ...context, facts: { runtimes: [docker], worker: worker({ configured: IMAGE, image: 'present', provider: nativeCliIds[1], providerPending: true }) },
+    states: new Map([['core:policy', 'done'], ['work:kind', 'done'], ['execution:runtime', 'done']]) });
+  expect(decision).toMatchObject({ state: 'blocked', reason: { code: 'setup.execution.workerConsentRequired' } });
 });

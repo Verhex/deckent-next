@@ -6,6 +6,7 @@ const state = z.enum(['present', 'none', 'unknown', 'not-run']), count = z.numbe
  * execution settings name, the first on PATH. */
 export const codingFactsSchema = z.object({ schemaVersion: z.literal(1), git: cli, gitPath: z.string().min(1).max(4096).nullable().default(null), gitVersion: z.string().regex(/^[0-9A-Za-z.+~_-]{1,64}$/u).nullable(),
   repository: state, commits: state, productSource: z.boolean(), workTargets: z.object({ configured: count, present: count }).strict(),
+  firstCommitRecovery: z.enum(['pending', 'settled', 'none', 'unknown']).optional(),
   hosts: z.array(z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{0,31}$/), cli, login: cli }).strict()).max(16) }).strict();
 export type CodingFacts = z.infer<typeof codingFactsSchema>;
 export const CODING_REPOSITORY_STAGE_ID = 'coding:repository', CODING_HOSTS_STAGE_ID = 'coding:hosts';
@@ -32,4 +33,13 @@ function hosts({ facts }: SetupStageContext): SetupDecision {
 /** The coding/git setup family (INIT ANALYSIS §11(b)): repository facts after the folder stage, coding-CLI sign-ins after the model stage. */
 export const codingSetupFamily = (): SetupFamilyPackage => Object.freeze({ namespace: 'coding', source: 'deckent-core', facts: codingFactsSchema.optional(),
   stages: [{ id: CODING_REPOSITORY_STAGE_ID, after: 'core:folder' as const, title: 'setup.coding.repositoryTitle', evaluate: repository },
-    { id: CODING_HOSTS_STAGE_ID, after: 'core:model' as const, title: 'setup.coding.hostsTitle', evaluate: hosts }] });
+    { id: CODING_HOSTS_STAGE_ID, after: 'core:model' as const, title: 'setup.coding.hostsTitle', evaluate: hosts },
+    { id: 'coding:first-commit', after: 'core:model' as const, phase: 'onboarding' as const, title: 'setup.coding.firstCommit.title', evaluate: ({ facts }: SetupStageContext): SetupDecision => {
+      const observed = facts as CodingFacts | undefined;
+      if (!observed || observed.repository !== 'present') return { state: 'skipped', reason: reason('notRepository') };
+      if (observed.firstCommitRecovery === 'unknown') return { state: 'blocked', reason: reason('firstCommit.recoveryUnavailable') };
+      if (observed.firstCommitRecovery === 'pending') return { state: 'ready', reason: reason('firstCommit.recovery'), operation: { id: 'coding.first-commit-recovery', version: 1, input: {} } };
+      if (observed.commits === 'present') return { state: 'done', reason: reason('firstCommit.done') };
+      if (observed.commits !== 'none') return { state: 'blocked', reason: reason('repositoryUnknown') };
+      return { state: 'ready', reason: reason('firstCommit.offer'), operation: { id: 'coding.first-commit', version: 1, input: {} } };
+    } }] });

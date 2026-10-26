@@ -111,27 +111,32 @@ one section; other sections link to it.
 
 - **Before you start:** your installation needs the current first-run policy; an older one upgrades first (see
   [First-run setup](#first-run-setup)).
-- **Worker image (alpha.54):** `deckent init` builds the worker image from the installed package as a foreground step after a
-  card that names its size and the time limit (`toolchains.update.buildTimeoutMs`), and records a receipt for this installation;
-  `deckent init --image-id sha256:<id>` instead checks an image this Docker already has against the package's worker image
-  version (one short read-only container with no network) and records the receipt. Only a person at a terminal is asked;
-  `--yes` never builds. When this Docker already holds a Deckent worker image, the new build takes the next version after it.
-  Versions and updates: [Worker image versions](#worker-image-versions).
-- **`execution` values:** `deckent init` writes only the Docker executable and the image id it built or adopted, and the Git
-  executable it found; memory, processes, CPU, deadline, log and output bounds keep their defaults (`deckent config explain
-  execution`). `deckent doctor` checks read-only (`docker image inspect`, no container) that the configured image is on this
-  Docker. Saving the setting by hand prints
-  `Saved execution in project. Apply: restart. Backup: …/.deckent/config.json.bak.<time>.…` and
-  `Restart required: the running service started with the previous configuration. Restart it with `deckent runtime restart` (or /service-restart in the terminal).`
-- **Registry and pool:** `deckent init registry` writes the first admission registry and pool settings from the coding CLI it
-  detects. Preview detects the CLI's exact version in a temporary, network-free container and shows the proposed versioned
-  profile and kind without writing anything; apply repeats the detection and writes through config policy, revision checks and
-  audit. An existing registry is never overwritten (typed refusal); add another kind with
-  `deckent coding template --provider <id> --kind <kind> --preview|--apply`. `deckent config explain admission` shows the result.
-  `--discovery` chooses what the worker CLI may load from the repository (see
-  [Worker instructions and discovery](#worker-instructions-and-discovery)). For a pool missing on an existing installation run
-  `deckent init pool --scope <id> --preview`, then `--apply`; capacity comes from the admission configuration, and a different
-  existing pool is never overwritten.
+- **Onboarding:** the first interactive terminal open shows sequential setup screens before the Workline. `/setup` revisits them.
+  Escape defers only the current screen for this person and launch folder. On relaunch, each operation is observed again; a closed screen
+  never proves that its operation completed. AI, MCP, pipes and CI do not answer person-only screens.
+- **Permission defaults:** versioned profile data supplies the offered start mode. The shipped `core:solo@1` entry offers full auto;
+  profiles or versions without an entry retain standard mode. The confirmation opens the person's mode grant through the installer
+  writer, then saves the mode through the existing mode application. An interruption between those writes resumes at the missing mode
+  entry. Company policy, protected-operation floors and audits still apply; Shift+Tab or `/mode` changes the mode, `/policy` shows grants.
+- **Worker image and registry:** a coding provider is selected from the observed signed-in CLIs. Its explicit image acquisition consent
+  permits background preparation. The later ready card observes and settles worker settings, the registry and pool in that order, through
+  their existing policy, revision and audit owners. The configured image is an installation fallback, not consent for a second provider.
+  `/setup` offers an additional signed-in provider through a profile-add preview with that provider's image; existing profiles, kinds and
+  evaluators are preserved. A changed preview or denied write is refused. Bootstrap never overwrites an existing registry.
+  `deckent config explain execution` and `deckent config explain admission` show the effective settings.
+- **Explicit CLI setup:** `deckent init registry --scope <id> --provider <id> --kind <kind> --pool <id>
+  --execution-slots <n> --in-flight-slots <n> --preview` previews the first registry without overwriting one; `--apply` uses the same
+  governed owner. `deckent coding template --provider <id> --kind <kind> --preview|--apply` adds a kind from an already admitted profile.
+  `--discovery` selects repository discovery (see [Worker instructions and discovery](#worker-instructions-and-discovery)).
+  A missing pool is previewed with `deckent init pool --scope <id> --preview`, then explicitly applied with `--apply`; capacity comes
+  from admission configuration and a different existing pool is preserved. Image lineage: [Worker image versions](#worker-image-versions).
+- **First commit:** an unborn Git repository receives a separate onboarding offer; it never blocks installation. The bounded preview
+  respects `.gitignore`, excludes flagged files unless explicitly selected, reports identity/signing and states that hooks do not run.
+  The person-only operation still needs an operation policy grant and its normal approval; the current template does not supply that
+  new operation grant. A policy refusal changes no Git files. Non-Git business folders skip this step.
+  If HEAD was committed but its index could not be settled, `/setup` shows the retained private NUL path list. After other Git writers
+  finish, only those paths may be reset in the index; unrelated staging, HEAD and the worktree are preserved. Same-path concurrent
+  staging requires manual reconciliation and receives no reset command. Never remove another Git writer's lock.
 - **Restart:** `deckent runtime restart` answers `Runtime service restarted (pid …, instance …).` A fresh `init policy --apply`
   already names the service (`service.identity`) and lets only the installing person stop it. On an older installation see
   [Runtime service](#runtime-service).
