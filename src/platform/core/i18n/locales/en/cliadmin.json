@@ -298,6 +298,7 @@
   "cli.uninstall.remove": "Remove",
   "cli.uninstall.keep": "Keep",
   "cli.uninstall.manual": "Manual steps required",
+  "cli.uninstall.manualStep": "  Kept because other installations may still use it. After checking that none does, you can remove it yourself: {command}",
   "cli.uninstall.unknown": "Unknown",
   "cli.uninstall.confirm": "Yes, uninstall",
   "cli.uninstall.cancel": "No, cancel",

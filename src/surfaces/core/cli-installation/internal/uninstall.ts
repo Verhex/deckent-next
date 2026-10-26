@@ -17,6 +17,7 @@ export function uninstallPlanLines(plan: UninstallPlan, locale: Locale): readonl
     const label = item.action === 'remove' ? t('cli.uninstall.remove', {}, locale) : item.action === 'keep' ? t('cli.uninstall.keep', {}, locale)
       : item.action === 'manual' ? t('cli.uninstall.manual', {}, locale) : unknown;
     for (const locator of item.members ?? [item.locator]) lines.push(`${label}: ${safe(locator)} · ${messages[`reason.${item.reason}`] ?? unknown}`);
+    if (item.manualCommand && item.action !== 'remove') lines.push(t('cli.uninstall.manualStep', { command: safe(item.manualCommand) }, locale));
   }
   for (const blocker of plan.blockers) {
     const authority = /^authority-(relocated|unsafe):(.+)$/su.exec(blocker), path = safe(authority?.[2] ?? '');

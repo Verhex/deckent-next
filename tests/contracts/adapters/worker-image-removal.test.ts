@@ -77,7 +77,7 @@ it('produces complete fresh daemon/config/retention references without inferring
   foreign = false;
 });
 
-it('keeps unknown installations without opening even their receipt path when complete reference custody is unavailable', async () => {
+it('keeps unknown installations without any daemon command or build-context read when complete reference custody is unavailable', async () => {
   const { observeWorkerRemovalInventory } = await import('#adapters/core/worker-image/index.js');
   const { writeFile } = await import('node:fs/promises');
   const root = await mkdtemp(join(tmpdir(), 'deckent-unknown-image-owner-'));
@@ -88,4 +88,54 @@ it('keeps unknown installations without opening even their receipt path when com
       .toEqual({ targets: [], resources: [] });
     expect(await readdir(root)).toEqual(['unowned']);
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('reports the exact manual removal step from a receipt but probes no daemon without complete lease references', async () => {
+  const { observeWorkerRemovalInventory, workerImageManualCommand } = await import('#adapters/core/worker-image/index.js');
+  const { writeFile } = await import('node:fs/promises');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-image-manual-'));
+  try {
+    const imageId = 'sha256:' + '3'.repeat(64), home = join(root, 'toolchains'), endpoint = `unix://${join(root, "it's", 'docker.sock')}`;
+    await mkdir(join(home, 'receipts'), { recursive: true, mode: 0o700 });
+    await writeFile(join(home, 'receipts/r7-20261026.json'), JSON.stringify({ schemaVersion: 3, imageVersion: 'r7-20261026', daemonId: 'daemon', endpoint,
+      recipeSha256: 'a'.repeat(64), images: [{ imageId, tag: 'owned:r7' }] }), { mode: 0o600 });
+    const observed = await observeWorkerRemovalInventory({ home, buildersRoot: join(root, 'builders'), installationId: 'temporary', executable: 'never-run', timeoutMs: 100, outputBytes: 4096 });
+    expect(observed.targets).toEqual([]);
+    expect(observed.resources).toEqual([expect.objectContaining({ exclusive: false, present: null, version: null, manualCommand: workerImageManualCommand('never-run', endpoint, imageId) })]);
+    // One argv source: the pinned daemon, --no-prune and the exact ID, shell-quoted; never force, prune or a tag.
+    expect(observed.resources[0]!.manualCommand).toBe(`never-run --host 'unix://${join(root, "it'\\''s", 'docker.sock')}' image rm --no-prune -- ${imageId}`);
+    expect(() => workerImageManualCommand('docker', 'tcp://remote:2375', imageId)).toThrow('WORKER_DAEMON_CHANGED');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+it('answers references from builder-custody leases only with participation, a private daemon socket and an image born here; a lease cannot be written while removal holds custody', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: lease custody and unix sockets are Linux-only here'); return; }
+  const { withWorkerBuilder, workerLeaseReferences, observeWorkerRemovalReferences } = await import('#adapters/core/worker-image/index.js');
+  const { writeFile, chmod } = await import('node:fs/promises');
+  const { createServer } = await import('node:net');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-image-leases-')), server = createServer();
+  try {
+    const builders = join(root, 'builders'), sockets = join(root, 'run'); await mkdir(builders, { mode: 0o700 }); await mkdir(sockets, { mode: 0o700 });
+    const socket = join(sockets, 'docker.sock'), endpoint = `unix://${socket}`; await new Promise<void>(done => server.listen(socket, done));
+    const imageId = 'sha256:' + '4'.repeat(64), adopted = 'sha256:' + '5'.repeat(64), daemon = join(builders, createHash('sha256').update('daemon').digest('hex'));
+    const custody = (lessee: string, budgetMs = 1000) => ({ root: builders, packageRoot: process.cwd(), daemonId: 'daemon', instanceId: lessee, budgetMs, audit: async () => undefined, lessee });
+    const lease = (lessee: string, provenance: string, ids: string[], budgetMs?: number) => withWorkerBuilder(custody(lessee, budgetMs), async run => run.retain({ provenance, images: ids.map(id => ({ imageId: id })) }));
+    const owner = workerLeaseReferences(builders, 'daemon', endpoint);
+    await lease('temporary', 'built-from-current-sources', [imageId]);
+    expect(await owner.inventory()).toBeNull(); // no participation record: pre-lease or invisible users may exist
+    await writeFile(join(daemon, 'participation.json'), JSON.stringify({ schemaVersion: 1, daemonId: 'daemon', since: '2020-01-01T00:00:00.000Z' }), { mode: 0o600 });
+    expect(await observeWorkerRemovalReferences(owner, 'daemon', imageId)).toEqual([{ installationId: 'temporary', protected: false, retained: false }]);
+    await lease('temporary', 'adopted-label-matched', [adopted]);
+    expect(await owner.inspect('temporary', adopted)).toBeNull(); // first use here was an adoption: born elsewhere
+    await chmod(sockets, 0o755); expect(await owner.inventory()).toBeNull(); await chmod(sockets, 0o700);
+    await lease('other', 'adopted-label-matched', [imageId]);
+    expect(await observeWorkerRemovalReferences(owner, 'daemon', imageId)).toContainEqual({ installationId: 'other', protected: false, retained: false });
+    await writeFile(join(daemon, 'participation.json'), JSON.stringify({ schemaVersion: 1, daemonId: 'daemon', since: '2999-01-01T00:00:00.000Z' }), { mode: 0o600 });
+    expect(await owner.inventory()).toBeNull(); // a lease older than participation is a pre-contract record
+    // Removal's custody is the same kernel lock: a new user's lease waits and is refused, never written beside a removal.
+    await withWorkerBuilder(custody('remover'), async () => {
+      await expect(lease('late', 'adopted-label-matched', [imageId], 100)).rejects.toMatchObject({ code: 'WORKER_IMAGE_BUILDING' });
+    });
+    expect(await readdir(join(daemon, 'leases', createHash('sha256').update(imageId).digest('hex')))).toHaveLength(2);
+  } finally { server.close(); await rm(root, { recursive: true, force: true }); }
 });

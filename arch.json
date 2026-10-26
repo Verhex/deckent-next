@@ -2427,7 +2427,8 @@
         "src/engine/core/worker-setup",
         "src/adapters/core/process-runner",
         "src/engine/core/runtime",
-        "src/platform/core/config-fields"
+        "src/platform/core/config-fields",
+        "src/adapters/core/installation-files"
       ],
       "plan": "PROVIDERS"
     },

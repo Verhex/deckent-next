@@ -53,3 +53,15 @@ it('renders one plan in the card and both preview modes, never applies JSON and 
     await expect(JSON.stringify({ uninstall: help, ...otherCommands }, null, 2) + '\n').toMatchFileSnapshot(path);
   }
 });
+
+it('prints a kept image\'s exact manual step and an unsafe authority file\'s path and fix on the card in both locales', () => {
+  const command = `docker --host unix:///run/user/1/docker.sock image rm --no-prune -- sha256:${'1'.repeat(64)}`;
+  const plan = createUninstallPlan({ schemaVersion: 1, purge: true }, { installation: { id: 'temp', root: '/fixture' },
+    scopeSummary: ['s'], layoutRevision: 'l1', policyRevision: 'p1', inventoryRevision: 'i1',
+    resources: [{ resourceId: 'image.1', contribution: 'worker-image', locator: `sha256:${'1'.repeat(64)}`, version: null, owner: null, ownership: 'unknown',
+      ownershipEvidence: null, present: null, protected: true, capability: false, backup: 'missing', manualCommand: command }],
+    blockers: ['authority-unsafe:/fixture/bindings.json'], protectedPaths: [], deletionRoots: ['/fixture'], backupDestination: '/backup', packageRemoval: { command: null, shared: true } });
+  const en = uninstallPlanLines(plan, 'en').join('\n'), tr = uninstallPlanLines(plan, 'tr').join('\n');
+  for (const text of [en, tr]) { expect(text).toContain(command); expect(text).toContain('/fixture/bindings.json'); expect(text).toContain('deckent uninstall'); }
+  expect(tr).toContain('kendiniz kaldırabilirsiniz');
+});

@@ -298,6 +298,7 @@
   "cli.uninstall.remove": "Kaldırılacak",
   "cli.uninstall.keep": "Korunacak",
   "cli.uninstall.manual": "Elle işlem gerekiyor",
+  "cli.uninstall.manualStep": "  Başka kurulumlar hâlâ kullanıyor olabileceği için korunuyor. Hiçbirinin kullanmadığını kontrol ettikten sonra kendiniz kaldırabilirsiniz: {command}",
   "cli.uninstall.unknown": "Bilinmiyor",
   "cli.uninstall.confirm": "Evet, kaldır",
   "cli.uninstall.cancel": "Hayır, vazgeç",

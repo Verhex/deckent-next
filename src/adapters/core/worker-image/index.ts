@@ -10,7 +10,8 @@ export { withWorkerBuilder, readWorkerHistory, type WorkerReservation } from './
 
 export { WorkerImageRemovalTarget, workerRemovalGuard } from './internal/removal.js';
 export type { WorkerRemovalResource, WorkerRemovalObservation, WorkerRemovalDriver } from './internal/removal.js';
-export { observeWorkerRemovalReferences, nativeWorkerRemovalDriver } from './internal/removal-driver.js';
+export { observeWorkerRemovalReferences, nativeWorkerRemovalDriver, workerImageManualCommand } from './internal/removal-driver.js';
+export { workerLeaseReferences } from './internal/references.js';
 export type { WorkerReferenceOwner, NativeWorkerRemovalInput } from './internal/removal-driver.js';
 export { observeWorkerRemovalInventory } from './internal/removal-inventory.js';
 
