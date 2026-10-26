@@ -677,7 +677,7 @@
   "mcp.start.notRecorded": "MCP server {name}: this failure could not be recorded; its card may be asked again.",
   "mcp.start.notDecided": "MCP server {name} was not decided: {code}.",
   "mcp.start.grantRefused": "MCP server {name} is trusted, but its tools were not allowed: {reason}. Calls to them are denied by policy.",
-  "mcp.grant.reason.delegation": "Your own policy does not cover the requested authority. Nothing was changed; an administrator who holds it must review the policy.",
+  "mcp.grant.reason.delegation": "your own policy does not cover the requested authority; an administrator who holds it must review the policy",
   "mcp.grant.reason.administer": "your policy does not let you change policy rules (no policy.administer operation or no right to decide its card); a first-run installation takes them with deckent init policy --scope <id> --upgrade --preview, then --apply; otherwise a policy administrator writes this grant",
   "mcp.grant.reason.unsupported": "the installation policy cannot carry the grant (policy v1 or unreadable)",
   "mcp.grant.reason.principal": "the approval came from another person than this service runs for",
