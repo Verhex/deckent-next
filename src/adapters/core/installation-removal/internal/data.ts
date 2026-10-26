@@ -8,7 +8,9 @@ const inside = (parent: string, child: string) => { const path = relative(parent
 const refuse = (code: 'EFFECT_TARGET_REJECTED' | 'EFFECT_TARGET_PRECONDITION'): never => { throw new EffectTargetError(code); };
 /** One exact owned file of a purge: the resource owner names it; never a subtree or a path a request supplies. `directory`: its
  * owner's private directory, removed only when nothing else remains in it. */
-export interface DataRemovalMember { readonly resourceId: string; readonly path: string; readonly directory: string | null }
+export interface DataRemovalMember { readonly resourceId: string; readonly path: string; readonly directory: string | null;
+  /** The member's path inside its resource as the standard backup set archives it ('' for a file resource). */
+  readonly archivePath: string }
 /** The verified final backup's exact content of every present member, bound immediately before deletion. */
 export interface DataRemovalSnapshot {
   readonly set: string; readonly manifestDigest: string;

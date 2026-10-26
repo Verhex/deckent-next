@@ -4357,7 +4357,8 @@
         "src/platform/core/utils",
         "src/adapters/core/attempt-store",
         "src/domain/core/policy",
-        "src/adapters/core/local-runtime-socket"
+        "src/adapters/core/local-runtime-socket",
+        "src/engine/core/audit"
       ],
       "plan": "INSTALLATION"
     },

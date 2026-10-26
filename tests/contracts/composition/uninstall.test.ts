@@ -182,7 +182,8 @@ it('purges only the exact backed-up authority files, keeps every unrecorded or s
     await expect(lstat(uninstallHoldPath(data))).rejects.toMatchObject({ code: 'ENOENT' });
     expect((await readdir(data)).some(name => name.startsWith('policy.json.damaged-'))).toBe(true);
     await expect(lstat(join(directory, 'final-tail.json'))).rejects.toMatchObject({ code: 'ENOENT' }); expect(await lstat(join(directory, `${plan.planDigest}.restored.json`))).toBeTruthy();
-    expect((await previewConfiguredUninstall(project, false, options)).blockers).toEqual([]);
+    const reopened = await previewConfiguredUninstall(project, false, options); expect(reopened.blockers).toEqual([]);
+    expect((await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'after-restore', planDigest: reopened.planDigest }, { confirm: async () => true }, options)).status).toMatch(/^(completed|noop)$/);
     for (const path of members) expect(await lstat(path)).toBeTruthy();
     for (const path of [strays[0]!, strays[3]!]) expect(await readFile(path, 'utf8')).toBe('FOREIGN KEEP');
     expect(await readFile(join(data, 'secrets.json'), 'utf8')).toBe('SHARED KEEP');
@@ -308,4 +309,46 @@ it('resumes an interrupted final tail only through a second card that lists the 
     const replay = await previewConfiguredUninstall(project, true, options);
     expect(replay.items.every(item => item.action === 'keep')).toBe(true);
   } finally { tail.left = null; clearConfigCache(); await rm(root, { recursive: true, force: true }); }
+});
+
+it('purges a tree only through its owner\'s signed records that the final set restores; unsigned, renamed and unready trees stay and are listed', async () => {
+  if (process.platform !== 'linux') { console.info('verify-not-run: native purge custody is Linux-only'); return; }
+  const { openSqliteLedger } = await import('#adapters/core/sqlite-ledger/index.js');
+  const { executeConfiguredBackup } = await import('#composition/core/backup/index.js');
+  const { verifyAuditRecord } = await import('#engine/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'deckent-purge-tree-'));
+  try {
+    const project = join(root, 'project'), data = join(root, 'global');
+    for (const path of [join(project, '.deckent'), join(data, 'state'), join(data, 'audit/authority-revisions'), join(data, 'artifacts', 'a'.repeat(64))]) await mkdir(path, { recursive: true, mode: 0o700 });
+    await writeFile(join(project, '.deckent/config.json'), JSON.stringify({ layout: { root: data }, terminal: { scopeId: 's' } }), { mode: 0o600 });
+    const actor = readLocalOsIdentity();
+    await writeFile(join(data, 'policy.json'), JSON.stringify({ schemaVersion: 1, revision: 'p1', restrictions: [], grants: ['installation', 'operation', 'approval', 'backup'].map(kind => ({
+      id: `owner-${kind}`, effect: 'allow', actions: 'all', scopes: 'all', principals: [{ issuer: actor.issuer, subject: actor.subject }], resource: { kind, ids: 'all' } })) }), { mode: 0o600 });
+    await writeFile(join(data, 'bindings.json'), JSON.stringify({ schemaVersion: 1, revision: 'b1', bindings: [] }), { mode: 0o600 });
+    const layout = resolveProductLayout({ projectRoot: project, root: data });
+    await new FileInstallationIdentityStore(layout).loadOrCreate();
+    const keyFile = getConfigFieldDefault('approvals').keyFile;
+    await openLocalIntegrityAuthority(layout, keyFile, true);
+    const ledger = productResourcePath(layout, 'ledger');
+    openSqliteLedger(ledger, getConfigFieldDefault('storage').sqlite).close(); await chmod(ledger, 0o600);
+    const options = { env: { HOME: join(root, 'home'), DECKENT_GLOBAL_HOME: data }, heal: false }, phrase = 'temporary-only-test-passphrase';
+    // The real producer: a person's backup writes its sealed operation record into audit/backup-operations.
+    await executeConfiguredBackup(project, { schemaVersion: 1, action: 'create', scopeId: 's', set: join(root, 'manual-set') }, phrase, options);
+    const operations = join(data, 'audit/backup-operations'), [eventId] = await readdir(operations), record = join(operations, eventId!);
+    const keep = [join(operations, 'unsigned-note'), join(operations, `renamed-${eventId}`), join(data, 'audit/authority-revisions/r-1.json'), join(data, 'artifacts', 'a'.repeat(64), 'b'.repeat(64))];
+    await writeFile(keep[0]!, 'FOREIGN KEEP', { mode: 0o600 }); await writeFile(keep[1]!, await readFile(record), { mode: 0o600 });
+    for (const path of keep.slice(2)) await writeFile(path, 'UNREADY KEEP', { mode: 0o600 });
+    const plan = await previewConfiguredUninstall(project, true, options);
+    expect(plan.blockers).toEqual([]);
+    expect(plan.items.find(item => item.resourceId === 'global-data')!.members).toContain(record);
+    for (const locator of [...keep.slice(0, 2), join(data, 'audit/authority-revisions'), join(data, 'artifacts')]) expect(plan.items.find(item => item.locator === locator)).toMatchObject({ action: 'keep' });
+    const result = await applyConfiguredUninstall(project, { schemaVersion: 1, commandId: 'tree', planDigest: plan.planDigest }, { backupPassphrase: async () => phrase, confirm: async () => true }, options);
+    expect(result.status).toBe('completed');
+    await expect(lstat(record)).rejects.toMatchObject({ code: 'ENOENT' });
+    for (const path of keep) expect((await readFile(path)).length).toBeGreaterThan(0);
+    // The standard restore brings the record back; it verifies again with the restored installation key.
+    await executeConfiguredBackup(project, { schemaVersion: 1, action: 'restore', scopeId: 's', set: result.backup.destination!, target: project, confirmTarget: project }, phrase, options);
+    const restored = await openLocalIntegrityAuthority(layout, keyFile);
+    expect(verifyAuditRecord(JSON.parse(await readFile(record, 'utf8')), restored).event.eventId).toBe(eventId);
+  } finally { clearConfigCache(); await rm(root, { recursive: true, force: true }); }
 });

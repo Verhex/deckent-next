@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "recoveryDirectory": ".deckent-uninstall",
   "purgeMembers": {
     "ledger": "",
@@ -8,9 +8,20 @@
     "installationIdentity": "identity.json",
     "approvals": "{keyFile}"
   },
+  "treeMembers": {
+    "audit": {
+      "directory": "backup-operations",
+      "proof": "sealed-audit-record"
+    }
+  },
   "cacheMembers": {
-    "scratch": ["^[0-9a-f]{32}$", "^[0-9a-f]{32}$"],
-    "treeScanCache": ["^[a-f0-9]{64}\\.json$"]
+    "scratch": [
+      "^[0-9a-f]{32}$",
+      "^[0-9a-f]{32}$"
+    ],
+    "treeScanCache": [
+      "^[a-f0-9]{64}\\.json$"
+    ]
   },
   "sharedSecretFiles": [
     "secrets.json",
