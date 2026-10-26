@@ -66,8 +66,9 @@ describe('K1 real binary journeys', () => {
     expect(result).toMatchObject({ schemaVersion: 2, principal: { assurance: 'os-user', provenance: 'cli' }, company: { companyId: 'default' }, status: 'degraded', startability: { status: 'blocked' }, policyTemplate: null, policyAdministration: null, modelInvocationDelivery: [] });
     // Doctor JSON 2 grows only by additive fields (shellRealm, poolReadiness before; wave 1: imageRefresh for WORKER-AUTO-REFRESH and
     // installationBinding for VERIFY-ENV, both always present, null when unwired or unreadable; alpha.35 P0: policyAdministration, null without a
-    // terminal scope; Node floor 24.22.0: node).
-    expect(Object.keys(result).sort()).toEqual(['auditIntegrity', 'company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'node', 'paths', 'platform', 'policyAdministration', 'policyTemplate', 'poolReadiness', 'principal', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status']);
+    // terminal scope; Node floor 24.22.0: node; alpha.56 U2: ownerBaseline and BP: providerSpending, both null without a terminal scope).
+    expect(Object.keys(result).sort()).toEqual(['auditIntegrity', 'company', 'environment', 'host', 'hostMemory', 'imageRefresh', 'installationBinding', 'modelInvocationDelivery', 'node', 'ownerBaseline', 'paths', 'platform', 'policyAdministration', 'policyTemplate', 'poolReadiness', 'principal', 'providerSpending', 'recoveryFiles', 'schemaVersion', 'scope', 'secretStore', 'serviceConfig', 'shellRealm', 'startability', 'status']);
+    expect({ ownerBaseline: result.ownerBaseline, providerSpending: result.providerSpending }).toEqual({ ownerBaseline: null, providerSpending: null });
     // No refresh ever ran in this installation (no Docker execution): nothing is claimed.
     expect(result.imageRefresh).toEqual({ status: 'unknown', reason: null, imageVersion: null });
     // Binding v2 (wave 2): the doctor reports the strength and source this host reaches by the product's own capture and whether company
@@ -82,7 +83,12 @@ describe('K1 real binary journeys', () => {
     // SECRET env guard (0805e626): with the environment store selected, doctor names any environment-held secret also kept in a file store (none here).
     expect(result.secretStore).toEqual({ schemaVersion: 1, backend: 'core.secret-store.env@1', writable: false, enumerable: false, status: 'ready', code: null,
       envGuard: { 'core.secret-store.file@1': { names: [], code: null }, 'core.secret-store.encrypted-file@1': { names: [], code: null } },
-      leftover: { backends: [], entries: 0, unverified: ['core.secret-store.file@1', 'core.secret-store.encrypted-file@1'] } });
+      // U1 S1: each unverified store carries its typed refusal, and the open installation root it lives in is named with its mode.
+      leftover: { backends: [], entries: 0, unverified: ['core.secret-store.file@1', 'core.secret-store.encrypted-file@1'],
+        codes: { 'core.secret-store.file@1': 'SECRET_STORE_UNSAFE', 'core.secret-store.encrypted-file@1': 'SECRET_STORE_UNSAFE' } },
+      globalRoot: { path: dirname(resolveGlobalConfigPaths(f.env).platformPath), mode: process.platform === 'win32' ? expect.any(String) : '0755' },
+      // FIX8b: on Linux the ChatGPT sign-in custody row; with a non-encrypted store selected it only says to switch the store (no host probe).
+      ...(process.platform === 'linux' ? { personalCustody: { status: 'store' } } : {}) });
     expect(result.shellRealm).toMatchObject({ schemaVersion: 1 });
     // S1 D2/D4 (backup): no stale restore stage; the project's .deckent directory is named with its mode (here open, so doctor would say chmod 700).
     expect(result.recoveryFiles).toMatchObject({ leftovers: [], installationDirectory: { path: expect.stringMatching(/[\\/]project[\\/]\.deckent$/u) } });
@@ -95,7 +101,7 @@ describe('K1 real binary journeys', () => {
     // (J3 d082a9a7: --verbose states the status once, in the grouped summary's words; degraded JSON = "needs attention" with its errors.)
     expect((await f.run(['doctor', '--verbose']).catch(error => error)).stdout).toMatch(/^Status: needs attention · \d+ error\(s\)/u);
     expect(result.host.workerBasis).toMatchObject({ cpuBased: expect.any(Number), memoryBased: expect.any(Number), workerMemoryEstimateMB: expect.any(Number), recommended: result.host.recommendedMaxWorkers });
-    expect((await f.run(['doctor', '--verbose'], { DECKENT_LANG: 'tr' }).catch(error => error)).stdout).toContain('Önerilen worker');
+    expect((await f.run(['doctor', '--verbose'], { DECKENT_LANG: 'tr' }).catch(error => error)).stdout).toContain('Önerilen işçi');
     expect((await f.run(['doctor', '--verbose', '--lang', 'tr']).catch(error => error)).stdout).toContain('Bellek:');
     expect((await f.run(['doctor', '--verbose', '--lang', 'tr']).catch(error => error)).stdout).toContain('Secret deposu: core.secret-store.env@1 (ready)');
   });
