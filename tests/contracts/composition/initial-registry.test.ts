@@ -4,10 +4,13 @@ import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { initializeNativeCodingRegistry, configureNativeCodingTemplate, addNativeCodingProfile } from '#composition/core/native-coding/index.js';
-import { observeOnboardingPermissions, applyOnboardingPermissions } from '#composition/core/setup/index.js';
-import { applyPolicyTemplateInstallation, openOwnPermissionMode } from '#composition/core/installation/index.js';
+import { observeSetupPermissions, applySetupPermissions, configuredSetup } from '#composition/core/setup/index.js';
+import { applyPolicyTemplateInstallation, openOwnPermissionMode, inspectPolicyTemplate } from '#composition/core/installation/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
+import { withLocalPrincipalChannel } from '#adapters/index.js';
+import { listIdentityProfiles } from '#composition/core/identity-profile/index.js';
+import { setupInitCommand, createSetupController } from '#surfaces/core/setup/index.js';
 import { executionRegistrySchema } from '#domain/index.js';
 import { main } from '#surfaces/core/cli/index.js';
 
@@ -65,17 +68,107 @@ it('U4C: witnessed profile defaults resume a partially opened grant and persist 
   const f = await setup();
   const principal = await resolveConfiguredConfigPrincipal(f.root, 's', f.options);
   await createConfiguredConfigApplication(f.root, f.options, undefined, person.witness).set({ keyPath: 'identity.profile', value: { id: 'core:solo', version: 1 }, layer: 'global', principal, scopeId: 's', commandId: 'choose-profile' });
-  const seen = await observeOnboardingPermissions(f.root, 's', f.options), before = await readFile(f.policyPath, 'utf8');
-  expect(seen).toMatchObject({ state: 'needed', mode: 'full-auto' });
-  await expect(applyOnboardingPermissions(f.root, 's', seen.digest, f.options, { attest: async () => false })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
-  await expect(applyOnboardingPermissions(f.root, 's', 'f'.repeat(64), f.options, person.witness)).rejects.toMatchObject({ code: 'PERMISSION_MODE_CONFLICT' });
+  const seen = await observeSetupPermissions(f.root, 's', f.options), before = await readFile(f.policyPath, 'utf8');
+  expect(seen).toMatchObject({ state: 'needs-confirmation', mode: 'full-auto' });
+  await expect(applySetupPermissions(f.root, 's', seen.digest, f.options, { attest: async () => false })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  await expect(applySetupPermissions(f.root, 's', 'f'.repeat(64), f.options, person.witness)).rejects.toMatchObject({ code: 'PERMISSION_MODE_CONFLICT' });
   expect(await readFile(f.policyPath, 'utf8')).toBe(before);
   const audits = f.auditCount();
   await openOwnPermissionMode(f.root, { scopeId: 's', mode: 'full-auto', confirm: async () => true }, f.options, undefined, person.witness);
-  const interrupted = await observeOnboardingPermissions(f.root, 's', f.options); expect(interrupted.state).toBe('needed');
-  await applyOnboardingPermissions(f.root, 's', interrupted.digest, f.options, person.witness);
+  const interrupted = await observeSetupPermissions(f.root, 's', f.options); expect(interrupted.state).toBe('needs-confirmation');
+  await applySetupPermissions(f.root, 's', interrupted.digest, f.options, person.witness);
   expect(f.auditCount()).toBe(audits + 2);
-  expect(await observeOnboardingPermissions(f.root, 's', f.options)).toMatchObject({ state: 'applied' });
+  expect(await observeSetupPermissions(f.root, 's', f.options)).toMatchObject({ state: 'applied' });
+});
+it('U4E G2: real headless init leaves authority pending; the first witnessed carrier saves the profile, resumes only the mode after a post-grant crash', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'setup-permission-headless-')); roots.push(root);
+  const options = { env: { DECKENT_GLOBAL_HOME: join(root, 'global'), LANG: 'en_US.UTF-8', PATH: '' } };
+  const host = { listIdentityProfiles, inspectPolicyTemplate }, setup = configuredSetup(host, person.witness);
+  let output = '';
+  await setupInitCommand(['init', '--yes', '--scope', 's', '--json'], { ...host, ...setup, root, env: options.env,
+    stdout: { write(text: string) { output += text; } } });
+  expect(JSON.parse(output)).toMatchObject({ authority: { status: 'authority-pending' } });
+  for (const [locale, pending] of [['en', 'Authority pending'], ['tr', 'Yetki onayı bekliyor']]) {
+    output = '';
+    await setupInitCommand(['init', '--scope', 's', '--lang', locale!], { ...host, ...setup, root, env: options.env,
+      stdout: { write(text: string) { output += text; } } });
+    expect(output).toContain(pending); expect(output).toContain('deckent terminal');
+  }
+  const missing = await observeSetupPermissions(root, 's', options);
+  expect(missing).toMatchObject({ state: 'needs-profile', currentMode: 'standart', effectiveMode: 'standart', mode: 'full-auto', selectedProfile: { id: 'core:solo', version: 1 } });
+  expect((await loadConfig(root, options))['identity']).toBeUndefined();
+  const policyPath = join(root, '.deckent/policy.json'), bytes = await readFile(policyPath, 'utf8');
+  await expect(applySetupPermissions(root, 's', missing.digest, options, { attest: async () => false })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  await expect(withLocalPrincipalChannel('mcp', () => applySetupPermissions(root, 's', missing.digest, options, person.witness))).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  expect(await readFile(policyPath, 'utf8')).toBe(bytes);
+  const interrupted = { attest: async () => !JSON.parse(await readFile(policyPath, 'utf8')).grants.some((row: { id: string }) => row.id === 'installer-permission-mode-full-auto') };
+  await expect(applySetupPermissions(root, 's', missing.digest, options, interrupted)).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  const next = await observeSetupPermissions(root, 's', options);
+  expect(next).toMatchObject({ state: 'needs-confirmation', currentMode: 'standart', mode: 'full-auto' });
+  const policyAfterGrant = await readFile(policyPath, 'utf8'), globalAfterProfile = await readFile(join(root, 'global/config.json'), 'utf8');
+  const db = new DatabaseSync(join(root, '.deckent/state/ledger.db'), { readOnly: true });
+  try {
+    const count = () => Number(db.prepare('SELECT count(*) AS n FROM audit_events').get()!['n']), before = count();
+    await applySetupPermissions(root, 's', next.digest, options, person.witness);
+    expect(count()).toBe(before + 1);
+    expect(await readFile(policyPath, 'utf8')).toBe(policyAfterGrant); expect(await readFile(join(root, 'global/config.json'), 'utf8')).toBe(globalAfterProfile);
+    expect(await observeSetupPermissions(root, 's', options)).toMatchObject({ state: 'applied', effectiveMode: 'full-auto' });
+    const settled = await observeSetupPermissions(root, 's', options);
+    await applySetupPermissions(root, 's', settled.digest, options, person.witness); expect(count()).toBe(before + 1);
+  } finally { db.close(); }
+});
+it('U4E G2: the install controller previews and confirms full-auto through the same carrier; a later explicit standart choice stays preserved', async () => {
+  const f = await setup(), host = { listIdentityProfiles, inspectPolicyTemplate }, wired = configuredSetup(host, person.witness);
+  await f.mutate(config => { config.language = 'en'; });
+  const context = { ...host, ...wired, root: f.root, env: f.options.env };
+  const observed = await wired.observeSetup(f.root, { ...f.options, person: true });
+  const controller = createSetupController({ context, root: f.root, locale: 'en', observed, flags: { json: false, yes: false } });
+  await controller.step('core:solo'); await controller.step('apply');
+  expect(controller.model().rows.join('\n')).toContain('Profile core:solo');
+  expect(controller.model().options.find(row => row.id === 'apply')?.label).toBe('Confirm the previewed permissions');
+  await controller.step('apply');
+  const applied = await observeSetupPermissions(f.root, 's', f.options);
+  expect(applied).toMatchObject({ state: 'applied', effectiveMode: 'full-auto' });
+  const principal = await resolveConfiguredConfigPrincipal(f.root, 's', f.options);
+  const { PermissionModeApplication, AuditApplication } = await import('#engine/index.js');
+  const { openSqliteAuditStore, openLocalIntegrityAuthority } = await import('#adapters/index.js');
+  const { createLayoutPolicySource } = await import('#composition/core/policy/index.js');
+  const config = await loadConfig(f.root, f.options), audit = await openSqliteAuditStore(join(config.productLayout.root, 'state/ledger.db'), config.storage.sqlite, 'forbid');
+  try {
+    const recorder = new AuditApplication(audit, await openLocalIntegrityAuthority(config.productLayout, config.approvals.keyFile));
+    await new PermissionModeApplication(createLayoutPolicySource(config.productLayout, process.getuid!(), config.inspection.policyMaxBytes), event => { recorder.record(event); }, Date.now)
+      .set(principal, { schemaVersion: 1, scopeId: 's', mode: 'standart', expectedRevision: applied.revision });
+    const preserved = await observeSetupPermissions(f.root, 's', f.options);
+    expect(preserved).toMatchObject({ state: 'applied', preserveMode: true, mode: 'standart', effectiveMode: 'standart' });
+    await applySetupPermissions(f.root, 's', preserved.digest, f.options, person.witness);
+    expect(await observeSetupPermissions(f.root, 's', f.options)).toMatchObject({ mode: 'standart' });
+  } finally { audit.close(); }
+});
+it('U4E G2: an explicit no-op standart decision is preserved; a selected custom profile without defaults is not-applicable and never replaced', async () => {
+  const f = await setup(), principal = await resolveConfiguredConfigPrincipal(f.root, 's', f.options);
+  const config = await loadConfig(f.root, f.options);
+  const { PermissionModeApplication, AuditApplication } = await import('#engine/index.js');
+  const { openSqliteAuditStore, openLocalIntegrityAuthority } = await import('#adapters/index.js');
+  const { createLayoutPolicySource } = await import('#composition/core/policy/index.js');
+  const source = createLayoutPolicySource(config.productLayout, process.getuid!(), config.inspection.policyMaxBytes);
+  const store = await openSqliteAuditStore(join(config.productLayout.root, 'state/ledger.db'), config.storage.sqlite, 'forbid');
+  try {
+    const initial = await observeSetupPermissions(f.root, 's', f.options), bindings = await readFile(join(config.productLayout.root, 'bindings.json'), 'utf8');
+    expect(initial).toMatchObject({ state: 'needs-profile', preserveMode: false });
+    const audit = new AuditApplication(store, await openLocalIntegrityAuthority(config.productLayout, config.approvals.keyFile, true));
+    await new PermissionModeApplication(source, event => { audit.record(event); }, Date.now)
+      .set(principal, { schemaVersion: 1, scopeId: 's', mode: 'standart', expectedRevision: initial.revision });
+    expect(await readFile(join(config.productLayout.root, 'bindings.json'), 'utf8')).toBe(bindings);
+    const missing = await observeSetupPermissions(f.root, 's', f.options);
+    expect(missing).toMatchObject({ state: 'needs-profile', preserveMode: true, mode: 'standart' });
+    await applySetupPermissions(f.root, 's', missing.digest, f.options, person.witness);
+    expect(await observeSetupPermissions(f.root, 's', f.options)).toMatchObject({ state: 'applied', effectiveMode: 'standart' });
+    await createConfiguredConfigApplication(f.root, f.options, undefined, person.witness).set({ keyPath: 'identity.profile', value: { id: 'core:custom', version: 1 }, layer: 'global', principal, scopeId: 's', commandId: 'custom-profile' });
+    const custom = await observeSetupPermissions(f.root, 's', f.options), before = await readFile(join(f.root, 'global/config.json'), 'utf8');
+    expect(custom).toMatchObject({ state: 'not-applicable', profile: 'core:custom', effectiveMode: 'standart' });
+    await applySetupPermissions(f.root, 's', custom.digest, f.options, person.witness);
+    expect(await readFile(join(f.root, 'global/config.json'), 'utf8')).toBe(before);
+  } finally { store.close(); }
 });
 it('fresh policy → preview is read-only → apply writes a versioned registry once → template works without a prepared seed', async () => {
   const f = await setup(), before = await readFile(f.path, 'utf8'), files = await f.files(), audits = f.auditCount();

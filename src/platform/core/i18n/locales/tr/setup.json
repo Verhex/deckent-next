@@ -288,5 +288,14 @@
   "setup.install.done": "Kurulum tamam. deckent yazın: ilk açılışta sağlayıcıyı ve ilk işi birlikte ayarlarız.",
   "setup.execution.noWorkKind": "Bir iş türü seçilene kadar işçi imajı gerekmiyor.",
   "setup.execution.workerConsentRequired": "İmaj edinmeden önce onboarding veya /setup üzerinden işçi imajı kaynaklarını onaylayın.",
-  "setup.execution.workerAcquisition": "İşçi imajı: {phase}; adım: {step}; neden: {code}."
+  "setup.execution.workerAcquisition": "İşçi imajı: {phase}; adım: {step}; neden: {code}.",
+  "setup.permissions.title": "Başlangıç izinleri",
+  "setup.permissions.waitsForPolicy": "Bu kapsam kurulana kadar yetki onayı bekliyor.",
+  "setup.permissions.profileMissing": "Yetki onayı bekliyor: ilk terminal açılışında profil seçip onaylayın. Kip yetkisi açılmadı.",
+  "setup.permissions.blocked": "Profil izinleri güvenli biçimde okunamadı. /policy üzerinden inceleyip /setup akışını yeniden açın.",
+  "setup.permissions.preview": "{scope} kapsamında {principal} için {profile} profili {mode} ile başlayacak. Olağan işler kurum politikasına uyar; korunan ayarlar, sırlar ve yıkıcı işlemler kendi onay kurallarını korur.",
+  "setup.permissions.confirm": "Önizlenen izinleri onayla",
+  "setup.permissions.applied": "Başlangıç izinleri tamamlandı. Şu an etkin kip: {effective}.",
+  "setup.permissions.notApplicable": "{profile} profilinin başlangıç izinleri yok. Şu an etkin kip {effective} olarak korunur.",
+  "setup.permissions.pending": "Yetki onayı bekliyor. Bu kurulumda deckent terminal açıp profili ve başlangıç izinlerini onaylayın; --yes kişi onayının yerine geçmez."
 }

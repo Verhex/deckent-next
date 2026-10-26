@@ -7,6 +7,7 @@ const readyIds = new Set(presentation.workerReady.members.filter(id => id !== 'w
 export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): readonly OnboardingStep[] {
   const steps: OnboardingStep[] = [], deferred = new Set(revisit ? [] : snapshot.deferred);
   const add = (step: OnboardingStep) => { if (!deferred.has(step.id) || step.id === 'core:model' && snapshot.observation.model.connections === 0) steps.push(step); };
+  if (!['applied', 'not-applicable'].includes(snapshot.permissions.state)) add({ id: 'permissions:start-mode', stages: [], kind: 'permissions' });
   for (const stage of snapshot.plan.stages) {
     if (stage.id === 'work:kind' && snapshot.folderFacts.kind !== 'coding' && !snapshot.answers['work:kind'] && stage.state !== 'done') continue;
     if (stage.phase !== 'onboarding' || readyIds.has(stage.id) || stage.state === 'skipped'
@@ -23,13 +24,10 @@ export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): 
     }
     if (stage.id === 'core:model') {
       if (snapshot.budget.needed) add({ id: 'onboarding:budget', stages: [], kind: 'budget' });
-      if (snapshot.permissions.state !== 'applied') add({ id: 'permissions:start-mode', stages: [], kind: 'permissions' });
     }
   }
   // A connected model's done stage is absent above; its dependent guide still has the same position before work.
-  if (!steps.some(row => row.kind === 'budget') && snapshot.budget.needed && !deferred.has('onboarding:budget')) steps.unshift({ id: 'onboarding:budget', stages: [], kind: 'budget' });
-  if (!steps.some(row => row.kind === 'permissions') && snapshot.permissions.state !== 'applied' && !deferred.has('permissions:start-mode'))
-    steps.splice(steps[0]?.kind === 'budget' ? 1 : 0, 0, { id: 'permissions:start-mode', stages: [], kind: 'permissions' });
+  if (!steps.some(row => row.kind === 'budget') && snapshot.budget.needed && !deferred.has('onboarding:budget')) steps.splice(steps[0]?.kind === 'permissions' ? 1 : 0, 0, { id: 'onboarding:budget', stages: [], kind: 'budget' });
   for (const pending of snapshot.pending.filter(row => row.status !== 'cancelled')) add({ id: `parked:${pending.runId}`, kind: 'parked', stages: [], pending });
   add({ id: 'onboarding:first-task', stages: [], kind: 'first-task' });
   return steps;

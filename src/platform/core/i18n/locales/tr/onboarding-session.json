@@ -87,5 +87,9 @@
   "setup.coding.firstCommit.flag.secret-content": "olası sır içeriği",
   "setup.coding.firstCommit.flag.size": "dosya boyutu tarama sınırını aşıyor",
   "setup.coding.firstCommit.flag.nested-repository": "iç içe depo; seçilemez",
-  "setup.coding.firstCommit.recoveryUnavailable": "İlk commit kurtarma kanıtı güvenle okunamıyor. Depoyu elle inceleyin; commit veya reset uygulanmaz."
+  "setup.coding.firstCommit.recoveryUnavailable": "İlk commit kurtarma kanıtı güvenle okunamıyor. Depoyu elle inceleyin; commit veya reset uygulanmaz.",
+  "onboarding.permissions.chooseProfile": "Başlangıç izinlerini önizlemek için profil seçin. Sonraki onaya kadar hiçbir şey yazılmaz.",
+  "onboarding.permissions.profileMissing": "{scope} kapsamında {principal} için {profile} profili kaydedilip {mode} ile başlayacak. Korunan ayarlar, sırlar ve yıkıcı işlemler kendi onay kurallarını korur. Bekleyen kurulum izinlerini tamamlamak için onaylayın.",
+  "onboarding.permissions.preserved": "{scope} kapsamında {principal} için önceki kip seçiminiz ({mode}) korunur.",
+  "onboarding.permissions.profileWithoutDefaults": "{profile} profilinin başlangıç izinleri yok. Onay bu profili kaydeder ve {scope} kapsamında {principal} için mevcut kipi ({mode}) korur."
 }

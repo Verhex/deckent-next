@@ -150,6 +150,11 @@
       "autoEligible": true
     }
   ],
+  "authority": {
+    "status": "unavailable",
+    "state": null,
+    "nextAction": null
+  },
   "apply": {
     "requested": false,
     "results": []

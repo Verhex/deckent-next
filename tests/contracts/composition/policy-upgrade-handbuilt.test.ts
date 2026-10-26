@@ -1,9 +1,10 @@
+import { FIRST_RUN_V16_RULE_IDS } from '../support/first-run-v16.js';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilePolicySource } from '#adapters/index.js';
-import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
+import { FIRST_RUN_CURRENT_UPGRADE_RULE_IDS as FIRST_RUN_V17_RULE_IDS, evaluatePolicy, resolvePolicyBindings } from '#domain/index.js';
 /** The v13 delta (I-POL): with v14 current, an exact older template lacks it as well as the current delta. */
 const V13_DELTA: readonly string[] = ['first-run-execution-environment-install', 'first-run-installation-repair', 'first-run-model-deactivation', 'first-run-decision-inspect',
   'first-run-monitor-scope-diagnostics', 'first-run-standing-grants-all'];
@@ -12,6 +13,9 @@ import { main } from '#surfaces/index.js';
 import { applyPolicyTemplateInstallation, upgradePolicyTemplateInstallation as upgradeInstallation } from '#composition/core/installation/index.js';
 import { clearConfigCache } from '#platform/index.js';
 import { FIRST_RUN_V15_RULE_IDS } from '../support/first-run-v15.js';
+
+// Historical fixtures before v16 exclude both later additive deltas.
+const POST_V15_RULE_IDS: readonly string[] = [...FIRST_RUN_V16_RULE_IDS, ...FIRST_RUN_V17_RULE_IDS];
 
 /** SEC-1 (I-POL): `init policy --upgrade --apply` is an authority write and vitest has no terminal, so this file attests the witness; the refusal
  * without one is tests/contracts/composition/policy-upgrade-witness.test.ts. */
@@ -149,13 +153,13 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     expect(entries).toHaveLength(1);
     const record = JSON.parse(await readFile(join(f.root, '.deckent', 'audit', 'authority-revisions', entries[0]!), 'utf8')) as Record<string, unknown> & {
       before: { policy: unknown }; after: { policy: unknown } };
-    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v16-/) });
+    expect(record).toMatchObject({ state: 'committed', key: expect.stringMatching(/^policy-template-upgrade-v17-/) });
     expect(record.before.policy).toEqual(handBuilt());
     expect(record.after.policy).toEqual(after);
     // The same upgrade run again adds the remaining v15 and v16 rules (each run add-only and idempotent); a third run is current.
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'upgraded', rules: [{ id: 'first-run-memory-distiller-output' }, { id: 'first-run-agent-catalog' }, { id: 'first-run-mcp-observe-agent-catalog' }, { id: 'first-run-memory-review' }, { id: 'first-run-memory-evaluator' }, { id: 'first-run-memory-evaluator-runs' }, { id: 'first-run-memory-evaluator-model' }, { id: 'first-run-memory-purge' }, { id: 'first-run-recovery-model' }, { id: 'first-run-skill-signers' }, { id: 'first-run-agent-catalog-import' },
       // S8-3: the catalog aggregator's exact list.
-      { id: 'first-run-catalog-aggregator' }, { id: 'first-run-catalog-aggregator-runs' }, { id: 'first-run-catalog-aggregator-memory' }, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS.map(id => ({ id }))] });
+      { id: 'first-run-catalog-aggregator' }, { id: 'first-run-catalog-aggregator-runs' }, { id: 'first-run-catalog-aggregator-memory' }, ...POST_V15_RULE_IDS.map(id => ({ id }))] });
     const upgraded = await f.bytes();
     expect(await f.upgrade(true, { person: PERSON })).toMatchObject({ status: 'current', basis: 'named-person', rules: [] });
     expect(await f.bytes()).toBe(upgraded);
@@ -186,7 +190,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const argv = ['init', 'policy', '--scope', SCOPE, '--upgrade', '--person', `${PERSON.issuer}/${PERSON.subject}`, '--json'];
     expect(await main([...argv, '--preview'], context)).toBe(0); expect(errors).toEqual([]);
     const preview = JSON.parse(output.join('')) as { revision: string; expect: string; rules: { id: string }[] };
-    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 16 } });
+    expect(preview).toMatchObject({ status: 'preview', basis: 'named-person', template: { to: 17 } });
     expect(preview.rules.map(rule => (rule as { id: string }).id)).toEqual(['first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-service-shutdown']);
     expect(await f.bytes()).toBe(before);
     output.length = 0;
@@ -244,7 +248,7 @@ describe.skipIf(process.platform !== 'linux')('deckent init policy --upgrade --p
     const owner = v5.grants[0]!.principals[0]!;
     const v4 = { ...v5, revision: 'first-run-template-v4', grants: v5.grants.filter(rule => !['first-run-mcp-servers', 'first-run-mcp-call-operation', 'first-run-policy-administer',
       'first-run-approvals', 'first-run-secret-switch', 'first-run-model-activation', 'first-run-model-invocation', 'first-run-provider-spending', 'first-run-backup', 'first-run-runs', 'first-run-pools', 'first-run-attempts', 'first-run-work-targets', 'first-run-quota-release', 'first-run-integration', 'first-run-work-target-adopt', 'first-run-scope-inspect', 'first-run-service-shutdown'].includes(rule.id)
-      && !rule.id.startsWith('first-run-mcp-observe-') && ![...V13_DELTA, 'first-run-memory-inspect', 'first-run-mcp-observe-memory', ...FIRST_RUN_V15_RULE_IDS, ...FIRST_RUN_CURRENT_UPGRADE_RULE_IDS].includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
+      && !rule.id.startsWith('first-run-mcp-observe-') && ![...V13_DELTA, 'first-run-memory-inspect', 'first-run-mcp-observe-memory', ...FIRST_RUN_V15_RULE_IDS, ...POST_V15_RULE_IDS].includes(rule.id)).map(rule => rule.id === 'first-run-read-tools' ? { ...rule, resource: { ...rule.resource,
       ids: (rule.resource.ids as string[]).filter(name => name !== 'propose_mcp_server') } } : rule) };
     await writeFile(policyPath, `${JSON.stringify(v4)}\n`, { mode: 0o600 });
     const v4Bytes = await readFile(policyPath, 'utf8');

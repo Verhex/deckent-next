@@ -7,3 +7,5 @@ export type { CoreSetupStageId, SetupAnswers, SetupDecision, SetupFamilyPackage,
   SetupStageState, SetupPhase } from './internal/contract.js';
 export { ExecutionEnvironmentInstallApplication, policyExecutionInstallAuthorization } from './internal/install.js';
 export type { ExecutionInstallDecision, ExecutionInstallOutcome, ExecutionInstallRequest, ExecutionInstallSource } from './internal/install.js';
+export { SETUP_PERMISSIONS_FAMILY } from './internal/permissions.js';
+export type { SetupPermissionPreview } from './internal/permissions.js';

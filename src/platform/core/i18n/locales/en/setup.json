@@ -288,5 +288,14 @@
   "setup.install.done": "Setup is complete. Type deckent: on the first open we set up the provider and the first job together.",
   "setup.execution.noWorkKind": "No worker image is needed until a work kind is selected.",
   "setup.execution.workerConsentRequired": "Confirm the worker image sources in onboarding or /setup before acquiring an image.",
-  "setup.execution.workerAcquisition": "Worker image: {phase}; step: {step}; reason: {code}."
+  "setup.execution.workerAcquisition": "Worker image: {phase}; step: {step}; reason: {code}.",
+  "setup.permissions.title": "Starting permissions",
+  "setup.permissions.waitsForPolicy": "Permission authority is pending until this scope is installed.",
+  "setup.permissions.profileMissing": "Authority pending: select and confirm a profile at the first terminal opening. No mode authority has been opened.",
+  "setup.permissions.blocked": "Permission defaults cannot be safely observed. Review /policy, then reopen /setup.",
+  "setup.permissions.preview": "Profile {profile} will start in {mode} for {principal} in scope {scope}. Routine work follows company policy; protected settings, secrets and destructive actions keep their approval rules.",
+  "setup.permissions.confirm": "Confirm the previewed permissions",
+  "setup.permissions.applied": "Starting permissions are settled. Current effective mode: {effective}.",
+  "setup.permissions.notApplicable": "Profile {profile} has no permission defaults. Current effective mode stays {effective}.",
+  "setup.permissions.pending": "Authority pending. Open deckent terminal in this installation and confirm the profile and starting permissions; --yes does not replace person confirmation."
 }

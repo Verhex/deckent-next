@@ -60,3 +60,10 @@ it('U4C: a relaunched ready card skips settled owners, refuses a refused write a
     { ...stage('execution:worker-settings', true), state: 'blocked' as const }, stage('work:kind', true), stage('work:pool', true)] } };
   expect(onboardingSteps(blocked).find(row => row.kind === 'ready')?.stages[0]?.state).toBe('blocked');
 });
+
+it('U4E G2: install permission recovery precedes an absent model; not-applicable profiles never get a permission success card', () => {
+  const missing = { ...snapshot, observation: { ...observation, model: { connections: 0 } }, budget: { ...snapshot.budget, needed: false },
+    permissions: { state: 'needs-profile' as const, reason: 'onboarding.permissions.profileMissing' } };
+  expect(onboardingSteps(missing)[0]?.kind).toBe('permissions');
+  expect(onboardingSteps({ ...missing, permissions: { state: 'not-applicable', reason: '' } }).some(step => step.kind === 'permissions')).toBe(false);
+});

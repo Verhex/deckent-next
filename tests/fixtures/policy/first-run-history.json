@@ -1,0 +1,92 @@
+{
+  "source": "c1e5f8fabb02a9f70660c0d8216c4111aee32b71",
+  "input": {
+    "scopeId": "installation",
+    "principal": {
+      "issuer": "os",
+      "subject": "1000"
+    },
+    "readToolNames": [
+      "read_file",
+      "list_dir",
+      "grep",
+      "glob"
+    ],
+    "scratchToolNames": [
+      "scratch_write",
+      "scratch_read",
+      "scratch_list"
+    ],
+    "editShellToolNames": [
+      "edit_file",
+      "write_file",
+      "run_shell"
+    ],
+    "scratchWriteOperationId": "workspace.scratch.write",
+    "writeOperationId": "workspace.file.write",
+    "shellOperationId": "host.shell.run",
+    "proposeMcpToolName": "propose_mcp_server",
+    "mcpCallOperationId": "mcp.tool.call",
+    "policyAdministerOperationId": "policy.administer",
+    "executionEnvironmentIds": [
+      "docker"
+    ],
+    "recoveryRules": [
+      {
+        "id": "container-gone",
+        "version": 1
+      },
+      {
+        "id": "launcher-dead-orphan",
+        "version": 1
+      },
+      {
+        "id": "launcher-dead-gone",
+        "version": 1
+      }
+    ]
+  },
+  "policy": {
+    "schemaVersion": 2,
+    "revision": "first-run-template-v4",
+    "roles": [],
+    "restrictions": [],
+    "separationOfDuties": [],
+    "approvalAssurance": [
+      {
+        "id": "first-run-hard-floor-cards",
+        "scopes": [
+          "installation"
+        ],
+        "subject": "agent-tool-call",
+        "cells": [
+          "edit-floor",
+          "edit-self-source",
+          "edit-authority",
+          "shell-destructive",
+          "shell-always-ask",
+          "fetch-listed",
+          "fetch-unlisted",
+          "mcp-call",
+          "mcp-floor"
+        ],
+        "minimum": "turn-bound"
+      }
+    ]
+  },
+  "versions": [
+    {"version": 4, "changed": [{"id": "first-run-read-tools", "actions": ["invoke"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "agent-tool", "ids": ["read_file", "list_dir", "grep", "glob"]}, "effect": "allow"}, {"id": "first-run-scratch-tools", "actions": ["invoke"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "agent-tool", "ids": ["scratch_write", "scratch_read", "scratch_list"]}, "effect": "allow"}, {"id": "first-run-edit-shell-tools", "actions": ["invoke"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "agent-tool", "ids": ["edit_file", "write_file", "run_shell"]}, "effect": "require-approval", "modeEligible": true}, {"id": "first-run-write-operation", "actions": ["execute"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "operation", "ids": ["workspace.file.write"]}, "effect": "allow"}, {"id": "first-run-shell-operation", "actions": ["execute"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "operation", "ids": ["host.shell.run"]}, "effect": "allow"}, {"id": "first-run-scratch-write-operation", "actions": ["execute"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "operation", "ids": ["workspace.scratch.write"]}, "effect": "allow"}, {"id": "first-run-secret-store", "actions": ["set", "delete"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "secret", "ids": "all"}, "effect": "allow"}, {"id": "first-run-config", "actions": ["write"], "scopes": "all", "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "config", "ids": "all"}, "effect": "allow"}]},
+    {"version": 5, "changed": [{"id": "first-run-read-tools", "actions": ["invoke"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "agent-tool", "ids": ["read_file", "list_dir", "grep", "glob", "propose_mcp_server"]}, "effect": "allow"}, {"id": "first-run-mcp-servers", "actions": ["invoke"], "scopes": "all", "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "mcp-server", "ids": "all"}, "effect": "allow"}, {"id": "first-run-mcp-call-operation", "actions": ["execute"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "operation", "ids": ["mcp.tool.call"]}, "effect": "allow"}, {"id": "first-run-policy-administer", "actions": ["execute"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "operation", "ids": ["policy.administer"]}, "effect": "allow"}, {"id": "first-run-approvals", "actions": ["inspect", "decide"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "approval", "ids": "all"}, "effect": "allow"}]},
+    {"version": 6, "changed": [{"id": "first-run-secret-switch", "actions": ["switch"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "secret", "ids": "all"}, "effect": "allow"}]},
+    {"version": 7, "changed": [{"id": "first-run-model-activation", "actions": ["activate", "inspect"], "scopes": "all", "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "model-activation", "ids": "all"}, "effect": "allow"}, {"id": "first-run-model-invocation", "actions": ["invoke", "inspect", "inspect-content", "cancel-invocation"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "model-invocation", "ids": "all"}, "effect": "allow"}, {"id": "first-run-provider-spending", "actions": ["inspect", "audit", "reconcile", "budget-revision"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "provider-spend-account", "ids": "all"}, "effect": "allow"}]},
+    {"version": 8, "changed": [{"id": "first-run-backup", "actions": ["create", "verify", "restore"], "scopes": "all", "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "backup", "ids": "all"}, "effect": "allow"}]},
+    {"version": 9, "changed": [{"id": "first-run-mcp-observe-run", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/mcp", "subject": "1000"}], "resource": {"kind": "run", "ids": "all"}, "effect": "allow"}, {"id": "first-run-mcp-observe-scope", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/mcp", "subject": "1000"}], "resource": {"kind": "scope", "ids": "all"}, "effect": "allow"}, {"id": "first-run-mcp-observe-approval", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/mcp", "subject": "1000"}], "resource": {"kind": "approval", "ids": "all"}, "effect": "allow"}, {"id": "first-run-mcp-observe-model-activation", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/mcp", "subject": "1000"}], "resource": {"kind": "model-activation", "ids": "all"}, "effect": "allow"}, {"id": "first-run-mcp-observe-model-invocation", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/mcp", "subject": "1000"}], "resource": {"kind": "model-invocation", "ids": "all"}, "effect": "allow"}, {"id": "first-run-mcp-observe-provider-spend-account", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/mcp", "subject": "1000"}], "resource": {"kind": "provider-spend-account", "ids": "all"}, "effect": "allow"}]},
+    {"version": 10, "changed": [{"id": "first-run-runs", "actions": ["create", "reserve", "inspect", "cancel"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "run", "ids": "all"}, "effect": "allow"}, {"id": "first-run-pools", "actions": ["use", "inspect"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "pool", "ids": "all"}, "effect": "allow"}, {"id": "first-run-attempts", "actions": ["execute", "evaluate", "read-output", "recover-output", "cancel", "reconcile", "release"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "attempt", "ids": "all"}, "effect": "allow"}, {"id": "first-run-work-targets", "actions": ["use"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "work-target", "ids": "all"}, "effect": "allow"}]},
+    {"version": 11, "changed": [{"id": "first-run-quota-release", "actions": ["release-quota"], "scopes": "all", "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "pool", "ids": "all"}, "effect": "allow"}, {"id": "first-run-integration", "actions": ["prepare-integration", "deliver-integration", "adopt-integration", "rollback-integration"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "attempt", "ids": "all"}, "effect": "allow"}, {"id": "first-run-work-target-adopt", "actions": ["adopt"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "work-target", "ids": "all"}, "effect": "allow"}]},
+    {"version": 12, "changed": [{"id": "first-run-scope-inspect", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "scope", "ids": ["installation"]}, "effect": "allow"}, {"id": "first-run-service-shutdown", "actions": ["shutdown"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "service", "ids": ["installation-runtime"]}, "effect": "allow"}]},
+    {"version": 13, "changed": [{"id": "first-run-execution-environment-install", "actions": ["install"], "scopes": "all", "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "execution-environment", "ids": ["docker"]}, "effect": "allow"}, {"id": "first-run-installation-repair", "actions": ["repair"], "scopes": "all", "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "installation", "ids": "all"}, "effect": "allow"}, {"id": "first-run-model-deactivation", "actions": ["deactivate"], "scopes": "all", "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "model-activation", "ids": "all"}, "effect": "allow"}, {"id": "first-run-decision-inspect", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "decision", "ids": "all"}, "effect": "allow"}, {"id": "first-run-monitor-scope-diagnostics", "actions": ["inspect-scope-diagnostics"], "scopes": "all", "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "monitor", "ids": "all"}, "effect": "allow"}, {"id": "first-run-standing-grants-all", "actions": ["inspect-standing-grants"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "policy", "ids": "all"}, "effect": "allow"}, {"id": "first-run-mcp-observe-pool", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/mcp", "subject": "1000"}], "resource": {"kind": "pool", "ids": "all"}, "effect": "allow"}]},
+    {"version": 14, "changed": [{"id": "first-run-memory-inspect", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "memory", "ids": "all"}, "effect": "allow"}, {"id": "first-run-mcp-observe-memory", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/mcp", "subject": "1000"}], "resource": {"kind": "memory", "ids": "all"}, "effect": "allow"}]},
+    {"version": 15, "changed": [{"id": "first-run-memory-propose", "actions": ["propose"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "memory", "ids": "all"}, "effect": "allow"}, {"id": "first-run-memory-distiller", "actions": ["inspect", "propose"], "scopes": ["installation"], "principals": [{"issuer": "os/memory-distiller", "subject": "1000"}], "resource": {"kind": "memory", "ids": "all"}, "effect": "allow"}, {"id": "first-run-memory-distiller-runs", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/memory-distiller", "subject": "1000"}], "resource": {"kind": "run", "ids": "all"}, "effect": "allow"}, {"id": "first-run-memory-distiller-output", "actions": ["read-output"], "scopes": ["installation"], "principals": [{"issuer": "os/memory-distiller", "subject": "1000"}], "resource": {"kind": "attempt", "ids": "all"}, "effect": "allow"}, {"id": "first-run-agent-catalog", "actions": ["inspect", "define", "promote", "demote", "restore", "retire", "dismiss", "suggest", "narrow"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "agent-catalog", "ids": "all"}, "effect": "allow"}, {"id": "first-run-mcp-observe-agent-catalog", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/mcp", "subject": "1000"}], "resource": {"kind": "agent-catalog", "ids": "all"}, "effect": "allow"}, {"id": "first-run-memory-review", "actions": ["verify", "contest"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "memory", "ids": "all"}, "effect": "allow"}, {"id": "first-run-memory-evaluator", "actions": ["inspect", "verify", "contest"], "scopes": ["installation"], "principals": [{"issuer": "os/memory-evaluator", "subject": "1000"}], "resource": {"kind": "memory", "ids": "all"}, "effect": "allow"}, {"id": "first-run-memory-evaluator-runs", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/memory-evaluator", "subject": "1000"}], "resource": {"kind": "run", "ids": "all"}, "effect": "allow"}, {"id": "first-run-memory-evaluator-model", "actions": ["invoke"], "scopes": ["installation"], "principals": [{"issuer": "os/memory-evaluator", "subject": "1000"}], "resource": {"kind": "model-invocation", "ids": "all"}, "effect": "allow"}, {"id": "first-run-memory-purge", "actions": ["retire", "purge"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "memory", "ids": "all"}, "effect": "allow"}, {"id": "first-run-recovery-model", "actions": ["invoke"], "scopes": ["installation"], "principals": [{"issuer": "os/recovery", "subject": "1000"}], "resource": {"kind": "model-invocation", "ids": "all"}, "effect": "allow"}, {"id": "first-run-skill-signers", "actions": ["inspect", "enrol", "add", "revoke", "repair"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "skill-signer", "ids": "all"}, "effect": "allow"}, {"id": "first-run-agent-catalog-import", "actions": ["import"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "agent-catalog", "ids": "all"}, "effect": "allow"}, {"id": "first-run-catalog-aggregator", "actions": ["inspect", "suggest", "narrow"], "scopes": ["installation"], "principals": [{"issuer": "os/catalog-aggregator", "subject": "1000"}], "resource": {"kind": "agent-catalog", "ids": "all"}, "effect": "allow"}, {"id": "first-run-catalog-aggregator-runs", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/catalog-aggregator", "subject": "1000"}], "resource": {"kind": "run", "ids": "all"}, "effect": "allow"}, {"id": "first-run-catalog-aggregator-memory", "actions": ["inspect"], "scopes": ["installation"], "principals": [{"issuer": "os/catalog-aggregator", "subject": "1000"}], "resource": {"kind": "memory", "ids": "all"}, "effect": "allow"}]},
+    {"version": 16, "changed": [{"id": "first-run-recovery-action-fence-attempt", "actions": ["apply"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "recovery-action", "ids": ["fence-attempt"]}, "effect": "require-approval"}, {"id": "first-run-recovery-action-hold-run", "actions": ["apply"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "recovery-action", "ids": ["hold-run"]}, "effect": "require-approval"}, {"id": "first-run-recovery-action-stop-orphan", "actions": ["apply"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "recovery-action", "ids": ["stop-orphan"]}, "effect": "require-approval"}, {"id": "first-run-recovery-action-restart-component", "actions": ["apply"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "recovery-action", "ids": ["restart-component"]}, "effect": "require-approval"}, {"id": "first-run-recovery-action-alert-brain", "actions": ["apply"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "recovery-action", "ids": ["alert-brain"]}, "effect": "require-approval"}, {"id": "first-run-recovery-action-hand-to-human", "actions": ["apply"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "recovery-action", "ids": ["hand-to-human"]}, "effect": "require-approval"}, {"id": "first-run-recovery-action-continue-new-attempt", "actions": ["apply"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "recovery-action", "ids": ["continue-new-attempt"]}, "effect": "require-approval"}, {"id": "first-run-recovery-promote-container-gone", "actions": ["promote"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "nervous-rule", "ids": ["container-gone@1"]}, "effect": "require-approval"}, {"id": "first-run-recovery-promote-launcher-dead-orphan", "actions": ["promote"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "nervous-rule", "ids": ["launcher-dead-orphan@1"]}, "effect": "require-approval"}, {"id": "first-run-recovery-promote-launcher-dead-gone", "actions": ["promote"], "scopes": ["installation"], "principals": [{"issuer": "os", "subject": "1000"}], "resource": {"kind": "nervous-rule", "ids": ["launcher-dead-gone@1"]}, "effect": "require-approval"}]}
+  ]
+}
