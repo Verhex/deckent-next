@@ -42,11 +42,14 @@ export interface HubServerTransaction {
   skills(after: string, limit: number): HubAwaitable<readonly HubSkillRef[]>;
   packages(after: string, limit: number): HubAwaitable<readonly { readonly key: string; readonly packageId: string; readonly version: string }[]>;
   latestFeed(): HubAwaitable<HubRevocationFeed | null>;
-  feedEntries(afterSequence: number): HubAwaitable<HubRevocationFeed['entries']>;
+  revocations(targets: readonly Pick<HubRevocationFeed['entries'][number], 'kind' | 'id'>[]): HubAwaitable<HubRevocationFeed['entries']>;
+  revocationPage(afterSequence: number, throughSequence: number, position?: number, throughPosition?: number): HubAwaitable<{
+    position: number; throughPosition: number; entries: HubRevocationFeed['entries']; nextPosition: number | null;
+  }>;
   revocationReceipt(commandId: string): HubAwaitable<{ digest: string; feed: HubRevocationFeed } | null>;
   appendReceipt(event: HubReceiptEvent, signer: HubServerSigner): Promise<HubServerReceipt>;
 }
-export interface HubServerStore extends Pick<HubServerTransaction, 'key' | 'get' | 'latest' | 'publishesSince' | 'skills' | 'packages' | 'latestFeed' | 'feedEntries' | 'revocationReceipt'> {
+export interface HubServerStore extends Pick<HubServerTransaction, 'key' | 'get' | 'latest' | 'publishesSince' | 'skills' | 'packages' | 'latestFeed' | 'revocations' | 'revocationPage' | 'revocationReceipt'> {
   transaction<T>(work: (transaction: HubServerTransaction) => Promise<T>): Promise<T>;
 }
 export interface HubServerPorts {

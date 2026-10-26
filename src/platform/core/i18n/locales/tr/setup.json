@@ -252,7 +252,7 @@
   "error.SETUP_WORKER_DOCKER_UNAVAILABLE": "Docker'a şu anda ulaşılamıyor; worker imajı derlenmedi ve denetlenmedi. Docker'ı başlatın, sonra deckent init'i yeniden çalıştırın.",
   "error.SETUP_FIRST_COMMIT_CHANGED": "İlk commit önizlemesinden sonra depo değişti (bir commit, hazırlanmış değişiklikler, başka bir Git işlemi ya da farklı bir dosya listesi); hiçbir şey yazılmadı. Güncel durumu görmek için ilk commit kartını yeniden açın.",
   "error.SETUP_FIRST_COMMIT_TOO_LARGE": "İlk commit kartın işleyebileceğinden fazlasını kapsıyor ({observed}, sınır {limit}); hiçbir şey yazılmadı. İlk commit'i Git ile kendiniz yapın: git add <yollar>, sonra git commit.",
-  "error.SETUP_FIRST_COMMIT_INDEX_PENDING": "İlk commit yapıldı, ama Git index'i güncellenemedi; commit'teki dosyalar hazırlanmış silme olarak görünür. Index'i commit ile eşitlemek için {command} çalıştırın.",
+  "error.SETUP_FIRST_COMMIT_INDEX_PENDING": "HEAD commit edildi ama Git indeksi tamamlanamadı. Saklanmış commit yol dosyası: {command}. Sınırlı kurtarma için /setup açın; tüm indeksi reset etmeyin.",
   "error.SETUP_FIRST_COMMIT_FAILED": "İlk commit Git'in {step} adımında durdu ({detail}); hiçbir şey yazılmadı, HEAD ve index değişmedi. Nedeni giderin (kimlik eksikse: git config user.name ve git config user.email), sonra ilk commit kartını yeniden açın.",
   "setup.execution.settingsTitle": "Çalıştırma ayarları",
   "setup.execution.workerBuilt": "Worker imajı {version} ({image}) derlendi ve bu Docker'da; sırada çalıştırma ayarları var.",

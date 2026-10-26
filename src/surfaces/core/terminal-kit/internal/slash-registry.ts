@@ -19,6 +19,7 @@ export const SLASH_GROUPS = Object.freeze([
 export type SlashGroupId = typeof SLASH_GROUPS[number]['id'];
 
 export const WORKLINE_SLASH_COMMANDS: readonly SlashCommand[] = Object.freeze([
+  { name: 'hub', group: 'settings', descriptionKey: 'hub.window.slash' },
   { name: 'do', group: 'work', descriptionKey: 'terminal.slash.do', argumentKey: 'terminal.slash.doArgument', typedArgument: true },
   { name: 'status', group: 'info', descriptionKey: 'terminal.slash.status' },
   { name: 'workers', group: 'work', descriptionKey: 'terminal.slash.workers' },

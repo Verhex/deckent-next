@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { commandEnvelopeSchema, encodeCommandProjection, evaluatePolicy, policyResources, type AuthorityDecisionSubject, type VerifiedPrincipal } from '#domain/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import type { SecretGrantStore } from './grant.js';
+import { assertPublicSecretName } from './protection.js';
 import { isSecretName } from './port.js';
 import { SECRET_STORE_SWITCH_RESOURCE_ID } from './switch.js';
 import { PROJECT_VAULT, type ProjectVaultAnchor, type SecretGrantFile } from './project.js';
@@ -35,6 +36,7 @@ const ACTIONS = Object.freeze({ grant: 'secret-grant', revoke: 'secret-grant-rev
  * grant record changes, for a refusal too; a grant carries that decision's event id. The caller has already passed the authority witness.
  */
 export async function decideSecretGrant(request: SecretGrantRequest, ports: SecretGrantPorts): Promise<SecretGrantFile> {
+  assertPublicSecretName(request.name);
   if (!isSecretName(request.name)) throw ErrorRegistry.createError('SECRET_NAME_INVALID');
   const { principal, scopeId, name } = request;
   const verdict = evaluatePolicy(ports.policy, { principal, scopeId, action: 'set', resource: { kind: policyResources.secret.kind, id: name } });

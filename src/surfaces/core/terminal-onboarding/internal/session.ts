@@ -11,15 +11,15 @@ export function onboardingSteps(snapshot: OnboardingSnapshot, revisit = false): 
     if (stage.id === 'work:kind' && snapshot.folderFacts.kind !== 'coding' && !snapshot.answers['work:kind'] && stage.state !== 'done') continue;
     if (stage.phase !== 'onboarding' || readyIds.has(stage.id) || stage.state === 'skipped'
       || presentation.observationOnly.includes(stage.id) || (!revisit && stage.state === 'done' && stage.id !== 'work:kind' && stage.id !== presentation.workerReady.after)) continue;
-    if (stage.id === 'work:kind' && stage.operation?.id === 'work.registry') continue;
+    if (stage.id === 'work:kind' && ['work.registry', 'work.profile-add'].includes(stage.operation?.id ?? '')) continue;
     if (stage.id === 'work:kind' && stage.state === 'done' && !stage.question) {
       const chosen = snapshot.answers['work:kind'];
-      if (typeof chosen !== 'string' || !revisit) continue;
+      if (!revisit || typeof chosen !== 'string' && snapshot.folderFacts.kind !== 'coding') continue;
     }
     if (stage.id !== presentation.workerReady.after || stage.state !== 'done') add({ id: stage.id, stages: [stage], kind: stage.id === 'work:kind' ? 'work' : 'stage' });
     if (stage.id === presentation.workerReady.after && stage.state === 'done') {
       const group = presentation.workerReady.members.flatMap(id => snapshot.plan.stages.filter(row => row.id === id));
-      if (group.some(row => row.state === 'ready' && row.operation)) add({ id: presentation.workerReady.id, stages: group, kind: 'ready' });
+      if (group.some(row => row.state !== 'done' && row.state !== 'skipped')) add({ id: presentation.workerReady.id, stages: group, kind: 'ready' });
     }
     if (stage.id === 'core:model') {
       if (snapshot.budget.needed) add({ id: 'onboarding:budget', stages: [], kind: 'budget' });

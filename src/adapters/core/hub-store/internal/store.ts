@@ -1,9 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { canonicalHubJson, hubEnvelopeSchema, hubPackageSchema, hubRevocationFeedSchema, HUB_LIMITS, HubError } from '#domain/index.js';
+import { canonicalHubJson, hubEnvelopeSchema, hubPackageSchema, hubRevocationFeedSchema } from '#domain/index.js';
 import { artifactReceiptSchema } from '#capabilities/index.js';
 import { HubServerError, hubRegisteredKeySchema, type HubServerStore, type HubServerTransaction, type HubServerSigner, type HubStoredVersion, type HubRegisteredKey, type HubReceiptEvent } from '#engine/index.js';
 import { canonicalHubManifest, hubPackageFileManifest } from '#engine/index.js';
 import { sha256, signatureMessage } from '#platform/index.js';
+import { hubRevocations, hubRevocationPage, recordHubRevocations } from './revocations.js';
 
 class SqliteHubTransaction implements HubServerTransaction {
   constructor(private readonly db: DatabaseSync, private readonly scopeId: string) {}
@@ -60,17 +61,9 @@ class SqliteHubTransaction implements HubServerTransaction {
     const row = this.db.prepare("SELECT record FROM hub_receipts WHERE json_type(record,'$.feed')='object' ORDER BY sequence DESC LIMIT 1").get();
     return row ? hubRevocationFeedSchema.parse(JSON.parse(String(row.record)).feed) : null;
   }
-  feedEntries(afterSequence: number) {
-    const entries = new Map<string, import('#domain/index.js').HubRevocationFeed['entries'][number]>();
-    for (const row of this.db.prepare("SELECT record FROM hub_receipts WHERE json_extract(record,'$.feed.sequence')>? AND json_extract(record,'$.action') IN ('yank','revoke') ORDER BY sequence").iterate(afterSequence)) {
-      const feed = hubRevocationFeedSchema.parse(JSON.parse(String(row.record)).feed);
-      for (const entry of feed.entries) {
-        const id = `${entry.kind}/${entry.id}`, previous = entries.get(id);
-        if (!previous || previous.severity !== 'revoke' && (entry.severity === 'revoke' || entry.atMs >= previous.atMs)) entries.set(id, entry);
-        if (entries.size > HUB_LIMITS.feedPageMax) throw new HubError('HUB_LIMIT_EXCEEDED');
-      }
-    }
-    return [...entries.values()];
+  revocations(targets: Parameters<HubServerTransaction['revocations']>[0]) { return hubRevocations(this.db, targets); }
+  revocationPage(afterSequence: number, throughSequence: number, position?: number, throughPosition?: number) {
+    return hubRevocationPage(this.db, afterSequence, throughSequence, position, throughPosition);
   }
   revocationReceipt(commandId: string) {
     const row = this.db.prepare("SELECT record FROM hub_receipts WHERE json_extract(record,'$.commandId')=? ORDER BY sequence DESC LIMIT 1").get(commandId);
@@ -85,6 +78,7 @@ class SqliteHubTransaction implements HubServerTransaction {
     const digest = sha256(record), signature = Buffer.from(await signer.sign(signatureMessage('hub-receipt:1', record))).toString('base64');
     this.db.prepare('INSERT INTO hub_receipts(sequence,previous,digest,record,key_id,signature) VALUES(?,?,?,?,?,?)')
       .run(sequence, previous, digest, record, signer.keyId, signature);
+    if (event.feed && (event.action === 'yank' || event.action === 'revoke')) recordHubRevocations(this.db, event.feed);
     return { sequence, previous, digest, keyId: signer.keyId, signature };
   }
 }
@@ -110,7 +104,10 @@ export class SqliteHubStore implements HubServerStore {
     });
   }
   latestFeed() { return this.serial(() => this.view.latestFeed()); }
-  feedEntries(afterSequence: number) { return this.serial(() => this.view.feedEntries(afterSequence)); }
+  revocations(targets: Parameters<HubServerTransaction['revocations']>[0]) { return this.serial(() => this.view.revocations(targets)); }
+  revocationPage(afterSequence: number, throughSequence: number, position?: number, throughPosition?: number) {
+    return this.serial(() => this.view.revocationPage(afterSequence, throughSequence, position, throughPosition));
+  }
   revocationReceipt(commandId: string) { return this.serial(() => this.view.revocationReceipt(commandId)); }
   key(keyId: string, role: HubRegisteredKey['role']) { return this.serial(() => this.view.key(keyId, role)); }
   get(packageId: string, version: string) { return this.serial(() => this.view.get(packageId, version)); }

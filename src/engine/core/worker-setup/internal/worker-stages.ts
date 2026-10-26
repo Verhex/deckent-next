@@ -7,7 +7,7 @@ const imageId = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
  * configured image or else the receipt's, the Git path from coding detection). Absent until an installation can be read. */
 export const workerFactsSchema = z.object({ configured: imageId.nullable(), receipt: z.object({ imageId, imageVersion: z.string().regex(/^r[1-9][0-9]*-\d{8}$/u),
   images: z.array(z.object({ imageId, providers: z.array(z.string()), tagVersion: z.string().regex(/^r[1-9][0-9]*(?:-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/u).nullable().optional() }).passthrough()).optional() }).strict().nullable(),
-  provider: z.string().optional(), acquisition: workerImageStateSchema.nullable().optional(),
+  provider: z.string().optional(), providerPending: z.boolean().optional(), acquisition: workerImageStateSchema.nullable().optional(),
   image: z.enum(['present', 'missing', 'unknown', 'not-run']), git: z.string().min(1).max(4096).nullable() }).strict();
 type WorkerFacts = z.infer<typeof workerFactsSchema>;
 /** The part of the execution family's facts these stages read (the family validates the whole shape with its own schema). */
@@ -35,6 +35,12 @@ function worker(context: SetupStageContext): SetupDecision {
   const ready = acquisition?.images.find(image => image.provider === facts?.provider);
   if (ready) return { state: 'done', reason: reason('workerBuilt', { image: short(ready.imageId), version: ready.imageVersion }) };
   if (acquisition && acquisition.phase !== 'ready') return blocked('workerAcquisition', { phase: acquisition.phase, step: acquisition.step ?? '', code: acquisition.code ?? '' });
+  // A present installation fallback is not consent or an image for a newly selected provider.
+  if (facts?.providerPending) {
+    if (context.states.get(RUNTIME_STAGE_ID) !== 'done') return blocked('workerWaits', { stage: RUNTIME_STAGE_ID });
+    if (!context.scopeId || !['done', 'skipped'].includes(context.states.get('core:policy') ?? '')) return blocked('workerWaits', { stage: 'core:policy' });
+    return blocked('workerConsentRequired', { scope: context.scopeId });
+  }
   const found = workerFacts(context);
   if ('state' in found) return found;
   const { observed, scopeId } = found;

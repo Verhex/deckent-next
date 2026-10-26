@@ -8,7 +8,7 @@ import type { ModelProviderLabel } from '#surfaces/core/terminal-render/index.js
  * every read, write, policy decision and trust record stays behind the port the trusted composition binds (the same paths as the text
  * commands and `deckent config|mcp`). All words come in already localized; nothing here calls the catalog.
  */
-export type PanelKind = 'mode' | 'config' | 'mcp' | 'model' | 'provider' | 'policy';
+export type PanelKind = 'hub' | 'mode' | 'config' | 'mcp' | 'model' | 'provider' | 'policy';
 export type PanelNotice = Readonly<{ level: 'info' | 'warning' | 'error'; text: string; identity?: ModelProviderLabel }>;
 /** A labelled body row of a panel window (detail views, trust questions). Values from a producer go through the decision projection. */
 export type PanelLine = Readonly<{ label: string; text: string; tone?: 'warning' | 'muted' | 'success' }>;
@@ -315,6 +315,7 @@ export interface PanelLabels {
   readonly workspace?: Readonly<{ entry: string; title: string; confirm: string; empty: string; note: string; hints: string }>;
 }
 export interface PanelPorts {
+  readonly hub?: { render(input: { readonly labels: PanelLabels; readonly push: (notices: readonly PanelNotice[]) => void; readonly onError: (error: unknown) => void; readonly onClose: () => void }): import('react').ReactNode };
   readonly policy?: PolicyPanelPort;
   readonly mode?: ModePanelPort;
   readonly config?: ConfigPanelPort;

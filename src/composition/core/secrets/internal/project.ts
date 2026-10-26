@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { configuredSecretResolver, ErrorRegistry, SystemTrustedClock, withConfigWriteLock, type ConfigLoadOptions } from '#platform/index.js';
 import { admitProjectVault, attestLocalInteractiveTerminal, directoryLocation, FileInstallationIdentityStore, FileProjectIdentityStore, handOverProjectVault, installationSecretRoot,
   localPrincipalChannel, localPrincipalPeer, openLocalIntegrityAuthority, openProjectVaultStore, openSecretGrantStore, openSqliteAuditStore, projectRepository, projectVaultDirectory, readProjectDeck } from '#adapters/index.js';
-import { assertAuthorityWitness, AuditApplication, AuthorityDecisionRecords, SecretStoreAdministration, credentialSourceError, decideCredentialSource, decideProjectVaultHandover, decideSecretGrant,
+import { assertPublicSecretName, assertAuthorityWitness, AuditApplication, AuthorityDecisionRecords, SecretStoreAdministration, credentialSourceError, decideCredentialSource, decideProjectVaultHandover, decideSecretGrant,
   deckDeclaration, findSecretGrant, parseDeckDeclarations, policySecretChangeAuthorization, projectVaultAnchorSchema, projectVaultClaimed, type AuthorityWitness,
   type CredentialSource, type ProjectCredentialResolver, type ProjectVaultAnchor } from '#engine/index.js';
 import { loadComposedConfig } from '#composition/core/root/index.js';
@@ -62,6 +62,7 @@ export async function openProjectSecrets(context: ProjectSecretContext, options:
  */
 export function projectCredentialResolver(context: ProjectSecretContext, scopeId: string, options: ConfigLoadOptions): ProjectCredentialResolver {
   const decide = async (name: string): Promise<{ readonly decision: CredentialSource; readonly opened: Awaited<ReturnType<typeof openProjectSecrets>> }> => {
+    assertPublicSecretName(name);
     const opened = await openProjectSecrets(context, options);
     if (!opened) return { decision: decideCredentialSource({ identified: false, declaration: 'undeclared', projectHas: false, granted: false }), opened };
     const declaration = deckDeclaration(opened.deck, name);
@@ -115,6 +116,7 @@ async function writerContext(projectRoot: string, scopeId: string, options: Conf
 /** `deckent secret grant|revoke NAME --scope S`: lend (or take back) main-vault key NAME to this project, decided on `secret`/`set` and sealed first. */
 export async function changeProjectSecretGrant(projectRoot: string, scopeId: string, name: string, action: 'grant' | 'revoke', source: 'card' | 'admin',
   options: ConfigLoadOptions = {}, witness: AuthorityWitness = defaultWitness) {
+  assertPublicSecretName(name);
   await witnessed('secretGrant', witness);
   const { context, anchor, root, clock, open } = await writerContext(projectRoot, scopeId, options), ledger = await open();
   try {

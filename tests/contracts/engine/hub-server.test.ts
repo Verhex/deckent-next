@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, symlinkSync, chmodSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, symlinkSync, chmodSync, copyFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -7,10 +7,10 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { bundle as portableBundle } from '../../fixtures/hub-client.js';
-import { HUB_LIMITS, canonicalHubJson, type HubEnvelope, type HubPackageSignature } from '#domain/core/hub/index.js';
+import { HUB_LIMITS, HUB_REVOCATION_REFRESH_MS, canonicalHubJson, type HubEnvelope, type HubPackageSignature } from '#domain/core/hub/index.js';
 import { buildHubPackage, buildHubSkillDocument, hubPackageSignatureMessage, verifyHubRevocationFeed, skillContentV2Digest, skillSignatureV2Message } from '#engine/core/hub/index.js';
 import { HubServerApplication, HubRevocationApplication, hubRevocationRequestMessage, HubServerError, requireHubDependencies, type HubServerContext, type HubServerStore, type HubStoredVersion } from '#engine/core/hub-server/index.js';
-import { openHubStore } from '#adapters/core/hub-store/index.js';
+import { openHubStore, HUB_STORE_SCHEMA_VERSION } from '#adapters/core/hub-store/index.js';
 import { createHubSkillsServer, createHubHttpHandler } from '#surfaces/core/hub-mcp/index.js';
 import { EMPTY_KNOWN_SECRETS, ed25519Signer, sha256, signatureMessage, verifyEd25519 } from '#platform/index.js';
 
@@ -65,7 +65,7 @@ it('persists immutable publish, hub attestation and signed receipt, then reopens
   const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
   const db = new DatabaseSync(join(f.path, 'hub.sqlite'), { readOnly: true });
   try {
-    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(1);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(HUB_STORE_SCHEMA_VERSION);
     const records = db.prepare('SELECT * FROM hub_receipts ORDER BY sequence').all();
     expect(records).toHaveLength(3);
     expect(records[2]?.previous).toBe(records[1]?.digest);
@@ -124,7 +124,7 @@ it('rechecks authority after artifact awaits and rolls back a failed receipt wit
   await expect(app.publish(context, b.manifest, b.envelope, b.files)).rejects.toThrow(code('HUB_SERVER_DENIED'));
   f.allow();
   const store: HubServerStore = { ...f.store,
-    feedEntries: f.store.feedEntries.bind(f.store), latestFeed: f.store.latestFeed.bind(f.store), revocationReceipt: f.store.revocationReceipt.bind(f.store),
+    revocations: f.store.revocations.bind(f.store), revocationPage: f.store.revocationPage.bind(f.store), latestFeed: f.store.latestFeed.bind(f.store), revocationReceipt: f.store.revocationReceipt.bind(f.store),
     key: f.store.key.bind(f.store), get: f.store.get.bind(f.store), latest: f.store.latest.bind(f.store), publishesSince: f.store.publishesSince.bind(f.store), skills: f.store.skills.bind(f.store),
     transaction: work => f.store.transaction(tx => work(new Proxy(tx, { get(target, prop, receiver) {
       if (prop === 'appendReceipt') return async () => { throw new HubServerError('HUB_STORE_CONFLICT'); };
@@ -375,4 +375,54 @@ it('rolls back feed/receipt writes on cancellation and lost authority while sign
   const controller = new AbortController(); controller.abort();
   await expect(new HubRevocationApplication(f.ports).withdraw(admin, 'revoke', command, controller.signal)).rejects.toThrow();
   expect(await f.store.revocationReceipt('operator-revoke')).toBeNull();
+});
+
+it('keeps registration and publish usable beyond 500 revocations and pages a fixed signed catch-up without losing concurrent changes (H5B)', async c => {
+  const f = await fixture(c), app = new HubRevocationApplication(f.ports);
+  for (let n = 0; n < 501; n++) await app.withdraw(admin, 'revoke', { schemaVersion: 1, commandId: `scale-${n}`, authority: 'operator',
+    kind: 'publisher', id: `unrelated-${n}`, reason: 'compromised' });
+  await f.app.register(admin, f.key(seed('04'), 'reviewer'));
+  await expect(publish(f)).resolves.toHaveProperty('receipt');
+  const first = await app.revocations(context, { afterSequence: 0 });
+  expect(first.entries).toHaveLength(500);
+  expect(first).toMatchObject({ catchup: { schemaVersion: 1, page: 0, throughSequence: 501, complete: false } });
+  const next = first.catchup!.next!;
+  await app.withdraw(admin, 'revoke', { schemaVersion: 1, commandId: 'concurrent', authority: 'operator', kind: 'key', id: publisher.keyId, reason: 'compromised' });
+  await expect(app.revocations(context, { afterSequence: 0, continuation: { ...next, position: 499 } })).rejects.toThrow(code('HUB_SIGNATURE_INVALID'));
+  const last = await app.revocations(context, { afterSequence: 0, continuation: next });
+  expect(last.entries).toHaveLength(1);
+  expect(last).toMatchObject({ catchup: { throughSequence: 501, page: 1, complete: true, next: null } });
+  const later = await app.revocations(context, { afterSequence: 501 });
+  expect(later.entries).toEqual([expect.objectContaining({ id: publisher.keyId, severity: 'revoke' })]);
+  await expect(publish(f, bundle('1.0.1'))).rejects.toThrow(code('HUB_SIGNER_UNTRUSTED'));
+  f.ports.now = () => 200 + HUB_REVOCATION_REFRESH_MS;
+  await expect(app.revocations(context, { afterSequence: 0, continuation: next })).rejects.toThrow(code('HUB_FEED_STALE'));
+});
+
+it('migrates the separate Hub v1 store with a private backup, monotonic backfill, rollback and a restorable down step (H5B)', async c => {
+  const f = await fixture(c), app = new HubRevocationApplication(f.ports);
+  for (const [n, severity] of (['yank', 'revoke', 'yank'] as const).entries()) await app.withdraw(admin, severity,
+    { schemaVersion: 1, commandId: `old-${n}`, authority: 'operator', kind: 'key', id: publisher.keyId, reason: 'compromised' });
+  f.close(); closers.splice(closers.indexOf(f.close), 1);
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+  const path = join(f.path, 'hub.sqlite'), db = new DatabaseSync(path);
+  db.exec('DROP TABLE hub_revocations; DROP TABLE hub_revocation_events; DROP INDEX hub_revocation_command; PRAGMA user_version=1'); db.close();
+  const migrated = openHubStore(f.options);
+  expect(await migrated.store.revocations([{ kind: 'key', id: publisher.keyId }])).toEqual([expect.objectContaining({ severity: 'revoke' })]);
+  const page = await migrated.store.revocationPage(0, 3); expect(page.entries).toHaveLength(3); migrated.close();
+  const backup = `${path}.v1.bak`; expect(statSync(backup).mode & 0o777).toBe(0o600);
+  const downPath = join(root(), 'hub.sqlite'); copyFileSync(backup, downPath);
+  const down = new DatabaseSync(downPath);
+  expect(down.prepare('PRAGMA user_version').get()?.user_version).toBe(1);
+  expect(down.prepare('SELECT count(*) AS n FROM hub_receipts').get()?.n).toBe(5);
+  // Corrupt old data refuses migration and rolls every new table/version change back.
+  down.exec("UPDATE hub_receipts SET record=json_set(record,'$.feed',json('{}')) WHERE json_extract(record,'$.action')='revoke'"); down.close();
+  await expect(async () => openHubStore({ ...f.options, root: downPath.slice(0, -'/hub.sqlite'.length) })).rejects.toThrow(code('HUB_STORE_UNSAFE'));
+  const failed = new DatabaseSync(downPath);
+  expect(failed.prepare('PRAGMA user_version').get()?.user_version).toBe(1);
+  expect(failed.prepare("SELECT name FROM sqlite_master WHERE name='hub_revocations'").get()).toBeUndefined(); failed.close();
+  const future = new DatabaseSync(path); future.exec('PRAGMA user_version=99'); future.close();
+  expect(() => openHubStore(f.options)).toThrow(code('HUB_STORE_UNSAFE'));
+  // A v1 restore with an existing backup refuses to overwrite custody.
+  copyFileSync(backup, path); expect(() => openHubStore(f.options)).toThrow(code('HUB_STORE_UNSAFE'));
 });

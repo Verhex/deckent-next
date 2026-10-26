@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AGENT_CATALOG_LIMITS, HUB_LIMITS, HUB_REVOCATION_REFRESH_MS, HUB_TRUST_POLICIES, HubError, requireBoundedHubJson, canonicalHubJson, identitySchema, isAiPrincipal, signerPublicKeySchema, hubRevocationFeedSchema, type HubRevocationFeed,
   type VerifiedPrincipal } from '#domain/index.js';
 import { ed25519KeyId, sha256, t, type Locale } from '#platform/index.js';
-import { verifyHubRevocationFeed } from '#engine/core/hub/index.js';
+import { verifyHubRevocationFeed, hubRevocationWatermark, requireHubRevocationContinuation } from '#engine/core/hub/index.js';
 import { canSignCatalogActions } from '#engine/core/agent-catalog/index.js';
 import { authenticate } from '#engine/core/authentication/index.js';
 import { HubClientError, hubClientCommandSchema, hubInstallCommandSchema, hubSourceSchema, type HubClientAction, type HubClientDependencies,
@@ -45,10 +45,11 @@ export class HubClientApplication {
   private async applyFeed(command: { schemaVersion: 1; scopeId: string; commandId: string; hubId: string; feed: HubRevocationFeed }, credential: unknown, strict: boolean) {
     return this.write('refresh', command, credential, async (store, principal) => {
       const source = await this.source(store, command.scopeId, command.hubId);
+      const previous = await store.feed(source.scopeId, source.hubId);
       const feed = strict ? verifyHubRevocationFeed(command.feed, { hubId: source.hubId, key: { keyId: source.hubId, publicKey: source.publicKey, role: 'hub', active: true },
-        nowMs: this.deps.catalog.now(), previous: await store.feed(source.scopeId, source.hubId) })
+        nowMs: this.deps.catalog.now(), previous })
         : await acceptClientFeed(store, source, command.feed, this.deps.catalog.now(), true);
-      if (strict) await store.saveFeed(source.scopeId, feed);
+      if (strict) { requireHubRevocationContinuation(feed, previous); await store.saveFeed(source.scopeId, feed); }
       return this.refreshState(store, source, feed, principal);
     });
   }
@@ -57,18 +58,29 @@ export class HubClientApplication {
     const command = hubClientCommandSchema.extend({ force: z.boolean().default(false) }).strict().parse(input);
     await this.admit('refresh', command.scopeId, credential);
     const state = await this.read(command.scopeId, credential, async store => ({ source: await this.source(store, command.scopeId, command.hubId), feed: await store.feed(command.scopeId, command.hubId) }));
-    const due = command.force || !state.feed || this.deps.catalog.now() >= state.feed.issuedAtMs + HUB_REVOCATION_REFRESH_MS
+    const due = command.force || !state.feed || state.feed.catchup?.complete === false || this.deps.catalog.now() >= state.feed.issuedAtMs + HUB_REVOCATION_REFRESH_MS
       || this.deps.catalog.now() >= state.feed.nextRefreshBy || this.deps.catalog.now() - state.feed.issuedAtMs >= HUB_LIMITS.feedMaxAgeMs;
-    let received: unknown, failure: unknown;
+    let failure: unknown;
     if (due && this.deps.fetchRevocations) {
-      signal.throwIfAborted();
-      try { received = await this.deps.fetchRevocations(state.source, state.feed?.sequence ?? 0, AbortSignal.any([signal, AbortSignal.timeout(HUB_LIMITS.fetchTimeoutMs)])); }
+      const bounded = AbortSignal.any([signal, AbortSignal.timeout(HUB_LIMITS.fetchTimeoutMs)]);
+      try {
+        let current = state.feed;
+        while (true) {
+          bounded.throwIfAborted();
+          const pending = current?.catchup?.complete === false ? current.catchup : null;
+          const next = pending?.next, now = this.deps.catalog.now();
+          const cursor = next && next.nextRefreshBy > now && now - next.issuedAtMs < HUB_LIMITS.feedMaxAgeMs ? next : undefined;
+          const received = await this.deps.fetchRevocations(state.source, pending?.afterSequence ?? hubRevocationWatermark(current), bounded, cursor);
+          bounded.throwIfAborted();
+          const feed = hubRevocationFeedSchema.parse(received);
+          const result = await this.applyRevocations({ schemaVersion: command.schemaVersion, scopeId: command.scopeId, hubId: command.hubId,
+            commandId: sha256(canonicalHubJson({ commandId: command.commandId, feed })), feed }, credential);
+          if (!feed.catchup || feed.catchup.complete) return result;
+          current = feed;
+        }
+      }
       catch (error) { failure = error; }
       signal.throwIfAborted();
-    }
-    if (received !== undefined) {
-      try { return await this.applyRevocations({ schemaVersion: command.schemaVersion, scopeId: command.scopeId, hubId: command.hubId, commandId: command.commandId, feed: received }, credential); }
-      catch (error) { failure = error; }
     }
     const result = await this.write('refresh', command, credential, async (store, principal) => {
       const source = await this.source(store, command.scopeId, command.hubId), feed = await store.feed(command.scopeId, command.hubId);
@@ -106,6 +118,15 @@ export class HubClientApplication {
     if (previous?.items.some(old => old.upstream === 'withdrawn' && items.some(item => item.kind === old.kind && item.id === old.id && item.revision === old.revision && item.upstream === 'clear')))
       cards.push({ event: 'restored', hubId: source.hubId, sequence, atMs: now });
     return { schemaVersion: 1, kind: 'revocations', hubId: source.hubId, verified, sequence, packages, items, cards };
+  }
+  /** Remote writes need the same active host signer and explicit grant before the governed network effect is admitted. */
+  async authorizeRemote(action: 'search' | 'publish' | 'yank' | 'revoke', scopeId: string, credential?: unknown): Promise<VerifiedPrincipal> {
+    const { principal } = await this.admit(action, scopeId, credential);
+    if (!isAiPrincipal(principal) || action === 'search') return principal;
+    const store = await this.deps.openStore('read');
+    try { if (!await canSignCatalogActions(this.deps.catalog, store, principal, scopeId)) throw new HubClientError('HUB_AUTHORITY_REFUSED'); }
+    finally { store.close(); }
+    return principal;
   }
   async listSources(input: unknown, credential?: unknown): Promise<readonly HubSource[]> {
     const query = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema }).strict().parse(input);

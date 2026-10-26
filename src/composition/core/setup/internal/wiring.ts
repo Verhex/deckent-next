@@ -1,3 +1,4 @@
+import { observeFirstCommitRecovery } from '#adapters/index.js';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { WORKER_IMAGE_ESTIMATED_GB, attestLocalInteractiveTerminal, codingSetupFamily, detectCodingFacts, detectExecutionFacts, dockerInstallOffer, executionSetupFamily, localPrincipalChannel,
@@ -10,6 +11,8 @@ import { assertConfiguredConfigWitness, createConfiguredConfigApplication, resol
 import { inspectConfiguredShellRealm } from '#composition/core/agent-turn/index.js';
 import { inspectConfiguredWorkerImage } from '#composition/core/toolchains/index.js';
 import { configuredOnboarding } from './onboarding.js';
+import { executionRegistrySchema } from '#domain/index.js';
+import { addNativeCodingProfile } from '#composition/core/native-coding/index.js';
 import { installExecutionEnvironment } from './install.js';
 
 type Options = ConfigLoadOptions & Readonly<{ person?: boolean; language?: string; scopeId?: string; answers?: Readonly<Record<string, unknown>>; expectedConfig?: Readonly<{ projectDigest: string | null; globalDigest: string }> }>;
@@ -44,9 +47,13 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
     const executionFamily = executionSetupFamily({ install: dockerInstallOffer(options.person === true), person: options.person === true });
     const family = { ...executionFamily, stages: executionFamily.stages.map(stage => ({ ...stage, evaluate: (context: Parameters<typeof stage.evaluate>[0]) =>
       hasWorkerKind(context) ? stage.evaluate(context) : { state: 'skipped' as const, reason: { code: 'setup.execution.noWorkKind', params: {} } } })) };
-    const observed = await (await loadSetupSurface()).observeCoreSetup({ ...host, env }, root, options.language, { packages: [family, codingSetupFamily()], facts: { execution: { ...execution, ...(worker ? { worker: { ...worker, ...(provider ? { provider } : {}), acquisition } } : {}) }, coding } });
+    const recovery = coding.repository === 'present' ? await observeFirstCommitRecovery(root, env).catch(() => ({ state: 'unknown' as const })) : null;
+    const observed = await (await loadSetupSurface()).observeCoreSetup({ ...host, env }, root, options.language, { packages: [family, codingSetupFamily()], facts: { execution: { ...execution, ...(worker ? { worker: { ...worker, ...(provider ? { provider, providerPending: !pins.some(pin => pin.provider === provider) } : {}), acquisition } } : {}) },
+      coding: { ...coding, firstCommitRecovery: recovery?.state === 'prepared' ? 'none' : recovery?.state ?? 'none' } } });
     const installed = ['current', 'upgradable', 'hand-built'].includes(observed.observation.policy.state), firstJob = observed.firstJob && { ...observed.firstJob, execution: observed.firstJob.execution && worker?.image !== 'missing' };
+    const registry = executionRegistrySchema.safeParse(config?.admission?.registry);
     const families: Readonly<Record<string, unknown>> = { ...observed.observation.families, work: { ...observed.firstJob, ...(provider ? { pendingProvider: provider } : {}),
+      providers: [...new Set(pins.map(pin => pin.provider))], kinds: registry.success ? registry.data.kinds.map(row => row.kind) : [],
       images: Object.fromEntries((acquisition?.images ?? []).map(image => [image.provider, image.imageId])) } };
     return { ...observed, ...(firstJob ? { firstJob } : {}), observation: { ...observed.observation, families, check: { state: installed ? await verdict(env, root).catch(() => 'not-run' as const) : 'not-run' as const } } };
   };
@@ -69,6 +76,11 @@ export function configuredSetup(host: object, witness: AuthorityWitness = { atte
         return installed.status === 'installed' || installed.status === 'replayed' ? { ...result('applied'), ...(secretStore ? { secretStore } : {}) } : result('refused', installed.status);
       }
       if (op === 'config.set') { await config(String(input['keyPath']), input['value'], input['layer'] === 'global' ? 'global' : 'project'); return result('applied'); }
+      if (op === 'work.profile-add') {
+        const added = await addNativeCodingProfile(root, { provider: input['provider'], kind: input['kind'], image: input['image'],
+          expect: input['expect'], digest: input['digest'], apply: true }, options, { witness });
+        return result(added.status === 'applied' || added.status === 'unchanged' ? 'applied' : 'refused');
+      }
       // Every profile's selection, solo included (SOLO-PROFILE; template data, never authority; the `identity` section is global-layer only,
       // as `config set identity.profile --global`; the next observation reads it back); distribution stays `deckent identity distribute`.
       if (op === 'identity-profile.preview') { await config('identity.profile', input['profile'], 'global'); return result('applied'); }

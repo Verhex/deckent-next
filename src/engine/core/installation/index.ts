@@ -1,5 +1,5 @@
 export { InstallationIdentityError } from './internal/installation-identity.js';
-export { configureNativeTemplate, initializeNativeRegistry } from './internal/native-template.js';
+export { configureNativeTemplate, initializeNativeRegistry, addNativeProfile } from './internal/native-template.js';
 export type { NativeTemplatePorts, CodingTemplateRequest, CodingTemplateResult, InitialRegistryRequest } from './internal/native-template.js';
 export { configuredInstallationPool, installExecutionPool } from './internal/pool.js';
 export type { InstallationPoolResult, InstallationPoolStore } from './internal/pool.js';
@@ -29,3 +29,8 @@ export type { FirstRunServiceIdentityPort, FirstRunServiceIdentityResult, Instal
   PreparedPolicyTemplateInstallation, PreparePolicyTemplateInput } from './internal/policy-template.js';
 
 export { setInstallerOwnerBaseline, ownerBaselineCells, describeOwnerBaseline, type InstallerOwnerBaselineResult } from './internal/owner-baseline.js';
+
+export { createUninstallPlan, assertUninstallPlanCurrent, uninstallRegistry, uninstallOperationDescriptors } from './internal/uninstall-plan.js';
+export type { UninstallInventory, UninstallContribution } from './internal/uninstall-plan.js';
+export { uninstallPlanQuerySchema, uninstallApplySchema, UninstallError } from './internal/uninstall-contract.js';
+export type { UninstallPlan, UninstallResult, UninstallResource, UninstallInstallation, UninstallItem } from './internal/uninstall-contract.js';

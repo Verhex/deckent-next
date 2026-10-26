@@ -3,8 +3,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { initializeNativeCodingRegistry, configureNativeCodingTemplate } from '#composition/core/native-coding/index.js';
-import { applyPolicyTemplateInstallation } from '#composition/core/installation/index.js';
+import { initializeNativeCodingRegistry, configureNativeCodingTemplate, addNativeCodingProfile } from '#composition/core/native-coding/index.js';
+import { observeOnboardingPermissions, applyOnboardingPermissions } from '#composition/core/setup/index.js';
+import { applyPolicyTemplateInstallation, openOwnPermissionMode } from '#composition/core/installation/index.js';
 import { createConfiguredConfigApplication, resolveConfiguredConfigPrincipal } from '#composition/core/config/index.js';
 import { clearConfigCache, loadConfig } from '#platform/index.js';
 import { executionRegistrySchema } from '#domain/index.js';
@@ -42,6 +43,40 @@ async function setup() {
 
 // Native Windows has no POSIX installer principal; adapter refusal tests remain active on every platform.
 describe.skipIf(process.platform === 'win32')('first registry with POSIX installer custody (Windows: verify-not-run, use WSL2)', () => {
+it('U4C: an explicit image adds a second provider by preview/CAS while preserving existing registry contents and refusing stale/witnessless writes', async () => {
+  const f = await setup(), first = await initializeNativeCodingRegistry(f.root, { ...request, apply: true }, f.options, { ...detected, ...person });
+  const next = { provider: 'codex', kind: 'codex-coding', image: `sha256:${'b'.repeat(64)}`, apply: false };
+  const deps = { ...person, detect: async (_provider: string, settings: typeof docker) => { expect(settings.imageId).toBe(next.image); return 'codex-cli 0.163.0'; } };
+  const before = await readFile(f.path, 'utf8'), audits = f.auditCount();
+  const preview = await addNativeCodingProfile(f.root, next, f.options, deps);
+  expect(preview.registry.profiles[0]).toEqual(first.profile); expect(preview.registry.kinds[0]).toEqual(first.kind);
+  expect(preview.profile.parameters).toMatchObject({ docker: { imageId: next.image }, invocation: { provider: 'codex' } });
+  expect(await readFile(f.path, 'utf8')).toBe(before); expect(f.auditCount()).toBe(audits);
+  await expect(addNativeCodingProfile(f.root, { ...next, apply: true, digest: preview.digest, expect: preview.expect }, f.options, { ...deps, witness: { attest: async () => false } })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  await expect(addNativeCodingProfile(f.root, { ...next, apply: true, digest: 'f'.repeat(64), expect: preview.expect }, f.options, deps)).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+  expect(await readFile(f.path, 'utf8')).toBe(before);
+  const applied = await addNativeCodingProfile(f.root, { ...next, apply: true, digest: preview.digest, expect: preview.expect }, f.options, deps);
+  expect(applied.status).toBe('applied'); expect(applied.registry.profiles).toHaveLength(2); expect(applied.registry.evaluators).toEqual(first.registry.evaluators);
+  expect(f.auditCount()).toBe(audits + 1);
+  await expect(addNativeCodingProfile(f.root, { ...next, apply: true, digest: preview.digest, expect: preview.expect }, f.options, deps)).rejects.toMatchObject({ code: 'CONFIG_CONCURRENT_REVISION_HOLD' });
+});
+
+it('U4C: witnessed profile defaults resume a partially opened grant and persist the mode through the U5 owner with stale/AI refusals', async () => {
+  const f = await setup();
+  const principal = await resolveConfiguredConfigPrincipal(f.root, 's', f.options);
+  await createConfiguredConfigApplication(f.root, f.options, undefined, person.witness).set({ keyPath: 'identity.profile', value: { id: 'core:solo', version: 1 }, layer: 'global', principal, scopeId: 's', commandId: 'choose-profile' });
+  const seen = await observeOnboardingPermissions(f.root, 's', f.options), before = await readFile(f.policyPath, 'utf8');
+  expect(seen).toMatchObject({ state: 'needed', mode: 'full-auto' });
+  await expect(applyOnboardingPermissions(f.root, 's', seen.digest, f.options, { attest: async () => false })).rejects.toMatchObject({ code: 'AUTHORITY_WITNESS_REQUIRED' });
+  await expect(applyOnboardingPermissions(f.root, 's', 'f'.repeat(64), f.options, person.witness)).rejects.toMatchObject({ code: 'PERMISSION_MODE_CONFLICT' });
+  expect(await readFile(f.policyPath, 'utf8')).toBe(before);
+  const audits = f.auditCount();
+  await openOwnPermissionMode(f.root, { scopeId: 's', mode: 'full-auto', confirm: async () => true }, f.options, undefined, person.witness);
+  const interrupted = await observeOnboardingPermissions(f.root, 's', f.options); expect(interrupted.state).toBe('needed');
+  await applyOnboardingPermissions(f.root, 's', interrupted.digest, f.options, person.witness);
+  expect(f.auditCount()).toBe(audits + 2);
+  expect(await observeOnboardingPermissions(f.root, 's', f.options)).toMatchObject({ state: 'applied' });
+});
 it('fresh policy → preview is read-only → apply writes a versioned registry once → template works without a prepared seed', async () => {
   const f = await setup(), before = await readFile(f.path, 'utf8'), files = await f.files(), audits = f.auditCount();
   const preview = await initializeNativeCodingRegistry(f.root, request, f.options, { ...detected, ...person });

@@ -5,3 +5,6 @@ export type { BackupLimits, BackupState } from './internal/archive.js';
 export { readBackupConfig, archivedConfigDocument } from './internal/archive.js';
 export { inspectScheduledSets, pruneScheduledSets } from './internal/scheduled.js';
 export { listBackupSets, lastBackupVerifications, type BackupSetEntry } from './internal/list.js';
+
+export { createBackupCoverage, verifyBackupCoverage } from './internal/coverage.js';
+export type { BackupCoverageRequest } from './internal/coverage.js';

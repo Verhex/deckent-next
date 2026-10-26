@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
-import { loadOnboardingScreens, deferredOnboardingNotice, guideQuestion, FirstTaskRegistry, firstTaskIntent, firstSignedInHost, createOnboardingSession, onboardingSteps, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
-import { planSetup, SetupStageRegistry } from '#engine/index.js';
+import { onboardingSteps, settleOnboardingReady, loadOnboardingScreens, deferredOnboardingNotice, guideQuestion, FirstTaskRegistry, firstTaskIntent, firstSignedInHost, createOnboardingSession, type OnboardingPort, type OnboardingSnapshot } from '#surfaces/core/terminal-onboarding/index.js';
+import { planSetup, SetupStageRegistry, type SetupStage } from '#engine/index.js';
 const observation = { schemaVersion: 2 as const, environment: { platform: 'linux' as const, node: 'supported' as const },
   language: { configured: 'en' as const, requested: null, system: null }, folder: { installation: 'present' as const, homeRoot: false, configuredScope: 's', suggestedScope: null },
   profile: { available: [], selected: null }, policy: { state: 'current' as const }, sandbox: { realm: 'bubblewrap' as const, selfTest: 'ok' as const, usernsRestricted: false },
@@ -44,4 +44,24 @@ it('U4-1/U4-2/U4-3: observed first signed-in default, dynamic progress, defer/re
   const { runOnboardingSession } = await loadOnboardingScreens();
   expect(await runOnboardingSession(stopped, {} as never, { locale: 'tr', signal: AbortSignal.abort() })).toBeNull();
   expect(attestations).toBe(0);
+});
+
+it('U4C: a relaunched ready card skips settled owners, refuses a refused write and reobserves before the next owner', async () => {
+  const stage = (id: string, done: boolean): SetupStage => ({ id, namespace: id.split(':')[0]!, title: 'setup.work.kindTitle', phase: 'onboarding', state: done ? 'done' : 'ready',
+    reason: { code: 'setup.work.kindDone', params: {} }, operation: done ? null : { id: id === 'work:kind' ? 'work.profile-add' : 'work.pool', version: 1, input: {} }, question: null, default: null, cli: null, autoEligible: false });
+  let registryDone = false, poolDone = false, allowed = false;
+  const calls: string[] = [];
+  const refresh = async () => { const fresh = { ...snapshot, plan: { ...snapshot.plan, stages: [stage('execution:worker-settings', true), stage('work:kind', registryDone), stage('work:pool', poolDone)] } };
+    return { schemaVersion: 1 as const, steps: [], completed: 0, total: 0, snapshot: fresh }; };
+  const port = { previewProfile: async () => ({ digest: 'd'.repeat(64), expect: null, image: 'sha256:pin', provider: 'new', profile: 'new@1', kind: 'new-coding' }),
+    apply: async (current: SetupStage) => { calls.push(current.id); expect(current.operation?.input['digest']).toBe('d'.repeat(64)); if (allowed) registryDone = true; return { status: allowed ? 'applied' : 'refused' }; } } as OnboardingPort;
+  const ui = { foreground: async (current: SetupStage) => { calls.push(current.id); poolDone = true; return { status: 'applied' }; } } as never;
+  expect(await settleOnboardingReady(port, ui, refresh, async () => true)).toBe(false);
+  expect(calls).toEqual(['work:kind']);
+  allowed = true; expect(await settleOnboardingReady(port, ui, refresh, async () => true)).toBe(true);
+  expect(calls).toEqual(['work:kind', 'work:kind', 'work:pool']);
+  calls.length = 0; expect(await settleOnboardingReady(port, ui, refresh, async () => true)).toBe(true); expect(calls).toEqual([]);
+  const blocked = { ...snapshot, plan: { ...snapshot.plan, stages: [stage('execution:worker', true),
+    { ...stage('execution:worker-settings', true), state: 'blocked' as const }, stage('work:kind', true), stage('work:pool', true)] } };
+  expect(onboardingSteps(blocked).find(row => row.kind === 'ready')?.stages[0]?.state).toBe('blocked');
 });

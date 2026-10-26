@@ -37,7 +37,7 @@ function discoveryRefusal(error: unknown, provider: string, fallback: string): n
 }
 
 /** Pure proposal from the authored project registry and the effective, validated resource limits. */
-function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, template: NativeTemplatePorts['template']) {
+function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, template: NativeTemplatePorts['template'], discovered?: ExecutionProfileDefinition) {
   const admission = snapshot.effective.admission;
   if (!admission?.poolId || !admission.executionSlots || !admission.inFlightSlots) refuse('CODING_TEMPLATE_ADMISSION_REQUIRED');
   const hold = registryLayerHold(snapshot);
@@ -49,7 +49,7 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
   const imageId = request.image ?? settings.imageId;
   const { executable, ...resourceLimits } = settings; void executable;
   const pins = affectedToolchainProfiles({ admission: { registry: registry.data } }).filter(pin => pin.provider === request.provider && pin.imageId === imageId);
-  const candidates = pins.map(pin => {
+  const candidates = discovered ? [discovered] : pins.map(pin => {
     const source = registry.data.profiles.find(profile => profile.id === pin.profile.id && profile.version === pin.profile.version)!;
     const invocation = source.parameters['invocation'] as { discovery?: JsonValue } | undefined;
     const preflight = (source.parameters['nativeSubscription'] as { preflight?: { discovery?: string } } | undefined)?.preflight;
@@ -70,6 +70,46 @@ function proposal(snapshot: ConfigSnapshot, request: CodingTemplateRequest, temp
   if (bound) return { profile: candidate, kind: bound, registry: registry.data, changed: false };
   const next = { ...registry.data, profiles: existing ? registry.data.profiles : [...registry.data.profiles, candidate], kinds: [...registry.data.kinds, kind] };
   return { profile: candidate, kind, registry: executionRegistrySchema.parse({ ...next, revision: `coding-template-${sha256(JSON.stringify(next))}` }), changed: true };
+}
+
+/** Add a newly acquired provider to an existing registry. Bootstrap is never used for this path. */
+export async function addNativeProfile(input: unknown, ports: NativeTemplatePorts) {
+  const parsed = requestSchema.extend({ image: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+    expect: z.string().regex(/^[a-f0-9]{64}$/u).nullable().optional(), digest: z.string().regex(/^[a-f0-9]{64}$/u).optional() }).strict().safeParse(input);
+  if (!parsed.success) refuse('CODING_TEMPLATE_INPUT_INVALID');
+  const request = parsed.data;
+  if (request.apply) await assertConfigPersonWitness('set', 'admission.registry', ports.witness);
+  const read = await ports.snapshot();
+  if (request.expect !== undefined && request.expect !== read.digest) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
+  const settings = read.effective.execution?.docker;
+  if (!settings) refuse('CODING_TEMPLATE_IMAGE_REQUIRED');
+  // Validate registry/layer/kind prerequisites before a detection process is allowed to start.
+  const hold = registryLayerHold(read);
+  if (hold) refuse(hold);
+  const existing = executionRegistrySchema.safeParse(read.effective.admission?.registry);
+  if (!existing.success) refuse('CODING_TEMPLATE_REGISTRY_INVALID');
+  const pins = affectedToolchainProfiles(read.effective).filter(pin => pin.provider === request.provider && pin.imageId === request.image);
+  const cliVersion = pins[0]?.cliVersion ?? await ports.detect(request.provider, { ...settings, imageId: request.image });
+  const { executable, ...resources } = settings; void executable;
+  const candidate = ports.template({ ...resources, imageId: request.image }, { provider: request.provider, cliVersion, permissionMode: 'unattended',
+    ...(request.discovery ? { discovery: { schemaVersion: 1, mode: request.discovery } } : {}) });
+  const plan = proposal(read, request, ports.template, candidate);
+  const digest = sha256(JSON.stringify({ project: read.digest, global: read.global, profile: plan.profile, registry: plan.registry }));
+  const result = { schemaVersion: 1 as const, profile: plan.profile, kind: plan.kind, registry: plan.registry, expect: read.digest, digest };
+  if (!request.apply) return { ...result, status: plan.changed ? 'preview' as const : 'unchanged' as const, write: null };
+  if (request.digest !== digest) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
+  if (!plan.changed) return { ...result, status: 'unchanged' as const, write: null };
+  const scopeId = read.effective.service.identity?.scopeId ?? (read.effective['terminal'] as { scopeId?: string } | undefined)?.scopeId;
+  if (!scopeId) refuse('TERMINAL_SCOPE_REQUIRED');
+  const principal = await ports.principal(scopeId);
+  const guard = (current: ConfigSnapshot) => {
+    if (JSON.stringify(current.global) !== JSON.stringify(read.global) || JSON.stringify(current.effective.execution) !== JSON.stringify(read.effective.execution)
+      || JSON.stringify(current.effective.admission) !== JSON.stringify(read.effective.admission)) refuse('CONFIG_CONCURRENT_REVISION_HOLD');
+  };
+  await ports.beforeWrite?.();
+  const write = await ports.writer(guard).set({ keyPath: 'admission.registry', value: plan.registry, layer: 'project', principal, scopeId,
+    commandId: randomUUID(), expect: read.digest });
+  return { ...result, status: 'applied' as const, write };
 }
 
 /** No launch/build/network. Apply is one allow-only ConfigApplication CAS write; no retry or policy bypass. */

@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { RegistryError } from '#domain/index.js';
 import { CONFIG_CONTRACT_SINCE, ConfigValidationError, DeckentError, ErrorRegistry, installSecretResolverFactory, isRecord, normalizeGlobalScopePlatform, readJsonFile,
   registerConfigSection, resolveGlobalConfigPaths, resolveGlobalScopePaths, withConfigWriteLock, writeConfig, type Environment } from '#platform/index.js';
-import { CORE_SECRET_GRANT_STORE_ID, SECRET_STORE_ID_PATTERN, SecretGrantStoreRegistry, SecretStoreRegistry, projectVaultKey, type ProjectVaultAnchor, type SecretCustody, type SecretGrantStore,
+import { assertPublicSecretName, CORE_SECRET_GRANT_STORE_ID, SECRET_STORE_ID_PATTERN, SecretGrantStoreRegistry, SecretStoreRegistry, projectVaultKey, type ProjectVaultAnchor, type SecretCustody, type SecretGrantStore,
   type SecretGrantStoreFactory, type SecretStore, type SecretStoreFactory, type SecretStoreSelectionPort } from '#engine/index.js';
 import { ENCRYPTED_FILE_SECRET_STORE_ID, ENV_SECRET_STORE_ID, encryptedFileSecretStoreFactory, environmentSecretStoreFactory, fileSecretStoreFactory,
   fileSecretGrantStoreFactory } from '#adapters/core/secret-store/index.js';
@@ -137,7 +137,7 @@ export function registerSecretStoreConfig(): void {
   // The one production resolver: each call opens the selected backend and reads per reference (no value cache).
   installSecretResolverFactory(context => {
     const store = openConfiguredSecretStore(context.config, context.env, context.platform);
-    return name => store.get(name);
+    return async name => { assertPublicSecretName(name); return store.get(name); };
   });
   registered = true;
 }

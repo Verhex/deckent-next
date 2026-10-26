@@ -39,11 +39,16 @@ export function parseSiwcModels(input: unknown): readonly Readonly<{ slug: strin
     .map(({ slug, display_name }) => Object.freeze({ slug, display_name })));
 }
 const object = (value: unknown) => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
-/** Machine codes only; arbitrary provider messages and headers never enter the shared rejection body. */
+/** A confirmed code/status pair alone can establish quota. Provider prose and unknown codes are never retained. */
 export function siwcRejection(input: unknown, status: number | null): HeadlessRejectionBody | null {
   const error = object(object(input)?.['error']), code = error?.['code'];
-  const refusal = typeof code === 'string' ? SIWC_USAGE_ERRORS[code] : undefined;
-  if (refusal === 'plan-unavailable') return Object.freeze({ schemaVersion: 2, refusal, status });
-  if (refusal) return Object.freeze({ schemaVersion: 1, refusal, status, ...(refusal === 'quota' ? { resetsAtMs: null } : {}) });
+  const rule = typeof code === 'string' && Object.hasOwn(SIWC_USAGE_ERRORS, code) ? SIWC_USAGE_ERRORS[code] : undefined;
+  if (rule && (status === rule.status || status === null && (rule.refusal === 'usage-unavailable' || rule.refusal === 'service-unavailable'))) {
+    const { refusal } = rule;
+    if (refusal === 'usage-unavailable' || refusal === 'service-unavailable') return Object.freeze({ schemaVersion: 3, refusal, code: code as string, status });
+    if (refusal === 'plan-unavailable') return Object.freeze({ schemaVersion: 2, refusal, status });
+    return Object.freeze({ schemaVersion: 1, refusal, status, ...(refusal === 'quota' ? { resetsAtMs: null } : {}) });
+  }
+  if (status === 503) return Object.freeze({ schemaVersion: 3, refusal: 'service-unavailable', ...(rule ? { code: code as string } : {}), status });
   return status === 401 ? Object.freeze({ schemaVersion: 1, refusal: 'login-required', status }) : null;
 }

@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { HUB_TRUST_POLICIES, HubError, type HubRevocationFeed, type VerifiedPrincipal } from '#domain/index.js';
 import { ed25519KeyId } from '#platform/index.js';
-import { verifyHubPackage, verifyHubRevocationFeed } from '#engine/core/hub/index.js';
+import { verifyHubPackage, verifyHubRevocationFeed, requireHubRevocationContinuation } from '#engine/core/hub/index.js';
 import { HubClientError, type HubBundle, type HubClientDependencies, type HubClientStore, type HubSource, type HubClientTrust } from './contract.js';
 /** Every trust resolver is a trusted composition port; publisher-pinned is resolved here from the current scope's signer rows. */
 export async function verifyClientBundle(deps: HubClientDependencies, store: HubClientStore, source: HubSource, bundle: HubBundle, principal: VerifiedPrincipal): Promise<HubClientTrust> {
@@ -39,10 +39,12 @@ export async function acceptClientFeed(store: HubClientStore, source: HubSource,
   const previous = await store.feed(source.scopeId, source.hubId), same = isDeepStrictEqual(previous, input);
   const feed = verifyHubRevocationFeed(input, { hubId: source.hubId, key: { keyId: source.hubId, publicKey: source.publicKey, role: 'hub', active: true },
     nowMs, previous: same ? null : previous });
+  if (!same) requireHubRevocationContinuation(feed, previous);
   if (persist && !same) await store.saveFeed(source.scopeId, feed);
   return feed;
 }
 export async function requirePackageNotRevoked(store: HubClientStore, source: HubSource, bundle: HubBundle, feed: HubRevocationFeed, installed = false): Promise<void> {
+  if (feed.catchup && !feed.catchup.complete) throw new HubError('HUB_FEED_INVALID');
   const targets = [...bundle.envelope.signatures.map(s => ({ kind: 'key' as const, id: s.keyId })),
     { kind: 'publisher' as const, id: bundle.manifest.packageId.split('/')[0]! }, { kind: 'package-version' as const, id: `${bundle.manifest.packageId}@${bundle.manifest.version}` }];
   const entries = [...await store.revocations(source.scopeId, source.hubId, targets), ...feed.entries.filter(entry => targets.some(t => t.kind === entry.kind && t.id === entry.id))];

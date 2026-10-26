@@ -1,14 +1,17 @@
-import { chmod, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ed25519Signer, signatureMessage } from '#platform/index.js';
 import { SIGNATURE_LABELS, catalogActionBytes } from '#domain/index.js';
 import { SignerKeyApplication } from '#engine/core/agent-catalog/index.js';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it, vi } from 'vitest';
-import { HUB_LIMITS, canonicalHubJson } from '#domain/index.js';
+import { HUB_LIMITS, HUB_REVOCATION_REFRESH_MS, canonicalHubJson } from '#domain/index.js';
 import { classifyLaunchRefusal } from '#engine/core/runs/index.js';
 import { ErrorRegistry } from '#platform/index.js';
 import { HubClientApplication, decodeHubBundle, encodeHubBundle, selectedHubSkillFiles } from '#engine/core/hub-client/index.js';
+import { HubRevocationApplication } from '#engine/core/hub-server/index.js';
+import { openHubStore } from '#adapters/core/hub-store/index.js';
+import { EMPTY_KNOWN_SECRETS } from '#platform/index.js';
 import { AgentCatalogApplication, AgentStandingApplication, selectTaskAgents, pinnedAgentSkills } from '#engine/core/agent-catalog/index.js';
 import { readHubPackageFile, writeHubPackageFile } from '#adapters/core/hub-package-file/index.js';
 import { ai, bundle, count, feed, fixture, hub, install, otherPublisher, personTrust, publisher, source } from '../../fixtures/hub-client.js';
@@ -424,4 +427,116 @@ it('keeps a valid revocation when another cached package is corrupt, withholding
   await f.app.applyRevocations(refresh('reverified', feed({ sequence: 3, issuedAtMs: 1000, nextRefreshBy: 3000 })));
   expect((await selection(f)).get('t')?.seal.agentId).toBe('order-agent');
   store = await f.deps.openStore('read'); try { expect((await store.refreshResult('s', hub.keyId))?.items.find(item => item.id === 'invoice-agent')?.upstream).toBe('revoked'); } finally { store.close(); }
+});
+
+it('catches up 1001 signed revocations atomically per page, refuses gaps/bad signatures and restarts expired cursors without widening (H5B)', async c => {
+  if (process.platform === 'win32') c.skip('verify-not-run: POSIX Hub store custody; typed Windows refusal remains in hub-server.test.ts');
+  let now = 1000; vi.spyOn(Date, 'now').mockImplementation(() => now);
+  const f = await setup(); await f.app.installFile(install()); await f.app.installFile(install('order', bundle({ name: 'order' })));
+  const root = join(f.root, 'hub'); await mkdir(root, { mode: 0o700 });
+  const opened = openHubStore({ root, scopeId: 's', hubId: hub.keyId, busyTimeoutMs: 1000 });
+  const context = { scopeId: 's', principal: { id: 'operator', kind: 'person' as const } };
+  const server = new HubRevocationApplication({ ...opened, hubId: hub.keyId, scopeId: 's', now: () => now, knownSecrets: () => EMPTY_KNOWN_SECRETS,
+    authority: { require: () => undefined }, attestor: () => ({ signer: hub, key: { keyId: hub.keyId, publicKey: hub.spki.toString('base64'), role: 'hub', active: true } }) });
+  try {
+    await server.revocations(context); // Match the installation's previously accepted sequence 1.
+    for (let n = 0; n < 1001; n++) await server.withdraw(context, 'revoke', { schemaVersion: 1, commandId: `scale-${n}`, authority: 'operator',
+      kind: n === 0 || n === 1000 ? 'package-version' : 'publisher', id: n === 0 ? 'acme/order@1.0.0' : n === 1000 ? 'acme/invoice@1.0.0' : `unrelated-${n}`, reason: 'compromised' });
+    let mode: 'gap' | 'tamper' | 'resume' = 'gap', calls = 0;
+    const app = new HubClientApplication({ ...f.deps, fetchRevocations: async (_source, afterSequence, signal, cursor) => {
+      signal.throwIfAborted(); calls++; expect(afterSequence).toBe(1);
+      let value = await server.revocations(context, { afterSequence, continuation: cursor });
+      if (mode === 'gap' && cursor) value = await server.revocations(context, { afterSequence, continuation: value.catchup!.next! });
+      if (mode === 'tamper') return { ...value, sequence: value.sequence + 1 };
+      return value;
+    } });
+    const command = { schemaVersion: 1, scopeId: 's', hubId: hub.keyId, commandId: 'catchup', force: true };
+    await expect(app.refreshRevocations(command)).rejects.toThrow(code('HUB_FEED_INVALID'));
+    expect(calls).toBe(2); expect((await selection(f)).size).toBe(0);
+    let store = await f.deps.openStore('read');
+    let partial;
+    try {
+      partial = (await store.feed('s', hub.keyId))!;
+      expect(partial.entries).toHaveLength(500); expect(partial.catchup).toMatchObject({ page: 0, complete: false });
+      expect(await store.revocations('s', hub.keyId, [{ kind: 'package-version', id: 'acme/order@1.0.0' }])).toEqual([expect.objectContaining({ severity: 'revoke' })]);
+    } finally { store.close(); }
+    await expect(f.app.installFile(install('incomplete', bundle({ name: 'other' }), { feed: partial }))).rejects.toThrow(code('HUB_FEED_INVALID'));
+    mode = 'tamper'; await expect(app.refreshRevocations({ ...command, commandId: 'bad-signature' })).rejects.toThrow(code('HUB_SIGNATURE_INVALID'));
+    expect((await selection(f)).size).toBe(0);
+    now += HUB_REVOCATION_REFRESH_MS; f.time(now); // A persisted partial catch-up must recover after its signed cursor expires.
+    mode = 'resume'; await app.refreshRevocations({ ...command, commandId: 'resume' });
+    expect(calls).toBe(6);
+    store = await f.deps.openStore('read');
+    let complete;
+    try {
+      complete = (await store.feed('s', hub.keyId))!;
+      expect(complete.catchup).toMatchObject({ page: 2, complete: true, next: null, throughSequence: 1006 });
+      expect(await store.revocations('s', hub.keyId, [{ kind: 'package-version', id: 'acme/invoice@1.0.0' }, { kind: 'package-version', id: 'acme/order@1.0.0' }])).toHaveLength(2);
+    } finally { store.close(); }
+    await f.app.installFile(install('completed', bundle({ name: 'other' }), { feed: complete }));
+    expect((await selection(f)).get('t')?.seal.agentId).toBe('other-agent');
+  } finally { opened.close(); }
+});
+
+it('H7 dispatches wire-safe install/verify/export to the same client and rejects noncanonical base64 before writes', async () => {
+  const { HubApplication } = await import('#engine/core/hub-operations/index.js');
+  const f = await setup(), app = new HubApplication({ client: f.app }), command = install();
+  const encoded = Buffer.from(command.bundles[0]!).toString('base64');
+  await expect(app.execute({ operation: 'hub.install', input: { ...command, bundles: [encoded + '\n'] } })).rejects.toMatchObject({ code: 'HUB_PACKAGE_INVALID' });
+  expect(count(f.path, 'hub_installs')).toBe(0);
+  expect(await app.execute({ operation: 'hub.install', input: { ...command, bundles: [encoded] } })).toMatchObject({ replayed: false });
+  expect(await app.execute({ operation: 'hub.verify', input: query })).toMatchObject({ version: '1.0.0' });
+  expect(await app.execute({ operation: 'hub.export', input: query })).toEqual({ encoding: 'base64', bundle: encoded });
+});
+
+it('H7 refuses unsigned AI remote writes before the governed transport; cancellation and missing connection never send', async () => {
+  const { HubApplication } = await import('#engine/core/hub-operations/index.js');
+  const f = await setup(), remote = vi.fn(async () => 'sent'), app = new HubApplication({ client: f.app, remote });
+  const request = { operation: 'hub.publish', input: { schemaVersion: 1, scopeId: 's', commandId: 'publish', hubId: hub.keyId, input: { bundle: {} } } };
+  f.as(ai);
+  await expect(app.execute(request)).rejects.toMatchObject({ code: 'HUB_AUTHORITY_REFUSED' });
+  expect(remote).not.toHaveBeenCalled();
+  const controller = new AbortController(); controller.abort();
+  await expect(app.execute(request, controller.signal)).rejects.toThrow(); expect(remote).not.toHaveBeenCalled();
+  f.as({ id: 'person', issuer: 'os', subject: 'u', assurance: 'os-user', scopeIds: ['s'] });
+  await expect(new HubApplication({ client: f.app }).execute({ operation: 'hub.search', input: { schemaVersion: 1, scopeId: 's', hubId: hub.keyId } })).rejects.toMatchObject({ code: 'HUB_CONNECTION_UNAVAILABLE' });
+  expect(remote).not.toHaveBeenCalled();
+});
+
+it('H7 scope policy refuses absent grants and approval-only grants; an explicit hub grant carries its revision', async () => {
+  const { HubPolicyAuthorization } = await import('#engine/core/hub-operations/index.js');
+  const person = { id: 'person', issuer: 'os', subject: 'u', assurance: 'os-user', scopeIds: ['s'] };
+  let grants: unknown[] = [];
+  const policy = new HubPolicyAuthorization({ load: async () => ({ schemaVersion: 1, revision: 'hub-policy', restrictions: [], grants }) });
+  await expect(policy.authorize('install', 's', person)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
+  grants = [{ id: 'hub-import', effect: 'require-approval', principals: 'all', scopes: ['s'], actions: ['install'], resource: { kind: 'hub', ids: ['s'] } }];
+  await expect(policy.authorize('install', 's', person)).rejects.toMatchObject({ code: 'POLICY_APPROVAL_UNSUPPORTED' });
+  grants = [{ ...grants[0] as object, effect: 'allow' }];
+  expect(await policy.authorize('install', 's', person)).toEqual({ revision: 'hub-policy', ruleId: 'hub-import' });
+});
+
+it('H7 scans every outbound package before network using the local known-secret snapshot', async () => {
+  const { HubApplication } = await import('#engine/core/hub-operations/index.js');
+  const { snapshotKnownSecrets } = await import('#platform/index.js');
+  const f = await setup(), remote = vi.fn(async () => 'sent');
+  const app = new HubApplication({ client: f.app, remote, knownSecrets: () => snapshotKnownSecrets([{ name: 'SYNTHETIC', value: 'Review invoice.' }]) });
+  await expect(app.execute({ operation: 'hub.publish', input: { schemaVersion: 1, scopeId: 's', commandId: 'publish', hubId: hub.keyId,
+    input: { bundle: JSON.parse(Buffer.from(encodeHubBundle(bundle())).toString('utf8')) } } })).rejects.toMatchObject({ code: 'HUB_SECRET_REFUSED' });
+  // Not only publish: a yank reason carrying the known secret is refused before transport.
+  await expect(app.execute({ operation: 'hub.yank', input: { schemaVersion: 1, scopeId: 's', hubId: hub.keyId, commandId: 'yank',
+    input: { schemaVersion: 1, commandId: 'yank', kind: 'package-version', id: 'acme/invoice@1.0.0', reason: 'Withdrawn: Review invoice.', authority: 'publisher' } } })).rejects.toMatchObject({ code: 'HUB_SECRET_REFUSED' });
+  expect(remote).not.toHaveBeenCalled();
+});
+
+it('H7 refuses AI operator revocation even with an enrolled key and grant, before transport', async () => {
+  const { HubApplication } = await import('#engine/core/hub-operations/index.js');
+  const f = await setup(), key = ed25519Signer(Buffer.from(`302e020100300506032b657004220420${'04'.repeat(32)}`, 'hex')), remote = vi.fn(async () => 'sent');
+  const custody = { create: async () => ({ keyId: key.keyId, publicKey: key.spki.toString('base64') }), signAction: async () => { throw new Error('operator must never sign'); } };
+  const catalog = { ...f.catalog, custody };
+  await new SignerKeyApplication(catalog).enrol({ schemaVersion: 1, scopeId: 's', commandId: 'enrol-operator-denial', principal: { issuer: ai.issuer, subject: ai.subject }, label: 'AI publisher' });
+  f.as(ai);
+  const app = new HubApplication({ client: new HubClientApplication({ ...f.deps, catalog }), remote });
+  await expect(app.execute({ operation: 'hub.revoke', input: { schemaVersion: 1, scopeId: 's', hubId: hub.keyId, commandId: 'revoke',
+    input: { schemaVersion: 1, commandId: 'revoke', kind: 'package-version', id: 'acme/invoice@1.0.0', reason: 'Security withdrawal', authority: 'operator' } } })).rejects.toMatchObject({ code: 'HUB_AUTHORITY_REFUSED' });
+  expect(remote).not.toHaveBeenCalled();
 });

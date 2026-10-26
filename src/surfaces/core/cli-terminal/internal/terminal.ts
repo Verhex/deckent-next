@@ -1,3 +1,4 @@
+import { hubPanelPort } from '#surfaces/core/terminal-hub/index.js';
 import { permissionModeOpener } from './mode-open-card.js';
 import { lineInstructionContext, instructionModelContext, instructionSourceLine, projectInstructionLabels } from '#surfaces/core/project-instructions/index.js';
 import type { WorklineStreamTurn } from '#surfaces/core/terminal-kit/index.js';
@@ -168,7 +169,7 @@ function worklineLabels(locale: Locale, statusLine: string): WorklineLabels {
  * T3 L4: the `/config` and `/mcp` windows' ports and every panel's words (`/mode`'s port is the workline's own). Where the terminal cannot draw
  * a list (TERM=dumb) there are none and the slash commands stay the text commands.
  */
-function panelProps(root: string, scopeId: string, context: TerminalLaunchContext, ports: TerminalLaunchPorts, options: ConfigLoadOptions, locale: Locale, env: NodeJS.ProcessEnv) {
+function panelProps(root: string, scopeId: string, context: TerminalLaunchContext, ports: TerminalLaunchPorts, options: ConfigLoadOptions, locale: Locale, env: NodeJS.ProcessEnv, config: { cli: { invocationInputMaxBytes: number }; approvals: { sessionTtlMs: number } }) {
   if (pickerNeedsTextFallback(env, true)) return {};
   const providerConnect = context.providerConnect;
   // Stage 1: the scope budget window (create / change) in `/model` and `/provider`, when the host binds the spend read and the governed command.
@@ -184,6 +185,7 @@ function panelProps(root: string, scopeId: string, context: TerminalLaunchContex
   const workspace = openProviderWorkspaces && context.configApplication && context.resolveConfigPrincipal ? { workspace: workspacePanelPort(root, scopeId, { ...context, openProviderWorkspaces }, options, locale) } : {};
   return { panels: { labels: terminalPanelLabels(locale), ports: { ...(context.configApplication ? { config: configPanelPort(root, context, options, locale) } : {}),
     ...(context.mcpCapabilities ? { policy: policyPanelPort(root, context.mcpCapabilities, options, locale, context.delegations, context.openOwnerBaselineInstallation) } : {}),
+    ...(context.executeHub ? { hub: hubPanelPort({ root, scopeId, options, locale, known: getConfigKnownSecrets(config), maxBytes: config.cli.invocationInputMaxBytes, timeoutMs: config.approvals.sessionTtlMs, execute: context.executeHub }) } : {}),
     ...(ports.runMcp ? { mcp: mcpPanelPort(root, ports.runMcp, options, locale) } : {}),
     // T4: `/model` lists the declared models with their state; `/provider` connects a kind (free check, key to the secret store through the service).
     // The pin rides only on the streamed agent turn (v23): without that port the window is not offered (no pin that a turn would drop).
@@ -260,7 +262,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
   if (parsed.help) { emit(t('cli.help.terminal', {}, locale), sinks); return; }
   const tty = ttyState(context);
   const options: ConfigLoadOptions = { env };
-  let config = await loadConfig(root, options) as Record<string, unknown> & { language?: string; inspection: { workers: { heartbeatMs: number } };
+  let config = await loadConfig(root, options) as Record<string, unknown> & { cli: { invocationInputMaxBytes: number }; language?: string; inspection: { workers: { heartbeatMs: number } };
     approvals: { pageSize: number; sessionTtlMs: number } };
   locale = resolveLocale(parsed.language, env, config.language);
   context.onLocale?.(locale);
@@ -337,7 +339,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       const port = await context.openOnboarding(root, scopeId, context.rootResolution?.folder ?? '', options);
       const io = { locale, env, stdin: process.stdin, stdout: process.stdout, ...(context.signal ? { signal: context.signal } : {}) };
       const run = async (revisit: boolean, signal?: AbortSignal) => {
-        const panels = panelProps(root, scopeId, context, ports, options, locale, env).panels;
+        const panels = panelProps(root, scopeId, context, ports, options, locale, env, config).panels;
         return (await surface.loadOnboardingScreens()).runOnboardingSession(port, { locale,
           provider: async () => {
             if (!panels?.ports.provider) throw ErrorRegistry.createError('INVENTORY_UNAVAILABLE');
@@ -491,7 +493,7 @@ export async function terminalCommand(argv: readonly string[], context: Terminal
       doctorReport: sink => ports.runKernelCommand(['doctor', '--json', '--lang', locale], { root, env, stdout: sink, stderr: sink }) }),
     ...(ports.mcpSlash ? { mcp: (args: string) => ports.mcpSlash!(root, args, options, locale) } : {}),
     ...(context.configApplication ? { config: (args: string) => configTtySlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
-    ...panelProps(root, scopeId, context, ports, options, locale, env),
+    ...panelProps(root, scopeId, context, ports, options, locale, env, config),
     // MONITOR: `/monitor` prints the monitor's text snapshot as notice lines (the fullscreen view is `deckent monitor`).
     ...(context.inspectMonitor ? { monitor: (args: string) => monitorSlash(root, args, context, options, locale, Math.max(40, (tty.columns ?? 100) - 4)) } : {}),
     // T3 L5: a bare `/monitor` opens the monitor in a window. The view loads on the first use (like `deckent monitor`); this unit stays free of it until then.

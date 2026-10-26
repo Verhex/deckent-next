@@ -157,7 +157,7 @@ export class BrainPlanApplication {
       const data = await this.ports.rejectionBody?.(result).catch(() => null) ?? null;
       const body = data === null ? null : readHeadlessRejection({ adapter: receipt.outcome.evidence.adapter, body: { data } });
       const untilMs = observe && prepared.quotaWait ? brainQuotaWaitUntil(body, receipt.outcome.observedAtMs, now(), attempt, prepared.quotaWait) : null;
-      if (untilMs === null || typeof body?.resetsAtMs !== 'number') throw brainRejection(receipt.outcome.evidence, data);
+      if (untilMs === null || body?.refusal !== 'quota' || typeof body.resetsAtMs !== 'number') throw brainRejection(receipt.outcome.evidence, data);
       const after = { commandId: invocation.commandId, invocationId: receipt.claim.invocationId };
       const waits = this.ports.quotaWaits;
       await waits?.begin({ schemaVersion: 1, scopeId: command.scopeId, commandId: command.commandId, attempt: attempt + 1, maxAttempts: prepared.quotaWait!.maxAttempts,

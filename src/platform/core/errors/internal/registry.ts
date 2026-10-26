@@ -110,6 +110,8 @@ const dockerImageProbeCause = (cause: unknown) => typeof cause === 'string' && O
 const DELEGATION_HINTS: Readonly<Record<string, (p: Params, l: Locale) => string>> = { owner: (p, l) => t('policy.hint.owner', p, l), other: (p, l) => t('policy.hint.other', p, l),
   unnamed: (p, l) => t('policy.hint.unnamed', p, l), deny: (p, l) => t('policy.hint.deny', p, l), approval: (p, l) => t('policy.hint.approval', p, l) };
 const coreDefinitions: ErrorDefinitions = Object.freeze({
+  SECRET_SESSION_RESERVED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_SESSION_RESERVED', p, l) }) },
+  SIWC_STORE_NOT_PERSONAL: { category: 'error', render: (p, l) => ({ message: t('error.SIWC_STORE_NOT_PERSONAL', p, l) }) },
   SECRET_STORE_PROTECTION_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.SECRET_STORE_PROTECTION_REQUIRED', p, l) }) },
   OAUTH_CONNECTION_INTERACTIVE_REQUIRED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED', p, l) }) },
   OAUTH_CONNECTION_PLATFORM_UNSUPPORTED: { category: 'error', render: (p, l) => ({ message: t('error.OAUTH_CONNECTION_PLATFORM_UNSUPPORTED', p, l) }) },
@@ -126,6 +128,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   BACKUP_TARGET_IDENTITY_MISMATCH: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_TARGET_IDENTITY_MISMATCH', p, l) }) },
   BACKUP_RESTORE_INCOMPLETE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_RESTORE_INCOMPLETE', p, l) }) },
   BACKUP_RESTORE_HOLD: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_RESTORE_HOLD', p, l) }) },
+  BACKUP_COVERAGE_INCOMPLETE: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_COVERAGE_INCOMPLETE', p, l) }) },
   BACKUP_INPUT_INVALID: { category: 'usage', render: (p, l) => ({ message: t('error.BACKUP_INPUT_INVALID', p, l) }) },
   BACKUP_POLICY_DENIED: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_POLICY_DENIED', p, l) }) },
   BACKUP_PASSPHRASE_INVALID: { category: 'config', render: (p, l) => ({ message: t('error.BACKUP_PASSPHRASE_INVALID', p, l) }) },
@@ -945,6 +948,7 @@ const coreDefinitions: ErrorDefinitions = Object.freeze({
   HUB_DOWNGRADE_REFUSED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_DOWNGRADE_REFUSED', p, l) }) },
   HUB_PACKAGE_REVOKED: { category: 'error', render: (p, l) => ({ message: t('error.HUB_PACKAGE_REVOKED', p, l) }) },
   HUB_STORE_CORRUPT: { category: 'error', render: (p, l) => ({ message: t('error.HUB_STORE_CORRUPT', p, l) }) },
+  HUB_CONNECTION_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_CONNECTION_UNAVAILABLE', p, l) }) },
   HUB_STORE_UNAVAILABLE: { category: 'error', render: (p, l) => ({ message: t('error.HUB_STORE_UNAVAILABLE', p, l) }) },
   HUB_OUTCOME_UNKNOWN: { category: 'error', render: (p, l) => ({ message: t('error.HUB_OUTCOME_UNKNOWN', p, l) }) },
   CLI_USAGE: { category: 'usage', render: (p, l) => ({ message: t('error.CLI_USAGE', { ...p, command: p.command ?? 'deckent', usage: p.usage ?? t('cli.usage.help', {}, l), flag: p.flag ?? t('cli.usage.arguments', {}, l) }, l) }) },

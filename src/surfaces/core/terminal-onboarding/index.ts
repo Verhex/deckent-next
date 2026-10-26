@@ -12,3 +12,4 @@ export { useOnboardingHandoff } from './internal/handoff.js';
 export { parseTerminalLaunch } from './internal/launch.js';
 
 export { guideQuestion } from './internal/guides.js';
+export { settleOnboardingReady } from './internal/ready.js';

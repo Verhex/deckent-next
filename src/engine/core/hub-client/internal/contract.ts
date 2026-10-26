@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { HUB_LIMITS, HUB_TRUST_POLICIES, counterSchema, identitySchema, hubDigestSchema, hubPackageIdSchema, hubVersionSchema,
-  type AuditEvent, type HubRevocationFeed, type VerifiedPrincipal } from '#domain/index.js';
+  type AuditEvent, type HubRevocationFeed, type HubRevocationCursor, type VerifiedPrincipal } from '#domain/index.js';
 import { artifactReceiptSchema, type ArtifactReceipt, type ArtifactStore } from '#capabilities/index.js';
 import type { AgentCatalogDependencies, AgentCatalogStore, CatalogUpstream } from '#engine/core/agent-catalog/index.js';
 import type { HubPackageVerification, HubPackageFile, HubVerificationKey } from '#engine/core/hub/index.js';
@@ -51,7 +51,7 @@ export interface HubClientStore extends AgentCatalogStore {
   hubReceipt(scopeId: string, commandId: string): Promise<HubReceipt | null>;
   finish(receipt: HubReceipt, event: AuditEvent): Promise<void>;
 }
-export type HubClientAction = 'inspect' | 'sources.add' | 'sources.remove' | 'install' | 'update' | 'uninstall' | 'export' | 'refresh';
+export type HubClientAction = 'inspect' | 'sources.add' | 'sources.remove' | 'install' | 'update' | 'uninstall' | 'export' | 'refresh' | 'search' | 'publish' | 'yank' | 'revoke';
 export interface HubClientDependencies {
   readonly catalog: AgentCatalogDependencies;
   readonly openStore: (access: 'read' | 'write') => Promise<HubClientStore>;
@@ -60,7 +60,7 @@ export interface HubClientDependencies {
   readonly authorize: (action: HubClientAction, scopeId: string, principal: VerifiedPrincipal) => Promise<{ revision: string; ruleId: string }>;
   /** H8/H9 resolve signed profiles, moderator rosters and delegation for non-pinned policies. No resolver = refused. */
   /** H4's governed transport (including first-use card) or an offline signed-file reader; never a raw fetch. */
-  readonly fetchRevocations?: (source: HubSource, afterSequence: number, signal: AbortSignal) => Promise<unknown>;
+  readonly fetchRevocations?: (source: HubSource, afterSequence: number, signal: AbortSignal, cursor?: HubRevocationCursor) => Promise<unknown>;
   readonly resolveTrust?: (source: HubSource, bundle: HubBundle, principal: VerifiedPrincipal, store: AgentCatalogStore, nowMs: number) => Promise<HubClientTrust>;
 }
 export class HubClientError extends Error {

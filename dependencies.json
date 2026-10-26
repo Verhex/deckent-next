@@ -264,7 +264,8 @@
         "src/surfaces/core/project-instructions",
         "src/surfaces/core/terminal-delivery",
         "src/surfaces/core/cli-human",
-        "src/surfaces/core/terminal-onboarding"
+        "src/surfaces/core/terminal-onboarding",
+        "src/surfaces/core/terminal-hub"
       ],
       "purpose": "Component model for the ink TUI.",
       "features": [

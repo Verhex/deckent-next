@@ -4,7 +4,7 @@ import type { SecretChangeAudit, SecretChangeAuthorization, SecretCustody, Secre
 export type OAuthConnectionCode = 'OAUTH_CONNECTION_INVALID' | 'OAUTH_CONNECTION_DENIED' | 'OAUTH_CONNECTION_UNAVAILABLE'
   | 'OAUTH_CONNECTION_CANCELLED' | 'OAUTH_CONNECTION_TIMEOUT' | 'OAUTH_CONNECTION_IDENTITY_INVALID'
   | 'OAUTH_CONNECTION_STORE_REQUIRED' | 'OAUTH_CONNECTION_CHANGED' | 'OAUTH_CONNECTION_REAUTHORIZE'
-  | 'OAUTH_CONNECTION_INTERACTIVE_REQUIRED' | 'OAUTH_CONNECTION_PLATFORM_UNSUPPORTED' | 'POLICY_APPROVAL_UNSUPPORTED';
+  | 'SIWC_STORE_NOT_PERSONAL' | 'OAUTH_CONNECTION_INTERACTIVE_REQUIRED' | 'OAUTH_CONNECTION_PLATFORM_UNSUPPORTED' | 'POLICY_APPROVAL_UNSUPPORTED';
 /** No vendor text, callback, token, URL or nested cause enters an error. */
 export class OAuthConnectionError extends Error {
   constructor(readonly code: OAuthConnectionCode) { super(code); this.name = 'OAuthConnectionError'; }

@@ -290,3 +290,13 @@ describe.skipIf(process.platform !== 'linux' || process.getuid?.() === 0)('REVIS
     expect(await readFile(m.record, 'utf8')).toBe(before); expect(await readFile(m.grants, 'utf8')).toBe(grants);
   });
 });
+
+it('refuses reserved sessions before generic resolution, admission checks or grant writes, including an injected resolver', async () => {
+  const name = 'DECKENT_CREDENTIAL_SESSION_FIXTURE'; let called = false;
+  const resolver = projectCredentialResolver({} as never, 'scope', { secretResolver: async () => { called = true; return MAIN_VALUE; } });
+  await expect(resolver.check(name)).rejects.toMatchObject({ code: 'SECRET_SESSION_RESERVED' });
+  await expect(resolver.resolve(name)).rejects.toMatchObject({ code: 'SECRET_SESSION_RESERVED' });
+  await expect(changeProjectSecretGrant('unused', 'scope', name, 'grant', 'admin', {}, { attest: async () => { called = true; return true; } }))
+    .rejects.toMatchObject({ code: 'SECRET_SESSION_RESERVED' });
+  expect(called).toBe(false);
+});

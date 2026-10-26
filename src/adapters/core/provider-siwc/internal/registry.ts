@@ -3,7 +3,7 @@ import asset from './registry.json' with { type: 'json' };
 import type { OAuthConnectionProtocol } from '#engine/index.js';
 const positive = z.number().int().positive().safe(), url = z.string().url().startsWith('https://');
 const sourced = { source: url, observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) };
-const parsed = z.object({ schemaVersion: z.literal(2), source: url, observedOn: z.string(), issuer: url, dynamicClientId: z.string().min(1),
+const parsed = z.object({ schemaVersion: z.literal(3), source: url, observedOn: z.string(), issuer: url, dynamicClientId: z.string().min(1),
   authorizationEndpoint: url, tokenEndpoint: url, discoveryEndpoint: url, resource: url, appName: z.string().min(1),
   identityScopes: z.array(z.string()), usageScopes: z.array(z.string()), usagePermission: z.string(), callbackPath: z.string().startsWith('/'),
   hostSecretName: z.string(), connectionSecretPrefix: z.string(), encryptedStoreId: z.string(), timeoutMs: positive, maxPending: positive, maxConnections: positive,
@@ -16,7 +16,9 @@ const parsed = z.object({ schemaVersion: z.literal(2), source: url, observedOn: 
   requestRules: z.object({ ...sourced, allowedFields: z.array(z.string()).min(1), unverifiedFields: z.array(z.string()), forbiddenFields: z.array(z.string()).min(1),
     store: z.literal(false), stream: z.literal(true) }).strict().refine(r => [...r.allowedFields, ...r.unverifiedFields].every(f => !r.forbiddenFields.includes(f))
       && r.allowedFields.every(f => !r.unverifiedFields.includes(f))),
-  usageErrors: z.object({ ...sourced, codes: z.record(z.string(), z.enum(['quota', 'plan-unavailable', 'login-required'])) }).strict(),
+  usageErrors: z.object({ ...sourced, codes: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,127}$/u), z.object({
+    refusal: z.enum(['quota', 'plan-unavailable', 'login-required', 'usage-unavailable', 'service-unavailable']),
+    status: z.number().int().min(400).max(599) }).strict()) }).strict(),
   terminalRefreshErrors: z.array(z.string()).min(1) }).strict().parse(asset);
 export const SIWC_PROTOCOL: OAuthConnectionProtocol = Object.freeze({ ...parsed, identityScopes: Object.freeze(parsed.identityScopes), usageScopes: Object.freeze(parsed.usageScopes) });
 export const SIWC_LIMITS = Object.freeze(parsed.limits);

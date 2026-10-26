@@ -1,6 +1,6 @@
 # AI floor compliance / AI yetki tabanı uyumu
 
-ai-floor: routes=355 floor=269 policy=2130 steps=48 uyumlu=2178 İHLAL=0
+ai-floor: routes=367 floor=269 policy=2202 steps=48 uyumlu=2250 İHLAL=0
 
 Pure source policy evaluator and explicit step gate; human-tty-policy is a verified os-user fixture, not terminal attestation.
 
@@ -1653,6 +1653,78 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 | execution-environment / fixture-target / install | host | legacy-mcp-os-user-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | execution-environment / fixture-target / install | host | workload-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | execution-environment / fixture-target / install | host | token-granted | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
+| hub / fixture-target / export | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| hub / fixture-target / export | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / export | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / export | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / export | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / export | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / inspect | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| hub / fixture-target / inspect | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / inspect | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / inspect | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / inspect | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / inspect | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / install | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| hub / fixture-target / install | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / install | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / install | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / install | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / install | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / publish | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| hub / fixture-target / publish | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / publish | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / publish | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / publish | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / publish | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / refresh | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| hub / fixture-target / refresh | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / refresh | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / refresh | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / refresh | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / refresh | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / revoke | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| hub / fixture-target / revoke | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / revoke | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / revoke | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / revoke | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / revoke | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / search | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| hub / fixture-target / search | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / search | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / search | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / search | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / search | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / sources.add | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| hub / fixture-target / sources.add | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / sources.add | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / sources.add | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / sources.add | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / sources.add | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / sources.remove | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| hub / fixture-target / sources.remove | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / sources.remove | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / sources.remove | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / sources.remove | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / sources.remove | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / uninstall | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| hub / fixture-target / uninstall | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / uninstall | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / uninstall | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / uninstall | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / uninstall | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / update | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| hub / fixture-target / update | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / update | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / update | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / update | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / update | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / yank | vocabulary | ai-no-cell | deny/NO_GRANT | deny/NO_GRANT | uyumlu | NO_GRANT |
+| hub / fixture-target / yank | vocabulary | ai-granting-cell | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / yank | vocabulary | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / yank | vocabulary | legacy-mcp-os-user-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / yank | vocabulary | workload-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
+| hub / fixture-target / yank | vocabulary | token-granted | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
 | installation / fixture-target / repair | host | ai-no-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | installation / fixture-target / repair | host | ai-granting-cell | deny/AI_NON_DELEGABLE | deny/AI_NON_DELEGABLE | uyumlu | AI_NON_DELEGABLE |
 | installation / fixture-target / repair | host | human-tty-policy | allow/GRANTED | allow/GRANTED | uyumlu | GRANTED |
@@ -2236,7 +2308,7 @@ Regenerate: `npm run report:ai-floor`. Check without writing: `npm run report:ai
 - `src/domain/core/policy/internal/schema.ts`: `7ee507ceee1166b0f2fada5ad67e334ab5c883b47ad7a16f4ec3f0665220df9c`
 - `src/domain/core/policy/internal/scope.ts`: `7515bab07e7ee92d03be12c0a8710f72d6973419ca53a79fdeff61a84a496da4`
 - `src/domain/core/policy/internal/standing.ts`: `bb3b4f7c301474d2df1f690d85f3b1ea7219fbfe6f90af8b8d680017bb50d5db`
-- `src/domain/core/policy/internal/vocabulary.ts`: `da3e2aff17489dd0433f1c11157899621d142ba781d094ab478b1203764659ac`
+- `src/domain/core/policy/internal/vocabulary.ts`: `16216ab96535b21944f5cfc3d9d4ad6d3d559d0edf92bfb443ab7673dd2f87e1`
 - `src/domain/core/primitives/index.ts`: `bca3a0460c7c89157faec5c9708e334c64a73d4e4753e271b7ca39c03cf144b4`
 - `src/domain/core/primitives/internal/command-id.ts`: `69a16b34a9225fe7c8bb1047e9b9e99d03fd71573baf2281bfa8e870e1a219c9`
 - `src/domain/core/primitives/internal/hidden-paths.ts`: `0f7e83b0231ee7deaf9487bb1bdc8e6f7f27fd6cb914bae341a59462596f2916`
