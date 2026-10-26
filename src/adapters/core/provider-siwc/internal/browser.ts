@@ -43,10 +43,9 @@ export async function siwcBrowserAuthorization(makeUrl: (redirectUri: string) =>
       || parsed.pathname !== new URL(SIWC_PROTOCOL.authorizationEndpoint).pathname
       || !expectedState || ['id_token_hint', 'access_token', 'refresh_token', 'code'].some(key => parsed.searchParams.has(key))) throw new OAuthConnectionError('OAUTH_CONNECTION_INVALID');
     const browser = spawn('xdg-open', [url], { stdio: 'ignore', shell: false, env: callerEnvironment(process.env) });
-    let shown = false;
-    const fallback = () => { if (!shown) { shown = true; presentation.fallback?.(url); } };
-    browser.once('error', fallback);
-    browser.once('exit', code => { if (code !== 0) fallback(); });
+    // The link is always shown (as Claude Code / Codex do): on SSH or a headless host xdg-open may "succeed" without a browser the person sees.
+    browser.once('error', () => { /* no opener: the link on screen is the way in */ });
+    presentation.fallback?.(url);
     const stopBrowser = () => { browser.kill(); };
     signal.addEventListener('abort', stopBrowser, { once: true });
     try { return await result; } finally { signal.removeEventListener('abort', stopBrowser); browser.kill(); }

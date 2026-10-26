@@ -24,7 +24,7 @@ export default function SiwcWindow({ port, onClose, onError }: { readonly port: 
   const lines = stage === 'background' ? [t('siwc.card.body', {}, port.locale), t('siwc.privacy.body', {}, port.locale), t('siwc.card.connectedAppOnly', {}, port.locale), t('siwc.card.background', {}, port.locale)]
     : stage === 'api' ? [t('siwc.card.apiQuestion', {}, port.locale), t('siwc.card.apiCost', {}, port.locale)]
       : stage === 'browser' ? [t('siwc.browser.waiting', { seconds }, port.locale), ...(url ? [t('siwc.browser.fallback', {}, port.locale), url] : [])]
-        : problem ? [problem, t('siwc.custody.personalRequired', {}, port.locale)] : [t('siwc.preview', {}, port.locale), result?.state === 'disconnected' ? t('siwc.revoke.done', {}, port.locale) : t('siwc.welcome.body', {}, port.locale), ...(result?.email ? [result.email] : []),
+        : problem ? [problem] : [t('siwc.preview', {}, port.locale), result?.state === 'disconnected' ? t('siwc.revoke.done', {}, port.locale) : t('siwc.welcome.body', {}, port.locale), ...(result?.email ? [result.email] : []),
           ...(usageUrl ? [t('siwc.usage.manage', { url: usageUrl }, port.locale)] : []),
           ...(result?.usage ? [result.usage.state === 'complete' ? t('siwc.usage.summary', { days: result.usage.days, total: result.usage.completedRequests!, busiest: result.usage.busiestDayRequests!, active: result.usage.activeDays! }, port.locale) : t('siwc.usage.unknown', {}, port.locale)] : []),
           ...(result?.remoteRevocation === 'unconfirmed' ? [t('siwc.revoke.unconfirmed', {}, port.locale)] : []),
@@ -52,7 +52,7 @@ export default function SiwcWindow({ port, onClose, onError }: { readonly port: 
       { signal: abort.signal, fallback: value => { if (!abort.signal.aborted) setUrl(value); } });
     if (!abort.signal.aborted) { setResult(connected); setSelection({ at: 0, ticked: [] }); setStage('result'); }
   };
-  return <Window title={[span(t('siwc.card.title', {}, port.locale))]} body={lines.map(text => ({ spans: [span(terminalSafeText(text))] }))}
+  return <Window title={[span(t('siwc.card.title', {}, port.locale))]} body={lines.map(text => ({ spans: [span(terminalSafeText(text))], ...(text === url ? { exact: true } : {}) }))}
     hints={t('siwc.card.keys', {}, port.locale)} position="{from}-{to}/{total}" priority={WINDOW_PRIORITY.approval} decision footerRows={options.length}
     footer={owns => <QuestionRows kind="single" options={options} state={selection} focused={owns} />} onClose={close}
     onInput={(input, key, meta) => {
@@ -61,7 +61,9 @@ export default function SiwcWindow({ port, onClose, onError }: { readonly port: 
       if (next.kind === 'cancel') { close(); return true; }
       if (next.kind === 'move') { current.current = next.state; setSelection(next.state); return true; }
       if (next.kind === 'submit' && next.ids[0] && !busy.current) { busy.current = true; void choose(next.ids[0]).catch(error => {
-        if (!controller.current?.signal.aborted) { const code = (error as { code?: string })?.code ?? 'unknown'; setProblem(ErrorRegistry.get(code, port.locale)?.message ?? t('error.unknown', { code }, port.locale)); setStage('result'); onError(ErrorRegistry.createError(code)); }
+        // R23: the refusal keeps its own cause (the CLI's and doctor's words and fix); the card resets its selection so Enter closes it.
+        if (!controller.current?.signal.aborted) { const code = (error as { code?: string })?.code ?? 'unknown', params = (error as { params?: Readonly<Record<string, string | number>> })?.params ?? {};
+          setProblem(ErrorRegistry.get(code, port.locale, params)?.message ?? t('error.unknown', { code }, port.locale)); current.current = { at: 0, ticked: [] }; setSelection(current.current); setStage('result'); onError(ErrorRegistry.createError(code, { params })); }
       }).finally(() => { busy.current = false; }); return true; }
       return key.tab;
     }} />;
