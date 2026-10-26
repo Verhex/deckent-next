@@ -137,12 +137,16 @@ try {
     // The in-build proxy is a predefined build argument: Docker leaves it out of `docker history` and the cache key (Dockerfile reference,
     // "Predefined ARGs"); the plan already refused a proxy URL with credentials. Base pulls use the daemon's own proxy configuration.
     const proxy = plan.proxy ? ['HTTPS_PROXY', 'HTTP_PROXY', 'https_proxy', 'http_proxy'].flatMap(name => ['--build-arg', `${name}=${plan.proxy}`]) : [];
+    // A Docker without the buildx plugin (Ubuntu's docker.io) runs the legacy builder, which has no `--progress` or `--secret`: the
+    // background build stays on it (progress.json below is the builder's own), and only the credentialed mirror path needs BuildKit.
+    const buildkit = (() => { try { command(['buildx', 'version'], 20_000); return true; } catch { return false; } })();
+    if (npmrcSecret && !buildkit) throw new Error('WORKER_IMAGE_BUILDKIT_REQUIRED: a credentialed mirror build needs the Docker buildx plugin (BuildKit secret mount)');
     const progress = step => writeFileSync(join(root, 'progress.json'), JSON.stringify({ step, at: new Date().toISOString() }), { mode: 0o600 });
     const buildOne = (name, text, pull) => {
       progress(name === 'Dockerfile.base' ? 'base' : `layer:${plan.images[Number(/image-(\d+)/.exec(name)[1]) - 1][0]}`);
       writeFileSync(join(root, name), text, { flag: 'wx', mode: 0o600 });
       const iidfile = join(temporary, `${name}.id`), at = Date.now();
-      command(['build', ...(pull ? ['--pull'] : []), ...proxy, ...(npmrcSecret ? ['--secret', `id=worker-npmrc,src=${npmrcSecret}`] : []), '--progress=plain', '-f', join(root, name), '--iidfile', iidfile, root], Math.min(plan.buildTimeoutMs, left()), true);
+      command(['build', ...(pull ? ['--pull'] : []), ...proxy, ...(npmrcSecret ? ['--secret', `id=worker-npmrc,src=${npmrcSecret}`] : []), ...(buildkit ? ['--progress=plain'] : []), '-f', join(root, name), '--iidfile', iidfile, root], Math.min(plan.buildTimeoutMs, left()), true);
       const id = readFileSync(iidfile, 'utf8').trim();
       if (!/^sha256:[a-f0-9]{64}$/.test(id) || idOf(id) !== id) throw new Error('WORKER_IMAGE_ID_INVALID');
       return { id, ms: Date.now() - at };

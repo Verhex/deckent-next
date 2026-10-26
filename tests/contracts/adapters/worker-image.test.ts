@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { readWorkerImageHeldVersion, prepareWorkerImageBuildContext, readWorkerImageSources, resolveWorkerBuildPlan, runWorkerImageBuild, type WorkerImageBuildRunner } from '#adapters/index.js';
+import { readWorkerImageHeldVersion, prepareWorkerImageBuildContext, readWorkerImageSources, resolveWorkerBuildPlan, runWorkerImageBuild, workerImageEstimate, type WorkerImageBuildRunner } from '#adapters/index.js';
 import { layeredWorkerRecipeSchema } from '#engine/index.js';
 import { parseVersionHistory, validateRecipe, assertVersionAdvances, heldVersion, adoptionProvenance } from '../../../assets/worker-image/history.mjs';
 import { baseDockerfile, imageDockerfile } from '../../../assets/worker-image/layers.mjs';
@@ -11,6 +11,13 @@ import { baseDockerfile, imageDockerfile } from '../../../assets/worker-image/la
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const packageRoot = process.cwd();
+
+it('IMGOPT: the image card names the measured base plus exactly the selected CLIs, every recipe CLI is measured, an unmeasured one is not guessed', async () => {
+  const ids = layeredWorkerRecipeSchema.parse((await readWorkerImageSources(packageRoot)).recipe).providers.map(provider => provider.id);
+  const all = workerImageEstimate(ids), single = ids.map(id => workerImageEstimate([id]));
+  expect(single.every(row => row.sizeGigabytes! > 0 && row.sizeGigabytes! < all.sizeGigabytes! && row.referenceMs! < all.referenceMs!)).toBe(true);
+  expect(workerImageEstimate(['unmeasured-cli'])).toEqual({ sizeGigabytes: null, referenceMs: null });
+});
 
 it('v3 resolves at plan time from the install registry, isolates CLI cache inputs, guards lineage and refuses unknown or credentialed sources', async () => {
   const recipe = layeredWorkerRecipeSchema.parse((await readWorkerImageSources(packageRoot)).recipe);
@@ -141,6 +148,22 @@ esac
     }
     expect((await readFile(log, 'utf8')).split('\n').some(line => / (build|tag|rmi|run) /.test(line))).toBe(false);
     expect((await readdir(parent)).sort()).toEqual(['bin', 'builds', 'docker-calls.log']);
+    // IMGOPT: a Docker without buildx (Ubuntu docker.io) keeps the legacy builder for the background path; only the credentialed mirror
+    // path needs BuildKit's secret mount, and it is refused before any build call.
+    await writeFile(join(bin, 'docker'), `#!/bin/sh
+printf '%s\\n' "$*" >> '${log}'
+case "$*" in
+  'context inspect --format {{json .Endpoints.docker.Host}}') printf '%s\\n' '"unix:///fixture-daemon"' ;;
+  '--host unix:///fixture-daemon info --format {{.ID}}') printf '%s\\n' 'fixture-daemon-id' ;;
+  '--host unix:///fixture-daemon image inspect '*|'--host unix:///fixture-daemon buildx version') exit 1 ;;
+  '--host unix:///fixture-daemon image ls '*) exit 0 ;;
+  *) exit 99 ;;
+esac
+`, { mode: 0o700 });
+    const npmrc = join(parent, 'npmrc'), receipts = join(parent, 'receipts'); await writeFile(npmrc, '//registry.invalid/:_authToken=fixture\n', { mode: 0o600 }); await mkdir(receipts, { mode: 0o700 });
+    const legacy = builder([join(receipts, 'r4-20260930.json'), '--npmrc-secret', npmrc]);
+    expect(legacy.status).toBe(1); expect(legacy.stderr).toMatch(/^Error: WORKER_IMAGE_BUILDKIT_REQUIRED: [^\n]+\n$/);
+    expect((await readFile(log, 'utf8')).split('\n').some(line => / build /.test(line))).toBe(false);
   });
   it('copies the shipped builder into a private exclusive context with the edited Dockerfile and recipe, leaving package bytes untouched', async () => {
     const sources = await readWorkerImageSources(packageRoot);

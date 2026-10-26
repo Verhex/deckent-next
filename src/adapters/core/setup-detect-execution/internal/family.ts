@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { workerFactsSchema, workerSetupStages, type SetupDecision, type SetupFamilyPackage, type SetupOperation, type SetupStageContext } from '#engine/index.js';
-import limits from './limits.json' with { type: 'json' };
+import { WORKER_IMAGE_ESTIMATED_GB } from './estimate.js';
 
 const version = z.string().regex(/^[0-9A-Za-z.+~_-]{1,64}$/u).nullable();
 /** One registry entry as detected. `daemon`: reachable | unreachable (stopped, socket missing) | no-permission (this user may not open the
@@ -20,7 +20,8 @@ export type ExecutionInstallOffer = Readonly<{ operation: SetupOperation; questi
   cli: readonly string[] | null }>;
 /** `person`: a person answers in the window, so the worker-image build may be offered (never to a pipe, `--json`, an agent or `--yes`). */
 export type ExecutionFamilyOptions = Readonly<{ install?: (facts: ExecutionFacts) => ExecutionInstallOffer | null; person?: boolean }>;
-export const EXECUTION_STAGE_ID = 'execution:runtime', WORKER_IMAGE_ESTIMATED_GB: number = limits.workerImageGigabytes;
+export const EXECUTION_STAGE_ID = 'execution:runtime';
+export { WORKER_IMAGE_ESTIMATED_GB };
 
 const reason = (code: string, params: Record<string, string | number> = {}) => ({ code: `setup.execution.${code}`, params });
 const blocked = (code: string, params: Record<string, string | number> = {}): SetupDecision => ({ state: 'blocked', reason: reason(code, params) });

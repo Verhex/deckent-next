@@ -116,7 +116,10 @@ it('U6-S4: image consent immediately follows work choice, offers verified adopti
   expect(question.choices[1]).toMatchObject({ disabled: true });
   expect(question.body.join('\n')).toContain('https://mirror.invalid/prefix'); expect(question.body.join('\n')).toContain(missing);
   expect(question.body.join('\n')).toContain('No task starts');
-  expect(workerImageQuestion({ providers: [], sources: [], proxy: null, baseRef: 'base', sizeGigabytes: 1, buildTimeoutMs: 20000, previousMs: 3000 }, 'en').body.join('\n')).toContain('Previous measured preparation');
+  expect(workerImageQuestion({ providers: [], sources: [], proxy: null, baseRef: 'base', sizeGigabytes: 1, buildTimeoutMs: 20000, previousMs: 3000, referenceMs: 70000 }, 'en').body.join('\n')).toContain('Previous measured preparation');
+  // IMGOPT: without a build on this machine the card names the recipe's measured reference build; the timeout is only an upper limit.
+  const reference = workerImageQuestion({ providers: [], sources: [], proxy: null, baseRef: 'base', sizeGigabytes: 1.5, buildTimeoutMs: 1_800_000, referenceMs: 70000 }, 'tr').body.join('\n');
+  expect(reference).toContain('referans makinede'); expect(reference).toContain('1,5 GB'); expect(reference).toContain('üst sınır');
   const acquisition = { schemaVersion: 1 as const, revision: 1, instanceId: 'instance', consentId: 'consent', phase: 'ready' as const, step: null, startedAt: '2026-10-26T00:00:00.000Z',
     lastProgressAt: '2026-10-26T00:00:02.000Z', expiresAt: '2026-10-26T00:01:00.000Z', daemonId: 'daemon', code: null, context: null,
     images: [{ provider: 'selected-cli', consentId: 'consent', recipeDigest: 'a'.repeat(64), daemonId: 'daemon', imageId: id, imageVersion: 'r32-20261026', tagVersion: 'r32-selected-cli', receiptPath: '/tmp/receipt' }] };

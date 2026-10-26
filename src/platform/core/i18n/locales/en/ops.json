@@ -513,6 +513,7 @@
   "error.WORKER_IMAGE_INSTALLER_CHANGED": "The installer changed after planning. Review a new plan before building.",
   "error.WORKER_IMAGE_SOURCE_CREDENTIALS_REFUSED": "Credentials in image source URLs are refused. Use a BuildKit secret mount for authenticated mirrors.",
   "error.WORKER_IMAGE_SOURCE_INSECURE": "Worker registry and installer sources require HTTPS. Review the complete source URL.",
+  "error.WORKER_IMAGE_BUILDKIT_REQUIRED": "A credentialed mirror build needs Docker BuildKit (the buildx plugin) for its secret mount. Install the Docker buildx plugin, or use sources without credentials.",
   "error.WORKER_LINEAGE_INVALID": "The packaged worker recipe lineage is invalid. Use a verified Deckent package.",
   "models.connect.cause.no-credential": "no stored credential",
   "models.connect.cause.credential-rejected": "credential rejected",

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, symlinkSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 // One provider layer of a worker image (recipe schema 3): the descriptor is this RUN line's own argument (layers.mjs), so the layer's cache
 // key is exactly its install input. A known refusal is one `Error: WORKER_<CODE>: <detail>` line (the builder promotes it), never a stack.
@@ -38,5 +38,7 @@ if (d.kind === 'npm') {
   if (!/^[\w.+-]{1,64}$/.test(version)) throw new Error('WORKER_VERSION_INVALID');
   record = { kind: 'vendor-script', url: d.url, installerSha256, version };
 } else throw new Error('WORKER_PLAN_INVALID: unknown installer kind');
+// IMGOPT: what the install left in /tmp (npm's compile cache, the vendor CLI's build-time HOME and logs) stays out of the layer; the base's /tmp is empty.
+for (const name of readdirSync('/tmp')) rmSync(`/tmp/${name}`, { recursive: true, force: true });
 mkdirSync(`${root}/installed`, { recursive: true });
 writeFileSync(`${root}/installed/${d.id}.json`, JSON.stringify({ schemaVersion: 2, id: d.id, ...record }, null, 2) + '\n');
