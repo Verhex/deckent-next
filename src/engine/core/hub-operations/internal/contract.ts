@@ -7,6 +7,11 @@ const scoped = z.object({ schemaVersion: z.literal(1), scopeId: identitySchema }
 const source = scoped.extend({ hubId: hubDigestSchema });
 const command = hubClientCommandSchema;
 const packageQuery = source.extend({ packageId: hubPackageIdSchema, version: hubVersionSchema.optional() });
+/** The hub's page cursor is its own `<packageId>@<version>` key (hub-mcp nextCursor); nothing else, so no free text rides it out of the scope. */
+const searchCursor = z.string().max(HUB_LIMITS.packageMaxBytes).refine(value => {
+  const at = value.lastIndexOf('@');
+  return value === '' || (hubPackageIdSchema.safeParse(value.slice(0, at)).success && hubVersionSchema.safeParse(value.slice(at + 1)).success);
+});
 const bundle = z.string().min(1).max(HUB_LIMITS.httpMaxBytes);
 const install = command.extend({ bundles: z.array(bundle).min(1).max(HUB_LIMITS.dependenciesMax + 1), feed: hubRevocationFeedSchema,
   feeds: z.record(hubDigestSchema, hubRevocationFeedSchema).default({}), workClassMapping: z.record(z.string(), identitySchema).default({}) });
@@ -19,7 +24,7 @@ export const hubOperationSchemas = {
     endpoint: z.string().min(1).max(2048), local: z.boolean().default(false), label: z.string().min(1).max(256),
     trustPolicy: z.string().default(HUB_TRUST_POLICIES.addedSourceDefault) }),
   'hub.sources.remove': command.extend({ expectedRevision: z.number().int().positive() }),
-  'hub.search': source.extend({ after: z.string().max(HUB_LIMITS.packageMaxBytes).default(''), limit: z.number().int().min(1).max(HUB_LIMITS.searchPageMax).default(HUB_LIMITS.searchPageMax) }),
+  'hub.search': source.extend({ after: searchCursor.default(''), limit: z.number().int().min(1).max(HUB_LIMITS.searchPageMax).default(HUB_LIMITS.searchPageMax) }),
   'hub.inspect': packageQuery.extend({ location: z.enum(['installed', 'source']).default('installed') }).refine(value => value.location !== 'source' || value.version !== undefined),
   'hub.install': install,
   'hub.update': install,

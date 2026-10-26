@@ -522,6 +522,9 @@ it('H7 scans every outbound package before network using the local known-secret 
   const app = new HubApplication({ client: f.app, remote, knownSecrets: () => snapshotKnownSecrets([{ name: 'SYNTHETIC', value: 'Review invoice.' }]) });
   await expect(app.execute({ operation: 'hub.publish', input: { schemaVersion: 1, scopeId: 's', commandId: 'publish', hubId: hub.keyId,
     input: { bundle: JSON.parse(Buffer.from(encodeHubBundle(bundle())).toString('utf8')) } } })).rejects.toMatchObject({ code: 'HUB_SECRET_REFUSED' });
+  // Not only publish: a yank reason carrying the known secret is refused before transport.
+  await expect(app.execute({ operation: 'hub.yank', input: { schemaVersion: 1, scopeId: 's', hubId: hub.keyId, commandId: 'yank',
+    input: { schemaVersion: 1, commandId: 'yank', kind: 'package-version', id: 'acme/invoice@1.0.0', reason: 'Withdrawn: Review invoice.', authority: 'publisher' } } })).rejects.toMatchObject({ code: 'HUB_SECRET_REFUSED' });
   expect(remote).not.toHaveBeenCalled();
 });
 

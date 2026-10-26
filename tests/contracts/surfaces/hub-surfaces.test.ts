@@ -45,4 +45,7 @@ it('Hub schemas stay strict and MCP inventory omits every person-only operation'
     expect(executeHub).toHaveBeenCalledWith({ operation: 'hub.sources.list', input: { schemaVersion: 1, scopeId: 's' } }, expect.any(AbortSignal));
   } finally { await client.close(); await server.close(); }
   expect(hubOperationSchemas['hub.search'].parse({ schemaVersion: 1, scopeId: 's', hubId: hub.keyId }).limit).toBeGreaterThan(0);
+  // The search cursor is only the hub's own `<packageId>@<version>` page key; free text never rides it to the hub.
+  expect(hubOperationSchemas['hub.search'].safeParse({ schemaVersion: 1, scopeId: 's', hubId: hub.keyId, after: 'acme/invoice@1.0.0' }).success).toBe(true);
+  expect(hubOperationSchemas['hub.search'].safeParse({ schemaVersion: 1, scopeId: 's', hubId: hub.keyId, after: 'Review invoice.' }).success).toBe(false);
 });

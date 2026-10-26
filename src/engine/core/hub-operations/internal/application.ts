@@ -38,11 +38,13 @@ export class HubApplication {
     request = parseHubOperation(JSON.parse(canonicalHubJson(request))) as HubRemoteOperation;
     const client = this.ports.client;
     const principal = await client.authorizeRemote(request.operation === 'hub.inspect' ? 'search' : request.operation.slice(4) as 'search' | 'publish' | 'yank' | 'revoke', request.input.scopeId);
+    const known = this.ports.knownSecrets?.() ?? EMPTY_KNOWN_SECRETS;
+    const secret = (text: string) => hasSecret(text, known) || REDACTION_GATE_PATTERNS.some(pattern => new RegExp(pattern.source, pattern.flags).test(text));
+    // Every remote input leaves the scope, not only a publish bundle: the outbound gate sees the exact canonical input that is sent.
+    if (secret(canonicalHubJson(request.input))) throw ErrorRegistry.createError('HUB_SECRET_REFUSED');
     if (request.operation === 'hub.publish') {
       const bundle = decodeHubBundle(Buffer.from(canonicalHubJson(request.input.input.bundle)));
       if (bundle.manifest.provenance.origin === 'lessons(derived)' && isAiPrincipal(principal)) throw new HubClientError('HUB_AUTHORITY_REFUSED');
-      const known = this.ports.knownSecrets?.() ?? EMPTY_KNOWN_SECRETS;
-      const secret = (text: string) => hasSecret(text, known) || REDACTION_GATE_PATTERNS.some(pattern => new RegExp(pattern.source, pattern.flags).test(text));
       if (secret(canonicalHubJson(bundle.manifest)) || bundle.files.some(file => secret(Buffer.from(file.bytes).toString('utf8')))) throw ErrorRegistry.createError('HUB_SECRET_REFUSED');
     }
     if ((request.operation === 'hub.yank' || request.operation === 'hub.revoke') && request.input.input.authority === 'operator' && isAiPrincipal(principal))

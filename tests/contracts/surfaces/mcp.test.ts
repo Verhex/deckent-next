@@ -77,7 +77,9 @@ it.skipIf(process.platform !== 'linux')('[requires Linux local runtime socket] s
     const tools = (await client.listTools()).tools;
     expect(tools.filter(t => !['plan_run', 'propose_run', 'renew_approval', 'create_run', 'reserve_run_tasks', 'request_run_cancellation', 'deliver_run_cancellation', 'reconcile_attempt', 'execute_task', 'evaluate_task', 'shutdown_runtime_service', 'admit_model_activation', 'apply_model_catalog', 'connect_model', 'apply_pool_hold', 'apply_pool_capacity', 'invoke_model', 'purge_model_invocation_content', 'cancel_model_invocation', 'manage_provider_spending', 'audit_provider_spending', 'update_toolchains', 'control_run',
       // S8-4: the signed catalog writes.
-      'define_agent', 'define_skill', 'import_skill', 'change_agent_standing', 'dismiss_agent_suggestion'].includes(t.name)).every(t => t.annotations?.readOnlyHint === true)).toBe(true);
+      'define_agent', 'define_skill', 'import_skill', 'change_agent_standing', 'dismiss_agent_suggestion',
+      // H7: the governed hub writes (person-only source changes and cards are absent from the AI inventory).
+      'hub_install', 'hub_update', 'hub_uninstall', 'hub_refresh', 'hub_publish', 'hub_yank', 'hub_revoke'].includes(t.name)).every(t => t.annotations?.readOnlyHint === true)).toBe(true);
     expect(tools.find(t => t.name === 'release_quota')).toBeUndefined();
     for (const name of ['plan_run', 'propose_run']) expect(tools.find(tool => tool.name === name)!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: true });
     expect(tools.find(t => t.name === 'apply_pool_capacity')!.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false });
