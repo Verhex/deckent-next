@@ -5,7 +5,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { transform } from 'esbuild';
 import { DockerSupervisor } from '#adapters/core/docker-supervisor/index.js';
-import { openSiwcWorkerRelay, stopSiwcWorker, assertSiwcWorkerLaunchable, siwcWorkerResultError, type SiwcUpstream, type SiwcRelayRecord, type SiwcNativeApproval } from '#adapters/core/siwc-worker/index.js';
+import { compileNativeCodingDockerProfile } from '#adapters/core/native-coding/index.js';
+import { openSiwcWorkerRelay, stopSiwcWorker, assertSiwcWorkerLaunchable, siwcWorkerResultError, siwcWorkerConnections, bindSiwcWorker, type SiwcUpstream, type SiwcRelayRecord, type SiwcNativeApproval } from '#adapters/core/siwc-worker/index.js';
 import type { SandboxRequest } from '#engine/index.js';
 
 // Source integration: the relay hashes its own standalone programs; tests mount esbuild transpilations of the exact candidate sources.
@@ -245,4 +246,27 @@ it('launch gate: activation hold, missing Yama scope, foreign platform or a Code
   expect(refusal({ platform: 'linux', imageCodexVersion: null, ptraceScope: 1 })).toMatchObject({ code: 'SIWC_APP_SERVER_AUTH_UNAVAILABLE', params: { reason: 'image-codex-missing' } });
   // Real activation stays held until the operator's real-binary proof: even a fully provable host refuses.
   expect(refusal({ platform: 'linux', imageCodexVersion: '0.164.0', ptraceScope: 1 })).toMatchObject({ code: 'SIWC_APP_SERVER_AUTH_UNAVAILABLE', params: { reason: 'activation-hold' } });
+});
+
+it('producer: only a consented, personally custodied connection of the same person binds a Codex worker on its exact model, and nothing while held (U9-7)', async () => {
+  const person = { issuer: 'local', subject: 'person' }, id = randomUUID(), other = randomUUID();
+  const siwc = (connectionId: string, modelId: string, owner = person, classes: string[] | null = ['system'], scopeId = 's') => ({ schemaVersion: 2, billingAxis: 'subscription', id: `p-${modelId}`, version: 1, scopeId,
+    reference: { providerId: 'chatgpt-login', providerVersion: 1, modelId, modelVersion: 1 }, bindingDigest: 'a'.repeat(64), protocol: { family: 'responses', version: 'v1' },
+    adapter: { id: 'siwc-responses', version: 1, definition: { schemaVersion: 1, connectionId, owner, rawUse: 'person', apiContinuation: null,
+      delegatedUse: classes ? { consentedBy: owner, atMs: 7, classes } : null } }, allocation: { id: 'a', maxCalls: null, maxInFlight: 1 },
+    limits: { requestMaxBytes: 1024, responseMaxBytes: 1024, timeoutMs: 1000 } });
+  const profiles = { profiles: [siwc(id, 'm'), siwc(id, 'm-ai', person, ['ai']), siwc(id, 'm-none', person, null), siwc(randomUUID(), 'm-other', { issuer: 'local', subject: 'else' }),
+    siwc(other, 'm-uncustodied'), siwc(id, 'm-elsewhere', person, ['system'], 'b')] };
+  const custody: string[] = [], read = (activation: 'hold' | 'open') => siwcWorkerConnections({ profiles, scopeIds: ['s'], actor: person, activation,
+    custody: async (_scope, connectionId) => { custody.push(connectionId); return connectionId === id; } });
+  expect(await read('hold')).toEqual([]); expect(custody).toEqual([]);
+  const rows = await read('open');
+  expect(rows).toEqual([{ scopeId: 's', connectionId: id, owner: person, modelId: 'm', consentAtMs: 7 }]); expect(new Set(custody)).toEqual(new Set([id, other]));
+  const template = { id: 't', version: 1, adapter: { id: 'docker', version: 2 }, parameters: { argv: ['unused'], imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456,
+    pids: 64, cpus: 1, logMaxSizeKiB: 64, logMaxFiles: 2, tmpBytes: 16777216, deadlineMs: 20000, controlTimeoutMs: 10000, outputBytes: 65536 } };
+  const worker = (modelId: string) => compileNativeCodingDockerProfile(template, { schemaVersion: 4, provider: 'codex', cliVersion: 'codex-cli 0.164.0', discovery: { schemaVersion: 1, mode: 'repository' },
+    permissionMode: 'unattended', model: { channelId: 'c', modelId, auxiliaryModelIds: [] }, composition: { schemaVersion: 1, task: 'Edit note.txt', scope: 'note.txt', acceptance: 'Zero exit' } });
+  expect(bindSiwcWorker(worker('m'), rows, 's').parameters['siwcWorker']).toMatchObject({ schemaVersion: 1, connectionId: id, owner: person });
+  // Another model, another scope or no consented connection keeps the profile exactly as compiled (its existing route).
+  for (const [profile, scope, given] of [[worker('m-ai'), 's', rows], [worker('m'), 'b', rows], [worker('m'), 's', []]] as const) expect(bindSiwcWorker(profile, given, scope)).toEqual(profile);
 });

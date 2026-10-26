@@ -99,6 +99,14 @@
             "--config"
           ]
         }
+      },
+      "appServer": {
+        "args": [
+          "app-server"
+        ],
+        "source": "https://learn.chatgpt.com/docs/developer-commands#codex-app-server",
+        "observedOn": "2026-10-26",
+        "support": "experimental"
       }
     },
     "claude": {

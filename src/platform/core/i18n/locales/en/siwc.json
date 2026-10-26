@@ -55,5 +55,6 @@
   "siwc.worker.preparing": "Preparing isolated worker",
   "siwc.worker.stopping": "Stopping worker",
   "siwc.worker.cleanupUnproven": "Cleanup unverified",
-  "siwc.relay.refused": "Model connection refused"
+  "siwc.relay.refused": "Model connection refused",
+  "siwc.worker.activationHold": "The Codex worker on your ChatGPT plan is not activated yet; nothing was sent and no effect ran. OpenAI's documentation marks the Codex app-server command and its WebSocket transport as experimental: Deckent's boundary proof for the pinned binary and transport is not vendor production support or a compliance approval of this combination, so an unsupported combination stops with this typed refusal before any authenticated work. Use an already supported worker connection meanwhile."
 }

@@ -198,8 +198,12 @@ Alpha.56 maddeleri aday kodu ve owner kararlarını anlatır; sürüm yayını v
 - **ChatGPT ile giriş aday koddur; işçi etkinleştirmesi bekletilir.** Alpha.56 kişi girişini, rızayı ve bağlantı
   saklamasını ekler. Codex app-server yalıtılmış işçide çalışır; host app-server yolu reddedilmiştir.
   Gerçek binary ile N1 kanıtına kadar işçi etkinleştirmesi HOLD'dur (`SIWC_APP_SERVER_AUTH_UNAVAILABLE`, neden `activation-hold`);
-  eksik yalıtım tipli rettir, host/token dosyası alternatifi yoktur. *Yol:* desteklenen mevcut bağlantıyı kullanın;
-  girişin başarılı olması Codex işçisinin kullanılabildiğini kanıtlamaz.
+  eksik yalıtım tipli rettir, host/token dosyası alternatifi yoktur. Bekletme sürerken hiçbir Run bu yola atanmaz ve Codex
+  işçisi mevcut bağlantısıyla çalışır; bu yola dondurulmuş bir Run çalışma alanı veya konteynerden önce `launch-refused` ile kapanır.
+  OpenAI belgeleri Codex app-server komutunu ve WebSocket taşımasını deneysel olarak işaretler; Deckent'in sabitlenmiş binary
+  ve taşıma için sınır kanıtı sağlayıcının üretim desteği veya bu birleşime özel uygunluk onayı değildir ve desteklenmeyen
+  birleşim kimlik doğrulamalı işten önce tipli retle durur. *Yol:* desteklenen mevcut bağlantıyı kullanın; girişin
+  başarılı olması Codex işçisinin kullanılabildiğini kanıtlamaz.
 
 - **Aboneliklerden API modeline otomatik geçiş yok.** Bir abonelik penceresi tükendiğinde Deckent kendiliğinden ücretli bir API'ye
   geçmez. alpha.55'ten beri abonelik kotası yüzünden bekleyen bir işçi Run'ı en çok 5 saat bekler (`runRuntime.quotaRecovery.maxWaitMs`),

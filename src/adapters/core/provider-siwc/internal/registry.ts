@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import asset from './registry.json' with { type: 'json' };
 import type { OAuthConnectionProtocol } from '#engine/index.js';
+import { nativeCliAppServer } from '#adapters/core/native-cli-registry/index.js';
 const positive = z.number().int().positive().safe(), url = z.string().url().startsWith('https://');
 const sourced = { source: url, observedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) };
 const parsed = z.object({ schemaVersion: z.literal(3), source: url, observedOn: z.string(), issuer: url, dynamicClientId: z.string().min(1),
@@ -21,8 +22,8 @@ const parsed = z.object({ schemaVersion: z.literal(3), source: url, observedOn: 
     status: z.number().int().min(400).max(599) }).strict()) }).strict(),
   terminalRefreshErrors: z.array(z.string()).min(1),
   /** U9-6/7: the worker-embedded app-server relay. `activation` stays `hold` until the operator's real-binary proof; bounds are required data. */
-  workerRelay: z.object({ ...sourced, activation: z.enum(['hold', 'open']), appServer: z.object({ ...sourced, executable: z.string().min(1), args: z.array(z.string().min(1)).min(1),
-    control: z.array(z.string().min(1)).min(1), controlSource: url, support: z.literal('experimental'),
+  workerRelay: z.object({ ...sourced, activation: z.enum(['hold', 'open']), appServer: z.object({
+    control: z.array(z.string().min(1)).min(1), controlSource: url,
     native: z.object({ note: z.string(), vendorRoots: z.record(z.string(), z.string().min(1)), fallbackVendorRoot: z.string().min(1), triples: z.record(z.string(), z.string().min(1)),
       binary: z.string().min(1), pathDir: z.string().min(1), managedEnv: z.string().min(1) }).strict() }).strict(), approvalPolicy: z.literal('untrusted'), sandbox: z.literal('danger-full-access'), wireApi: z.literal('responses'),
     requestFields: z.array(z.string().min(1)).min(1), toolTypes: z.array(z.string().min(1)).min(1),
@@ -45,4 +46,7 @@ export const SIWC_REFRESH_LOCK_WAIT_MS = parsed.refreshLockWaitMs;
 const quotaRules = Object.values(parsed.usageErrors.codes).filter(rule => rule.refusal === 'quota');
 export const SIWC_USAGE_LIMIT_STATUS = positive.parse(quotaRules.length === 1 ? quotaRules[0]!.status : undefined);
 /** U9-6/7 worker relay policy (registry data; `activation: hold` keeps every SIWC worker launch refused). */
-export const SIWC_WORKER_RELAY = Object.freeze({ ...parsed.workerRelay, appName: parsed.appName, endpoint: parsed.inference.endpoint });
+/** The app-server command itself is the worker command catalog's (U6 `commands.json`, one source); the relay keeps only its transport data. */
+const { id: appServerCli, ...appServerCommand } = nativeCliAppServer();
+export const SIWC_WORKER_RELAY = Object.freeze({ ...parsed.workerRelay, appServer: Object.freeze({ ...parsed.workerRelay.appServer, ...appServerCommand }), appServerCli,
+  appName: parsed.appName, endpoint: parsed.inference.endpoint });

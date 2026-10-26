@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { resolveDockerTaskProfile, validateDockerTaskProfile } from '#adapters/index.js';
+import { compileNativeCodingDockerProfile, dockerTaskHiddenPaths, resolveDockerTaskProfile, validateDockerTaskProfile } from '#adapters/index.js';
 
 const parameters = () => ({
   argv: ['node', 'task.js'], imageId: 'sha256:' + 'a'.repeat(64), memoryBytes: 268435456,
@@ -49,4 +49,20 @@ it('accepts a local billing declaration and keeps it out of the Docker options; 
   expect(resolveDockerTaskProfile(local).options).not.toHaveProperty('billingAxis');
   for (const billingAxis of ['metered', 'subscription', null]) expect(() => validateDockerTaskProfile({ ...value, parameters: { ...value.parameters, billingAxis } })).toThrow('DOCKER_TASK_PROFILE_INVALID');
   expect(() => validateDockerTaskProfile({ ...local, parameters: { ...local.parameters, nativeSubscription: { schemaVersion: 1, provider: 'claude' } } })).toThrow('DOCKER_TASK_PROFILE_INVALID');
+});
+
+it('siwcWorker v1 is strict and only rides a pinned, prompt-delivered worker of the CLI that embeds the app-server (U9-7)', () => {
+  const invocation = { schemaVersion: 4, provider: 'codex', cliVersion: 'codex-cli 0.164.0', discovery: { schemaVersion: 1, mode: 'repository' }, permissionMode: 'unattended',
+    model: { channelId: 'c', modelId: 'm', auxiliaryModelIds: [] }, composition: { schemaVersion: 1, task: 'Edit note.txt', scope: 'note.txt', acceptance: 'Zero exit' } };
+  const pinned = compileNativeCodingDockerProfile({ ...profile(), parameters: { ...parameters(), argv: ['unused'] } }, invocation);
+  const worker = { schemaVersion: 1, connectionId: '00000000-0000-4000-8000-000000000001', owner: { issuer: 'local', subject: 'person' }, hiddenPaths: ['AGENTS.md'] };
+  const relay = (parameters: Record<string, unknown>, siwcWorker: unknown = worker) => ({ ...pinned, parameters: { ...parameters, siwcWorker } });
+  expect(resolveDockerTaskProfile(relay(pinned.parameters)).siwcWorker).toEqual(worker);
+  expect(dockerTaskHiddenPaths(relay(pinned.parameters))).toEqual(['AGENTS.md']);
+  for (const value of [{ ...worker, schemaVersion: 2 }, { ...worker, token: 'x' }, { ...worker, connectionId: 'not-a-uuid' }, { ...worker, hiddenPaths: undefined }])
+    expect(() => validateDockerTaskProfile(relay(pinned.parameters, value))).toThrow('DOCKER_TASK_PROFILE_INVALID');
+  // No native pin / prompt delivery (a plain task, an inline-prompt CLI run) or another CLI: the relay route is refused, not reinterpreted.
+  const inline = compileNativeCodingDockerProfile({ ...profile(), parameters: { ...parameters(), argv: ['unused'] } }, { ...invocation, composition: undefined, prompt: 'Edit note.txt.' });
+  const other = compileNativeCodingDockerProfile({ ...profile(), parameters: { ...parameters(), argv: ['unused'] } }, { ...invocation, provider: 'claude', cliVersion: '2.1.293 (Claude Code)' });
+  for (const value of [relay(parameters()), relay(inline.parameters), relay(other.parameters)]) expect(() => validateDockerTaskProfile(value)).toThrow('DOCKER_TASK_PROFILE_INVALID');
 });

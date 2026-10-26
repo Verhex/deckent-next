@@ -4,3 +4,5 @@ export type { SiwcNativeApproval, SiwcTurnOutcome } from './internal/client.js';
 export { yamaPtraceScope } from './internal/proc.js';
 export { assertSiwcWorkerLaunchable, stopSiwcWorker, siwcWorkerResultError } from './internal/launch.js';
 export type { SiwcWorkerStop } from './internal/launch.js';
+export { siwcWorkerConnections, bindSiwcWorker, siwcWorkerPrompt, SiwcWorkerSupervisor } from './internal/worker.js';
+export type { SiwcWorkerConnection } from './internal/worker.js';
