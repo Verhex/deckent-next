@@ -333,6 +333,6 @@
   "cli.uninstall.purge.confirm": "Evet, yalnız listelenen yedeklenmiş global veriyi sil",
   "cli.uninstall.retainedData": "Projelerin .deckent/ klasörleri her zaman korunur. Genel veriler varsayılan olarak korunur; yedekli silme önizlemesi için --purge kullanın. Listelenmeyen veya paylaşılan kaynaklar da korunur.",
   "cli.uninstall.reinstall": "Yeniden kurmak için önceki paket yöneticisini kullanın ve proje klasörünüzde deckent çalıştırın. Korunan proje verisi yeniden kullanılır.",
-  "cli.uninstall.blocker.backup-destination": "Tam doğrulanmış yedek kapsamı ve silme kökleri dışında bir yedek konumu gerekiyor. Global veri korunuyor.",
+  "cli.uninstall.blocker.backup-destination": "Doğrulanmış bir yedek ve silme kökleri dışında bir yedek konumu gerekiyor. Global veri korunuyor.",
   "cli.uninstall.backupPassphrase": "Yedek parolası"
 }

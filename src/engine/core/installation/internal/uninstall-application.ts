@@ -42,7 +42,7 @@ export interface UninstallAdmission {
   readonly effects: Pick<EffectApplication, 'execute' | 'inspect'>;
   /** Re-observe remaining targets, policy, live session, ownership and hold; settled steps use retained generic receipts. */
   revalidate(item: UninstallItem | null): Promise<void>;
-  /** Existing backup owner: create AND verify exact encrypted coverage outside every removal root. */
+  /** Existing backup owner: create AND verify the standard restorable set outside every removal root. */
   prepareBackup(passphrase?: string): Promise<void>;
   verifiedBackup?(): UninstallPlan['backup'];
   /** Persist the exact plan/step approvals through the existing operation broker and authenticated recovery companion. */
