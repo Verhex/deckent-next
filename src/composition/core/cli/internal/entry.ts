@@ -1,10 +1,9 @@
 #!/usr/bin/env node
+import './production-mode.js'; // First: NODE_ENV is settled before any module below loads React.
 import { main as runCli, resolveCliLocale } from '#surfaces/index.js';
 import { isMainModule, envValue, loadConfigLanguage, loadConfigAgentEnvironment, resolveProjectRoot, DeckentError, formatHumanError, exitCodeFor, type Locale, type ProjectRootResolution } from '#platform/index.js';
-/**
- * L-KIT: the call's locale, resolved once here and handed to every command (`context.locale`): `--lang`, DECKENT_LANGUAGE/DECKENT_LANG,
- * config `language`, LC_ALL, LC_MESSAGES, LANG. Presentation only: a config that cannot be read falls back to the environment, never blocks.
- */
+/** L-KIT: the call's locale, resolved once here and handed to every command (`context.locale`): `--lang`, DECKENT_LANGUAGE/DECKENT_LANG,
+ * config `language`, LC_ALL, LC_MESSAGES, LANG. Presentation only: a config that cannot be read falls back to the environment, never blocks. */
 export async function hostLocale(argv: readonly string[], root: string, env: NodeJS.ProcessEnv = process.env): Promise<Locale> {
   const at = argv.indexOf('--lang'), flag = at >= 0 && !argv[at + 1]?.startsWith('-') ? argv[at + 1] : undefined;
   // A supported flag or DECKENT_LANGUAGE/DECKENT_LANG outranks config: no config read is needed then (an unsupported value is passed over).
@@ -42,11 +41,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2), serv
   if (handlesSignals) { process.once('SIGINT', stop); process.once('SIGTERM', stop); }
   const base = { root, rootResolution: resolution, locale, ...(agentEnvironment ? { agentEnvironment } : {}), signal: controller.signal };
   // COLDSTART: host operations remain lazy. Model-connect help alone loads the public adapter metadata boundary for its current kinds.
-  try { return await runCli(argv, { ...base, helpParams: async key => {
-    if (key !== 'cli.help.modelsConnect') return {};
-    const { modelConnectHelpKinds } = await import('./model-help.js');
-    return { kinds: modelConnectHelpKinds() };
-  }, loadHost: async () => (await import('./host.js')).createCliHost(base, serviceEntry) }); }
+  try { return await runCli(argv, { ...base, helpParams: async key => key !== 'cli.help.modelsConnect' ? {} : { kinds: (await import('./model-help.js')).modelConnectHelpKinds() },
+    loadHost: async () => (await import('./host.js')).createCliHost(base, serviceEntry) }); }
   finally { if (handlesSignals) { process.off('SIGINT', stop); process.off('SIGTERM', stop); } }
 }
 /** A reader that closed the pipe (`deckent … | head`) is a SIGPIPE: 128 + 13, the code a shell reports for `cat`, `git` and `yes` there. */
