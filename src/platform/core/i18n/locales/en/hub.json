@@ -79,5 +79,13 @@
   "hub.window.slash": "Inspect Hub sources, packages and security notices; apply person cards.",
   "hub.mcp.tool": "Hub operation {operation}. Requires scope policy and the caller’s own active signing authority for writes.",
   "error.HUB_CONNECTION_UNAVAILABLE": "The Hub connection is not configured. A registry extension identity and a durable first-use person decision are required before network access.",
-  "hub.window.nextCards": "More security notices"
+  "hub.window.nextCards": "More security notices",
+  "error.HUB_ACCOUNT_REFUSED": "Hub login or publishing requires an active verified account, a passkey and the configured minimum account age.",
+  "error.HUB_PROFILE_REFUSED": "The Hub profile, handle or key proof is invalid or inactive.",
+  "error.HUB_RATE_REFUSED": "The Hub operation exceeds its configured rate or page limit.",
+  "hub.page.title": "Deckent Hub",
+  "hub.page.ai": "AI publisher",
+  "hub.page.profiles": "Publisher profiles",
+  "hub.page.packages": "Packages",
+  "hub.service.command": "Manage a Hub account, profile or moderation case."
 }

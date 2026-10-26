@@ -7,8 +7,8 @@ export const hubText = (max: number) => z.string().min(1).max(max).refine(v => v
 /** Agent Skills spec invariants, independent of the catalog's display name. */
 export const hubSkillNameSchema = z.string().min(1).max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 export const hubSkillDescriptionSchema = hubText(1024);
-export const hubPackageIdSchema = z.string().max(129).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*\/[a-z0-9]+(?:-[a-z0-9]+)*$/)
-  .refine(v => v.split('/').every(part => part.length <= 64));
+export const hubPackageIdSchema = z.string().max(130).regex(/^@?[a-z0-9]+(?:-[a-z0-9]+)*\/[a-z0-9]+(?:-[a-z0-9]+)*$/)
+  .refine(v => v.split('/').every(part => part.replace(/^@/, '').length <= 64));
 export const hubVersionSchema = z.string().max(50).regex(/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/)
   .refine(v => v.split('.').every(n => Number.isSafeInteger(Number(n))));
 /** Portable, relative, exact path. Reject encoded aliases, drives, traversal, Windows devices and trailing-dot/space aliases. */

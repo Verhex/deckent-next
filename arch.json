@@ -4279,7 +4279,9 @@
         "src/domain/core/effect",
         "src/platform/core/clock",
         "src/engine/core/hub-operations",
-        "src/platform/core/validate"
+        "src/engine/core/hub-server",
+        "src/platform/core/validate",
+        "src/platform/core/common"
       ],
       "plan": "LEARNING"
     },
