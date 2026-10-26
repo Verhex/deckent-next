@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, open, readFile, realpath, rename, rm } from 'node:fs/promises';
+import { lstat, open, readFile, readlink, realpath, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { workerTreeDenyForms } from '#engine/index.js';
 import { ErrorRegistry, redactForRecord, callerEnvironment } from '#platform/index.js';
@@ -16,14 +16,14 @@ import { sha256 } from '#platform/index.js';
 export const FIRST_COMMIT_OPERATION_ID = 'coding.first-commit@1' as const;
 export type FirstCommitFlag = 'secret-name' | 'secret-content' | 'size' | 'nested-repository';
 export type FirstCommitRow = Readonly<{ path: string; bytes: number; flag: FirstCommitFlag | null }>;
-/** `offered`: HEAD unborn and nothing staged. Flagged rows come first and are excluded unless named in `include`; `digest` binds the selection
- * and the message, so the apply commits exactly what the card showed. Hooks never run (plumbing); `sign` mirrors the person's commit.gpgSign. */
+/** `offered`: HEAD unborn and nothing staged. Flagged rows come first and are excluded unless named in `include`; `digest` binds the selection,
+ * each selected file's mode and content digest and the message, so the apply commits exactly the bytes the card showed and scanned. Hooks never run (plumbing); `sign` mirrors the person's commit.gpgSign. */
 export type FirstCommitPreview = Readonly<{ state: 'has-commits' }> | Readonly<{ state: 'staged' }> | Readonly<{ state: 'offered'; operation: typeof FIRST_COMMIT_OPERATION_ID;
   identity: boolean; sign: boolean; hooks: 'not-run'; total: number; selected: number; flagged: number; rows: readonly FirstCommitRow[]; more: number; digest: string }>;
 export type FirstCommitResult = Readonly<{ operation: typeof FIRST_COMMIT_OPERATION_ID; commit: string; tree: string; files: number; signed: boolean }>;
 export type FirstCommitGitResult = Readonly<{ code: number | null; stdout: string; stderr: string; overflow: boolean }>;
 /** One Git process in the person's environment; `index` is a GIT_INDEX_FILE. The port the focused test wraps to inject a ref race. */
-export type FirstCommitGit = (args: readonly string[], options?: Readonly<{ input?: string; index?: string; timeoutMs?: number; outputBytes?: number }>) => Promise<FirstCommitGitResult>;
+export type FirstCommitGit = (args: readonly string[], options?: Readonly<{ input?: string | Uint8Array; index?: string; timeoutMs?: number; outputBytes?: number }>) => Promise<FirstCommitGitResult>;
 type Request = Readonly<{ root: string; env: DetectEnvironment; message: string; include?: readonly string[]; signal?: AbortSignal; git?: FirstCommitGit; effectKey?: string }>;
 
 const { git: gitRegistry, limits: detectLimits, firstCommit: policy } = registry, limits = policy.limits;
@@ -58,53 +58,71 @@ export async function firstCommitGit(root: string, env: DetectEnvironment, signa
   return run;
 }
 
-/** Why a candidate is excluded by default: a known credential path, a known secret shape anywhere in its content (symlinks are never followed), or
- * its size. The whole file is scanned (a secret past a prefix must not slip in); the reads are bounded by fileBytes per file and by the
- * default-selection byte limit across files (the caller refuses past it). */
-async function flagOf(root: string, path: string, bytes: number, file: boolean): Promise<FirstCommitFlag | null> {
-  if (workerTreeDenyForms(path).some(form => denied.some(match => match(form)))) return 'secret-name';
-  if (bytes > limits.fileBytes) return 'size';
-  if (!file) return null;
-  const handle = await open(join(root, path), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+type Candidate = Readonly<{ bytes: Buffer; executable: boolean; link: boolean }>;
+type Staged = Readonly<{ mode: '100644' | '100755' | '120000'; digest: string }>;
+/** The bytes Git stages for one candidate, read once and never through a link: a regular file's whole content (the size `lstat` saw, no more,
+ * no less) or a symbolic link's target. Any other kind, or a file that changed size meanwhile, throws: the repository changed under the read. */
+async function readCandidate(root: string, path: string, expected?: number): Promise<Candidate> {
+  const full = join(root, path), info = await lstat(full), size = info.size;
+  if (expected !== undefined && size !== expected) throw new Error('changed');
+  if (info.isSymbolicLink()) return { bytes: await readlink(full, { encoding: 'buffer' }), executable: false, link: true };
+  if (!info.isFile()) throw new Error('kind');
+  const handle = await open(full, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
-    const buffer = Buffer.alloc(bytes);
+    const stat = await handle.stat(), bytes = Buffer.alloc(size);
+    if (!stat.isFile() || stat.size !== size) throw new Error('changed');
     let read = 0;
-    for (let part = 1; read < bytes && part > 0;) { part = (await handle.read(buffer, read, bytes - read, read)).bytesRead; read += part; }
-    const text = buffer.subarray(0, read).toString('utf8');
-    return shapes.some(shape => shape.test(text)) || isConfigFile(path) && configSecretHit(text) ? 'secret-content' : null;
+    for (let part = 1; read < size && part > 0;) { part = (await handle.read(bytes, read, size - read, read)).bytesRead; read += part; }
+    if (read !== size || (await handle.read(Buffer.alloc(1), 0, 1, size)).bytesRead !== 0) throw new Error('changed');
+    return { bytes, executable: (stat.mode & 0o100) !== 0, link: false };
   } finally { await handle.close(); }
 }
-const digestOf = (paths: readonly string[], message: string) => createHash('sha256').update(JSON.stringify([FIRST_COMMIT_OPERATION_ID, paths, message])).digest('hex');
+/** Why a candidate is excluded by default: a known credential path, its size, or a known secret shape anywhere in its whole content. */
+const nameOrSize = (path: string, bytes: number): FirstCommitFlag | null =>
+  workerTreeDenyForms(path).some(form => denied.some(match => match(form))) ? 'secret-name' : bytes > limits.fileBytes ? 'size' : null;
+const secretIn = (path: string, text: string) => shapes.some(shape => shape.test(text)) || isConfigFile(path) && configSecretHit(text);
+const digestOf = (staged: ReadonlyMap<string, Staged>, message: string) =>
+  createHash('sha256').update(JSON.stringify([FIRST_COMMIT_OPERATION_ID, [...staged].map(([path, file]) => [path, file.mode, file.digest]), message])).digest('hex');
+const stagedOf = (file: Candidate, fileMode: boolean): Staged =>
+  ({ mode: file.link ? '120000' : file.executable && fileMode ? '100755' : '100644', digest: sha256(file.bytes) });
 
-async function observe(request: Request, git: FirstCommitGit): Promise<Readonly<{ preview: FirstCommitPreview; selection: readonly string[]; message: string }>> {
+type Observed = Readonly<{ preview: FirstCommitPreview; selection: readonly string[]; message: string; root: string; fileMode: boolean; staged: ReadonlyMap<string, Staged> }>;
+async function observe(request: Request, git: FirstCommitGit): Promise<Observed> {
   const message = request.message.trim();
   if (!message || message.length > limits.messageChars || message.includes('\0')) refuse('SETUP_ANSWER_INVALID');
   const head = await git(gitRegistry.headArgs);
-  if (head.code === 0) return { preview: { state: 'has-commits' }, selection: [], message };
+  const none = { selection: [], message, root: request.root, fileMode: true, staged: new Map<string, Staged>() };
+  if (head.code === 0) return { preview: { state: 'has-commits' }, ...none };
   if (head.code !== 1) step('head', head);
-  if (step('index', await git(['ls-files', '--cached', '-z'])) !== '') return { preview: { state: 'staged' }, selection: [], message };
+  if (step('index', await git(['ls-files', '--cached', '-z'])) !== '') return { preview: { state: 'staged' }, ...none };
   const listed = await git(['ls-files', '--others', '--exclude-standard', '-z'], { outputBytes: limits.files * limits.pathBytes });
   if (listed.overflow) refuse('SETUP_FIRST_COMMIT_TOO_LARGE', { observed: `>${limits.files}`, limit: limits.files });
   const paths = step('list', listed).split('\0').filter(Boolean).sort();
   if (paths.length > limits.files) refuse('SETUP_FIRST_COMMIT_TOO_LARGE', { observed: paths.length, limit: limits.files });
   const root = step('root', await git(['rev-parse', '--show-toplevel'])).trim(), include = new Set(request.include ?? []), rows: FirstCommitRow[] = [];
+  // Git's own rule for a new file's mode: the executable bit counts only while core.fileMode is on.
+  const fileMode = (await git(['config', '--type=bool', '--default=true', '--get', 'core.fileMode'])).stdout.trim() !== 'false', staged = new Map<string, Staged>();
   let bytes = 0;
   for (const path of paths) {
-    // `ls-files` names an untracked nested repository as `dir/`; `update-index --add` would record a gitlink without .gitmodules.
+    // `ls-files` names an untracked nested repository as `dir/`; staging it would record a gitlink without .gitmodules.
     if (path.endsWith('/')) { rows.push({ path, bytes: 0, flag: 'nested-repository' }); continue; }
     // A candidate that vanished or changed kind after the listing: the repository changed under the preview.
     const info = await lstat(join(root, path)).catch(() => refuse('SETUP_FIRST_COMMIT_CHANGED'));
-    const flag = await flagOf(root, path, info.size, info.isFile()).catch(() => refuse('SETUP_FIRST_COMMIT_CHANGED'));
-    if (flag !== 'size') bytes += info.size;
+    const early = nameOrSize(path, info.size), selected = early === null || include.has(path);
+    // Every file read is bounded: the default selection, any file the person ticks, and the content scan of the rest.
+    if (early !== 'size' || selected) bytes += info.size;
     if (bytes > limits.bytes) refuse('SETUP_FIRST_COMMIT_TOO_LARGE', { observed: `>${limits.bytes}`, limit: limits.bytes });
+    const file = early === null || selected ? await readCandidate(root, path, info.size).catch(() => refuse('SETUP_FIRST_COMMIT_CHANGED')) : null;
+    const flag = early ?? (file && !file.link && secretIn(path, file.bytes.toString('utf8')) ? 'secret-content' : null);
+    if (file && (flag === null || include.has(path))) staged.set(path, stagedOf(file, fileMode));
     rows.push({ path, bytes: info.size, flag });
   }
-  const selection = rows.filter(row => row.flag === null || row.flag !== 'nested-repository' && include.has(row.path)).map(row => row.path);
+  const selection = [...staged.keys()];
   const identity = (await git(['var', 'GIT_AUTHOR_IDENT'])).code === 0 && (await git(['var', 'GIT_COMMITTER_IDENT'])).code === 0;
   const sign = (await git(['config', '--type=bool', '--default=false', '--get', 'commit.gpgSign'])).stdout.trim() === 'true';
   const flagged = rows.filter(row => row.flag !== null), shown = [...flagged, ...rows.filter(row => row.flag === null)].slice(0, limits.previewRows);
   return { preview: { state: 'offered', operation: FIRST_COMMIT_OPERATION_ID, identity, sign, hooks: 'not-run', total: rows.length, selected: selection.length,
-    flagged: flagged.length, rows: shown, more: rows.length - shown.length, digest: digestOf(selection, message) }, selection, message };
+    flagged: flagged.length, rows: shown, more: rows.length - shown.length, digest: digestOf(staged, message) }, selection, message, root, fileMode, staged };
 }
 
 /** Read-only preview of the first commit (U3U4U7 §3.8): offered only for an unborn HEAD with nothing staged; bounded, flagged files excluded. */
@@ -121,7 +139,7 @@ export async function previewFirstCommit(request: Request): Promise<FirstCommitP
  */
 export async function applyFirstCommit(request: Request & Readonly<{ digest: string }>): Promise<FirstCommitResult> {
   const git = request.git ?? await firstCommitGit(request.root, request.env, request.signal), seen = await observe(request, git);
-  const { preview, selection, message } = seen;
+  const { preview, selection, message, root, fileMode, staged } = seen;
   if (preview.state !== 'offered' || preview.digest !== request.digest) return refuse('SETUP_FIRST_COMMIT_CHANGED');
   const sign = preview.sign;
   if (selection.length === 0) refuse('SETUP_ANSWER_INVALID');
@@ -130,7 +148,16 @@ export async function applyFirstCommit(request: Request & Readonly<{ digest: str
   const pathsFile = join(gitDir, recoveryNames.paths), receiptFile = join(gitDir, recoveryNames.receipt);
   let held = false, committed = false, refSent = false, pathsOwned = false, receiptOwned = false;
   try {
-    step('update-index', await git(['update-index', '--add', '-z', '--stdin'], { input: `${selection.join('\0')}\0`, index: temporary }));
+    // Git stores the bytes this apply scanned, never a later read of the work tree: each file is read again, must equal the scanned digest and
+    // mode, and its blob is written from that buffer (clean filters still apply by path, as `update-index --add` would).
+    const entries: string[] = [];
+    for (const path of selection) {
+      const want = staged.get(path)!, file = await readCandidate(root, path).catch(() => refuse('SETUP_FIRST_COMMIT_CHANGED')), now = stagedOf(file, fileMode);
+      if (now.mode !== want.mode || now.digest !== want.digest) refuse('SETUP_FIRST_COMMIT_CHANGED');
+      const blob = step('hash-object', await git(['hash-object', '-w', '--stdin', ...file.link ? [] : [`--path=${path}`]], { input: file.bytes })).trim();
+      entries.push(`${want.mode} ${blob}\t${path}\0`);
+    }
+    step('update-index', await git(['update-index', '-z', '--index-info'], { input: entries.join(''), index: temporary }));
     const tree = step('write-tree', await git(['write-tree'], { index: temporary })).trim();
     const recordedMessage = request.effectKey ? `${message}\n\nDeckent-Effect: ${request.effectKey}` : message;
     const commit = step('commit-tree', await git(['commit-tree', tree, '-m', recordedMessage, sign ? '-S' : '--no-gpg-sign'], { timeoutMs: limits.commitTimeoutMs })).trim();
