@@ -112,8 +112,9 @@ describe('readonly defaults and string formats', () => {
 
   it('config url format: accepted and refused registry endpoints', () => {
     const endpoint = (registryEndpoint: string) => CORE_SCHEMA.safeParse({ toolchains: { currency: { registryEndpoint } } }).success;
-    expect(['https://registry.npmjs.org', 'http://localhost:4873', 'http://[::1]:8080/npm', 'http://127.0.0.1'].map(endpoint)).toEqual([true, true, true, true]);
-    expect(['registry.npmjs.org', 'https://', 'https://exa mple.com'].map(endpoint)).toEqual([false, false, false]);
+    expect(['https://registry.npmjs.org', 'https://localhost:4873', 'https://[::1]:8080/npm', 'https://127.0.0.1'].map(endpoint)).toEqual([true, true, true, true]);
+    // alpha.56 U6 (5879c0ec0): the registry also feeds the worker image, so plain http is refused (WORKER_IMAGE_SOURCE_INSECURE), loopback included.
+    expect(['registry.npmjs.org', 'https://', 'https://exa mple.com', 'http://localhost:4873'].map(endpoint)).toEqual([false, false, false, false]);
   });
 
   it('process command uuid: generated ids pass; EXPECTED-TO-CHANGE: a non-RFC version nibble passes today', () => {
