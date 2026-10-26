@@ -147,6 +147,16 @@ describe.skipIf(process.platform !== 'linux')('I-S3 deckent init on a real PTY (
     expect(rerun.status).toBe(0);
     expect(rerun.output).toContain("5. Who uses this installation · done · The identity profile core:solo is already saved in your user's configuration.");
     expect(rerun.output).not.toContain('Will only you use this installation?');
+    // The carrier's full-auto grant rewrote the policy revision (PRE-9 chain); the first-run anchor keeps it installed (above: policyCurrent).
+    const path = join(f.root, '.deckent', 'policy.json'), chained = JSON.parse(await readFile(path, 'utf8')) as { revision: string; grants: { id: string }[] };
+    expect(chained.revision).toMatch(/^a-/u);
+    // A newer template's rule missing from that policy is still offered through the same add-only upgrade, never as hand-written.
+    const delta: readonly string[] = FIRST_RUN_CURRENT_UPGRADE_RULE_IDS;
+    await writeFile(path, JSON.stringify({ ...chained, grants: chained.grants.filter(rule => !delta.includes(rule.id)) }), { mode: 0o600 });
+    expect(await f.plan()).toMatchObject({ 'core:policy': 'needs-answer:setup.reason.policyUpgrade' });
+    // NEGATIVE: without the first-run anchor the document is hand-written and setup leaves it unchanged.
+    await writeFile(path, JSON.stringify({ ...chained, grants: chained.grants.filter(rule => rule.id !== 'first-run-read-tools') }), { mode: 0o600 });
+    expect(await f.plan()).toMatchObject({ 'core:policy': 'skipped:setup.reason.policyHandBuilt' });
   }, 240_000);
 
   it('interrupted after the permissions (Esc): the next run shows them done and asks the unsaved selections again', async () => {

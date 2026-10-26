@@ -3,7 +3,7 @@ import { firstSessionTargets, firstSessionPublication } from '#adapters/index.js
 import { lstat, readFile, stat } from 'node:fs/promises';
 import { FileInstallationIdentityStore, FileProjectIdentityStore, attestLocalInteractiveTerminal, inspectInstallationFile, localPrincipalChannel, openLocalIntegrityAuthority, openSqliteAuditStore, publishInstallationFile, readLocalOsIdentity, withInstallationJournal } from '#adapters/index.js';
 import { userInfo } from 'node:os'; import { randomUUID } from 'node:crypto'; import { dirname } from 'node:path';
-import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
+import { FIRST_RUN_TOOL_NAMES, inspectFirstRunPolicyTemplate, inspectAnchoredFirstRunPolicy, InstallationPublicationError, AuditApplication, PolicyTemplateInstallationApplication, firstRunServiceIdentity, settleFirstRunServiceIdentity,
   upgradeInstalledPolicyTemplate, preparePolicyTemplateInstallation, assertAuthorityWitness, setInstallerPermissionModes, setInstallerOwnerBaseline, mcpCapabilityRegistry, ownerBaselineCells, describeOwnerBaseline, type AuthorityWitness, type FirstRunServiceIdentityPort, type PolicyTemplatePublishTarget } from '#engine/index.js';
 import { getConfigFieldDefault, prepareProductFile, productResourcePath, resolveProductLayout, observeBootstrapState, SystemTrustedClock, withConfigLayersLocked, type ConfigLoadOptions, type ProductLayout } from '#platform/index.js';
 import { createLayoutPolicySource } from '#composition/core/policy/index.js';
@@ -119,11 +119,16 @@ async function ownsAuthority(layout: ProductLayout, callerUid: number | undefine
 }
 /** Doctor-only, read-soft: not the trusted gate (that stays FilePolicySource); oversized/missing/unparsable/custom -> null, never a doctor failure. */
 export async function inspectPolicyTemplate(projectRoot: string, options: ConfigLoadOptions = {}) {
-  try {
-    const path = productResourcePath((await loadComposedConfig(projectRoot, { ...options, heal: false })).productLayout, 'policy');
-    if ((await stat(path)).size > getConfigFieldDefault('inspection').policyMaxBytes) return null;
-    return await inspectFirstRunPolicyTemplate({ load: async () => JSON.parse(await readFile(path, 'utf8')) as unknown });
-  } catch { return null; }
+  try { const source = await softPolicySource(projectRoot, options); return source && await inspectFirstRunPolicyTemplate(source); } catch { return null; }
+}
+/** Setup-only, read-soft: a first-run policy whose revision a governed edit rewrote (U4E full-auto) stays installed when its anchor names this person. */
+export async function inspectAnchoredPolicyTemplate(projectRoot: string, scopeId: string, options: ConfigLoadOptions = {}) {
+  try { const source = await softPolicySource(projectRoot, options), { issuer, subject } = readLocalOsIdentity();
+    return source && await inspectAnchoredFirstRunPolicy(source, { scopeId, person: { issuer, subject }, toolNames: FIRST_RUN_TOOL_NAMES }); } catch { return null; }
+}
+async function softPolicySource(projectRoot: string, options: ConfigLoadOptions) {
+  const path = productResourcePath((await loadComposedConfig(projectRoot, { ...options, heal: false })).productLayout, 'policy');
+  return (await stat(path)).size > getConfigFieldDefault('inspection').policyMaxBytes ? null : { load: async () => JSON.parse(await readFile(path, 'utf8')) as unknown };
 }
 
 /** Read-only, read-soft doctor information; no writer, audit store, network call or implicit baseline installation. */

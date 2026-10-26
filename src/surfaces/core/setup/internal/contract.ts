@@ -38,6 +38,8 @@ export interface SetupCommandContext extends CliBaseContext {
   observeSetup?: SetupObserveHandler;
   applySetupStage?: SetupApplyHandler;
   inspectPolicyTemplate?: (root: string, options: ConfigLoadOptions) => Promise<{ readonly id: string; readonly version: number } | null>;
+  /** A first-run policy whose revision a governed edit rewrote (U4E full-auto): its anchor keeps it installed; `null` reads as hand-built. */
+  inspectAnchoredPolicyTemplate?: (root: string, scopeId: string, options: ConfigLoadOptions) => Promise<'current' | 'upgradable' | null>;
   inspectShellRealm?: (root: string, options: ConfigLoadOptions) => Promise<SetupShellRealmView>;
   listIdentityProfiles?: (packages: readonly unknown[]) => IdentityProfileListing;
   openProjectInstructions?: (root: string, options: ConfigLoadOptions) => Promise<ProjectInstructionPort>;

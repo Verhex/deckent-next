@@ -49,7 +49,8 @@ export async function observeCoreSetup(context: SetupCommandContext, root: strin
   const identity = (config as Record<string, unknown> | null)?.['identity'] as { profile?: unknown } | undefined;
   const policyFile = config ? await exists(productResourcePath(config.productLayout, 'policy')) : false;
   const template = config && context.inspectPolicyTemplate ? await context.inspectPolicyTemplate(root, options) : null;
-  const policy = pending ? 'pending' : template ? template.version < FIRST_RUN_POLICY_TEMPLATE_VERSION ? 'upgradable' : 'current' : policyFile ? 'hand-built' : 'absent';
+  const anchored = !template && policyFile && scopeId && context.inspectAnchoredPolicyTemplate ? await context.inspectAnchoredPolicyTemplate(root, scopeId, options) : null;
+  const policy = pending ? 'pending' : template ? template.version < FIRST_RUN_POLICY_TEMPLATE_VERSION ? 'upgradable' : 'current' : anchored ?? (policyFile ? 'hand-built' : 'absent');
   const realm = context.inspectShellRealm && !pending ? await context.inspectShellRealm(root, options).catch(() => null) : null;
   const instructions = context.openProjectInstructions && !pending ? await context.openProjectInstructions(root, options)
     .then(port => port.preview([], projectSkeleton('en'))).catch(() => null) : null;
