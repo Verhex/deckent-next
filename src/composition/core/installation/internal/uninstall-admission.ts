@@ -59,7 +59,7 @@ export async function withUninstallAdmission<T>(config: ResolvedConfig, plan: Un
       const close = () => { if (!authorityClosed) { audit?.close(); audit = undefined; approvals.close(); authorityClosed = true; } };
       current.dataTarget.prepare(async () => {
         close();
-        const final = await prepareUninstallBackup(config, plan, scopeId, principal, await policy.load(), integrity, current.portable, passphrase, true, options); backup = { ...plan.backup, destination: final.set }; return final.snapshot!;
+        const final = await prepareUninstallBackup(config, plan, scopeId, { ...principal, scopeIds: affected }, await policy.load(), integrity, current.portable, passphrase, true, options); backup = { ...plan.backup, destination: final.set }; return final.snapshot!;
       });
       return await work({ scopeId, recoveryLocation,
         effects: approvedUninstallEffects(plan, scopeId, app, decider),

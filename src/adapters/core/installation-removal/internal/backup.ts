@@ -27,7 +27,7 @@ async function bindMember(verified: VerifiedBackup, member: DataRemovalMember, b
       : state.entries.some(entry => entry.resource === member.resourceId && entry.path === (member.directory ? basename(member.path) : '') && digest(Buffer.from(entry.content, 'base64')) === current);
   const after = await memberStat(member.path);
   if (!backed || !after || after.dev !== before.dev || after.ino !== before.ino || after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs) return unbound();
-  return { path: member.path, digest: current, dev: before.dev, ino: before.ino, size: before.size, mtimeMs: before.mtimeMs, ctimeMs: before.ctimeMs };
+  return { path: member.path, digest: current, dev: before.dev, ino: before.ino, size: before.size, mtimeMs: before.mtimeMs, ctimeMs: before.ctimeMs, directory: member.directory };
 }
 /** The existing backup application owns create/verify/audit of the standard set that `deckent backup restore` restores. The final set is
  * re-verified, every member is bound to its exact verified content and a durable final-tail intent is written before any deletion. */

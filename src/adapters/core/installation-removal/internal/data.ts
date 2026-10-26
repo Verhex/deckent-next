@@ -12,7 +12,8 @@ export interface DataRemovalMember { readonly resourceId: string; readonly path:
 /** The verified final backup's exact content of every present member, bound immediately before deletion. */
 export interface DataRemovalSnapshot {
   readonly set: string; readonly manifestDigest: string;
-  readonly members: readonly { readonly path: string; readonly digest: string; readonly dev: number; readonly ino: number; readonly size: number; readonly mtimeMs: number; readonly ctimeMs: number }[];
+  readonly members: readonly { readonly path: string; readonly digest: string; readonly dev: number; readonly ino: number; readonly size: number; readonly mtimeMs: number; readonly ctimeMs: number;
+    readonly directory?: string | null }[];
 }
 export async function fileDigest(path: string) {
   const digest = createHash('sha256');

@@ -331,6 +331,7 @@
   "cli.uninstall.reason.service-unresolved": "Servis sahipliği veya etkinliği çözümlenmedi",
   "cli.uninstall.reason.retained-overlap": "Korunan kaynakla örtüşüyor",
   "cli.uninstall.reason.dependency-unresolved": "Önkoşul çözümlenmedi",
+  "cli.uninstall.reason.resume": "Yarıda kalan temizlemeden kaldı; yalnız yedek ve silme izni yeniden doğrulanınca silinir",
   "cli.uninstall.purge.confirm": "Evet, yalnız listelenen yedeklenmiş global veriyi sil",
   "cli.uninstall.retainedData": "Projelerin .deckent/ klasörleri her zaman korunur. Genel veriler varsayılan olarak korunur; yedekli silme önizlemesi için --purge kullanın. Listelenmeyen veya paylaşılan kaynaklar da korunur.",
   "cli.uninstall.reinstall": "Yeniden kurmak için önceki paket yöneticisini kullanın ve proje klasörünüzde deckent çalıştırın. Korunan proje verisi yeniden kullanılır.",

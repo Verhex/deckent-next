@@ -3196,7 +3196,8 @@
         "src/adapters/core/sqlite-ledger",
         "src/adapters/core/contract",
         "src/platform/core/managed-files",
-        "src/composition/core/secrets"
+        "src/composition/core/secrets",
+        "src/adapters/core/installation-removal"
       ],
       "plan": "INSTALLATION"
     },
@@ -4354,7 +4355,9 @@
         "src/engine/core/toolchain-currency",
         "src/adapters/core/sqlite-ledger",
         "src/platform/core/utils",
-        "src/adapters/core/attempt-store"
+        "src/adapters/core/attempt-store",
+        "src/domain/core/policy",
+        "src/adapters/core/local-runtime-socket"
       ],
       "plan": "INSTALLATION"
     },
