@@ -56,5 +56,12 @@
   "siwc.worker.stopping": "İşçi durduruluyor",
   "siwc.worker.cleanupUnproven": "Temizlik doğrulanamadı",
   "siwc.relay.refused": "Model bağlantısı reddedildi",
-  "siwc.worker.activationHold": "ChatGPT planınızla çalışan Codex işçisi henüz etkin değil; hiçbir istek gönderilmedi, hiçbir etki çalışmadı. OpenAI belgeleri Codex app-server komutunu ve WebSocket taşımasını deneysel olarak işaretler: Deckent'in sabitlenmiş binary ve taşıma için sınır kanıtı sağlayıcının üretim desteği veya bu birleşime özel uygunluk onayı değildir; desteklenmeyen birleşim kimlik doğrulamalı işten önce bu tipli retle durur. Bu arada zaten desteklenen bir işçi bağlantısını kullanın."
+  "siwc.worker.activationHold": "ChatGPT planınızla çalışan Codex işçisi henüz etkin değil; hiçbir istek gönderilmedi, hiçbir etki çalışmadı. OpenAI belgeleri Codex app-server komutunu ve WebSocket taşımasını deneysel olarak işaretler: Deckent'in sabitlenmiş binary ve taşıma için sınır kanıtı sağlayıcının üretim desteği veya bu birleşime özel uygunluk onayı değildir; desteklenmeyen birleşim kimlik doğrulamalı işten önce bu tipli retle durur. Bu arada zaten desteklenen bir işçi bağlantısını kullanın.",
+  "siwc.custody.privateFolder": "ChatGPT girişi reddedildi: {path} izinleri {mode}, oturum bilgileriniz için fazla açık. `chmod 700 {path}` ile özel yapın, sonra yeniden giriş yapın. Deckent hiçbir izni değiştirmedi.",
+  "siwc.custody.privateParent": "ChatGPT girişi reddedildi: {path} (izinler {mode}) başka kullanıcılarca değiştirilebilir; altındaki hiçbir depo özel değildir. Deckent'in global klasörünü ev klasörünüz gibi özel bir üst klasörde tutun (DECKENT_GLOBAL_HOME), sonra yeniden giriş yapın.",
+  "siwc.custody.unsafeRoot": "ChatGPT girişi reddedildi: oturum deposunun klasörü ya da bir üst klasörü başka kullanıcılara açık. `deckent doctor` klasörü ve düzeltmeyi gösterir. Deckent hiçbir izni değiştirmedi.",
+  "siwc.custody.localDisk": "ChatGPT girişi reddedildi: oturum bilgileri bu bilgisayarın kendi yerel diskinde kalmalı; ağ paylaşımı, /mnt/c ya da tanınmayan bir aygıt olamaz. Deckent'in global klasörünü yerel diskte, örneğin ev klasörünüzün altında tutun.",
+  "siwc.doctor.custodyReady": "ChatGPT girişi deposu: size özel yerel şifreli depo",
+  "siwc.doctor.custodyStore": "ChatGPT girişi reddedilir: şifreli sır deposu gerekir; bu kurulum {backend} kullanıyor.",
+  "siwc.doctor.custodyUntested": "ChatGPT girişi deposu denetlenemedi ({reason})."
 }

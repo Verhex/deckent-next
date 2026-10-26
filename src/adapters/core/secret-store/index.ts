@@ -7,4 +7,5 @@ export { admitProjectVault, directoryLocation, fileSecretGrantStoreFactory, hand
 
 export { personalStoreAssertion, rememberPersonalStoreInstance } from './internal/personal.js';
 export type { PersonalStoreContext } from './internal/personal.js';
-export { observePersonalStoreHost } from './internal/personal-host.js';
+export { inspectPersonalStoreReadiness, observePersonalStoreHost, unsafeStoreDirectory } from './internal/personal-host.js';
+export type { PersonalStoreReadiness } from './internal/personal-host.js';

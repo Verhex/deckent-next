@@ -56,5 +56,12 @@
   "siwc.worker.stopping": "Stopping worker",
   "siwc.worker.cleanupUnproven": "Cleanup unverified",
   "siwc.relay.refused": "Model connection refused",
-  "siwc.worker.activationHold": "The Codex worker on your ChatGPT plan is not activated yet; nothing was sent and no effect ran. OpenAI's documentation marks the Codex app-server command and its WebSocket transport as experimental: Deckent's boundary proof for the pinned binary and transport is not vendor production support or a compliance approval of this combination, so an unsupported combination stops with this typed refusal before any authenticated work. Use an already supported worker connection meanwhile."
+  "siwc.worker.activationHold": "The Codex worker on your ChatGPT plan is not activated yet; nothing was sent and no effect ran. OpenAI's documentation marks the Codex app-server command and its WebSocket transport as experimental: Deckent's boundary proof for the pinned binary and transport is not vendor production support or a compliance approval of this combination, so an unsupported combination stops with this typed refusal before any authenticated work. Use an already supported worker connection meanwhile.",
+  "siwc.custody.privateFolder": "ChatGPT sign-in refused: {path} has mode {mode}, too open for your session credentials. Make it private with `chmod 700 {path}`, then sign in again. Deckent did not change any permission.",
+  "siwc.custody.privateParent": "ChatGPT sign-in refused: {path} (mode {mode}) can be changed by other users, so no store under it is private. Keep Deckent's global folder under a private parent such as your home folder (DECKENT_GLOBAL_HOME), then sign in again.",
+  "siwc.custody.unsafeRoot": "ChatGPT sign-in refused: the credential store folder or one of its parents is open to other users. `deckent doctor` names the folder and the fix. Deckent did not change any permission.",
+  "siwc.custody.localDisk": "ChatGPT sign-in refused: session credentials must stay on this computer's own local disk, not a network share, /mnt/c or an unrecognized device. Keep Deckent's global folder on the local disk, for example under your home folder.",
+  "siwc.doctor.custodyReady": "ChatGPT sign-in storage: your private local encrypted store",
+  "siwc.doctor.custodyStore": "ChatGPT sign-in would be refused: it needs the encrypted secret store; this installation uses {backend}.",
+  "siwc.doctor.custodyUntested": "ChatGPT sign-in storage was not checked ({reason})."
 }

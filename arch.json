@@ -1737,7 +1737,9 @@
         "src/domain/core/model-invocation",
         "src/engine/core/oauth-connection",
         "src/engine/core/provider-spend",
-        "src/adapters/core/sqlite-model-invocation"
+        "src/adapters/core/sqlite-model-invocation",
+        "src/adapters/core/secret-store",
+        "src/engine/core/secret-store"
       ],
       "plan": "PROVIDERS"
     },

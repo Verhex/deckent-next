@@ -62,9 +62,10 @@ export type DoctorSecretUse = Readonly<{ kind: 'grant-required' | 'undeclared-pr
 /** The setup family's decision for the execution environment: its state and its reason (a `setup.execution.*` key and parameters). */
 export type ExecutionEnvironmentDoctorView = Readonly<{ state: string; reason: Readonly<{ code: string; params: Readonly<Record<string, string | number>> }> }>;
 
+const ENCRYPTED_STORE = 'core.secret-store.encrypted-file@1';
 /** Core secret store backends in plain words; another backend shows its id. */
 function secretBackendWord(backend: string, l: Locale): string {
-  if (backend === 'core.secret-store.encrypted-file@1') return t('doctor.check.secretStore.backend.encryptedFile', {}, l);
+  if (backend === ENCRYPTED_STORE) return t('doctor.check.secretStore.backend.encryptedFile', {}, l);
   if (backend === 'core.secret-store.file@1') return t('doctor.check.secretStore.backend.file', {}, l);
   return backend === 'core.secret-store.env@1' ? t('doctor.check.secretStore.backend.env', {}, l) : backend;
 }
@@ -123,6 +124,17 @@ function securityChecks(r: DoctorRenderInput, f: DoctorCheckFacts, l: Locale): D
       : row('security', 'security.secrets', 'error', t('doctor.check.secretStore.problem', { backend, code: store.code ?? store.status }, l), 'deckent secret store'));
     const missing = Object.values(store.envGuard ?? {}).some(guard => guard.code || guard.names.length);
     if (missing || store.leftover?.entries || store.leftover?.unverified?.length) rows.push(row('security', 'security.secretsLeftover', 'warning', t('doctor.check.secretStore.leftover', {}, l), 'deckent secret store'));
+    // E01 (ssh-style): an open installation secret folder is named with its mode and the exact fix; Deckent never changes it.
+    const open = store.globalRoot && (parseInt(store.globalRoot.mode, 8) & 0o077) ? store.globalRoot : null;
+    if (open) rows.push(row('security', 'security.secretsRoot', 'warning', t('doctor.secretStore.globalRootUnsafe', { path: open.path, mode: open.mode }, l), `chmod 700 ${open.path}`));
+    const custody = store.personalCustody;
+    if (custody?.status === 'ready') rows.push(row('security', 'security.siwcCustody', 'ok', t('siwc.doctor.custodyReady', {}, l)));
+    else if (custody?.status === 'store') rows.push(row('security', 'security.siwcCustody', 'warning', t('siwc.doctor.custodyStore', { backend }, l), `deckent secret store --to ${ENCRYPTED_STORE}`));
+    else if (custody?.status === 'untested') rows.push(row('security', 'security.siwcCustody', 'untested', t('siwc.doctor.custodyUntested', { reason: custody.reason ?? '-' }, l)));
+    else if (custody?.status === 'refused' && !(open && custody.folder === 'root')) rows.push(row('security', 'security.siwcCustody', 'warning',
+      ErrorRegistry.createError('SIWC_STORE_NOT_PERSONAL', { params: Object.fromEntries(Object.entries({ reason: custody.reason, path: custody.path, mode: custody.mode, folder: custody.folder })
+        .filter((entry): entry is [string, string] => typeof entry[1] === 'string')) }).localize?.(l).message ?? custody.reason ?? '',
+      custody.folder === 'root' && custody.path ? `chmod 700 ${custody.path}` : undefined));
   }
   // PRE-8 v2: one row per key a profile uses that this project cannot read now, with the exact next command (names only).
   for (const use of f.secretUse ?? []) {

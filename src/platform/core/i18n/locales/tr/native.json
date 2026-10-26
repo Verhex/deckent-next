@@ -201,7 +201,7 @@
   "error.OAUTH_CONNECTION_CANCELLED": "ChatGPT bağlantı işlemi iptal edildi. Devam etmeden önce durumunu inceleyin.",
   "error.OAUTH_CONNECTION_TIMEOUT": "ChatGPT girişinin süresi doldu. Yeni bir giriş denemesi başlatın.",
   "error.OAUTH_CONNECTION_IDENTITY_INVALID": "ChatGPT kimliği doğrulanamadı. Hiçbir hesap etkinleştirilmedi.",
-  "error.OAUTH_CONNECTION_STORE_REQUIRED": "ChatGPT bağlantısından önce şifreli sır deposunu seçin.",
+  "error.OAUTH_CONNECTION_STORE_REQUIRED": "ChatGPT girişi şifreli sır deposunu ister. `deckent secret store --to core.secret-store.encrypted-file@1` ile geçin, sonra yeniden giriş yapın.",
   "error.OAUTH_CONNECTION_CHANGED": "Bağlantı veya sır deposu değişti. Devam etmeden önce durumunu inceleyin.",
   "error.OAUTH_CONNECTION_REAUTHORIZE": "Bu ChatGPT oturumu için tekrar giriş gerekir.",
   "error.OAUTH_CONNECTION_INTERACTIVE_REQUIRED": "ChatGPT girişini etkileşimli terminalden başlatın. Giriş URL adresi yazdırılmaz.",
