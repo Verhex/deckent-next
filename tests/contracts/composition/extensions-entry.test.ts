@@ -16,9 +16,9 @@ const memoryBackend = (id: string) => ({ id, create: () => {
 
 it('exports exactly the declared extension surface; the SDK entry exports none of its registrations', () => {
   expect(Object.keys(extensions).sort()).toEqual(['CORE_API_VERSION', 'EffectTargetError', 'RegistryError', 'SECRET_GRANT_STORE_ID_PATTERN', 'SECRET_STORE_ID_PATTERN', 'createSecretHelperFactory',
-    'registerApprovalAssuranceProducer', 'registerEnvironmentProbeKind', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretGrantStore',
+    'registerApprovalAssuranceProducer', 'registerEnvironmentProbeKind', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerProviderSpendPeriod', 'registerSecretGrantStore',
     'registerSecretStoreBackend', 'runCli', 'runMcp']);
-  expect(['registerApprovalAssuranceProducer', 'registerEnvironmentProbeKind', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerSecretGrantStore',
+  expect(['registerApprovalAssuranceProducer', 'registerEnvironmentProbeKind', 'registerMcpCapabilityGroup', 'registerOperationAdapterModule', 'registerProviderSpendNoChargeCertification', 'registerProviderSpendPeriod', 'registerSecretGrantStore',
     'registerSecretStoreBackend', 'registerProviderConfig'].filter(name => name in sdk)).toEqual([]);
 });
 
@@ -44,6 +44,7 @@ it('registers a non-Core secret backend before the composition root seals, and r
   expect(() => extensions.registerEnvironmentProbeKind('executable', reachable)).toThrow(expect.objectContaining({ code: 'REGISTRY_NAMESPACE_RESERVED' }));
   extensions.registerEnvironmentProbeKind('overlay.connector-reachable', reachable);
   expect(() => extensions.registerEnvironmentProbeKind('overlay.connector-reachable', reachable)).toThrow(expect.objectContaining({ code: 'REGISTRY_ADAPTER_DUPLICATE' }));
+  extensions.registerProviderSpendPeriod({ schemaVersion: 1, id: 'overlay.quarter-local', calendarMonths: 3 });
   composeCore();
   expect(environmentProbeRegistry.with(new Map([['executable', reachable]])).get('overlay.connector-reachable')).toBe(reachable);
   expect(() => extensions.registerEnvironmentProbeKind('overlay.late', reachable)).toThrow(expect.objectContaining({ code: 'REGISTRY_SEALED' }));
@@ -53,6 +54,7 @@ it('registers a non-Core secret backend before the composition root seals, and r
   // The registered backend resolves through the same selection path as Core's own backends.
   expect(openConfiguredSecretStore({ secrets: { store: id } }, {}).descriptor.id).toBe(id);
   expect(() => extensions.registerApprovalAssuranceProducer({ ...producer, manifest: { ...producer.manifest, id: 'overlay.late-assurance' } })).toThrow(expect.objectContaining({ code: 'REGISTRY_SEALED' }));
+  expect(() => extensions.registerProviderSpendPeriod({ schemaVersion: 1, id: 'overlay.late-period', calendarMonths: 3 })).toThrow(expect.objectContaining({ code: 'REGISTRY_SEALED' }));
   const sealed = expect.objectContaining({ name: 'RegistryError', code: 'REGISTRY_SEALED' });
   expect(() => extensions.registerSecretStoreBackend(memoryBackend('overlay.secret-store.late@1'))).toThrow(sealed);
   expect(() => extensions.registerMcpCapabilityGroup({ ...capability, id: 'overlay.late' })).toThrow(sealed);

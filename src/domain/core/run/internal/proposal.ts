@@ -16,7 +16,7 @@ export const proposalPermissionSchema = z.object({ kind: identitySchema, action:
 /** Attribution is checked against the authenticated principal; a model receipt reference never grants authority. */
 export const runProposalSchema = z.object({ schemaVersion: z.literal(1), commandId: clientCommandIdSchema,
   proposalId: identitySchema, scopeId: identitySchema, runId: identitySchema, graph: taskGraphSchema,
-  budgetCeiling: providerSpendBudgetSchema.unwrap().pick({ currency: true, limitMinorUnits: true }).readonly(),
+  budgetCeiling: providerSpendBudgetSchema.unwrap().innerType().pick({ currency: true, limitMinorUnits: true }).readonly(),
   requiredPermissions: z.array(proposalPermissionSchema).max(256).readonly(),
   proposer: proposalActorSchema,
   delivery: runDeliveryIntentSchema.optional(),

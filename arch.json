@@ -1268,6 +1268,7 @@
     },
     "src/surfaces/core/doctor": {
       "dependencies": [
+        "src/engine/core/provider-spend",
         "src/engine/core/toolchain-currency",
         "src/engine/core/setup",
         "src/engine/core/worker-setup",

@@ -30,16 +30,18 @@ class SqliteProviderSpendManagementStore implements ProviderSpendManagementStore
         FROM model_invocation_spend_reservations s JOIN model_invocations i ON i.scope_id=s.scope_id AND i.invocation_id=s.invocation_id
         WHERE s.scope_id=? AND s.invocation_id=?`).get(command.scopeId, command.invocationId) : null;
       if (command.kind === 'reconcile' && (!row || typeof row.invocation_record !== 'string')) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
-      const reservation = row ? decodeSpendReservation(row, verifyModelInvocationReceipt(JSON.parse(row.invocation_record as string)), before, this.db) : null;
-      const after = command.kind === 'budget-revision' ? reviseProviderSpendBudget(before.account, command)
-        : reconcileProviderSpend(before.account, reservation, command, '0'.repeat(64)).account;
+      const invocation = row ? verifyModelInvocationReceipt(JSON.parse(row.invocation_record as string)) : null;
+      const reservation = row ? decodeSpendReservation(row, invocation!, before, this.db) : null;
+      const settledAtMs = invocation?.outcome?.observedAtMs;
+      const after = command.kind === 'budget-revision' ? reviseProviderSpendBudget(before.account, command, recordedAtMs)
+        : reconcileProviderSpend(before.account, reservation, command, '0'.repeat(64), recordedAtMs, settledAtMs).account;
       const body = { schemaVersion: 1 as const, command, actor, authorization, recordedAtMs, before, after,
         ...(command.kind === 'reconcile' && reservation?.disposition.state === 'settled-measured-tariff'
           ? { replacedUpperBoundExactMinorUnits: reservation.measurement!.exactMinorUnits } : {}) };
       const receipt = parseProviderSpendManagementReceipt({ ...body, digest: providerSpendEvidenceDigest(body) });
       if (Buffer.byteLength(JSON.stringify({ receipt, replayed: false })) > maxResultBytes) throw new ProviderSpendError('PROVIDER_SPEND_RESULT_LIMIT');
       if (command.kind === 'reconcile' && row) {
-        const next = reconcileProviderSpend(before.account, reservation, command, receipt.digest).reservation;
+        const next = reconcileProviderSpend(before.account, reservation, command, receipt.digest, recordedAtMs, settledAtMs).reservation;
         const updated = this.db.prepare('UPDATE model_invocation_spend_reservations SET record=?,digest=? WHERE scope_id=? AND invocation_id=? AND digest=?')
           .run(JSON.stringify(next), providerSpendReservationDigest(next), command.scopeId, command.invocationId, row.digest!);
         if (updated.changes !== 1) throw new ProviderSpendError('PROVIDER_SPEND_CONFLICT');
@@ -55,7 +57,7 @@ class SqliteProviderSpendManagementStore implements ProviderSpendManagementStore
   private record(command: Extract<ProviderSpendManagementCommand, { kind: 'budget-create' }>, actor: ModelInvocationActor, authorization: ModelInvocationAuthorization,
     recordedAtMs: number, maxResultBytes: number, before: ReturnType<typeof readSpendCheckpoint>): ProviderSpendManagementResult {
     if (before) throw new ProviderSpendError('PROVIDER_SPEND_BUDGET_EXISTS');
-    const body = { schemaVersion: 1 as const, command, actor, authorization, recordedAtMs, before: null, after: createGovernedProviderSpendAccount(command) };
+    const body = { schemaVersion: 1 as const, command, actor, authorization, recordedAtMs, before: null, after: createGovernedProviderSpendAccount(command, recordedAtMs) };
     const receipt = parseProviderSpendManagementReceipt({ ...body, digest: providerSpendEvidenceDigest(body) });
     if (Buffer.byteLength(JSON.stringify({ receipt, replayed: false })) > maxResultBytes) throw new ProviderSpendError('PROVIDER_SPEND_RESULT_LIMIT');
     return this.commit(null, receipt);

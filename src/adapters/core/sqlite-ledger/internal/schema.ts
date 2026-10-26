@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { migrateAdoptionVerification, migrateAuditCheckpoints, migrateAuditEvents, migrateDecisionPort, migrateEffectProducerIndex, migrateExecutionPoolHolds, migrateImmediateEligibility, migrateMeasuredTariffSpend, migrateModelAllocationCheckpoints, migrateModelCatalog, migrateModelInvocationContents, migrateModelInvocationControl, migrateModelInvocationEvidence, migrateModelInvocationPurge, migratePoolCapacity, migrateProviderReportedSpend, migrateProviderSpend, migrateQuotaWaits, migrateRunCreateApprovals, migrateRunParking, migrateScopeRegistry, requireLedgerV5Custody, requireLedgerV6ProfileCompatibility, requireLedgerV8ExecutionRegistry } from '#adapters/core/sqlite-ledger-migrations/index.js';
+import { migrateProviderSpendPeriods, migrateAdoptionVerification, migrateAuditCheckpoints, migrateAuditEvents, migrateDecisionPort, migrateEffectProducerIndex, migrateExecutionPoolHolds, migrateImmediateEligibility, migrateMeasuredTariffSpend, migrateModelAllocationCheckpoints, migrateModelCatalog, migrateModelInvocationContents, migrateModelInvocationControl, migrateModelInvocationEvidence, migrateModelInvocationPurge, migratePoolCapacity, migrateProviderReportedSpend, migrateProviderSpend, migrateQuotaWaits, migrateRunCreateApprovals, migrateRunParking, migrateScopeRegistry, requireLedgerV5Custody, requireLedgerV6ProfileCompatibility, requireLedgerV8ExecutionRegistry } from '#adapters/core/sqlite-ledger-migrations/index.js';
 import { AttemptStoreError, type SupervisorProfileValidator } from '#engine/index.js';
 import { getConfigFieldDefault } from '#platform/index.js';
 // Persisted Next schema history. Versions are protocol invariants, not customer configuration.
@@ -15,7 +15,7 @@ export const MODEL_ALLOCATION_LEDGER_VERSION = 19;
 export const PROVIDER_SPEND_LEDGER_VERSION = 21;
 export const PROVIDER_SPEND_AUDIT_LEDGER_VERSION = 22;
 // Current durable contract; older writers must not reopen newer records.
-export const CURRENT_LEDGER_VERSION = 71;
+export const CURRENT_LEDGER_VERSION = 72;
 // H2 additive client metadata and v2 skill reader. Older binaries refuse v71; rollback restores the pre-switch backup, never drops installed rows.
 export const HUB_CLIENT_LEDGER_VERSION = 71;
 // S8-3/S8-4 catalog suggestions (lane v70 after s82's v69; the lead renumbers at landing): sealed suggestion rows whose state moves once from `open`
@@ -401,7 +401,7 @@ export function migrateLedger(db: DatabaseSync, mode: 'allow' | 'forbid', profil
   // Older custody validators inspect the current Run shape. Prove and convert old eligibility
   // before those validators, inside the same transaction; never skip their independent checks.
   if (version >= 3 && version < IMMEDIATE_ELIGIBILITY_LEDGER_VERSION) migrateImmediateEligibility(db);
-  const codeSteps: Readonly<Record<number, () => void>> = { 5: () => requireLedgerV5Custody(db), 6: () => requireLedgerV6ProfileCompatibility(db, profiles),
+  const codeSteps: Readonly<Record<number, () => void>> = { 72: () => migrateProviderSpendPeriods(db), 5: () => requireLedgerV5Custody(db), 6: () => requireLedgerV6ProfileCompatibility(db, profiles),
     8: () => requireLedgerV8ExecutionRegistry(db), 15: () => migrateModelInvocationEvidence(db), 16: () => migrateModelInvocationContents(db),
     17: () => migrateModelInvocationPurge(db), 18: () => migrateModelInvocationControl(db), 19: () => migrateModelAllocationCheckpoints(db),
     20: () => migrateProviderSpend(db), 21: () => migrateProviderReportedSpend(db), [SCOPE_REGISTRY_LEDGER_VERSION]: () => migrateScopeRegistry(db, companyId),

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { initializeProviderSpendPeriod } from '#engine/index.js';
+import { describe, expect, it, vi } from 'vitest';
 import { createProviderSpendAccount, createProviderSpendAuditReceipt, createProviderSpendCheckpoint, ProviderSpendAccountInspectionApplication,
   parseProviderSpendAccountInspectionForQuery, type ProviderSpendAccountReader } from '#engine/index.js';
 
@@ -133,4 +134,16 @@ describe('provider spending account inspection', () => {
     await expect(failedRead.inspect(query)).rejects.toMatchObject({ code: 'PROVIDER_SPEND_UNAVAILABLE', message: 'PROVIDER_SPEND_UNAVAILABLE' });
     expect(f.calls.closes).toBe(1);
   });
+});
+
+it('projects the due month without mutating the checkpoint and refuses forged remaining money', async () => {
+  vi.stubEnv('TZ', 'Etc/UTC'); const now = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-01T00:00:00Z'));
+  try {
+    const old = createProviderSpendCheckpoint(initializeProviderSpendPeriod(checkpoint.account, Date.parse('2026-10-26T00:00:00Z'), true), 4, 1);
+    const before = JSON.stringify(old), f = fixture({ checkpoint: old, audit: null });
+    const result = await f.app.inspect(query);
+    expect(result.period).toMatchObject({ usedExactMinorUnits: '0', remainingMinorUnits: 93, state: { nextResetAtMs: Date.parse('2026-12-01T00:00:00Z'), legacyTransition: false } });
+    expect(JSON.stringify(old)).toBe(before); expect(result.checkpoint).toEqual(old);
+    expect(() => parseProviderSpendAccountInspectionForQuery(query, { ...result, period: { ...result.period, remainingMinorUnits: 100 } })).toThrow('PROVIDER_SPEND_INVALID');
+  } finally { now.mockRestore(); vi.unstubAllEnvs(); }
 });
